@@ -1,0 +1,11 @@
+[package]
+name = "perch-compile"
+description = "Lowering: PolicyDoc → executable plan of OZ context-rule calls"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+perch-ir = { workspace = true }
+perch-program = { workspace = true }

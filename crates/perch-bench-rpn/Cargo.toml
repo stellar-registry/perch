@@ -1,0 +1,16 @@
+[package]
+name = "perch-bench-rpn"
+description = "Metering-only bench contract wrapping the RPN encoding (issue #2); never deployed"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+perch-program = { workspace = true }

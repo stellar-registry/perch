@@ -1,13 +1,15 @@
 [package]
-name = "perch-program"
-description = "On-chain constraint program encoding and fail-closed three-valued evaluation"
+name = "perch-bench"
+description = "Metered wire-format benchmark harness for issue #2 (arena vs RPN)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 
-[dependencies]
-soroban-sdk = { workspace = true }
+[lib]
+doctest = false
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+perch-program = { workspace = true }

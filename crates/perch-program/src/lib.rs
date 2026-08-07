@@ -9,6 +9,74 @@
 //! <https://github.com/stellar-registry/perch/issues/2>; the op set and
 //! evaluation semantics land in
 //! <https://github.com/stellar-registry/perch/issues/5>.
+//!
+//! Both candidate encodings are implemented here pending the freeze:
+//! [`arena`] (Encoding A — flat node vector, forward-only child indices)
+//! and [`rpn`] (Encoding B — postfix ops over a verdict stack). They share
+//! the same leaf semantics and the same fail-closed rule. Metered numbers
+//! and the recommendation live in `crates/perch-program/BENCH.md`
+//! (reproduce with `just bench`).
+
+pub mod arena;
+mod leaf;
+pub mod rpn;
+
+pub use arena::{ArenaProgram, Node};
+pub use rpn::{Op, RpnProgram};
+
+use soroban_sdk::{auth::Context, Address};
+
+/// The only program wire-format version either encoding accepts today.
+/// Unknown versions are rejected at validation time — fail closed.
+pub const PROGRAM_VERSION: u32 = 1;
+
+/// Maximum node/op count either encoding accepts. Bounds arena recursion
+/// depth and RPN program length so evaluation cost is bounded at install
+/// time.
+pub const MAX_PROGRAM_LEN: u32 = 256;
+
+/// Maximum RPN value-stack depth (and arena recursion depth guard).
+pub const MAX_STACK_DEPTH: u32 = 128;
+
+/// Why a program failed validation. Validation runs at install time; a
+/// program that validates can always be evaluated without tripping the
+/// defensive `Unknown` paths in eval.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidationError {
+    /// `program.version` is not [`PROGRAM_VERSION`].
+    UnknownVersion,
+    /// The program has no nodes/ops.
+    Empty,
+    /// The program exceeds [`MAX_PROGRAM_LEN`].
+    TooLarge,
+    /// Arena: a composite node references a child at or before itself
+    /// (indices must be strictly forward — this single-pass check proves
+    /// acyclicity).
+    ForwardRefViolation,
+    /// Arena: a child index is past the end of the node arena.
+    IndexOutOfRange,
+    /// A composite op has an impossible arity (`All`/`Any` of zero children).
+    ArityMismatch,
+    /// RPN: an op pops more values than the stack holds.
+    StackUnderflow,
+    /// RPN: the simulated stack would exceed [`MAX_STACK_DEPTH`].
+    StackOverflow,
+    /// RPN: the program does not leave exactly one value on the stack.
+    NotSingleResult,
+}
+
+/// Everything a leaf predicate may inspect, besides the [`soroban_sdk::Env`].
+///
+/// `context` is the authorization context being screened; only
+/// [`Context::Contract`] is decodable — every leaf that looks inside the
+/// context yields [`Verdict::Unknown`] for other variants. `signer_count` is
+/// the number of *authenticated* signers, computed by the caller.
+/// `self_addr` is the address the policy protects (the smart account).
+pub struct EvalInputs<'a> {
+    pub context: &'a Context,
+    pub signer_count: u32,
+    pub self_addr: &'a Address,
+}
 
 /// Three-valued (Kleene) verdict of evaluating a constraint.
 ///
@@ -40,6 +108,18 @@ impl Verdict {
     #[must_use]
     pub fn allows(self) -> bool {
         self == Verdict::True
+    }
+}
+
+/// A decoded boolean check maps onto the two definite verdicts; `Unknown`
+/// only ever arises from decode failure, never from `From<bool>`.
+impl From<bool> for Verdict {
+    fn from(b: bool) -> Verdict {
+        if b {
+            Verdict::True
+        } else {
+            Verdict::False
+        }
     }
 }
 

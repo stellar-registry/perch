@@ -1,0 +1,631 @@
+//! Validation matrix: for every [`ValidationError`] variant, at least one
+//! rejecting case and a nearby accepting case.
+
+mod common;
+
+use common::{
+    assert_accepts, assert_rejects, base_doc, rule, signer, CI_KEY_HEX, ED25519_VERIFIER, G_ADDR,
+    POLICY_CONTRACT, REGISTRY, WEBAUTHN_VERIFIER,
+};
+use perch_ir::{
+    validate, AddressEqPred, ArgConstraint, ArgPred, Principals, Scope,
+    SelfAuthenticatingPrincipals, StringInPred, StringPrefixPred, U32EqPred, ValidationError,
+    ACK_SENTINEL,
+};
+
+// --- UnsupportedVersion ------------------------------------------------------
+
+#[test]
+fn rejects_version_other_than_1() {
+    let mut doc = base_doc();
+    doc.version = 2;
+    assert_rejects(&doc, &ValidationError::UnsupportedVersion { version: 2 });
+    doc.version = 0;
+    assert_rejects(&doc, &ValidationError::UnsupportedVersion { version: 0 });
+}
+
+#[test]
+fn accepts_version_1() {
+    assert_accepts(&base_doc());
+}
+
+// --- EmptySignerId -----------------------------------------------------------
+
+#[test]
+fn rejects_empty_signer_id() {
+    let mut doc = base_doc();
+    doc.signers[0].id = String::new();
+    assert_rejects(&doc, &ValidationError::EmptySignerId { position: 0 });
+}
+
+#[test]
+fn accepts_non_empty_signer_id() {
+    assert_accepts(&base_doc());
+}
+
+// --- DuplicateSignerId -------------------------------------------------------
+
+#[test]
+fn rejects_duplicate_signer_ids() {
+    let mut doc = base_doc();
+    doc.signers
+        .push(signer("admin", ED25519_VERIFIER, CI_KEY_HEX));
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateSignerId { id: "admin".into() },
+    );
+}
+
+#[test]
+fn accepts_distinct_signer_ids() {
+    let mut doc = base_doc();
+    doc.signers.push(signer("ci", ED25519_VERIFIER, CI_KEY_HEX));
+    assert_accepts(&doc);
+}
+
+// --- InvalidSignerKeyHex -----------------------------------------------------
+
+#[test]
+fn rejects_non_hex_signer_key() {
+    let mut doc = base_doc();
+    doc.signers[0].key = "zz".into();
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidSignerKeyHex { id: "admin".into() },
+    );
+}
+
+#[test]
+fn rejects_odd_length_signer_key_hex() {
+    let mut doc = base_doc();
+    doc.signers[0].key = "abc".into();
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidSignerKeyHex { id: "admin".into() },
+    );
+}
+
+#[test]
+fn accepts_valid_hex_signer_key() {
+    let mut doc = base_doc();
+    doc.signers[0].key = "deadbeef".into();
+    assert_accepts(&doc);
+}
+
+// --- SignerKeyLength ---------------------------------------------------------
+
+#[test]
+fn rejects_empty_signer_key() {
+    let mut doc = base_doc();
+    doc.signers[0].key = String::new();
+    assert_rejects(
+        &doc,
+        &ValidationError::SignerKeyLength {
+            id: "admin".into(),
+            len: 0,
+        },
+    );
+}
+
+#[test]
+fn rejects_signer_key_over_256_bytes() {
+    let mut doc = base_doc();
+    doc.signers[0].key = "ab".repeat(257);
+    assert_rejects(
+        &doc,
+        &ValidationError::SignerKeyLength {
+            id: "admin".into(),
+            len: 257,
+        },
+    );
+}
+
+#[test]
+fn accepts_signer_key_boundary_lengths() {
+    let mut doc = base_doc();
+    doc.signers[0].key = "ab".into(); // 1 byte
+    assert_accepts(&doc);
+    doc.signers[0].key = "ab".repeat(256); // 256 bytes
+    assert_accepts(&doc);
+}
+
+// --- InvalidVerifierAddress --------------------------------------------------
+
+#[test]
+fn rejects_verifier_that_is_not_a_c_address() {
+    let mut doc = base_doc();
+    // A G-address is a valid strkey but not a contract address.
+    doc.signers[0].verifier = G_ADDR.into();
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidVerifierAddress {
+            id: "admin".into(),
+            address: G_ADDR.into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_verifier_with_bad_length_case_or_charset() {
+    for bad in [
+        &WEBAUTHN_VERIFIER[..55],                  // too short
+        &format!("{WEBAUTHN_VERIFIER}A"),          // too long
+        &WEBAUTHN_VERIFIER.to_lowercase(),         // lowercase
+        &format!("C1{}", &WEBAUTHN_VERIFIER[2..]), // '1' outside base32
+        "",                                        // empty
+    ] {
+        let mut doc = base_doc();
+        doc.signers[0].verifier = (*bad).to_string();
+        assert_rejects(
+            &doc,
+            &ValidationError::InvalidVerifierAddress {
+                id: "admin".into(),
+                address: (*bad).to_string(),
+            },
+        );
+    }
+}
+
+#[test]
+fn accepts_shape_valid_verifier() {
+    assert_accepts(&base_doc());
+}
+
+// --- EmptyRuleName -----------------------------------------------------------
+
+#[test]
+fn rejects_empty_rule_name() {
+    let mut doc = base_doc();
+    doc.rules[0].name = String::new();
+    assert_rejects(&doc, &ValidationError::EmptyRuleName { position: 0 });
+}
+
+#[test]
+fn accepts_non_empty_rule_name() {
+    assert_accepts(&base_doc());
+}
+
+// --- DuplicateRuleName -------------------------------------------------------
+
+#[test]
+fn rejects_duplicate_rule_names() {
+    let mut doc = base_doc();
+    doc.rules
+        .push(rule("admin-root", Scope::contract(REGISTRY), &["admin"]));
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateRuleName {
+            name: "admin-root".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_distinct_rule_names() {
+    let mut doc = base_doc();
+    doc.rules
+        .push(rule("publish", Scope::contract(REGISTRY), &["admin"]));
+    assert_accepts(&doc);
+}
+
+// --- InvalidContractAddress --------------------------------------------------
+
+#[test]
+fn rejects_contract_scope_with_non_c_address() {
+    let mut doc = base_doc();
+    doc.rules[0].scope = Scope::contract(G_ADDR);
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidContractAddress {
+            rule: "admin-root".into(),
+            address: G_ADDR.into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_contract_scope_with_c_address() {
+    let mut doc = base_doc();
+    doc.rules[0].scope = Scope::contract(REGISTRY);
+    assert_accepts(&doc);
+}
+
+// --- EmptyPrincipalSigners ---------------------------------------------------
+
+#[test]
+fn rejects_empty_all_principals() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = Principals::All(perch_ir::AllPrincipals { signers: vec![] });
+    assert_rejects(
+        &doc,
+        &ValidationError::EmptyPrincipalSigners {
+            rule: "admin-root".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_non_empty_all_principals() {
+    assert_accepts(&base_doc());
+}
+
+// --- DuplicatePrincipalSigner ------------------------------------------------
+
+#[test]
+fn rejects_repeated_signer_in_principals_list() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = Principals::All(perch_ir::AllPrincipals {
+        signers: vec!["admin".into(), "admin".into()],
+    });
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicatePrincipalSigner {
+            rule: "admin-root".into(),
+            id: "admin".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_distinct_signers_in_principals_list() {
+    let mut doc = base_doc();
+    doc.signers.push(signer("ci", ED25519_VERIFIER, CI_KEY_HEX));
+    doc.rules[0].principals = Principals::All(perch_ir::AllPrincipals {
+        signers: vec!["admin".into(), "ci".into()],
+    });
+    assert_accepts(&doc);
+}
+
+// --- UnknownSignerRef --------------------------------------------------------
+
+#[test]
+fn rejects_reference_to_undeclared_signer() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = Principals::All(perch_ir::AllPrincipals {
+        signers: vec!["admin".into(), "ghost".into()],
+    });
+    assert_rejects(
+        &doc,
+        &ValidationError::UnknownSignerRef {
+            rule: "admin-root".into(),
+            id: "ghost".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_references_to_declared_signers() {
+    let mut doc = base_doc();
+    doc.signers.push(signer("ci", ED25519_VERIFIER, CI_KEY_HEX));
+    doc.rules[0].principals = Principals::All(perch_ir::AllPrincipals {
+        signers: vec!["admin".into(), "ci".into()],
+    });
+    assert_accepts(&doc);
+}
+
+// --- WrongAckSentinel / InvalidPolicyAddress / InvalidInstallParamHex --------
+
+fn self_auth(policy: &str, install_param_hex: &str, ack: &str) -> Principals {
+    Principals::SelfAuthenticating(SelfAuthenticatingPrincipals {
+        policy: policy.into(),
+        install_param_hex: install_param_hex.into(),
+        ack: ack.into(),
+    })
+}
+
+#[test]
+fn rejects_wrong_ack_sentinel() {
+    for bad_ack in [
+        "",
+        "yes",
+        "this-policy-authenticates",
+        ACK_SENTINEL.to_uppercase().as_str(),
+    ] {
+        let mut doc = base_doc();
+        doc.rules[0].principals = self_auth(POLICY_CONTRACT, "", bad_ack);
+        assert_rejects(
+            &doc,
+            &ValidationError::WrongAckSentinel {
+                rule: "admin-root".into(),
+            },
+        );
+    }
+}
+
+#[test]
+fn rejects_self_auth_policy_that_is_not_a_c_address() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = self_auth(G_ADDR, "", ACK_SENTINEL);
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidPolicyAddress {
+            rule: "admin-root".into(),
+            address: G_ADDR.into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_self_auth_with_invalid_install_param_hex() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = self_auth(POLICY_CONTRACT, "xyz", ACK_SENTINEL);
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidInstallParamHex {
+            rule: "admin-root".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_self_auth_with_exact_sentinel_and_valid_fields() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = self_auth(POLICY_CONTRACT, "", ACK_SENTINEL);
+    assert_accepts(&doc);
+    doc.rules[0].principals = self_auth(POLICY_CONTRACT, "deadbeef", ACK_SENTINEL);
+    assert_accepts(&doc);
+}
+
+// --- EmptyFunctions / EmptyFunctionName / DuplicateFunction ------------------
+
+#[test]
+fn rejects_present_but_empty_functions() {
+    let mut doc = base_doc();
+    doc.rules[0].functions = Some(vec![]);
+    assert_rejects(
+        &doc,
+        &ValidationError::EmptyFunctions {
+            rule: "admin-root".into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_empty_function_name() {
+    let mut doc = base_doc();
+    doc.rules[0].functions = Some(vec!["publish".into(), String::new()]);
+    assert_rejects(
+        &doc,
+        &ValidationError::EmptyFunctionName {
+            rule: "admin-root".into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_duplicate_function_names() {
+    let mut doc = base_doc();
+    doc.rules[0].functions = Some(vec!["publish".into(), "publish".into()]);
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateFunction {
+            rule: "admin-root".into(),
+            name: "publish".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_absent_functions_and_distinct_function_names() {
+    let mut doc = base_doc();
+    doc.rules[0].functions = None;
+    assert_accepts(&doc);
+    doc.rules[0].functions = Some(vec!["publish".into(), "publish_hash".into()]);
+    assert_accepts(&doc);
+}
+
+// --- EmptyArgs / DuplicateArgIndex -------------------------------------------
+
+fn arg(index: u32, pred: ArgPred) -> ArgConstraint {
+    ArgConstraint { index, pred }
+}
+
+#[test]
+fn rejects_present_but_empty_args() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![]);
+    assert_rejects(
+        &doc,
+        &ValidationError::EmptyArgs {
+            rule: "admin-root".into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_duplicate_arg_indexes() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![
+        arg(0, ArgPred::is_self()),
+        arg(0, ArgPred::U32Eq(U32EqPred { value: 7 })),
+    ]);
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateArgIndex {
+            rule: "admin-root".into(),
+            index: 0,
+        },
+    );
+}
+
+#[test]
+fn accepts_absent_args_and_distinct_indexes() {
+    let mut doc = base_doc();
+    doc.rules[0].args = None;
+    assert_accepts(&doc);
+    doc.rules[0].args = Some(vec![
+        arg(0, ArgPred::is_self()),
+        arg(
+            1,
+            ArgPred::StringPrefix(StringPrefixPred { prefix: "v".into() }),
+        ),
+    ]);
+    assert_accepts(&doc);
+}
+
+// --- EmptyStringInValues -----------------------------------------------------
+
+#[test]
+fn rejects_string_in_with_empty_values() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![arg(
+        2,
+        ArgPred::StringIn(StringInPred { values: vec![] }),
+    )]);
+    assert_rejects(
+        &doc,
+        &ValidationError::EmptyStringInValues {
+            rule: "admin-root".into(),
+            index: 2,
+        },
+    );
+}
+
+#[test]
+fn accepts_string_in_with_values() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![arg(
+        2,
+        ArgPred::StringIn(StringInPred {
+            values: vec!["a".into(), "b".into()],
+        }),
+    )]);
+    assert_accepts(&doc);
+}
+
+// --- DuplicateStringInValue --------------------------------------------------
+
+#[test]
+fn rejects_string_in_with_repeated_value() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![arg(
+        2,
+        ArgPred::StringIn(StringInPred {
+            values: vec!["a".into(), "b".into(), "a".into()],
+        }),
+    )]);
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateStringInValue {
+            rule: "admin-root".into(),
+            index: 2,
+            value: "a".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_string_in_with_distinct_values() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![arg(
+        2,
+        ArgPred::StringIn(StringInPred {
+            values: vec!["a".into(), "b".into()],
+        }),
+    )]);
+    assert_accepts(&doc);
+}
+
+// --- InvalidArgAddress -------------------------------------------------------
+
+#[test]
+fn rejects_address_eq_with_malformed_address() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![arg(
+        0,
+        ArgPred::AddressEq(AddressEqPred {
+            address: "not-an-address".into(),
+        }),
+    )]);
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidArgAddress {
+            rule: "admin-root".into(),
+            index: 0,
+            address: "not-an-address".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_address_eq_with_c_or_g_address() {
+    let mut doc = base_doc();
+    doc.rules[0].args = Some(vec![arg(
+        0,
+        ArgPred::AddressEq(AddressEqPred {
+            address: REGISTRY.into(),
+        }),
+    )]);
+    assert_accepts(&doc);
+    doc.rules[0].args = Some(vec![arg(
+        0,
+        ArgPred::AddressEq(AddressEqPred {
+            address: G_ADDR.into(),
+        }),
+    )]);
+    assert_accepts(&doc);
+}
+
+// --- ZeroNotAfter ------------------------------------------------------------
+
+#[test]
+fn rejects_zero_not_after() {
+    let mut doc = base_doc();
+    doc.rules[0].not_after = Some(0);
+    assert_rejects(
+        &doc,
+        &ValidationError::ZeroNotAfter {
+            rule: "admin-root".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_positive_or_absent_not_after() {
+    let mut doc = base_doc();
+    doc.rules[0].not_after = Some(1);
+    assert_accepts(&doc);
+    doc.rules[0].not_after = None;
+    assert_accepts(&doc);
+}
+
+// --- Error collection & display ----------------------------------------------
+
+#[test]
+fn collects_all_errors_not_just_the_first() {
+    let mut doc = base_doc();
+    doc.version = 3;
+    doc.signers[0].key = "zz".into();
+    doc.signers
+        .push(signer("admin", ED25519_VERIFIER, CI_KEY_HEX));
+    doc.rules[0].not_after = Some(0);
+    doc.rules[0].functions = Some(vec![]);
+    let errors = validate(&doc).expect_err("expected failure");
+    assert!(errors.len() >= 5, "expected >= 5 errors, got {errors:?}");
+    assert!(errors.contains(&ValidationError::UnsupportedVersion { version: 3 }));
+    assert!(errors.contains(&ValidationError::InvalidSignerKeyHex { id: "admin".into() }));
+    assert!(errors.contains(&ValidationError::DuplicateSignerId { id: "admin".into() }));
+    assert!(errors.contains(&ValidationError::ZeroNotAfter {
+        rule: "admin-root".into()
+    }));
+    assert!(errors.contains(&ValidationError::EmptyFunctions {
+        rule: "admin-root".into()
+    }));
+}
+
+#[test]
+fn display_names_the_offender() {
+    let err = ValidationError::UnknownSignerRef {
+        rule: "publish".into(),
+        id: "ghost".into(),
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("publish") && msg.contains("ghost"), "{msg}");
+
+    let err = ValidationError::SignerKeyLength {
+        id: "admin".into(),
+        len: 300,
+    };
+    let msg = err.to_string();
+    assert!(msg.contains("admin") && msg.contains("300"), "{msg}");
+}

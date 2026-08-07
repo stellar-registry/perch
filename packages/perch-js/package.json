@@ -1,0 +1,14 @@
+{
+  "name": "@stellar-registry/perch",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript surface for perch policy documents: schemas, builder, compile parity, apply, signing helpers",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stellar-registry/perch",
+    "directory": "packages/perch-js"
+  }
+}

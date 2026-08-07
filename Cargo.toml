@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/perch-ir",
+    "crates/perch-program",
+    "crates/perch-interpreter",
+    "crates/perch-compile",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/stellar-registry/perch"
+
+[workspace.dependencies]
+soroban-sdk = "26.0.1"
+# OZ stellar-contracts main @ 637c53a — the sdk-26 bump landed on main after the
+# v0.7.1 tag, so we pin the rev rather than a released version.
+stellar-accounts = { git = "https://github.com/OpenZeppelin/stellar-contracts.git", rev = "637c53a8c4928fd0c71d330bd866f482c3454578", package = "stellar-accounts" }
+
+perch-ir = { path = "crates/perch-ir" }
+perch-program = { path = "crates/perch-program" }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true

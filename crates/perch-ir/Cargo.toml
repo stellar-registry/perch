@@ -1,0 +1,9 @@
+[package]
+name = "perch-ir"
+description = "Perch policy document model: canonical JSON, doc_hash, validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]

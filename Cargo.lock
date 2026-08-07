@@ -1081,14 +1081,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "perch-bench-arena"
-version = "0.1.0"
-dependencies = [
- "perch-program",
- "soroban-sdk",
-]
-
-[[package]]
 name = "perch-bench-rpn"
 version = "0.1.0"
 dependencies = [

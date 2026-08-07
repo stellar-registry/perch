@@ -5,37 +5,31 @@
 //! the compiler — install params are only ever encoded through these types,
 //! never hand-built `ScVal`s. It must never become a `#[contract]`.
 //!
-//! The wire format (node arena vs postfix) is frozen by the benchmark in
-//! <https://github.com/stellar-registry/perch/issues/2>; the op set and
+//! The wire format is FROZEN: postfix (RPN) is perch-program v1, chosen by
+//! the metered benchmark in `crates/perch-program/BENCH.md`
+//! (<https://github.com/stellar-registry/perch/issues/2>). The op set and
 //! evaluation semantics land in
 //! <https://github.com/stellar-registry/perch/issues/5>.
 //!
-//! Both candidate encodings are implemented here pending the freeze:
-//! [`arena`] (Encoding A — flat node vector, forward-only child indices)
-//! and [`rpn`] (Encoding B — postfix ops over a verdict stack). They share
-//! the same leaf semantics and the same fail-closed rule. Metered numbers
-//! and the recommendation live in `crates/perch-program/BENCH.md`
-//! (reproduce with `just bench`).
+//! [`rpn`] encodes programs as postfix ops over a verdict stack, with the
+//! leaf semantics and fail-closed rule in `leaf`.
 
-pub mod arena;
 mod leaf;
 pub mod rpn;
 
-pub use arena::{ArenaProgram, Node};
 pub use rpn::{Op, RpnProgram};
 
 use soroban_sdk::{auth::Context, Address};
 
-/// The only program wire-format version either encoding accepts today.
-/// Unknown versions are rejected at validation time — fail closed.
+/// The only program wire-format version accepted today. Unknown versions
+/// are rejected at validation time — fail closed.
 pub const PROGRAM_VERSION: u32 = 1;
 
-/// Maximum node/op count either encoding accepts. Bounds arena recursion
-/// depth and RPN program length so evaluation cost is bounded at install
-/// time.
+/// Maximum op count a program may contain. Bounds program length so
+/// evaluation cost is bounded at install time.
 pub const MAX_PROGRAM_LEN: u32 = 256;
 
-/// Maximum RPN value-stack depth (and arena recursion depth guard).
+/// Maximum RPN value-stack depth.
 pub const MAX_STACK_DEPTH: u32 = 128;
 
 /// Why a program failed validation. Validation runs at install time; a
@@ -45,23 +39,17 @@ pub const MAX_STACK_DEPTH: u32 = 128;
 pub enum ValidationError {
     /// `program.version` is not [`PROGRAM_VERSION`].
     UnknownVersion,
-    /// The program has no nodes/ops.
+    /// The program has no ops.
     Empty,
     /// The program exceeds [`MAX_PROGRAM_LEN`].
     TooLarge,
-    /// Arena: a composite node references a child at or before itself
-    /// (indices must be strictly forward — this single-pass check proves
-    /// acyclicity).
-    ForwardRefViolation,
-    /// Arena: a child index is past the end of the node arena.
-    IndexOutOfRange,
-    /// A composite op has an impossible arity (`All`/`Any` of zero children).
+    /// A composite op has an impossible arity (`All`/`Any` of zero operands).
     ArityMismatch,
-    /// RPN: an op pops more values than the stack holds.
+    /// An op pops more values than the stack holds.
     StackUnderflow,
-    /// RPN: the simulated stack would exceed [`MAX_STACK_DEPTH`].
+    /// The simulated stack would exceed [`MAX_STACK_DEPTH`].
     StackOverflow,
-    /// RPN: the program does not leave exactly one value on the stack.
+    /// The program does not leave exactly one value on the stack.
     NotSingleResult,
 }
 

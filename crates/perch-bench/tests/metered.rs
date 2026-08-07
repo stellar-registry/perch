@@ -1,18 +1,23 @@
-//! Metered wire-format benchmark: arena vs RPN, evaluated AS COMPILED WASM.
+//! Metered RPN wire-format benchmark, evaluated AS COMPILED WASM.
+//!
+//! Originally the arena-vs-RPN decision benchmark (issue #2); postfix won
+//! and is frozen as perch-program v1 — see crates/perch-program/BENCH.md.
+//! The RPN half is kept as an instruction-count canary for the frozen
+//! format.
 //!
 //! Metered costs only accrue to code executing as wasm — native test
-//! execution is not metered. So both encodings are wrapped in tiny bench
-//! contracts (`perch-bench-arena`, `perch-bench-rpn`), built for
-//! `wasm32v1-none --release`, registered from their wasm bytes, and
-//! invoked through the host. `env.cost_estimate().resources()` reports the
-//! resources of the *last top-level invocation only* (it resets before
-//! every top-level call), so each number below is exactly one `eval` or
-//! `validate` call, nothing else.
+//! execution is not metered. So the encoding is wrapped in a tiny bench
+//! contract (`perch-bench-rpn`), built for `wasm32v1-none --release`,
+//! registered from its wasm bytes, and invoked through the host.
+//! `env.cost_estimate().resources()` reports the resources of the *last
+//! top-level invocation only* (it resets before every top-level call), so
+//! each number below is exactly one `eval` or `validate` call, nothing
+//! else.
 //!
-//! Run via `just bench` (builds the wasms, then runs this with
-//! `--ignored --nocapture`). Numbers land in crates/perch-program/BENCH.md.
+//! Run via `just bench` (builds the wasm, then runs this with
+//! `--ignored --nocapture`).
 
-use perch_program::{arena, rpn, ArenaProgram, EvalInputs, Node, Op, RpnProgram, PROGRAM_VERSION};
+use perch_program::{rpn, EvalInputs, Op, RpnProgram, PROGRAM_VERSION};
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::xdr::ToXdr;
@@ -20,9 +25,8 @@ use soroban_sdk::{vec as svec, Address, Env, IntoVal, Symbol, Val, Vec as SVec};
 
 // ------------------------------------------------------------- shared shape
 
-/// Abstract program shape, lowered into BOTH encodings so they are
-/// guaranteed to be the same logical program. Construction is fully
-/// deterministic — no randomness anywhere.
+/// Abstract program shape, lowered into the wire encoding. Construction is
+/// fully deterministic — no randomness anywhere.
 enum Spec {
     All(Vec<Spec>),
     Any(Vec<Spec>),
@@ -60,54 +64,6 @@ impl Lowerer<'_> {
             v.push_back(Symbol::new(self.env, n));
         }
         v
-    }
-
-    /// Pre-order lowering: a node's children always land at higher indices,
-    /// satisfying the arena's forward-only rule by construction.
-    fn to_arena(&self, spec: &Spec) -> ArenaProgram {
-        let mut nodes: Vec<Node> = Vec::new();
-        self.arena_node(spec, &mut nodes);
-        let mut out = SVec::new(self.env);
-        for n in &nodes {
-            out.push_back(n.clone());
-        }
-        ArenaProgram {
-            version: PROGRAM_VERSION,
-            nodes: out,
-        }
-    }
-
-    fn arena_node(&self, spec: &Spec, nodes: &mut Vec<Node>) -> u32 {
-        let idx = u32::try_from(nodes.len()).unwrap();
-        // Reserve the slot; composites are patched once children exist.
-        nodes.push(Node::MinSigners(0));
-        let node = match spec {
-            Spec::All(kids) => {
-                let mut ix = SVec::new(self.env);
-                for k in kids {
-                    ix.push_back(self.arena_node(k, nodes));
-                }
-                Node::All(ix)
-            }
-            Spec::Any(kids) => {
-                let mut ix = SVec::new(self.env);
-                for k in kids {
-                    ix.push_back(self.arena_node(k, nodes));
-                }
-                Node::Any(ix)
-            }
-            Spec::Not(kid) => Node::Not(self.arena_node(kid, nodes)),
-            Spec::MinSigners(n) => Node::MinSigners(*n),
-            Spec::FnIn(names) => Node::FnIn(self.syms(names)),
-            Spec::ArgAddrEq(i) => Node::ArgAddrEq(*i, self.addr.clone()),
-            Spec::ArgAddrIsSelf(i) => Node::ArgAddrIsSelf(*i),
-            Spec::ArgSymEq(i, s) => Node::ArgSymEq(*i, Symbol::new(self.env, s)),
-            Spec::ArgU32Eq(i, n) => Node::ArgU32Eq(*i, *n),
-            Spec::LedgerBefore(n) => Node::LedgerBefore(*n),
-            Spec::LedgerAtOrAfter(n) => Node::LedgerAtOrAfter(*n),
-        };
-        nodes[idx as usize] = node;
-        idx
     }
 
     /// Post-order lowering: children first, then the combining op.
@@ -207,8 +163,8 @@ fn load_wasm(name: &str) -> Vec<u8> {
     std::fs::read(&path).unwrap_or_else(|e| {
         panic!(
             "bench wasm not found at {path} ({e}).\n\
-             Build it first: `just bench` (or `cargo build -p perch-bench-arena \
-             -p perch-bench-rpn --target wasm32v1-none --release`)."
+             Build it first: `just bench` (or `cargo build -p perch-bench-rpn \
+             --target wasm32v1-none --release`)."
         )
     })
 }
@@ -222,7 +178,7 @@ struct Measurement {
 }
 
 /// Register `wasm` in a fresh Env and meter one `validate` and one `eval`.
-/// `build_args` constructs (program-as-Val, program-xdr-len) for that Env.
+/// `build` constructs (program-as-Val, program-xdr-len) for that Env.
 fn measure(
     wasm: &[u8],
     build: &dyn Fn(&Env, &Address) -> (Val, u32),
@@ -272,14 +228,12 @@ fn measure(
 }
 
 #[test]
-#[ignore = "needs bench wasms built for wasm32v1-none; run via `just bench`"]
+#[ignore = "needs the bench wasm built for wasm32v1-none; run via `just bench`"]
 fn metered_wire_format_bench() {
-    let arena_wasm = load_wasm("perch_bench_arena.wasm");
     let rpn_wasm = load_wasm("perch_bench_rpn.wasm");
 
     println!("\n## Wasm sizes");
-    println!("- perch_bench_arena.wasm: {} bytes", arena_wasm.len());
-    println!("- perch_bench_rpn.wasm:   {} bytes", rpn_wasm.len());
+    println!("- perch_bench_rpn.wasm: {} bytes", rpn_wasm.len());
 
     let matrix: Vec<(&str, Spec, u32)> = vec![
         ("ci-publish (4 nodes)", ci_publish_shape(), 1),
@@ -288,21 +242,19 @@ fn metered_wire_format_bench() {
         ("mixed-64", synthetic_mixed(64), 2),
     ];
 
-    println!("\n| program | encoding | eval cpu | eval mem | validate cpu | program XDR bytes | verdict |");
-    println!("|---|---|---:|---:|---:|---:|---|");
+    println!("\n| program | eval cpu | eval mem | validate cpu | program XDR bytes | verdict |");
+    println!("|---|---:|---:|---:|---:|---|");
     for (name, spec, signers) in &matrix {
-        // Sanity: both lowerings agree with each other under native eval
-        // before we meter anything.
-        {
+        // Sanity: the lowering validates, and native eval agrees with the
+        // metered verdict below.
+        let native_verdict = {
             let env = Env::default();
             let self_addr = Address::generate(&env);
             let low = Lowerer {
                 env: &env,
                 addr: Address::generate(&env),
             };
-            let a = low.to_arena(spec);
             let r = low.to_rpn(spec);
-            arena::validate(&a).expect("arena lowering must validate");
             rpn::validate(&r).expect("rpn lowering must validate");
             let ctx = Context::Contract(ContractContext {
                 contract: Address::generate(&env),
@@ -319,27 +271,14 @@ fn metered_wire_format_bench() {
                 signer_count: *signers,
                 self_addr: &self_addr,
             };
-            assert_eq!(
-                arena::eval(&env, &a, &inputs),
-                rpn::eval(&env, &r, &inputs),
-                "encodings disagree on {name}"
-            );
-        }
+            match rpn::eval(&env, &r, &inputs) {
+                perch_program::Verdict::False => 0u32,
+                perch_program::Verdict::Unknown => 1,
+                perch_program::Verdict::True => 2,
+            }
+        };
 
-        let m_arena = measure(
-            &arena_wasm,
-            &|env, _self_addr| {
-                let low = Lowerer {
-                    env,
-                    addr: Address::generate(env),
-                };
-                let p = low.to_arena(spec);
-                let bytes = p.clone().to_xdr(env).len();
-                (p.into_val(env), bytes)
-            },
-            *signers,
-        );
-        let m_rpn = measure(
+        let m = measure(
             &rpn_wasm,
             &|env, _self_addr| {
                 let low = Lowerer {
@@ -353,14 +292,12 @@ fn metered_wire_format_bench() {
             *signers,
         );
         assert_eq!(
-            m_arena.verdict, m_rpn.verdict,
-            "metered verdicts disagree on {name}"
+            m.verdict, native_verdict,
+            "metered verdict disagrees with native eval on {name}"
         );
-        for (enc, m) in [("arena", &m_arena), ("rpn", &m_rpn)] {
-            println!(
-                "| {name} | {enc} | {} | {} | {} | {} | {} |",
-                m.eval_cpu, m.eval_mem, m.validate_cpu, m.program_bytes, m.verdict
-            );
-        }
+        println!(
+            "| {name} | {} | {} | {} | {} | {} |",
+            m.eval_cpu, m.eval_mem, m.validate_cpu, m.program_bytes, m.verdict
+        );
     }
 }

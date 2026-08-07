@@ -1,10 +1,10 @@
 #![no_std]
-//! Bench-only contract exposing the RPN encoding's validate/eval as
-//! metered wasm entry points for the wire-format benchmark
-//! (<https://github.com/stellar-registry/perch/issues/2>).
+//! Bench-only contract exposing the frozen RPN encoding's validate/eval
+//! as metered wasm entry points for the instruction-count canary
+//! (originally the wire-format benchmark,
+//! <https://github.com/stellar-registry/perch/issues/2>).
 //!
-//! One contract per encoding so each wasm's size isolates one encoding's
-//! code contribution. Never deployed to a network.
+//! Never deployed to a network.
 
 use perch_program::{rpn, EvalInputs, RpnProgram, Verdict};
 use soroban_sdk::{auth::Context, contract, contractimpl, Address, Env};

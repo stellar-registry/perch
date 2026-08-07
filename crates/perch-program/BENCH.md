@@ -178,3 +178,13 @@ transaction's 400M CPU allowance.
   short-circuit); an arena interpreter *with* short-circuiting would beat
   these arena numbers on favorable data, but not in the worst case that
   budgets must provision for.
+
+## Decision
+
+The postfix (RPN) encoding is **frozen as perch-program v1**, on the
+numbers and analysis above. The arena implementation (the `arena` module,
+its bench contract `perch-bench-arena`, and its tests) was removed in this
+commit; it remains retrievable at the previous commit, alongside the exact
+code both columns of the tables were measured from. The RPN bench contract
+and harness are kept as an instruction-count canary for the frozen format
+(`just bench`).

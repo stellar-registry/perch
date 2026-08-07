@@ -1,4 +1,5 @@
-//! Encoding B — postfix (RPN).
+//! Postfix (RPN) encoding — the frozen perch-program v1 wire format,
+//! chosen by the benchmark in `crates/perch-program/BENCH.md`.
 //!
 //! Ops are evaluated left-to-right against a [`Verdict`] value stack:
 //! leaves push, `Not` pops one, `All(n)`/`Any(n)` pop `n` and push the

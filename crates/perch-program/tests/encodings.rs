@@ -1,13 +1,10 @@
-//! Validation + evaluation tests for both candidate wire formats.
+//! Validation + evaluation tests for the frozen postfix (RPN) wire format.
 //!
 //! Every test that exercises a leaf decode failure asserts the fail-closed
 //! contract in BOTH polarities: `Unknown` in allow position (root leaf)
 //! must deny, and `Unknown` in deny position (under `Not`) must still deny.
 
-use perch_program::{
-    arena, rpn, ArenaProgram, EvalInputs, Node, Op, RpnProgram, ValidationError, Verdict,
-    PROGRAM_VERSION,
-};
+use perch_program::{rpn, EvalInputs, Op, RpnProgram, ValidationError, Verdict, PROGRAM_VERSION};
 use soroban_sdk::auth::{
     Context, ContractContext, ContractExecutable, CreateContractHostFnContext,
 };
@@ -54,19 +51,6 @@ impl Fixture {
         })
     }
 
-    fn eval_arena(&self, nodes: SVec<Node>, context: &Context, signer_count: u32) -> Verdict {
-        let program = ArenaProgram {
-            version: PROGRAM_VERSION,
-            nodes,
-        };
-        let inputs = EvalInputs {
-            context,
-            signer_count,
-            self_addr: &self.self_addr,
-        };
-        arena::eval(&self.env, &program, &inputs)
-    }
-
     fn eval_rpn(&self, ops: SVec<Op>, context: &Context, signer_count: u32) -> Verdict {
         let program = RpnProgram {
             version: PROGRAM_VERSION,
@@ -81,26 +65,8 @@ impl Fixture {
     }
 }
 
-/// The CI-publish shape: All(MinSigners(1), FnIn[2 syms], ArgAddrIsSelf(1)),
-/// arena encoding.
-fn ci_shape_arena(f: &Fixture) -> ArenaProgram {
-    ArenaProgram {
-        version: PROGRAM_VERSION,
-        nodes: vec![
-            &f.env,
-            Node::All(vec![&f.env, 1, 2, 3]),
-            Node::MinSigners(1),
-            Node::FnIn(vec![
-                &f.env,
-                Symbol::new(&f.env, "transfer"),
-                Symbol::new(&f.env, "approve"),
-            ]),
-            Node::ArgAddrIsSelf(2),
-        ],
-    }
-}
-
-/// Same logical program, postfix encoding.
+/// The CI-publish shape: All(MinSigners(1), FnIn[2 syms], ArgAddrIsSelf(2)),
+/// postfix encoding.
 fn ci_shape_rpn(f: &Fixture) -> RpnProgram {
     RpnProgram {
         version: PROGRAM_VERSION,
@@ -121,80 +87,9 @@ fn ci_shape_rpn(f: &Fixture) -> RpnProgram {
 // ---------------------------------------------------------------- validation
 
 #[test]
-fn arena_validates_ci_shape() {
-    let f = Fixture::new();
-    assert_eq!(arena::validate(&ci_shape_arena(&f)), Ok(()));
-}
-
-#[test]
 fn rpn_validates_ci_shape() {
     let f = Fixture::new();
     assert_eq!(rpn::validate(&ci_shape_rpn(&f)), Ok(()));
-}
-
-#[test]
-fn arena_rejects_backward_and_self_reference() {
-    let f = Fixture::new();
-    // Not at index 1 pointing back at the root: backward edge.
-    let backward = ArenaProgram {
-        version: PROGRAM_VERSION,
-        nodes: vec![&f.env, Node::Not(1), Node::Not(0)],
-    };
-    assert_eq!(
-        arena::validate(&backward),
-        Err(ValidationError::ForwardRefViolation)
-    );
-    // Self-cycle: node references itself.
-    let cycle = ArenaProgram {
-        version: PROGRAM_VERSION,
-        nodes: vec![&f.env, Node::Not(0)],
-    };
-    assert_eq!(
-        arena::validate(&cycle),
-        Err(ValidationError::ForwardRefViolation)
-    );
-}
-
-#[test]
-fn arena_rejects_out_of_range_child() {
-    let f = Fixture::new();
-    let program = ArenaProgram {
-        version: PROGRAM_VERSION,
-        nodes: vec![&f.env, Node::All(vec![&f.env, 1, 2]), Node::MinSigners(1)],
-    };
-    assert_eq!(
-        arena::validate(&program),
-        Err(ValidationError::IndexOutOfRange)
-    );
-}
-
-#[test]
-fn arena_rejects_zero_arity_composite() {
-    let f = Fixture::new();
-    let program = ArenaProgram {
-        version: PROGRAM_VERSION,
-        nodes: vec![&f.env, Node::All(SVec::new(&f.env))],
-    };
-    assert_eq!(
-        arena::validate(&program),
-        Err(ValidationError::ArityMismatch)
-    );
-}
-
-#[test]
-fn arena_rejects_unknown_version_and_empty() {
-    let f = Fixture::new();
-    let mut program = ci_shape_arena(&f);
-    program.version = PROGRAM_VERSION + 1;
-    assert_eq!(
-        arena::validate(&program),
-        Err(ValidationError::UnknownVersion)
-    );
-    let empty = ArenaProgram {
-        version: PROGRAM_VERSION,
-        nodes: SVec::new(&f.env),
-    };
-    assert_eq!(arena::validate(&empty), Err(ValidationError::Empty));
 }
 
 #[test]
@@ -262,7 +157,7 @@ fn rpn_rejects_unknown_version_and_empty() {
 // ---------------------------------------------------------------------- eval
 
 #[test]
-fn ci_shape_allows_matching_call_in_both_encodings() {
+fn ci_shape_allows_matching_call() {
     let f = Fixture::new();
     let ctx = f.contract_context();
     let inputs = EvalInputs {
@@ -270,10 +165,6 @@ fn ci_shape_allows_matching_call_in_both_encodings() {
         signer_count: 1,
         self_addr: &f.self_addr,
     };
-    assert_eq!(
-        arena::eval(&f.env, &ci_shape_arena(&f), &inputs),
-        Verdict::True
-    );
     assert_eq!(rpn::eval(&f.env, &ci_shape_rpn(&f), &inputs), Verdict::True);
 }
 
@@ -293,10 +184,6 @@ fn ci_shape_denies_definitely_on_wrong_fn_and_zero_signers() {
     // MinSigners(1) with 0 signers is False; FnIn misses: False, and the
     // missing arg 2 makes ArgAddrIsSelf Unknown. min(False, ...) = False.
     assert_eq!(
-        arena::eval(&f.env, &ci_shape_arena(&f), &inputs),
-        Verdict::False
-    );
-    assert_eq!(
         rpn::eval(&f.env, &ci_shape_rpn(&f), &inputs),
         Verdict::False
     );
@@ -314,79 +201,46 @@ fn leaf_decode_failure_is_unknown_in_both_polarities() {
 
     let leaves = [
         // Missing argument index (context has 3 args).
-        Node::ArgAddrEq(9, f.target.clone()),
-        Node::ArgAddrIsSelf(9),
-        Node::ArgSymEq(9, sym.clone()),
-        Node::ArgU32Eq(9, 42),
+        Op::ArgAddrEq(9, f.target.clone()),
+        Op::ArgAddrIsSelf(9),
+        Op::ArgSymEq(9, sym.clone()),
+        Op::ArgU32Eq(9, 42),
         // Wrong argument type (arg 0 is u32; arg 2 is an address).
-        Node::ArgAddrEq(0, f.target.clone()),
-        Node::ArgAddrIsSelf(0),
-        Node::ArgSymEq(0, sym.clone()),
-        Node::ArgU32Eq(2, 42),
+        Op::ArgAddrEq(0, f.target.clone()),
+        Op::ArgAddrIsSelf(0),
+        Op::ArgSymEq(0, sym.clone()),
+        Op::ArgU32Eq(2, 42),
     ];
-    for node in leaves {
-        let op = node_to_op(&node);
+    for op in leaves {
         // Allow position: the leaf is the root.
-        assert_eq!(
-            f.eval_arena(vec![&f.env, node.clone()], &ctx, 1),
-            Verdict::Unknown,
-            "arena allow position: {node:?}"
-        );
         assert_eq!(
             f.eval_rpn(vec![&f.env, op.clone()], &ctx, 1),
             Verdict::Unknown,
-            "rpn allow position: {node:?}"
+            "allow position: {op:?}"
         );
         // Deny position: Not(leaf) must stay Unknown, not flip to True.
         assert_eq!(
-            f.eval_arena(vec![&f.env, Node::Not(1), node.clone()], &ctx, 1),
-            Verdict::Unknown,
-            "arena deny position: {node:?}"
-        );
-        assert_eq!(
             f.eval_rpn(vec![&f.env, op.clone(), Op::Not], &ctx, 1),
             Verdict::Unknown,
-            "rpn deny position: {node:?}"
+            "deny position: {op:?}"
         );
     }
 
     // Non-contract context: every context-inspecting leaf is Unknown, even
     // ones that would be True/False under a contract context.
     let ctx_leaves = [
-        Node::FnIn(vec![&f.env, sym.clone()]),
-        Node::ArgAddrEq(0, f.target.clone()),
-        Node::ArgAddrIsSelf(2),
-        Node::ArgSymEq(1, sym.clone()),
-        Node::ArgU32Eq(0, 42),
+        Op::FnIn(vec![&f.env, sym.clone()]),
+        Op::ArgAddrEq(0, f.target.clone()),
+        Op::ArgAddrIsSelf(2),
+        Op::ArgSymEq(1, sym.clone()),
+        Op::ArgU32Eq(0, 42),
     ];
-    for node in ctx_leaves {
-        let op = node_to_op(&node);
+    for op in ctx_leaves {
         assert_eq!(
-            f.eval_arena(vec![&f.env, node.clone()], &non_contract, 1),
+            f.eval_rpn(vec![&f.env, op.clone()], &non_contract, 1),
             Verdict::Unknown,
-            "arena non-contract ctx: {node:?}"
+            "non-contract ctx: {op:?}"
         );
-        assert_eq!(
-            f.eval_rpn(vec![&f.env, op], &non_contract, 1),
-            Verdict::Unknown,
-            "rpn non-contract ctx: {node:?}"
-        );
-    }
-}
-
-/// Leaf-for-leaf translation for tests that run the same leaf through both
-/// encodings.
-fn node_to_op(node: &Node) -> Op {
-    match node {
-        Node::MinSigners(n) => Op::MinSigners(*n),
-        Node::FnIn(fns) => Op::FnIn(fns.clone()),
-        Node::ArgAddrEq(i, a) => Op::ArgAddrEq(*i, a.clone()),
-        Node::ArgAddrIsSelf(i) => Op::ArgAddrIsSelf(*i),
-        Node::ArgSymEq(i, s) => Op::ArgSymEq(*i, s.clone()),
-        Node::ArgU32Eq(i, n) => Op::ArgU32Eq(*i, *n),
-        Node::LedgerBefore(n) => Op::LedgerBefore(*n),
-        Node::LedgerAtOrAfter(n) => Op::LedgerAtOrAfter(*n),
-        composite => panic!("not a leaf: {composite:?}"),
     }
 }
 
@@ -395,10 +249,6 @@ fn min_signers_boundary() {
     let f = Fixture::new();
     let ctx = f.contract_context();
     for (signers, want) in [(1, Verdict::False), (2, Verdict::True), (3, Verdict::True)] {
-        assert_eq!(
-            f.eval_arena(vec![&f.env, Node::MinSigners(2)], &ctx, signers),
-            want
-        );
         assert_eq!(
             f.eval_rpn(vec![&f.env, Op::MinSigners(2)], &ctx, signers),
             want
@@ -411,14 +261,12 @@ fn ledger_leaves_track_sequence() {
     let f = Fixture::new();
     let ctx = f.contract_context();
     f.env.ledger().with_mut(|l| l.sequence_number = 100);
-    for (node, want) in [
-        (Node::LedgerBefore(101), Verdict::True),
-        (Node::LedgerBefore(100), Verdict::False),
-        (Node::LedgerAtOrAfter(100), Verdict::True),
-        (Node::LedgerAtOrAfter(101), Verdict::False),
+    for (op, want) in [
+        (Op::LedgerBefore(101), Verdict::True),
+        (Op::LedgerBefore(100), Verdict::False),
+        (Op::LedgerAtOrAfter(100), Verdict::True),
+        (Op::LedgerAtOrAfter(101), Verdict::False),
     ] {
-        let op = node_to_op(&node);
-        assert_eq!(f.eval_arena(vec![&f.env, node], &ctx, 1), want);
         assert_eq!(f.eval_rpn(vec![&f.env, op], &ctx, 1), want);
     }
 }
@@ -431,16 +279,6 @@ fn nested_composition_mixes_kleene_correctly() {
     let f = Fixture::new();
     let ctx = f.contract_context();
     // False leaf: ArgU32Eq(0, 43) (arg 0 is 42). Unknown leaf: ArgU32Eq(9, 1).
-    let nodes = vec![
-        &f.env,
-        Node::All(vec![&f.env, 1, 5]), // 0
-        Node::Any(vec![&f.env, 2, 3]), // 1
-        Node::ArgU32Eq(0, 43),         // 2: False
-        Node::Not(4),                  // 3
-        Node::ArgU32Eq(0, 43),         // 4: False -> Not = True
-        Node::Not(6),                  // 5
-        Node::ArgU32Eq(9, 1),          // 6: Unknown -> Not = Unknown
-    ];
     let ops = vec![
         &f.env,
         Op::ArgU32Eq(0, 43),
@@ -451,20 +289,9 @@ fn nested_composition_mixes_kleene_correctly() {
         Op::Not,
         Op::All(2),
     ];
-    assert_eq!(f.eval_arena(nodes, &ctx, 1), Verdict::Unknown);
     assert_eq!(f.eval_rpn(ops, &ctx, 1), Verdict::Unknown);
 
     // Swap the Unknown branch for a True one: the whole thing goes True.
-    let nodes_true = vec![
-        &f.env,
-        Node::All(vec![&f.env, 1, 5]),
-        Node::Any(vec![&f.env, 2, 3]),
-        Node::ArgU32Eq(0, 43),
-        Node::Not(4),
-        Node::ArgU32Eq(0, 43),
-        Node::Not(6),
-        Node::ArgU32Eq(0, 43), // False -> Not = True
-    ];
     let ops_true = vec![
         &f.env,
         Op::ArgU32Eq(0, 43),
@@ -475,7 +302,6 @@ fn nested_composition_mixes_kleene_correctly() {
         Op::Not,
         Op::All(2),
     ];
-    assert_eq!(f.eval_arena(nodes_true, &ctx, 1), Verdict::True);
     assert_eq!(f.eval_rpn(ops_true, &ctx, 1), Verdict::True);
 }
 
@@ -484,17 +310,7 @@ fn nested_composition_mixes_kleene_correctly() {
 fn eval_is_fail_closed_on_unvalidated_programs() {
     let f = Fixture::new();
     let ctx = f.contract_context();
-    // Arena: out-of-range child.
-    assert_eq!(
-        f.eval_arena(vec![&f.env, Node::Not(7)], &ctx, 1),
-        Verdict::Unknown
-    );
-    // Arena: self-cycle terminates via the depth guard.
-    assert_eq!(
-        f.eval_arena(vec![&f.env, Node::All(vec![&f.env, 0])], &ctx, 1),
-        Verdict::Unknown
-    );
-    // RPN: underflow and non-single result.
+    // Underflow and non-single result.
     assert_eq!(f.eval_rpn(vec![&f.env, Op::Not], &ctx, 1), Verdict::Unknown);
     assert_eq!(
         f.eval_rpn(vec![&f.env, Op::MinSigners(1), Op::MinSigners(1)], &ctx, 1),

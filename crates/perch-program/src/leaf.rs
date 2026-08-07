@@ -1,6 +1,5 @@
-//! Shared leaf-predicate evaluation, used verbatim by both the arena and
-//! RPN encodings so the wire-format benchmark compares encoding overhead
-//! only, never divergent leaf semantics.
+//! Leaf-predicate evaluation, kept separate from the [`crate::rpn`] op
+//! dispatch so leaf semantics stay independent of the wire encoding.
 //!
 //! Fail-closed rule: any decode failure — non-`Contract` context, missing
 //! argument index, wrong argument type — yields [`Verdict::Unknown`], never

@@ -5,7 +5,6 @@ members = [
     "crates/perch-program",
     "crates/perch-interpreter",
     "crates/perch-compile",
-    "crates/perch-bench-arena",
     "crates/perch-bench-rpn",
     "crates/perch-bench",
 ]

@@ -1,9 +1,56 @@
 //! The perch policy document model.
 //!
-//! A `PolicyDoc` is the reviewable artifact at the center of perch: a canonical,
-//! serializable description of a smart account's signers, rules, scopes, and
-//! constraints. Canonical JSON (JCS) gives every document a stable
-//! `doc_hash = sha256(canonical bytes)`; validation is fail-closed
-//! (unknown fields and unknown versions are rejected).
+//! A [`PolicyDoc`] is the reviewable artifact at the center of perch: a
+//! canonical, serializable description of a smart account's signers, rules,
+//! scopes, and constraints. This crate is host-side tooling (std, never
+//! on-chain) and is the trust root of the review workflow: what a reviewer
+//! approves is `doc_hash = sha256(canonical bytes)` of a document, so parsing,
+//! canonicalization, and validation here must be strict and deterministic.
+//!
+//! # Fail-closed philosophy
+//!
+//! Anything this model does not understand is an error, never a silent skip:
+//!
+//! - **Unknown fields** anywhere in the tree are rejected
+//!   (`deny_unknown_fields` on every struct; enum variants wrap payload
+//!   structs so the guarantee holds inside tagged enums too — including the
+//!   payload-less `self-admin` / `is-self` variants, which use empty structs
+//!   because serde's internally-tagged unit variants silently accept extra
+//!   fields).
+//! - **Unknown enum tags** are rejected by serde's tagged-enum handling.
+//! - **`version != 1`** is rejected by [`from_json`] with a distinct error
+//!   before anything else is examined, so future formats fail loudly and
+//!   precisely.
+//! - **Semantic validation** ([`validate()`]) collects every violation —
+//!   duplicate ids/names, dangling signer references, malformed keys and
+//!   addresses, ambiguous empty lists, dead expiries — rather than stopping
+//!   at the first, and each error names the offending signer or rule.
+//! - Removing all signature checks from a rule requires writing out the
+//!   [`ACK_SENTINEL`] acknowledgement string verbatim.
+//!
+//! # Canonical form
+//!
+//! [`canonical_json`] implements RFC 8785 (JCS) for the subset of JSON this
+//! model can produce (integers only, ASCII keys, no nulls — see [`canon`] for
+//! the precise restrictions), and [`doc_hash`] / [`doc_hash_hex`] hash those
+//! bytes with SHA-256. Two structurally equal documents hash identically no
+//! matter how they were written down.
 //!
 //! Tracking issue: <https://github.com/stellar-registry/perch/issues/4>
+
+pub mod canon;
+pub mod doc;
+pub mod parse;
+pub mod validate;
+
+pub use canon::{canonical_json, doc_hash, doc_hash_hex};
+pub use doc::{
+    AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, ContractScope, IsSelfPred, PolicyDoc,
+    Principals, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
+    StringInPred, StringPrefixPred, U32EqPred,
+};
+pub use parse::{from_json, ParseError};
+pub use validate::{
+    is_address_shape, is_contract_address_shape, validate, ValidationError, ACK_SENTINEL,
+    MAX_SIGNER_KEY_LEN,
+};

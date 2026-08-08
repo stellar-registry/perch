@@ -19,7 +19,8 @@
 //! `string-in` predicate ([`ValidationError::DuplicateStringInValue`]).
 
 use crate::doc::{ArgPred, PolicyDoc, Principals, Rule, Scope};
-use std::collections::HashSet;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 /// The exact acknowledgement sentinel required in
@@ -50,6 +51,17 @@ pub enum ValidationError {
     DuplicateSignerId {
         /// The duplicated signer id.
         id: String,
+    },
+    /// Two signers with distinct ids resolve to the same physical key: same
+    /// verifier and same decoded key material. This reads to a reviewer as
+    /// two independent signers (e.g. a 2-of-2 rule) but is one key, so the
+    /// rule's real threshold is lower than it appears. Compared on decoded
+    /// bytes, so hex case does not hide the collision.
+    DuplicateSignerKey {
+        /// The later signer id that duplicates an earlier one's key.
+        id: String,
+        /// The earlier signer id sharing the same verifier and key.
+        first_id: String,
     },
     /// A signer's `key` is not valid hex.
     InvalidSignerKeyHex {
@@ -212,6 +224,10 @@ impl fmt::Display for ValidationError {
                 write!(f, "signer at position {position}: id is empty")
             }
             E::DuplicateSignerId { id } => write!(f, "duplicate signer id `{id}`"),
+            E::DuplicateSignerKey { id, first_id } => write!(
+                f,
+                "signer `{id}` shares verifier and key material with `{first_id}` (same physical key under two ids)"
+            ),
             E::InvalidSignerKeyHex { id } => {
                 write!(f, "signer `{id}`: key is not valid hex")
             }
@@ -336,6 +352,9 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
     }
 
     let mut seen_signer_ids: HashSet<&str> = HashSet::new();
+    // Keyed on (verifier, decoded key bytes) so the same physical key under
+    // two ids is caught regardless of hex case; maps to the first id seen.
+    let mut seen_key_material: HashMap<(&str, Vec<u8>), &str> = HashMap::new();
     for (position, signer) in doc.signers.iter().enumerate() {
         if signer.id.is_empty() {
             errors.push(ValidationError::EmptySignerId { position });
@@ -354,6 +373,17 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
                         id: signer.id.clone(),
                         len: decoded.len(),
                     });
+                }
+                match seen_key_material.entry((&signer.verifier, decoded)) {
+                    Entry::Occupied(first) => {
+                        errors.push(ValidationError::DuplicateSignerKey {
+                            id: signer.id.clone(),
+                            first_id: (*first.get()).to_string(),
+                        });
+                    }
+                    Entry::Vacant(slot) => {
+                        slot.insert(&signer.id);
+                    }
                 }
             }
         }

@@ -204,6 +204,37 @@ fn rejects_snake_case_field_names() {
     assert_json_err(&input, "not_after_ledger");
 }
 
+// --- explicit null is not "absent" -------------------------------------------
+
+#[test]
+fn rejects_explicit_null_functions() {
+    // `null` must not collapse to None (= "all functions"), which would make
+    // `"functions": null` silently authorize everything.
+    let input = valid().replace(r#""functions":["publish"]"#, r#""functions":null"#);
+    assert_json_err(&input, "null");
+}
+
+#[test]
+fn rejects_explicit_null_args() {
+    let input = valid().replace(
+        r#""args":[{"index":1,"pred":{"type":"is-self"}}]"#,
+        r#""args":null"#,
+    );
+    assert_json_err(&input, "null");
+}
+
+#[test]
+fn rejects_explicit_null_not_after_ledger() {
+    let input = valid().replace(r#""not-after-ledger":999"#, r#""not-after-ledger":null"#);
+    assert_json_err(&input, "null");
+}
+
+#[test]
+fn rejects_explicit_null_network() {
+    let input = valid().replace(r#""network":"testnet""#, r#""network":null"#);
+    assert_json_err(&input, "null");
+}
+
 // --- duplicate object keys ---------------------------------------------------
 //
 // JSON parsers legitimately disagree on whether the first or last occurrence

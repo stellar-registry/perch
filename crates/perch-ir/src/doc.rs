@@ -12,7 +12,22 @@
 //! `install-param-hex`), matching the kebab-case enum tags so the document
 //! surface uses one consistent convention.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Deserialize an optional field that must be *absent* to be `None` — an
+/// explicit `null` is rejected. serde only calls this when the key is present,
+/// so a present `null` reaches the inner type's deserializer and fails; an
+/// absent key uses `#[serde(default)]` and never calls this. Without it, serde
+/// maps `null` to `None`, and `None` is the permissive meaning for
+/// `functions`/`args` (all functions / unconstrained) — so `"functions": null`
+/// would silently authorize everything. Fail-closed: `null` is never "absent".
+fn deserialize_present_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
 
 /// A complete perch policy document — the reviewable artifact whose canonical
 /// bytes are hashed by [`crate::doc_hash`].
@@ -25,7 +40,11 @@ pub struct PolicyDoc {
     pub version: u32,
     /// Optional network identifier (e.g. a network passphrase or short name).
     /// Omitted from the canonical form when `None`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub network: Option<String>,
     /// Declared signers that rules may reference by id.
     pub signers: Vec<SignerDecl>,
@@ -66,12 +85,20 @@ pub struct Rule {
     /// If present, the allowlist of function names this rule covers.
     /// `None` means all functions in scope; an explicit empty list is
     /// rejected by validation as ambiguous.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub functions: Option<Vec<String>>,
     /// If present, constraints on call arguments, keyed by argument index.
     /// `None` means unconstrained; an explicit empty list is rejected by
     /// validation as ambiguous.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub args: Option<Vec<ArgConstraint>>,
     /// If present, the **ledger sequence** at or after which this rule stops
     /// authorizing — not a Unix timestamp. The unit is explicit in the name
@@ -82,7 +109,11 @@ pub struct Rule {
     /// (enforced before any policy runs); in-program ledger predicates are
     /// reserved for windows *within* a live rule. Must be non-zero; omitted
     /// from the canonical form when `None`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub not_after_ledger: Option<u32>,
 }
 

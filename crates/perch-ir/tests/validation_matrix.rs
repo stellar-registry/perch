@@ -4,8 +4,8 @@
 mod common;
 
 use common::{
-    assert_accepts, assert_rejects, base_doc, rule, signer, CI_KEY_HEX, ED25519_VERIFIER, G_ADDR,
-    POLICY_CONTRACT, REGISTRY, WEBAUTHN_VERIFIER,
+    assert_accepts, assert_rejects, base_doc, rule, signer, ADMIN_KEY_HEX, CI_KEY_HEX,
+    ED25519_VERIFIER, G_ADDR, POLICY_CONTRACT, REGISTRY, WEBAUTHN_VERIFIER,
 };
 use perch_ir::{
     validate, AddressEqPred, ArgConstraint, ArgPred, Principals, Scope,
@@ -60,6 +60,51 @@ fn rejects_duplicate_signer_ids() {
 fn accepts_distinct_signer_ids() {
     let mut doc = base_doc();
     doc.signers.push(signer("ci", ED25519_VERIFIER, CI_KEY_HEX));
+    assert_accepts(&doc);
+}
+
+// --- DuplicateSignerKey ------------------------------------------------------
+
+#[test]
+fn rejects_two_ids_sharing_one_key() {
+    let mut doc = base_doc();
+    // Same verifier and key as "admin" under a new id: reads as two signers
+    // (e.g. a 2-of-2 rule) but is one physical key.
+    doc.signers
+        .push(signer("backup", WEBAUTHN_VERIFIER, ADMIN_KEY_HEX));
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateSignerKey {
+            id: "backup".into(),
+            first_id: "admin".into(),
+        },
+    );
+}
+
+#[test]
+fn duplicate_signer_key_detection_is_hex_case_insensitive() {
+    let mut doc = base_doc();
+    doc.signers.push(signer(
+        "backup",
+        WEBAUTHN_VERIFIER,
+        &ADMIN_KEY_HEX.to_uppercase(),
+    ));
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateSignerKey {
+            id: "backup".into(),
+            first_id: "admin".into(),
+        },
+    );
+}
+
+#[test]
+fn accepts_same_key_under_different_verifier() {
+    let mut doc = base_doc();
+    // Identical key material but a different verifier is a genuinely distinct
+    // signer, so it must not trip the duplicate-key check.
+    doc.signers
+        .push(signer("other", ED25519_VERIFIER, ADMIN_KEY_HEX));
     assert_accepts(&doc);
 }
 

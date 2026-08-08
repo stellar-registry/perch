@@ -30,7 +30,7 @@
       "args": [
         { "index": 1, "pred": { "type": "is-self" } }
       ],
-      "not-after": 1893456000
+      "not-after-ledger": 55000000
     }
   ]
 }

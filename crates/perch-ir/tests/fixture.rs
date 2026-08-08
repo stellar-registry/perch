@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 /// Pinned doc_hash (hex) of the fixture. Must match
 /// `testdata/ci-publish.doc-hash`; a change is a canonical-form break.
-const FIXTURE_HASH_HEX: &str = "12a0f9b9c63f45d48c6695785439ed61341b47fa19b4f8768ea82b44474d2d76";
+const FIXTURE_HASH_HEX: &str = "38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d";
 
 fn testdata(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -42,7 +42,7 @@ fn fixture_parses_and_validates() {
         Some(["publish".to_string(), "publish_hash".to_string()].as_slice())
     );
     assert_eq!(doc.rules[1].args.as_ref().map(Vec::len), Some(1));
-    assert_eq!(doc.rules[1].not_after, Some(1_893_456_000));
+    assert_eq!(doc.rules[1].not_after_ledger, Some(55_000_000));
 }
 
 #[test]

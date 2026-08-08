@@ -41,7 +41,7 @@ pub fn rule(name: &str, scope: Scope, signers: &[&str]) -> Rule {
         }),
         functions: None,
         args: None,
-        not_after: None,
+        not_after_ledger: None,
     }
 }
 

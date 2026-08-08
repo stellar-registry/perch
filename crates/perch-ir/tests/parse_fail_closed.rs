@@ -11,7 +11,7 @@ use perch_ir::{from_json, ParseError, ACK_SENTINEL};
 /// substitute whole sub-objects.
 fn doc(scope: &str, principals: &str, pred: &str) -> String {
     format!(
-        r#"{{"version":1,"network":"testnet","signers":[{{"id":"admin","verifier":"{WEBAUTHN_VERIFIER}","key":"{ADMIN_KEY_HEX}"}}],"rules":[{{"name":"r","scope":{scope},"principals":{principals},"functions":["publish"],"args":[{{"index":1,"pred":{pred}}}],"not-after":999}}]}}"#
+        r#"{{"version":1,"network":"testnet","signers":[{{"id":"admin","verifier":"{WEBAUTHN_VERIFIER}","key":"{ADMIN_KEY_HEX}"}}],"rules":[{{"name":"r","scope":{scope},"principals":{principals},"functions":["publish"],"args":[{{"index":1,"pred":{pred}}}],"not-after-ledger":999}}]}}"#
     )
 }
 
@@ -43,7 +43,7 @@ fn parses_a_fully_featured_valid_doc() {
     assert_eq!(doc.network.as_deref(), Some("testnet"));
     assert_eq!(doc.signers.len(), 1);
     assert_eq!(doc.rules.len(), 1);
-    assert_eq!(doc.rules[0].not_after, Some(999));
+    assert_eq!(doc.rules[0].not_after_ledger, Some(999));
     perch_ir::validate(&doc).expect("valid doc must validate");
 }
 
@@ -200,8 +200,8 @@ fn rejects_unknown_field_in_pred_payload() {
 #[test]
 fn rejects_snake_case_field_names() {
     // The wire format is kebab-case: snake_case aliases must not sneak in.
-    let input = valid().replace(r#""not-after":999"#, r#""not_after":999"#);
-    assert_json_err(&input, "not_after");
+    let input = valid().replace(r#""not-after-ledger":999"#, r#""not_after_ledger":999"#);
+    assert_json_err(&input, "not_after_ledger");
 }
 
 // --- duplicate object keys ---------------------------------------------------

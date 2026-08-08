@@ -566,26 +566,26 @@ fn accepts_address_eq_with_c_or_g_address() {
     assert_accepts(&doc);
 }
 
-// --- ZeroNotAfter ------------------------------------------------------------
+// --- ZeroNotAfterLedger ------------------------------------------------------
 
 #[test]
-fn rejects_zero_not_after() {
+fn rejects_zero_not_after_ledger() {
     let mut doc = base_doc();
-    doc.rules[0].not_after = Some(0);
+    doc.rules[0].not_after_ledger = Some(0);
     assert_rejects(
         &doc,
-        &ValidationError::ZeroNotAfter {
+        &ValidationError::ZeroNotAfterLedger {
             rule: "admin-root".into(),
         },
     );
 }
 
 #[test]
-fn accepts_positive_or_absent_not_after() {
+fn accepts_positive_or_absent_not_after_ledger() {
     let mut doc = base_doc();
-    doc.rules[0].not_after = Some(1);
+    doc.rules[0].not_after_ledger = Some(1);
     assert_accepts(&doc);
-    doc.rules[0].not_after = None;
+    doc.rules[0].not_after_ledger = None;
     assert_accepts(&doc);
 }
 
@@ -598,14 +598,14 @@ fn collects_all_errors_not_just_the_first() {
     doc.signers[0].key = "zz".into();
     doc.signers
         .push(signer("admin", ED25519_VERIFIER, CI_KEY_HEX));
-    doc.rules[0].not_after = Some(0);
+    doc.rules[0].not_after_ledger = Some(0);
     doc.rules[0].functions = Some(vec![]);
     let errors = validate(&doc).expect_err("expected failure");
     assert!(errors.len() >= 5, "expected >= 5 errors, got {errors:?}");
     assert!(errors.contains(&ValidationError::UnsupportedVersion { version: 3 }));
     assert!(errors.contains(&ValidationError::InvalidSignerKeyHex { id: "admin".into() }));
     assert!(errors.contains(&ValidationError::DuplicateSignerId { id: "admin".into() }));
-    assert!(errors.contains(&ValidationError::ZeroNotAfter {
+    assert!(errors.contains(&ValidationError::ZeroNotAfterLedger {
         rule: "admin-root".into()
     }));
     assert!(errors.contains(&ValidationError::EmptyFunctions {

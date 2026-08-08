@@ -13,7 +13,7 @@ use perch_ir::{
 };
 
 /// Golden doc used by the byte-level tests below: two signers, two rules,
-/// exercising functions/args/not-after.
+/// exercising functions/args/not-after-ledger.
 fn golden_doc() -> PolicyDoc {
     let mut doc = base_doc();
     doc.network = Some("testnet".into());
@@ -24,7 +24,7 @@ fn golden_doc() -> PolicyDoc {
         index: 1,
         pred: ArgPred::is_self(),
     }]);
-    publish.not_after = Some(1_893_456_000);
+    publish.not_after_ledger = Some(55_000_000);
     doc.rules.push(publish);
     doc
 }
@@ -38,7 +38,7 @@ fn golden_doc_shuffled_json() -> String {
             {{ "principals": {{ "signers": [ "admin" ], "type": "all" }},
                "scope": {{ "type": "self-admin" }},
                "name": "admin-root" }},
-            {{ "not-after": 1893456000,
+            {{ "not-after-ledger": 55000000,
                "args": [ {{ "pred": {{ "type": "is-self" }}, "index": 1 }} ],
                "functions": [ "publish", "publish_hash" ],
                "principals": {{ "signers": [ "ci" ], "type": "all" }},
@@ -58,7 +58,7 @@ fn golden_doc_shuffled_json() -> String {
 /// Pinned SHA-256 (hex) of the golden document's canonical bytes. Computed
 /// once from this crate and frozen; a change here is a breaking change to the
 /// canonical form and must be deliberate.
-const GOLDEN_HASH_HEX: &str = "411952cb9ebf4ca538d4d62228cbddf4c9892fca978a223078ca02f743c9a924";
+const GOLDEN_HASH_HEX: &str = "0ec51d345e5ea20c5406f2fea78448bf6a5e65a73a073dfcb9d7623f73dc21d9";
 
 #[test]
 fn struct_literal_and_shuffled_json_canonicalize_identically() {
@@ -99,20 +99,20 @@ fn round_trip_is_a_fixed_point() {
 
 #[test]
 fn absent_options_are_omitted_not_null() {
-    let doc = base_doc(); // network/functions/args/not_after all None
+    let doc = base_doc(); // network/functions/args/not_after_ledger all None
     let canon = canonical_json(&doc);
     assert!(!canon.contains("null"), "{canon}");
     assert!(!canon.contains("network"), "{canon}");
-    assert!(!canon.contains("not-after"), "{canon}");
+    assert!(!canon.contains("not-after-ledger"), "{canon}");
 }
 
 #[test]
 fn u32_extremes_serialize_as_plain_decimal() {
     let mut doc = golden_doc();
-    doc.rules[1].not_after = Some(u32::MAX);
+    doc.rules[1].not_after_ledger = Some(u32::MAX);
     let canon = canonical_json(&doc);
     // Plain decimal digits: no exponent, no decimal point, no sign.
-    assert!(canon.contains("\"not-after\":4294967295"), "{canon}");
+    assert!(canon.contains("\"not-after-ledger\":4294967295"), "{canon}");
     doc.rules[1].args = Some(vec![ArgConstraint {
         index: 0,
         pred: ArgPred::U32Eq(perch_ir::U32EqPred { value: 0 }),

@@ -8,7 +8,7 @@
 //! newtype around a dedicated payload struct (empty for `self-admin` /
 //! `is-self`) that does enforce it.
 //!
-//! JSON field names are kebab-case throughout (`not-after`,
+//! JSON field names are kebab-case throughout (`not-after-ledger`,
 //! `install-param-hex`), matching the kebab-case enum tags so the document
 //! surface uses one consistent convention.
 
@@ -53,7 +53,7 @@ pub struct SignerDecl {
 
 /// A single policy rule: who ([`Principals`]) may do what
 /// ([`Rule::functions`], [`Rule::args`]) where ([`Scope`]) until when
-/// ([`Rule::not_after`]).
+/// ([`Rule::not_after_ledger`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct Rule {
@@ -73,10 +73,17 @@ pub struct Rule {
     /// validation as ambiguous.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub args: Option<Vec<ArgConstraint>>,
-    /// If present, the rule expires after this value (must be non-zero).
-    /// Omitted from the canonical form when `None`.
+    /// If present, the **ledger sequence** at or after which this rule stops
+    /// authorizing — not a Unix timestamp. The unit is explicit in the name
+    /// because both lowering targets compare against the current ledger
+    /// sequence (`env.ledger().sequence()`), and a timestamp fits in `u32`
+    /// too, so an unlabelled field silently produces a rule that never
+    /// expires. Rule expiry lowers to OZ's native `ContextRule.valid_until`
+    /// (enforced before any policy runs); in-program ledger predicates are
+    /// reserved for windows *within* a live rule. Must be non-zero; omitted
+    /// from the canonical form when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub not_after: Option<u32>,
+    pub not_after_ledger: Option<u32>,
 }
 
 /// Where a rule applies. Tagged with `"type"`: `"contract"` or `"self-admin"`.

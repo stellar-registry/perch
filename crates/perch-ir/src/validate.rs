@@ -193,9 +193,9 @@ pub enum ValidationError {
         /// The malformed address string.
         address: String,
     },
-    /// A rule's `not-after` is `0`, which would make the rule dead on
+    /// A rule's `not-after-ledger` is `0`, which would make the rule dead on
     /// arrival. Omit the field for "no expiry".
-    ZeroNotAfter {
+    ZeroNotAfterLedger {
         /// The offending rule name.
         rule: String,
     },
@@ -284,8 +284,11 @@ impl fmt::Display for ValidationError {
                 f,
                 "rule `{rule}`: address-eq at arg {index}: `{address}` is not a C- or G-address strkey"
             ),
-            E::ZeroNotAfter { rule } => {
-                write!(f, "rule `{rule}`: not-after is 0 (omit it for no expiry)")
+            E::ZeroNotAfterLedger { rule } => {
+                write!(
+                    f,
+                    "rule `{rule}`: not-after-ledger is 0 (omit it for no expiry)"
+                )
             }
         }
     }
@@ -501,7 +504,7 @@ fn validate_rule(rule: &Rule, declared: &HashSet<&str>, errors: &mut Vec<Validat
         }
     }
 
-    if rule.not_after == Some(0) {
-        errors.push(ValidationError::ZeroNotAfter { rule: name() });
+    if rule.not_after_ledger == Some(0) {
+        errors.push(ValidationError::ZeroNotAfterLedger { rule: name() });
     }
 }

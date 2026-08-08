@@ -1,0 +1,15 @@
+[package]
+name = "perch-bench"
+description = "Metered benchmark harness for the frozen RPN wire format (instruction-count canary)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+doctest = false
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+perch-program = { workspace = true }

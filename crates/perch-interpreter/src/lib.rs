@@ -17,9 +17,10 @@ pub struct PerchInterpreter;
 impl PerchInterpreter {
     /// Program wire-format version this interpreter evaluates.
     ///
-    /// `0` = pre-release placeholder until the format is frozen by the
-    /// arena-vs-postfix benchmark (issue #2). Unknown versions are always
-    /// rejected at install time — fail closed.
+    /// `0` = pre-release placeholder until evaluation of the frozen
+    /// postfix v1 format (see `crates/perch-program/BENCH.md`) lands here
+    /// via issue #5. Unknown versions are always rejected at install time
+    /// — fail closed.
     pub fn program_version(_env: Env) -> u32 {
         0
     }

@@ -5,6 +5,8 @@ members = [
     "crates/perch-program",
     "crates/perch-interpreter",
     "crates/perch-compile",
+    "crates/perch-bench-rpn",
+    "crates/perch-bench",
 ]
 
 [workspace.package]

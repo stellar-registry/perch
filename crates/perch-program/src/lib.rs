@@ -5,10 +5,66 @@
 //! the compiler — install params are only ever encoded through these types,
 //! never hand-built `ScVal`s. It must never become a `#[contract]`.
 //!
-//! The wire format (node arena vs postfix) is frozen by the benchmark in
-//! <https://github.com/stellar-registry/perch/issues/2>; the op set and
+//! The wire format is FROZEN: postfix (RPN) is perch-program v1, chosen by
+//! the metered benchmark in `crates/perch-program/BENCH.md`
+//! (<https://github.com/stellar-registry/perch/issues/2>). The op set and
 //! evaluation semantics land in
 //! <https://github.com/stellar-registry/perch/issues/5>.
+//!
+//! [`rpn`] encodes programs as postfix ops over a verdict stack, with the
+//! leaf semantics and fail-closed rule in `leaf`.
+
+mod leaf;
+pub mod rpn;
+
+pub use rpn::{Op, RpnProgram};
+
+use soroban_sdk::{auth::Context, Address};
+
+/// The only program wire-format version accepted today. Unknown versions
+/// are rejected at validation time — fail closed.
+pub const PROGRAM_VERSION: u32 = 1;
+
+/// Maximum op count a program may contain. Bounds program length so
+/// evaluation cost is bounded at install time.
+pub const MAX_PROGRAM_LEN: u32 = 256;
+
+/// Maximum RPN value-stack depth.
+pub const MAX_STACK_DEPTH: u32 = 128;
+
+/// Why a program failed validation. Validation runs at install time; a
+/// program that validates can always be evaluated without tripping the
+/// defensive `Unknown` paths in eval.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValidationError {
+    /// `program.version` is not [`PROGRAM_VERSION`].
+    UnknownVersion,
+    /// The program has no ops.
+    Empty,
+    /// The program exceeds [`MAX_PROGRAM_LEN`].
+    TooLarge,
+    /// A composite op has an impossible arity (`All`/`Any` of zero operands).
+    ArityMismatch,
+    /// An op pops more values than the stack holds.
+    StackUnderflow,
+    /// The simulated stack would exceed [`MAX_STACK_DEPTH`].
+    StackOverflow,
+    /// The program does not leave exactly one value on the stack.
+    NotSingleResult,
+}
+
+/// Everything a leaf predicate may inspect, besides the [`soroban_sdk::Env`].
+///
+/// `context` is the authorization context being screened; only
+/// [`Context::Contract`] is decodable — every leaf that looks inside the
+/// context yields [`Verdict::Unknown`] for other variants. `signer_count` is
+/// the number of *authenticated* signers, computed by the caller.
+/// `self_addr` is the address the policy protects (the smart account).
+pub struct EvalInputs<'a> {
+    pub context: &'a Context,
+    pub signer_count: u32,
+    pub self_addr: &'a Address,
+}
 
 /// Three-valued (Kleene) verdict of evaluating a constraint.
 ///
@@ -40,6 +96,18 @@ impl Verdict {
     #[must_use]
     pub fn allows(self) -> bool {
         self == Verdict::True
+    }
+}
+
+/// A decoded boolean check maps onto the two definite verdicts; `Unknown`
+/// only ever arises from decode failure, never from `From<bool>`.
+impl From<bool> for Verdict {
+    fn from(b: bool) -> Verdict {
+        if b {
+            Verdict::True
+        } else {
+            Verdict::False
+        }
     }
 }
 

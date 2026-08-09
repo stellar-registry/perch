@@ -9,3 +9,7 @@ repository.workspace = true
 [dependencies]
 perch-ir = { workspace = true }
 perch-program = { workspace = true }
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

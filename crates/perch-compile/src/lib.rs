@@ -152,7 +152,12 @@ fn lower_rule(
         name: rule.name.clone(),
         scope,
         signers,
-        valid_until: rule.not_after_ledger,
+        // `not_after_ledger` is "dead AT OR AFTER this sequence" (valid while
+        // sequence < X). OZ's `valid_until` is inclusive — it expires only when
+        // `valid_until < sequence`, so it stays valid at `sequence == valid_until`.
+        // Lower to X-1 to honor the documented boundary; validation guarantees
+        // X >= 1, so this never underflows.
+        valid_until: rule.not_after_ledger.map(|x| x - 1),
         install,
     })
 }

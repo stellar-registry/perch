@@ -42,7 +42,9 @@ fn ci_publish_lowers_to_the_expected_plan() {
     let ci = &plan.rules[1];
     assert_eq!(ci.name, "ci-publish");
     assert_eq!(ci.scope, ScopeSpec::Contract(REGISTRY.to_string()));
-    assert_eq!(ci.valid_until, Some(55_000_000));
+    // not-after-ledger 55_000_000 ("dead at or after 55_000_000") lowers to the
+    // inclusive OZ valid_until one below it.
+    assert_eq!(ci.valid_until, Some(54_999_999));
     let install = ci
         .install
         .as_ref()
@@ -139,4 +141,20 @@ fn unknown_signer_ref_is_a_typed_error() {
 
 fn vec_std(ids: &[&str]) -> Vec<String> {
     ids.iter().map(|s| s.to_string()).collect()
+}
+
+#[test]
+fn expiry_lowers_to_the_inclusive_boundary_minus_one() {
+    // "dead at or after X" (perch-ir) must lower to OZ valid_until = X-1, since
+    // OZ keeps a rule valid at sequence == valid_until. Fail-closed on the
+    // boundary rather than granting one extra ledger.
+    let env = Env::default();
+    let mut doc = perch_ir::from_json(&fixture()).expect("parse");
+    doc.rules[1].not_after_ledger = Some(1);
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    assert_eq!(plan.rules[1].valid_until, Some(0));
+
+    doc.rules[0].not_after_ledger = None;
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    assert_eq!(plan.rules[0].valid_until, None, "no expiry stays no expiry");
 }

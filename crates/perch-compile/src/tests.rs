@@ -158,3 +158,75 @@ fn expiry_lowers_to_the_inclusive_boundary_minus_one() {
     let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
     assert_eq!(plan.rules[0].valid_until, None, "no expiry stays no expiry");
 }
+
+// --- static analysis (#19 PR4) ---------------------------------------------
+
+fn syms(env: &Env, names: &[&str]) -> Vec<Symbol> {
+    names.iter().map(|n| Symbol::new(env, n)).collect()
+}
+
+#[test]
+fn reachable_calls_reports_scope_and_functions() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let reach = reachable_calls(&plan);
+    assert_eq!(reach.len(), 2);
+
+    // admin-root: policy-free self-admin → any function (INV-2).
+    assert_eq!(reach[0].rule, "admin-root");
+    assert_eq!(reach[0].scope, ScopeSpec::SelfAdmin);
+    assert_eq!(reach[0].functions, FnSet::Any);
+
+    // ci-publish: registry-scoped, restricted to exactly publish/publish_hash.
+    assert_eq!(reach[1].rule, "ci-publish");
+    assert_eq!(reach[1].scope, ScopeSpec::Contract(REGISTRY.to_string()));
+    assert_eq!(
+        reach[1].functions,
+        FnSet::Only(syms(&env, &["publish", "publish_hash"]))
+    );
+}
+
+#[test]
+fn program_bounds_are_derivable_from_ops() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let program = &plan.rules[1].install.as_ref().unwrap().program;
+    let b = program_bounds(program);
+    // MinSigners, FnIn, ArgAddrIsSelf, All(3).
+    assert_eq!(b.ops, 4);
+    assert_eq!(b.max_stack_depth, 3);
+    assert!(b.fits(perch_program::MAX_PROGRAM_LEN));
+    assert!(!b.fits(3));
+}
+
+#[test]
+fn can_ever_authorize_flags_live_and_dead_programs() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let live = &plan.rules[1].install.as_ref().unwrap().program;
+    assert!(can_ever_authorize(live), "ci-publish can authorize");
+
+    // A leaf that is always False (ledger < 0 is impossible) is dead.
+    let dead = RpnProgram {
+        version: PROGRAM_VERSION,
+        ops: vec![&env, Op::LedgerBefore(0)],
+    };
+    assert!(!can_ever_authorize(&dead));
+
+    // Not of an always-true structural leaf can never be True.
+    let dead2 = RpnProgram {
+        version: PROGRAM_VERSION,
+        ops: vec![&env, Op::MinSigners(0), Op::Not],
+    };
+    assert!(!can_ever_authorize(&dead2));
+
+    // Sanity: MinSigners(0) alone is live.
+    let live2 = RpnProgram {
+        version: PROGRAM_VERSION,
+        ops: vec![&env, Op::MinSigners(0)],
+    };
+    assert!(can_ever_authorize(&live2));
+}

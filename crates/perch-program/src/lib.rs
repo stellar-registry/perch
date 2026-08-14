@@ -17,7 +17,7 @@
 mod leaf;
 pub mod rpn;
 
-pub use rpn::{Op, RpnProgram};
+pub use rpn::{InstallParams, Op, RpnProgram};
 
 use soroban_sdk::{auth::Context, Address};
 

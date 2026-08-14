@@ -6,9 +6,14 @@
 //! `False`. `Unknown` denies at the root and stays `Unknown` under `Not`,
 //! so a decode failure can neither allow nor satisfy a negated guardrail.
 
-use soroban_sdk::{auth::Context, Address, Env, Symbol, TryFromVal, Val, Vec};
+use soroban_sdk::{auth::Context, Address, Bytes, Env, String, Symbol, TryFromVal, Val, Vec};
 
 use crate::{EvalInputs, Verdict};
+
+/// Longest string argument `ArgStrPrefix`/`ArgStrIn` will inspect. A longer
+/// argument decodes to [`Verdict::Unknown`] (fail closed) rather than risk an
+/// unbounded copy in `no_std`.
+const MAX_STR_ARG_LEN: usize = 256;
 
 /// Decode argument `i` of a contract-call context as `T`.
 /// `None` == decode failure (caller maps to `Unknown`).
@@ -64,6 +69,77 @@ pub(crate) fn arg_u32_eq(env: &Env, inputs: &EvalInputs, i: u32, want: u32) -> V
         Some(n) => Verdict::from(n == want),
         None => Verdict::Unknown,
     }
+}
+
+/// `ArgI128Eq(i, n)`: argument `i` is exactly `n`.
+pub(crate) fn arg_i128_eq(env: &Env, inputs: &EvalInputs, i: u32, want: i128) -> Verdict {
+    match arg::<i128>(env, inputs.context, i) {
+        Some(n) => Verdict::from(n == want),
+        None => Verdict::Unknown,
+    }
+}
+
+/// `ArgBytesEq(i, want)`: argument `i` is exactly these bytes.
+pub(crate) fn arg_bytes_eq(env: &Env, inputs: &EvalInputs, i: u32, want: &Bytes) -> Verdict {
+    match arg::<Bytes>(env, inputs.context, i) {
+        Some(b) => Verdict::from(b == *want),
+        None => Verdict::Unknown,
+    }
+}
+
+/// Copy a soroban [`String`] into a fixed buffer, or `None` if it is longer
+/// than [`MAX_STR_ARG_LEN`]. Fail-closed: an over-long argument denies.
+fn str_bytes(s: &String, buf: &mut [u8; MAX_STR_ARG_LEN]) -> Option<usize> {
+    let n = s.len() as usize;
+    if n > MAX_STR_ARG_LEN {
+        return None;
+    }
+    s.copy_into_slice(&mut buf[..n]);
+    Some(n)
+}
+
+/// `ArgStrIn(i, set)`: argument `i` (a string) equals one of `set`.
+pub(crate) fn arg_str_in(env: &Env, inputs: &EvalInputs, i: u32, set: &Vec<String>) -> Verdict {
+    let Some(s) = arg::<String>(env, inputs.context, i) else {
+        return Verdict::Unknown;
+    };
+    let mut sbuf = [0u8; MAX_STR_ARG_LEN];
+    let Some(sn) = str_bytes(&s, &mut sbuf) else {
+        return Verdict::Unknown;
+    };
+    let mut cand = [0u8; MAX_STR_ARG_LEN];
+    for want in set.iter() {
+        if let Some(cn) = str_bytes(&want, &mut cand) {
+            if cn == sn && cand[..cn] == sbuf[..sn] {
+                return Verdict::True;
+            }
+        }
+    }
+    Verdict::False
+}
+
+/// `ArgStrPrefix(i, prefix)`: argument `i` (a string) starts with `prefix`.
+pub(crate) fn arg_str_prefix(env: &Env, inputs: &EvalInputs, i: u32, prefix: &String) -> Verdict {
+    let Some(s) = arg::<String>(env, inputs.context, i) else {
+        return Verdict::Unknown;
+    };
+    let mut sbuf = [0u8; MAX_STR_ARG_LEN];
+    let mut pbuf = [0u8; MAX_STR_ARG_LEN];
+    let (Some(sn), Some(pn)) = (str_bytes(&s, &mut sbuf), str_bytes(prefix, &mut pbuf)) else {
+        return Verdict::Unknown;
+    };
+    if pn > sn {
+        return Verdict::False;
+    }
+    Verdict::from(sbuf[..pn] == pbuf[..pn])
+}
+
+/// `ArgCount(n)`: the contract call has exactly `n` arguments.
+pub(crate) fn arg_count(inputs: &EvalInputs, n: u32) -> Verdict {
+    let Context::Contract(c) = inputs.context else {
+        return Verdict::Unknown;
+    };
+    Verdict::from(c.args.len() == n)
 }
 
 /// `LedgerBefore(n)`: current ledger sequence is strictly below `n`.

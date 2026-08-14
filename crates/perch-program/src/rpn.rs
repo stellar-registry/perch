@@ -8,7 +8,7 @@
 //! never underflows, never exceeds [`MAX_STACK_DEPTH`], and ends with
 //! exactly one value (the root verdict).
 
-use soroban_sdk::{contracttype, Address, Env, Symbol, Vec};
+use soroban_sdk::{contracttype, Address, Bytes, Env, String, Symbol, Vec};
 
 use crate::{
     leaf, EvalInputs, ValidationError, Verdict, MAX_PROGRAM_LEN, MAX_STACK_DEPTH, PROGRAM_VERSION,
@@ -34,8 +34,18 @@ pub enum Op {
     ArgAddrIsSelf(u32),
     /// Argument at index equals this symbol.
     ArgSymEq(u32, Symbol),
+    /// Argument at index (a string) is one of these strings.
+    ArgStrIn(u32, Vec<String>),
+    /// Argument at index (a string) starts with this prefix.
+    ArgStrPrefix(u32, String),
+    /// Argument at index equals these bytes.
+    ArgBytesEq(u32, Bytes),
+    /// Argument at index equals this i128.
+    ArgI128Eq(u32, i128),
     /// Argument at index equals this u32.
     ArgU32Eq(u32, u32),
+    /// The call has exactly this many arguments.
+    ArgCount(u32),
     /// Current ledger sequence is strictly below this.
     LedgerBefore(u32),
     /// Current ledger sequence is at least this.
@@ -49,6 +59,19 @@ pub enum Op {
 pub struct RpnProgram {
     pub version: u32,
     pub ops: Vec<Op>,
+}
+
+/// What the compiler stores in the interpreter for one `(account, rule)`: the
+/// program plus the `doc_hash` of the source PolicyDoc. Sharing this
+/// `#[contracttype]` between the compiler and the interpreter is what keeps
+/// install params from ever being a hand-built `ScVal` — both sides encode and
+/// decode through exactly these types. `doc_hash` binds the on-chain program to
+/// the reviewed document (provenance for lift/diff).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InstallParams {
+    pub program: RpnProgram,
+    pub doc_hash: soroban_sdk::BytesN<32>,
 }
 
 /// How many verdicts an op pops. Every op pushes exactly one.
@@ -141,7 +164,12 @@ pub fn eval(env: &Env, program: &RpnProgram, inputs: &EvalInputs) -> Verdict {
             Op::ArgAddrEq(i, addr) => leaf::arg_addr_eq(env, inputs, i, &addr),
             Op::ArgAddrIsSelf(i) => leaf::arg_addr_is_self(env, inputs, i),
             Op::ArgSymEq(i, sym) => leaf::arg_sym_eq(env, inputs, i, &sym),
+            Op::ArgStrIn(i, set) => leaf::arg_str_in(env, inputs, i, &set),
+            Op::ArgStrPrefix(i, prefix) => leaf::arg_str_prefix(env, inputs, i, &prefix),
+            Op::ArgBytesEq(i, want) => leaf::arg_bytes_eq(env, inputs, i, &want),
+            Op::ArgI128Eq(i, want) => leaf::arg_i128_eq(env, inputs, i, want),
             Op::ArgU32Eq(i, n) => leaf::arg_u32_eq(env, inputs, i, n),
+            Op::ArgCount(n) => leaf::arg_count(inputs, n),
             Op::LedgerBefore(n) => leaf::ledger_before(env, n),
             Op::LedgerAtOrAfter(n) => leaf::ledger_at_or_after(env, n),
         };

@@ -1,0 +1,21 @@
+[package]
+name = "perch-integration-tests"
+description = "End-to-end tests: compile → install → do_check_auth against real stellar-accounts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+doctest = false
+
+[dev-dependencies]
+perch-ir = { workspace = true }
+perch-program = { workspace = true }
+perch-compile = { path = "../perch-compile" }
+perch-interpreter = { path = "../perch-interpreter" }
+stellar-accounts = { workspace = true }
+soroban-sdk = { workspace = true, features = ["testutils"] }
+ed25519-dalek = "2"
+hex = "0.4"

@@ -1,0 +1,16 @@
+[package]
+name = "perch-golden"
+description = "Golden XDR byte-vectors freezing the perch-program wire format and OZ policy params across encoders"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+perch-program = { workspace = true }
+soroban-sdk = { workspace = true }
+stellar-accounts = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+hex = "0.4"

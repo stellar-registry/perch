@@ -230,3 +230,44 @@ fn can_ever_authorize_flags_live_and_dead_programs() {
     };
     assert!(can_ever_authorize(&live2));
 }
+
+// --- fail-closed activation (#19 PR5) --------------------------------------
+
+#[test]
+fn verify_plan_accepts_a_freshly_compiled_plan() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    assert_eq!(verify_plan_matches_doc(&env, &doc, &plan), Ok(()));
+}
+
+#[test]
+fn verify_plan_rejects_a_tampered_doc_hash() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let mut plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    // Tamper the ci-publish attachment's doc_hash → activation must refuse.
+    let install = plan.rules[1].install.as_mut().expect("ci-publish attaches");
+    install.doc_hash = BytesN::from_array(&env, &[0u8; 32]);
+    assert_eq!(
+        verify_plan_matches_doc(&env, &doc, &plan),
+        Err(ActivationError::DocHashMismatch {
+            rule: "ci-publish".to_string()
+        })
+    );
+}
+
+#[test]
+fn verify_plan_rejects_a_plan_from_a_different_doc() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    // Same plan, but checked against a document whose canonical form differs
+    // (renamed rule → different doc_hash) → refuse.
+    let mut other = doc.clone();
+    other.rules[1].name = "ci-publish-v2".to_string();
+    assert!(matches!(
+        verify_plan_matches_doc(&env, &other, &plan),
+        Err(ActivationError::DocHashMismatch { .. })
+    ));
+}

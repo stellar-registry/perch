@@ -19,6 +19,19 @@
 //!   `enforce` denies outright when that set is empty, a defense-in-depth floor
 //!   behind the compiler's `MinSigners` injection (INV-1).
 //!
+//! ## Fail-closed activation
+//!
+//! `install` never activates an unusable or surprise program: it rejects one
+//! that fails structural `validate` ([`Error::InvalidProgram`]), refuses to
+//! overwrite an existing attachment ([`Error::AlreadyInstalled`], so the
+//! current policy stays in force), and requires the account's own auth. It
+//! stores each rule's `doc_hash` for provenance but cannot recompute it
+//! on-chain — the source document never reaches the interpreter — so a client
+//! verifies `doc_hash` against the reviewed document *before* attaching, via
+//! `perch_compile::verify_plan_matches_doc`. Together these are perch's
+//! OPA-style activation: an attachment is either hash-verified against a
+//! reviewed document or refused, never silently swapped.
+//!
 //! Tracking issue: <https://github.com/stellar-registry/perch/issues/6>
 
 use perch_program::{rpn, EvalInputs, InstallParams, Verdict, PROGRAM_VERSION};

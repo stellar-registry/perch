@@ -48,6 +48,22 @@ pub struct SignerSpec {
     pub key_hex: String,
 }
 
+/// A cumulative spend cap lowered from a rule's `cap`. The applier attaches OZ's
+/// `spending_limit` policy to the same context rule with these parameters
+/// (`SpendingLimitAccountParams { spending_limit: limit, period_ledgers }`,
+/// pinned to `token`). perch-compile stays free of the OZ policy types — the
+/// applier maps this spec onto them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapSpec {
+    /// Token contract (C-address) the cap is denominated in. `None` → the rule's
+    /// scope contract (guaranteed a `Contract` scope by validation).
+    pub token: Option<String>,
+    /// Cumulative amount limit over the window (parsed from the decimal string).
+    pub limit: i128,
+    /// Rolling-window length in ledgers.
+    pub period_ledgers: u32,
+}
+
 /// One OZ context rule the document lowers to.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LoweredRule {
@@ -59,6 +75,11 @@ pub struct LoweredRule {
     /// `Some` → attach the interpreter with these params; `None` → policy-free
     /// (INV-2), OZ enforces all-signers-must-match natively.
     pub install: Option<InstallParams>,
+    /// `Some` → also attach OZ's `spending_limit` policy (a stateful cumulative
+    /// cap) alongside the interpreter on this rule. A capped rule always carries
+    /// an interpreter too, so INV-1's `MinSigners(n)` floor holds independently
+    /// of `spending_limit`'s own single-signer floor.
+    pub cap: Option<CapSpec>,
 }
 
 /// The lowered document: the rules plus the pinned interpreter wasm hash
@@ -87,6 +108,9 @@ pub enum LowerError {
     Unsupported { rule: String, reason: &'static str },
     /// The lowered program failed structural validation.
     InvalidProgram { rule: String, err: ValidationError },
+    /// A rule's `cap.limit` does not parse as an `i128` (validation should have
+    /// caught this; a defense-in-depth typed error rather than a panic).
+    InvalidCap { rule: String },
 }
 
 /// Lower a validated document. Precondition: `perch_ir::validate(doc).is_ok()`.
@@ -144,8 +168,29 @@ fn lower_rule(
         });
     }
 
-    // INV-2: a constraint-free All-rule lowers policy-free.
-    let constraint_free = rule.functions.is_none() && rule.args.is_none();
+    // Lower a cumulative cap (if any) to a spending_limit attachment spec.
+    let cap = match &rule.cap {
+        None => None,
+        Some(c) => {
+            let limit = c
+                .limit
+                .parse::<i128>()
+                .map_err(|_| LowerError::InvalidCap {
+                    rule: rule.name.clone(),
+                })?;
+            Some(CapSpec {
+                token: c.token.clone(),
+                limit,
+                period_ledgers: c.period_ledgers,
+            })
+        }
+    };
+
+    // INV-2: a constraint-free All-rule lowers policy-free — but only if it is
+    // *also* cap-free. A capped rule always attaches the interpreter so INV-1's
+    // `MinSigners(n)` floor enforces the full signer set; spending_limit's own
+    // single-signer floor is not a substitute for it.
+    let constraint_free = rule.functions.is_none() && rule.args.is_none() && cap.is_none();
     let install = if constraint_free {
         None
     } else {
@@ -167,6 +212,7 @@ fn lower_rule(
         // X >= 1, so this never underflows.
         valid_until: rule.not_after_ledger.map(|x| x - 1),
         install,
+        cap,
     })
 }
 

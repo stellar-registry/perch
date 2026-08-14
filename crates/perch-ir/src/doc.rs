@@ -115,6 +115,46 @@ pub struct Rule {
         skip_serializing_if = "Option::is_none"
     )]
     pub not_after_ledger: Option<u32>,
+    /// If present, a cumulative spend cap over a rolling window, enforced by a
+    /// stateful sibling policy (OZ `spending_limit`) attached alongside the
+    /// interpreter — perch itself is stateless (see the crate-level "Stateless,
+    /// per-invocation semantics" section). Omitted from the canonical form when
+    /// `None`, so documents without a cap hash exactly as before this field
+    /// existed.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cap: Option<CapConstraint>,
+}
+
+/// A cumulative spend cap on a [`Rule`], over a rolling window of ledgers.
+///
+/// Perch is stateless (an [`ArgPred`] bounds a single call, never a running
+/// total), so a cumulative cap cannot live in the interpreter. It lowers to OZ's
+/// `spending_limit` policy, attached to the same OZ context rule alongside
+/// perch's interpreter; OZ enforces every attached policy (AND), so both the
+/// per-call constraints and the cumulative cap must pass.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct CapConstraint {
+    /// The token contract (C-address strkey) the cap is denominated in. If
+    /// omitted, the rule's scope contract is used (the scope must then be a
+    /// `contract` scope). Omitted from the canonical form when `None`.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub token: Option<String>,
+    /// Maximum cumulative amount over the window, as a decimal string. A string,
+    /// not a number, because the canonical form carries only `u32` numbers (see
+    /// `CANONICAL.md`) and an `i128` amount does not fit a JSON number safely.
+    /// Must parse as a positive `i128`.
+    pub limit: String,
+    /// Rolling-window length in ledgers. Must be non-zero.
+    pub period_ledgers: u32,
 }
 
 /// Where a rule applies. Tagged with `"type"`: `"contract"` or `"self-admin"`.

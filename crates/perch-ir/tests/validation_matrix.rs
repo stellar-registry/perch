@@ -8,7 +8,7 @@ use common::{
     ED25519_VERIFIER, G_ADDR, POLICY_CONTRACT, REGISTRY, WEBAUTHN_VERIFIER,
 };
 use perch_ir::{
-    validate, AddressEqPred, ArgConstraint, ArgPred, Principals, Scope,
+    validate, AddressEqPred, ArgConstraint, ArgPred, CapConstraint, Principals, Scope,
     SelfAuthenticatingPrincipals, StringInPred, StringPrefixPred, U32EqPred, ValidationError,
     ACK_SENTINEL,
 };
@@ -673,4 +673,84 @@ fn display_names_the_offender() {
     };
     let msg = err.to_string();
     assert!(msg.contains("admin") && msg.contains("300"), "{msg}");
+}
+
+// --- cap (#19 PR6): InvalidCapLimit / ZeroCapPeriod / InvalidCapToken /
+// --- CapWithoutToken --------------------------------------------------------
+
+fn capped_doc(token: Option<&str>, limit: &str, period: u32) -> perch_ir::PolicyDoc {
+    let mut doc = base_doc();
+    let mut r = rule("spend", Scope::contract(REGISTRY), &["admin"]);
+    r.cap = Some(CapConstraint {
+        token: token.map(str::to_string),
+        limit: limit.to_string(),
+        period_ledgers: period,
+    });
+    doc.rules.push(r);
+    doc
+}
+
+#[test]
+fn accepts_valid_cap_with_and_without_token() {
+    // Explicit token, and token-less on a contract scope (denominates in scope).
+    assert_accepts(&capped_doc(Some(POLICY_CONTRACT), "1000", 100));
+    assert_accepts(&capped_doc(None, "1000", 100));
+}
+
+#[test]
+fn rejects_non_positive_or_unparsable_cap_limit() {
+    for bad in ["0", "-5", "abc"] {
+        assert_rejects(
+            &capped_doc(Some(POLICY_CONTRACT), bad, 100),
+            &ValidationError::InvalidCapLimit {
+                rule: "spend".into(),
+                limit: bad.into(),
+            },
+        );
+    }
+}
+
+#[test]
+fn rejects_zero_cap_period() {
+    assert_rejects(
+        &capped_doc(Some(POLICY_CONTRACT), "1000", 0),
+        &ValidationError::ZeroCapPeriod {
+            rule: "spend".into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_invalid_cap_token() {
+    assert_rejects(
+        &capped_doc(Some("not-an-address"), "1000", 100),
+        &ValidationError::InvalidCapToken {
+            rule: "spend".into(),
+            address: "not-an-address".into(),
+        },
+    );
+    // A G-address is a valid strkey but not a contract address.
+    assert_rejects(
+        &capped_doc(Some(G_ADDR), "1000", 100),
+        &ValidationError::InvalidCapToken {
+            rule: "spend".into(),
+            address: G_ADDR.into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_cap_without_token_on_self_admin() {
+    let mut doc = base_doc();
+    doc.rules[0].cap = Some(CapConstraint {
+        token: None,
+        limit: "1000".into(),
+        period_ledgers: 100,
+    });
+    assert_rejects(
+        &doc,
+        &ValidationError::CapWithoutToken {
+            rule: "admin-root".into(),
+        },
+    );
 }

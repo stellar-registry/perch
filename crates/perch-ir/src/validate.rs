@@ -211,6 +211,33 @@ pub enum ValidationError {
         /// The offending rule name.
         rule: String,
     },
+    /// A `cap`'s `limit` does not parse as a positive `i128`.
+    InvalidCapLimit {
+        /// The offending rule name.
+        rule: String,
+        /// The malformed limit string.
+        limit: String,
+    },
+    /// A `cap`'s `period-ledgers` is `0`, which the OZ spending-limit policy
+    /// rejects on install.
+    ZeroCapPeriod {
+        /// The offending rule name.
+        rule: String,
+    },
+    /// A `cap`'s `token` is present but not shaped like a C-address strkey
+    /// (checksum not verified — see module docs).
+    InvalidCapToken {
+        /// The offending rule name.
+        rule: String,
+        /// The malformed token address string.
+        address: String,
+    },
+    /// A `cap` omits `token` on a non-`contract` scope, so there is no token to
+    /// denominate the cap in. Give the cap an explicit `token`.
+    CapWithoutToken {
+        /// The offending rule name.
+        rule: String,
+    },
 }
 
 impl fmt::Display for ValidationError {
@@ -306,6 +333,19 @@ impl fmt::Display for ValidationError {
                     "rule `{rule}`: not-after-ledger is 0 (omit it for no expiry)"
                 )
             }
+            E::InvalidCapLimit { rule, limit } => {
+                write!(f, "rule `{rule}`: cap limit `{limit}` is not a positive i128")
+            }
+            E::ZeroCapPeriod { rule } => {
+                write!(f, "rule `{rule}`: cap period-ledgers is 0")
+            }
+            E::InvalidCapToken { rule, address } => {
+                write!(f, "rule `{rule}`: cap token `{address}` is not a C-address")
+            }
+            E::CapWithoutToken { rule } => write!(
+                f,
+                "rule `{rule}`: cap omits token on a non-contract scope (give it an explicit token)"
+            ),
         }
     }
 }
@@ -536,5 +576,34 @@ fn validate_rule(rule: &Rule, declared: &HashSet<&str>, errors: &mut Vec<Validat
 
     if rule.not_after_ledger == Some(0) {
         errors.push(ValidationError::ZeroNotAfterLedger { rule: name() });
+    }
+
+    if let Some(cap) = &rule.cap {
+        if cap.limit.parse::<i128>().map(|v| v <= 0).unwrap_or(true) {
+            errors.push(ValidationError::InvalidCapLimit {
+                rule: name(),
+                limit: cap.limit.clone(),
+            });
+        }
+        if cap.period_ledgers == 0 {
+            errors.push(ValidationError::ZeroCapPeriod { rule: name() });
+        }
+        match &cap.token {
+            Some(token) => {
+                if !is_contract_address_shape(token) {
+                    errors.push(ValidationError::InvalidCapToken {
+                        rule: name(),
+                        address: token.clone(),
+                    });
+                }
+            }
+            // No explicit token: the cap denominates in the scope contract, so
+            // the scope must be a `contract` (not `self-admin`).
+            None => {
+                if !matches!(rule.scope, Scope::Contract(_)) {
+                    errors.push(ValidationError::CapWithoutToken { rule: name() });
+                }
+            }
+        }
     }
 }

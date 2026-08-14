@@ -22,7 +22,14 @@ export {
   type Rule,
   type ArgConstraint,
   type ArgPred,
+  type CapConstraint,
 } from './schema.js';
+export {
+  requestToPolicyDoc,
+  type PolicyRequest,
+  type Permission,
+  type PermissionScope,
+} from './request.js';
 export {
   policy,
   external,

@@ -1,10 +1,37 @@
 // @stellar-registry/perch — TypeScript surface for perch policy documents.
 //
-// Planned exports (tracking issue: https://github.com/stellar-registry/perch/issues/8):
-//   - zod schemas mirroring perch-ir (fail closed)
-//   - fluent builder producing policy documents
+// Shipped (this milestone): fail-closed schema mirroring perch-ir, canonical
+// JSON + doc_hash byte-identical to the Rust model (parity-tested against the
+// shared golden fixtures), and a fluent builder producing validated documents.
+//
+// Planned (tracking issue #8, gated on perch-compile #7 + the interpreter):
 //   - compile() with byte-identical output vs the Rust compiler
 //   - applyPlan() with the derived-interpreter-address hard precondition
 //   - signing helpers: selectRuleIds, signingDigest, buildAuthPayload, signAuthEntry
 
-export {};
+export { canonicalJson, docHash } from './canonical.js';
+export {
+  ACK_SENTINEL,
+  policyDocSchema,
+  parsePolicyDoc,
+  parsePolicyDocJson,
+  type PolicyDoc,
+  type SignerDecl,
+  type Scope,
+  type Principals,
+  type Rule,
+  type ArgConstraint,
+  type ArgPred,
+} from './schema.js';
+export {
+  policy,
+  external,
+  isSelf,
+  addressEq,
+  stringIn,
+  stringPrefix,
+  u32Eq,
+  PolicyBuilder,
+  RuleBuilder,
+  type SignerSpec,
+} from './builder.js';

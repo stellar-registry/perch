@@ -1094,6 +1094,7 @@ version = "0.1.0"
 dependencies = [
  "perch-ir",
  "perch-program",
+ "soroban-sdk",
 ]
 
 [[package]]
@@ -1107,11 +1108,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-integration-tests"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "perch-compile",
+ "perch-interpreter",
+ "perch-ir",
+ "perch-program",
+ "soroban-sdk",
+ "stellar-accounts",
+]
+
+[[package]]
 name = "perch-interpreter"
 version = "0.1.0"
 dependencies = [
  "perch-program",
  "soroban-sdk",
+ "stellar-accounts",
 ]
 
 [[package]]

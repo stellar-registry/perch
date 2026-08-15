@@ -210,6 +210,15 @@ pub struct ArgConstraint {
 
 /// Predicate over a single call argument. Tagged with `"type"`: `"is-self"`,
 /// `"address-eq"`, `"string-in"`, `"string-prefix"`, or `"u32-eq"`.
+///
+/// Every predicate here is **stateless**: it constrains *this* invocation's
+/// argument, never a running total across invocations. A numeric bound is a
+/// per-call bound, not a cumulative cap — a signer authorized for "≤ X per
+/// call" can call repeatedly and exceed any intended total. Cumulative limits
+/// (spend caps, rate limits) are not expressible in perch and must be enforced
+/// by a stateful sibling policy (e.g. OZ `spending_limit`) attached to the same
+/// context rule. Keep this in mind before adding any amount-shaped predicate:
+/// its bound is per-call, and the doc must not read as a spend cap.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum ArgPred {
@@ -263,7 +272,8 @@ pub struct StringPrefixPred {
     pub prefix: String,
 }
 
-/// Payload of [`ArgPred::U32Eq`].
+/// Payload of [`ArgPred::U32Eq`]. Equality on a single call's argument — a
+/// per-invocation check, never a cumulative counter (see [`ArgPred`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "kebab-case")]
 pub struct U32EqPred {

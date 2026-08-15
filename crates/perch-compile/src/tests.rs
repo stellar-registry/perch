@@ -333,3 +333,99 @@ fn a_document_without_a_cap_lowers_cap_free() {
     let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
     assert!(plan.rules.iter().all(|r| r.cap.is_none()));
 }
+
+// --- monotone attenuation (#19 PR8) ----------------------------------------
+
+/// The ci-publish functions on rule 1, mutated in place.
+fn set_ci_functions(doc: &mut perch_ir::PolicyDoc, functions: Option<&[&str]>) {
+    doc.rules[1].functions = functions.map(|f| f.iter().map(|s| s.to_string()).collect());
+}
+
+#[test]
+fn narrowing_the_function_set_is_accepted_and_links_the_hashes() {
+    let env = Env::default();
+    let parent = perch_ir::from_json(&fixture()).expect("parse");
+    // Child: ci may only `publish`, not `publish_hash`.
+    let mut child = parent.clone();
+    set_ci_functions(&mut child, Some(&["publish"]));
+
+    let link = attenuate(&env, &parent, &child, &cfg(&env)).expect("child narrows parent");
+    assert_eq!(
+        link.parent_hash,
+        BytesN::from_array(&env, &perch_ir::doc_hash(&parent))
+    );
+    assert_eq!(
+        link.child_hash,
+        BytesN::from_array(&env, &perch_ir::doc_hash(&child))
+    );
+    assert_ne!(
+        link.parent_hash, link.child_hash,
+        "a narrowing is a new doc"
+    );
+}
+
+#[test]
+fn dropping_a_rule_is_a_narrowing() {
+    let env = Env::default();
+    let parent = perch_ir::from_json(&fixture()).expect("parse");
+    // Child keeps only admin-root (drops the ci-publish authority entirely).
+    let mut child = parent.clone();
+    child.rules.remove(1);
+    assert!(attenuate(&env, &parent, &child, &cfg(&env)).is_ok());
+}
+
+#[test]
+fn widening_the_function_set_is_rejected() {
+    let env = Env::default();
+    let parent = perch_ir::from_json(&fixture()).expect("parse");
+    // Child adds a function the parent never authorized.
+    let mut child = parent.clone();
+    set_ci_functions(&mut child, Some(&["publish", "publish_hash", "set_admin"]));
+    assert_eq!(
+        attenuate(&env, &parent, &child, &cfg(&env)),
+        Err(AttenuationError::NotANarrowing {
+            rule: "ci-publish".to_string()
+        })
+    );
+}
+
+#[test]
+fn widening_a_specific_set_back_to_any_is_rejected() {
+    let env = Env::default();
+    let parent = perch_ir::from_json(&fixture()).expect("parse");
+    // Child removes every per-call constraint on ci-publish → any function
+    // (broader than the parent's publish/publish_hash allowlist).
+    let mut child = parent.clone();
+    set_ci_functions(&mut child, None);
+    child.rules[1].args = None;
+    assert_eq!(
+        attenuate(&env, &parent, &child, &cfg(&env)),
+        Err(AttenuationError::NotANarrowing {
+            rule: "ci-publish".to_string()
+        })
+    );
+}
+
+#[test]
+fn adding_a_new_scope_is_rejected() {
+    let env = Env::default();
+    let parent = perch_ir::from_json(&fixture()).expect("parse");
+    // Child scopes ci-publish to a different contract the parent never allowed.
+    let mut child = parent.clone();
+    child.rules[1].scope =
+        perch_ir::Scope::contract("CAPS4YALJ6I4D3NDMRG5JZGDAAT266PSPLSHIITGUKBXUVAH5SUPZQKE");
+    assert_eq!(
+        attenuate(&env, &parent, &child, &cfg(&env)),
+        Err(AttenuationError::NotANarrowing {
+            rule: "ci-publish".to_string()
+        })
+    );
+}
+
+#[test]
+fn a_document_narrows_itself() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let link = attenuate(&env, &doc, &doc, &cfg(&env)).expect("identity is a narrowing");
+    assert_eq!(link.parent_hash, link.child_hash);
+}

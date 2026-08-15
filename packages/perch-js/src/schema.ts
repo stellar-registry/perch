@@ -52,6 +52,18 @@ const argPred = z.discriminatedUnion('type', [
 
 const argConstraint = z.object({ index: u32, pred: argPred }).strict();
 
+// A cumulative spend cap; lowers (Rust-side) to an OZ spending_limit policy.
+// `limit` is a decimal string, not a number, because the canonical form carries
+// only u32 numbers (see CANONICAL.md) and an i128 amount does not fit a JSON
+// number safely. Mirrors perch-ir's CapConstraint.
+const capConstraint = z
+  .object({
+    token: z.string().optional(),
+    limit: z.string(),
+    'period-ledgers': u32,
+  })
+  .strict();
+
 const rule = z
   .object({
     name: z.string(),
@@ -60,6 +72,7 @@ const rule = z
     functions: z.array(z.string()).optional(),
     args: z.array(argConstraint).optional(),
     'not-after-ledger': u32.optional(),
+    cap: capConstraint.optional(),
   })
   .strict();
 
@@ -79,6 +92,7 @@ export type Principals = z.infer<typeof principals>;
 export type Rule = z.infer<typeof rule>;
 export type ArgConstraint = z.infer<typeof argConstraint>;
 export type ArgPred = z.infer<typeof argPred>;
+export type CapConstraint = z.infer<typeof capConstraint>;
 
 /** Parse and validate an already-JSON-parsed value into a PolicyDoc, throwing a
  *  ZodError on any shape/version/unknown-field violation (fail-closed). */

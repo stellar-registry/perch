@@ -13,6 +13,28 @@
 //!
 //! [`rpn`] encodes programs as postfix ops over a verdict stack, with the
 //! leaf semantics and fail-closed rule in `leaf`.
+//!
+//! # Decidable fragment
+//!
+//! v1 is deliberately a *bounded, analyzable* language, not merely a wire
+//! format — the Cedar discipline: restrict the language so questions about it
+//! stay decidable. Three properties hold, pinned by `tests/fragment_v1.rs`:
+//!
+//! - **Termination.** [`rpn::eval`] is a single left-to-right pass over at most
+//!   [`MAX_PROGRAM_LEN`] ops with no recursion and no backward jump; each op
+//!   does work bounded by [`MAX_STACK_DEPTH`]. Evaluation always halts.
+//! - **Totality / fail-closed.** Every leaf is a total predicate over a
+//!   finite-comparable domain (`Symbol` / `Address` / `Bytes` / `String` /
+//!   `u32` / `i128` / ledger sequence); a decode failure yields
+//!   [`Verdict::Unknown`], never a panic. eval returns a verdict for *any* op
+//!   sequence.
+//! - **Validation ⇒ analyzable.** A program that passes [`rpn::validate`] never
+//!   trips eval's defensive `Unknown` paths (underflow, overflow past
+//!   [`MAX_STACK_DEPTH`], not-single-result): its verdict is a pure function of
+//!   its leaves. That is what lets static analysis answer "can this ever
+//!   authorize?" and "which calls does it reach?" over the ops alone (#19 PR4),
+//!   and it is the second leg — beside the compiler's INV-1/INV-2 — under the
+//!   claim that a validated program can neither diverge nor brick an account.
 
 mod leaf;
 pub mod rpn;

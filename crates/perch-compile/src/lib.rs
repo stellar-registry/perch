@@ -30,6 +30,9 @@ pub use analysis::{
     can_ever_authorize, program_bounds, reachable_calls, FnSet, ProgramBounds, ReachableScope,
 };
 
+pub mod activation;
+pub use activation::{verify_plan_matches_doc, ActivationError};
+
 /// Where a lowered rule applies. `SelfAdmin` is account-agnostic — the applier
 /// resolves it to the account's own address at apply time.
 #[derive(Clone, Debug, PartialEq, Eq)]

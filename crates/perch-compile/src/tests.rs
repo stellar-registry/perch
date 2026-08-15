@@ -271,3 +271,65 @@ fn verify_plan_rejects_a_plan_from_a_different_doc() {
         Err(ActivationError::DocHashMismatch { .. })
     ));
 }
+
+// --- cumulative-cap lowering (#19 PR6) -------------------------------------
+
+#[test]
+fn cap_lowers_to_a_spending_limit_spec_beside_the_interpreter() {
+    let env = Env::default();
+    let mut doc = perch_ir::from_json(&fixture()).expect("parse");
+    doc.rules[1].cap = Some(perch_ir::CapConstraint {
+        token: Some(REGISTRY.to_string()),
+        limit: "10000000".to_string(),
+        period_ledgers: 17_280,
+    });
+    perch_ir::validate(&doc).expect("valid");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let ci = &plan.rules[1];
+    // Interpreter still attached (per-call constraints) AND the cap spec present.
+    assert!(
+        ci.install.is_some(),
+        "capped rule keeps the interpreter (INV-1)"
+    );
+    assert_eq!(
+        ci.cap,
+        Some(CapSpec {
+            token: Some(REGISTRY.to_string()),
+            limit: 10_000_000,
+            period_ledgers: 17_280,
+        })
+    );
+}
+
+#[test]
+fn cap_forces_the_interpreter_even_when_otherwise_constraint_free() {
+    // A rule with no functions/args but a cap must still attach the interpreter
+    // so INV-1's MinSigners(n) floor holds — spending_limit's single-signer
+    // floor is not a substitute for the full referenced signer set.
+    let env = Env::default();
+    let mut doc = perch_ir::from_json(&fixture()).expect("parse");
+    doc.rules[1].functions = None;
+    doc.rules[1].args = None;
+    doc.rules[1].cap = Some(perch_ir::CapConstraint {
+        token: None, // denominate in the scope contract
+        limit: "5".to_string(),
+        period_ledgers: 100,
+    });
+    perch_ir::validate(&doc).expect("valid");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let ci = &plan.rules[1];
+    assert!(ci.install.is_some(), "cap forces interpreter (INV-1)");
+    assert_eq!(ci.cap.as_ref().unwrap().token, None);
+    // The interpreter program is the bare signer floor: [MinSigners(1), All(1)].
+    let program = &ci.install.as_ref().unwrap().program;
+    assert_eq!(program.ops.len(), 2);
+    assert_eq!(program.ops.get(0).unwrap(), Op::MinSigners(1));
+}
+
+#[test]
+fn a_document_without_a_cap_lowers_cap_free() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    assert!(plan.rules.iter().all(|r| r.cap.is_none()));
+}

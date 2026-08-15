@@ -9,7 +9,7 @@
 //   - applyPlan() with the derived-interpreter-address hard precondition
 //   - signing helpers: selectRuleIds, signingDigest, buildAuthPayload, signAuthEntry
 
-export { canonicalJson, docHash } from './canonical.js';
+export { canonicalJson, docHash, CANON_VERSION } from './canonical.js';
 export {
   ACK_SENTINEL,
   policyDocSchema,

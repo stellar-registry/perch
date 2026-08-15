@@ -29,6 +29,7 @@ Every perch constraint is a stateless predicate over a *single* invocation — t
 ## Layout
 
 ```
+CANONICAL.md          normative definition of the canonical form + doc_hash (CANON v1)
 crates/
   perch-ir/           policy document model — canonical JSON, doc_hash, validation
   perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)

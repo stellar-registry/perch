@@ -15,12 +15,26 @@
 //! - **Strings**: escaped per RFC 8785 §3.2.2.2 — only `"`, `\`, and control
 //!   characters are escaped (short forms `\b \t \n \f \r` where they exist,
 //!   lowercase `\u00xx` otherwise); everything else, including non-ASCII, is
-//!   emitted as literal UTF-8. This matches `serde_json`'s string escaping,
-//!   which is used directly and pinned by test.
+//!   emitted as literal UTF-8. Implemented directly (`write_json_string`), not
+//!   delegated to `serde_json`, so the canonical form can never drift with a
+//!   serializer version. Pinned by test.
+//!
+//! The authoritative, versioned definition of these bytes is `CANONICAL.md` at
+//! the repo root; this module implements it, and [`CANON_VERSION`] tags the
+//! format version.
 
 use crate::doc::PolicyDoc;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+
+/// Version of the canonical form implemented here, as defined by `CANONICAL.md`.
+///
+/// This is a format identifier, **not** part of the hash preimage: [`doc_hash`]
+/// is `SHA-256` of the canonical bytes and contains no version marker. The
+/// constant exists so that any change to the canonicalization rules is an
+/// explicit, greppable, breaking event — bump it and re-freeze the conformance
+/// vectors, never let the hash drift silently.
+pub const CANON_VERSION: u32 = 1;
 
 /// Serialize a document to its canonical JSON form (RFC 8785 for the subset
 /// this model produces): keys sorted by UTF-16 code units, no insignificant
@@ -64,12 +78,7 @@ fn write_value(value: &Value, out: &mut String) {
                 .expect("PolicyDoc numbers are u32, always representable as u64");
             out.push_str(&u.to_string());
         }
-        Value::String(s) => {
-            // serde_json's escaping matches JCS: minimal escapes, short forms,
-            // lowercase \u00xx for remaining control chars, literal UTF-8
-            // beyond ASCII. Pinned by tests in this module.
-            out.push_str(&serde_json::to_string(s).expect("string serialization is infallible"));
-        }
+        Value::String(s) => write_json_string(s, out),
         Value::Array(items) => {
             out.push('[');
             for (i, item) in items.iter().enumerate() {
@@ -89,13 +98,43 @@ fn write_value(value: &Value, out: &mut String) {
                 if i > 0 {
                     out.push(',');
                 }
-                write_value(&Value::String((*key).clone()), out);
+                write_json_string(key, out);
                 out.push(':');
                 write_value(val, out);
             }
             out.push('}');
         }
     }
+}
+
+/// Write `s` as a canonical JSON string literal per RFC 8785 §3.2.2.2 — the
+/// escaping table in `CANONICAL.md`. Implemented directly rather than delegated
+/// to a JSON serializer whose output could change between versions (the Biscuit
+/// canonicalization lesson): the bytes `doc_hash` commits to are defined here,
+/// not inherited from `serde_json`.
+fn write_json_string(s: &str, out: &mut String) {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    out.push('"');
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\u{8}' => out.push_str("\\b"),
+            '\t' => out.push_str("\\t"),
+            '\n' => out.push_str("\\n"),
+            '\u{c}' => out.push_str("\\f"),
+            '\r' => out.push_str("\\r"),
+            c if (c as u32) < 0x20 => {
+                // Remaining C0 control chars: lowercase `\u00xx` (high byte 00).
+                let b = c as u32;
+                out.push_str("\\u00");
+                out.push(HEX[((b >> 4) & 0xf) as usize] as char);
+                out.push(HEX[(b & 0xf) as usize] as char);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push('"');
 }
 
 #[cfg(test)]
@@ -137,5 +176,19 @@ mod tests {
             canon(&v),
             r#"{"alpha":[1,2],"beta":{"x":2,"y":1},"zeta":1}"#
         );
+    }
+
+    #[test]
+    fn escaper_matches_serde_json_across_the_subset() {
+        // The hand-written escaper must be byte-identical to serde_json's string
+        // escaping (what it replaced) across the whole reachable domain: every
+        // ASCII code point incl. controls/quote/backslash/slash/DEL, plus a
+        // spread of non-ASCII scalars. This is the guardrail that lets us stop
+        // depending on the serializer without risking a hash drift.
+        let mut sample: String = (0u8..=0x7f).map(|b| b as char).collect();
+        sample.push_str("é€😀\u{a0}\u{feff}");
+        let mut ours = String::new();
+        super::write_json_string(&sample, &mut ours);
+        assert_eq!(ours, serde_json::to_string(&sample).unwrap());
     }
 }

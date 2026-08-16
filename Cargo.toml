@@ -9,6 +9,7 @@ members = [
     "crates/perch-bench",
     "crates/integration-tests",
     "crates/perch-golden",
+    "crates/perch-plan-cli",
 ]
 
 [workspace.package]

@@ -1141,6 +1141,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-plan-cli"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "perch-compile",
+ "perch-ir",
+ "serde_json",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "perch-program"
 version = "0.1.0"
 dependencies = [

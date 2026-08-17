@@ -6,6 +6,7 @@
 //! `False`. `Unknown` denies at the root and stays `Unknown` under `Not`,
 //! so a decode failure can neither allow nor satisfy a negated guardrail.
 
+use soroban_flux::prelude::*;
 use soroban_sdk::{auth::Context, Address, Bytes, Env, String, Symbol, TryFromVal, Val, Vec};
 
 use crate::{EvalInputs, Verdict};
@@ -17,6 +18,11 @@ const MAX_STR_ARG_LEN: usize = 256;
 
 /// Decode argument `i` of a contract-call context as `T`.
 /// `None` == decode failure (caller maps to `Unknown`).
+///
+/// TRUST: pure host-value decode with no arithmetic; its generic
+/// `TryFromVal` projection is the pattern that ICEs flux
+/// (flux-infer/projections.rs:720). Callers fail closed on `None`.
+#[trusted]
 fn arg<T: TryFromVal<Env, Val>>(env: &Env, context: &Context, i: u32) -> Option<T> {
     let Context::Contract(c) = context else {
         return None;
@@ -32,6 +38,11 @@ pub(crate) fn min_signers(inputs: &EvalInputs, n: u32) -> Verdict {
 }
 
 /// `FnIn(fns)`: the invoked function is one of `fns`.
+///
+/// TRUST: pure host-value comparisons over a soroban iterator — nothing to
+/// refine, and the closure's `TryFromVal` projection ICEs flux
+/// (flux-infer/projections.rs:720, "ambiguous substitution").
+#[trusted]
 pub(crate) fn fn_in(inputs: &EvalInputs, fns: &Vec<Symbol>) -> Verdict {
     let Context::Contract(c) = inputs.context else {
         return Verdict::Unknown;
@@ -89,6 +100,8 @@ pub(crate) fn arg_bytes_eq(env: &Env, inputs: &EvalInputs, i: u32, want: &Bytes)
 
 /// Copy a soroban [`String`] into a fixed buffer, or `None` if it is longer
 /// than [`MAX_STR_ARG_LEN`]. Fail-closed: an over-long argument denies.
+/// Flux proves the returned length keeps every downstream slice in-bounds.
+#[sig(fn(s: &String, buf: &mut [u8; _]) -> Option<usize{v: v <= MAX_STR_ARG_LEN}>)]
 fn str_bytes(s: &String, buf: &mut [u8; MAX_STR_ARG_LEN]) -> Option<usize> {
     let n = s.len() as usize;
     if n > MAX_STR_ARG_LEN {
@@ -98,7 +111,19 @@ fn str_bytes(s: &String, buf: &mut [u8; MAX_STR_ARG_LEN]) -> Option<usize> {
     Some(n)
 }
 
+/// Equality of two buffered strings by their filled prefixes. Flux proves
+/// both slice reads in-bounds from the length preconditions.
+#[sig(fn(a: &[u8; _], an: usize{an <= MAX_STR_ARG_LEN}, b: &[u8; _], bn: usize{bn <= MAX_STR_ARG_LEN}) -> bool)]
+fn buf_eq(a: &[u8; MAX_STR_ARG_LEN], an: usize, b: &[u8; MAX_STR_ARG_LEN], bn: usize) -> bool {
+    an == bn && a[..an] == b[..bn]
+}
+
 /// `ArgStrIn(i, set)`: argument `i` (a string) equals one of `set`.
+///
+/// TRUST: iterating a soroban `Vec` ICEs flux (same projections.rs:720
+/// class as [`fn_in`]); the bounds-critical byte comparison is delegated to
+/// the checked [`buf_eq`], and the buffer fills to checked [`str_bytes`].
+#[trusted]
 pub(crate) fn arg_str_in(env: &Env, inputs: &EvalInputs, i: u32, set: &Vec<String>) -> Verdict {
     let Some(s) = arg::<String>(env, inputs.context, i) else {
         return Verdict::Unknown;
@@ -110,7 +135,7 @@ pub(crate) fn arg_str_in(env: &Env, inputs: &EvalInputs, i: u32, set: &Vec<Strin
     let mut cand = [0u8; MAX_STR_ARG_LEN];
     for want in set.iter() {
         if let Some(cn) = str_bytes(&want, &mut cand) {
-            if cn == sn && cand[..cn] == sbuf[..sn] {
+            if buf_eq(&cand, cn, &sbuf, sn) {
                 return Verdict::True;
             }
         }

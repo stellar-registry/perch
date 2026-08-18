@@ -16,6 +16,8 @@
 //!   dead (can never yield `True`); `true` means "not provably dead".
 
 use crate::{LoweredRule, Plan, ScopeSpec};
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 use perch_program::{Op, RpnProgram, Verdict};
 use soroban_sdk::Symbol;
 

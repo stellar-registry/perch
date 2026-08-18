@@ -14,8 +14,10 @@
 //! overwrite (`AlreadyInstalled`), and `require_auth`.
 
 use crate::Plan;
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
 use perch_ir::PolicyDoc;
-use soroban_sdk::{BytesN, Env};
+use soroban_sdk::{Bytes, BytesN, Env};
 
 /// Why activation was refused. Fail closed: on any variant, do **not** attach —
 /// keep whatever policy is currently in force.
@@ -35,7 +37,14 @@ pub fn verify_plan_matches_doc(
     doc: &PolicyDoc,
     plan: &Plan,
 ) -> Result<(), ActivationError> {
-    let expected = BytesN::from_array(env, &perch_ir::doc_hash(doc));
+    // Recompute the doc_hash on-chain via the host sha256 (a cheap builtin) over
+    // the canonical bytes — the same digest as the off-chain `perch_ir::doc_hash`,
+    // but no `sha2` software impl (and so no_std-clean).
+    let canonical = perch_ir::canonical_json(doc);
+    let expected: BytesN<32> = env
+        .crypto()
+        .sha256(&Bytes::from_slice(env, canonical.as_bytes()))
+        .to_bytes();
     for rule in &plan.rules {
         if let Some(install) = &rule.install {
             if install.doc_hash != expected {

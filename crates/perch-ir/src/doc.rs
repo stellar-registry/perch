@@ -1,38 +1,29 @@
 //! The policy document types.
 //!
-//! Every struct and enum-variant payload carries `deny_unknown_fields`, so a
-//! document containing any field this model does not know about fails to parse
-//! anywhere in the tree. Tagged enums use an internal `"type"` tag with
-//! kebab-case values; because serde's internally-tagged representation cannot
-//! enforce `deny_unknown_fields` on struct or unit variants, every variant is a
-//! newtype around a dedicated payload struct (empty for `self-admin` /
-//! `is-self`) that does enforce it.
+//! These are plain data types with no serialization framework attached: the
+//! crate is serde-free so nothing can drag an `f64` into the on-chain wasm (the
+//! Soroban VM rejects the wasm float feature outright, and serde's
+//! internally-tagged-enum buffering carries an `f64` variant — see
+//! [`crate::parse`]). The authoritative mapping between these types and JSON
+//! lives entirely in [`crate::parse`] (reading) and [`crate::canon`] (writing).
 //!
-//! JSON field names are kebab-case throughout (`not-after-ledger`,
-//! `install-param-hex`), matching the kebab-case enum tags so the document
-//! surface uses one consistent convention.
+//! The wire surface, enforced there:
+//!
+//! - **Field names are kebab-case** throughout (`not-after-ledger`,
+//!   `install-param-hex`), matching the kebab-case enum `type` tags so the
+//!   document uses one consistent convention.
+//! - **Unknown fields are rejected** anywhere in the tree. Tagged enums use an
+//!   internal `"type"` tag; each variant is a newtype around a dedicated payload
+//!   struct — empty for `self-admin` / `is-self` — so "no extra fields" is a
+//!   uniform, per-object rule the parser applies even to the payload-less
+//!   variants.
 
-use serde::{Deserialize, Deserializer, Serialize};
-
-/// Deserialize an optional field that must be *absent* to be `None` — an
-/// explicit `null` is rejected. serde only calls this when the key is present,
-/// so a present `null` reaches the inner type's deserializer and fails; an
-/// absent key uses `#[serde(default)]` and never calls this. Without it, serde
-/// maps `null` to `None`, and `None` is the permissive meaning for
-/// `functions`/`args` (all functions / unconstrained) — so `"functions": null`
-/// would silently authorize everything. Fail-closed: `null` is never "absent".
-fn deserialize_present_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    T::deserialize(deserializer).map(Some)
-}
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
 
 /// A complete perch policy document — the reviewable artifact whose canonical
 /// bytes are hashed by [`crate::doc_hash`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyDoc {
     /// Document format version. The only supported value is `1`;
     /// [`crate::from_json`] rejects anything else before looking at the rest
@@ -40,11 +31,6 @@ pub struct PolicyDoc {
     pub version: u32,
     /// Optional network identifier (e.g. a network passphrase or short name).
     /// Omitted from the canonical form when `None`.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_present_non_null",
-        skip_serializing_if = "Option::is_none"
-    )]
     pub network: Option<String>,
     /// Declared signers that rules may reference by id.
     pub signers: Vec<SignerDecl>,
@@ -54,8 +40,7 @@ pub struct PolicyDoc {
 
 /// A declared signer: an id local to the document, the verifier contract that
 /// checks its signatures, and the verifier-defined key material.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignerDecl {
     /// Document-local identifier rules use to reference this signer.
     /// Must be unique within the document.
@@ -73,8 +58,7 @@ pub struct SignerDecl {
 /// A single policy rule: who ([`Principals`]) may do what
 /// ([`Rule::functions`], [`Rule::args`]) where ([`Scope`]) until when
 /// ([`Rule::not_after_ledger`]).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rule {
     /// Human-readable rule name, unique within the document.
     pub name: String,
@@ -84,21 +68,14 @@ pub struct Rule {
     pub principals: Principals,
     /// If present, the allowlist of function names this rule covers.
     /// `None` means all functions in scope; an explicit empty list is
-    /// rejected by validation as ambiguous.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_present_non_null",
-        skip_serializing_if = "Option::is_none"
-    )]
+    /// rejected by validation as ambiguous. An explicit JSON `null` is rejected
+    /// by [`crate::parse`] rather than treated as `None` — otherwise
+    /// `"functions": null` would silently authorize every function.
     pub functions: Option<Vec<String>>,
     /// If present, constraints on call arguments, keyed by argument index.
     /// `None` means unconstrained; an explicit empty list is rejected by
-    /// validation as ambiguous.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_present_non_null",
-        skip_serializing_if = "Option::is_none"
-    )]
+    /// validation as ambiguous. An explicit `null` is rejected (see
+    /// `functions`).
     pub args: Option<Vec<ArgConstraint>>,
     /// If present, the **ledger sequence** at or after which this rule stops
     /// authorizing — not a Unix timestamp. The unit is explicit in the name
@@ -109,11 +86,6 @@ pub struct Rule {
     /// (enforced before any policy runs); in-program ledger predicates are
     /// reserved for windows *within* a live rule. Must be non-zero; omitted
     /// from the canonical form when `None`.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_present_non_null",
-        skip_serializing_if = "Option::is_none"
-    )]
     pub not_after_ledger: Option<u32>,
     /// If present, a cumulative spend cap over a rolling window, enforced by a
     /// stateful sibling policy (OZ `spending_limit`) attached alongside the
@@ -121,11 +93,6 @@ pub struct Rule {
     /// per-invocation semantics" section). Omitted from the canonical form when
     /// `None`, so documents without a cap hash exactly as before this field
     /// existed.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_present_non_null",
-        skip_serializing_if = "Option::is_none"
-    )]
     pub cap: Option<CapConstraint>,
 }
 
@@ -136,17 +103,11 @@ pub struct Rule {
 /// `spending_limit` policy, attached to the same OZ context rule alongside
 /// perch's interpreter; OZ enforces every attached policy (AND), so both the
 /// per-call constraints and the cumulative cap must pass.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapConstraint {
     /// The token contract (C-address strkey) the cap is denominated in. If
     /// omitted, the rule's scope contract is used (the scope must then be a
     /// `contract` scope). Omitted from the canonical form when `None`.
-    #[serde(
-        default,
-        deserialize_with = "deserialize_present_non_null",
-        skip_serializing_if = "Option::is_none"
-    )]
     pub token: Option<String>,
     /// Maximum cumulative amount over the window, as a decimal string. A string,
     /// not a number, because the canonical form carries only `u32` numbers (see
@@ -158,8 +119,7 @@ pub struct CapConstraint {
 }
 
 /// Where a rule applies. Tagged with `"type"`: `"contract"` or `"self-admin"`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Scope {
     /// Calls into one specific contract.
     Contract(ContractScope),
@@ -186,24 +146,21 @@ impl Scope {
 
 /// Payload of [`Scope::Contract`]: the target contract address
 /// (C-address strkey).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContractScope {
     /// The contract the rule scopes to (C-address strkey).
     pub address: String,
 }
 
 /// Payload of [`Scope::SelfAdmin`]. Deliberately an empty struct rather than a
-/// unit variant: serde's internally-tagged unit variants silently accept extra
-/// sibling fields, which would break the fail-closed guarantee.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// unit variant so the scope stays a JSON object whose only member is its
+/// `type` tag; [`crate::parse`] rejects any extra sibling field beside it.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfAdminScope {}
 
 /// Who a rule authorizes. Tagged with `"type"`: `"all"` or
 /// `"self-authenticating"`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Principals {
     /// All of the referenced signers must authorize (list must be non-empty
     /// and reference declared signer ids).
@@ -216,16 +173,14 @@ pub enum Principals {
 }
 
 /// Payload of [`Principals::All`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllPrincipals {
     /// Ids of declared signers, all of which must authorize.
     pub signers: Vec<String>,
 }
 
 /// Payload of [`Principals::SelfAuthenticating`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfAuthenticatingPrincipals {
     /// The policy contract (C-address strkey) that authenticates invocations.
     pub policy: String,
@@ -239,8 +194,7 @@ pub struct SelfAuthenticatingPrincipals {
 }
 
 /// A constraint on one call argument.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArgConstraint {
     /// Zero-based argument index. Unique within a rule's `args` list.
     pub index: u32,
@@ -259,8 +213,7 @@ pub struct ArgConstraint {
 /// by a stateful sibling policy (e.g. OZ `spending_limit`) attached to the same
 /// context rule. Keep this in mind before adding any amount-shaped predicate:
 /// its bound is per-call, and the doc must not read as a spend cap.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ArgPred {
     /// The argument must be the smart account's own address.
     IsSelf(IsSelfPred),
@@ -283,30 +236,27 @@ impl ArgPred {
 }
 
 /// Payload of [`ArgPred::IsSelf`]. Empty struct rather than a unit variant for
-/// the same fail-closed reason as [`SelfAdminScope`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// the same reason as [`SelfAdminScope`]: the predicate stays a JSON object
+/// with only its `type` tag, and no stray sibling field is accepted.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IsSelfPred {}
 
 /// Payload of [`ArgPred::AddressEq`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AddressEqPred {
     /// The address the argument must equal (C- or G-address strkey).
     pub address: String,
 }
 
 /// Payload of [`ArgPred::StringIn`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringInPred {
     /// The allowed string values (must be non-empty).
     pub values: Vec<String>,
 }
 
 /// Payload of [`ArgPred::StringPrefix`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringPrefixPred {
     /// The required string prefix.
     pub prefix: String,
@@ -314,8 +264,7 @@ pub struct StringPrefixPred {
 
 /// Payload of [`ArgPred::U32Eq`]. Equality on a single call's argument — a
 /// per-invocation check, never a cumulative counter (see [`ArgPred`]).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct U32EqPred {
     /// The exact u32 value the argument must equal.
     pub value: u32,

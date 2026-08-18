@@ -80,7 +80,7 @@ fn version_check_runs_before_other_schema_errors() {
 #[test]
 fn non_numeric_or_missing_version_is_a_schema_error() {
     // A string version is not the distinct UnsupportedVersion error — it is a
-    // type mismatch surfaced by serde.
+    // type mismatch surfaced by the parser ("expected u32").
     let input = valid().replace(r#""version":1"#, r#""version":"1""#);
     assert_json_err(&input, "expected u32");
 

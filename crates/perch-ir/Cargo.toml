@@ -6,11 +6,22 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Dual-target: `std` (default, off-chain tooling) and `no_std + alloc` (on-chain,
+# via soroban's bump allocator). Deliberately serde-free — the Soroban VM rejects
+# the wasm float feature, and both serde_json's number lexer and serde's
+# tagged-enum `Content` buffer pull an `f64` into the module (see parse.rs). The
+# same hand-written parser/canonicaliser runs in both builds, so doc_hashes stay
+# byte-identical across them.
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sha2 = "0.10"
-hex = "0.4"
+# Float-free JSON lexer for the parse path: numbers stay raw strings.
+hifijson = { version = "0.5", default-features = false, features = ["alloc"] }
+# std-only: on-chain, hash canonical_json bytes with the host env.crypto sha256.
+sha2 = { version = "0.10", default-features = false, optional = true }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+
+[features]
+default = ["std"]
+std = ["sha2/std", "hex/std"]
 
 [dev-dependencies]
-hex = "0.4"
+hex = { version = "0.4", default-features = false, features = ["alloc"] }

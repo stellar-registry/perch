@@ -1,3 +1,4 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 //! Lowering from `perch_ir::PolicyDoc` to an executable [`Plan`] — the ordered
 //! set of OZ smart-account rules a document becomes, each either policy-free or
 //! carrying an interpreter program.
@@ -21,9 +22,23 @@
 //!
 //! Tracking issue: <https://github.com/stellar-registry/perch/issues/7>
 
+extern crate alloc;
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 use perch_ir::{ArgPred, PolicyDoc, Principals, Rule, Scope};
 use perch_program::{rpn, InstallParams, Op, RpnProgram, ValidationError, PROGRAM_VERSION};
-use soroban_sdk::{BytesN, Env, String as SString, Symbol, Vec as SVec};
+use soroban_sdk::{Bytes, BytesN, Env, String as SString, Symbol, Vec as SVec};
+
+/// `doc_hash` computed with the host `sha256` over the canonical bytes — the
+/// same digest as the std-only `perch_ir::doc_hash`, but no_std and far cheaper
+/// on-chain than the `sha2` software impl.
+pub(crate) fn doc_hash_onchain(env: &Env, doc: &PolicyDoc) -> BytesN<32> {
+    let canonical = perch_ir::canonical_json(doc);
+    env.crypto()
+        .sha256(&Bytes::from_slice(env, canonical.as_bytes()))
+        .to_bytes()
+}
 
 pub mod analysis;
 pub use analysis::{
@@ -118,7 +133,7 @@ pub enum LowerError {
 
 /// Lower a validated document. Precondition: `perch_ir::validate(doc).is_ok()`.
 pub fn compile(env: &Env, doc: &PolicyDoc, cfg: &CompileConfig) -> Result<Plan, LowerError> {
-    let doc_hash = BytesN::from_array(env, &perch_ir::doc_hash(doc));
+    let doc_hash = doc_hash_onchain(env, doc);
     let mut rules = Vec::with_capacity(doc.rules.len());
     let mut any_interpreter = false;
 

@@ -66,7 +66,9 @@ pub mod doc;
 pub mod parse;
 pub mod validate;
 
-pub use canon::{canonical_json, doc_hash, doc_hash_hex, CANON_VERSION};
+pub use canon::{canonical_json, CANON_VERSION};
+#[cfg(feature = "std")]
+pub use canon::{doc_hash, doc_hash_hex};
 pub use doc::{
     AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, CapConstraint, ContractScope, IsSelfPred,
     PolicyDoc, Principals, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,

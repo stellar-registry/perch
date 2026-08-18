@@ -14,6 +14,8 @@
 
 use crate::analysis::{reachable_calls, FnSet};
 use crate::{compile, CompileConfig, LowerError, Plan};
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
 use perch_ir::PolicyDoc;
 use soroban_sdk::{BytesN, Env};
 
@@ -65,8 +67,8 @@ pub fn attenuate(
     let child_plan = compile(env, child, cfg).map_err(AttenuationError::Compile)?;
     is_narrowing(&parent_plan, &child_plan)?;
     Ok(Attenuation {
-        parent_hash: BytesN::from_array(env, &perch_ir::doc_hash(parent)),
-        child_hash: BytesN::from_array(env, &perch_ir::doc_hash(child)),
+        parent_hash: crate::doc_hash_onchain(env, parent),
+        child_hash: crate::doc_hash_onchain(env, child),
     })
 }
 

@@ -31,6 +31,7 @@ use alloc::{
 };
 
 use serde_json::Value;
+#[cfg(feature = "std")]
 use sha2::{Digest, Sha256};
 
 /// Version of the canonical form implemented here, as defined by `CANONICAL.md`.
@@ -59,12 +60,18 @@ pub fn canonical_json(doc: &PolicyDoc) -> String {
 
 /// SHA-256 of the canonical JSON bytes of `doc`. This is the document's
 /// identity: what reviewers approve and what on-chain state commits to.
+///
+/// `std`-only: it uses the `sha2` software implementation. On-chain, hash
+/// [`canonical_json`]'s bytes with the host `env.crypto().sha256` instead — the
+/// same digest for a fraction of the gas.
+#[cfg(feature = "std")]
 #[must_use]
 pub fn doc_hash(doc: &PolicyDoc) -> [u8; 32] {
     Sha256::digest(canonical_json(doc).as_bytes()).into()
 }
 
-/// Lowercase hex encoding of [`doc_hash`].
+/// Lowercase hex encoding of [`doc_hash`]. `std`-only (see [`doc_hash`]).
+#[cfg(feature = "std")]
 #[must_use]
 pub fn doc_hash_hex(doc: &PolicyDoc) -> String {
     hex::encode(doc_hash(doc))

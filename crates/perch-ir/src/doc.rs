@@ -12,6 +12,9 @@
 //! `install-param-hex`), matching the kebab-case enum tags so the document
 //! surface uses one consistent convention.
 
+#[cfg(not(feature = "std"))]
+use alloc::{string::String, vec::Vec};
+
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Deserialize an optional field that must be *absent* to be `None` — an

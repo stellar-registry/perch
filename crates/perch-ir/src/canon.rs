@@ -24,6 +24,12 @@
 //! format version.
 
 use crate::doc::PolicyDoc;
+#[cfg(not(feature = "std"))]
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 

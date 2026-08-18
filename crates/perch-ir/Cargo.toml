@@ -6,11 +6,19 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Dual-target: `std` (default, off-chain tooling) and `no_std + alloc` (on-chain,
+# via soroban's bump allocator). All deps are no_std-capable; the `std` feature
+# just adds their std shims. Parsing/canonicalization logic is unchanged, so
+# doc_hashes stay byte-identical across both builds.
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sha2 = "0.10"
-hex = "0.4"
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.10", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
+
+[features]
+default = ["std"]
+std = ["serde/std", "serde_json/std", "sha2/std", "hex/std"]
 
 [dev-dependencies]
-hex = "0.4"
+hex = { version = "0.4", default-features = false, features = ["alloc"] }

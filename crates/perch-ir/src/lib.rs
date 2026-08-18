@@ -1,9 +1,11 @@
+#![cfg_attr(not(feature = "std"), no_std)]
 //! The perch policy document model.
 //!
 //! A [`PolicyDoc`] is the reviewable artifact at the center of perch: a
 //! canonical, serializable description of a smart account's signers, rules,
-//! scopes, and constraints. This crate is host-side tooling (std, never
-//! on-chain) and is the trust root of the review workflow: what a reviewer
+//! scopes, and constraints. This crate builds both for `std` (off-chain review
+//! tooling) and for `no_std + alloc` (on-chain, via soroban's bump allocator),
+//! and is the trust root of the review workflow: what a reviewer
 //! approves is `doc_hash = sha256(canonical bytes)` of a document, so parsing,
 //! canonicalization, and validation here must be strict and deterministic.
 //!
@@ -56,6 +58,8 @@
 //! purpose-built stateful contract, never here.
 //!
 //! Tracking issue: <https://github.com/stellar-registry/perch/issues/4>
+
+extern crate alloc;
 
 pub mod canon;
 pub mod doc;

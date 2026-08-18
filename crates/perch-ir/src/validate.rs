@@ -19,9 +19,13 @@
 //! `string-in` predicate ([`ValidationError::DuplicateStringInValue`]).
 
 use crate::doc::{ArgPred, PolicyDoc, Principals, Rule, Scope};
-use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
-use std::fmt;
+use alloc::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+#[cfg(not(feature = "std"))]
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+use core::fmt;
 
 /// The exact acknowledgement sentinel required in
 /// [`crate::SelfAuthenticatingPrincipals::ack`].
@@ -350,7 +354,7 @@ impl fmt::Display for ValidationError {
     }
 }
 
-impl std::error::Error for ValidationError {}
+impl core::error::Error for ValidationError {}
 
 /// Structural strkey shape check: length 56, base32 alphabet (`A-Z2-7`), and
 /// a leading version letter from `leads`. Does **not** verify the CRC16
@@ -391,10 +395,10 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
         });
     }
 
-    let mut seen_signer_ids: HashSet<&str> = HashSet::new();
+    let mut seen_signer_ids: BTreeSet<&str> = BTreeSet::new();
     // Keyed on (verifier, decoded key bytes) so the same physical key under
     // two ids is caught regardless of hex case; maps to the first id seen.
-    let mut seen_key_material: HashMap<(&str, Vec<u8>), &str> = HashMap::new();
+    let mut seen_key_material: BTreeMap<(&str, Vec<u8>), &str> = BTreeMap::new();
     for (position, signer) in doc.signers.iter().enumerate() {
         if signer.id.is_empty() {
             errors.push(ValidationError::EmptySignerId { position });
@@ -437,9 +441,9 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
 
     // All declared ids (duplicates included) are valid reference targets;
     // the duplication itself is already reported above.
-    let declared: HashSet<&str> = doc.signers.iter().map(|s| s.id.as_str()).collect();
+    let declared: BTreeSet<&str> = doc.signers.iter().map(|s| s.id.as_str()).collect();
 
-    let mut seen_rule_names: HashSet<&str> = HashSet::new();
+    let mut seen_rule_names: BTreeSet<&str> = BTreeSet::new();
     for (position, rule) in doc.rules.iter().enumerate() {
         if rule.name.is_empty() {
             errors.push(ValidationError::EmptyRuleName { position });
@@ -459,7 +463,7 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
 }
 
 /// Validate one rule's scope, principals, functions, args, and expiry.
-fn validate_rule(rule: &Rule, declared: &HashSet<&str>, errors: &mut Vec<ValidationError>) {
+fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<ValidationError>) {
     let name = || rule.name.clone();
 
     match &rule.scope {
@@ -479,7 +483,7 @@ fn validate_rule(rule: &Rule, declared: &HashSet<&str>, errors: &mut Vec<Validat
             if all.signers.is_empty() {
                 errors.push(ValidationError::EmptyPrincipalSigners { rule: name() });
             }
-            let mut seen: HashSet<&str> = HashSet::new();
+            let mut seen: BTreeSet<&str> = BTreeSet::new();
             for id in &all.signers {
                 if !seen.insert(id) {
                     errors.push(ValidationError::DuplicatePrincipalSigner {
@@ -515,7 +519,7 @@ fn validate_rule(rule: &Rule, declared: &HashSet<&str>, errors: &mut Vec<Validat
         if functions.is_empty() {
             errors.push(ValidationError::EmptyFunctions { rule: name() });
         }
-        let mut seen: HashSet<&str> = HashSet::new();
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
         for func in functions {
             if func.is_empty() {
                 errors.push(ValidationError::EmptyFunctionName { rule: name() });
@@ -533,7 +537,7 @@ fn validate_rule(rule: &Rule, declared: &HashSet<&str>, errors: &mut Vec<Validat
         if args.is_empty() {
             errors.push(ValidationError::EmptyArgs { rule: name() });
         }
-        let mut seen: HashSet<u32> = HashSet::new();
+        let mut seen: BTreeSet<u32> = BTreeSet::new();
         for constraint in args {
             if !seen.insert(constraint.index) {
                 errors.push(ValidationError::DuplicateArgIndex {
@@ -549,7 +553,7 @@ fn validate_rule(rule: &Rule, declared: &HashSet<&str>, errors: &mut Vec<Validat
                             index: constraint.index,
                         });
                     }
-                    let mut seen: HashSet<&str> = HashSet::new();
+                    let mut seen: BTreeSet<&str> = BTreeSet::new();
                     for value in &pred.values {
                         if !seen.insert(value) {
                             errors.push(ValidationError::DuplicateStringInValue {

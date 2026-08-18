@@ -25,7 +25,7 @@
 //! the result.
 
 use crate::doc::PolicyDoc;
-use std::fmt;
+use core::fmt;
 
 /// Error returned by [`from_json`].
 #[derive(Debug)]
@@ -49,8 +49,8 @@ impl fmt::Display for ParseError {
     }
 }
 
-impl std::error::Error for ParseError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for ParseError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             ParseError::Json(e) => Some(e),
             ParseError::UnsupportedVersion(_) => None,

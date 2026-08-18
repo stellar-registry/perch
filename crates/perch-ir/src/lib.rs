@@ -11,15 +11,19 @@
 //!
 //! # Fail-closed philosophy
 //!
-//! Anything this model does not understand is an error, never a silent skip:
+//! Anything this model does not understand is an error, never a silent skip.
+//! [`from_json`] parses by walking a float-free [`hifijson`] value tree by hand
+//! (serde cannot ride the on-chain wasm — see [`parse`]), enforcing at every
+//! level:
 //!
-//! - **Unknown fields** anywhere in the tree are rejected
-//!   (`deny_unknown_fields` on every struct; enum variants wrap payload
-//!   structs so the guarantee holds inside tagged enums too — including the
-//!   payload-less `self-admin` / `is-self` variants, which use empty structs
-//!   because serde's internally-tagged unit variants silently accept extra
-//!   fields).
-//! - **Unknown enum tags** are rejected by serde's tagged-enum handling.
+//! - **Unknown fields** anywhere in the tree are rejected — including beside an
+//!   internally-tagged variant's `type` (so the payload-less `self-admin` /
+//!   `is-self` shapes accept no stray siblings). The document types still carry
+//!   `deny_unknown_fields` for off-chain serde interop; the parser enforces the
+//!   same rule independently.
+//! - **Unknown enum tags** (`type` values) are rejected.
+//! - **Duplicate object keys** at any nesting level are rejected (a
+//!   content-aliasing vector — see [`parse`]).
 //! - **`version != 1`** is rejected by [`from_json`] with a distinct error
 //!   before anything else is examined, so future formats fail loudly and
 //!   precisely.
@@ -74,7 +78,7 @@ pub use doc::{
     PolicyDoc, Principals, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
     StringInPred, StringPrefixPred, U32EqPred,
 };
-pub use parse::{from_json, ParseError};
+pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{
     is_address_shape, is_contract_address_shape, validate, ValidationError, ACK_SENTINEL,
     MAX_SIGNER_KEY_LEN,

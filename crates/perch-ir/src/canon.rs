@@ -285,7 +285,12 @@ fn write_json_string(s: &str, out: &mut String) {
 mod tests {
     use super::{write_value, Cv};
     #[cfg(not(feature = "std"))]
-    use alloc::{string::String, vec, vec::Vec};
+    use alloc::{
+        format,
+        string::{String, ToString},
+        vec,
+        vec::Vec,
+    };
 
     fn canon(v: &Cv) -> String {
         let mut out = String::new();
@@ -328,16 +333,39 @@ mod tests {
     }
 
     #[test]
-    fn escaper_matches_serde_json_across_the_subset() {
-        // The hand-written escaper must be byte-identical to serde_json's string
-        // escaping across the whole reachable domain: every ASCII code point
-        // incl. controls/quote/backslash/slash/DEL, plus a spread of non-ASCII
-        // scalars. This guardrail lets the canonical form never depend on a
-        // serializer while still matching one where their domains overlap.
-        let mut sample: String = (0u8..=0x7f).map(|b| b as char).collect();
-        sample.push_str("é€😀\u{a0}\u{feff}");
+    fn escaper_matches_the_jcs_table_over_all_ascii_and_non_ascii() {
+        // The hand-written escaper must match RFC 8785 §3.2.2.2 (the table in
+        // CANONICAL.md) across the whole reachable domain: every ASCII code
+        // point incl. controls/quote/backslash/slash/DEL, plus a spread of
+        // non-ASCII scalars. `reference` re-expresses the table independently of
+        // `write_json_string` (a plain `{:04x}`, not its manual hex nibbles), so
+        // a typo in either the range boundary or the hex digits is caught —
+        // without depending on any JSON serializer.
+        fn reference(c: char) -> String {
+            match c {
+                '"' => "\\\"".into(),
+                '\\' => "\\\\".into(),
+                '\u{8}' => "\\b".into(),
+                '\t' => "\\t".into(),
+                '\n' => "\\n".into(),
+                '\u{c}' => "\\f".into(),
+                '\r' => "\\r".into(),
+                c if (c as u32) < 0x20 => format!("\\u{:04x}", c as u32),
+                c => c.to_string(),
+            }
+        }
+        let mut sample: Vec<char> = (0u8..=0x7f).map(|b| b as char).collect();
+        sample.extend(['é', '€', '😀', '\u{a0}', '\u{feff}']);
+
+        let mut expected = String::from("\"");
+        for &c in &sample {
+            expected.push_str(&reference(c));
+        }
+        expected.push('"');
+
+        let s: String = sample.iter().collect();
         let mut ours = String::new();
-        super::write_json_string(&sample, &mut ours);
-        assert_eq!(ours, serde_json::to_string(&sample).unwrap());
+        super::write_json_string(&s, &mut ours);
+        assert_eq!(ours, expected);
     }
 }

@@ -26,9 +26,8 @@
 //!
 //! So [`from_json`] walks a [`hifijson`] value tree by hand. hifijson is a
 //! float-free lexer: numbers stay as raw digit strings (`num::Parts` tells us
-//! whether one is an integer), and *we* parse them into `u32`. The document
-//! model keeps its `#[derive(Serialize, Deserialize)]` for off-chain serde
-//! interop, but nothing on the on-chain path touches it.
+//! whether one is an integer), and *we* parse them into `u32`. The crate carries
+//! no serde dependency at all, so nothing can reintroduce the float taint.
 //!
 //! # Duplicate keys
 //!

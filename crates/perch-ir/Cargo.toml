@@ -7,16 +7,13 @@ license.workspace = true
 repository.workspace = true
 
 # Dual-target: `std` (default, off-chain tooling) and `no_std + alloc` (on-chain,
-# via soroban's bump allocator). All deps are no_std-capable; the `std` feature
-# just adds their std shims. The same hand-written parser/canonicaliser runs in
-# both builds, so doc_hashes stay byte-identical across them.
+# via soroban's bump allocator). Deliberately serde-free — the Soroban VM rejects
+# the wasm float feature, and both serde_json's number lexer and serde's
+# tagged-enum `Content` buffer pull an `f64` into the module (see parse.rs). The
+# same hand-written parser/canonicaliser runs in both builds, so doc_hashes stay
+# byte-identical across them.
 [dependencies]
-# Kept for off-chain serde interop (the doc types derive Serialize/Deserialize);
-# NOT used on the parse/canonicalize path — see parse.rs on why serde can't ride
-# the on-chain wasm (the Soroban VM rejects the float feature serde_json and
-# serde's tagged-enum Content buffer both pull in).
-serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
-# Float-free JSON lexer for the on-chain parse path: numbers stay raw strings.
+# Float-free JSON lexer for the parse path: numbers stay raw strings.
 hifijson = { version = "0.5", default-features = false, features = ["alloc"] }
 # std-only: on-chain, hash canonical_json bytes with the host env.crypto sha256.
 sha2 = { version = "0.10", default-features = false, optional = true }
@@ -24,10 +21,7 @@ hex = { version = "0.4", default-features = false, features = ["alloc"] }
 
 [features]
 default = ["std"]
-std = ["serde/std", "sha2/std", "hex/std"]
+std = ["sha2/std", "hex/std"]
 
 [dev-dependencies]
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
-# Tests only: proves serde interop still round-trips and that the hand-written
-# JCS escaper matches serde_json's where their domains overlap.
-serde_json = "1.0"

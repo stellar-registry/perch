@@ -18,9 +18,7 @@
 //!
 //! - **Unknown fields** anywhere in the tree are rejected — including beside an
 //!   internally-tagged variant's `type` (so the payload-less `self-admin` /
-//!   `is-self` shapes accept no stray siblings). The document types still carry
-//!   `deny_unknown_fields` for off-chain serde interop; the parser enforces the
-//!   same rule independently.
+//!   `is-self` shapes accept no stray siblings).
 //! - **Unknown enum tags** (`type` values) are rejected.
 //! - **Duplicate object keys** at any nesting level are rejected (a
 //!   content-aliasing vector — see [`parse`]).

@@ -8,6 +8,16 @@ repository.workspace = true
 
 [dependencies]
 soroban-sdk = { workspace = true }
+soroban-flux = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+
+# Verified by the Flux refinement checker (`just flux`). The attributes this
+# enables erase to no-ops under normal builds — deploy artifacts and stable CI
+# are unaffected.
+[package.metadata.flux]
+enabled = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(flux_sysroot)"] }

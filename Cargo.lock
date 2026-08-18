@@ -719,6 +719,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26b73573e6edcd2af0cdf47bd6cb58f0b3839491263c314eaad1ccf24430e1de"
 
 [[package]]
+name = "flux-attrs"
+version = "0.1.0"
+source = "git+https://github.com/flux-rs/flux.git?rev=283ad737569f80951973747ef16f1a89d64d9728#283ad737569f80951973747ef16f1a89d64d9728"
+dependencies = [
+ "flux-attrs-impl",
+]
+
+[[package]]
+name = "flux-attrs-impl"
+version = "0.1.0"
+source = "git+https://github.com/flux-rs/flux.git?rev=283ad737569f80951973747ef16f1a89d64d9728#283ad737569f80951973747ef16f1a89d64d9728"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "flux-rs"
+version = "0.1.0"
+source = "git+https://github.com/flux-rs/flux.git?rev=283ad737569f80951973747ef16f1a89d64d9728#283ad737569f80951973747ef16f1a89d64d9728"
+dependencies = [
+ "flux-attrs",
+]
+
+[[package]]
 name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1149,6 +1175,7 @@ dependencies = [
 name = "perch-program"
 version = "0.1.0"
 dependencies = [
+ "soroban-flux",
  "soroban-sdk",
 ]
 
@@ -1581,6 +1608,15 @@ dependencies = [
  "serde_json",
  "stellar-xdr",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "soroban-flux"
+version = "0.1.0"
+source = "git+https://github.com/nidohq/soroban-flux.git?rev=72d0679#72d06798dabac4c0893072bd431ce260b65d742d"
+dependencies = [
+ "flux-rs",
+ "soroban-sdk",
 ]
 
 [[package]]

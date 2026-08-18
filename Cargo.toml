@@ -26,6 +26,12 @@ stellar-accounts = { git = "https://github.com/OpenZeppelin/stellar-contracts.gi
 perch-ir = { path = "crates/perch-ir" }
 perch-program = { path = "crates/perch-program" }
 
+# Flux refinement-type bridge (attrs erase to no-ops on stable; verification
+# runs via `just flux` under flux's pinned nightly). Rev tracks
+# nidohq/soroban-flux main; its COMPATIBILITY.md pins the matching flux
+# toolchain rev.
+soroban-flux = { git = "https://github.com/nidohq/soroban-flux.git", rev = "72d0679" }
+
 [profile.release]
 opt-level = "z"
 overflow-checks = true

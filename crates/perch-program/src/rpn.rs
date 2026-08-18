@@ -90,6 +90,12 @@ fn pops(op: &Op) -> Result<u32, ValidationError> {
 }
 
 /// Validate an RPN program by simulating its stack effect.
+///
+/// Flux-checked with strict overflow: the depth accounting
+/// (`depth - pops + 1`) is proven to never underflow (the `depth < pops`
+/// guard) nor overflow (the `depth <= MAX_STACK_DEPTH` loop invariant).
+/// Ops are walked by index rather than `.iter()` because soroban `Vec`
+/// iteration ICEs flux (projections.rs:720) — semantics are identical.
 pub fn validate(program: &RpnProgram) -> Result<(), ValidationError> {
     if program.version != PROGRAM_VERSION {
         return Err(ValidationError::UnknownVersion);
@@ -102,7 +108,10 @@ pub fn validate(program: &RpnProgram) -> Result<(), ValidationError> {
         return Err(ValidationError::TooLarge);
     }
     let mut depth: u32 = 0;
-    for op in program.ops.iter() {
+    let mut idx: u32 = 0;
+    while idx < len {
+        let op = program.ops.get_unchecked(idx);
+        idx += 1;
         let pops = pops(&op)?;
         if depth < pops {
             return Err(ValidationError::StackUnderflow);
@@ -125,30 +134,50 @@ pub fn validate(program: &RpnProgram) -> Result<(), ValidationError> {
 /// stack underflow, overflow past [`MAX_STACK_DEPTH`], a zero-arity
 /// composite, or a final stack size other than one yields
 /// [`Verdict::Unknown`].
+///
+/// Flux-checked with strict overflow: every `stack[sp]` access is proven
+/// in-bounds and every `sp` update free of wrap-around, given only the
+/// fail-closed guards — the guards are load-bearing for the proof, not just
+/// for malformed input. Ops are walked by index (not `.iter()`, which ICEs
+/// flux; also measurably cheaper under metering — see the bench canary).
 pub fn eval(env: &Env, program: &RpnProgram, inputs: &EvalInputs) -> Verdict {
     let mut stack = [Verdict::Unknown; MAX_STACK_DEPTH as usize];
-    let mut sp: usize = 0;
-    for op in program.ops.iter() {
+    let mut sp: u32 = 0;
+    let len = program.ops.len();
+    let mut idx: u32 = 0;
+    while idx < len {
+        // Defensive and provably unreachable (the pre-push guard below keeps
+        // `sp <= MAX_STACK_DEPTH`); stated explicitly so the bound is a
+        // syntactic loop invariant flux can carry into the pop loops.
+        if sp > MAX_STACK_DEPTH {
+            return Verdict::Unknown;
+        }
+        let op = program.ops.get_unchecked(idx);
+        idx += 1;
         let v = match op {
             Op::All(n) => {
-                if n == 0 || (sp as u32) < n {
+                if n == 0 || sp < n {
                     return Verdict::Unknown;
                 }
                 let mut v = Verdict::True;
-                for _ in 0..n {
+                let mut k = n;
+                while k > 0 {
                     sp -= 1;
-                    v = v.and(stack[sp]);
+                    v = v.and(stack[sp as usize]);
+                    k -= 1;
                 }
                 v
             }
             Op::Any(n) => {
-                if n == 0 || (sp as u32) < n {
+                if n == 0 || sp < n {
                     return Verdict::Unknown;
                 }
                 let mut v = Verdict::False;
-                for _ in 0..n {
+                let mut k = n;
+                while k > 0 {
                     sp -= 1;
-                    v = v.or(stack[sp]);
+                    v = v.or(stack[sp as usize]);
+                    k -= 1;
                 }
                 v
             }
@@ -157,7 +186,7 @@ pub fn eval(env: &Env, program: &RpnProgram, inputs: &EvalInputs) -> Verdict {
                     return Verdict::Unknown;
                 }
                 sp -= 1;
-                !stack[sp]
+                !stack[sp as usize]
             }
             Op::MinSigners(n) => leaf::min_signers(inputs, n),
             Op::FnIn(fns) => leaf::fn_in(inputs, &fns),
@@ -173,10 +202,10 @@ pub fn eval(env: &Env, program: &RpnProgram, inputs: &EvalInputs) -> Verdict {
             Op::LedgerBefore(n) => leaf::ledger_before(env, n),
             Op::LedgerAtOrAfter(n) => leaf::ledger_at_or_after(env, n),
         };
-        if sp >= MAX_STACK_DEPTH as usize {
+        if sp >= MAX_STACK_DEPTH {
             return Verdict::Unknown;
         }
-        stack[sp] = v;
+        stack[sp as usize] = v;
         sp += 1;
     }
     if sp == 1 {

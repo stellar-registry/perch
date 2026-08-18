@@ -22,3 +22,10 @@ bench-build:
 # v1 format. Reference numbers: crates/perch-program/BENCH.md.
 bench: bench-build
     cargo test -p perch-bench --test metered -- --ignored --nocapture
+
+# Flux refinement verification of perch-program (nidohq/soroban-flux). Runs
+# under flux's pinned nightly toolchain; the repo's stable pin is untouched —
+# the flux attributes are no-ops in normal builds. Setup: see
+# https://github.com/nidohq/soroban-flux (`just flux-setup` there).
+flux:
+    PATH="$HOME/.cargo/bin:$PATH" RUSTUP_TOOLCHAIN=nightly-2026-02-05 FLUXFLAGS="-Fpointer-width=32 -Fcheck-overflow=strict -Fcache=target/flux-cache" cargo flux -p perch-program

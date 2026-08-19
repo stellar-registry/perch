@@ -1409,6 +1409,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-conformance"
+version = "0.1.0"
+dependencies = [
+ "perch-compile",
+ "perch-ir",
+ "perch-program",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "perch-deploy"
 version = "0.1.0"
 dependencies = [

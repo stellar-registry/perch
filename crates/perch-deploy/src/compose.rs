@@ -1,8 +1,11 @@
-//! `compose`: PolicyDoc → the JSON worklist of `add_context_rule` calls.
-//! The self-admin rule is *not* emitted as an apply entry — the account
-//! constructor already installed it as rule 0, and re-adding would duplicate
-//! the rule and shift every subsequent id. It lands in `genesis_rule` so
-//! `verify` can still check it on chain.
+//! `compose`: PolicyDoc → a reviewable JSON expansion of the rules the
+//! document lowers to. The account applies the document directly
+//! (`apply_doc` — see the `apply` subcommand), so this output is a review
+//! artifact and `verify`'s expectation file, not an install worklist. The
+//! self-admin rule lands in `genesis_rule` (the constructor satisfies it at
+//! genesis; `apply_doc` re-creates it on every apply); rule ids here are
+//! doc-order and advisory — actual ids are assigned at apply time, and
+//! `verify` matches by name.
 
 use anyhow::{anyhow, bail, Context, Result};
 use perch_compile::{CapSpec, CompileConfig, LoweredRule, ScopeSpec, SignerSpec};
@@ -18,8 +21,8 @@ pub struct ComposeOutput {
     pub account: String,
     pub interpreter: String,
     pub interpreter_wasm_hash: String,
-    /// The single self-admin rule, satisfied by the account constructor as
-    /// rule 0; `verify` checks it, `install-rule` refuses it.
+    /// The single self-admin rule, satisfied by the account constructor at
+    /// genesis and re-created by every `apply_doc`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub genesis_rule: Option<RuleEntry>,
     pub apply: Vec<RuleEntry>,
@@ -27,6 +30,8 @@ pub struct ComposeOutput {
 
 #[derive(Serialize, Deserialize)]
 pub struct RuleEntry {
+    /// Doc-order index — advisory only. Actual ids are assigned at apply
+    /// time; `verify` matches rules by name and reports the real ids.
     pub expected_rule_id: u32,
     pub name: String,
     pub context_type: ContextTypeJson,

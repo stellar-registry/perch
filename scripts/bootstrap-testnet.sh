@@ -13,8 +13,9 @@
 #                    every future republish requires smart-account auth.
 #   4. Deploy      — deploy the interpreter (named, no constructor).
 #   5. Policy      — fill testdata/deploy/perch-testnet.json from the template,
-#                    compose + install ci-publish (rule 1) and admin-registry
-#                    (rule 2) via perch-deploy, signed by the admin key.
+#                    then apply the WHOLE document in one transaction
+#                    (perch-deploy apply → the account's apply_doc), signed by
+#                    the admin key; verify reconciles installed == reviewed.
 #   6. Rotate      — rehearse the CI publish path (simulation only), then
 #                    set_manager(smart account). After this, every initial
 #                    publish/deploy/register in the perch sub needs a
@@ -225,9 +226,9 @@ INTERPRETER="${INTERPRETER:-<unknown>}"
 log "INTERPRETER=$INTERPRETER (wasm hash $INTERP_HASH)"
 
 # ---------------------------------------------------------------------------
-# Phase 5 — compose + install the policy rules
+# Phase 5 — apply the policy document (one transaction)
 # ---------------------------------------------------------------------------
-log "Phase 5: policy document + rule installs"
+log "Phase 5: policy document → apply_doc"
 case "$PERCH_SUB$VERIFIER$INTERPRETER" in
     *'<unknown>'*)
         warn "dry-run with unresolved addresses — phases 5-6 shown symbolically only"
@@ -244,23 +245,42 @@ sed -e "s/@VERIFIER@/$VERIFIER/g" \
 log "wrote $DOC (commit it after bootstrap for provenance)"
 
 deploy_env=(env STELLAR_RPC_URL="$RPC_URL" STELLAR_NETWORK_PASSPHRASE="$PASSPHRASE")
-# compose is offline; run it for real even in dry-run so later commands have a
-# real rules file to point at.
+# compose is offline review tooling; run it for real even in dry-run so verify
+# has an expectation file to reconcile against.
 "${deploy_env[@]}" "$PERCH_DEPLOY" compose \
     --doc "$DOC" --account "$SA" --interpreter "$INTERPRETER" \
     --interpreter-wasm-hash "$INTERP_HASH" \
     > "$RULES_OUT" || die "compose failed"
-# The rule id CI signs under comes from compose, never hard-coded: any rule
-# re-creation shifts it, and the id is bound into the signed digest.
-CI_RULE_ID="$(jq -er '.apply[] | select(.name == "ci-publish") | .expected_rule_id' "$RULES_OUT")" \
-    || die "compose output has no ci-publish rule"
-# PERCH_ADMIN_KEY must be in the environment for install-rule (never in argv).
-run "${deploy_env[@]}" "$PERCH_DEPLOY" install-rule \
-    --account "$SA" --rules "$RULES_OUT" --rule ci-publish
-run "${deploy_env[@]}" "$PERCH_DEPLOY" install-rule \
-    --account "$SA" --rules "$RULES_OUT" --rule admin-registry
+# ONE transaction: apply_doc verifies the document on-chain (parse, validate,
+# network binding, compile, anti-brick) and swaps the entire rule set
+# atomically. PERCH_ADMIN_KEY must be in the environment (never in argv).
+run "${deploy_env[@]}" "$PERCH_DEPLOY" apply \
+    --account "$SA" --doc "$DOC" --interpreter "$INTERPRETER"
 run "${deploy_env[@]}" "$PERCH_DEPLOY" verify \
     --account "$SA" --interpreter "$INTERPRETER" --rules "$RULES_OUT"
+# The rule id CI signs under comes from the CHAIN, never hard-coded: apply_doc
+# assigns fresh ids on every apply, so scan the live rules by name with the
+# stock stellar CLI (read-only simulation, no keys).
+if [ "$DRY_RUN" -eq 0 ]; then
+    CI_RULE_ID=""
+    count="$(stellar contract invoke --id "$SA" "${net_args[@]}" -- get_context_rules_count)" \
+        || die "get_context_rules_count failed"
+    found=0 id=0 ceiling=$((count * 8 + 64))
+    while [ "$found" -lt "$count" ] && [ "$id" -lt "$ceiling" ]; do
+        if rule_json="$(stellar contract invoke --id "$SA" "${net_args[@]}" \
+            -- get_context_rule --context_rule_id "$id" 2>/dev/null)"; then
+            found=$((found + 1))
+            [ "$(jq -er '.name' <<<"$rule_json")" = "ci-publish" ] && CI_RULE_ID="$id"
+        fi
+        id=$((id + 1))
+    done
+    [ -n "$CI_RULE_ID" ] || die "ci-publish rule not found on-chain after apply"
+else
+    # dry-run prediction for a fresh account: the constructor consumed id 0;
+    # apply_doc assigns 1..n in document order.
+    CI_RULE_ID=$((1 + $(jq -er '[.rules[].name] | index("ci-publish")' "$DOC")))
+fi
+log "ci-publish rule id: $CI_RULE_ID"
 
 # ---------------------------------------------------------------------------
 # Phase 6 — rehearse the CI path, then rotate the manager

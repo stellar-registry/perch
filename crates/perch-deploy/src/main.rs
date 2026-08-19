@@ -1,12 +1,14 @@
-//! perch-deploy: deploy/CI tool for the perch smart-account pipeline — the
-//! only tool that can sign OZ smart-account auth entries (stellar-cli cannot).
-//! Bootstrap installs policy rules signed by the admin key; CI publishes wasm
-//! to the registry signed by the scoped CI key. Key material comes ONLY from
-//! the PERCH_ADMIN_KEY / PERCH_CI_KEY environment variables.
+//! perch-deploy: the interim signing shim for the perch smart-account
+//! pipeline — it exists only because stellar-cli cannot yet sign OZ
+//! smart-account approvals (AuthPayload selecting a rule id). `apply` submits
+//! a policy document to the account's `apply_doc` signed by the admin key; CI
+//! publishes wasm to the registry signed by the scoped CI key. Everything
+//! else — and eventually all of this — is the stock `stellar` CLI. Key
+//! material comes ONLY from PERCH_ADMIN_KEY / PERCH_CI_KEY env variables.
 
+mod apply;
 mod auth;
 mod compose;
-mod install;
 mod keys;
 mod publish;
 mod rpc;
@@ -50,17 +52,18 @@ enum Cmd {
         #[arg(long)]
         interpreter_wasm_hash: String,
     },
-    /// Install one composed rule on the account, signed by PERCH_ADMIN_KEY
-    /// selecting rule 0.
-    InstallRule {
+    /// Apply a policy document whole: submit its JSON bytes to the account's
+    /// `apply_doc` in one transaction, signed by PERCH_ADMIN_KEY selecting
+    /// rule 0. The account verifies and swaps the entire rule set atomically.
+    Apply {
         #[arg(long)]
         account: String,
-        /// Path to a compose output JSON.
+        /// Path to the PolicyDoc JSON — the same file the review approved.
         #[arg(long)]
-        rules: PathBuf,
-        /// Name of the rule to install.
+        doc: PathBuf,
+        /// The shared perch interpreter contract (C…).
         #[arg(long)]
-        rule: String,
+        interpreter: String,
         /// Stop after simulation; print footprint and fee.
         #[arg(long)]
         dry_run: bool,
@@ -111,17 +114,17 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&out)?);
             Ok(())
         }
-        Cmd::InstallRule {
+        Cmd::Apply {
             account,
-            rules,
-            rule,
+            doc,
+            interpreter,
             dry_run,
-        } => install::run(
+        } => apply::run(
             &cli.rpc()?,
             cli.passphrase()?,
             account,
-            rules,
-            rule,
+            doc,
+            interpreter,
             *dry_run,
         ),
         Cmd::Publish(args) => publish::run(&cli.rpc()?, cli.passphrase()?, args),

@@ -485,7 +485,7 @@
     <span class="pn">}</span>
 <span class="pn">}</span>
 
-<span class="k">impl</span> SmartAccount <span class="k">for</span> <span class="fn">PerchAccount</span> <span class="pn">{</span> <span class="cm">/* getters inherited; every mutator overridden to reject — slide 16 */</span> <span class="pn">}</span></pre>
+<span class="k">impl</span> SmartAccount <span class="k">for</span> <span class="fn">PerchAccount</span> <span class="pn">{}</span>  <span class="cm">// implemented, NOT exported — these entry points don't exist on-chain (slide 16)</span></pre>
       <p class="code-cap">crates/perch-account/src/lib.rs — the OZ core of our account, abridged (its one extension, apply_doc, is on slide 16)</p>
       <p class="punch">A complete, deployable smart account. Everything after deploy — rules, signers, policies — is <em>data</em>. What's still missing: a guarantee about <em>where that data comes from</em>.</p>
     </div>
@@ -684,24 +684,25 @@ perch_ir<span class="pn">::</span><span class="fn">validate</span><span class="p
     <div class="wrap">
       <p class="eyebrow"><span class="n">16</span> · Perch · one call</p>
       <h2>Publish the document. Switch in one call.</h2>
-      <p class="lead">A perch account has <strong>no piecemeal mutation surface</strong>: <code>add_signer</code>, <code>remove_signer</code>, <code>add_policy</code>… every mutator entry point rejects (<code>UseApplyDoc</code>). Authorization data changes one way — the reviewed JSON, applied whole:</p>
+      <p class="lead">A perch account has <strong>no piecemeal mutation surface</strong> — <code>add_signer</code>, <code>remove_signer</code>, <code>add_policy</code>… <strong>those entry points don't exist on the contract</strong>. The whole account exports six functions, and authorization data changes through exactly one of them:</p>
       <div class="docgrid" style="margin-top:1rem">
-<pre><span class="cm">/// Apply a policy document — the ONLY way this account's authorization changes.</span>
-<span class="k">pub fn</span> <span class="fn">apply_doc</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">,</span> doc_json<span class="pn">:</span> Bytes<span class="pn">,</span> interpreter<span class="pn">:</span> Address<span class="pn">)</span> <span class="k">-&gt;</span> BytesN<span class="pn">&lt;</span><span class="nm">32</span><span class="pn">&gt;</span> <span class="pn">{</span>
-    e<span class="pn">.</span><span class="fn">current_contract_address</span><span class="pn">().</span><span class="fn">require_auth</span><span class="pn">();</span>  <span class="cm">// the admin rule approves the switch</span>
-    <span class="k">let</span> doc <span class="pn">=</span> perch_ir<span class="pn">::</span><span class="fn">from_json</span><span class="pn">(</span>json<span class="pn">)?;</span>           <span class="cm">// fail-closed parse…</span>
-    perch_ir<span class="pn">::</span><span class="fn">validate</span><span class="pn">(&amp;</span>doc<span class="pn">)?;</span>                     <span class="cm">// …and validation</span>
-    <span class="cm">// the document must name THIS network: sha256(network) == the chain's id</span>
-    <span class="k">let</span> plan <span class="pn">=</span> <span class="fn">compile</span><span class="pn">(</span>e<span class="pn">,</span> <span class="pn">&amp;</span>doc<span class="pn">,</span> <span class="pn">&amp;</span>cfg<span class="pn">)?;</span>            <span class="cm">// → OZ rules + programs</span>
-    <span class="cm">// anti-brick: refuse unless a policy-free self-admin rule survives</span>
-    <span class="cm">// remove every existing rule; install the document's — atomically</span>
-    <span class="k">let</span> hash <span class="pn">=</span> <span class="fn">sha256</span><span class="pn">(</span><span class="fn">canonical_json</span><span class="pn">(&amp;</span>doc<span class="pn">));</span>      <span class="cm">// the canonical identity</span>
-    <span class="cm">// stored + returned, so anyone can check installed == reviewed</span>
+<pre><span class="cm">/// The doc-only account trait, extending OZ's evaluation machinery.</span>
+<span class="k">pub trait</span> <span class="fn">PerchSmartAccount</span><span class="pn">:</span> CustomAccountInterface <span class="pn">+</span> SmartAccount <span class="pn">{</span>
+    <span class="cm">/// Apply a policy document — the ONLY way authorization changes.</span>
+    <span class="k">fn</span> <span class="fn">apply_doc</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">,</span> doc_json<span class="pn">:</span> Bytes<span class="pn">,</span> interpreter<span class="pn">:</span> Address<span class="pn">)</span>
+        <span class="k">-&gt;</span> Result<span class="pn">&lt;</span>BytesN<span class="pn">&lt;</span><span class="nm">32</span><span class="pn">&gt;,</span> PerchAccountError<span class="pn">&gt;</span> <span class="pn">{</span>
+        e<span class="pn">.</span><span class="fn">current_contract_address</span><span class="pn">().</span><span class="fn">require_auth</span><span class="pn">();</span>  <span class="cm">// the admin rule approves</span>
+        <span class="k">let</span> doc  <span class="pn">=</span> <span class="fn">parse_checked</span><span class="pn">(</span>e<span class="pn">,</span> <span class="pn">&amp;</span>doc_json<span class="pn">)?;</span>   <span class="cm">// fail-closed parse + validate + network binding</span>
+        <span class="k">let</span> plan <span class="pn">=</span> <span class="fn">compile_checked</span><span class="pn">(</span>e<span class="pn">,</span> <span class="pn">&amp;</span>doc<span class="pn">)?;</span>       <span class="cm">// compile + anti-brick refusal</span>
+        <span class="fn">replace_rules</span><span class="pn">(</span>e<span class="pn">,</span> <span class="pn">&amp;</span>plan<span class="pn">,</span> <span class="pn">&amp;</span>interpreter<span class="pn">)?;</span>     <span class="cm">// whole rule set, atomically</span>
+        <span class="cm">// …store + return the canonical doc_hash…</span>
+    <span class="pn">}</span>
+    <span class="k">fn</span> <span class="fn">applied_doc_hash</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">)</span> <span class="k">-&gt;</span> Option<span class="pn">&lt;</span>BytesN<span class="pn">&lt;</span><span class="nm">32</span><span class="pn">&gt;&gt;</span> <span class="pn">{</span> <span class="pn">…</span> <span class="pn">}</span>  <span class="cm">// read-only</span>
 <span class="pn">}</span></pre>
         <ul class="callouts">
           <li><span class="f">one transaction</span><span class="d">Send the <strong>same JSON you reviewed</strong>; the entire rule set switches in one call. No half-migrated states, ever — and formatting doesn't matter: the stored hash is canonical.</span></li>
           <li><span class="f">anti-brick</span><span class="d">A document that would leave the account without a working admin rule is <strong>rejected before anything changes</strong>. You cannot lock yourself out with an edit. (Tested.)</span></li>
-          <li><span class="f">shipped</span><span class="d"><strong>Real code, in this PR</strong> — <code>crates/perch-account/src/lib.rs</code>, with six end-to-end tests (<code>tests/apply_doc.rs</code>): replace, re-apply, anti-brick, wrong-network, unknown-field, and disabled-mutator rejections all proven.</span></li>
+          <li><span class="f">shipped</span><span class="d"><strong>Real code, in this PR</strong> — <code>crates/perch-smart-account</code> is the trait; the deployable exports exactly <strong>six functions</strong> (constructor, <code>__check_auth</code>, <code>apply_doc</code>, and three reads). Six end-to-end tests prove replace, re-apply, anti-brick, wrong-network, unknown-field, and that the mutator entry points don't exist.</span></li>
         </ul>
       </div>
 <pre style="margin-top:1rem"><span class="cm"># today — one command; the shim signs the admin's approval (the one gap in stock CLI):</span>
@@ -759,7 +760,7 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
         </div>
         <div class="card">
           <h3>With perch</h3>
-          <p><strong>One interpreter</strong> — immutable (it can never be changed after deploy), shared by every account on the network, its evaluator core machine-checked so every memory access is proven safe before it ships. Plus the account from slide 8, whose one extension is <code>apply_doc</code> — the document gate. It contains <strong>zero policy-evaluation logic of its own</strong>.</p>
+          <p><strong>One interpreter</strong> — immutable (it can never be changed after deploy), shared by every account on the network, its evaluator core machine-checked so every memory access is proven safe before it ships. Plus an account with <strong>six exported functions total</strong> — constructor, <code>__check_auth</code>, <code>apply_doc</code>, three reads — and <strong>zero policy-evaluation logic of its own</strong>.</p>
           <p>It fails closed by construction: no program installed → deny. No signer authenticated → deny. A malformed program, or an attempt to overwrite an existing one → refused at install.</p>
         </div>
       </div>

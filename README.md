@@ -35,7 +35,8 @@ crates/
   perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)
   perch-interpreter/  the deployable OZ Policy contract (the policy-evaluation surface)
   perch-compile/      lowering: PolicyDoc → executable plan (OZ call sequence)
-  perch-account/      deployable OZ smart account; authorization changes only via apply_doc
+  perch-smart-account/  the doc-only account trait: apply_doc (the sole write path) on OZ
+  perch-account/      deployable shell of perch-smart-account (6 exported functions total)
   perch-ed25519-verifier/  deployable ed25519 verifier for External signers
   perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
 packages/

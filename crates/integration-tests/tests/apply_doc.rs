@@ -1,15 +1,15 @@
 //! `apply_doc` end-to-end: the account's whole authorization is replaced from
 //! a policy document's JSON bytes in one call — parse, validate, network
 //! binding, compile, anti-brick check, atomic swap, canonical `doc_hash`
-//! stored. Piecemeal mutation entry points are disabled (`UseApplyDoc`).
+//! stored. Piecemeal mutation entry points do not exist on the contract.
 
 use perch_account::{PerchAccount, PerchAccountClient};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use soroban_sdk::testutils::Ledger;
 use soroban_sdk::{
-    contract, contractimpl, map, vec, Address, Bytes, BytesN, Env, Map, String as SString, Val, Vec,
+    contract, contractimpl, vec, Address, Bytes, BytesN, Env, String as SString, Symbol, Val, Vec,
 };
-use stellar_accounts::smart_account::{ContextRuleType, Signer};
+use stellar_accounts::smart_account::Signer;
 use stellar_accounts::verifiers::Verifier;
 
 mod common;
@@ -157,29 +157,29 @@ fn reapply_replaces_the_whole_rule_set() {
 }
 
 #[test]
-fn piecemeal_mutation_is_disabled() {
+fn piecemeal_mutation_entry_points_do_not_exist() {
+    // Doc-only is structural: the account implements OZ's SmartAccount but
+    // never exports it, so the mutation functions aren't callable at all —
+    // there is nothing to authorize, misuse, or audit. apply_doc is the only
+    // write path.
     let w = setup();
-    let client = PerchAccountClient::new(&w.env, &w.account);
-    let policies: Map<Address, Val> = map![&w.env];
-    let signers: Vec<Signer> = vec![&w.env, Signer::Delegated(w.account.clone())];
-
-    // Every mutator entry point rejects: apply_doc is the only write path.
-    assert!(client
-        .try_add_context_rule(
-            &ContextRuleType::CallContract(w.account.clone()),
-            &SString::from_str(&w.env, "backdoor"),
-            &None,
-            &signers,
-            &policies,
-        )
-        .is_err());
-    assert!(client
-        .try_add_signer(&0, &Signer::Delegated(w.account.clone()))
-        .is_err());
-    assert!(client.try_remove_context_rule(&0).is_err());
-    assert!(client
-        .try_update_context_rule_valid_until(&0, &Some(1))
-        .is_err());
+    for func in [
+        "add_context_rule",
+        "remove_context_rule",
+        "add_signer",
+        "remove_signer",
+        "add_policy",
+        "remove_policy",
+        "update_context_rule_name",
+        "update_context_rule_valid_until",
+    ] {
+        let res = w.env.try_invoke_contract::<Val, soroban_sdk::Error>(
+            &w.account,
+            &Symbol::new(&w.env, func),
+            vec![&w.env],
+        );
+        assert!(res.is_err(), "{func} should not be an entry point");
+    }
 }
 
 #[test]

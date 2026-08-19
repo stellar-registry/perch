@@ -1,0 +1,19 @@
+[package]
+name = "perch-conformance"
+description = "Eval-semantics conformance vectors: (program, invocation) → verdict triples shared with the formal model"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# testutils in normal deps: this crate is host-side test tooling only (never a
+# dependency of anything that ships), and its lib constructs test addresses.
+soroban-sdk = { workspace = true, features = ["testutils"] }
+perch-program = { workspace = true }
+
+[dev-dependencies]
+# Both default to their `std` feature — this crate is host-side only.
+perch-ir = { workspace = true }
+perch-compile = { path = "../perch-compile" }

@@ -615,11 +615,7 @@
                   "storage": [
                     {
                       "key": {
-                        "vec": [
-                          {
-                            "symbol": "AppliedDoc"
-                          }
-                        ]
+                        "symbol": "AppliedDoc"
                       },
                       "val": {
                         "bytes": "38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d"

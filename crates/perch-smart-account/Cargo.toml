@@ -1,0 +1,22 @@
+[package]
+name = "perch-smart-account"
+description = "The doc-only smart-account trait: apply_doc is the sole write path, on OZ evaluation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+# "alloc" enables soroban's bump allocator on wasm — apply_doc parses the
+# policy-document JSON on-chain (perch-ir is no_std + alloc).
+soroban-sdk = { workspace = true, features = ["alloc"] }
+soroban-sdk-tools = { workspace = true }
+stellar-accounts = { workspace = true }
+# Direct paths (not `workspace = true`) so `default-features = false` is
+# honored — cargo ignores it on workspace-inherited deps. Keeps both no_std.
+perch-ir = { path = "../perch-ir", default-features = false }
+perch-compile = { path = "../perch-compile", default-features = false }

@@ -15,14 +15,9 @@ crate-type = ["lib", "cdylib"]
 doctest = false
 
 [dependencies]
-# "alloc" enables soroban's bump allocator on wasm — apply_doc parses the
-# policy-document JSON on-chain (perch-ir is no_std + alloc).
-soroban-sdk = { workspace = true, features = ["alloc"] }
+soroban-sdk = { workspace = true }
 stellar-accounts = { workspace = true }
-# Direct paths (not `workspace = true`) so `default-features = false` is
-# honored — cargo ignores it on workspace-inherited deps. Keeps both no_std.
-perch-ir = { path = "../perch-ir", default-features = false }
-perch-compile = { path = "../perch-compile", default-features = false }
+perch-smart-account = { path = "../perch-smart-account" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

@@ -1,10 +1,12 @@
 #![no_std]
-//! The perch interpreter: the single deployable contract implementing
-//! OpenZeppelin's `Policy` trait by evaluating a stored constraint program.
+//! The perch interpreter: the deployable contract implementing OpenZeppelin's
+//! `Policy` trait by evaluating a stored constraint program.
 //!
-//! This is the entire custom on-chain surface of perch — there is no
-//! per-policy codegen anywhere. One immutable instance per network; the
-//! address is derived from the registry id and this contract's wasm hash.
+//! This is the entire policy-evaluation surface of perch — there is no
+//! per-policy codegen anywhere. (The workspace's other deployables,
+//! `perch-account` and `perch-ed25519-verifier`, are thin OZ compositions with
+//! no policy logic.) One immutable instance per network; the address is
+//! derived from the registry id and this contract's wasm hash.
 //!
 //! ## Security contract
 //! - **Multi-tenant auth (C1):** `smart_account` is an *argument* to the Policy

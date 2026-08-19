@@ -1,10 +1,11 @@
 [package]
-name = "perch-interpreter"
-description = "The single deployable OZ Policy contract evaluating perch constraint programs"
+name = "perch-account"
+description = "Deployable OZ smart account governed by perch policies; admin for the perch registry"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+publish = false
 
 [package.metadata.stellar]
 cargo_inherit = true
@@ -15,7 +16,6 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-perch-program = { workspace = true }
 stellar-accounts = { workspace = true }
 
 [dev-dependencies]

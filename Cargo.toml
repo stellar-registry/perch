@@ -18,19 +18,24 @@ license = "Apache-2.0"
 repository = "https://github.com/stellar-registry/perch"
 
 [workspace.dependencies]
-soroban-sdk = "26.0.1"
-# OZ stellar-contracts main @ 637c53a — the sdk-26 bump landed on main after the
-# v0.7.1 tag, so we pin the rev rather than a released version.
-stellar-accounts = { git = "https://github.com/OpenZeppelin/stellar-contracts.git", rev = "637c53a8c4928fd0c71d330bd866f482c3454578", package = "stellar-accounts" }
+soroban-sdk = "27.0.2"
+# TEMPORARY dogfood pin: theahaco's OZ fork at the CAP-0071 patch
+# (theahaco/stellar-contracts-OZ PR #3, branch cap-71-delegate-auth) —
+# Signer::Delegated authenticates via delegate_account_auth (protocol 27,
+# single AddressWithDelegates auth entry) instead of a separate
+# require_auth_for_args entry per delegate. Fork main == upstream fbfde38,
+# which is itself past OZ PR #816 (the first soroban-sdk-27 main commit).
+# Re-pin to upstream OpenZeppelin/stellar-contracts once the patch lands there.
+stellar-accounts = { git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "82002206b1da48167091f33fe2ecfc97ce915857", package = "stellar-accounts" }
 
 perch-ir = { path = "crates/perch-ir" }
 perch-program = { path = "crates/perch-program" }
 
 # Flux refinement-type bridge (attrs erase to no-ops on stable; verification
 # runs via `just flux` under flux's pinned nightly). Rev tracks
-# nidohq/soroban-flux main; its COMPATIBILITY.md pins the matching flux
-# toolchain rev.
-soroban-flux = { git = "https://github.com/nidohq/soroban-flux.git", rev = "72d0679" }
+# nidohq/soroban-flux main (this rev carries the soroban-sdk 26–27 compat
+# range); its COMPATIBILITY.md pins the matching flux toolchain rev.
+soroban-flux = { git = "https://github.com/nidohq/soroban-flux.git", rev = "3170467" }
 
 [profile.release]
 opt-level = "z"

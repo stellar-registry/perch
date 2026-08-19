@@ -7,12 +7,12 @@
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_compile::{compile, CompileConfig};
+use perch_ed25519_verifier::PerchEd25519Verifier;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
-use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
     contract, contractimpl, crypto::Hash, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map,
-    String as SString, Symbol, Val, Vec as SVec,
+    String as SString, Symbol, Val,
 };
 use stellar_accounts::policies::{
     spending_limit, spending_limit::SpendingLimitAccountParams, Policy,
@@ -20,7 +20,9 @@ use stellar_accounts::policies::{
 use stellar_accounts::smart_account::{
     add_context_rule, do_check_auth, AuthPayload, ContextRule, ContextRuleType, Signer,
 };
-use stellar_accounts::verifiers::{ed25519, Verifier};
+
+mod common;
+use common::auth_digest;
 
 /// The token contract the cap is denominated in (also the rule's scope).
 const TOKEN: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL";
@@ -35,30 +37,6 @@ const PERIOD_LEDGERS: u32 = 1000;
 
 #[contract]
 struct Account;
-
-#[contract]
-struct Ed25519Verifier;
-
-#[contractimpl]
-impl Verifier for Ed25519Verifier {
-    type KeyData = BytesN<32>;
-    type SigData = BytesN<64>;
-
-    fn verify(e: &Env, hash: Bytes, key_data: BytesN<32>, sig_data: BytesN<64>) -> bool {
-        ed25519::verify(e, &hash, &key_data, &sig_data)
-    }
-
-    fn canonicalize_key(e: &Env, key_data: BytesN<32>) -> Bytes {
-        ed25519::canonicalize_key(e, &key_data)
-    }
-
-    fn batch_canonicalize_key(
-        e: &Env,
-        key_data: soroban_sdk::Vec<BytesN<32>>,
-    ) -> soroban_sdk::Vec<Bytes> {
-        ed25519::batch_canonicalize_key(e, &key_data)
-    }
-}
 
 /// The reusable OZ spending-limit policy wrapped as a `Policy` contract, exactly
 /// as an applier would deploy it.
@@ -102,14 +80,18 @@ impl Policy for SpendingLimitPolicy {
 // --- a capped document, built in-code ---------------------------------------
 
 fn cap_doc(pubkey_hex: &str) -> perch_ir::PolicyDoc {
-    use perch_ir::{AllPrincipals, CapConstraint, PolicyDoc, Principals, Rule, Scope, SignerDecl};
+    use perch_ir::{
+        AllPrincipals, CapConstraint, PolicyDoc, Principals, Rule, Scope, SignerDecl, SignerMethod,
+    };
     PolicyDoc {
         version: 1,
         network: None,
         signers: std::vec![SignerDecl {
             id: "ci".into(),
-            verifier: ED25519_VERIFIER.into(),
-            key: pubkey_hex.into(),
+            method: SignerMethod::External {
+                verifier: ED25519_VERIFIER.into(),
+                key: pubkey_hex.into(),
+            },
         }],
         rules: std::vec![Rule {
             name: "spend".into(),
@@ -150,7 +132,7 @@ fn setup() -> World {
     env.ledger().with_mut(|l| l.sequence_number = 500);
 
     let account = env.register(Account, ());
-    let verifier = env.register(Ed25519Verifier, ());
+    let verifier = env.register(PerchEd25519Verifier, ());
     let interpreter = env.register(perch_interpreter::PerchInterpreter, ());
     let spending = env.register(SpendingLimitPolicy, ());
 
@@ -211,15 +193,9 @@ fn payload_hash(env: &Env) -> Hash<32> {
     env.crypto().sha256(&Bytes::from_array(env, &[0x11; 32]))
 }
 
-fn auth_digest(env: &Env, payload: &Hash<32>, ids: &SVec<u32>) -> [u8; 32] {
-    let mut preimage = payload.to_bytes().to_bytes();
-    preimage.append(&ids.clone().to_xdr(env));
-    env.crypto().sha256(&preimage).to_array()
-}
-
 fn signed_payload(w: &World) -> AuthPayload {
     let ids = vec![&w.env, w.rule_id];
-    let digest = auth_digest(&w.env, &payload_hash(&w.env), &ids);
+    let digest = auth_digest(&w.env, &payload_hash(&w.env).to_bytes(), &ids);
     let sig = w.signing_key.sign(&digest).to_bytes();
     let signer = Signer::External(w.verifier.clone(), w.pubkey.clone().into());
     let signers: Map<Signer, Bytes> = map![&w.env, (signer, Bytes::from_array(&w.env, &sig))];

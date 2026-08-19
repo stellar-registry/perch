@@ -329,3 +329,45 @@ fn all_pred_tags_parse() {
         from_json(&input).unwrap_or_else(|e| panic!("pred {pred} failed: {e}"));
     }
 }
+
+// --- delegated signer shape ---------------------------------------------------
+
+const G_ADDR_TEST: &str = "GA327GGWT6747B57DRWJJ3SWBVIQ354TTDRHR76CVAWO6OBPZ4Z57YGA";
+
+fn doc_with_signer(signer_json: &str) -> String {
+    format!(
+        r#"{{"version":1,"signers":[{signer_json}],"rules":[{{"name":"r","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["s"]}}}}]}}"#
+    )
+}
+
+#[test]
+fn parses_a_delegated_signer() {
+    let doc = from_json(&doc_with_signer(&format!(
+        r#"{{"id":"s","address":"{G_ADDR_TEST}"}}"#
+    )))
+    .expect("delegated signer must parse");
+    assert!(matches!(
+        doc.signers[0].method,
+        perch_ir::SignerMethod::Delegated { .. }
+    ));
+}
+
+#[test]
+fn rejects_a_signer_mixing_delegated_and_external_fields() {
+    // `address` selects the delegated shape, making `verifier` unknown.
+    assert_json_err(
+        &doc_with_signer(&format!(
+            r#"{{"id":"s","address":"{G_ADDR_TEST}","verifier":"{WEBAUTHN_VERIFIER}"}}"#
+        )),
+        "unknown field `verifier`",
+    );
+}
+
+#[test]
+fn rejects_a_signer_with_neither_shape() {
+    // No `address` falls to the external shape, whose fields are required.
+    assert_json_err(
+        &doc_with_signer(r#"{"id":"s"}"#),
+        "missing field `verifier`",
+    );
+}

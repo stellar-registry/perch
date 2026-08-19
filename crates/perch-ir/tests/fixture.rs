@@ -69,3 +69,36 @@ fn fixture_pretty_and_canonical_files_are_the_same_document() {
         .expect("canonical must parse");
     assert_eq!(pretty, canonical);
 }
+
+// --- the delegated variant of the fixture ------------------------------------
+//
+// Same document with the ci signer as a CAP-0071 delegated address instead of
+// an external verifier+key. Pins the delegated signer shape's canonical form.
+
+/// Pinned doc_hash (hex) of the delegated fixture. Must match
+/// `testdata/ci-publish-delegated.doc-hash`.
+const DELEGATED_FIXTURE_HASH_HEX: &str =
+    "8c9a85cf81cb7b556ca6292c1a3b38ae876a1703b97471753caa93f6c11e2c46";
+
+#[test]
+fn delegated_fixture_parses_validates_and_matches_committed_files() {
+    let doc = from_json(&read("ci-publish-delegated.json")).expect("fixture must parse");
+    validate(&doc).expect("fixture must validate");
+
+    assert_eq!(doc.signers.len(), 2);
+    assert!(matches!(
+        doc.signers[0].method,
+        perch_ir::SignerMethod::External { .. }
+    ));
+    assert!(matches!(
+        doc.signers[1].method,
+        perch_ir::SignerMethod::Delegated { .. }
+    ));
+
+    let committed = read("ci-publish-delegated.canonical.json");
+    assert_eq!(canonical_json(&doc), committed.trim_end_matches('\n'));
+
+    let hash = doc_hash_hex(&doc);
+    assert_eq!(hash, read("ci-publish-delegated.doc-hash").trim());
+    assert_eq!(hash, DELEGATED_FIXTURE_HASH_HEX);
+}

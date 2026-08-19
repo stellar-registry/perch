@@ -16,9 +16,15 @@ export const ACK_SENTINEL = 'this-policy-authenticates-or-anyone-can-fire-this-r
 
 const u32 = z.number().int().gte(0).lte(0xffff_ffff);
 
-const signerDecl = z
+// Signer shapes are discriminated by fields, not a `type` tag (mirroring
+// perch-ir): `verifier`+`key` is external, `address` is delegated (CAP-0071 —
+// the host authenticates the address inside the account's own auth entry).
+// Both branches are strict, so a mixed shape matches neither and fails closed.
+const externalSignerDecl = z
   .object({ id: z.string(), verifier: z.string(), key: z.string() })
   .strict();
+const delegatedSignerDecl = z.object({ id: z.string(), address: z.string() }).strict();
+const signerDecl = z.union([externalSignerDecl, delegatedSignerDecl]);
 
 const contractScope = z.object({ type: z.literal('contract'), address: z.string() }).strict();
 const selfAdminScope = z.object({ type: z.literal('self-admin') }).strict();

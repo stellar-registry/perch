@@ -429,3 +429,27 @@ fn a_document_narrows_itself() {
     let link = attenuate(&env, &doc, &doc, &cfg(&env)).expect("identity is a narrowing");
     assert_eq!(link.parent_hash, link.child_hash);
 }
+
+#[test]
+fn delegated_signer_lowers_to_signer_spec_delegated() {
+    let env = Env::default();
+    let json = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../testdata/ci-publish-delegated.json"
+    ))
+    .expect("read delegated fixture");
+    let doc = perch_ir::from_json(&json).expect("parse");
+    perch_ir::validate(&doc).expect("valid");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+
+    // Rule 1 (ci-publish) is signed by the delegated ci address; the lowering
+    // must carry it as SignerSpec::Delegated for the applier to map onto OZ
+    // Signer::Delegated.
+    assert_eq!(plan.rules[1].signers.len(), 1);
+    assert!(matches!(
+        &plan.rules[1].signers[0],
+        SignerSpec::Delegated { address } if address.starts_with('G')
+    ));
+    // The activation gate must accept its own lowering.
+    verify_plan_matches_doc(&env, &doc, &plan).expect("plan matches doc");
+}

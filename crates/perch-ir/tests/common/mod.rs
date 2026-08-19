@@ -3,7 +3,7 @@
 //! seeds, so they stay valid if shape checks ever grow checksum verification.
 #![allow(dead_code)]
 
-use perch_ir::{AllPrincipals, PolicyDoc, Principals, Rule, Scope, SignerDecl};
+use perch_ir::{AllPrincipals, PolicyDoc, Principals, Rule, Scope, SignerDecl, SignerMethod};
 
 /// WebAuthn verifier contract (C-address, checksum-valid).
 pub const WEBAUTHN_VERIFIER: &str = "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN";
@@ -21,12 +21,43 @@ pub const ADMIN_KEY_HEX: &str = "045e2a7589b73c19d5341cf12ac0c5f6c45c298d4c20002
 /// 32-byte ed25519 public key, hex.
 pub const CI_KEY_HEX: &str = "1ce6040b0d03232ac6c911b0c375f1a52ebdefff56fd361d13680e23ca578a17";
 
-/// Build a signer declaration.
+/// Build an external signer declaration.
 pub fn signer(id: &str, verifier: &str, key: &str) -> SignerDecl {
     SignerDecl {
         id: id.into(),
-        verifier: verifier.into(),
-        key: key.into(),
+        method: SignerMethod::External {
+            verifier: verifier.into(),
+            key: key.into(),
+        },
+    }
+}
+
+/// Build a delegated signer declaration.
+#[allow(dead_code)]
+pub fn delegated_signer(id: &str, address: &str) -> SignerDecl {
+    SignerDecl {
+        id: id.into(),
+        method: SignerMethod::Delegated {
+            address: address.into(),
+        },
+    }
+}
+
+/// Overwrite an external signer's key (test mutation helper).
+#[allow(dead_code)]
+pub fn set_key(s: &mut SignerDecl, new_key: &str) {
+    match &mut s.method {
+        SignerMethod::External { key, .. } => *key = new_key.into(),
+        SignerMethod::Delegated { .. } => panic!("not an external signer"),
+    }
+}
+
+/// Overwrite an external signer's verifier (test mutation helper).
+#[allow(dead_code)]
+pub fn set_verifier(s: &mut SignerDecl, new_verifier: &str) {
+    match &mut s.method {
+        SignerMethod::External { verifier, .. } => *verifier = new_verifier.into(),
+        SignerMethod::Delegated { .. } => panic!("not an external signer"),
     }
 }
 

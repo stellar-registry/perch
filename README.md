@@ -9,7 +9,7 @@ The motivating use-case: a CI key stored in GitHub that can publish Wasm release
 ```ts
 const doc = policy()
   .signer('admin', external(WEBAUTHN_VERIFIER, maintainerPasskey))
-  .signer('ci',    external(ED25519_VERIFIER, ciPubKey))
+  .signer('ci',    delegated(CI_ACCOUNT)) // CAP-0071: host-authenticated G-account
   .rule('root', r => r.selfAdmin().signedBy('admin'))
   .rule('ci-publish', r => r
     .callContract(REGISTRY)
@@ -33,19 +33,34 @@ CANONICAL.md          normative definition of the canonical form + doc_hash (CAN
 crates/
   perch-ir/           policy document model — canonical JSON, doc_hash, validation
   perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)
-  perch-interpreter/  the single deployable OZ Policy contract
+  perch-interpreter/  the deployable OZ Policy contract (the policy-evaluation surface)
   perch-compile/      lowering: PolicyDoc → executable plan (OZ call sequence)
+  perch-account/      deployable OZ smart account; authorization changes only via apply_doc
+  perch-ed25519-verifier/  deployable ed25519 verifier for External signers
+  perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
 packages/
   perch-js/           TypeScript surface: schemas, builder, compile parity, apply, signing helpers
-testdata/             golden vectors shared by the Rust and TS suites
+scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap
+docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
+testdata/             golden vectors shared by the Rust and TS suites (frozen)
+testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)
 ```
 
+Three contracts deploy on-chain: the interpreter (immutable, multi-tenant policy
+evaluation), the smart account (holds the authorization rules; the CI key is one
+of its scoped signers), and the ed25519 verifier they share.
+
 ## Development
+
+Building contract wasm requires the scaffold plugin:
+`cargo install --locked stellar-scaffold-cli` (and `stellar-registry-cli` for
+the deploy flow).
 
 ```sh
 just test              # cargo test --workspace
 just build             # cargo build --workspace (native)
-just build-contracts   # stellar contract build (interpreter wasm)
+just build-contracts   # stellar scaffold build — all contract wasms with
+                       #   name/binver meta, to target/stellar/$STELLAR_NETWORK/
 just check             # cargo fmt --check + cargo clippy -D warnings
 ```
 

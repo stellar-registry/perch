@@ -79,14 +79,18 @@ mutants:
 coverage:
     cargo +nightly-2026-02-05 llvm-cov -p perch-program -p perch-compile -p perch-ir -p perch-conformance --branch
 
-# Komet (Runtime Verification, K framework) property tests: fuzz + symbolic
-# execution of the RPN evaluator's wasm under the mechanized Soroban semantics —
-# an independent second opinion (trusted base = K, not rustc/LLVM+wasmi).
-# Needs the K toolchain version-matched to Komet (see komet/README.md).
+# Komet (Runtime Verification, K framework) property tests: execute the RPN
+# evaluator's wasm under the mechanized Soroban + KWasm semantics — an
+# independent second opinion (trusted base = K, not rustc/LLVM+wasmi). Needs
+# komet (via Nix) + stellar-cli; see komet/README.md. `komet test` is what CI
+# runs; `komet prove run` is the stronger symbolic check (local — too slow for CI).
 komet:
-    cd komet && komet-kdist build soroban-semantics.llvm
-    cd komet && komet test
-    cd komet && komet prove run
+    cd komet && cargo build --release --target wasm32v1-none
+    cd komet && python3 strip_datacount.py \
+      target/wasm32v1-none/release/perch_komet_tests.wasm \
+      target/perch_komet_tests.komet.wasm
+    cd komet && komet test --wasm target/perch_komet_tests.komet.wasm
+    cd komet && komet prove run --wasm target/perch_komet_tests.komet.wasm
 
 # Flux refinement verification of perch-program (nidohq/soroban-flux). Runs
 # under flux's pinned nightly toolchain; the repo's stable pin is untouched —

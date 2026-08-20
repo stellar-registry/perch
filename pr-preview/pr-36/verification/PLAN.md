@@ -44,8 +44,9 @@ land):
 - **T1 Lattice laws** — `and`/`or` commutative, associative, De Morgan, double negation,
   `¬Unknown = Unknown`. (Foundation; also pins the fail-open trap closed: a decode failure
   under `Not` still denies.)
-- **T2 Fail-closed root** — only `True` allows; `Unknown` never allows, and is preserved by
-  every composite.
+- **T2 Fail-closed root** — only `True` allows; `Unknown` never allows, can never raise a
+  conjunction to `True`, and is preserved under negation (in a disjunction a definite `True`
+  branch legitimately wins — that is Kleene `or`, not a leak).
 - **T3 Totality/termination** — `eval` is a total function (structural recursion over the op
   list; free in Lean).
 - **T4 Validation soundness** — `validate ok ⇒` evaluation never trips a defensive guard: the
@@ -55,7 +56,13 @@ land):
 - **T5 INV-1 (signer floor)** — for every lowered (interpreter-attached) rule, zero
   authenticated signers ⇒ the program's verdict is `False` (not merely non-`True`).
 - **T6 Lowering preservation** — `eval (build_program rule) inv = docSemantics rule inv` for
-  all rules expressible in v1 and all invocations. This is target (b) at the model level.
+  all rules expressible in v1 and all invocations, where `docSemantics` is stated over the
+  doc-level predicates directly (no ops, no machine) and a per-predicate lemma proves the op
+  translation meaning-preserving. Scope, precisely: this covers the encoding, the machine, and
+  the `lowerPred` translation *within the model*; that the model's predicate meanings match the
+  Rust leaf implementations is the empirical link carried by the shared vectors and the Rust
+  differential suite (whose reference never looks at `Op` or the compiler). Together they are
+  target (b); T6 alone is its machine-checked half.
 - **T7 Monotonicity of attenuation** *(stretch)* — tightening a bound (subset `FnIn`, subset
   `StrIn`, smaller `notAfter`) never admits a previously denied invocation; the model-level
   justification of `attenuation::is_narrowing`.
@@ -90,19 +97,22 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 
 ### Phase 0 — baseline hardening (this PR)
 - [x] Verification plan (this doc) + enforceability theory writeup (`THEORY.md`)
-- [ ] Eval-semantics golden vectors (`testdata/eval/`) + `perch-conformance` replay/generate
-- [ ] Deterministic differential tests: compile→eval vs reference doc semantics
-- [ ] fast-check property tests in perch-js (canonicalization determinism, hash uniqueness
-      sampling, parse/canon round-trip)
-- [ ] Fuzz targets (`fuzz/`): eval-never-panics on arbitrary programs/invocations;
-      compile→eval differential (build-only smoke in CI; long runs nightly/dispatch)
-- [ ] `cargo-mutants` + `cargo-llvm-cov` recipes (justfile) + scheduled CI jobs — measures
-      whether the suite would catch a silent fail-open
+- [x] Eval-semantics golden vectors (`testdata/eval/`, 72 hand-authored cases) +
+      `perch-conformance` replay
+- [x] Deterministic differential tests: compile→eval vs reference doc semantics
+      (400 random docs × 16 invocations; also INV-1/INV-2/expiry-boundary/doc_hash-two-paths)
+- [x] fast-check property tests in perch-js (key-order independence, canonical round-trip,
+      hash-injectivity sampling, builder ≡ wire form)
+- [x] Fuzz targets (`fuzz/`): `eval_fail_closed` (totality + determinism on arbitrary
+      programs/invocations), `ir_parse_roundtrip` (parser never panics; canonicalization
+      idempotent) — weekly/dispatch runs in `assurance.yml`
+- [x] `cargo-mutants` + `cargo-llvm-cov` recipes (justfile) + scheduled CI jobs
+      (`assurance.yml`; mutants in burn-in)
 
 ### Phase 1 — the model + proofs (this PR, continued)
-- [ ] Lean 4 model under `formal/` (no external deps beyond Lean core)
-- [ ] Theorems T1–T5 proved; T6 at least stated, proved if tractable in the first pass
-- [ ] Lean replay of the eval vectors wired into `just drt` + CI job
+- [x] Lean 4 model under `formal/` (no external deps beyond Lean core)
+- [x] Theorems T1–T6 proved, sorry-free — including lowering preservation (T6)
+- [x] Lean replay of the eval vectors wired as `just drt` + the `formal` CI job
 - [ ] Graduate Flux job out of `continue-on-error` once its streak is green (separate PR)
 
 ### Phase 2 — deepening source-level assurance (follow-up PRs)

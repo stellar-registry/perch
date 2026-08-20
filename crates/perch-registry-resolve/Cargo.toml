@@ -1,0 +1,18 @@
+[package]
+name = "perch-registry-resolve"
+description = "registry_contract!: resolve a stateless contract's address from registry id + wasm hash"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The generated code references `::soroban_sdk`, so every consumer (this crate
+# included) must link it.
+soroban-sdk = { workspace = true }
+perch-registry-resolve-macro = { path = "../perch-registry-resolve-macro" }
+
+[dev-dependencies]
+# testutils gives the integration tests `Env::default`, `Address::generate`,
+# `env.register`, and the mock-auth deploy path.
+soroban-sdk = { workspace = true, features = ["testutils"] }

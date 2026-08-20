@@ -1504,6 +1504,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-registry-resolve"
+version = "0.1.0"
+dependencies = [
+ "perch-registry-resolve-macro",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "perch-registry-resolve-macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "perch-smart-account"
 version = "0.1.0"
 dependencies = [

@@ -113,12 +113,15 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 - [x] Lean 4 model under `formal/` (no external deps beyond Lean core)
 - [x] Theorems T1–T6 proved, sorry-free — including lowering preservation (T6)
 - [x] Lean replay of the eval vectors wired as `just drt` + the `formal` CI job
-- [ ] Graduate Flux job out of `continue-on-error` once its streak is green (separate PR)
+- [x] Graduate Flux job out of `continue-on-error` — flux failures now fail CI
 
 ### Phase 2 — deepening source-level assurance (follow-up PRs)
 - [ ] T6/T7 completed; model covers `attenuation`/`analysis` claims
-- [ ] doc_hash injectivity: property-test now; Lean/F* proof of the CANON v1 fragment later
-      (no verified RFC 8785 implementation exists anywhere as of 2026-08 — this would be a first)
+- [x] doc_hash injectivity: **proved** (`formal/PerchFormal/CanonProofs.lean`,
+      `emitDoc_injective`) — a verified inverse parser round-trips the canonical emitter, so
+      two distinct documents can never share canonical bytes; the model emitter is pinned to
+      the Rust emitter by round-tripping the frozen `*.canonical.json` fixtures in CI. To our
+      knowledge the first machine-verified RFC 8785-subset implementation.
 - [ ] Choose one deductive tie between model and Rust: Verus (`eval == spec_fn`, ghost code
       erased from the shipped crate) or Aeneas extraction to Lean. Decision gate: model + DRT
       running for a few weeks first.
@@ -126,8 +129,9 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
       expire against a reference state machine
 
 ### Phase 3 — wasm-artifact level, per release (staged trust)
-- [ ] Wasm leg of the vectors: compiled interpreter replays `testdata/eval/` under the soroban
-      test host
+- [x] Wasm leg of the vectors: the compiled wasm32 artifact (`perch-bench-rpn`, wrapping the
+      same `perch_program` entry points as the interpreter) replays `testdata/eval/` under the
+      soroban test host — `just conformance-wasm`, gated in CI
 - [ ] **Certora Sunbeam**: CVLR rules over the compiled interpreter wasm (fail-closed,
       MinSigners floor, arg-bound/notAfter enforcement over symbolic payloads). *Needs a
       Certora account/key — blocked on maintainer.*
@@ -137,11 +141,13 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
       against WasmRef-Isabelle (the Wasmtime oracle setup)
 
 ### Phase 4 — per-policy prover (product feature)
-- [ ] `perch-analyze`: symbolic compiler PolicyDoc → SMT-LIB (quantifier-free, decidable),
-      answering: intent conformance ("can never call X with arg N ≠ …"), subsumption
-      ("rotation only narrows" — re-founding `attenuation::is_narrowing`), dead rules
-      (re-founding `analysis::can_ever_authorize` with counterexamples), doc ↔ on-chain
-      encoding equivalence (translation validation per install, seeded from
+- [x] `perch-analyze`: PolicyDoc → SMT-LIB (quantifier-free), discharged by z3 —
+      `dead-rules` (unsat = proof of deadness, sharper than `analysis::can_ever_authorize`:
+      it sees argument predicates), `only-calls` (intent conformance with witnesses — CI
+      proves the shipped ci-publish fixture can only ever authorize publish/publish_hash),
+      `can-call`, and `narrows` (semantic attenuation: catches arg-level widening invisible
+      to `attenuation::is_narrowing`, plus expiry/cap loosening structurally)
+- [ ] doc ↔ on-chain encoding equivalence (translation validation per install, seeded from
       `activation::verify_plan_matches_doc`)
 - [ ] Prove the SMT encoding sound + complete in Lean (the cedar-policy-symcc / SymCert pattern)
 

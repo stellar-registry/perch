@@ -1473,6 +1473,7 @@ dependencies = [
  "perch-interpreter",
  "perch-ir",
  "perch-program",
+ "perch-testkit",
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -1510,6 +1511,19 @@ dependencies = [
  "perch-doc-compiler",
  "soroban-sdk",
  "soroban-sdk-tools",
+ "stellar-accounts",
+]
+
+[[package]]
+name = "perch-testkit"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "perch-account",
+ "perch-doc-compiler",
+ "perch-ed25519-verifier",
+ "perch-interpreter",
+ "soroban-sdk",
  "stellar-accounts",
 ]
 

@@ -21,8 +21,7 @@ use stellar_accounts::smart_account::{
     add_context_rule, do_check_auth, AuthPayload, ContextRule, ContextRuleType, Signer,
 };
 
-mod common;
-use common::auth_digest;
+use perch_testkit::auth_digest;
 
 /// The token contract the cap is denominated in (also the rule's scope).
 const TOKEN: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL";

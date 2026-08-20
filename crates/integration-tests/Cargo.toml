@@ -18,6 +18,7 @@ perch-interpreter = { path = "../perch-interpreter" }
 perch-account = { path = "../perch-account" }
 perch-doc-compiler = { path = "../perch-doc-compiler" }
 perch-ed25519-verifier = { path = "../perch-ed25519-verifier" }
+perch-testkit = { path = "../perch-testkit" }
 stellar-accounts = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 ed25519-dalek = "2"

@@ -29,6 +29,19 @@ bench-build:
 bench: bench-build
     cargo test -p perch-bench --test metered -- --ignored --nocapture
 
+# Build the Lean 4 formal model and check every theorem (formal/). Setup:
+# `curl -sSf https://elan.lean-lang.org/elan-init.sh | sh` — elan then picks
+# the pinned toolchain from formal/lean-toolchain automatically.
+formal:
+    cd formal && lake build
+
+# Differential conformance: run the frozen eval vectors through the real Rust
+# evaluator AND the proved Lean model. Green = spec, implementation, and model
+# agree on every case.
+drt: formal
+    cargo test -p perch-conformance
+    cd formal && lake exe drt ../testdata/eval/eval-vectors.json
+
 # Flux refinement verification of perch-program (nidohq/soroban-flux). Runs
 # under flux's pinned nightly toolchain; the repo's stable pin is untouched —
 # the flux attributes are no-ops in normal builds. Setup: see

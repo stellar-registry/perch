@@ -106,6 +106,36 @@ jobs:
           FLUXFLAGS="-Fpointer-width=32 -Fcheck-overflow=strict -Fcache=target/flux-cache" \
           cargo flux -p perch-program
 
+  # The Lean 4 formal model (formal/): checks every theorem, then replays the
+  # frozen eval-semantics vectors through the model — the same vectors the
+  # rust job runs through the real evaluator (crates/perch-conformance), so a
+  # green pair means spec, implementation, and model agree on every case.
+  formal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain') }}
+      - name: Install elan
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSf https://elan.lean-lang.org/elan-init.sh \
+              | sh -s -- -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Check theorems
+        working-directory: formal
+        run: lake build
+      - name: Replay conformance vectors through the model
+        working-directory: formal
+        run: lake exe drt ../testdata/eval/eval-vectors.json
+
   node:
     runs-on: ubuntu-latest
     permissions:

@@ -1,0 +1,35 @@
+[package]
+name = "perch-fuzz"
+description = "Coverage-guided fuzz targets for the perch security core"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+perch-program = { path = "../crates/perch-program" }
+perch-ir = { path = "../crates/perch-ir" }
+soroban-sdk = { version = "27.0.2", features = ["testutils"] }
+
+# Its own workspace: fuzz builds want their own profile/instrumentation and
+# must not inherit the root release profile (panic = "abort" would stop
+# libFuzzer from catching panics as findings).
+[workspace]
+
+[[bin]]
+name = "eval_fail_closed"
+path = "fuzz_targets/eval_fail_closed.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ir_parse_roundtrip"
+path = "fuzz_targets/ir_parse_roundtrip.rs"
+test = false
+doc = false
+bench = false

@@ -40,11 +40,24 @@ crates/
   perch-account/      deployable shell of perch-smart-account (6 exported functions, ~28 KB)
   perch-ed25519-verifier/  deployable ed25519 verifier for External signers
   perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
+  perch-conformance/  eval-semantics conformance vectors: hand-authored (program,
+                      invocation) → verdict cases + compile→eval differential + wasm-leg suites
+  perch-analyze/      per-policy SMT prover (PolicyDoc → SMT-LIB, z3): dead rules, intent
+                      conformance (only-calls), semantic attenuation (narrows)
 packages/
   perch-js/           TypeScript surface: schemas, builder, compile parity, apply, signing helpers
+formal/               Lean 4 model of the v1 semantics + machine-checked theorems
+                      (fail-closed, validation soundness, lowering preservation, and CANON v1
+                      canonicalizer injectivity); replays the conformance + canonical vectors
+                      (`just drt`)
+fuzz/                 cargo-fuzz targets: evaluator totality, parser/canonicalization round-trip
+komet/                Komet (K-framework) symbolic property tests — an independent wasm-level
+                      second opinion (maintainer-gated on the K toolchain; see komet/README.md)
 scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
+docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
 testdata/             golden vectors shared by the Rust and TS suites (frozen)
+testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and the wasm leg
 testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)
 ```
 
@@ -64,7 +77,16 @@ just build             # cargo build --workspace (native)
 just build-contracts   # stellar scaffold build — all contract wasms with
                        #   name/binver meta, to target/stellar/$STELLAR_NETWORK/
 just check             # cargo fmt --check + cargo clippy -D warnings
+just formal            # build the Lean model, check every theorem (needs elan)
+just drt               # differential conformance: Rust evaluator + Lean model
+                       #   over the same frozen vectors
+just fuzz              # coverage-guided fuzzing (needs cargo-fuzz + nightly)
+just mutants           # mutation testing of the security core (cargo-mutants)
+just coverage          # branch coverage incl. the conformance suite (cargo-llvm-cov)
 ```
+
+The verification story — what is proved, what is differentially tested, and
+what is planned — lives in [`docs/verification/PLAN.md`](./docs/verification/PLAN.md).
 
 ## License
 

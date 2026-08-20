@@ -1384,6 +1384,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-analyze"
+version = "0.1.0"
+dependencies = [
+ "perch-compile",
+ "perch-ir",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "perch-bench"
 version = "0.1.0"
 dependencies = [
@@ -1403,6 +1412,17 @@ dependencies = [
 name = "perch-compile"
 version = "0.1.0"
 dependencies = [
+ "perch-ir",
+ "perch-program",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "perch-conformance"
+version = "0.1.0"
+dependencies = [
+ "perch-bench-rpn",
+ "perch-compile",
  "perch-ir",
  "perch-program",
  "soroban-sdk",

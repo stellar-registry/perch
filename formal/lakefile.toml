@@ -1,0 +1,13 @@
+# The perch formal model: an executable Lean 4 twin of the perch-program v1
+# semantics (CANONICAL.md + crates/perch-program), with machine-checked
+# theorems and a differential-testing executable that replays
+# testdata/eval/eval-vectors.json. No dependencies beyond Lean core.
+name = "perch-formal"
+defaultTargets = ["PerchFormal", "drt"]
+
+[[lean_lib]]
+name = "PerchFormal"
+
+[[lean_exe]]
+name = "drt"
+root = "Main"

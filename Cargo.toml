@@ -9,6 +9,8 @@ members = [
     "crates/perch-bench",
     "crates/integration-tests",
     "crates/perch-golden",
+    "crates/perch-conformance",
+    "crates/perch-analyze",
     "crates/perch-ed25519-verifier",
     "crates/perch-doc-compiler",
     "crates/perch-smart-account",

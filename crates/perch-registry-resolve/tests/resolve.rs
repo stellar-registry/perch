@@ -7,11 +7,7 @@
 //! and against a real cross-contract `fetch_hash` (runtime mode).
 
 use perch_registry_resolve::registry_contract;
-use soroban_sdk::{
-    contract, contractimpl,
-    testutils::Address as _,
-    Address, BytesN, Env, String,
-};
+use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, BytesN, Env, String};
 
 /// The soroban-sdk doctest `test_add_u64` contract — a real, deployable wasm,
 /// embedded as bytes (see the module docs for why it isn't a `.wasm` file).
@@ -22,8 +18,7 @@ use soroban_sdk::{
 mod deployable_wasm;
 use deployable_wasm::DEPLOYABLE_WASM;
 
-const FIXTURE_HASH_HEX: &str =
-    "33d12fec8f6f3ddf2eb0ec76ee9a75a9e37d1fa20af35908d90d278af8264311";
+const FIXTURE_HASH_HEX: &str = "33d12fec8f6f3ddf2eb0ec76ee9a75a9e37d1fa20af35908d90d278af8264311";
 
 /// Trivial local contract: mints the `FixtureClient` type used for `client:`,
 /// and gives `env.as_contract` a real contract address with instance storage.

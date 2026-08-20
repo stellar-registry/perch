@@ -101,12 +101,10 @@ impl Parse for RegistrySpec {
 
         let span = input.span();
         Ok(RegistrySpec {
-            module: module
-                .ok_or_else(|| syn::Error::new(span, "missing required key `mod`"))?,
+            module: module.ok_or_else(|| syn::Error::new(span, "missing required key `mod`"))?,
             wasm_name: wasm_name
                 .ok_or_else(|| syn::Error::new(span, "missing required key `wasm_name`"))?,
-            client: client
-                .ok_or_else(|| syn::Error::new(span, "missing required key `client`"))?,
+            client: client.ok_or_else(|| syn::Error::new(span, "missing required key `client`"))?,
             hash,
         })
     }
@@ -128,12 +126,10 @@ fn parse_hash(lit: &LitStr) -> syn::Result<[u8; 32]> {
     let mut out = [0u8; 32];
     let bytes = hex.as_bytes();
     for (i, slot) in out.iter_mut().enumerate() {
-        let hi = hex_val(bytes[2 * i]).ok_or_else(|| {
-            syn::Error::new(lit.span(), "`hash` contains a non-hex character")
-        })?;
-        let lo = hex_val(bytes[2 * i + 1]).ok_or_else(|| {
-            syn::Error::new(lit.span(), "`hash` contains a non-hex character")
-        })?;
+        let hi = hex_val(bytes[2 * i])
+            .ok_or_else(|| syn::Error::new(lit.span(), "`hash` contains a non-hex character"))?;
+        let lo = hex_val(bytes[2 * i + 1])
+            .ok_or_else(|| syn::Error::new(lit.span(), "`hash` contains a non-hex character"))?;
         *slot = (hi << 4) | lo;
     }
     Ok(out)

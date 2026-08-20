@@ -298,13 +298,14 @@
     </div>
   </section>
 
-  <!-- 2 ▸ the goal -->
+  <!-- 2 ▸ the problem -->
   <section class="slide" aria-label="Slide 2">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">02</span> · The goal</p>
-      <h2>One key. One method. One contract.</h2>
-      <p class="lead">One running example for this whole talk: <strong>a robot key that lives in GitHub Actions</strong> and publishes our compiled contract binaries (wasm) as releases. Not "may use the account", not "may call the registry" — we want the account to guarantee, on-chain:</p>
+      <p class="eyebrow"><span class="n">02</span> · The problem everyone has</p>
+      <h2>Every operational key does too much.</h2>
+      <p class="lead">A wallet session key. A treasury payout key. An AI agent's tool key. A CI key that ships wasm to the registry. Each one should do <strong>exactly one narrow thing</strong> — yet on Stellar today, scoping a key that tightly means writing and auditing a smart contract. We'll follow one concrete example the whole way — <strong>a robot key in GitHub Actions</strong> that publishes releases — where all we want the account to guarantee, on-chain, is:</p>
       <p class="quote">This key may call <code>publish</code> on the registry contract, as the account — and nothing else.</p>
+      <p class="punch">Today that's a contract to write, audit, and deploy. With perch it's <em>a JSON file you can read in one sitting.</em></p>
     </div>
   </section>
 
@@ -922,14 +923,14 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
   <!-- 25 ▸ CTA -->
   <section class="slide" aria-label="Slide 25">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">25</span> · Get involved</p>
-      <h2>Bring a key that does too much.</h2>
+      <p class="eyebrow"><span class="n">25</span> · Where you come in</p>
+      <h2>Let's make scoped keys the easy path on Stellar.</h2>
       <a class="repo" href="https://github.com/stellar-registry/perch">github.com/stellar-registry/perch</a>
-      <p class="code-cap">status: design → working pipeline</p>
+      <p class="code-cap">status: working pipeline, live on testnet</p>
       <ul class="biglist" style="margin-top:1.6rem">
-        <li><strong>Review the policy document format</strong> — <code>CANONICAL.md</code> is normative and short; the flagship documents live in <code>testdata/</code>.</li>
-        <li><strong>Try the TypeScript builder</strong> — <code>packages/perch-js</code>: build a document, hash it, check it matches Rust byte-for-byte.</li>
-        <li><strong>Bring a product use-case</strong> — a wallet session key, a treasury limit, an agent's tool key. If you have an operational key you'd rather not think about, that's a policy document waiting to be written.</li>
+        <li><strong>Adopt the document format</strong> — a wallet session key, a treasury limit, an agent's tool key. Any operational key you'd rather not think about is a policy document waiting to be written. <code>CANONICAL.md</code> is normative and short; the flagship documents live in <code>testdata/</code>.</li>
+        <li><strong>Build on it</strong> — <code>packages/perch-js</code> emits the exact same canonical bytes as Rust, pinned in CI. Wire it into a wallet, an agent framework, or a deploy tool with no fear of drift.</li>
+        <li><strong>Upstream the primitives with us</strong> — CAP-0071 delegated signers into <code>stellar-accounts</code>, smart-account signing into the stock stellar CLI. The roadmap's last miles are really invitations to collaborate.</li>
       </ul>
     </div>
   </section>

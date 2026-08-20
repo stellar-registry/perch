@@ -1514,6 +1514,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-stateless-registry"
+version = "0.1.0"
+dependencies = [
+ "registry-traits",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1638,6 +1646,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.3",
+]
+
+[[package]]
+name = "registry-traits"
+version = "0.1.0"
+source = "git+https://github.com/stellar-registry/contracts?branch=feat%2Fregistry-importable-stateless-deploy#884c1f94cbfcce249a5b8fa6325fb9052a90bd61"
+dependencies = [
+ "semver",
+ "soroban-sdk",
 ]
 
 [[package]]

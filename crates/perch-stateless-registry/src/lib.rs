@@ -26,65 +26,68 @@
 //!
 //! The contract is nothing but a `#[contract]` struct, a `__constructor`, and a
 //! series of empty `#[contractimpl(contracttrait)] impl Trait for _ {}` lines
-//! that pull the trait's default methods into the exported ABI — exactly the
+//! that pull each trait's default methods into the exported ABI — exactly the
 //! idiom the base registry uses (`contracts/registry/src/lib.rs`) and the perch
 //! analog of `perch_smart_account::impl_perch_smart_account!`.
 //!
-//! It composes **five** registry contracttraits:
-//! [`Administratable`], [`Upgradable`], [`Publishable`], [`Manageable`], and the
-//! new [`StatelessDeployable`].
+//! It composes the importable registry contracttraits from
+//! [`registry-traits`](https://github.com/stellar-registry/contracts) (PR #33):
+//! [`Publishable`], [`Manageable`], and the content-addressed
+//! [`StatelessDeployable`].
 //!
-//! ## Status: BLOCKED ON stellar-registry/contracts#38
+//! ## registry-traits gap worked around here (follow-up)
 //!
-//! The `registry` crate is not importable yet. This module is written against
-//! #38's *intended* interface and is gated behind the `contract` feature; it
-//! compiles once the (currently commented) `registry` dependency in `Cargo.toml`
-//! is enabled and #38 lands the requirements enumerated there. Build the
-//! skeleton green today with `--no-default-features`.
+//! The canonical `registry` contract also composes `Administratable` and
+//! `Upgradable`, but those live in **`admin-sep`**, which caps at
+//! `soroban-sdk ^25` and therefore cannot be depended on from this sdk-27
+//! workspace. `registry-traits` deliberately excludes `admin-sep` and ships
+//! only the [`registry_traits::admin`] free-function key convention (admin at
+//! the `ADMIN` instance key, byte-identical to admin-sep's). So there is **no
+//! importable `Administratable`/`Upgradable` contracttrait** to compose. The
+//! `admin` / `set_admin` / `upgrade` entry points below are therefore provided
+//! as thin local glue over that convention + `env.deployer()`. Everything else
+//! — including the `manager`/`root` wiring the constructor needs — is a public
+//! seam on `registry_traits::storage::Storage`, so no other glue was required.
 //!
-//! [`Administratable`]: registry::Administratable
-//! [`Upgradable`]: registry::Upgradable
-//! [`Publishable`]: registry::Publishable
-//! [`Manageable`]: registry::Manageable
-//! [`StatelessDeployable`]: registry::StatelessDeployable
-//! [`Deployable::deploy`]: registry::Deployable::deploy
+//! Follow-up: once an sdk-27-compatible `Administratable`/`Upgradable`
+//! contracttrait exists upstream (either in `registry-traits` or an
+//! sdk-version-flexible admin crate), replace the local glue with composed
+//! `#[contractimpl(contracttrait)]` blocks.
+//!
+//! [`Publishable`]: registry_traits::registry::wasm::Publishable
+//! [`Manageable`]: registry_traits::registry::contract::Manageable
+//! [`StatelessDeployable`]: registry_traits::registry::contract::StatelessDeployable
+//! [`Deployable::deploy`]: registry_traits::registry::contract::Deployable::deploy
 //
 // `no_std` only for the on-chain (`contract`) build — soroban's contract macros
 // supply the wasm panic handler. With `--no-default-features` the crate is an
 // empty `std` library, which lets the skeleton + workspace wiring build green
-// while #38 is unmerged.
+// without pulling the `registry-traits` git dependency at all.
 #![cfg_attr(feature = "contract", no_std)]
 
-// The composed, deployable contract. Everything that touches the (blocked)
-// `registry` crate lives here so `--no-default-features` yields a clean, empty
-// library and the rest of the workspace keeps building while #38 is unmerged.
+// The composed, deployable contract. Everything that touches `registry-traits`
+// lives here so `--no-default-features` yields a clean, empty library and the
+// rest of the workspace keeps building without the git dependency.
 #[cfg(feature = "contract")]
 mod contract {
     // Same-name imports: soroban's `#[contractimpl(contracttrait)]` derives the
-    // exported entry-point symbol names from the trait path *as written*, so the
-    // `impl` headers below must reference bare trait identifiers. #38 must
-    // `pub use` this exact set at the `registry` crate root (Administratable /
-    // Upgradable are themselves re-exports of `admin_sep`).
-    use registry::{
-        Administratable, Manageable, Publishable, StatelessDeployable, Upgradable,
-    };
-    // `set_admin` is provided by admin-sep's extension trait (re-exported by #38).
-    use registry::AdministratableExtension;
-    // Manager + root wiring currently lives in the registry crate's `pub(crate)`
-    // `Storage`; #38 must make it (or an equivalent public setter) importable.
-    // See `__constructor` below.
-    use registry::Storage;
+    // exported entry-point symbol names — and copies the `Error` return type
+    // token verbatim — from the trait path *as written*, so the `impl` headers
+    // must reference bare trait identifiers and `Error` must be in scope.
+    use registry_traits::registry::contract::{Manageable, StatelessDeployable};
+    use registry_traits::registry::wasm::Publishable;
+    use registry_traits::Error;
 
-    use soroban_sdk::{contract, contractimpl, Address, Env};
+    // Public seams: manager + root wiring for the constructor, and the admin
+    // key convention that stands in for the (unavailable, sdk-25-capped)
+    // `admin-sep::Administratable`/`Upgradable` — see the crate-level docs.
+    use registry_traits::admin as registry_admin;
+    use registry_traits::storage::Storage;
+
+    use soroban_sdk::{contract, contractimpl, Address, BytesN, Env};
 
     #[contract]
     pub struct StatelessRegistry;
-
-    #[contractimpl(contracttrait)]
-    impl Administratable for StatelessRegistry {}
-
-    #[contractimpl(contracttrait)]
-    impl Upgradable for StatelessRegistry {}
 
     #[contractimpl(contracttrait)]
     impl Publishable for StatelessRegistry {}
@@ -92,9 +95,9 @@ mod contract {
     #[contractimpl(contracttrait)]
     impl Manageable for StatelessRegistry {}
 
-    // The content-addressed deploy surface (salt = wasm_hash) + the read/resolve
-    // methods carried over from `Deployable`. `Deployable` itself is NOT
-    // composed: its name-salted `deploy` conflicts with content-addressing.
+    // The content-addressed deploy surface (salt = wasm_hash, init = () always,
+    // idempotent). `Deployable` itself is NOT composed: its name-salted `deploy`
+    // conflicts with content-addressing.
     #[contractimpl(contracttrait)]
     impl StatelessDeployable for StatelessRegistry {}
 
@@ -115,13 +118,50 @@ mod contract {
         /// registry, and there is no unmanaged or root mode.
         ///
         /// Modeled on the `root = Some(_)` (subregistry) branch of
-        /// `registry::Contract::__constructor`.
+        /// `registry::Contract::__constructor`. `manager`/`root` are set via the
+        /// public `Storage` seam; `admin` via the `registry_traits::admin`
+        /// key convention.
         pub fn __constructor(env: &Env, admin: Address, manager: Address, root: Address) {
-            Self::set_admin(env, &admin);
-            // TODO(#38): expose these two seams publicly. Today both are
-            // `pub(crate)` on the registry crate's `Storage`.
+            registry_admin::set_admin_no_auth(env, &admin);
             Storage::set_manager_no_auth(env, &manager);
-            Storage::new(env).root_registry.set(&root);
+            Storage::set_root_registry(env, &root);
+        }
+
+        /// The admin account (registry-traits key convention). Local stand-in
+        /// for `admin-sep::Administratable::admin` — see crate docs.
+        pub fn admin(env: &Env) -> Address {
+            registry_admin::admin(env).unwrap()
+        }
+
+        /// Rotate the admin. Requires the current admin's auth. Local stand-in
+        /// for `admin-sep::AdministratableExtension::set_admin`.
+        pub fn set_admin(env: &Env, new_admin: Address) {
+            registry_admin::require_admin(env);
+            registry_admin::set_admin_no_auth(env, &new_admin);
+        }
+
+        /// Upgrade this registry's own wasm. Requires admin auth. Local stand-in
+        /// for `admin-sep::Upgradable::upgrade`.
+        pub fn upgrade(env: &Env, new_wasm_hash: BytesN<32>) {
+            registry_admin::require_admin(env);
+            env.deployer().update_current_contract_wasm(new_wasm_hash);
+        }
+
+        /// The manager account which gates initial publishes / stateless deploys.
+        pub fn manager(env: &Env) -> Option<Address> {
+            Storage::manager(env)
+        }
+
+        /// Admin can set a new manager.
+        pub fn set_manager(env: &Env, new_manager: Address) {
+            registry_admin::require_admin(env);
+            Storage::set_manager_no_auth(env, &new_manager);
+        }
+
+        /// Admin can remove the manager.
+        pub fn remove_manager(env: &Env) {
+            registry_admin::require_admin(env);
+            Storage::remove_manager_no_auth(env);
         }
     }
 }
@@ -130,11 +170,18 @@ mod contract {
 pub use contract::{StatelessRegistry, StatelessRegistryClient};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// In-SDK acceptance test. `#[ignore]`d until #38 lands (the `contract` feature
-// cannot pull the `registry` crate yet). It encodes the issue-#39 acceptance
-// criterion: publish a fixture wasm, `deploy_stateless` it content-addressed,
-// assert the deployed address equals the offline derivation, and assert that a
-// redeploy of identical bytecode is a no-op (returns the same address).
+// Tests. The first is fully self-contained and green: it validates that the
+// registry-traits composition + local admin/manager glue wire up correctly (and
+// that soroban-sdk unifies to a single version across perch + registry-traits).
+//
+// The second encodes the issue-#39 acceptance criterion end to end (publish →
+// content-addressed `deploy_stateless` → assert derived address → assert
+// idempotent redeploy). It stays `#[ignore]`d: the #38/#33 import blocker is now
+// RESOLVED, but it needs a real fixture wasm whose `__constructor` takes no args
+// (`deploy_stateless` always inits with `()`), and the embedded placeholder is
+// empty bytes that `upload_contract_wasm` rejects. Materializing that fixture
+// (a build step that drops a `.wasm` under the crate for `contractimport!`) is
+// the remaining follow-up.
 // ─────────────────────────────────────────────────────────────────────────────
 #[cfg(all(test, feature = "contract"))]
 mod test {
@@ -143,17 +190,46 @@ mod test {
         testutils::Address as _, Address, Bytes, BytesN, Env, String,
     };
 
+    /// Self-contained, green: constructing the subregistry wires `admin`,
+    /// `manager`, and `root` through the composed registry-traits seams. Also
+    /// exercises the composed ABI (the `#[contracttrait]` glue) at compile time,
+    /// which is what validates the soroban-sdk 27 ⇄ registry-traits `<28` pin.
+    #[test]
+    fn constructor_wires_admin_manager_and_root() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let manager = Address::generate(&env);
+        let root = Address::generate(&env);
+
+        let registry_id =
+            env.register(StatelessRegistry, (admin.clone(), manager.clone(), root.clone()));
+        let client = StatelessRegistryClient::new(&env, &registry_id);
+
+        assert_eq!(client.admin(), admin, "admin must be the constructor admin");
+        assert_eq!(
+            client.manager(),
+            Some(manager.clone()),
+            "manager must be the constructor manager"
+        );
+
+        // Admin can rotate the manager; a fresh manager reads back.
+        let new_manager = Address::generate(&env);
+        client.set_manager(&new_manager);
+        assert_eq!(client.manager(), Some(new_manager));
+    }
+
     // A deployable fixture wasm to publish and content-address deploy. Any valid
-    // contract works. TODO(#38): point `contractimport!` at a real fixture wasm
-    // (e.g. a small hello-world) once the crate builds; a symlink/build step will
-    // materialize it under the crate before `cargo test`.
+    // no-arg-`__constructor` contract works. TODO: point `contractimport!` at a
+    // real fixture wasm once a build step materializes it under the crate.
     mod fixture {
         // soroban_sdk::contractimport!(file = "fixtures/stateless_fixture.wasm");
         pub const WASM: &[u8] = &[]; // placeholder — replaced by contractimport! WASM
     }
 
     #[test]
-    #[ignore = "blocked on stellar-registry/contracts#38 (importable registry + StatelessDeployable)"]
+    #[ignore = "needs a real no-arg-__constructor fixture wasm; embedded placeholder is empty bytes (upload_contract_wasm rejects)"]
     fn deploy_stateless_is_content_addressed_and_idempotent() {
         let env = Env::default();
         env.mock_all_auths();
@@ -174,8 +250,9 @@ mod test {
         client.publish(&wasm_name, &manager, &wasm, &version);
         let wasm_hash: BytesN<32> = client.fetch_hash(&wasm_name, &Some(version.clone()));
 
-        // Content-addressed deploy: salt = wasm_hash.
-        let deployed = client.deploy_stateless(&wasm_name, &Some(version.clone()));
+        // Content-addressed deploy: salt = wasm_hash, deployer defaults to the
+        // registry itself (`None`).
+        let deployed = client.deploy_stateless(&wasm_name, &Some(version.clone()), &None);
 
         // Offline derivation: deployer = the registry contract, salt = wasm_hash.
         let expected = env
@@ -188,7 +265,7 @@ mod test {
         );
 
         // Redeploy of identical bytecode is a no-op → same deterministic address.
-        let again = client.deploy_stateless(&wasm_name, &Some(version));
+        let again = client.deploy_stateless(&wasm_name, &Some(version), &None);
         assert_eq!(
             again, deployed,
             "redeploy of identical wasm must be a no-op (same address)"

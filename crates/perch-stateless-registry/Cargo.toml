@@ -1,0 +1,63 @@
+[package]
+name = "perch-stateless-registry"
+description = "Managed 'stateless' subregistry: publish-here-iff-stateless; content-addressed deploy (salt = wasm_hash). Composed from the imported registry contracttraits."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+# `alloc` enables soroban's bump allocator on wasm — the registry contracttraits
+# parse names / upload wasm bytes on-chain.
+soroban-sdk = { workspace = true, features = ["alloc"] }
+
+# ── BLOCKED ON stellar-registry/contracts#38 ────────────────────────────────
+# The composition below imports the registry contracttraits (Administratable,
+# Upgradable, Publishable, Manageable) plus the NEW `StatelessDeployable` from
+# the upstream `registry` crate. That crate is not importable yet, so this dep
+# is intentionally COMMENTED (an active git dep on an unpushed branch would fail
+# `cargo metadata`/resolution for the whole workspace). Uncomment — and switch
+# the `contract` feature to `["dep:registry"]` — once #38 lands ALL of:
+#   1. `[lib] crate-type = ["lib", "cdylib"]` (today it is `["cdylib"]` only, so
+#      the crate has no rlib target and cannot be `use`d as a dependency).
+#   2. The contracttrait default-method bodies refactored `Contract::` → `Self::`
+#      so they compose onto a *foreign* struct (`StatelessRegistry`) instead of
+#      hard-referencing the registry crate's own `Contract`.
+#   3. `pub use` of the trait set at the crate root:
+#      `Administratable, Upgradable, Publishable, Manageable, StatelessDeployable`
+#      (Administratable/Upgradable are re-exported from `admin_sep`), plus a
+#      public constructor seam for manager/root wiring (`Storage` is `pub(crate)`
+#      today — see `__constructor` in src/lib.rs).
+#   4. `StatelessDeployable` added: content-addressed `deploy_stateless`
+#      (salt = wasm_hash) + the read/resolve methods carried over from
+#      `Deployable` (its name-salted `deploy` is deliberately dropped).
+#   5. contracts workspace bumped soroban-sdk 25.3.1 → 27.x to match this
+#      workspace (types like `Env`/`Address`/`BytesN` must unify across the ABI).
+#
+# The branch is `feat/registry-importable-stateless-deploy`; it is not yet on
+# origin (currently only in the sibling checkout at
+# /Users/willem/c/stellar-registry/contracts).
+#
+# registry = { git = "https://github.com/stellar-registry/contracts", branch = "feat/registry-importable-stateless-deploy", default-features = false, optional = true }
+# ─────────────────────────────────────────────────────────────────────────────
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+
+[features]
+# Mirrors the perch-doc-compiler template: the deployable contract lives behind
+# `contract`, on by default. Today `contract` gates the composition module,
+# which fails to compile with a self-contained `unresolved import registry`
+# until the `registry` dep above is uncommented — that IS the intended
+# "blocked on #38" signal. Build the skeleton green with
+# `--no-default-features`; flip `contract = ["dep:registry"]` when #38 lands.
+default = ["contract"]
+contract = []

@@ -12,6 +12,47 @@ on:
 permissions: {}
 
 jobs:
+  # The Lean 4 formal model (formal/): checks every theorem, then replays the
+  # frozen eval-semantics vectors through the model. Heavy (elan install +
+  # `lake build`), so it runs here on the weekly/on-demand assurance path
+  # rather than on every PR — the rust job (crates/perch-conformance) already
+  # replays the same vectors through the real evaluator on each PR.
+  formal:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('formal/lean-toolchain') }}
+      - name: Install elan
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSf https://elan.lean-lang.org/elan-init.sh \
+              | sh -s -- -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Check theorems
+        working-directory: formal
+        run: lake build
+      # lake build exits 0 for proofs stubbed with `sorry` (warning only) and
+      # for new axioms — forbid both at the source level so the job actually
+      # gates on the proofs being real.
+      - name: Forbid sorry/axiom
+        working-directory: formal
+        run: |
+          ! grep -rnE '\b(sorry|admit|axiom)\b' PerchFormal PerchFormal.lean Main.lean
+      - name: Replay conformance vectors + canonical fixtures through the model
+        working-directory: formal
+        run: |
+          lake exe drt ../testdata/eval/eval-vectors.json \
+            ../testdata/ci-publish.canonical.json \
+            ../testdata/ci-publish-delegated.canonical.json
+
   fuzz:
     runs-on: ubuntu-latest
     permissions:

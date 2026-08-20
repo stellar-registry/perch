@@ -25,6 +25,9 @@ soroban-sdk = { workspace = true, features = ["alloc"] }
 # two-major split. `default-features` (`alloc`) are what the trait bodies need
 # (name parsing / wasm upload on-chain). Optional + gated behind `contract` so
 # `--no-default-features` yields an empty library with no git dependency.
+# TODO(registry upstream): this points at the unmerged `feat/registry-importable-stateless-deploy`
+# branch (stellar-registry/contracts PR #33). Re-pin to a merged `rev`/tag (or a
+# published `registry-traits` crate version) once #33 lands. Tracked in perch#37.
 registry-traits = { git = "https://github.com/stellar-registry/contracts", branch = "feat/registry-importable-stateless-deploy", package = "registry-traits", optional = true }
 
 # admin-sep (theahaco/admin-sep v0.27.0, released on soroban-sdk 27) ships the

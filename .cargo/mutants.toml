@@ -1,0 +1,7 @@
+# cargo-mutants configuration. Mutation scope is set per-run with -p flags
+# (see `just mutants` / assurance.yml); this file makes every mutant run the
+# FULL workspace test suite — by default cargo-mutants only runs the mutated
+# package's own tests, which would exempt perch-program mutants from the
+# conformance vectors and the differential suite in perch-conformance, i.e.
+# exactly the tests that exist to catch them.
+test_workspace = true

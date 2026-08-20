@@ -81,7 +81,14 @@ fn gen_arg_pred(rng: &mut Rng) -> ArgPred {
             ArgPred::StringIn(StringInPred { values })
         }
         _ => ArgPred::StringPrefix(StringPrefixPred {
-            prefix: STRINGS[rng.below(STRINGS.len() as u32) as usize].into(),
+            // Occasionally an over-long prefix: valid per perch-ir (no length
+            // limit), lowered verbatim, and must fail closed at eval time —
+            // exercises the prefix-side str_bytes failure path in leaf.rs.
+            prefix: if rng.chance(6) {
+                "x".repeat(257)
+            } else {
+                STRINGS[rng.below(STRINGS.len() as u32) as usize].into()
+            },
         }),
     }
 }

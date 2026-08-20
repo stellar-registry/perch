@@ -194,9 +194,15 @@ describe('canonicalization properties', () => {
   it('canonical form is object-key-insertion-order independent', () => {
     fc.assert(
       fc.property(docArb, (g) => {
-        const a = parsePolicyDoc(wireDoc(g, false));
-        const b = parsePolicyDoc(wireDoc(g, true));
-        expect(canonicalJson(b)).toBe(canonicalJson(a));
+        // Deliberately NOT parsed first: zod's .parse() rebuilds objects in
+        // schema-definition key order, which would erase the reversed
+        // insertion order before canonicalJson ever saw it (and make this
+        // property vacuous). canonicalJson takes the raw wire object.
+        const a = wireDoc(g, false);
+        const b = wireDoc(g, true);
+        parsePolicyDoc(a); // both orders are schema-valid …
+        parsePolicyDoc(b);
+        expect(canonicalJson(b)).toBe(canonicalJson(a)); // … and hash identically
         expect(docHash(b)).toBe(docHash(a));
       }),
       { seed: SEED, numRuns: RUNS },

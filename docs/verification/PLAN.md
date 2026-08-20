@@ -44,8 +44,9 @@ land):
 - **T1 Lattice laws** — `and`/`or` commutative, associative, De Morgan, double negation,
   `¬Unknown = Unknown`. (Foundation; also pins the fail-open trap closed: a decode failure
   under `Not` still denies.)
-- **T2 Fail-closed root** — only `True` allows; `Unknown` never allows, and is preserved by
-  every composite.
+- **T2 Fail-closed root** — only `True` allows; `Unknown` never allows, can never raise a
+  conjunction to `True`, and is preserved under negation (in a disjunction a definite `True`
+  branch legitimately wins — that is Kleene `or`, not a leak).
 - **T3 Totality/termination** — `eval` is a total function (structural recursion over the op
   list; free in Lean).
 - **T4 Validation soundness** — `validate ok ⇒` evaluation never trips a defensive guard: the
@@ -55,7 +56,13 @@ land):
 - **T5 INV-1 (signer floor)** — for every lowered (interpreter-attached) rule, zero
   authenticated signers ⇒ the program's verdict is `False` (not merely non-`True`).
 - **T6 Lowering preservation** — `eval (build_program rule) inv = docSemantics rule inv` for
-  all rules expressible in v1 and all invocations. This is target (b) at the model level.
+  all rules expressible in v1 and all invocations, where `docSemantics` is stated over the
+  doc-level predicates directly (no ops, no machine) and a per-predicate lemma proves the op
+  translation meaning-preserving. Scope, precisely: this covers the encoding, the machine, and
+  the `lowerPred` translation *within the model*; that the model's predicate meanings match the
+  Rust leaf implementations is the empirical link carried by the shared vectors and the Rust
+  differential suite (whose reference never looks at `Op` or the compiler). Together they are
+  target (b); T6 alone is its machine-checked half.
 - **T7 Monotonicity of attenuation** *(stretch)* — tightening a bound (subset `FnIn`, subset
   `StrIn`, smaller `notAfter`) never admits a previously denied invocation; the model-level
   justification of `attenuation::is_narrowing`.

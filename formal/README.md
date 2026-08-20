@@ -26,10 +26,16 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
   defensive guard — the guarded machine agrees with a purely structural one,
   so a validated program's verdict is a pure function of its leaves
   ("Validation ⇒ analyzable").
-- **T5** `zero_signers_denied`: every lowered rule evaluates to a definite `F`
-  on any invocation with zero authenticated signers — INV-1 at the model level.
+- **T5** `zero_signers_denied`: every lowered rule (whose leaves fit the
+  stack cap — guaranteed in Rust by compile's re-validation) evaluates to a
+  definite `F` on any invocation with zero authenticated signers — INV-1 at
+  the model level.
 - **T6** `lowering_preserves`: the machine over `build_program`'s postfix
-  output computes exactly the rule's doc-level Kleene conjunction.
+  output computes exactly the rule's doc-level Kleene conjunction, where the
+  doc side is stated over predicates directly and `leafEval_lowerPred` proves
+  the op translation meaning-preserving — so encoding, machine, and
+  translation are all inside the theorem; only the model↔Rust leaf-semantics
+  link remains empirical (the vectors + differential suite below).
 
 ## What ties the model to the shipped code
 

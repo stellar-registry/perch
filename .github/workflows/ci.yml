@@ -132,6 +132,13 @@ jobs:
       - name: Check theorems
         working-directory: formal
         run: lake build
+      # lake build exits 0 for proofs stubbed with `sorry` (warning only) and
+      # for new axioms — forbid both at the source level so the job actually
+      # gates on the proofs being real.
+      - name: Forbid sorry/axiom
+        working-directory: formal
+        run: |
+          ! grep -rnE '\b(sorry|admit|axiom)\b' PerchFormal PerchFormal.lean Main.lean
       - name: Replay conformance vectors through the model
         working-directory: formal
         run: lake exe drt ../testdata/eval/eval-vectors.json

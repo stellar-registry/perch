@@ -14,7 +14,9 @@ import PerchFormal.Lowering
   denies — definite `F` — any invocation with zero authenticated signers.
   INV-1 at the model level.
 - **T6** (`lowering_preserves`): the machine over the emitted postfix program
-  computes exactly the rule's doc-level Kleene conjunction.
+  computes exactly the rule's doc-level Kleene conjunction, with the op
+  translation proved meaning-preserving per predicate (`leafEval_lowerPred`).
+  The model-to-Rust link stays empirical (shared vectors + differential suite).
 -/
 
 namespace PerchFormal
@@ -147,7 +149,7 @@ theorem lowering_preserves (r : DocRule) (inp : Inputs)
   have hdrop : ((leafOps r).map (leafEval inp)).reverse.drop (leafOps r).length = [] := by
     rw [← hlenvs]; exact List.drop_length ..
   simp only [evalGo, if_neg h1, if_neg hguard, htake, hdrop]
-  rw [foldl_and_reverse]
+  rw [foldl_and_reverse, map_leafEval_leafOps]
   rfl
 
 /-! ## T5 — INV-1 at the model level -/
@@ -157,11 +159,11 @@ theorem zero_signers_denied (r : DocRule) (inp : Inputs)
     (hzero : inp.signerCount = 0) :
     eval (buildProgram r) inp = .F := by
   rw [lowering_preserves r inp hcap]
-  unfold docSemantics leafOps
+  unfold docSemantics docLeaves
   have hge : ¬ (inp.signerCount ≥ max r.signerCount 1) := by omega
-  have hfloor : leafEval inp (.minSigners (max r.signerCount 1)) = .F := by
-    simp [leafEval, hge, Verdict.ofBool]
-  simp only [List.map_cons, List.foldl_cons, hfloor, Verdict.and_F_right]
+  have hfloor : Verdict.ofBool (inp.signerCount ≥ max r.signerCount 1) = .F := by
+    simp [hge, Verdict.ofBool]
+  simp only [List.foldl_cons, hfloor, Verdict.and_F_right]
   exact foldl_and_F _
 
 /-- INV-1 on the authorization bit: with zero authenticated signers the

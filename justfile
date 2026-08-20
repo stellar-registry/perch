@@ -59,9 +59,10 @@ mutants:
 
 # Branch coverage of the security core, including the conformance vectors.
 # Every deny path in the evaluator should be exercised. Setup:
-# `cargo install cargo-llvm-cov`.
+# `cargo install cargo-llvm-cov`; --branch needs a nightly toolchain (the
+# flux pin works) with llvm-tools.
 coverage:
-    cargo llvm-cov -p perch-program -p perch-compile -p perch-ir -p perch-conformance --branch
+    cargo +nightly-2026-02-05 llvm-cov -p perch-program -p perch-compile -p perch-ir -p perch-conformance --branch
 
 # Flux refinement verification of perch-program (nidohq/soroban-flux). Runs
 # under flux's pinned nightly toolchain; the repo's stable pin is untouched —

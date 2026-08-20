@@ -17,6 +17,8 @@ members = [
     "crates/perch-account",
     "crates/perch-deploy",
     "crates/perch-stateless-registry",
+    "crates/perch-registry-resolve-macro",
+    "crates/perch-registry-resolve",
 ]
 
 [workspace.package]

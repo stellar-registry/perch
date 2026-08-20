@@ -142,9 +142,12 @@ jobs:
         working-directory: formal
         run: |
           ! grep -rnE '\b(sorry|admit|axiom)\b' PerchFormal PerchFormal.lean Main.lean
-      - name: Replay conformance vectors through the model
+      - name: Replay conformance vectors + canonical fixtures through the model
         working-directory: formal
-        run: lake exe drt ../testdata/eval/eval-vectors.json
+        run: |
+          lake exe drt ../testdata/eval/eval-vectors.json \
+            ../testdata/ci-publish.canonical.json \
+            ../testdata/ci-publish-delegated.canonical.json
 
   node:
     runs-on: ubuntu-latest

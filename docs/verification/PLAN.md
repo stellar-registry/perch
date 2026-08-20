@@ -113,12 +113,15 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 - [x] Lean 4 model under `formal/` (no external deps beyond Lean core)
 - [x] Theorems T1–T6 proved, sorry-free — including lowering preservation (T6)
 - [x] Lean replay of the eval vectors wired as `just drt` + the `formal` CI job
-- [ ] Graduate Flux job out of `continue-on-error` once its streak is green (separate PR)
+- [x] Graduate Flux job out of `continue-on-error` — flux failures now fail CI
 
 ### Phase 2 — deepening source-level assurance (follow-up PRs)
 - [ ] T6/T7 completed; model covers `attenuation`/`analysis` claims
-- [ ] doc_hash injectivity: property-test now; Lean/F* proof of the CANON v1 fragment later
-      (no verified RFC 8785 implementation exists anywhere as of 2026-08 — this would be a first)
+- [x] doc_hash injectivity: **proved** (`formal/PerchFormal/CanonProofs.lean`,
+      `emitDoc_injective`) — a verified inverse parser round-trips the canonical emitter, so
+      two distinct documents can never share canonical bytes; the model emitter is pinned to
+      the Rust emitter by round-tripping the frozen `*.canonical.json` fixtures in CI. To our
+      knowledge the first machine-verified RFC 8785-subset implementation.
 - [ ] Choose one deductive tie between model and Rust: Verus (`eval == spec_fn`, ghost code
       erased from the shipped crate) or Aeneas extraction to Lean. Decision gate: model + DRT
       running for a few weeks first.

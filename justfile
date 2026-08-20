@@ -40,7 +40,9 @@ formal:
 # agree on every case.
 drt: formal
     cargo test -p perch-conformance
-    cd formal && lake exe drt ../testdata/eval/eval-vectors.json
+    cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
+      ../testdata/ci-publish.canonical.json \
+      ../testdata/ci-publish-delegated.canonical.json
 
 # Wasm leg of the conformance vectors: replay every case through the COMPILED
 # wasm32 artifact under the soroban test host — rustc, LLVM, and the wasm

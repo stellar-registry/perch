@@ -152,6 +152,28 @@ def runCase (j : Json) : Dec CaseResult := do
 
   return { name, failures }
 
+/-- Parse a Rust-emitted canonical document with the *verified* CANON v1
+parser and re-emit it: the file must be byte-identical to the model's own
+canonical form (and fully consumed). Ties `emitDoc_injective`'s model emitter
+to the Rust emitter on the golden fixtures. -/
+def checkCanonicalFile (path : String) : IO Bool := do
+  let text ← IO.FS.readFile path
+  let chars := text.toList
+  match Canon.pDoc chars with
+  | none =>
+    IO.eprintln s!"FAIL {path}: not parseable as CANON v1 (model grammar diverges from Rust output)"
+    return false
+  | some (doc, rest) =>
+    if !rest.isEmpty then
+      IO.eprintln s!"FAIL {path}: {rest.length} trailing chars after the document"
+      return false
+    else if Canon.emitDoc doc ≠ chars then
+      IO.eprintln s!"FAIL {path}: model re-emission differs from the Rust canonical bytes"
+      return false
+    else
+      IO.println s!"{path}: parses and re-emits byte-identically under the verified canonicalizer"
+      return true
+
 def main (args : List String) : IO UInt32 := do
   let path := args.headD "../testdata/eval/eval-vectors.json"
   let text ← IO.FS.readFile path
@@ -164,4 +186,9 @@ def main (args : List String) : IO UInt32 := do
     for f in c.failures do
       IO.eprintln s!"  {f}"
   IO.println s!"{cases.length - failing.length}/{cases.length} conformance cases agree with the Lean model"
-  return if failing.isEmpty then 0 else 1
+  -- Any further arguments are Rust-emitted canonical documents to round-trip
+  -- through the verified canonicalizer.
+  let mut canonOk := true
+  for p in args.drop 1 do
+    canonOk := (← checkCanonicalFile p) && canonOk
+  return if failing.isEmpty && canonOk then 0 else 1

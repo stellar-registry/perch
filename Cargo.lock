@@ -1412,6 +1412,7 @@ dependencies = [
 name = "perch-conformance"
 version = "0.1.0"
 dependencies = [
+ "perch-bench-rpn",
  "perch-compile",
  "perch-ir",
  "perch-program",

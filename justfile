@@ -42,6 +42,13 @@ drt: formal
     cargo test -p perch-conformance
     cd formal && lake exe drt ../testdata/eval/eval-vectors.json
 
+# Wasm leg of the conformance vectors: replay every case through the COMPILED
+# wasm32 artifact under the soroban test host — rustc, LLVM, and the wasm
+# interpreter join the parity boundary.
+conformance-wasm:
+    cargo build -p perch-bench-rpn --target wasm32v1-none --release
+    cargo test -p perch-conformance --test wasm_leg -- --ignored
+
 # Coverage-guided fuzzing of a target in fuzz/fuzz_targets/ (default: the
 # evaluator's fail-closed totality). Setup: `cargo install cargo-fuzz` and a
 # nightly toolchain (the flux pin below works: nightly-2026-02-05).

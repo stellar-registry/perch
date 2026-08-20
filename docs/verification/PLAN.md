@@ -126,8 +126,9 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
       expire against a reference state machine
 
 ### Phase 3 — wasm-artifact level, per release (staged trust)
-- [ ] Wasm leg of the vectors: compiled interpreter replays `testdata/eval/` under the soroban
-      test host
+- [x] Wasm leg of the vectors: the compiled wasm32 artifact (`perch-bench-rpn`, wrapping the
+      same `perch_program` entry points as the interpreter) replays `testdata/eval/` under the
+      soroban test host — `just conformance-wasm`, gated in CI
 - [ ] **Certora Sunbeam**: CVLR rules over the compiled interpreter wasm (fail-closed,
       MinSigners floor, arg-bound/notAfter enforcement over symbolic payloads). *Needs a
       Certora account/key — blocked on maintainer.*

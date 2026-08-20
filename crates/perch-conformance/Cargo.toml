@@ -17,3 +17,6 @@ perch-program = { workspace = true }
 # Both default to their `std` feature — this crate is host-side only.
 perch-ir = { workspace = true }
 perch-compile = { path = "../perch-compile" }
+# The wasm leg invokes the compiled perch-bench-rpn artifact through its
+# generated client (tests/wasm_leg.rs).
+perch-bench-rpn = { path = "../perch-bench-rpn" }

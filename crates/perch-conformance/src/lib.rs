@@ -904,14 +904,31 @@ pub fn program(env: &Env, book: &mut AddrBook, c: &Case) -> RpnProgram {
 /// Run one case against the real evaluator, returning
 /// `(validate outcome, verdict)`.
 pub fn run(env: &Env, book: &mut AddrBook, c: &Case) -> (Result<(), ValidationError>, Verdict) {
+    let (p, ctx, signer_count, self_addr) = materialize(env, book, c);
+    let valid = rpn::validate(&p);
+    let inputs = EvalInputs {
+        context: &ctx,
+        signer_count,
+        self_addr: &self_addr,
+    };
+    (valid, rpn::eval(env, &p, &inputs))
+}
+
+/// Materialize a case into concrete soroban values: sets the env's ledger
+/// sequence and returns the program plus the evaluator inputs' components.
+/// Shared by the native leg ([`run`]) and the wasm leg (`tests/wasm_leg.rs`),
+/// so both execute byte-identical inputs.
+pub fn materialize(
+    env: &Env,
+    book: &mut AddrBook,
+    c: &Case,
+) -> (RpnProgram, Context, u32, Address) {
     use soroban_sdk::testutils::Ledger as _;
     env.ledger().with_mut(|li| {
         li.sequence_number = c.inv.ledger;
     });
 
     let p = program(env, book, c);
-    let valid = rpn::validate(&p);
-
     let self_addr = book.get(env, "self");
     let ctx = match c.inv.ctx {
         CtxKind::Contract => {
@@ -927,12 +944,7 @@ pub fn run(env: &Env, book: &mut AddrBook, c: &Case) -> (Result<(), ValidationEr
         }
         CtxKind::NonContract => non_contract_context(env),
     };
-    let inputs = EvalInputs {
-        context: &ctx,
-        signer_count: c.inv.signer_count,
-        self_addr: &self_addr,
-    };
-    (valid, rpn::eval(env, &p, &inputs))
+    (p, ctx, c.inv.signer_count, self_addr)
 }
 
 /// A concrete non-`Contract` authorization context: contract creation via the

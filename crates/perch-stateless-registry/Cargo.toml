@@ -1,0 +1,49 @@
+[package]
+name = "perch-stateless-registry"
+description = "Managed 'stateless' subregistry: publish-here-iff-stateless; content-addressed deploy (salt = wasm_hash). Composed from the imported registry contracttraits."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+# `alloc` enables soroban's bump allocator on wasm — the registry contracttraits
+# parse names / upload wasm bytes on-chain.
+soroban-sdk = { workspace = true, features = ["alloc"] }
+
+# The importable registry contracttraits (stellar-registry/contracts PR #33,
+# crate `registry-traits`). Version-flexible on soroban-sdk (`>=25.3.1, <28`):
+# this workspace pins 27.0.2, so it unifies to a single soroban-sdk 27.x — no
+# two-major split. `default-features` (`alloc`) are what the trait bodies need
+# (name parsing / wasm upload on-chain). Optional + gated behind `contract` so
+# `--no-default-features` yields an empty library with no git dependency.
+registry-traits = { git = "https://github.com/stellar-registry/contracts", branch = "feat/registry-importable-stateless-deploy", package = "registry-traits", optional = true }
+
+# admin-sep (theahaco/admin-sep v0.27.0, released on soroban-sdk 27) ships the
+# real `Administratable`/`Upgradable` `#[contracttrait]`s that the canonical
+# `registry` contract composes. It stores the admin at the same instance key —
+# `symbol_short!("ADMIN")` (`admin_sep::STORAGE_KEY`) — that `registry-traits`'
+# internal auth reads (`registry_traits::admin::ADMIN_KEY`, documented as
+# byte-identical), so the two interoperate on a single admin key. Pins
+# soroban-sdk `^27.0.5`, which unifies with the workspace's 27.x. Optional +
+# gated behind `contract` for the same empty-skeleton reason as above.
+admin-sep = { version = "0.27.0", optional = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+
+[features]
+# Mirrors the perch-doc-compiler template: the deployable contract lives behind
+# `contract`, on by default. `contract` pulls in `registry-traits` + `admin-sep`
+# and gates the composition module. Build the empty skeleton (no git dep) with
+# `--no-default-features`.
+default = ["contract"]
+contract = ["dep:registry-traits", "dep:admin-sep"]

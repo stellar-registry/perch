@@ -181,9 +181,7 @@ pub use contract::{StatelessRegistry, StatelessRegistryClient};
 #[cfg(all(test, feature = "contract"))]
 mod test {
     use super::{StatelessRegistry, StatelessRegistryClient};
-    use soroban_sdk::{
-        testutils::Address as _, Address, Bytes, BytesN, Env, String,
-    };
+    use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, String};
 
     /// Self-contained, green: constructing the subregistry wires `admin`,
     /// `manager`, and `root` through the composed registry-traits seams. Also
@@ -198,8 +196,10 @@ mod test {
         let manager = Address::generate(&env);
         let root = Address::generate(&env);
 
-        let registry_id =
-            env.register(StatelessRegistry, (admin.clone(), manager.clone(), root.clone()));
+        let registry_id = env.register(
+            StatelessRegistry,
+            (admin.clone(), manager.clone(), root.clone()),
+        );
         let client = StatelessRegistryClient::new(&env, &registry_id);
 
         assert_eq!(client.admin(), admin, "admin must be the constructor admin");
@@ -234,8 +234,10 @@ mod test {
         let root = Address::generate(&env);
 
         // Deploy the managed subregistry: __constructor(admin, manager, root).
-        let registry_id =
-            env.register(StatelessRegistry, (admin.clone(), manager.clone(), root.clone()));
+        let registry_id = env.register(
+            StatelessRegistry,
+            (admin.clone(), manager.clone(), root.clone()),
+        );
         let client = StatelessRegistryClient::new(&env, &registry_id);
 
         // Manager gates the initial publish (the perch smart account, mocked here).

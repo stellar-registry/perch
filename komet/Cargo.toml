@@ -1,0 +1,43 @@
+# Komet (Runtime Verification, K framework) property tests over the frozen RPN
+# evaluator — an INDEPENDENT second opinion on the wasm-artifact semantics
+# (PLAN.md phase 3). The evaluator is compiled into this test contract's wasm
+# and executed under Komet's mechanized Soroban + wasm (KWasm) semantics, so
+# `komet prove run` gives an all-inputs guarantee at the bytecode level whose
+# trusted base is the K semantics rather than rustc/LLVM+wasmi (the wasm leg's
+# base). Setup + run instructions: komet/README.md.
+#
+# Its own workspace (like fuzz/): the K toolchain drives this build, it is not
+# part of `cargo test --workspace`, and the main-workspace release profile is
+# reproduced below. The two workspace.dependencies mirror the main workspace so
+# perch-program's `workspace = true` inheritance resolves here.
+[workspace]
+members = ["."]
+
+[workspace.dependencies]
+soroban-sdk = "27.0.2"
+soroban-flux = { git = "https://github.com/nidohq/soroban-flux.git", rev = "3170467" }
+
+[package]
+name = "perch-komet-tests"
+description = "Komet property tests over the frozen RPN evaluator; never deployed"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+perch-program = { path = "../crates/perch-program" }
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true

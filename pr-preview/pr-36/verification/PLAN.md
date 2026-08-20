@@ -135,8 +135,11 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 - [ ] **Certora Sunbeam**: CVLR rules over the compiled interpreter wasm (fail-closed,
       MinSigners floor, arg-bound/notAfter enforcement over symbolic payloads). *Needs a
       Certora account/key — blocked on maintainer.*
-- [ ] **Komet** (Runtime Verification, K semantics) as an independent second opinion. *Needs
-      kup/K toolchain — heavyweight install, maintainer call.*
+- [~] **Komet** (Runtime Verification, K semantics) as an independent second opinion. Test
+      contract written and compiling (`komet/`, three symbolic properties: INV-1 signer floor,
+      `All` conjunction folding, fail-closed missing-arg deny). Running it is maintainer-gated
+      on the K toolchain: Komet `main` pins K 7.1.323, the brew bottle is 7.1.282, and the
+      version-matched install (`kup`) needs Nix. Setup + one-command run in `komet/README.md`.
 - [ ] Engine-TCB mitigation: differential fuzz of the protocol-pinned soroban-wasmi revision
       against WasmRef-Isabelle (the Wasmtime oracle setup)
 

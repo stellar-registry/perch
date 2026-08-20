@@ -1,0 +1,23 @@
+[package]
+name = "perch-account"
+description = "Deployable OZ smart account governed by perch policies; admin for the perch registry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+stellar-accounts = { workspace = true }
+perch-smart-account = { path = "../perch-smart-account" }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

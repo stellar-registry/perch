@@ -28,7 +28,9 @@
 //! the repo root; this module implements it, and [`CANON_VERSION`] tags the
 //! format version.
 
-use crate::doc::{ArgPred, CapConstraint, PolicyDoc, Principals, Rule, Scope, SignerDecl};
+use crate::doc::{
+    ArgPred, CapConstraint, PolicyDoc, Principals, Rule, Scope, SignerDecl, SignerMethod,
+};
 #[cfg(not(feature = "std"))]
 use alloc::{
     string::{String, ToString},
@@ -112,11 +114,16 @@ fn doc_to_cv(doc: &PolicyDoc) -> Cv<'_> {
 }
 
 fn signer_to_cv(s: &SignerDecl) -> Cv<'_> {
-    Cv::Obj(vec![
-        ("id", Cv::Str(&s.id)),
-        ("verifier", Cv::Str(&s.verifier)),
-        ("key", Cv::Str(&s.key)),
-    ])
+    match &s.method {
+        SignerMethod::External { verifier, key } => Cv::Obj(vec![
+            ("id", Cv::Str(&s.id)),
+            ("verifier", Cv::Str(verifier)),
+            ("key", Cv::Str(key)),
+        ]),
+        SignerMethod::Delegated { address } => {
+            Cv::Obj(vec![("id", Cv::Str(&s.id)), ("address", Cv::Str(address))])
+        }
+    }
 }
 
 fn rule_to_cv(r: &Rule) -> Cv<'_> {

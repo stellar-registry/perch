@@ -1,0 +1,32 @@
+{
+  "$comment": "Declarative set of perch infra contracts that are published + content-addressed deployed (deploy_stateless, salt = wasm_hash) via the managed `stateless` registry. Consumed by scripts/bootstrap-testnet.sh (PERCH_STATELESS=1) and, once #41 lands, by the registry_contract! resolver macro + perch-compile's interpreter_wasm_hash. Requires #38 (upstream StatelessDeployable / deploy-stateless CLI) and #39 (crates/perch-stateless-registry). perch-account is deliberately ABSENT: its __constructor takes admin_signers, so it is not content-addressable and stays name-salted on unverified/perch.",
+  "registry": {
+    "name": "stateless",
+    "wasm": "perch_stateless_registry.wasm",
+    "wasm_name": "perch-stateless-registry",
+    "note": "A second managed subregistry, registered as `stateless` under unverified/perch (admin=manager=deployer at deploy, manager rotated to the perch smart account in phase 6). Its deploy_stateless entry point uses salt = wasm_hash. Built by #39; the entry point is #38's StatelessDeployable."
+  },
+  "contracts": [
+    {
+      "name": "perch-ed25519-verifier",
+      "wasm": "perch_ed25519_verifier.wasm",
+      "author": null,
+      "eligibility": "stateless",
+      "note": "Holds no storage. Pure ed25519 signature verification — one shared, content-addressed instance is safe for every account."
+    },
+    {
+      "name": "perch-doc-compiler",
+      "wasm": "perch_doc_compiler.wasm",
+      "author": null,
+      "eligibility": "stateless",
+      "note": "Holds no storage. compile_doc parses + validates + compiles PolicyDoc JSON on-chain; shared by every account (accounts carry no parser)."
+    },
+    {
+      "name": "perch-interpreter",
+      "wasm": "perch_interpreter.wasm",
+      "author": "@SMART_ACCOUNT@",
+      "eligibility": "per-caller-keyed",
+      "note": "Stateful, but every slot is keyed by DataKey::Program(smart_account, context_rule_id) (crates/perch-interpreter/src/lib.rs). Each (account, rule) owns an isolated program slot with no cross-account key, so one shared content-addressed singleton is multi-tenant-safe. Published with --author = the perch smart account: the registry has no author transfer, so this fixes republish auth to the smart account forever (see phase 3)."
+    }
+  ]
+}

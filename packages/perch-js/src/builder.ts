@@ -13,16 +13,29 @@ import {
   type SignerDecl,
 } from './schema.js';
 
-/** A signer's verifier + key material, keyed into the doc by a local id. */
-export interface SignerSpec {
-  verifier: string;
-  /** hex-encoded key material. */
-  keyHex: string;
-}
+/** How a signer authenticates, keyed into the doc by a local id. */
+export type SignerSpec =
+  | {
+      kind: 'external';
+      verifier: string;
+      /** hex-encoded key material. */
+      keyHex: string;
+    }
+  | {
+      kind: 'delegated';
+      /** G… account or C… contract strkey, host-authenticated via CAP-0071. */
+      address: string;
+    };
 
 /** Build an external signer spec; `key` may be raw bytes or an existing hex string. */
 export function external(verifier: string, key: Uint8Array | string): SignerSpec {
-  return { verifier, keyHex: typeof key === 'string' ? key : bytesToHex(key) };
+  return { kind: 'external', verifier, keyHex: typeof key === 'string' ? key : bytesToHex(key) };
+}
+
+/** Build a delegated signer spec (CAP-0071): the address authorizes the same
+ *  call tree inside the account's own auth entry. */
+export function delegated(address: string): SignerSpec {
+  return { kind: 'delegated', address };
 }
 
 // Argument-predicate constructors (wire shape).
@@ -96,7 +109,11 @@ export class PolicyBuilder {
     return this;
   }
   signer(id: string, spec: SignerSpec): this {
-    this._signers.push({ id, verifier: spec.verifier, key: spec.keyHex });
+    this._signers.push(
+      spec.kind === 'external'
+        ? { id, verifier: spec.verifier, key: spec.keyHex }
+        : { id, address: spec.address },
+    );
     return this;
   }
   rule(name: string, build: (r: RuleBuilder) => void): this {

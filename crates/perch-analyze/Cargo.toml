@@ -1,0 +1,17 @@
+[package]
+name = "perch-analyze"
+description = "Per-policy SMT prover: dead rules, intent conformance (only-calls), semantic attenuation — PolicyDoc → SMT-LIB, discharged by z3"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+# Pure doc-level analysis: no soroban dependency in the library.
+perch-ir = { workspace = true }
+
+[dev-dependencies]
+# Cross-checks against the coarse op-level analyzer.
+perch-compile = { path = "../perch-compile" }
+soroban-sdk = { workspace = true, features = ["testutils"] }

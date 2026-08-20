@@ -38,21 +38,39 @@ pub struct PolicyDoc {
     pub rules: Vec<Rule>,
 }
 
-/// A declared signer: an id local to the document, the verifier contract that
-/// checks its signatures, and the verifier-defined key material.
+/// A declared signer: an id local to the document plus how it authenticates.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignerDecl {
     /// Document-local identifier rules use to reference this signer.
     /// Must be unique within the document.
     pub id: String,
-    /// Contract address (C-address strkey) of the verifier that checks this
-    /// signer's signatures.
-    pub verifier: String,
-    /// Hex-encoded key material, opaque to perch and interpreted by the
-    /// verifier. Decoded length must be 1..=256 bytes — the generous cap
-    /// exists because commitment-style keys can be larger than raw curve
-    /// points.
-    pub key: String,
+    /// How this signer's authorization is verified on-chain.
+    pub method: SignerMethod,
+}
+
+/// How a signer authenticates. Discriminated in JSON by field shape, not a
+/// `type` tag: `{"verifier","key"}` is external, `{"address"}` is delegated —
+/// anything else fails closed in [`crate::parse`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SignerMethod {
+    /// A raw key checked by a verifier contract (OZ `Signer::External`).
+    External {
+        /// Contract address (C-address strkey) of the verifier that checks
+        /// this signer's signatures.
+        verifier: String,
+        /// Hex-encoded key material, opaque to perch and interpreted by the
+        /// verifier. Decoded length must be 1..=256 bytes — the generous cap
+        /// exists because commitment-style keys can be larger than raw curve
+        /// points.
+        key: String,
+    },
+    /// An address (G- or C-strkey) the host authenticates via CAP-0071
+    /// authentication delegation (OZ `Signer::Delegated`): the delegate
+    /// authorizes the same call tree inside the account's own auth entry.
+    Delegated {
+        /// The delegate's address (G… account or C… contract strkey).
+        address: String,
+    },
 }
 
 /// A single policy rule: who ([`Principals`]) may do what

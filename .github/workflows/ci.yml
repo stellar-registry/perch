@@ -21,16 +21,21 @@ jobs:
           targets: wasm32v1-none
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # z3 backs the perch-analyze SMT tests (they skip loudly when absent).
+      - run: sudo apt-get update && sudo apt-get install -y z3
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # Wasm leg of the conformance vectors: the compiled artifact must agree
+      # with the vectors under the soroban host (rustc/LLVM/wasmi in the loop).
+      - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release
+      - run: cargo test -p perch-conformance --test wasm_leg -- --ignored
 
   # Flux refinement verification of perch-program (nidohq/soroban-flux).
   # Runs under flux's pinned nightly; the deploy/test toolchain stays stable.
-  # continue-on-error during burn-in — flip to required once stable in CI.
+  # Graduated from burn-in: a flux failure now fails CI.
   flux:
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       contents: read
     env:

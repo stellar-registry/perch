@@ -9,6 +9,17 @@ members = [
     "crates/perch-bench",
     "crates/integration-tests",
     "crates/perch-golden",
+    "crates/perch-conformance",
+    "crates/perch-analyze",
+    "crates/perch-ed25519-verifier",
+    "crates/perch-doc-compiler",
+    "crates/perch-smart-account",
+    "crates/perch-account",
+    "crates/perch-deploy",
+    "crates/perch-stateless-registry",
+    "crates/perch-registry-resolve-macro",
+    "crates/perch-registry-resolve",
+    "crates/perch-testkit",
 ]
 
 [workspace.package]
@@ -19,12 +30,13 @@ repository = "https://github.com/stellar-registry/perch"
 
 [workspace.dependencies]
 soroban-sdk = "27.0.2"
+# scerr (sequentially-coded contract errors) + typed storage handles.
+soroban-sdk-tools = "0.1.3"
 # TEMPORARY dogfood pin: theahaco's OZ fork at the CAP-0071 patch
 # (theahaco/stellar-contracts-OZ PR #3, branch cap-71-delegate-auth) —
 # Signer::Delegated authenticates via delegate_account_auth (protocol 27,
 # single AddressWithDelegates auth entry) instead of a separate
-# require_auth_for_args entry per delegate. Fork main == upstream fbfde38,
-# which is itself past OZ PR #816 (the first soroban-sdk-27 main commit).
+# require_auth_for_args entry per delegate. Fork main == upstream fbfde38.
 # Re-pin to upstream OpenZeppelin/stellar-contracts once the patch lands there.
 stellar-accounts = { git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "82002206b1da48167091f33fe2ecfc97ce915857", package = "stellar-accounts" }
 

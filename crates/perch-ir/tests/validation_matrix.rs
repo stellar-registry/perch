@@ -4,8 +4,8 @@
 mod common;
 
 use common::{
-    assert_accepts, assert_rejects, base_doc, rule, signer, ADMIN_KEY_HEX, CI_KEY_HEX,
-    ED25519_VERIFIER, G_ADDR, POLICY_CONTRACT, REGISTRY, WEBAUTHN_VERIFIER,
+    assert_accepts, assert_rejects, base_doc, delegated_signer, rule, signer, ADMIN_KEY_HEX,
+    CI_KEY_HEX, ED25519_VERIFIER, G_ADDR, POLICY_CONTRACT, REGISTRY, WEBAUTHN_VERIFIER,
 };
 use perch_ir::{
     validate, AddressEqPred, ArgConstraint, ArgPred, CapConstraint, Principals, Scope,
@@ -113,7 +113,7 @@ fn accepts_same_key_under_different_verifier() {
 #[test]
 fn rejects_non_hex_signer_key() {
     let mut doc = base_doc();
-    doc.signers[0].key = "zz".into();
+    common::set_key(&mut doc.signers[0], "zz");
     assert_rejects(
         &doc,
         &ValidationError::InvalidSignerKeyHex { id: "admin".into() },
@@ -123,7 +123,7 @@ fn rejects_non_hex_signer_key() {
 #[test]
 fn rejects_odd_length_signer_key_hex() {
     let mut doc = base_doc();
-    doc.signers[0].key = "abc".into();
+    common::set_key(&mut doc.signers[0], "abc");
     assert_rejects(
         &doc,
         &ValidationError::InvalidSignerKeyHex { id: "admin".into() },
@@ -133,7 +133,7 @@ fn rejects_odd_length_signer_key_hex() {
 #[test]
 fn accepts_valid_hex_signer_key() {
     let mut doc = base_doc();
-    doc.signers[0].key = "deadbeef".into();
+    common::set_key(&mut doc.signers[0], "deadbeef");
     assert_accepts(&doc);
 }
 
@@ -142,7 +142,7 @@ fn accepts_valid_hex_signer_key() {
 #[test]
 fn rejects_empty_signer_key() {
     let mut doc = base_doc();
-    doc.signers[0].key = String::new();
+    common::set_key(&mut doc.signers[0], "");
     assert_rejects(
         &doc,
         &ValidationError::SignerKeyLength {
@@ -155,7 +155,7 @@ fn rejects_empty_signer_key() {
 #[test]
 fn rejects_signer_key_over_256_bytes() {
     let mut doc = base_doc();
-    doc.signers[0].key = "ab".repeat(257);
+    common::set_key(&mut doc.signers[0], &"ab".repeat(257));
     assert_rejects(
         &doc,
         &ValidationError::SignerKeyLength {
@@ -168,9 +168,9 @@ fn rejects_signer_key_over_256_bytes() {
 #[test]
 fn accepts_signer_key_boundary_lengths() {
     let mut doc = base_doc();
-    doc.signers[0].key = "ab".into(); // 1 byte
+    common::set_key(&mut doc.signers[0], "ab"); // 1 byte
     assert_accepts(&doc);
-    doc.signers[0].key = "ab".repeat(256); // 256 bytes
+    common::set_key(&mut doc.signers[0], &"ab".repeat(256)); // 256 bytes
     assert_accepts(&doc);
 }
 
@@ -180,7 +180,7 @@ fn accepts_signer_key_boundary_lengths() {
 fn rejects_verifier_that_is_not_a_c_address() {
     let mut doc = base_doc();
     // A G-address is a valid strkey but not a contract address.
-    doc.signers[0].verifier = G_ADDR.into();
+    common::set_verifier(&mut doc.signers[0], G_ADDR);
     assert_rejects(
         &doc,
         &ValidationError::InvalidVerifierAddress {
@@ -200,7 +200,7 @@ fn rejects_verifier_with_bad_length_case_or_charset() {
         "",                                        // empty
     ] {
         let mut doc = base_doc();
-        doc.signers[0].verifier = (*bad).to_string();
+        common::set_verifier(&mut doc.signers[0], bad);
         assert_rejects(
             &doc,
             &ValidationError::InvalidVerifierAddress {
@@ -640,7 +640,7 @@ fn accepts_positive_or_absent_not_after_ledger() {
 fn collects_all_errors_not_just_the_first() {
     let mut doc = base_doc();
     doc.version = 3;
-    doc.signers[0].key = "zz".into();
+    common::set_key(&mut doc.signers[0], "zz");
     doc.signers
         .push(signer("admin", ED25519_VERIFIER, CI_KEY_HEX));
     doc.rules[0].not_after_ledger = Some(0);
@@ -751,6 +751,45 @@ fn rejects_cap_without_token_on_self_admin() {
         &doc,
         &ValidationError::CapWithoutToken {
             rule: "admin-root".into(),
+        },
+    );
+}
+
+// --- delegated signers ---------------------------------------------------------
+
+#[test]
+fn accepts_delegated_signers_with_g_or_c_addresses() {
+    let mut doc = base_doc();
+    doc.signers.push(delegated_signer("dg", G_ADDR));
+    doc.signers.push(delegated_signer("dc", REGISTRY));
+    assert_accepts(&doc);
+}
+
+#[test]
+fn rejects_a_malformed_delegated_address() {
+    let mut doc = base_doc();
+    doc.signers.push(delegated_signer("dg", "not-an-address"));
+    assert_rejects(
+        &doc,
+        &ValidationError::InvalidDelegatedAddress {
+            id: "dg".into(),
+            address: "not-an-address".into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_the_same_delegated_address_under_two_ids() {
+    // The delegated analogue of DuplicateSignerKey: an address IS the key, so
+    // two ids over one address misrepresent the rule's real threshold.
+    let mut doc = base_doc();
+    doc.signers.push(delegated_signer("dg1", G_ADDR));
+    doc.signers.push(delegated_signer("dg2", G_ADDR));
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicateSignerKey {
+            id: "dg2".into(),
+            first_id: "dg1".into(),
         },
     );
 }

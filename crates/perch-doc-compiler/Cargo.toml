@@ -1,0 +1,34 @@
+[package]
+name = "perch-doc-compiler"
+description = "Stateless deployable: PolicyDoc JSON → compiled rules + canonical doc_hash, on-chain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+# "alloc" enables soroban's bump allocator on wasm — compile_doc parses the
+# policy-document JSON on-chain (perch-ir is no_std + alloc).
+soroban-sdk = { workspace = true, features = ["alloc"] }
+soroban-sdk-tools = { workspace = true }
+stellar-accounts = { workspace = true }
+perch-program = { workspace = true }
+# Direct paths (not `workspace = true`) so `default-features = false` is
+# honored — cargo ignores it on workspace-inherited deps. Keeps both no_std.
+perch-ir = { path = "../perch-ir", default-features = false, optional = true }
+perch-compile = { path = "../perch-compile", default-features = false, optional = true }
+
+[features]
+# The deployable contract + its parser/compiler deps. Consumers that only
+# need the wire types and DocCompilerClient (i.e. smart accounts) disable
+# this so their wasm links no compiler code.
+default = ["contract"]
+contract = ["dep:perch-ir", "dep:perch-compile"]

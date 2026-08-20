@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "network": "Test SDF Network ; September 2015",
+  "signers": [
+    { "id": "admin", "verifier": "@VERIFIER@", "key": "@ADMIN_PK@" },
+    { "id": "ci", "address": "@CI_G@" }
+  ],
+  "rules": [
+    {
+      "name": "admin-root",
+      "scope": { "type": "self-admin" },
+      "principals": { "type": "all", "signers": ["admin"] }
+    },
+    {
+      "name": "ci-publish",
+      "scope": { "type": "contract", "address": "@PERCH_SUB@" },
+      "principals": { "type": "all", "signers": ["ci"] },
+      "functions": ["publish", "publish_hash"],
+      "args": [{ "index": 1, "pred": { "type": "is-self" } }],
+      "not-after-ledger": @CI_EXPIRY_LEDGER@
+    },
+    {
+      "name": "admin-registry",
+      "scope": { "type": "contract", "address": "@PERCH_SUB@" },
+      "principals": { "type": "all", "signers": ["admin"] }
+    }
+  ]
+}

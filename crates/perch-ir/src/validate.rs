@@ -18,7 +18,7 @@
 //! ([`ValidationError::DuplicatePrincipalSigner`]), and repeated values in a
 //! `string-in` predicate ([`ValidationError::DuplicateStringInValue`]).
 
-use crate::doc::{ArgPred, PolicyDoc, Principals, Rule, Scope};
+use crate::doc::{ArgPred, PolicyDoc, Principals, Rule, Scope, SignerMethod};
 use alloc::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -83,6 +83,14 @@ pub enum ValidationError {
     /// A signer's `verifier` is not shaped like a C-address strkey
     /// (checksum not verified — see module docs).
     InvalidVerifierAddress {
+        /// The offending signer id.
+        id: String,
+        /// The malformed address string.
+        address: String,
+    },
+    /// A delegated signer's `address` is not shaped like a G- or C-address
+    /// strkey (checksum not verified — see module docs).
+    InvalidDelegatedAddress {
         /// The offending signer id.
         id: String,
         /// The malformed address string.
@@ -270,6 +278,10 @@ impl fmt::Display for ValidationError {
                 f,
                 "signer `{id}`: verifier `{address}` is not a C-address strkey"
             ),
+            E::InvalidDelegatedAddress { id, address } => write!(
+                f,
+                "signer `{id}`: delegated address `{address}` is not a G- or C-address strkey"
+            ),
             E::EmptyRuleName { position } => {
                 write!(f, "rule at position {position}: name is empty")
             }
@@ -399,6 +411,8 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
     // Keyed on (verifier, decoded key bytes) so the same physical key under
     // two ids is caught regardless of hex case; maps to the first id seen.
     let mut seen_key_material: BTreeMap<(&str, Vec<u8>), &str> = BTreeMap::new();
+    // Delegated identity is the address itself; maps to the first id seen.
+    let mut seen_delegated: BTreeMap<&str, &str> = BTreeMap::new();
     for (position, signer) in doc.signers.iter().enumerate() {
         if signer.id.is_empty() {
             errors.push(ValidationError::EmptySignerId { position });
@@ -407,18 +421,49 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
                 id: signer.id.clone(),
             });
         }
-        match hex::decode(&signer.key) {
-            Err(_) => errors.push(ValidationError::InvalidSignerKeyHex {
-                id: signer.id.clone(),
-            }),
-            Ok(decoded) => {
-                if decoded.is_empty() || decoded.len() > MAX_SIGNER_KEY_LEN {
-                    errors.push(ValidationError::SignerKeyLength {
+        match &signer.method {
+            SignerMethod::External { verifier, key } => {
+                match hex::decode(key) {
+                    Err(_) => errors.push(ValidationError::InvalidSignerKeyHex {
                         id: signer.id.clone(),
-                        len: decoded.len(),
+                    }),
+                    Ok(decoded) => {
+                        if decoded.is_empty() || decoded.len() > MAX_SIGNER_KEY_LEN {
+                            errors.push(ValidationError::SignerKeyLength {
+                                id: signer.id.clone(),
+                                len: decoded.len(),
+                            });
+                        }
+                        match seen_key_material.entry((verifier, decoded)) {
+                            Entry::Occupied(first) => {
+                                errors.push(ValidationError::DuplicateSignerKey {
+                                    id: signer.id.clone(),
+                                    first_id: (*first.get()).to_string(),
+                                });
+                            }
+                            Entry::Vacant(slot) => {
+                                slot.insert(&signer.id);
+                            }
+                        }
+                    }
+                }
+                if !is_contract_address_shape(verifier) {
+                    errors.push(ValidationError::InvalidVerifierAddress {
+                        id: signer.id.clone(),
+                        address: verifier.clone(),
                     });
                 }
-                match seen_key_material.entry((&signer.verifier, decoded)) {
+            }
+            SignerMethod::Delegated { address } => {
+                if !is_address_shape(address) {
+                    errors.push(ValidationError::InvalidDelegatedAddress {
+                        id: signer.id.clone(),
+                        address: address.clone(),
+                    });
+                }
+                // Same physical identity under two ids — the delegated
+                // analogue of DuplicateSignerKey (an address IS the key).
+                match seen_delegated.entry(address) {
                     Entry::Occupied(first) => {
                         errors.push(ValidationError::DuplicateSignerKey {
                             id: signer.id.clone(),
@@ -430,12 +475,6 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
                     }
                 }
             }
-        }
-        if !is_contract_address_shape(&signer.verifier) {
-            errors.push(ValidationError::InvalidVerifierAddress {
-                id: signer.id.clone(),
-                address: signer.verifier.clone(),
-            });
         }
     }
 

@@ -5,55 +5,23 @@
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_compile::{compile, CompileConfig};
+use perch_ed25519_verifier::PerchEd25519Verifier;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
-use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
-    contract, contractimpl, crypto::Hash, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map,
-    String as SString, Symbol, Val, Vec as SVec,
+    contract, crypto::Hash, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString,
+    Symbol, Val,
 };
-use std::fs;
-use std::path::PathBuf;
 use stellar_accounts::smart_account::{
     add_context_rule, do_check_auth, remove_context_rule, AuthPayload, ContextRuleType, Signer,
 };
-use stellar_accounts::verifiers::{ed25519, Verifier};
 
-const REGISTRY: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL";
+use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY as REGISTRY};
 
-// --- the account under test (bare) and a real ed25519 verifier contract -----
+// --- the account under test (bare); the verifier is the real deployable -----
 
 #[contract]
 struct Account;
-
-#[contract]
-struct Ed25519Verifier;
-
-#[contractimpl]
-impl Verifier for Ed25519Verifier {
-    type KeyData = BytesN<32>;
-    type SigData = BytesN<64>;
-
-    fn verify(e: &Env, hash: Bytes, key_data: BytesN<32>, sig_data: BytesN<64>) -> bool {
-        ed25519::verify(e, &hash, &key_data, &sig_data)
-    }
-
-    fn canonicalize_key(e: &Env, key_data: BytesN<32>) -> Bytes {
-        ed25519::canonicalize_key(e, &key_data)
-    }
-
-    fn batch_canonicalize_key(
-        e: &Env,
-        key_data: soroban_sdk::Vec<BytesN<32>>,
-    ) -> soroban_sdk::Vec<Bytes> {
-        ed25519::batch_canonicalize_key(e, &key_data)
-    }
-}
-
-fn fixture() -> String {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/ci-publish.json");
-    fs::read_to_string(p).expect("read ci-publish.json")
-}
 
 struct World {
     env: Env,
@@ -73,7 +41,7 @@ fn setup(valid_until: Option<u32>) -> World {
     env.mock_all_auths();
 
     let account = env.register(Account, ());
-    let verifier = env.register(Ed25519Verifier, ());
+    let verifier = env.register(PerchEd25519Verifier, ());
     let interpreter = env.register(perch_interpreter::PerchInterpreter, ());
 
     // A deterministic ed25519 signer — the "ci" key.
@@ -118,18 +86,10 @@ fn setup(valid_until: Option<u32>) -> World {
     }
 }
 
-/// The digest `do_check_auth` binds and the verifier checks:
-/// `sha256(payload || rule_ids.to_xdr())`.
-fn auth_digest(env: &Env, payload: &Hash<32>, ids: &SVec<u32>) -> [u8; 32] {
-    let mut preimage = payload.to_bytes().to_bytes();
-    preimage.append(&ids.clone().to_xdr(env));
-    env.crypto().sha256(&preimage).to_array()
-}
-
 /// A signed auth payload from the ci key for `rule_id`.
 fn signed_payload(w: &World, payload: &Hash<32>) -> AuthPayload {
     let ids = vec![&w.env, w.rule_id];
-    let digest = auth_digest(&w.env, payload, &ids);
+    let digest = auth_digest(&w.env, &payload.to_bytes(), &ids);
     let sig = w.signing_key.sign(&digest).to_bytes();
     let sig_bytes = Bytes::from_array(&w.env, &sig);
     let signer = Signer::External(w.verifier.clone(), w.pubkey.clone().into());

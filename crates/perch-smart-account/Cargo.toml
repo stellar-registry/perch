@@ -1,0 +1,19 @@
+[package]
+name = "perch-smart-account"
+description = "The doc-only smart-account trait: apply_doc is the sole write path, on OZ evaluation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+soroban-sdk-tools = { workspace = true }
+stellar-accounts = { workspace = true }
+# Client + wire types only — `contract` off, so no compiler code (parser,
+# lowering) is ever linked into account wasm.
+perch-doc-compiler = { path = "../perch-doc-compiler", default-features = false }

@@ -1,0 +1,22 @@
+[package]
+name = "perch-testkit"
+description = "One-call bootstrap of the perch registry + stateless infra + account for tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+# Always-on testutils: this crate exists only to stand up unit-`Env` test
+# worlds, and it is consumed exclusively as a dev-dependency (never shipped).
+soroban-sdk = { workspace = true, features = ["testutils"] }
+stellar-accounts = { workspace = true }
+perch-account = { path = "../perch-account" }
+perch-doc-compiler = { path = "../perch-doc-compiler" }
+perch-interpreter = { path = "../perch-interpreter" }
+perch-ed25519-verifier = { path = "../perch-ed25519-verifier" }
+hex = "0.4"

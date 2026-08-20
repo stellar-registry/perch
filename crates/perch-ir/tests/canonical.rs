@@ -79,7 +79,7 @@ fn golden_hash_is_pinned() {
 #[test]
 fn canonical_form_of_minimal_doc_is_pinned_byte_for_byte() {
     let mut doc = base_doc();
-    doc.signers[0].key = "ab".into();
+    common::set_key(&mut doc.signers[0], "ab");
     let expected = format!(
         r#"{{"rules":[{{"name":"admin-root","principals":{{"signers":["admin"],"type":"all"}},"scope":{{"type":"self-admin"}}}}],"signers":[{{"id":"admin","key":"ab","verifier":"{WEBAUTHN_VERIFIER}"}}],"version":1}}"#
     );

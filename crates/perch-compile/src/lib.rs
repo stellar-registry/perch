@@ -59,11 +59,14 @@ pub enum ScopeSpec {
     SelfAdmin,
 }
 
-/// A signer on a lowered rule. perch-ir only declares external signers.
+/// A signer on a lowered rule, mirroring the doc's [`perch_ir::SignerMethod`].
+/// The applier maps these onto OZ `Signer::External` / `Signer::Delegated`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SignerSpec {
-    pub verifier: String,
-    pub key_hex: String,
+pub enum SignerSpec {
+    /// Raw key checked by a verifier contract.
+    External { verifier: String, key_hex: String },
+    /// Address authenticated by the host via CAP-0071 delegation.
+    Delegated { address: String },
 }
 
 /// A cumulative spend cap lowered from a rule's `cap`. The applier attaches OZ's
@@ -180,9 +183,14 @@ fn lower_rule(
                 id: id.clone(),
             }
         })?;
-        signers.push(SignerSpec {
-            verifier: decl.verifier.clone(),
-            key_hex: decl.key.clone(),
+        signers.push(match &decl.method {
+            perch_ir::SignerMethod::External { verifier, key } => SignerSpec::External {
+                verifier: verifier.clone(),
+                key_hex: key.clone(),
+            },
+            perch_ir::SignerMethod::Delegated { address } => SignerSpec::Delegated {
+                address: address.clone(),
+            },
         });
     }
 

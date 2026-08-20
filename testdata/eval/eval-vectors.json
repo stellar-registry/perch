@@ -1,0 +1,2244 @@
+{
+  "format": 1,
+  "cases": [
+    {
+      "name": "min-signers-met",
+      "pins": "MinSigners is >= on the authenticated-signer count",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":1}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "min-signers-unmet",
+      "pins": "one signer does not meet a floor of two",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "min-signers-zero-floor",
+      "pins": "MinSigners(0) is vacuously true even with zero signers",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 0,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "min-signers-non-contract",
+      "pins": "MinSigners is context-independent: definite under a non-contract context",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":1}
+      ] },
+      "invocation": {
+        "context": "non-contract",
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "fn-in-hit",
+      "pins": "invoked function inside the allowlist",
+      "program": { "version": 1, "ops": [
+        {"op":"fn-in","fns":["publish","other"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "fn-in-miss",
+      "pins": "invoked function outside the allowlist",
+      "program": { "version": 1, "ops": [
+        {"op":"fn-in","fns":["other"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "fn-in-empty-is-false",
+      "pins": "an empty allowlist is vacuously False (definite), not Unknown",
+      "program": { "version": 1, "ops": [
+        {"op":"fn-in","fns":[]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "fn-in-non-contract",
+      "pins": "context leaf fails closed to Unknown outside a contract call",
+      "program": { "version": 1, "ops": [
+        {"op":"fn-in","fns":["publish"]}
+      ] },
+      "invocation": {
+        "context": "non-contract",
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-addr-eq-hit",
+      "pins": "address equality on a matching argument",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-addr-eq","i":1,"address":"self"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-addr-eq-miss",
+      "pins": "address equality on a differing argument",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-addr-eq","i":1,"address":"alice"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-addr-eq-wrong-type",
+      "pins": "decode failure (u32 argument read as address) is Unknown, never False",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-addr-eq","i":0,"address":"alice"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-addr-eq-missing-index",
+      "pins": "missing argument index is a decode failure",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-addr-eq","i":9,"address":"alice"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-addr-is-self-hit",
+      "pins": "argument is the protected account",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-addr-is-self","i":1}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-addr-is-self-miss",
+      "pins": "argument is some other address",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-addr-is-self","i":1}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"alice"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-sym-eq-hit",
+      "pins": "symbol equality hit",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-sym-eq","i":2,"symbol":"kind"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-sym-eq-miss",
+      "pins": "symbol equality miss",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-sym-eq","i":2,"symbol":"other"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-sym-eq-wrong-type",
+      "pins": "string argument read as symbol is a decode failure",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-sym-eq","i":3,"symbol":"hello"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-str-in-hit",
+      "pins": "string set membership hit",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-in","i":3,"values":["hello","x"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-str-in-miss",
+      "pins": "string set membership miss",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-in","i":3,"values":["x"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-str-in-overlong-arg",
+      "pins": "argument longer than MAX_STR_ARG_LEN fails closed even if the set matches textually",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-in","i":3,"values":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-str-in-overlong-candidate-skipped",
+      "pins": "an over-long *candidate* is skipped, not fatal — a later match still hits",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-in","i":3,"values":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","hello"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-str-in-only-overlong-candidates",
+      "pins": "a set of only over-long candidates simply never matches: definite False",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-in","i":3,"values":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-str-in-256-boundary",
+      "pins": "exactly MAX_STR_ARG_LEN (256) bytes is still comparable",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-in","i":3,"values":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-str-prefix-hit",
+      "pins": "prefix hit",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-prefix","i":3,"prefix":"he"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-str-prefix-exact-equal",
+      "pins": "a prefix equal to the whole argument matches (pn == sn)",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-prefix","i":3,"prefix":"hello"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-str-prefix-longer-than-arg",
+      "pins": "a prefix longer than the argument is a definite miss, not Unknown",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-prefix","i":3,"prefix":"hello!"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-str-prefix-miss",
+      "pins": "prefix miss",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-prefix","i":3,"prefix":"x"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-str-prefix-empty-prefix",
+      "pins": "the empty prefix matches any decodable string argument",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-prefix","i":3,"prefix":""}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-str-prefix-overlong-arg",
+      "pins": "over-long argument fails closed under prefix too",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-prefix","i":3,"prefix":"a"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-str-prefix-overlong-prefix",
+      "pins": "an over-long *prefix* constant also fails closed (both sides are bounded)",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-str-prefix","i":3,"prefix":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-bytes-eq-hit",
+      "pins": "bytes equality hit",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-bytes-eq","i":4,"hex":"0102"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-bytes-eq-miss",
+      "pins": "bytes equality miss",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-bytes-eq","i":4,"hex":"0909"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-bytes-eq-wrong-type",
+      "pins": "u32 argument read as bytes is a decode failure",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-bytes-eq","i":0,"hex":"0102"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-i128-eq-hit",
+      "pins": "i128 equality hit (negative value)",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-i128-eq","i":5,"value":"-42"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-i128-eq-miss",
+      "pins": "i128 equality miss",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-i128-eq","i":5,"value":"42"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-i128-eq-wrong-type",
+      "pins": "u32 argument is NOT implicitly widened to i128 — strict decode, Unknown",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-i128-eq","i":0,"value":"7"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-u32-eq-hit",
+      "pins": "u32 equality hit",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":0,"value":7}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-u32-eq-miss",
+      "pins": "u32 equality miss",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":0,"value":8}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-u32-eq-wrong-type",
+      "pins": "i128 argument read as u32 is a decode failure",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":5,"value":7}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-u32-eq-void-arg",
+      "pins": "an undecodable (void) argument is a decode failure",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":6,"value":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "arg-count-exact",
+      "pins": "ArgCount is exact equality on the argument count",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-count","n":7}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "arg-count-miss",
+      "pins": "ArgCount misses on any other count",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-count","n":3}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "arg-count-non-contract",
+      "pins": "ArgCount inspects the context: Unknown outside a contract call",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-count","n":0}
+      ] },
+      "invocation": {
+        "context": "non-contract",
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "ledger-before-true",
+      "pins": "strictly-below window is open below the bound",
+      "program": { "version": 1, "ops": [
+        {"op":"ledger-before","n":101}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "ledger-before-boundary-false",
+      "pins": "LedgerBefore is strict: closed exactly at the bound",
+      "program": { "version": 1, "ops": [
+        {"op":"ledger-before","n":100}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "ledger-at-or-after-boundary-true",
+      "pins": "LedgerAtOrAfter is inclusive at the bound",
+      "program": { "version": 1, "ops": [
+        {"op":"ledger-at-or-after","n":100}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "ledger-at-or-after-false",
+      "pins": "LedgerAtOrAfter below the bound is False",
+      "program": { "version": 1, "ops": [
+        {"op":"ledger-at-or-after","n":101}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "ledger-non-contract",
+      "pins": "ledger leaves read the env, not the context: definite under non-contract",
+      "program": { "version": 1, "ops": [
+        {"op":"ledger-before","n":101}
+      ] },
+      "invocation": {
+        "context": "non-contract",
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "all-true",
+      "pins": "All folds True over definite-true leaves",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"fn-in","fns":["publish"]},
+        {"op":"all","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "all-false-wins",
+      "pins": "All with one False is False",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":2},
+        {"op":"fn-in","fns":["publish"]},
+        {"op":"all","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "all-unknown-poisons-true",
+      "pins": "All(Unknown, True) is Unknown — a decode failure can never help authorize",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":6,"value":0},
+        {"op":"min-signers","n":0},
+        {"op":"all","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "all-false-beats-unknown",
+      "pins": "All(Unknown, False) is False — min under False < Unknown < True",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":6,"value":0},
+        {"op":"min-signers","n":2},
+        {"op":"all","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "any-true-beats-unknown",
+      "pins": "Any(Unknown, True) is True — max under the same order",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":6,"value":0},
+        {"op":"min-signers","n":0},
+        {"op":"any","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "any-all-false",
+      "pins": "Any over definite-false leaves is False",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":2},
+        {"op":"fn-in","fns":["other"]},
+        {"op":"any","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "any-unknown-beats-false",
+      "pins": "Any(Unknown, False) is Unknown — an undecodable branch cannot be assumed False",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":6,"value":0},
+        {"op":"min-signers","n":2},
+        {"op":"any","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "not-true",
+      "pins": "Not(True) is False",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"not"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "not-false",
+      "pins": "Not(False) is True",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":2},
+        {"op":"not"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "not-unknown-stays-unknown",
+      "pins": "THE fail-open trap: a decode failure under Not must deny, not satisfy the guardrail",
+      "program": { "version": 1, "ops": [
+        {"op":"arg-u32-eq","i":6,"value":0},
+        {"op":"not"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "unknown"
+    },
+    {
+      "name": "double-not",
+      "pins": "Not is an involution on definite verdicts",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"not"},
+        {"op":"not"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "ci-publish-shape-allows",
+      "pins": "the motivating program: MinSigners + FnIn + ArgAddrIsSelf under All",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":1},
+        {"op":"fn-in","fns":["publish","publish_hash"]},
+        {"op":"arg-addr-is-self","i":1},
+        {"op":"all","n":3}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "ci-publish-shape-denies-zero-signers",
+      "pins": "the same program fails closed with zero authenticated signers (INV-1)",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":1},
+        {"op":"fn-in","fns":["publish","publish_hash"]},
+        {"op":"arg-addr-is-self","i":1},
+        {"op":"all","n":3}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 0,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "false"
+    },
+    {
+      "name": "empty-program",
+      "pins": "no ops: rejected at install; eval yields no root verdict",
+      "program": { "version": 1, "ops": [
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "empty",
+      "verdict": "unknown"
+    },
+    {
+      "name": "underflow-not",
+      "pins": "Not with an empty stack underflows",
+      "program": { "version": 1, "ops": [
+        {"op":"not"}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "stack-underflow",
+      "verdict": "unknown"
+    },
+    {
+      "name": "underflow-all",
+      "pins": "All(2) over a single pushed verdict underflows",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"all","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "stack-underflow",
+      "verdict": "unknown"
+    },
+    {
+      "name": "zero-arity-all",
+      "pins": "All(0) has no identity element on purpose — rejected, and eval fails closed",
+      "program": { "version": 1, "ops": [
+        {"op":"all","n":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "arity-mismatch",
+      "verdict": "unknown"
+    },
+    {
+      "name": "zero-arity-any",
+      "pins": "Any(0) likewise",
+      "program": { "version": 1, "ops": [
+        {"op":"any","n":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "arity-mismatch",
+      "verdict": "unknown"
+    },
+    {
+      "name": "multi-result",
+      "pins": "two verdicts left on the stack is not a program",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "not-single-result",
+      "verdict": "unknown"
+    },
+    {
+      "name": "partial-consume-multi-result",
+      "pins": "a fold that consumes only part of the stack still ends multi-result",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"any","n":2}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "not-single-result",
+      "verdict": "unknown"
+    },
+    {
+      "name": "wrong-version-eval-is-version-blind",
+      "pins": "validate rejects version 2; eval itself never reads the version field",
+      "program": { "version": 2, "ops": [
+        {"op":"min-signers","n":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "unknown-version",
+      "verdict": "true"
+    },
+    {
+      "name": "depth-at-cap-ok",
+      "pins": "a simulated depth of exactly MAX_STACK_DEPTH validates and evaluates",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"all","n":128}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": true,
+      "verdict": "true"
+    },
+    {
+      "name": "depth-overflow",
+      "pins": "MAX_STACK_DEPTH + 1 unfolded leaves overflow the verdict stack",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "stack-overflow",
+      "verdict": "unknown"
+    },
+    {
+      "name": "program-too-large",
+      "pins": "MAX_PROGRAM_LEN + 1 ops are rejected at install",
+      "program": { "version": 1, "ops": [
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0},
+        {"op":"min-signers","n":0}
+      ] },
+      "invocation": {
+        "context": "contract",
+        "fn": "publish",
+        "args": [
+          {"type":"u32","value":7},
+          {"type":"address","value":"self"},
+          {"type":"symbol","value":"kind"},
+          {"type":"string","value":"hello"},
+          {"type":"bytes","hex":"0102"},
+          {"type":"i128","value":"-42"},
+          {"type":"void"}
+        ],
+        "signer_count": 1,
+        "ledger": 100
+      },
+      "valid": false,
+      "error": "too-large",
+      "verdict": "unknown"
+    }
+  ]
+}

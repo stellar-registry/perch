@@ -1,0 +1,26 @@
+# Releases are ON-CHAIN wasm publishes, not crates.io: release-plz only does
+# version bump + changelog + per-crate git tags; the perch-interpreter tag
+# triggers .github/workflows/publish.yml, which publishes to the registry with
+# the scoped delegated CI key.
+
+[workspace]
+# Never `cargo publish` — the workspace pins a git rev of stellar-accounts,
+# which crates.io would reject anyway.
+publish = false
+# No crates.io consumers -> cargo-semver-checks is noise.
+semver_check = false
+changelog_update = true
+dependencies_update = false
+# Tags are the release markers (publish = false makes release-plz detect
+# released versions from tags; release.yml checks out with fetch-depth: 0).
+git_tag_enable = true
+git_tag_name = "{{ package }}-v{{ version }}"
+# No GitHub Release per crate by default (avoids one release per member)...
+git_release_enable = false
+
+# ...except the deployable contract, which drives the on-chain publish. The
+# publish workflow attaches the built wasm + on-chain receipt to this release.
+[[package]]
+name = "perch-interpreter"
+git_release_enable = true
+git_release_name = "perch-interpreter v{{ version }}"

@@ -32,6 +32,7 @@ export {
 } from './request.js';
 export {
   policy,
+  delegated,
   external,
   isSelf,
   addressEq,

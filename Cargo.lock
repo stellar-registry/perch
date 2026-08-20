@@ -1502,6 +1502,7 @@ dependencies = [
  "perch-interpreter",
  "perch-ir",
  "perch-program",
+ "perch-registry-resolve",
  "perch-testkit",
  "soroban-sdk",
  "stellar-accounts",

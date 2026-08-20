@@ -44,6 +44,12 @@ drt: formal
       ../testdata/ci-publish.canonical.json \
       ../testdata/ci-publish-delegated.canonical.json
 
+# Per-policy SMT prover (needs z3, e.g. `brew install z3`): dead rules,
+# intent conformance, semantic attenuation. Example:
+#   just analyze only-calls testdata/ci-publish.json C... publish publish_hash
+analyze *ARGS:
+    cargo run -q -p perch-analyze -- {{ARGS}}
+
 # Wasm leg of the conformance vectors: replay every case through the COMPILED
 # wasm32 artifact under the soroban test host — rustc, LLVM, and the wasm
 # interpreter join the parity boundary.

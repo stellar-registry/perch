@@ -141,11 +141,13 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
       against WasmRef-Isabelle (the Wasmtime oracle setup)
 
 ### Phase 4 — per-policy prover (product feature)
-- [ ] `perch-analyze`: symbolic compiler PolicyDoc → SMT-LIB (quantifier-free, decidable),
-      answering: intent conformance ("can never call X with arg N ≠ …"), subsumption
-      ("rotation only narrows" — re-founding `attenuation::is_narrowing`), dead rules
-      (re-founding `analysis::can_ever_authorize` with counterexamples), doc ↔ on-chain
-      encoding equivalence (translation validation per install, seeded from
+- [x] `perch-analyze`: PolicyDoc → SMT-LIB (quantifier-free), discharged by z3 —
+      `dead-rules` (unsat = proof of deadness, sharper than `analysis::can_ever_authorize`:
+      it sees argument predicates), `only-calls` (intent conformance with witnesses — CI
+      proves the shipped ci-publish fixture can only ever authorize publish/publish_hash),
+      `can-call`, and `narrows` (semantic attenuation: catches arg-level widening invisible
+      to `attenuation::is_narrowing`, plus expiry/cap loosening structurally)
+- [ ] doc ↔ on-chain encoding equivalence (translation validation per install, seeded from
       `activation::verify_plan_matches_doc`)
 - [ ] Prove the SMT encoding sound + complete in Lean (the cedar-policy-symcc / SymCert pattern)
 

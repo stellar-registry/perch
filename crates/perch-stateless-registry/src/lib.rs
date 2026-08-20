@@ -33,31 +33,33 @@
 //! It composes the importable registry contracttraits from
 //! [`registry-traits`](https://github.com/stellar-registry/contracts) (PR #33):
 //! [`Publishable`], [`Manageable`], and the content-addressed
-//! [`StatelessDeployable`].
+//! [`StatelessDeployable`]; plus [`Administratable`] and [`Upgradable`] from
+//! [`admin-sep`](https://github.com/theahaco/admin-sep) (`v0.27.0`).
 //!
-//! ## registry-traits gap worked around here (follow-up)
+//! ## Admin: a single `ADMIN` key shared with registry-traits
 //!
-//! The canonical `registry` contract also composes `Administratable` and
-//! `Upgradable`, but those live in **`admin-sep`**, which caps at
-//! `soroban-sdk ^25` and therefore cannot be depended on from this sdk-27
-//! workspace. `registry-traits` deliberately excludes `admin-sep` and ships
-//! only the [`registry_traits::admin`] free-function key convention (admin at
-//! the `ADMIN` instance key, byte-identical to admin-sep's). So there is **no
-//! importable `Administratable`/`Upgradable` contracttrait** to compose. The
-//! `admin` / `set_admin` / `upgrade` entry points below are therefore provided
-//! as thin local glue over that convention + `env.deployer()`. Everything else
-//! — including the `manager`/`root` wiring the constructor needs — is a public
-//! seam on `registry_traits::storage::Storage`, so no other glue was required.
+//! The canonical `registry` contract composes `Administratable` and
+//! `Upgradable` from **`admin-sep`**. That crate now ships on soroban-sdk 27
+//! (`v0.27.0`), so this sdk-27 workspace composes the same real
+//! `#[contracttrait]`s for its public `admin` / `set_admin` / `upgrade` entry
+//! points — no local glue.
 //!
-//! Follow-up: once an sdk-27-compatible `Administratable`/`Upgradable`
-//! contracttrait exists upstream (either in `registry-traits` or an
-//! sdk-version-flexible admin crate), replace the local glue with composed
-//! `#[contractimpl(contracttrait)]` blocks.
+//! This interoperates with `registry-traits`' internal auth because both sides
+//! keep the admin at the **same** instance-storage key,
+//! `symbol_short!("ADMIN")`: admin-sep at [`admin_sep::STORAGE_KEY`] and
+//! registry-traits at [`registry_traits::admin::ADMIN_KEY`] (whose own docs
+//! call it "byte-identical to admin-sep's"). The constructor sets that one key
+//! via admin-sep's `Administratable::set_admin`; the `manager`-gated
+//! `Publishable`/`Manageable`/`StatelessDeployable` trait bodies read it back
+//! through registry-traits' `require_admin`. The `manager`/`root` wiring is a
+//! public seam on `registry_traits::storage::Storage`.
 //!
 //! [`Publishable`]: registry_traits::registry::wasm::Publishable
 //! [`Manageable`]: registry_traits::registry::contract::Manageable
 //! [`StatelessDeployable`]: registry_traits::registry::contract::StatelessDeployable
 //! [`Deployable::deploy`]: registry_traits::registry::contract::Deployable::deploy
+//! [`Administratable`]: admin_sep::Administratable
+//! [`Upgradable`]: admin_sep::Upgradable
 //
 // `no_std` only for the on-chain (`contract`) build — soroban's contract macros
 // supply the wasm panic handler. With `--no-default-features` the crate is an
@@ -66,8 +68,9 @@
 #![cfg_attr(feature = "contract", no_std)]
 
 // The composed, deployable contract. Everything that touches `registry-traits`
-// lives here so `--no-default-features` yields a clean, empty library and the
-// rest of the workspace keeps building without the git dependency.
+// / `admin-sep` lives here so `--no-default-features` yields a clean, empty
+// library and the rest of the workspace keeps building without the git
+// dependency.
 #[cfg(feature = "contract")]
 mod contract {
     // Same-name imports: soroban's `#[contractimpl(contracttrait)]` derives the
@@ -78,16 +81,26 @@ mod contract {
     use registry_traits::registry::wasm::Publishable;
     use registry_traits::Error;
 
-    // Public seams: manager + root wiring for the constructor, and the admin
-    // key convention that stands in for the (unavailable, sdk-25-capped)
-    // `admin-sep::Administratable`/`Upgradable` — see the crate-level docs.
-    use registry_traits::admin as registry_admin;
+    // Public seam: manager + root wiring for the constructor. Admin auth is
+    // owned by admin-sep's `Administratable` below; it and registry-traits'
+    // internal `require_admin` share the one `symbol_short!("ADMIN")` key.
     use registry_traits::storage::Storage;
 
-    use soroban_sdk::{contract, contractimpl, Address, BytesN, Env};
+    // The real admin/upgrade contracttraits, composed exactly as the canonical
+    // `registry` contract does. `AdministratableExtension` supplies the
+    // `require_admin` used by the manager setters.
+    use admin_sep::{Administratable, AdministratableExtension, Upgradable};
+
+    use soroban_sdk::{contract, contractimpl, Address, Env};
 
     #[contract]
     pub struct StatelessRegistry;
+
+    #[contractimpl(contracttrait)]
+    impl Administratable for StatelessRegistry {}
+
+    #[contractimpl(contracttrait)]
+    impl Upgradable for StatelessRegistry {}
 
     #[contractimpl(contracttrait)]
     impl Publishable for StatelessRegistry {}
@@ -119,32 +132,13 @@ mod contract {
         ///
         /// Modeled on the `root = Some(_)` (subregistry) branch of
         /// `registry::Contract::__constructor`. `manager`/`root` are set via the
-        /// public `Storage` seam; `admin` via the `registry_traits::admin`
-        /// key convention.
+        /// public `Storage` seam; `admin` via admin-sep's
+        /// `Administratable::set_admin` (which, at construction time, has no
+        /// prior admin to auth against and simply writes the `ADMIN` key).
         pub fn __constructor(env: &Env, admin: Address, manager: Address, root: Address) {
-            registry_admin::set_admin_no_auth(env, &admin);
+            Self::set_admin(env, admin);
             Storage::set_manager_no_auth(env, &manager);
             Storage::set_root_registry(env, &root);
-        }
-
-        /// The admin account (registry-traits key convention). Local stand-in
-        /// for `admin-sep::Administratable::admin` — see crate docs.
-        pub fn admin(env: &Env) -> Address {
-            registry_admin::admin(env).unwrap()
-        }
-
-        /// Rotate the admin. Requires the current admin's auth. Local stand-in
-        /// for `admin-sep::AdministratableExtension::set_admin`.
-        pub fn set_admin(env: &Env, new_admin: Address) {
-            registry_admin::require_admin(env);
-            registry_admin::set_admin_no_auth(env, &new_admin);
-        }
-
-        /// Upgrade this registry's own wasm. Requires admin auth. Local stand-in
-        /// for `admin-sep::Upgradable::upgrade`.
-        pub fn upgrade(env: &Env, new_wasm_hash: BytesN<32>) {
-            registry_admin::require_admin(env);
-            env.deployer().update_current_contract_wasm(new_wasm_hash);
         }
 
         /// The manager account which gates initial publishes / stateless deploys.
@@ -154,13 +148,13 @@ mod contract {
 
         /// Admin can set a new manager.
         pub fn set_manager(env: &Env, new_manager: Address) {
-            registry_admin::require_admin(env);
+            Self::require_admin(env);
             Storage::set_manager_no_auth(env, &new_manager);
         }
 
         /// Admin can remove the manager.
         pub fn remove_manager(env: &Env) {
-            registry_admin::require_admin(env);
+            Self::require_admin(env);
             Storage::remove_manager_no_auth(env);
         }
     }
@@ -171,8 +165,9 @@ pub use contract::{StatelessRegistry, StatelessRegistryClient};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests. The first is fully self-contained and green: it validates that the
-// registry-traits composition + local admin/manager glue wire up correctly (and
-// that soroban-sdk unifies to a single version across perch + registry-traits).
+// registry-traits + admin-sep composition wires up correctly (and that
+// soroban-sdk unifies to a single version across perch + registry-traits +
+// admin-sep).
 //
 // The second encodes the issue-#39 acceptance criterion end to end (publish →
 // content-addressed `deploy_stateless` → assert derived address → assert

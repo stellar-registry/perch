@@ -9,6 +9,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "admin-sep"
+version = "0.27.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b45f70e98918c7ecfcda164bc45811cfc282be96f38e57e1198f401d9466eb7a"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1517,6 +1526,7 @@ dependencies = [
 name = "perch-stateless-registry"
 version = "0.1.0"
 dependencies = [
+ "admin-sep",
  "registry-traits",
  "soroban-sdk",
 ]

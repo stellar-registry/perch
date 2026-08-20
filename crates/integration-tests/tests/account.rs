@@ -20,10 +20,7 @@ use stellar_accounts::smart_account::{
     add_context_rule, AuthPayload, ContextRuleType, Signer, SmartAccountError,
 };
 
-mod common;
-use common::{auth_digest, fixture};
-
-const REGISTRY: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL";
+use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY};
 
 struct World {
     env: Env,
@@ -70,7 +67,7 @@ fn setup() -> World {
         .clone()
         .expect("ci-publish attaches interpreter");
 
-    let registry = Address::from_str(&env, REGISTRY);
+    let registry = Address::from_str(&env, FIXTURE_REGISTRY);
     let ci_signer = Signer::External(verifier.clone(), ci_pub.clone().into());
     let policies: Map<Address, Val> = map![&env, (interpreter.clone(), install.into_val(&env))];
 

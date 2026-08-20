@@ -30,8 +30,7 @@ use stellar_accounts::smart_account::{
     add_context_rule, AuthPayload, ContextRuleType, Signer, SmartAccountError,
 };
 
-mod common;
-use common::fixture;
+use perch_testkit::fixture;
 
 // Stand-in for the CI key: a custom account approving everything it is asked
 // to co-sign. On-network this is a plain G-account whose classic signature the

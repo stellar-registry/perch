@@ -16,10 +16,7 @@ use stellar_accounts::smart_account::{
     add_context_rule, do_check_auth, remove_context_rule, AuthPayload, ContextRuleType, Signer,
 };
 
-mod common;
-use common::{auth_digest, fixture};
-
-const REGISTRY: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL";
+use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY as REGISTRY};
 
 // --- the account under test (bare); the verifier is the real deployable -----
 

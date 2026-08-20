@@ -6,8 +6,9 @@
 #   0. Preflight  — plugins, keys, name availability, wasm builds.
 #   1. Subregistry — deploy the managed `unverified/perch` registry from root's
 #                    published `registry` wasm (admin=manager=deployer, for now).
-#   2. Infra      — publish + deploy perch-ed25519-verifier and perch-account
-#                    (authors stay the human deployer, deliberately).
+#   2. Infra      — publish + deploy perch-ed25519-verifier, the stateless
+#                    perch-doc-compiler, and perch-account (authors stay the
+#                    human deployer, deliberately).
 #   3. Interpreter — publish perch-interpreter with --author <smart account>.
 #                    IRREVERSIBLE choice: the registry has no author transfer;
 #                    every future republish requires smart-account auth.
@@ -105,7 +106,7 @@ stellar registry current-version registry "${net_args[@]}" >/dev/null 2>&1 \
 log "building contract wasms (stellar scaffold build)"
 (cd "$REPO_ROOT" && run stellar scaffold build)
 if [ "$DRY_RUN" -eq 0 ]; then
-    for w in perch_ed25519_verifier perch_account perch_interpreter; do
+    for w in perch_ed25519_verifier perch_doc_compiler perch_account perch_interpreter; do
         [ -f "$WASM_DIR/$w.wasm" ] || die "missing $WASM_DIR/$w.wasm after build"
     done
 fi
@@ -177,6 +178,24 @@ fi
 VERIFIER="${VERIFIER:-<unknown>}"
 log "VERIFIER=$VERIFIER"
 
+# The stateless doc compiler: parse+compile live here, shared by every
+# account (accounts carry no parser). Immutable, like the interpreter.
+if [ -n "$(wasm_hash perch-doc-compiler)" ]; then
+    log "perch-doc-compiler wasm already published — skipping"
+else
+    run stellar registry publish --wasm "$WASM_DIR/perch_doc_compiler.wasm" "${net_args[@]}"
+fi
+COMPILER="$(contract_id perch-doc-compiler)"
+if [ -n "$COMPILER" ]; then
+    log "perch-doc-compiler already deployed — skipping"
+else
+    run stellar registry deploy --contract-name perch-doc-compiler \
+        --wasm-name perch-doc-compiler "${net_args[@]}"
+    COMPILER="$(contract_id perch-doc-compiler)"
+fi
+COMPILER="${COMPILER:-<unknown>}"
+log "COMPILER=$COMPILER"
+
 if [ -n "$(wasm_hash perch-account)" ]; then
     log "perch-account wasm already published — skipping"
 else
@@ -229,7 +248,7 @@ log "INTERPRETER=$INTERPRETER (wasm hash $INTERP_HASH)"
 # Phase 5 — apply the policy document (one transaction)
 # ---------------------------------------------------------------------------
 log "Phase 5: policy document → apply_doc"
-case "$PERCH_SUB$VERIFIER$INTERPRETER" in
+case "$PERCH_SUB$VERIFIER$COMPILER$INTERPRETER" in
     *'<unknown>'*)
         warn "dry-run with unresolved addresses — phases 5-6 shown symbolically only"
         warn "  (re-run after --execute has created the contracts to see them concretely)"
@@ -251,11 +270,12 @@ deploy_env=(env STELLAR_RPC_URL="$RPC_URL" STELLAR_NETWORK_PASSPHRASE="$PASSPHRA
     --doc "$DOC" --account "$SA" --interpreter "$INTERPRETER" \
     --interpreter-wasm-hash "$INTERP_HASH" \
     > "$RULES_OUT" || die "compose failed"
-# ONE transaction: apply_doc verifies the document on-chain (parse, validate,
-# network binding, compile, anti-brick) and swaps the entire rule set
-# atomically. PERCH_ADMIN_KEY must be in the environment (never in argv).
+# ONE transaction: apply_doc sends the document to the stateless compiler
+# contract (parse, validate, network binding, compile — all on-chain), checks
+# anti-brick, and swaps the entire rule set atomically. PERCH_ADMIN_KEY must
+# be in the environment (never in argv).
 run "${deploy_env[@]}" "$PERCH_DEPLOY" apply \
-    --account "$SA" --doc "$DOC" --interpreter "$INTERPRETER"
+    --account "$SA" --doc "$DOC" --compiler "$COMPILER" --interpreter "$INTERPRETER"
 run "${deploy_env[@]}" "$PERCH_DEPLOY" verify \
     --account "$SA" --interpreter "$INTERPRETER" --rules "$RULES_OUT"
 # The rule id CI signs under comes from the CHAIN, never hard-coded: apply_doc

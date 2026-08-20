@@ -55,6 +55,7 @@ const FIXTURE_NETWORK: &str = "Test SDF Network ; September 2015";
 struct World {
     env: Env,
     account: Address,
+    compiler: Address,
     interpreter: Address,
 }
 
@@ -69,6 +70,7 @@ fn setup() -> World {
         .to_array();
     env.ledger().with_mut(|l| l.network_id = net_id);
 
+    let compiler = env.register(perch_doc_compiler::PerchDocCompiler, ());
     let interpreter = env.register(perch_interpreter::PerchInterpreter, ());
     let verifier = env.register(PerchEd25519Verifier, ());
     for addr in FIXTURE_VERIFIERS {
@@ -82,13 +84,14 @@ fn setup() -> World {
     World {
         env,
         account,
+        compiler,
         interpreter,
     }
 }
 
 fn apply_fixture(w: &World) -> BytesN<32> {
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    PerchAccountClient::new(&w.env, &w.account).apply_doc(&doc, &w.interpreter)
+    PerchAccountClient::new(&w.env, &w.account).apply_doc(&doc, &w.compiler, &w.interpreter)
 }
 
 #[test]
@@ -142,7 +145,11 @@ fn reapply_replaces_the_whole_rule_set() {
   ]
 }}"#
     );
-    let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()), &w.interpreter);
+    let second = client.apply_doc(
+        &Bytes::from_slice(&w.env, doc2.as_bytes()),
+        &w.compiler,
+        &w.interpreter,
+    );
 
     assert_ne!(first, second);
     assert_eq!(client.applied_doc_hash(), Some(second));
@@ -203,7 +210,11 @@ fn doc_without_admin_rule_is_rejected_anti_brick() {
 }}"#
     );
     assert!(client
-        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &w.interpreter)
+        .try_apply_doc(
+            &Bytes::from_slice(&w.env, doc.as_bytes()),
+            &w.compiler,
+            &w.interpreter
+        )
         .is_err());
     // Nothing changed: the constructor's rule 0 is still the only rule.
     assert_eq!(client.get_context_rules_count(), 1);
@@ -226,7 +237,9 @@ fn doc_for_another_network_is_rejected() {
 
     let client = PerchAccountClient::new(&w.env, &w.account);
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    assert!(client.try_apply_doc(&doc, &w.interpreter).is_err());
+    assert!(client
+        .try_apply_doc(&doc, &w.compiler, &w.interpreter)
+        .is_err());
     assert_eq!(client.applied_doc_hash(), None);
 }
 
@@ -236,11 +249,19 @@ fn garbage_and_unknown_fields_are_rejected() {
     let client = PerchAccountClient::new(&w.env, &w.account);
     // Not JSON at all.
     assert!(client
-        .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"), &w.interpreter)
+        .try_apply_doc(
+            &Bytes::from_slice(&w.env, b"not json"),
+            &w.compiler,
+            &w.interpreter
+        )
         .is_err());
     // Unknown field: fail closed, never skipped.
     let doc = fixture().replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
     assert!(client
-        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &w.interpreter)
+        .try_apply_doc(
+            &Bytes::from_slice(&w.env, doc.as_bytes()),
+            &w.compiler,
+            &w.interpreter
+        )
         .is_err());
 }

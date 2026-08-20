@@ -54,6 +54,7 @@ pub fn run(
     passphrase: &str,
     account: &str,
     doc_path: &std::path::Path,
+    compiler: &str,
     interpreter: &str,
     dry_run: bool,
 ) -> Result<()> {
@@ -86,6 +87,7 @@ pub fn run(
                 .try_into()
                 .context("document too large for an ScVal bytes value")?,
         )),
+        scv::address(compiler)?,
         scv::address(interpreter)?,
     ];
 

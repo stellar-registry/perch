@@ -1431,6 +1431,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-doc-compiler"
+version = "0.1.0"
+dependencies = [
+ "perch-compile",
+ "perch-ir",
+ "perch-program",
+ "soroban-sdk",
+ "soroban-sdk-tools",
+ "stellar-accounts",
+]
+
+[[package]]
 name = "perch-ed25519-verifier"
 version = "0.1.0"
 dependencies = [
@@ -1456,6 +1468,7 @@ dependencies = [
  "hex",
  "perch-account",
  "perch-compile",
+ "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",
  "perch-ir",
@@ -1494,8 +1507,7 @@ dependencies = [
 name = "perch-smart-account"
 version = "0.1.0"
 dependencies = [
- "perch-compile",
- "perch-ir",
+ "perch-doc-compiler",
  "soroban-sdk",
  "soroban-sdk-tools",
  "stellar-accounts",

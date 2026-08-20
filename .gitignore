@@ -4,3 +4,6 @@ dist/
 *.wasm
 .DS_Store
 .lake/
+fuzz/corpus/
+fuzz/artifacts/
+fuzz/coverage/

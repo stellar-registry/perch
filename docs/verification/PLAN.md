@@ -90,19 +90,22 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 
 ### Phase 0 — baseline hardening (this PR)
 - [x] Verification plan (this doc) + enforceability theory writeup (`THEORY.md`)
-- [ ] Eval-semantics golden vectors (`testdata/eval/`) + `perch-conformance` replay/generate
-- [ ] Deterministic differential tests: compile→eval vs reference doc semantics
-- [ ] fast-check property tests in perch-js (canonicalization determinism, hash uniqueness
-      sampling, parse/canon round-trip)
-- [ ] Fuzz targets (`fuzz/`): eval-never-panics on arbitrary programs/invocations;
-      compile→eval differential (build-only smoke in CI; long runs nightly/dispatch)
-- [ ] `cargo-mutants` + `cargo-llvm-cov` recipes (justfile) + scheduled CI jobs — measures
-      whether the suite would catch a silent fail-open
+- [x] Eval-semantics golden vectors (`testdata/eval/`, 72 hand-authored cases) +
+      `perch-conformance` replay
+- [x] Deterministic differential tests: compile→eval vs reference doc semantics
+      (400 random docs × 16 invocations; also INV-1/INV-2/expiry-boundary/doc_hash-two-paths)
+- [x] fast-check property tests in perch-js (key-order independence, canonical round-trip,
+      hash-injectivity sampling, builder ≡ wire form)
+- [x] Fuzz targets (`fuzz/`): `eval_fail_closed` (totality + determinism on arbitrary
+      programs/invocations), `ir_parse_roundtrip` (parser never panics; canonicalization
+      idempotent) — weekly/dispatch runs in `assurance.yml`
+- [x] `cargo-mutants` + `cargo-llvm-cov` recipes (justfile) + scheduled CI jobs
+      (`assurance.yml`; mutants in burn-in)
 
 ### Phase 1 — the model + proofs (this PR, continued)
-- [ ] Lean 4 model under `formal/` (no external deps beyond Lean core)
-- [ ] Theorems T1–T5 proved; T6 at least stated, proved if tractable in the first pass
-- [ ] Lean replay of the eval vectors wired into `just drt` + CI job
+- [x] Lean 4 model under `formal/` (no external deps beyond Lean core)
+- [x] Theorems T1–T6 proved, sorry-free — including lowering preservation (T6)
+- [x] Lean replay of the eval vectors wired as `just drt` + the `formal` CI job
 - [ ] Graduate Flux job out of `continue-on-error` once its streak is green (separate PR)
 
 ### Phase 2 — deepening source-level assurance (follow-up PRs)

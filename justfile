@@ -42,6 +42,27 @@ drt: formal
     cargo test -p perch-conformance
     cd formal && lake exe drt ../testdata/eval/eval-vectors.json
 
+# Coverage-guided fuzzing of a target in fuzz/fuzz_targets/ (default: the
+# evaluator's fail-closed totality). Setup: `cargo install cargo-fuzz` and a
+# nightly toolchain (the flux pin below works: nightly-2026-02-05).
+# `-s none`: ASan fails to link soroban-sdk's rlib ("initializer pointer has
+# no target"), and these targets are pure safe Rust — panic/divergence
+# detection is the point, not memory errors.
+fuzz target="eval_fail_closed" time="60":
+    cargo +nightly-2026-02-05 fuzz run -s none {{target}} -- -max_total_time={{time}}
+
+# Mutation testing over the security core: seeds small semantic bugs and
+# checks the suite kills them — measures whether the golden vectors + property
+# tests would actually catch a silent fail-open. Setup: `cargo install cargo-mutants`.
+mutants:
+    cargo mutants -p perch-program -p perch-compile -p perch-ir
+
+# Branch coverage of the security core, including the conformance vectors.
+# Every deny path in the evaluator should be exercised. Setup:
+# `cargo install cargo-llvm-cov`.
+coverage:
+    cargo llvm-cov -p perch-program -p perch-compile -p perch-ir -p perch-conformance --branch
+
 # Flux refinement verification of perch-program (nidohq/soroban-flux). Runs
 # under flux's pinned nightly toolchain; the repo's stable pin is untouched —
 # the flux attributes are no-ops in normal builds. Setup: see

@@ -25,21 +25,24 @@ the entire `u32` domain, the all-inputs guarantee the fixed conformance vectors
 
 ## Status
 
-The contract **compiles to a valid Komet input** (`cargo build --release
---target wasm32v1-none`), and the setup below is complete. Actually *running*
-Komet needs its K-semantics artifact built, which is **maintainer-gated on the
-K toolchain version**:
+**Runs in CI** — the `komet` job in `.github/workflows/assurance.yml` (weekly +
+`workflow_dispatch`) installs Komet from Nix, pinned to release **v0.1.88**, and
+pulls the whole prebuilt closure (K, the haskell backend, and the bundled
+Soroban semantics) from RV's public `k-framework` Cachix cache, then runs
+`komet test` and `komet prove run` from this directory. Nothing compiles from
+source and no separate `komet-kdist build` step is needed. It is
+`continue-on-error` during burn-in, because the semantics' own examples pin
+soroban-sdk 22 while perch is on sdk 27 — CI confirms whether the sdk-27
+contract runs under these semantics.
 
-- Komet (current `main`) pins **K 7.1.323** (`deps/k_release`).
-- Homebrew's `runtimeverification/k/kframework` bottle is **7.1.282**.
-- Building the Soroban semantics against the mismatched K fails at link time
-  with `Undefined symbols … _table_getArgumentSortsForTag` — an internal
-  K-runtime symbol that moved between those versions.
-
-The version-matched, RV-supported install is [`kup`](https://github.com/runtimeverification/kup),
-which requires Nix. On a machine with Nix this is a one-time
-`kup install komet`; without it, pin a Komet revision whose `deps/k_release`
-matches an installable K bottle, or build K 7.1.323 from source.
+**Local run needs the K toolchain version-matched to Komet**, which is the
+snag on a plain Homebrew setup: Komet v0.1.88 pins **K 7.1.323**
+(`deps/k_release`), but Homebrew's `runtimeverification/k/kframework` bottle is
+**7.1.282**, and building the Soroban semantics against the mismatched K fails
+at link time (`Undefined symbols … _table_getArgumentSortsForTag`, an internal
+K-runtime symbol that moved between those versions). The RV-supported install
+is [`kup`](https://github.com/runtimeverification/kup) or Nix, which version-match
+automatically — the same path CI takes.
 
 ## Running (once the toolchain matches)
 

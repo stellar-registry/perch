@@ -1384,6 +1384,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-analyze"
+version = "0.1.0"
+dependencies = [
+ "perch-compile",
+ "perch-ir",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "perch-bench"
 version = "0.1.0"
 dependencies = [

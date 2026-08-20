@@ -98,3 +98,50 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo install cargo-llvm-cov --locked
       - run: cargo +nightly-2026-02-05 llvm-cov -p perch-program -p perch-compile -p perch-ir -p perch-conformance --branch
+
+  # Komet (Runtime Verification, K framework): fuzz + symbolic execution of the
+  # RPN evaluator's wasm under the mechanized Soroban + KWasm semantics — an
+  # independent second opinion whose trusted base is the K semantics, not
+  # rustc/LLVM + wasmi (see komet/README.md, docs/verification/PLAN.md phase 3).
+  #
+  # Komet is installed from Nix, pinned to the v0.1.88 release, and pulled
+  # prebuilt from RV's public `k-framework` Cachix cache (the whole closure —
+  # K, the haskell backend, and the bundled Soroban semantics — is published
+  # there, so nothing compiles from source and no separate `komet-kdist build`
+  # is needed). Burn-in: continue-on-error while the soroban-sdk 27 contract is
+  # confirmed to run under semantics whose examples pin sdk 22.
+  komet:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Nix
+        uses: cachix/install-nix-action@754537aaedb35f72ab11a60cc162c49ef3016495 # v31.2.0
+        with:
+          install_url: https://releases.nixos.org/nix/nix-2.31.0/install
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+      # RV publishes komet's entire dependency closure here; read-only, no token.
+      - name: Use k-framework Cachix cache
+        uses: cachix/cachix-action@3ba601ff5bbb07c7220846facfa2cd81eeee15a1 # v16
+        with:
+          name: k-framework
+          skipPush: true
+      - name: Install Komet (pinned)
+        run: nix profile install github:runtimeverification/komet/v0.1.88
+      - name: Fuzz the properties (komet test)
+        working-directory: komet
+        run: komet test --max-examples 50
+      # Symbolic execution proves each property for all u32 signer_count, but can
+      # be slow; best-effort so the fuzz result stays the primary signal.
+      - name: Prove the properties (komet prove run)
+        working-directory: komet
+        continue-on-error: true
+        timeout-minutes: 30
+        run: komet prove run

@@ -33,6 +33,13 @@
 # Required env for phase 5/6:
 #   PERCH_ADMIN_KEY — S... seed matching ADMIN_PK (perch-deploy signs installs)
 #   PERCH_CI_KEY    — S... seed whose G-account is CI_G (phase-6 rehearsal)
+#
+# Optional env:
+#   PERCH_STATELESS=1 — route the ed25519-verifier / doc-compiler / interpreter
+#               through the managed `stateless` registry via deploy_stateless
+#               (salt = wasm_hash) instead of the name-salted deploy. GUARDED
+#               off by default: requires #38 (deploy-stateless CLI/trait) + #39
+#               (perch-stateless-registry crate). See the STATELESS block below.
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
@@ -52,13 +59,35 @@ DOC_TEMPLATE="$REPO_ROOT/testdata/deploy/perch-testnet.template.json"
 DOC="$REPO_ROOT/testdata/deploy/perch-testnet.json"
 RULES_OUT="$REPO_ROOT/testdata/deploy/perch-testnet.rules.json"
 
+# --- Stateless registry (content-addressed infra) — issue #40 / epic #37 -----
+# PERCH_STATELESS=1 routes the three constructorless / per-caller-keyed infra
+# contracts (ed25519-verifier, doc-compiler, interpreter) through the managed
+# `stateless` registry via deploy_stateless (salt = wasm_hash) instead of the
+# name-salted `deploy` on unverified/perch. Content-addressing makes each
+# address a pure function of (stateless registry id + wasm hash): derivable
+# offline, identical across networks, permissionless, idempotent.
+# GUARDED OFF by default — the live path needs BOTH:
+#   * #38 — upstream StatelessDeployable + a `stellar registry deploy-stateless`
+#           verb (override PERCH_DEPLOY_STATELESS_CMD if it ships differently);
+#   * #39 — crates/perch-stateless-registry, built to $STATELESS_REGISTRY_WASM.
+# Neither is merged yet, so with the flag on the script degrades to symbolic
+# dry-run output and refuses to --execute (die) at the first missing dependency.
+PERCH_STATELESS="${PERCH_STATELESS:-0}"
+STATELESS_REGISTRY_NAME="${PERCH_STATELESS_REGISTRY_NAME:-stateless}"
+STATELESS_REGISTRY_WASM="${PERCH_STATELESS_REGISTRY_WASM:-perch_stateless_registry.wasm}"
+STATELESS_REGISTRY_WASM_NAME="${PERCH_STATELESS_REGISTRY_WASM_NAME:-perch-stateless-registry}"
+STELLAR_DEPLOY_STATELESS="${PERCH_DEPLOY_STATELESS_CMD:-deploy-stateless}"
+STATELESS_MANIFEST="${PERCH_STATELESS_MANIFEST:-$REPO_ROOT/testdata/deploy/stateless-manifest.json}"
+STATELESS_OUT="${PERCH_STATELESS_OUT:-$REPO_ROOT/testdata/deploy/stateless-testnet.json}"
+STATELESS_REG=""
+
 DRY_RUN=1
 for arg in "$@"; do
     case "$arg" in
         --execute)    DRY_RUN=0 ;;
         -n|--dry-run) DRY_RUN=1 ;;
         -h|--help)
-            sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,42p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) echo "Unknown option: $arg" >&2; exit 1 ;;
@@ -85,6 +114,61 @@ net_args=(--network "$STELLAR_NETWORK" --source "$DEPLOYER")
 # its use are one network lookup. Empty output = not found.
 contract_id() { stellar registry fetch-contract-id "$1" "${net_args[@]}" 2>/dev/null || true; }
 wasm_hash()   { stellar registry fetch-hash "$1" "${net_args[@]}" 2>/dev/null || true; }
+
+# --- Stateless registry helpers (issue #40) --------------------------------
+# The same two read-only probes, but resolved against the `stateless` registry
+# rather than unverified/perch. STATELESS_REG is set in phase 1b; empty before
+# then (and <unknown> in dry-run), which makes the probes return empty and the
+# stateless phases render symbolically — phase 5 already exits on any <unknown>.
+sl_contract_id() { env STELLAR_REGISTRY_CONTRACT_ID="$STATELESS_REG" stellar registry fetch-contract-id "$1" "${net_args[@]}" 2>/dev/null || true; }
+sl_wasm_hash()   { env STELLAR_REGISTRY_CONTRACT_ID="$STATELESS_REG" stellar registry fetch-hash        "$1" "${net_args[@]}" 2>/dev/null || true; }
+
+# One field of one row of the declarative stateless manifest.
+# $1 = contract name, $2 = field. Empty output = absent.
+sl_field() { jq -er --arg n "$1" --arg f "$2" \
+    '.contracts[] | select(.name == $n) | .[$f] // empty' "$STATELESS_MANIFEST" 2>/dev/null || true; }
+
+# Publish + content-addressed deploy ONE stateless-eligible contract into the
+# stateless registry. salt = wasm_hash ⇒ address = f(stateless registry id,
+# wasm hash): derivable offline, cross-network-identical, permissionless, and
+# idempotent (probe fetch-hash / fetch-contract-id first, like the base path).
+# Echoes "<wasm_hash> <address>" on stdout; ALL logs go to stderr so the caller
+# can `read` the pair back. Per-contract wasm + author come from the manifest.
+#   $1 = contract name (row key in the manifest)
+stateless_deploy() {
+    local name="$1" wasm author addr hash
+    wasm="$(sl_field "$name" wasm)"
+    author="$(sl_field "$name" author)"
+    [ -n "$wasm" ] || die "stateless manifest has no entry for '$name'"
+    # @SMART_ACCOUNT@ sentinel → publish with --author = the perch smart account
+    # (the interpreter's irreversible republish-auth choice; see phase 3).
+    [ "$author" = "@SMART_ACCOUNT@" ] && author="$SA"
+
+    hash="$(sl_wasm_hash "$name" | tr -d '[:space:]')"
+    if [ -n "$hash" ]; then
+        log "  [stateless] $name wasm already published — skipping" >&2
+    else
+        if [ -n "$author" ]; then
+            run env STELLAR_REGISTRY_CONTRACT_ID="$STATELESS_REG" stellar registry publish \
+                --wasm "$WASM_DIR/$wasm" --author "$author" "${net_args[@]}" >&2
+        else
+            run env STELLAR_REGISTRY_CONTRACT_ID="$STATELESS_REG" stellar registry publish \
+                --wasm "$WASM_DIR/$wasm" "${net_args[@]}" >&2
+        fi
+        hash="$(sl_wasm_hash "$name" | tr -d '[:space:]')"
+    fi
+
+    addr="$(sl_contract_id "$name")"
+    if [ -n "$addr" ]; then
+        log "  [stateless] $name already deployed — skipping" >&2
+    else
+        # deploy_stateless: no name-salt, no constructor args EVER; salt = wasm_hash.
+        run env STELLAR_REGISTRY_CONTRACT_ID="$STATELESS_REG" stellar registry \
+            "$STELLAR_DEPLOY_STATELESS" --wasm-name "$name" "${net_args[@]}" >&2
+        addr="$(sl_contract_id "$name")"
+    fi
+    printf '%s %s\n' "${hash:-<unknown>}" "${addr:-<unknown>}"
+}
 
 # ---------------------------------------------------------------------------
 # Phase 0 — preflight
@@ -155,46 +239,114 @@ fi
 export STELLAR_REGISTRY_CONTRACT_ID="$PERCH_SUB"
 
 # ---------------------------------------------------------------------------
+# Phase 1b — managed `stateless` registry (content-addressed infra) [#40]
+# ---------------------------------------------------------------------------
+# GUARDED: only when PERCH_STATELESS=1. Deploys a SECOND managed subregistry —
+# `stateless` — under unverified/perch, whose deploy_stateless entry point uses
+# salt = wasm_hash. Phases 2-4 then resolve the three infra contracts as
+# name → hash → derived address instead of via the name-salted deploy.
+#   Requires #39 (crates/perch-stateless-registry → $STATELESS_REGISTRY_WASM)
+#   and #38 (StatelessDeployable / `stellar registry $STELLAR_DEPLOY_STATELESS`).
+if [ "$PERCH_STATELESS" -eq 1 ]; then
+    log "Phase 1b: stateless managed registry (PERCH_STATELESS=1)"
+    [ -f "$STATELESS_MANIFEST" ] || die "stateless manifest not found: $STATELESS_MANIFEST"
+    # #38 guard: the deploy-stateless verb must exist in the installed plugin.
+    if ! stellar registry "$STELLAR_DEPLOY_STATELESS" --help >/dev/null 2>&1; then
+        if [ "$DRY_RUN" -eq 1 ]; then
+            warn "requires #38: 'stellar registry $STELLAR_DEPLOY_STATELESS' is not in the"
+            warn "  installed plugin yet — stateless phases render symbolically (dry-run)."
+        else
+            die "requires #38: 'stellar registry $STELLAR_DEPLOY_STATELESS' not found — cannot content-address deploy"
+        fi
+    fi
+    STATELESS_REG="$(contract_id "$STATELESS_REGISTRY_NAME")"
+    if [ -n "$STATELESS_REG" ]; then
+        log "$STATELESS_REGISTRY_NAME registry already exists — skipping deploy"
+    else
+        sl_wasm_path="$WASM_DIR/$STATELESS_REGISTRY_WASM"
+        if [ ! -f "$sl_wasm_path" ]; then
+            # #39 guard: the perch-stateless-registry crate isn't in-tree yet.
+            if [ "$DRY_RUN" -eq 1 ]; then
+                warn "requires #39: $sl_wasm_path not built (perch-stateless-registry crate"
+                warn "  absent) — showing the deploy symbolically."
+            else
+                die "requires #39: missing $sl_wasm_path — build crates/perch-stateless-registry first"
+            fi
+        fi
+        # Publish the registry wasm under unverified/perch (name from wasm meta =
+        # $STATELESS_REGISTRY_WASM_NAME), then deploy it as the `stateless` name
+        # with the managed (admin, manager, root) constructor. admin=manager=
+        # deployer for now; phase 6 rotates the manager to the smart account.
+        if [ -f "$sl_wasm_path" ] && [ -z "$(wasm_hash "$STATELESS_REGISTRY_WASM_NAME")" ]; then
+            run stellar registry publish --wasm "$sl_wasm_path" "${net_args[@]}"
+        fi
+        run stellar registry deploy \
+            --contract-name "$STATELESS_REGISTRY_NAME" \
+            --wasm-name "$STATELESS_REGISTRY_WASM_NAME" \
+            "${net_args[@]}" \
+            -- \
+            --admin "\"$DEPLOYER_G\"" \
+            --manager "\"$DEPLOYER_G\"" \
+            --root "\"$ROOT\""
+        STATELESS_REG="$(contract_id "$STATELESS_REGISTRY_NAME")"
+    fi
+    STATELESS_REG="${STATELESS_REG:-<unknown>}"
+    log "STATELESS_REG=$STATELESS_REG"
+fi
+
+# ---------------------------------------------------------------------------
 # Phase 2 — verifier + account (authors = human deployer)
 # ---------------------------------------------------------------------------
 log "Phase 2: verifier + smart account"
 [ -n "${ADMIN_PK:-}" ] || die "ADMIN_PK (hex ed25519 admin pubkey) is required from phase 2 on"
 [ -n "${CI_G:-}" ]     || die "CI_G (G... strkey of the delegated CI key) is required from phase 2 on"
 
-if [ -n "$(wasm_hash perch-ed25519-verifier)" ]; then
-    log "perch-ed25519-verifier wasm already published — skipping"
+if [ "$PERCH_STATELESS" -eq 1 ]; then
+    # Content-addressed via the stateless registry (salt = wasm_hash).
+    read -r VERIFIER_HASH VERIFIER <<<"$(stateless_deploy perch-ed25519-verifier)"
+    log "VERIFIER=$VERIFIER (stateless; wasm hash $VERIFIER_HASH)"
 else
-    # name/binver come from the wasm meta injected by scaffold build.
-    run stellar registry publish --wasm "$WASM_DIR/perch_ed25519_verifier.wasm" "${net_args[@]}"
-fi
-VERIFIER="$(contract_id perch-ed25519-verifier)"
-if [ -n "$VERIFIER" ]; then
-    log "perch-ed25519-verifier already deployed — skipping"
-else
-    run stellar registry deploy --contract-name perch-ed25519-verifier \
-        --wasm-name perch-ed25519-verifier "${net_args[@]}"
+    if [ -n "$(wasm_hash perch-ed25519-verifier)" ]; then
+        log "perch-ed25519-verifier wasm already published — skipping"
+    else
+        # name/binver come from the wasm meta injected by scaffold build.
+        run stellar registry publish --wasm "$WASM_DIR/perch_ed25519_verifier.wasm" "${net_args[@]}"
+    fi
     VERIFIER="$(contract_id perch-ed25519-verifier)"
+    if [ -n "$VERIFIER" ]; then
+        log "perch-ed25519-verifier already deployed — skipping"
+    else
+        run stellar registry deploy --contract-name perch-ed25519-verifier \
+            --wasm-name perch-ed25519-verifier "${net_args[@]}"
+        VERIFIER="$(contract_id perch-ed25519-verifier)"
+    fi
+    VERIFIER="${VERIFIER:-<unknown>}"
+    log "VERIFIER=$VERIFIER"
 fi
-VERIFIER="${VERIFIER:-<unknown>}"
-log "VERIFIER=$VERIFIER"
 
 # The stateless doc compiler: parse+compile live here, shared by every
 # account (accounts carry no parser). Immutable, like the interpreter.
-if [ -n "$(wasm_hash perch-doc-compiler)" ]; then
-    log "perch-doc-compiler wasm already published — skipping"
+if [ "$PERCH_STATELESS" -eq 1 ]; then
+    # Content-addressed via the stateless registry (salt = wasm_hash).
+    read -r COMPILER_HASH COMPILER <<<"$(stateless_deploy perch-doc-compiler)"
+    log "COMPILER=$COMPILER (stateless; wasm hash $COMPILER_HASH)"
 else
-    run stellar registry publish --wasm "$WASM_DIR/perch_doc_compiler.wasm" "${net_args[@]}"
-fi
-COMPILER="$(contract_id perch-doc-compiler)"
-if [ -n "$COMPILER" ]; then
-    log "perch-doc-compiler already deployed — skipping"
-else
-    run stellar registry deploy --contract-name perch-doc-compiler \
-        --wasm-name perch-doc-compiler "${net_args[@]}"
+    if [ -n "$(wasm_hash perch-doc-compiler)" ]; then
+        log "perch-doc-compiler wasm already published — skipping"
+    else
+        run stellar registry publish --wasm "$WASM_DIR/perch_doc_compiler.wasm" "${net_args[@]}"
+    fi
     COMPILER="$(contract_id perch-doc-compiler)"
+    if [ -n "$COMPILER" ]; then
+        log "perch-doc-compiler already deployed — skipping"
+    else
+        run stellar registry deploy --contract-name perch-doc-compiler \
+            --wasm-name perch-doc-compiler "${net_args[@]}"
+        COMPILER="$(contract_id perch-doc-compiler)"
+    fi
+    COMPILER="${COMPILER:-<unknown>}"
+    log "COMPILER=$COMPILER"
 fi
-COMPILER="${COMPILER:-<unknown>}"
-log "COMPILER=$COMPILER"
 
 if [ -n "$(wasm_hash perch-account)" ]; then
     log "perch-account wasm already published — skipping"
@@ -219,30 +371,72 @@ log "SA=$SA"
 # Phase 3 — publish interpreter, author = smart account (irreversible)
 # ---------------------------------------------------------------------------
 log "Phase 3: publish perch-interpreter (author = $SA)"
-INTERP_HASH="$(wasm_hash perch-interpreter)"
-if [ -n "$INTERP_HASH" ]; then
-    log "perch-interpreter wasm already published — skipping (author is fixed forever)"
+# Shared-singleton safety: perch-interpreter is stateful but every slot is keyed
+# by DataKey::Program(smart_account, context_rule_id), so a single content-
+# addressed instance is multi-tenant-safe — no cross-account key exists. Author
+# is pinned to the smart account here (the registry has no author transfer, so
+# every future republish requires smart-account auth); the same author flows
+# through the manifest's @SMART_ACCOUNT@ sentinel on the stateless path.
+if [ "$PERCH_STATELESS" -eq 1 ]; then
+    # stateless_deploy publishes (--author = smart account) AND content-addressed
+    # deploys in one step; phase 4 then just reports the address.
+    read -r INTERP_HASH INTERPRETER <<<"$(stateless_deploy perch-interpreter)"
 else
-    run stellar registry publish --wasm "$WASM_DIR/perch_interpreter.wasm" \
-        --author "$SA" "${net_args[@]}"
     INTERP_HASH="$(wasm_hash perch-interpreter)"
+    if [ -n "$INTERP_HASH" ]; then
+        log "perch-interpreter wasm already published — skipping (author is fixed forever)"
+    else
+        run stellar registry publish --wasm "$WASM_DIR/perch_interpreter.wasm" \
+            --author "$SA" "${net_args[@]}"
+        INTERP_HASH="$(wasm_hash perch-interpreter)"
+    fi
+    INTERP_HASH="${INTERP_HASH:-<unknown>}"
 fi
-INTERP_HASH="${INTERP_HASH:-<unknown>}"
 
 # ---------------------------------------------------------------------------
 # Phase 4 — deploy interpreter
 # ---------------------------------------------------------------------------
 log "Phase 4: deploy perch-interpreter"
-INTERPRETER="$(contract_id perch-interpreter)"
-if [ -n "$INTERPRETER" ]; then
-    log "perch-interpreter already deployed — skipping"
+if [ "$PERCH_STATELESS" -eq 1 ]; then
+    # Already content-addressed deployed in phase 3 via the stateless registry.
+    INTERPRETER="${INTERPRETER:-<unknown>}"
+    log "perch-interpreter deployed via the stateless registry (phase 3)"
 else
-    run stellar registry deploy --contract-name perch-interpreter \
-        --wasm-name perch-interpreter "${net_args[@]}"
     INTERPRETER="$(contract_id perch-interpreter)"
+    if [ -n "$INTERPRETER" ]; then
+        log "perch-interpreter already deployed — skipping"
+    else
+        run stellar registry deploy --contract-name perch-interpreter \
+            --wasm-name perch-interpreter "${net_args[@]}"
+        INTERPRETER="$(contract_id perch-interpreter)"
+    fi
+    INTERPRETER="${INTERPRETER:-<unknown>}"
 fi
-INTERPRETER="${INTERPRETER:-<unknown>}"
 log "INTERPRETER=$INTERPRETER (wasm hash $INTERP_HASH)"
+
+# Record the derived (name → wasm hash → address) map so off-chain plans
+# (perch-compile's interpreter_wasm_hash) and the #41 resolver macro agree.
+# Written only when the stateless path resolved everything concretely (i.e.
+# after --execute); the symbolic dry-run leaves the last committed file intact.
+if [ "$PERCH_STATELESS" -eq 1 ]; then
+    case "$STATELESS_REG$VERIFIER$COMPILER$INTERPRETER" in
+        *'<unknown>'*)
+            log "stateless: addresses unresolved (dry-run) — not writing $STATELESS_OUT" ;;
+        *)
+            jq -n \
+                --arg net "$STELLAR_NETWORK" \
+                --arg reg "$STATELESS_REG" \
+                --arg vh "$VERIFIER_HASH" --arg va "$VERIFIER" \
+                --arg ch "$COMPILER_HASH" --arg ca "$COMPILER" \
+                --arg ih "$INTERP_HASH"   --arg ia "$INTERPRETER" \
+                '{network: $net, stateless_registry: $reg, contracts: {
+                    "perch-ed25519-verifier": {wasm_hash: $vh, address: $va},
+                    "perch-doc-compiler":     {wasm_hash: $ch, address: $ca},
+                    "perch-interpreter":      {wasm_hash: $ih, address: $ia}}}' \
+                > "$STATELESS_OUT"
+            log "recorded derived addresses → $STATELESS_OUT (commit for provenance)" ;;
+    esac
+fi
 
 # ---------------------------------------------------------------------------
 # Phase 5 — apply the policy document (one transaction)
@@ -331,6 +525,18 @@ else
         set_manager --new_manager "$SA"
 fi
 
+# The stateless registry is also managed (its manager gates the "only stateless-
+# eligible wasm" publish policy) — rotate it to the smart account too. [#40/#39]
+if [ "$PERCH_STATELESS" -eq 1 ] && [ "$STATELESS_REG" != "<unknown>" ]; then
+    sl_manager="$(stellar contract invoke --id "$STATELESS_REG" "${net_args[@]}" -- manager 2>/dev/null | tr -d '"' || true)"
+    if [ "$sl_manager" = "$SA" ]; then
+        log "stateless registry manager already rotated — skipping"
+    else
+        run stellar contract invoke --id "$STATELESS_REG" "${net_args[@]}" -- \
+            set_manager --new_manager "$SA"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # Summary — the values CI needs (GitHub environment vars/secrets)
 # ---------------------------------------------------------------------------
@@ -349,3 +555,16 @@ Kept deliberately human-held (do NOT rotate):
 Also fund the CI key's G-account $CI_G (friendbot) — it is BOTH the CAP-0071
 delegated signer and the transaction fee payer.
 EOF
+if [ "$PERCH_STATELESS" -eq 1 ]; then
+    cat <<EOF
+
+Stateless registry (content-addressed infra — issue #40):
+  stateless registry id           = $STATELESS_REG
+  perch-ed25519-verifier          = $VERIFIER (wasm $VERIFIER_HASH)
+  perch-doc-compiler              = $COMPILER (wasm $COMPILER_HASH)
+  perch-interpreter               = $INTERPRETER (wasm $INTERP_HASH)
+  derived-address map             = $STATELESS_OUT
+Each address = get_contract_id(stateless registry id, wasm hash): re-derivable
+offline, identical across networks that share the registry id + hash.
+EOF
+fi

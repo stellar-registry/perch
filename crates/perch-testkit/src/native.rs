@@ -4,18 +4,19 @@
 //! typed clients.
 //!
 //! The compiler + interpreter are registered at exactly the content addresses
-//! the account's `apply_doc` resolves them to: a tiny [`MockRegistry`] stands in
-//! at the pinned `STATELESS_REGISTRY` id and answers `fetch_hash`, and each infra
-//! type is registered at `perch_registry_resolve::address(registry, hash)`. So
-//! native mode drives the *real* registry-resolution path (fetch the hash, then
-//! derive the address) without a live registry contract or any wasm artifact —
-//! see [`crate::faithful`] for the phase-2 variant on the true registry wasm.
+//! the account's `apply_doc` resolves them to: the `stateless` subregistry is
+//! derived from the pinned `PERCH_REGISTRY` by name-salt, a tiny [`MockRegistry`]
+//! stands in there and answers `fetch_hash`, and each infra type is registered at
+//! `perch_registry_resolve::address(stateless, hash)`. So native mode drives the
+//! *real* resolution path (name-salt → fetch the hash → derive the address)
+//! without a live registry contract or any wasm artifact — see [`crate::faithful`]
+//! for the phase-2 variant on the true registry wasm.
 
 use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use perch_interpreter::{PerchInterpreter, PerchInterpreterClient};
-use perch_smart_account::{compiler, interpreter, STATELESS_REGISTRY};
+use perch_smart_account::{compiler, interpreter, stateless, PERCH_REGISTRY};
 use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{contract, contractimpl, vec, Address, Bytes, BytesN, Env, String, Vec};
 use stellar_accounts::smart_account::Signer;
@@ -24,9 +25,9 @@ use crate::fixture::{self, AnyKeyVerifier, FIXTURE_VERIFIERS};
 use crate::Bootstrap;
 
 /// A minimal stand-in for the stateless registry's `Publishable::fetch_hash`,
-/// deployed at the account's pinned `STATELESS_REGISTRY` id so runtime
-/// resolution reaches it. Its `wasm_name → hash` map is seeded directly in
-/// storage by [`deploy_registry`]; the hash it returns is what the account
+/// deployed at the derived `stateless` subregistry address so the account's
+/// runtime resolution reaches it. Its `wasm_name → hash` map is seeded directly
+/// in storage by [`deploy_registry`]; the hash it returns is what the account
 /// derives the content-addressed infra address from.
 #[contract]
 pub struct MockRegistry;
@@ -54,9 +55,14 @@ fn infra_hashes(env: &Env) -> (BytesN<32>, BytesN<32>) {
     (h(compiler::WASM_NAME), h(interpreter::WASM_NAME))
 }
 
-/// Deploy [`MockRegistry`] at the pinned id and seed its `wasm_name → hash` map.
+/// Derive the `stateless` subregistry from the pinned perch registry (name-salt,
+/// exactly as the account does), deploy [`MockRegistry`] there, and seed its
+/// `wasm_name → hash` map. Returns the stateless registry address (the deployer
+/// the compiler + interpreter content-address off). Network-dependent, so it
+/// must run after the network bind.
 fn deploy_registry(env: &Env) -> Address {
-    let registry = Address::from_str(env, STATELESS_REGISTRY);
+    let perch = Address::from_str(env, PERCH_REGISTRY);
+    let registry = stateless::address(env, &perch);
     env.register_at(&registry, MockRegistry, ());
     let (hc, hi) = infra_hashes(env);
     env.as_contract(&registry, || {
@@ -87,10 +93,11 @@ fn register_infra_at_derived(env: &Env, registry: &Address) -> (Address, Address
 pub struct World {
     /// The unit host every contract shares.
     pub env: Env,
-    /// The stateless-registry address the account resolves infra through — the
-    /// pinned `STATELESS_REGISTRY` id, where native mode deploys a [`MockRegistry`]
-    /// answering `fetch_hash`. Always `Some` in native mode now that resolution
-    /// runs for real; [`crate::faithful`] mode populates it with the true registry.
+    /// The stateless-registry address the account resolves infra through —
+    /// derived from the pinned `PERCH_REGISTRY` by name-salt, where native mode
+    /// deploys a [`MockRegistry`] answering `fetch_hash`. Always `Some` in native
+    /// mode now that resolution runs for real; [`crate::faithful`] mode populates
+    /// it with the true registry.
     pub registry: Option<Address>,
     /// The stateless doc-compiler (`compile_doc`).
     pub compiler: Address,
@@ -125,18 +132,18 @@ impl World {
         fixture::ci_publish_doc_hash(&self.env)
     }
 
-    /// Re-register the compiler + interpreter at the content addresses derived
-    /// under the CURRENTLY bound network, returning the new `(compiler,
-    /// interpreter)`. `build()` does this once after the fixture-network bind; a
-    /// test that rebinds the ledger to another network (to prove cross-network
-    /// rejection) calls this so the account's resolution still reaches a real
-    /// compiler — one that then returns `WrongNetwork` for the foreign document.
+    /// Re-derive the whole resolution chain under the CURRENTLY bound network —
+    /// the `stateless` subregistry (with its mock), then the compiler +
+    /// interpreter — returning the new `(compiler, interpreter)`. `build()` does
+    /// this once after the fixture-network bind; a test that rebinds the ledger
+    /// to another network (to prove cross-network rejection) calls it so the
+    /// account's resolution reaches a real compiler at the *new* network's
+    /// derived address — one that then returns `WrongNetwork` for the foreign
+    /// document. The stateless address is network-dependent, so the mock must be
+    /// re-stood-up at the new derivation, not reused from `self.registry`.
     pub fn reregister_infra_for_current_network(&self) -> (Address, Address) {
-        let registry = self
-            .registry
-            .as_ref()
-            .expect("native mode always has a registry");
-        register_infra_at_derived(&self.env, registry)
+        let registry = deploy_registry(&self.env);
+        register_infra_at_derived(&self.env, &registry)
     }
 }
 
@@ -159,11 +166,12 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
         env.ledger().with_mut(|l| l.network_id = net_id);
     }
 
-    // Deploy the mock registry at the pinned id, then register the compiler +
-    // interpreter at the content addresses `apply_doc` derives from it — so the
-    // zero-arg `apply_doc(doc)` resolves to these by fetching the hash and
-    // deriving, exactly as on-chain, with no live registry contract. Derivation
-    // is network-dependent, so both must run after the network bind above.
+    // Derive the stateless subregistry from the pinned perch registry, deploy
+    // the mock registry there, then register the compiler + interpreter at the
+    // content addresses `apply_doc` derives from it — so the zero-arg
+    // `apply_doc(doc)` resolves to these by name-salt → fetch hash → derive,
+    // exactly as on-chain, with no live registry contract. All network-dependent,
+    // so it runs after the network bind above.
     let registry = deploy_registry(&env);
     let (compiler, interpreter) = register_infra_at_derived(&env, &registry);
     let verifier = env.register(PerchEd25519Verifier, ());

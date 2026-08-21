@@ -16,6 +16,8 @@
     [],
     [],
     [],
+    [],
+    [],
     []
   ],
   "ledger": {
@@ -275,7 +277,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAALFZY4QK6CFYWQK4VOLBHP2JB5Y64Y5OU4A45ORAH7H3BZF3LIK3LE",
+              "contract": "CB7U5AOMI3ECL4RRODD5OJZSNU3MALZFT6KYJBREN7WIFGTDRCPG3WOX",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -298,7 +300,47 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CACY2C4ANO5UEL4Z4KSOGTL2RBMRVSMNN32E4FCLSL5SZWLAT7L252VQ",
+              "contract": "CB7VFQ5RN7HLYRD3QRRLHTCLOOFCM44LGZLDWAXLWNT2TK5KKPMMWBCI",
+              "key": {
+                "string": "perch-doc-compiler"
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "6972dc3e2cf84b005c348cc9cc7ad5e8b48e0c292f0e722034178ab1564c6071"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CB7VFQ5RN7HLYRD3QRRLHTCLOOFCM44LGZLDWAXLWNT2TK5KKPMMWBCI",
+              "key": {
+                "string": "perch-interpreter"
+              },
+              "durability": "persistent",
+              "val": {
+                "bytes": "61cae109b18841951fcf55a05385bff8fc3de864bc1119c95408ac30ff9bce48"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CB7VFQ5RN7HLYRD3QRRLHTCLOOFCM44LGZLDWAXLWNT2TK5KKPMMWBCI",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -431,6 +473,29 @@
             "contract_data": {
               "ext": "v0",
               "contract": "CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CDR4GG42IAO3LESRRW7EEU3ZMS4IWBCKCEIDBITTRTS55EHXDCVFNQR3",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {

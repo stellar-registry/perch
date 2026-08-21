@@ -61,27 +61,46 @@
 //!     // → CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY
 //! }
 //!
-//! // Both expand to a module `interpreter` / `compiler` exposing:
+//! // Name-salted mode — `deploy_name:` instead of `wasm_name:`. Resolves a
+//! // *named* deploy (salt = sha256(name), the base `deploy` convention) from its
+//! // PARENT registry, so e.g. the stateless subregistry derives from the perch
+//! // registry id — no need to hardcode the child's strkey.
+//! registry_contract! {
+//!     mod: stateless,
+//!     deploy_name: "stateless",
+//! }
+//! // stateless::address(env, &perch_registry) → CC6ELNH6…RY26O (on testnet)
+//!
+//! // Content-addressed modes expand to a module exposing:
 //! //   pub fn address(env: &Env, registry: &Address) -> Address
 //! //   pub const WASM_NAME: &str
 //! //   pub fn client<'a>(env: &Env, registry: &Address) -> <client>  // iff `client:` given
 //! // Pinned mode also exposes `WASM_HASH: [u8; 32]` and `hash(env)`.
 //! // Runtime mode also exposes `hash(env, registry)`, plus `address_memoized`
 //! // and `clear_memo` for an opt-in instance-storage memo.
+//! // Name-salted mode exposes `address(env, parent)` + `DEPLOY_NAME: &str`
+//! // (+ `client()` iff `client:` given).
 //! ```
 //!
 //! ## Grammar
 //!
 //! - `mod:` — required — identifier naming the generated module.
-//! - `wasm_name:` — required — string literal; the registry name (used verbatim
-//!   in runtime mode's `fetch_hash`).
+//! - `wasm_name:` — string literal; the registry name (used verbatim in runtime
+//!   mode's `fetch_hash`). Selects **content-addressed** derivation
+//!   (`salt = wasm_hash`). Mutually exclusive with `deploy_name:`; exactly one is
+//!   required.
+//! - `deploy_name:` — string literal; a *named* deploy. Selects **name-salted**
+//!   derivation (`salt = sha256(normalized_name)`), the base `deploy` convention —
+//!   `address(env, parent)` resolves the child from its PARENT registry id.
+//!   Normalized (lowercased, `_`→`-`) at expansion time. No `hash:`/`fetch_hash`.
 //! - `client:` — optional — path to the typed client `client()` returns. Use an
 //!   absolute/extern-crate path (e.g. `perch_interpreter::PolicyClient`); the
 //!   path is re-emitted inside the generated child module. Omit it for
 //!   address-only resolution (no `client()` is generated, and no client type is
 //!   linked) — e.g. an interpreter used solely as a policy-map key.
-//! - `hash:` — optional — 64-hex-char string (optional `0x` prefix). Present
-//!   selects **pinned mode**; absent selects **runtime mode**.
+//! - `hash:` — optional; **content-addressed only** — 64-hex-char string
+//!   (optional `0x` prefix). Present selects **pinned mode**; absent selects
+//!   **runtime mode**.
 //!
 //! [`CompileConfig::interpreter_wasm_hash`]: https://github.com/stellar-registry/perch
 //! [`Env::get_contract_id`]: soroban_sdk::Env

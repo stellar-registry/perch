@@ -30,25 +30,41 @@ pub fn registry_contract(input: TokenStream) -> TokenStream {
     expand(&spec).into()
 }
 
+/// Which derivation the generated `address()` performs. Both end at
+/// `deployer(registry, salt).deployed_address()`; they differ only in the salt.
+enum Mode {
+    /// Content-addressed: `salt == wasm_hash`. `WasmName` names the published
+    /// wasm; the hash is a compile-time literal (pinned) or fetched at call time
+    /// (runtime). This is how a stateless singleton (compiler, interpreter) is
+    /// resolved from the registry it was `deploy_stateless`'d in.
+    Content {
+        wasm_name: LitStr,
+        hash: Option<[u8; 32]>,
+    },
+    /// Name-salted: `salt == sha256(normalized_name)` — the base registry
+    /// `deploy` convention. This is how a *named* deploy (e.g. a subregistry
+    /// under its parent) is resolved from the parent registry's id.
+    Named { deploy_name: String },
+}
+
 /// Parsed `registry_contract! { … }` invocation.
 struct RegistrySpec {
     /// Name of the generated module (`mod:`).
     module: Ident,
-    /// The registry wasm name looked up in runtime mode (`wasm_name:`).
-    wasm_name: LitStr,
+    /// Which salt the derivation uses (`wasm_name:`/`hash:` vs `deploy_name:`).
+    mode: Mode,
     /// Path to the typed client returned by `client()` (`client:`). Optional:
     /// omit it for address-only resolution (no `client()` is generated) — e.g.
     /// resolving a contract used purely as an address, like an interpreter
     /// attached as a policy-map key.
     client: Option<Path>,
-    /// Pinned wasm hash bytes (`hash:`), or `None` for runtime-fetch mode.
-    hash: Option<[u8; 32]>,
 }
 
 impl Parse for RegistrySpec {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut module: Option<Ident> = None;
         let mut wasm_name: Option<LitStr> = None;
+        let mut deploy_name: Option<LitStr> = None;
         let mut client: Option<Path> = None;
         let mut hash: Option<[u8; 32]> = None;
 
@@ -70,6 +86,12 @@ impl Parse for RegistrySpec {
                     }
                     wasm_name = Some(input.parse()?);
                 }
+                "deploy_name" => {
+                    if deploy_name.is_some() {
+                        return Err(syn::Error::new(key.span(), "duplicate `deploy_name`"));
+                    }
+                    deploy_name = Some(input.parse()?);
+                }
                 "client" => {
                     if client.is_some() {
                         return Err(syn::Error::new(key.span(), "duplicate `client`"));
@@ -88,7 +110,7 @@ impl Parse for RegistrySpec {
                         key.span(),
                         format!(
                             "unknown key `{other}`; expected one of `mod`, `wasm_name`, \
-                             `client`, `hash`"
+                             `deploy_name`, `client`, `hash`"
                         ),
                     ));
                 }
@@ -103,12 +125,41 @@ impl Parse for RegistrySpec {
         }
 
         let span = input.span();
+        let module = module.ok_or_else(|| syn::Error::new(span, "missing required key `mod`"))?;
+
+        // Exactly one salt source: content-addressed (`wasm_name`) XOR
+        // name-salted (`deploy_name`). `hash:` only applies to the former.
+        let mode =
+            match (wasm_name, deploy_name) {
+                (Some(_), Some(d)) => return Err(syn::Error::new(
+                    d.span(),
+                    "`wasm_name` and `deploy_name` are mutually exclusive — pick one salt source",
+                )),
+                (None, None) => {
+                    return Err(syn::Error::new(
+                        span,
+                        "missing a salt source: give `wasm_name` (content-addressed) or \
+                     `deploy_name` (name-salted)",
+                    ))
+                }
+                (Some(wasm_name), None) => Mode::Content { wasm_name, hash },
+                (None, Some(deploy_name)) => {
+                    if hash.is_some() {
+                        return Err(syn::Error::new(
+                            deploy_name.span(),
+                            "`hash` is only valid with `wasm_name` (content-addressed mode)",
+                        ));
+                    }
+                    Mode::Named {
+                        deploy_name: normalize_name(&deploy_name.value()),
+                    }
+                }
+            };
+
         Ok(RegistrySpec {
-            module: module.ok_or_else(|| syn::Error::new(span, "missing required key `mod`"))?,
-            wasm_name: wasm_name
-                .ok_or_else(|| syn::Error::new(span, "missing required key `wasm_name`"))?,
+            module,
+            mode,
             client,
-            hash,
         })
     }
 }
@@ -147,13 +198,25 @@ fn hex_val(c: u8) -> Option<u8> {
     }
 }
 
+/// Canonicalize a registry name to the form the registry hashes for its deploy
+/// salt: lowercase ASCII, `_` → `-`. Mirrors the registry's `NormalizedName`
+/// (`sha256` of this string is the name-salt). Keyword rejection and full
+/// validation are the registry's job at deploy time, not the resolver's.
+fn normalize_name(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '_' => '-',
+            c => c.to_ascii_lowercase(),
+        })
+        .collect()
+}
+
 fn expand(spec: &RegistrySpec) -> TokenStream2 {
     let module = &spec.module;
-    let wasm_name = &spec.wasm_name;
 
     // `client()` is only emitted when a `client:` path was given. Address-only
-    // callers (e.g. resolving an interpreter used solely as a policy-map key)
-    // omit it and link no client type at all.
+    // callers (e.g. resolving an interpreter used solely as a policy-map key, or
+    // a subregistry we only need the address of) omit it and link no client type.
     let client_item = spec.client.as_ref().map(|client| {
         quote! {
             /// A typed client bound to the derived address.
@@ -166,13 +229,53 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
         }
     });
 
+    // Name-salted mode: `salt == sha256(normalized_name)`, the base `deploy`
+    // convention — resolves a *named* deploy (e.g. a subregistry) from its
+    // parent registry's id. `registry` is the PARENT here.
+    let deploy_name = match &spec.mode {
+        Mode::Named { deploy_name } => Some(deploy_name.clone()),
+        Mode::Content { .. } => None,
+    };
+    if let Some(deploy_name) = deploy_name {
+        return quote! {
+            #[allow(dead_code, clippy::all)]
+            pub mod #module {
+                /// The normalized registry name this module resolves.
+                pub const DEPLOY_NAME: &str = #deploy_name;
+
+                /// Derive this named deploy's address from its parent registry —
+                /// pure, offline: `salt == sha256(DEPLOY_NAME)`, exactly the base
+                /// `deploy` convention. `registry` is the PARENT registry.
+                pub fn address(
+                    env: &::soroban_sdk::Env,
+                    registry: &::soroban_sdk::Address,
+                ) -> ::soroban_sdk::Address {
+                    let salt = env
+                        .crypto()
+                        .sha256(&::soroban_sdk::Bytes::from_slice(env, DEPLOY_NAME.as_bytes()))
+                        .to_bytes();
+                    env.deployer()
+                        .with_address(registry.clone(), salt)
+                        .deployed_address()
+                }
+
+                #client_item
+            }
+        };
+    }
+
+    // Content-addressed mode below (`salt == wasm_hash`).
+    let Mode::Content { wasm_name, hash } = &spec.mode else {
+        unreachable!("named mode handled above");
+    };
+
     // `hash()` accessor + the salt expression `address()`/`client()` derive from.
-    // Both modes end at the same pure derivation:
+    // Both sub-modes end at the same pure derivation:
     //     env.deployer().with_address(registry.clone(), <salt>).deployed_address()
     // where <salt> is the contract's wasm hash (perch's stateless-singleton
     // deploy convention: salt == wasm hash, so the address is a pure function of
     // (registry id, wasm hash) with no on-chain lookup).
-    let (hash_items, derive_impl) = if let Some(bytes) = spec.hash {
+    let (hash_items, derive_impl) = if let Some(bytes) = hash {
         // ---- Pinned mode: compile-time hash literal, zero XCC, fully offline.
         let byte_lits = bytes.iter().map(|b| quote!(#b));
         let hash_items = quote! {

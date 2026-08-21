@@ -10,17 +10,22 @@
 //! address is derivable (registry id + this hash)"). This macro formalizes that
 //! derivation and gives you a typed client for the resolved contract.
 //!
-//! The derivation is **pure SDK** — no deployment and no network passphrase.
-//! Perch deploys its stateless singletons (interpreter, compiler) with
-//! `salt == wasm_hash`, so the address is
+//! The derivation is **pure SDK** — no deployment, no RPC. Perch deploys its
+//! stateless singletons (interpreter, compiler) with `salt == wasm_hash`, so the
+//! address is
 //!
 //! ```text
 //! env.deployer().with_address(registry, wasm_hash).deployed_address()
 //! ```
 //!
-//! which is exactly [`Env::get_contract_id`]`(registry, wasm_hash)`. Because the
-//! address is a function of `(registry id, wasm hash)` only, it is identical on
-//! every network where the registry address and the published wasm match.
+//! which is exactly [`Env::get_contract_id`]`(registry, wasm_hash)`. The host
+//! computes `sha256(network_id ‖ Address-preimage(registry, salt = wasm_hash))`,
+//! so the address is a function of `(network id, registry id, wasm hash)` and is
+//! taken from the *current env's* ledger network id. It is therefore derivable
+//! offline for a given network, but **network-specific**: the same registry
+//! address + wasm hash yield different contract ids on testnet vs mainnet
+//! (their network ids differ). Resolve under an env bound to the target
+//! network's id (`env.ledger().with_mut(|l| l.network_id = …)` in tests).
 //!
 //! # Usage
 //!
@@ -28,11 +33,22 @@
 //! use perch_registry_resolve::registry_contract;
 //!
 //! // Pinned mode — compile-time hash literal, zero cross-contract calls, offline.
+//! // Hashes below are the perch infra published to `unverified/perch/stateless`
+//! // on **testnet** (registry CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O);
+//! // `address(env, &that_registry)` under testnet's network id derives the live ids.
 //! registry_contract! {
 //!     mod: interpreter,
 //!     wasm_name: "perch-interpreter",
-//!     client: perch_interpreter::PolicyClient,
-//!     hash: "9f3c…",              // 64 hex chars, optional `0x` prefix
+//!     client: perch_interpreter::PerchInterpreterClient,
+//!     hash: "f8320d3031e7dffe51fac14177c5353b8818f8e6df3bda6c4c1b714f5ce1d858",
+//!     // → CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM
+//! }
+//! registry_contract! {
+//!     mod: verifier,
+//!     wasm_name: "perch-ed25519-verifier",
+//!     client: perch_ed25519_verifier::PerchEd25519VerifierClient,
+//!     hash: "6ddf7cadcb85059cffa5b127f994490ee560f8a46b2bb437975fbe5bd0cc7de4",
+//!     // → CBVCTXCSF4HJJCQLLIM543CH5MJW3A2MMZ2T35GSCSN6QSC6BGSDJNNY
 //! }
 //!
 //! // Runtime mode — omit `hash:`; the current hash is fetched from the registry
@@ -41,6 +57,8 @@
 //!     mod: compiler,
 //!     wasm_name: "perch-doc-compiler",
 //!     client: perch_doc_compiler::DocCompilerClient,
+//!     // pinned hash 3645bd0de34f4896c5e6fd8ca141713eb9f8658728bf16d82026418d4ab0b27f
+//!     // → CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY
 //! }
 //!
 //! // Both expand to a module `interpreter` / `compiler` exposing:

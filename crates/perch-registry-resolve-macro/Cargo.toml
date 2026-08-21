@@ -13,3 +13,6 @@ proc-macro = true
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
+# `wasm_file:` mode hashes the wasm at macro-expansion time (build time) — the
+# same sha256 the registry stores as the content-address salt.
+sha2 = "0.10"

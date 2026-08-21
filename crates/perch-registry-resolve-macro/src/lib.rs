@@ -34,9 +34,11 @@ pub fn registry_contract(input: TokenStream) -> TokenStream {
 /// `deployer(registry, salt).deployed_address()`; they differ only in the salt.
 enum Mode {
     /// Content-addressed: `salt == wasm_hash`. `WasmName` names the published
-    /// wasm; the hash is a compile-time literal (pinned) or fetched at call time
-    /// (runtime). This is how a stateless singleton (compiler, interpreter) is
-    /// resolved from the registry it was `deploy_stateless`'d in.
+    /// wasm; the hash is pinned — from a compile-time literal (`hash:`) or the
+    /// sha256 of a local wasm file (`wasm_file:`, computed at build time) — or,
+    /// when neither is given, fetched at call time (runtime). This is how a
+    /// stateless singleton (compiler, interpreter) is resolved from the registry
+    /// it was `deploy_stateless`'d in.
     Content {
         wasm_name: LitStr,
         hash: Option<[u8; 32]>,
@@ -67,6 +69,7 @@ impl Parse for RegistrySpec {
         let mut deploy_name: Option<LitStr> = None;
         let mut client: Option<Path> = None;
         let mut hash: Option<[u8; 32]> = None;
+        let mut wasm_file: Option<LitStr> = None;
 
         while !input.is_empty() {
             // `mod` is a keyword, so parse the key with `parse_any`.
@@ -105,12 +108,18 @@ impl Parse for RegistrySpec {
                     let lit: LitStr = input.parse()?;
                     hash = Some(parse_hash(&lit)?);
                 }
+                "wasm_file" => {
+                    if wasm_file.is_some() {
+                        return Err(syn::Error::new(key.span(), "duplicate `wasm_file`"));
+                    }
+                    wasm_file = Some(input.parse()?);
+                }
                 other => {
                     return Err(syn::Error::new(
                         key.span(),
                         format!(
                             "unknown key `{other}`; expected one of `mod`, `wasm_name`, \
-                             `deploy_name`, `client`, `hash`"
+                             `deploy_name`, `client`, `hash`, `wasm_file`"
                         ),
                     ));
                 }
@@ -128,33 +137,50 @@ impl Parse for RegistrySpec {
         let module = module.ok_or_else(|| syn::Error::new(span, "missing required key `mod`"))?;
 
         // Exactly one salt source: content-addressed (`wasm_name`) XOR
-        // name-salted (`deploy_name`). `hash:` only applies to the former.
-        let mode =
-            match (wasm_name, deploy_name) {
-                (Some(_), Some(d)) => return Err(syn::Error::new(
+        // name-salted (`deploy_name`). `hash:`/`wasm_file:` only apply to the
+        // former, and are themselves mutually exclusive.
+        let mode = match (wasm_name, deploy_name) {
+            (Some(_), Some(d)) => {
+                return Err(syn::Error::new(
                     d.span(),
                     "`wasm_name` and `deploy_name` are mutually exclusive — pick one salt source",
-                )),
-                (None, None) => {
-                    return Err(syn::Error::new(
-                        span,
-                        "missing a salt source: give `wasm_name` (content-addressed) or \
+                ))
+            }
+            (None, None) => {
+                return Err(syn::Error::new(
+                    span,
+                    "missing a salt source: give `wasm_name` (content-addressed) or \
                      `deploy_name` (name-salted)",
-                    ))
+                ))
+            }
+            (Some(wasm_name), None) => {
+                let hash =
+                    match (hash, &wasm_file) {
+                        (Some(_), Some(f)) => return Err(syn::Error::new(
+                            f.span(),
+                            "`hash` and `wasm_file` are mutually exclusive — a pin comes from one \
+                             or the other",
+                        )),
+                        // `wasm_file:` — hash a local wasm at build time (its sha256
+                        // is the content-address salt). A missing file is a build
+                        // error telling you to fetch it.
+                        (None, Some(f)) => Some(hash_wasm_file(f)?),
+                        (h, None) => h,
+                    };
+                Mode::Content { wasm_name, hash }
+            }
+            (None, Some(deploy_name)) => {
+                if hash.is_some() || wasm_file.is_some() {
+                    return Err(syn::Error::new(
+                        deploy_name.span(),
+                        "`hash`/`wasm_file` are only valid with `wasm_name` (content-addressed mode)",
+                    ));
                 }
-                (Some(wasm_name), None) => Mode::Content { wasm_name, hash },
-                (None, Some(deploy_name)) => {
-                    if hash.is_some() {
-                        return Err(syn::Error::new(
-                            deploy_name.span(),
-                            "`hash` is only valid with `wasm_name` (content-addressed mode)",
-                        ));
-                    }
-                    Mode::Named {
-                        deploy_name: normalize_name(&deploy_name.value()),
-                    }
+                Mode::Named {
+                    deploy_name: normalize_name(&deploy_name.value()),
                 }
-            };
+            }
+        };
 
         Ok(RegistrySpec {
             module,
@@ -162,6 +188,37 @@ impl Parse for RegistrySpec {
             client,
         })
     }
+}
+
+/// Read a local wasm file at macro-expansion (build) time and return its
+/// sha256 — the same digest the registry stores as the `deploy_stateless`
+/// content-address salt. The path is relative to the invoking crate's
+/// `CARGO_MANIFEST_DIR`. A missing file is a **build error** naming the file, so
+/// resolution is pinned to a wasm you have on disk (fetch it first) rather than
+/// silently reaching the network.
+fn hash_wasm_file(lit: &LitStr) -> syn::Result<[u8; 32]> {
+    use sha2::{Digest, Sha256};
+    let rel = lit.value();
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
+        syn::Error::new(
+            lit.span(),
+            "CARGO_MANIFEST_DIR unset — cannot resolve `wasm_file`",
+        )
+    })?;
+    let path = std::path::Path::new(&manifest).join(&rel);
+    let bytes = std::fs::read(&path).map_err(|e| {
+        syn::Error::new(
+            lit.span(),
+            format!(
+                "`wasm_file` {rel:?} not found ({e}).\n\
+                 Fetch the published wasm to {path} first, e.g.\n\
+                 `stellar registry download <wasm-name> --out-file {path}`\n\
+                 (or `stellar contract fetch --id <deployed-id> --out-file {path}`).",
+                path = path.display(),
+            ),
+        )
+    })?;
+    Ok(Sha256::digest(&bytes).into())
 }
 
 /// Decode a `hash:` literal (64 hex chars, optional `0x` prefix) to 32 bytes.

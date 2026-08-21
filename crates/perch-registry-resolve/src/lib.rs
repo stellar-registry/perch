@@ -99,8 +99,13 @@
 //!   address-only resolution (no `client()` is generated, and no client type is
 //!   linked) — e.g. an interpreter used solely as a policy-map key.
 //! - `hash:` — optional; **content-addressed only** — 64-hex-char string
-//!   (optional `0x` prefix). Present selects **pinned mode**; absent selects
-//!   **runtime mode**.
+//!   (optional `0x` prefix). A compile-time-pinned wasm hash.
+//! - `wasm_file:` — optional; **content-addressed only**; mutually exclusive with
+//!   `hash:` — path (relative to the invoking crate's `CARGO_MANIFEST_DIR`) to a
+//!   local `.wasm`. The macro reads it at build time and pins `sha256(bytes)` (the
+//!   content-address salt). A missing file is a build error naming it, so the pin
+//!   comes from a wasm you have on disk — fetch it first. Present `hash:`/`wasm_file:`
+//!   selects **pinned mode**; both absent selects **runtime mode** (call-time `fetch_hash`).
 //!
 //! [`CompileConfig::interpreter_wasm_hash`]: https://github.com/stellar-registry/perch
 //! [`Env::get_contract_id`]: soroban_sdk::Env

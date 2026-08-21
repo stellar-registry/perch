@@ -4,18 +4,19 @@
 //! typed clients.
 //!
 //! The compiler + interpreter are registered at exactly the content addresses
-//! the account's `apply_doc` resolves them to: the pinned `STATELESS_REGISTRY`
-//! id + each infra's pinned wasm hash derive `deployer(stateless, hash)`, and the
-//! infra type is registered there. Resolution is pinned (offline, no `fetch_hash`
-//! XCC), so native mode needs no registry contract, no mock, and no wasm
-//! artifact — just the same derivation the account uses. See [`crate::faithful`]
-//! for the phase-2 variant on the true registry wasm.
+//! the account's `apply_doc` resolves them to: `stateless` = name-salt(perch
+//! registry, "stateless"), then each infra's pinned wasm hash derives
+//! `deployer(stateless, hash)`, and the infra type is registered there.
+//! Resolution is pinned (offline, no `fetch_hash` XCC), so native mode needs no
+//! registry contract, no mock, and no wasm artifact — just the same derivation
+//! the account uses. See [`crate::faithful`] for the phase-2 variant on the true
+//! registry wasm.
 
 use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use perch_interpreter::{PerchInterpreter, PerchInterpreterClient};
-use perch_smart_account::registry_pins::{compiler, interpreter, STATELESS_REGISTRY};
+use perch_smart_account::{compiler, interpreter, stateless, PERCH_REGISTRY};
 use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Vec};
 use stellar_accounts::smart_account::Signer;
@@ -24,17 +25,23 @@ use crate::fixture::{self, AnyKeyVerifier, FIXTURE_VERIFIERS};
 use crate::Bootstrap;
 
 /// Register the compiler + interpreter types at the content addresses the
-/// account derives — `deployer(STATELESS_REGISTRY, pinned_hash)` — under the
+/// account derives — `deployer(stateless, pinned_hash)` — under the
 /// CURRENTLY bound network. Derivation is network-dependent, so this runs after
 /// the network is bound, and again if a test rebinds the ledger (see
 /// [`World::reregister_infra_for_current_network`]).
 fn register_infra_at_derived(env: &Env) -> (Address, Address) {
-    let stateless = Address::from_str(env, STATELESS_REGISTRY);
+    let stateless = stateless_address(env);
     let compiler_addr = compiler::address(env, &stateless);
     env.register_at(&compiler_addr, PerchDocCompiler, ());
     let interpreter_addr = interpreter::address(env, &stateless);
     env.register_at(&interpreter_addr, PerchInterpreter, ());
     (compiler_addr, interpreter_addr)
+}
+
+/// The `stateless` subregistry address the account derives — name-salt(perch
+/// registry, "stateless") under the current env's network.
+fn stateless_address(env: &Env) -> Address {
+    stateless::address(env, &Address::from_str(env, PERCH_REGISTRY))
 }
 
 /// A fully wired unit-`Env` world: the account, the three stateless infra
@@ -44,8 +51,8 @@ fn register_infra_at_derived(env: &Env) -> (Address, Address) {
 pub struct World {
     /// The unit host every contract shares.
     pub env: Env,
-    /// The pinned `STATELESS_REGISTRY` id the account content-addresses its infra
-    /// off (`deployer(stateless, hash)`). Native mode deploys no contract there —
+    /// The `stateless` subregistry address the account content-addresses its
+    /// infra off (`deployer(stateless, hash)`). Native mode deploys no contract there —
     /// resolution is a pure offline derivation — but the field is populated for
     /// parity with [`crate::faithful`] mode, which puts the real registry here.
     pub registry: Option<Address>,
@@ -99,7 +106,7 @@ impl World {
 ///
 /// The compiler + interpreter live at content-addressed derivations rather than
 /// sequential `register()` ids, so their addresses (and any snapshot that embeds
-/// them) are a function of the pinned `STATELESS_REGISTRY` id, the pinned infra
+/// them) are a function of the derived `stateless` id, the pinned infra
 /// hashes, and the fixture network — stable across runs, but not the old
 /// sequential ids.
 pub(crate) fn build(cfg: Bootstrap) -> World {
@@ -116,7 +123,7 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
     }
 
     // Register the compiler + interpreter at the content addresses `apply_doc`
-    // derives — `deployer(STATELESS_REGISTRY, pinned_hash)` — so the zero-arg
+    // derives — `deployer(stateless, pinned_hash)` — so the zero-arg
     // `apply_doc(doc)` resolves to exactly these, offline, with no registry
     // contract. Network-dependent, so it runs after the network bind above.
     let (compiler, interpreter) = register_infra_at_derived(&env);
@@ -134,7 +141,7 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
     ];
     let account = env.register(PerchAccount, (admin_signers.clone(),));
 
-    let registry = Address::from_str(&env, STATELESS_REGISTRY);
+    let registry = stateless_address(&env);
     World {
         env,
         registry: Some(registry),

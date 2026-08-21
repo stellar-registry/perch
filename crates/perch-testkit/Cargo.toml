@@ -19,8 +19,7 @@ perch-account = { path = "../perch-account" }
 perch-doc-compiler = { path = "../perch-doc-compiler" }
 perch-interpreter = { path = "../perch-interpreter" }
 perch-ed25519-verifier = { path = "../perch-ed25519-verifier" }
-# The pinned infra-resolution constants + the derivation `apply_doc` uses, so
-# native mode registers the infra at exactly the addresses the account derives.
+# The pinned infra-resolution modules (`registry_pins`), so native mode registers
+# the infra at exactly the content addresses the account derives.
 perch-smart-account = { path = "../perch-smart-account" }
-perch-registry-resolve = { path = "../perch-registry-resolve" }
 hex = "0.4"

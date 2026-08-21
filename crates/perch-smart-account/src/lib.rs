@@ -35,42 +35,15 @@ use stellar_accounts::smart_account::{
 pub use soroban_sdk;
 pub use stellar_accounts;
 
-/// The perch registry (`unverified/perch`) — the account's own registry, and
-/// the **only** pinned value. Everything else is *derived* through the resolver
-/// macros: [`stateless`] hangs off this by name, and the compiler + interpreter
-/// hang off `stateless` by content hash. So `apply_doc` takes just the document;
-/// no infra strkey is hardcoded.
-///
-/// This is the one **network-specific** pin. The derivations below are pure
-/// functions of it (and the current ledger network id), so a redeployed
-/// stateless subregistry or republished infra needs no change here.
-// TODO(mainnet): feature-gate PERCH_REGISTRY per network.
-pub const PERCH_REGISTRY: &str = "CASB2M4JQSGP3QHFBGK5U6DGJXJX34GX37C2JFBU73LKKDXXNNIZHCP7";
-
-// The `stateless` subregistry derives from the perch registry by name-salt
-// (`salt == sha256("stateless")`, the base `deploy` convention) — so its id is
-// resolved from [`PERCH_REGISTRY`], never pasted as a strkey.
-perch_registry_resolve::registry_contract! {
-    mod: stateless,
-    deploy_name: "stateless",
-}
-
-// Resolve the two shared infra contracts through the `stateless` registry, the
-// same way `import_contract_client!` resolves a published contract: fetch the
-// current wasm hash for the name, then derive the content-addressed address
-// (`salt == wasm_hash`). Runtime mode (no pinned `hash:`) tracks whatever
-// version the stateless registry currently publishes.
-perch_registry_resolve::registry_contract! {
-    mod: compiler,
-    wasm_name: "perch-doc-compiler",
-    client: perch_doc_compiler::DocCompilerClient,
-}
-perch_registry_resolve::registry_contract! {
-    // Address-only: the interpreter is used solely as a rule's policy-map key,
-    // so no client type is named and no interpreter code links into the account.
-    mod: interpreter,
-    wasm_name: "perch-interpreter",
-}
+/// Build-time-resolved, cache-first pins for the shared infra: the `stateless`
+/// subregistry id and the compiler/interpreter wasm hashes, resolved from the
+/// registry by a script and committed so normal builds are offline and
+/// deterministic. `apply_doc` resolves the compiler + interpreter from these —
+/// nothing is hand-hardcoded, and because the hashes are **pinned** (not fetched
+/// at runtime) a later republish cannot change a deployed account's behavior.
+/// See [`registry_pins`] for the regenerate command and the trust rationale.
+pub mod registry_pins;
+use registry_pins::{compiler, interpreter, STATELESS_REGISTRY};
 
 /// Everything `apply_doc` can refuse. Compiler failures flatten in via
 /// `#[from_contract_client]` — the account's error space includes every
@@ -111,21 +84,20 @@ struct PerchStorage {
 pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// Apply a policy document — **the only way authorization changes**.
     /// Takes just the document's JSON bytes; the two shared, immutable infra
-    /// contracts (the stateless doc compiler and the interpreter) are *resolved*
-    /// from the compile-time-pinned [`PERCH_REGISTRY`] — the `stateless`
-    /// subregistry derived by name, then each infra's current wasm hash fetched
-    /// and its content-addressed address derived — never passed in. Replaces the
-    /// entire rule set atomically and returns the canonical `doc_hash`. Runs
-    /// under the account's own authorization: the admin rule must approve the call.
+    /// contracts (the stateless doc compiler and the interpreter) are *derived*
+    /// from the build-time-pinned [`registry_pins`] — the content-addressed
+    /// address of each is `deployer(stateless_registry, wasm_hash)`, computed
+    /// offline (no cross-contract call) — never passed in. Replaces the entire
+    /// rule set atomically and returns the canonical `doc_hash`. Runs under the
+    /// account's own authorization: the admin rule must approve the call.
     fn apply_doc(e: &Env, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
         e.current_contract_address().require_auth();
 
-        // Resolve the infra from the pinned perch registry: derive the
-        // `stateless` subregistry by name, then resolve the compiler +
-        // interpreter through it (fetch hash → content address). No
-        // admin-supplied addresses to vouch for.
-        let perch_registry = Address::from_str(e, PERCH_REGISTRY);
-        let stateless = stateless::address(e, &perch_registry);
+        // Resolve the infra from the pinned stateless registry, purely offline:
+        // each address is `deployer(stateless, pinned_wasm_hash).deployed_address()`.
+        // Pinned (not runtime-fetched), so a registry republish can't change what
+        // a deployed account runs; no admin-supplied addresses to vouch for.
+        let stateless = Address::from_str(e, STATELESS_REGISTRY);
         let interpreter = interpreter::address(e, &stateless);
 
         // Stateless compile: parse, validate, network-bind, lower. Every

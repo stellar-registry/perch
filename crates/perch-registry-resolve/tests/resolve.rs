@@ -61,6 +61,15 @@ registry_contract! {
     client: crate::FixtureClient,
 }
 
+// Address-only: no `client:` — resolves the address (and, pinned, the hash)
+// without naming or linking any client type. This is how the account resolves
+// the interpreter, which it uses solely as a policy-map key.
+registry_contract! {
+    mod: address_only,
+    wasm_name: "fixture",
+    hash: "33d12fec8f6f3ddf2eb0ec76ee9a75a9e37d1fa20af35908d90d278af8264311",
+}
+
 fn hex32(s: &str) -> [u8; 32] {
     let mut out = [0u8; 32];
     let b = s.as_bytes();
@@ -124,6 +133,19 @@ fn pinned_address_matches_actual_deployment() {
 
     // The macro-derived address equals the actually-deployed instance address.
     assert_eq!(pinned::address(&env, &registry), deployed);
+}
+
+#[test]
+fn address_only_matches_pinned_derivation() {
+    // The no-`client:` module derives the identical address + hash as the
+    // client-bearing one; it only omits `client()`.
+    let env = Env::default();
+    let registry = Address::generate(&env);
+    assert_eq!(
+        address_only::address(&env, &registry),
+        pinned::address(&env, &registry)
+    );
+    assert_eq!(address_only::WASM_HASH, pinned::WASM_HASH);
 }
 
 #[test]

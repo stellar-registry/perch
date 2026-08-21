@@ -1556,6 +1556,7 @@ name = "perch-smart-account"
 version = "0.1.0"
 dependencies = [
  "perch-doc-compiler",
+ "perch-registry-resolve",
  "soroban-sdk",
  "soroban-sdk-tools",
  "stellar-accounts",
@@ -1579,6 +1580,8 @@ dependencies = [
  "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",
+ "perch-registry-resolve",
+ "perch-smart-account",
  "soroban-sdk",
  "stellar-accounts",
 ]

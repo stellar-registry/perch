@@ -36,8 +36,11 @@ struct RegistrySpec {
     module: Ident,
     /// The registry wasm name looked up in runtime mode (`wasm_name:`).
     wasm_name: LitStr,
-    /// Path to the typed client returned by `client()` (`client:`).
-    client: Path,
+    /// Path to the typed client returned by `client()` (`client:`). Optional:
+    /// omit it for address-only resolution (no `client()` is generated) — e.g.
+    /// resolving a contract used purely as an address, like an interpreter
+    /// attached as a policy-map key.
+    client: Option<Path>,
     /// Pinned wasm hash bytes (`hash:`), or `None` for runtime-fetch mode.
     hash: Option<[u8; 32]>,
 }
@@ -104,7 +107,7 @@ impl Parse for RegistrySpec {
             module: module.ok_or_else(|| syn::Error::new(span, "missing required key `mod`"))?,
             wasm_name: wasm_name
                 .ok_or_else(|| syn::Error::new(span, "missing required key `wasm_name`"))?,
-            client: client.ok_or_else(|| syn::Error::new(span, "missing required key `client`"))?,
+            client,
             hash,
         })
     }
@@ -147,7 +150,21 @@ fn hex_val(c: u8) -> Option<u8> {
 fn expand(spec: &RegistrySpec) -> TokenStream2 {
     let module = &spec.module;
     let wasm_name = &spec.wasm_name;
-    let client = &spec.client;
+
+    // `client()` is only emitted when a `client:` path was given. Address-only
+    // callers (e.g. resolving an interpreter used solely as a policy-map key)
+    // omit it and link no client type at all.
+    let client_item = spec.client.as_ref().map(|client| {
+        quote! {
+            /// A typed client bound to the derived address.
+            pub fn client<'a>(
+                env: &::soroban_sdk::Env,
+                registry: &::soroban_sdk::Address,
+            ) -> #client<'a> {
+                #client::new(env, &address(env, registry))
+            }
+        }
+    });
 
     // `hash()` accessor + the salt expression `address()`/`client()` derive from.
     // Both modes end at the same pure derivation:
@@ -262,13 +279,7 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
 
             #derive_impl
 
-            /// A typed client bound to the derived address.
-            pub fn client<'a>(
-                env: &::soroban_sdk::Env,
-                registry: &::soroban_sdk::Address,
-            ) -> #client<'a> {
-                #client::new(env, &address(env, registry))
-            }
+            #client_item
         }
     }
 }

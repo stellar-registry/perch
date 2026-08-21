@@ -17,3 +17,6 @@ stellar-accounts = { workspace = true }
 # Client + wire types only — `contract` off, so no compiler code (parser,
 # lowering) is ever linked into account wasm.
 perch-doc-compiler = { path = "../perch-doc-compiler", default-features = false }
+# The pure `registry_id + wasm_hash → address` derivation `apply_doc` uses to
+# resolve the compiler + interpreter from the pinned stateless-registry id.
+perch-registry-resolve = { path = "../perch-registry-resolve" }

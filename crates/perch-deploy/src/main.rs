@@ -61,12 +61,6 @@ enum Cmd {
         /// Path to the PolicyDoc JSON — the same file the review approved.
         #[arg(long)]
         doc: PathBuf,
-        /// The shared stateless doc-compiler contract (C…).
-        #[arg(long)]
-        compiler: String,
-        /// The shared perch interpreter contract (C…).
-        #[arg(long)]
-        interpreter: String,
         /// Stop after simulation; print footprint and fee.
         #[arg(long)]
         dry_run: bool,
@@ -120,18 +114,8 @@ fn main() -> Result<()> {
         Cmd::Apply {
             account,
             doc,
-            compiler,
-            interpreter,
             dry_run,
-        } => apply::run(
-            &cli.rpc()?,
-            cli.passphrase()?,
-            account,
-            doc,
-            compiler,
-            interpreter,
-            *dry_run,
-        ),
+        } => apply::run(&cli.rpc()?, cli.passphrase()?, account, doc, *dry_run),
         Cmd::Publish(args) => publish::run(&cli.rpc()?, cli.passphrase()?, args),
         Cmd::Verify {
             account,

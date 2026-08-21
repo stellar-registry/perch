@@ -20,9 +20,7 @@
 //! installed == reviewed via [`PerchSmartAccount::applied_doc_hash`].
 #![no_std]
 
-use perch_doc_compiler::{
-    CompiledDoc, CompiledRule, DocCompilerClient, DocCompilerError, RuleScope,
-};
+use perch_doc_compiler::{CompiledDoc, CompiledRule, DocCompilerError, RuleScope};
 use soroban_sdk::{
     auth::CustomAccountInterface, contractevent, contracttrait, Address, Bytes, BytesN, Env, Map,
     String, Val, Vec,
@@ -36,6 +34,36 @@ use stellar_accounts::smart_account::{
 // regardless of the caller's dependency graph.
 pub use soroban_sdk;
 pub use stellar_accounts;
+
+/// The perch **stateless registry** that anchors infra resolution — the
+/// content-addressed deployer whose id + a published wasm hash derives an infra
+/// contract's address (`salt == wasm_hash`). This is the **only** pinned value:
+/// `apply_doc` takes just the document, and resolves the compiler + interpreter
+/// through the registry (see [`compiler`] / [`interpreter`]) — nothing else is
+/// hardcoded.
+///
+/// It is the one **network-specific** pin — testnet's `unverified/perch/stateless`.
+/// The wasm hashes are *fetched* from it at call time, so an infra republish is
+/// picked up with no account change; only this id changes per network.
+// TODO(mainnet): feature-gate STATELESS_REGISTRY per network.
+pub const STATELESS_REGISTRY: &str = "CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O";
+
+// Resolve the two shared infra contracts through the stateless registry, the
+// same way `import_contract_client!` resolves a published contract: fetch the
+// current wasm hash for the name from the registry, then derive the
+// content-addressed address (`salt == wasm_hash`). Runtime mode (no pinned
+// `hash:`) tracks whatever version the registry currently publishes.
+perch_registry_resolve::registry_contract! {
+    mod: compiler,
+    wasm_name: "perch-doc-compiler",
+    client: perch_doc_compiler::DocCompilerClient,
+}
+perch_registry_resolve::registry_contract! {
+    // Address-only: the interpreter is used solely as a rule's policy-map key,
+    // so no client type is named and no interpreter code links into the account.
+    mod: interpreter,
+    wasm_name: "perch-interpreter",
+}
 
 /// Everything `apply_doc` can refuse. Compiler failures flatten in via
 /// `#[from_contract_client]` — the account's error space includes every
@@ -75,23 +103,25 @@ struct PerchStorage {
 #[contracttrait]
 pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// Apply a policy document — **the only way authorization changes**.
-    /// Takes the document's JSON bytes plus the two shared, immutable infra
-    /// contracts (the stateless doc compiler and the interpreter); replaces
-    /// the entire rule set atomically and returns the canonical `doc_hash`.
-    /// Runs under the account's own authorization: the admin rule must
-    /// approve the call.
-    fn apply_doc(
-        e: &Env,
-        doc_json: Bytes,
-        compiler: Address,
-        interpreter: Address,
-    ) -> Result<BytesN<32>, PerchAccountError> {
+    /// Takes just the document's JSON bytes; the two shared, immutable infra
+    /// contracts (the stateless doc compiler and the interpreter) are *resolved*
+    /// through the compile-time-pinned [`STATELESS_REGISTRY`] — their current
+    /// wasm hash fetched from the registry, then the content-addressed address
+    /// derived — never passed in. Replaces the entire rule set atomically and
+    /// returns the canonical `doc_hash`. Runs under the account's own
+    /// authorization: the admin rule must approve the call.
+    fn apply_doc(e: &Env, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
         e.current_contract_address().require_auth();
+
+        // Resolve the infra through the pinned registry: `compiler`/`interpreter`
+        // fetch the current wasm hash for their name and derive the
+        // content-addressed address. No admin-supplied addresses to vouch for.
+        let registry = Address::from_str(e, STATELESS_REGISTRY);
+        let interpreter = interpreter::address(e, &registry);
 
         // Stateless compile: parse, validate, network-bind, lower. Every
         // compiler refusal surfaces here as a typed error.
-        let compiled: CompiledDoc =
-            DocCompilerClient::new(e, &compiler).try_compile_doc(&doc_json)??;
+        let compiled: CompiledDoc = compiler::client(e, &registry).try_compile_doc(&doc_json)??;
 
         ensure_admin_survives(&compiled)?;
 

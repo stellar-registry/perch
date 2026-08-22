@@ -35,7 +35,15 @@ if [[ -z "$perch_id" ]]; then
     echo "       install it: cargo binstall -y stellar-registry-cli" >&2
     exit 1
   }
-  perch_id="$(stellar registry fetch-contract-id "$PERCH_NAME" | tr -d '[:space:]')"
+  # fetch-contract-id invokes the registry (a read); the CLI needs a source
+  # account to build the sim tx (no funding/signing needed). Use a throwaway.
+  src="${STELLAR_ACCOUNT:-}"
+  if [[ -z "$src" ]]; then
+    stellar keys address perch-fetch-reader >/dev/null 2>&1 ||
+      stellar keys generate perch-fetch-reader >/dev/null 2>&1
+    src=perch-fetch-reader
+  fi
+  perch_id="$(stellar registry fetch-contract-id "$PERCH_NAME" --source-account "$src" | tr -d '[:space:]')"
 fi
 [[ "$perch_id" =~ ^C[A-Z2-7]{55}$ ]] || { echo "error: bad perch id: '$perch_id'" >&2; exit 1; }
 

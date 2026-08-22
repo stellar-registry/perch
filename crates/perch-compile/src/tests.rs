@@ -28,9 +28,9 @@ fn ci_publish_lowers_to_the_expected_plan() {
 
     assert_eq!(plan.rules.len(), 2);
 
-    // admin-root: constraint-free self-admin → policy-free (INV-2).
+    // admin: constraint-free self-admin → policy-free (INV-2).
     let admin = &plan.rules[0];
-    assert_eq!(admin.name, "admin-root");
+    assert_eq!(admin.name, "admin");
     assert_eq!(admin.scope, ScopeSpec::SelfAdmin);
     assert_eq!(admin.signers.len(), 1);
     assert!(
@@ -173,8 +173,8 @@ fn reachable_calls_reports_scope_and_functions() {
     let reach = reachable_calls(&plan);
     assert_eq!(reach.len(), 2);
 
-    // admin-root: policy-free self-admin → any function (INV-2).
-    assert_eq!(reach[0].rule, "admin-root");
+    // admin: policy-free self-admin → any function (INV-2).
+    assert_eq!(reach[0].rule, "admin");
     assert_eq!(reach[0].scope, ScopeSpec::SelfAdmin);
     assert_eq!(reach[0].functions, FnSet::Any);
 
@@ -368,7 +368,7 @@ fn narrowing_the_function_set_is_accepted_and_links_the_hashes() {
 fn dropping_a_rule_is_a_narrowing() {
     let env = Env::default();
     let parent = perch_ir::from_json(&fixture()).expect("parse");
-    // Child keeps only admin-root (drops the ci-publish authority entirely).
+    // Child keeps only admin (drops the ci-publish authority entirely).
     let mut child = parent.clone();
     child.rules.remove(1);
     assert!(attenuate(&env, &parent, &child, &cfg(&env)).is_ok());

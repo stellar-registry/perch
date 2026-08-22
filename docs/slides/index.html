@@ -472,7 +472,7 @@
     <span class="k">pub fn</span> <span class="fn">__constructor</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">,</span> admin_signers<span class="pn">:</span> Vec<span class="pn">&lt;</span>Signer<span class="pn">&gt;)</span> <span class="pn">{</span>
         smart_account<span class="pn">::</span><span class="fn">add_context_rule</span><span class="pn">(</span>e<span class="pn">,</span>
             <span class="pn">&amp;</span>ContextRuleType<span class="pn">::</span><span class="fn">CallContract</span><span class="pn">(</span>e<span class="pn">.</span><span class="fn">current_contract_address</span><span class="pn">()),</span>
-            <span class="pn">&amp;</span>String<span class="pn">::</span><span class="fn">from_str</span><span class="pn">(</span>e<span class="pn">,</span> <span class="s">"admin-root"</span><span class="pn">),</span> None<span class="pn">,</span> <span class="pn">&amp;</span>admin_signers<span class="pn">,</span> <span class="pn">&amp;</span>Map<span class="pn">::</span><span class="fn">new</span><span class="pn">(</span>e<span class="pn">));</span>
+            <span class="pn">&amp;</span>String<span class="pn">::</span><span class="fn">from_str</span><span class="pn">(</span>e<span class="pn">,</span> <span class="s">"admin"</span><span class="pn">),</span> None<span class="pn">,</span> <span class="pn">&amp;</span>admin_signers<span class="pn">,</span> <span class="pn">&amp;</span>Map<span class="pn">::</span><span class="fn">new</span><span class="pn">(</span>e<span class="pn">));</span>
     <span class="pn">}</span>
 <span class="pn">}</span>
 
@@ -591,7 +591,7 @@
     <span class="pn">{</span> <span class="k">"id"</span><span class="pn">:</span> <span class="s">"ci"</span><span class="pn">,</span> <span class="k">"address"</span><span class="pn">:</span> <span class="s">"GA327GGW…57YGA"</span> <span class="pn">}</span>
   <span class="pn">],</span>
   <span class="k">"rules"</span><span class="pn">:</span> <span class="pn">[</span>
-    <span class="pn">{</span> <span class="k">"name"</span><span class="pn">:</span> <span class="s">"admin-root"</span><span class="pn">,</span>
+    <span class="pn">{</span> <span class="k">"name"</span><span class="pn">:</span> <span class="s">"admin"</span><span class="pn">,</span>
       <span class="k">"scope"</span><span class="pn">:</span> <span class="pn">{</span> <span class="k">"type"</span><span class="pn">:</span> <span class="s">"self-admin"</span> <span class="pn">},</span>
       <span class="k">"principals"</span><span class="pn">:</span> <span class="pn">{</span> <span class="k">"type"</span><span class="pn">:</span> <span class="s">"all"</span><span class="pn">,</span> <span class="k">"signers"</span><span class="pn">:</span> <span class="pn">[</span><span class="s">"admin"</span><span class="pn">]</span> <span class="pn">}</span> <span class="pn">},</span>
     <span class="pn">{</span> <span class="k">"name"</span><span class="pn">:</span> <span class="s">"ci-publish"</span><span class="pn">,</span>
@@ -604,7 +604,7 @@
 <span class="pn">}</span></pre>
         <ul class="callouts">
           <li><span class="f">"signers"</span><span class="d">Who may act. <strong>admin</strong>: raw key bytes checked by a verifier contract. <strong>ci</strong>: the robot — just its ordinary account address.</span></li>
-          <li><span class="f">"scope"</span><span class="d"><strong>admin-root</strong> covers managing the account itself; <strong>ci-publish</strong> covers calls to one contract: the registry.</span></li>
+          <li><span class="f">"scope"</span><span class="d"><strong>admin</strong> covers managing the account itself; <strong>ci-publish</strong> covers calls to one contract: the registry.</span></li>
           <li><span class="f">"functions"</span><span class="d">Only these two methods authorize. <code>set_manager</code> isn't on the list, so it can't happen.</span></li>
           <li><span class="f">"args" · is-self</span><span class="d">Argument 1 — the author — must be the account itself. The robot publishes as us, never as anyone else.</span></li>
           <li><span class="f">"not-after-ledger"</span><span class="d">The rule dies at ledger 55,000,000 — chain time; we set it to roughly end of quarter.</span></li>
@@ -646,7 +646,7 @@
       <p class="eyebrow"><span class="n">14</span> · Perch · the hash</p>
       <h2>The document has one identity: its hash.</h2>
       <p class="lead">Before hashing, the document is put into one exactly-specified byte form — keys sorted, no whitespace, one escaping rule. That spec (<code>CANONICAL.md</code>) is written down independently of any JSON library, so <strong>Rust and TypeScript produce the identical bytes</strong>. Shared test files pin the result; if either side ever drifts by one byte, CI fails.</p>
-      <div class="hashline"><span class="lbl">doc_hash&nbsp;=&nbsp;SHA-256(those&nbsp;bytes)&nbsp;→&nbsp;</span>38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d</div>
+      <div class="hashline"><span class="lbl">doc_hash&nbsp;=&nbsp;SHA-256(those&nbsp;bytes)&nbsp;→&nbsp;</span>27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98</div>
       <p class="code-cap">testdata/ci-publish.doc-hash — the pinned hash of the flagship policy (it's also the progress bar below)</p>
       <p class="punch">You approve a hash. The chain stores it. Anyone can check that <em>what's installed is what was reviewed.</em></p>
     </div>
@@ -952,7 +952,7 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
   var counter = document.getElementById('counter');
   var ribbon  = document.getElementById('ribbon');
   var N       = slides.length;
-  var HASH    = '38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d';
+  var HASH    = '27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98';
   var i       = 0;
 
   // build the doc_hash ribbon, one span per hex char

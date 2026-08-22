@@ -37,7 +37,7 @@ fn golden_doc_shuffled_json() -> String {
         "rules": [
             {{ "principals": {{ "signers": [ "admin" ], "type": "all" }},
                "scope": {{ "type": "self-admin" }},
-               "name": "admin-root" }},
+               "name": "admin" }},
             {{ "not-after-ledger": 55000000,
                "args": [ {{ "pred": {{ "type": "is-self" }}, "index": 1 }} ],
                "functions": [ "publish", "publish_hash" ],
@@ -58,7 +58,7 @@ fn golden_doc_shuffled_json() -> String {
 /// Pinned SHA-256 (hex) of the golden document's canonical bytes. Computed
 /// once from this crate and frozen; a change here is a breaking change to the
 /// canonical form and must be deliberate.
-const GOLDEN_HASH_HEX: &str = "0ec51d345e5ea20c5406f2fea78448bf6a5e65a73a073dfcb9d7623f73dc21d9";
+const GOLDEN_HASH_HEX: &str = "57a0f2583d617d32eb3f43ddcbc2710fd024e6f27d2a5eb68107cd4f717fd009";
 
 #[test]
 fn struct_literal_and_shuffled_json_canonicalize_identically() {
@@ -81,7 +81,7 @@ fn canonical_form_of_minimal_doc_is_pinned_byte_for_byte() {
     let mut doc = base_doc();
     common::set_key(&mut doc.signers[0], "ab");
     let expected = format!(
-        r#"{{"rules":[{{"name":"admin-root","principals":{{"signers":["admin"],"type":"all"}},"scope":{{"type":"self-admin"}}}}],"signers":[{{"id":"admin","key":"ab","verifier":"{WEBAUTHN_VERIFIER}"}}],"version":1}}"#
+        r#"{{"rules":[{{"name":"admin","principals":{{"signers":["admin"],"type":"all"}},"scope":{{"type":"self-admin"}}}}],"signers":[{{"id":"admin","key":"ab","verifier":"{WEBAUTHN_VERIFIER}"}}],"version":1}}"#
     );
     assert_eq!(canonical_json(&doc), expected);
 }

@@ -95,7 +95,7 @@
                       "symbol": "doc_hash"
                     },
                     "val": {
-                      "bytes": "38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d"
+                      "bytes": "27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98"
                     }
                   },
                   {
@@ -288,7 +288,7 @@
                       "symbol": "name"
                     },
                     "val": {
-                      "string": "admin-root"
+                      "string": "admin"
                     }
                   },
                   {

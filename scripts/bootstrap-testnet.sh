@@ -357,7 +357,7 @@ SA="$(contract_id perch-account)"
 if [ -n "$SA" ]; then
     log "perch-account already deployed — skipping"
 else
-    # __constructor(admin_signers: Vec<Signer>) — installs rule 0 (admin-root).
+    # __constructor(admin_signers: Vec<Signer>) — installs rule 0 (admin).
     run stellar registry deploy --contract-name perch-account --wasm-name perch-account \
         "${net_args[@]}" \
         -- \

@@ -20,7 +20,7 @@ describe('perch-ir parity: ci-publish fixture', () => {
 
   it('doc_hash matches the committed and pinned Rust hash', () => {
     expect(docHash(doc)).toBe(readFileSync(td('ci-publish.doc-hash'), 'utf8').trim());
-    expect(docHash(doc)).toBe('38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d');
+    expect(docHash(doc)).toBe('27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98');
   });
 });
 
@@ -39,6 +39,6 @@ describe('perch-ir parity: ci-publish-delegated fixture', () => {
 
   it('doc_hash matches the committed and pinned Rust hash', () => {
     expect(docHash(doc)).toBe(readFileSync(td('ci-publish-delegated.doc-hash'), 'utf8').trim());
-    expect(docHash(doc)).toBe('8c9a85cf81cb7b556ca6292c1a3b38ae876a1703b97471753caa93f6c11e2c46');
+    expect(docHash(doc)).toBe('0e2f8e7c826d8252ce0bec1528a079e21ba6b628649762a7cae3fb823e6155ea');
   });
 });

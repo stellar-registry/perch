@@ -39,7 +39,7 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     // Constructor rule 0 is gone; the document's two rules are installed.
     assert_eq!(client.get_context_rules_count(), 2);
     let admin = client.get_context_rule(&1);
-    assert_eq!(admin.name, SString::from_str(&w.env, "admin-root"));
+    assert_eq!(admin.name, SString::from_str(&w.env, "admin"));
     assert_eq!(admin.policies.len(), 0); // policy-free admin path (INV-2)
     let ci = client.get_context_rule(&2);
     assert_eq!(ci.name, SString::from_str(&w.env, "ci-publish"));
@@ -56,7 +56,7 @@ fn reapply_replaces_the_whole_rule_set() {
     let client = w.account_client();
     let first = apply_fixture(&w);
 
-    // A second document: admin-root only — the ci grant is revoked wholesale.
+    // A second document: admin only — the ci grant is revoked wholesale.
     let doc2 = format!(
         r#"{{
   "version": 1,
@@ -65,7 +65,7 @@ fn reapply_replaces_the_whole_rule_set() {
     {{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "aa" }}
   ],
   "rules": [
-    {{ "name": "admin-root",
+    {{ "name": "admin",
       "scope": {{ "type": "self-admin" }},
       "principals": {{ "type": "all", "signers": ["admin"] }} }}
   ]
@@ -81,7 +81,7 @@ fn reapply_replaces_the_whole_rule_set() {
     assert!(client.try_get_context_rule(&2).is_err());
     assert_eq!(
         client.get_context_rule(&3).name,
-        SString::from_str(&w.env, "admin-root")
+        SString::from_str(&w.env, "admin")
     );
 }
 

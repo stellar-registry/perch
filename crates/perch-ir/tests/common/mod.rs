@@ -83,7 +83,7 @@ pub fn base_doc() -> PolicyDoc {
         version: 1,
         network: None,
         signers: vec![signer("admin", WEBAUTHN_VERIFIER, ADMIN_KEY_HEX)],
-        rules: vec![rule("admin-root", Scope::self_admin(), &["admin"])],
+        rules: vec![rule("admin", Scope::self_admin(), &["admin"])],
     }
 }
 

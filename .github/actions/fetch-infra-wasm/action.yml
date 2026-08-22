@@ -4,10 +4,6 @@ description: >
   account pins (by sha256) at build time. Any job that compiles perch-smart-account
   needs this before cargo runs, because crates/perch-smart-account/wasm/*.wasm is
   git-ignored (fetched, not committed). Core CLI only — no registry plugin.
-inputs:
-  stellar-version:
-    description: Stellar CLI release to install.
-    default: "27.1.0"
 runs:
   using: composite
   steps:
@@ -15,12 +11,11 @@ runs:
       shell: bash
       run: |
         if ! command -v stellar >/dev/null; then
-          v="${{ inputs.stellar-version }}"
+          v=27.1.0
           curl -fsSL -o /tmp/stellar.tar.gz \
             "https://github.com/stellar/stellar-cli/releases/download/v${v}/stellar-cli-${v}-x86_64-unknown-linux-gnu.tar.gz"
-          mkdir -p "$HOME/.local/bin"
-          tar -xzf /tmp/stellar.tar.gz -C "$HOME/.local/bin" stellar
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          # Extract onto an existing PATH dir rather than writing $GITHUB_PATH.
+          sudo tar -xzf /tmp/stellar.tar.gz -C /usr/local/bin stellar
         fi
     - name: Fetch pinned infra wasm
       shell: bash

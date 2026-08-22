@@ -152,7 +152,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     }
 
     /// The canonical `doc_hash` of the currently applied policy document, or
-    /// `None` if only the constructor's admin-root rule exists. Read-only:
+    /// `None` if only the constructor's admin rule exists. Read-only:
     /// anyone can check installed == reviewed.
     fn applied_doc_hash(e: &Env) -> Option<BytesN<32>> {
         PerchStorage::get_applied_doc(e)
@@ -170,15 +170,15 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     }
 }
 
-/// Constructor helper: install rule 0, "admin-root", scoped
+/// Constructor helper: install rule 0, "admin", scoped
 /// `CallContract(self)` — the admin signers may manage this account (i.e.
 /// call `apply_doc`) and nothing else. Every other capability arrives via an
 /// applied, doc-reviewed rule set.
-pub fn install_admin_root(e: &Env, admin_signers: &Vec<Signer>) {
+pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
     smart_account::add_context_rule(
         e,
         &ContextRuleType::CallContract(e.current_contract_address()),
-        &String::from_str(e, "admin-root"),
+        &String::from_str(e, "admin"),
         None,
         admin_signers,
         &Map::new(e),

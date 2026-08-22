@@ -15,7 +15,7 @@ describe('fluent builder', () => {
       .network('Test SDF Network ; September 2015')
       .signer('admin', external(WEBAUTHN_VERIFIER, ADMIN_KEY))
       .signer('ci', external(ED25519_VERIFIER, CI_KEY))
-      .rule('admin-root', (r) => r.selfAdmin().signedBy('admin'))
+      .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
       .rule('ci-publish', (r) =>
         r
           .callContract(REGISTRY)
@@ -26,7 +26,7 @@ describe('fluent builder', () => {
       )
       .build();
 
-    expect(docHash(doc)).toBe('38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d');
+    expect(docHash(doc)).toBe('27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98');
   });
 
   it('accepts a raw byte key and hex-encodes it', () => {
@@ -57,7 +57,7 @@ describe('delegated signers', () => {
       .network('Test SDF Network ; September 2015')
       .signer('admin', external(WEBAUTHN_VERIFIER, ADMIN_KEY))
       .signer('ci', delegated(CI_G))
-      .rule('admin-root', (r) => r.selfAdmin().signedBy('admin'))
+      .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
       .rule('ci-publish', (r) =>
         r
           .callContract(REGISTRY)
@@ -67,6 +67,6 @@ describe('delegated signers', () => {
           .notAfter(55000000),
       )
       .build();
-    expect(docHash(doc)).toBe('8c9a85cf81cb7b556ca6292c1a3b38ae876a1703b97471753caa93f6c11e2c46');
+    expect(docHash(doc)).toBe('0e2f8e7c826d8252ce0bec1528a079e21ba6b628649762a7cae3fb823e6155ea');
   });
 });

@@ -121,7 +121,7 @@ The shared vector lives in `testdata/`:
 
 - `ci-publish.json` — a real policy document (the flagship CI-publish policy).
 - `ci-publish.canonical.json` — its canonical bytes, exactly as defined above.
-- `ci-publish.doc-hash` — `38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d`.
+- `ci-publish.doc-hash` — `27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98`.
 
 Both suites assert, against these files, that canonicalization is byte-identical
 and the hash matches:

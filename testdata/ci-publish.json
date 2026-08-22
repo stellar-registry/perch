@@ -15,7 +15,7 @@
   ],
   "rules": [
     {
-      "name": "admin-root",
+      "name": "admin",
       "scope": { "type": "self-admin" },
       "principals": { "type": "all", "signers": ["admin"] }
     },

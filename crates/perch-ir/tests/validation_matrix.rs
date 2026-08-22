@@ -236,11 +236,11 @@ fn accepts_non_empty_rule_name() {
 fn rejects_duplicate_rule_names() {
     let mut doc = base_doc();
     doc.rules
-        .push(rule("admin-root", Scope::contract(REGISTRY), &["admin"]));
+        .push(rule("admin", Scope::contract(REGISTRY), &["admin"]));
     assert_rejects(
         &doc,
         &ValidationError::DuplicateRuleName {
-            name: "admin-root".into(),
+            name: "admin".into(),
         },
     );
 }
@@ -262,7 +262,7 @@ fn rejects_contract_scope_with_non_c_address() {
     assert_rejects(
         &doc,
         &ValidationError::InvalidContractAddress {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             address: G_ADDR.into(),
         },
     );
@@ -284,7 +284,7 @@ fn rejects_empty_all_principals() {
     assert_rejects(
         &doc,
         &ValidationError::EmptyPrincipalSigners {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
         },
     );
 }
@@ -305,7 +305,7 @@ fn rejects_repeated_signer_in_principals_list() {
     assert_rejects(
         &doc,
         &ValidationError::DuplicatePrincipalSigner {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             id: "admin".into(),
         },
     );
@@ -332,7 +332,7 @@ fn rejects_reference_to_undeclared_signer() {
     assert_rejects(
         &doc,
         &ValidationError::UnknownSignerRef {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             id: "ghost".into(),
         },
     );
@@ -371,7 +371,7 @@ fn rejects_wrong_ack_sentinel() {
         assert_rejects(
             &doc,
             &ValidationError::WrongAckSentinel {
-                rule: "admin-root".into(),
+                rule: "admin".into(),
             },
         );
     }
@@ -384,7 +384,7 @@ fn rejects_self_auth_policy_that_is_not_a_c_address() {
     assert_rejects(
         &doc,
         &ValidationError::InvalidPolicyAddress {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             address: G_ADDR.into(),
         },
     );
@@ -397,7 +397,7 @@ fn rejects_self_auth_with_invalid_install_param_hex() {
     assert_rejects(
         &doc,
         &ValidationError::InvalidInstallParamHex {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
         },
     );
 }
@@ -420,7 +420,7 @@ fn rejects_present_but_empty_functions() {
     assert_rejects(
         &doc,
         &ValidationError::EmptyFunctions {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
         },
     );
 }
@@ -432,7 +432,7 @@ fn rejects_empty_function_name() {
     assert_rejects(
         &doc,
         &ValidationError::EmptyFunctionName {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
         },
     );
 }
@@ -444,7 +444,7 @@ fn rejects_duplicate_function_names() {
     assert_rejects(
         &doc,
         &ValidationError::DuplicateFunction {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             name: "publish".into(),
         },
     );
@@ -472,7 +472,7 @@ fn rejects_present_but_empty_args() {
     assert_rejects(
         &doc,
         &ValidationError::EmptyArgs {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
         },
     );
 }
@@ -487,7 +487,7 @@ fn rejects_duplicate_arg_indexes() {
     assert_rejects(
         &doc,
         &ValidationError::DuplicateArgIndex {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             index: 0,
         },
     );
@@ -520,7 +520,7 @@ fn rejects_string_in_with_empty_values() {
     assert_rejects(
         &doc,
         &ValidationError::EmptyStringInValues {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             index: 2,
         },
     );
@@ -552,7 +552,7 @@ fn rejects_string_in_with_repeated_value() {
     assert_rejects(
         &doc,
         &ValidationError::DuplicateStringInValue {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             index: 2,
             value: "a".into(),
         },
@@ -585,7 +585,7 @@ fn rejects_address_eq_with_malformed_address() {
     assert_rejects(
         &doc,
         &ValidationError::InvalidArgAddress {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
             index: 0,
             address: "not-an-address".into(),
         },
@@ -620,7 +620,7 @@ fn rejects_zero_not_after_ledger() {
     assert_rejects(
         &doc,
         &ValidationError::ZeroNotAfterLedger {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
         },
     );
 }
@@ -651,10 +651,10 @@ fn collects_all_errors_not_just_the_first() {
     assert!(errors.contains(&ValidationError::InvalidSignerKeyHex { id: "admin".into() }));
     assert!(errors.contains(&ValidationError::DuplicateSignerId { id: "admin".into() }));
     assert!(errors.contains(&ValidationError::ZeroNotAfterLedger {
-        rule: "admin-root".into()
+        rule: "admin".into()
     }));
     assert!(errors.contains(&ValidationError::EmptyFunctions {
-        rule: "admin-root".into()
+        rule: "admin".into()
     }));
 }
 
@@ -750,7 +750,7 @@ fn rejects_cap_without_token_on_self_admin() {
     assert_rejects(
         &doc,
         &ValidationError::CapWithoutToken {
-            rule: "admin-root".into(),
+            rule: "admin".into(),
         },
     );
 }

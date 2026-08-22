@@ -195,7 +195,7 @@ mod tests {
     use super::*;
 
     const FIXTURE_DOC_HASH: &str =
-        "38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d";
+        "27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98";
     const DUMMY: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL";
 
     fn fixture() -> String {
@@ -210,9 +210,9 @@ mod tests {
         let out = compose(&env, &fixture(), DUMMY, DUMMY, &"ab".repeat(32)).unwrap();
 
         assert_eq!(out.doc_hash, FIXTURE_DOC_HASH);
-        // admin-root is genesis-satisfied, never an apply entry.
+        // admin is genesis-satisfied, never an apply entry.
         let genesis = out.genesis_rule.as_ref().expect("one genesis rule");
-        assert_eq!(genesis.name, "admin-root");
+        assert_eq!(genesis.name, "admin");
         assert_eq!(genesis.expected_rule_id, 0);
         assert_eq!(genesis.context_type.call_contract, DUMMY);
         assert!(genesis.install.is_none());

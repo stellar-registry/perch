@@ -14,7 +14,7 @@
   ],
   "rules": [
     {
-      "name": "admin-root",
+      "name": "admin",
       "scope": {
         "type": "self-admin"
       },

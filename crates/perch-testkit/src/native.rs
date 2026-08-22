@@ -54,7 +54,7 @@ pub struct World {
     pub interpreter: Address,
     /// The ed25519 verifier backing the admin signer.
     pub verifier: Address,
-    /// The `PerchAccount` (constructor-installed admin-root as rule 0).
+    /// The `PerchAccount` (constructor-installed admin as rule 0).
     pub account: Address,
     /// The admin signer set handed to the account constructor.
     pub admin_signers: Vec<Signer>,

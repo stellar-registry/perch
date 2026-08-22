@@ -3,7 +3,7 @@
 //! a production `SorobanAuthorizationEntry` takes, including the real
 //! cross-contract calls into the deployed verifier and interpreter. matrix.rs
 //! exercises the storage-level `do_check_auth` free function; this suite covers
-//! what it can't: the constructor-installed admin-root rule (id 0), the
+//! what it can't: the constructor-installed admin rule (id 0), the
 //! contract-level export, and the least-privilege boundary between the two
 //! rules the production account ships with.
 
@@ -35,7 +35,7 @@ struct World {
 }
 
 /// Deploy the real verifier + interpreter + PerchAccount (constructor installs
-/// admin-root as rule 0), then install the compiled ci-publish rule (rule 1).
+/// admin as rule 0), then install the compiled ci-publish rule (rule 1).
 fn setup() -> World {
     let env = Env::default();
     env.mock_all_auths();

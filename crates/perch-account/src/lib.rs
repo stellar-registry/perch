@@ -29,7 +29,7 @@ impl PerchAccount {
     /// Deploy-time rule 0: the admin signers may manage this account (i.e.
     /// call `apply_doc`) — and nothing else.
     pub fn __constructor(e: &Env, admin_signers: Vec<Signer>) {
-        perch_smart_account::install_admin_root(e, &admin_signers);
+        perch_smart_account::install_admin(e, &admin_signers);
     }
 }
 

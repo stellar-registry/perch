@@ -29,7 +29,7 @@ pub const FIXTURE_REGISTRY: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHW
 
 /// The fixture's frozen canonical identity (`testdata/ci-publish.doc-hash`).
 pub const CI_PUBLISH_DOC_HASH: &str =
-    "38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d";
+    "27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98";
 
 /// The frozen ci-publish conformance fixture (CANON v1), read from
 /// `testdata/ci-publish.json` at the workspace root.

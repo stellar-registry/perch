@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 /// Pinned doc_hash (hex) of the fixture. Must match
 /// `testdata/ci-publish.doc-hash`; a change is a canonical-form break.
-const FIXTURE_HASH_HEX: &str = "38c7ae56e602adbd318d08b92c664106fde77f3f08b7457ed8203f0d2d27ab0d";
+const FIXTURE_HASH_HEX: &str = "27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98";
 
 fn testdata(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -78,7 +78,7 @@ fn fixture_pretty_and_canonical_files_are_the_same_document() {
 /// Pinned doc_hash (hex) of the delegated fixture. Must match
 /// `testdata/ci-publish-delegated.doc-hash`.
 const DELEGATED_FIXTURE_HASH_HEX: &str =
-    "8c9a85cf81cb7b556ca6292c1a3b38ae876a1703b97471753caa93f6c11e2c46";
+    "0e2f8e7c826d8252ce0bec1528a079e21ba6b628649762a7cae3fb823e6155ea";
 
 #[test]
 fn delegated_fixture_parses_validates_and_matches_committed_files() {

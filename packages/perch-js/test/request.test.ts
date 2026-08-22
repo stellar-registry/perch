@@ -24,7 +24,7 @@ const CI_PUBLISH: PolicyRequest = {
     },
   ],
   permissions: [
-    { name: 'admin-root', on: 'self-admin', by: ['admin'] },
+    { name: 'admin', on: 'self-admin', by: ['admin'] },
     {
       name: 'ci-publish',
       on: { contract: 'CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL' },

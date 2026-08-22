@@ -127,8 +127,9 @@ impl PerchDocCompiler {
         }
 
         // Compile. The config's wasm-hash pin is advisory metadata for
-        // off-chain plans; on-chain the interpreter is bound by the account's
-        // admin-authorized argument to `apply_doc`, not by this hash.
+        // off-chain plans; on-chain the account resolves the interpreter itself
+        // through its pinned stateless registry (fetch hash → derive address),
+        // so this hash is unused here.
         let cfg = CompileConfig {
             interpreter_wasm_hash: BytesN::from_array(e, &[0u8; 32]),
         };

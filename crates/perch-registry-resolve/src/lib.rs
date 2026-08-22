@@ -32,6 +32,20 @@
 //! ```ignore
 //! use perch_registry_resolve::registry_contract;
 //!
+//! // Name-only mode — the ergonomic default, like `import_contract_client!`. A
+//! // bare ident matching the crate (or a "hyphenated-string", optional channel
+//! // prefix + `@version`) generates a same-named module. It bakes, at build time,
+//! // both the wasm hash (sha256 of `wasm/<name>.wasm`) and the deployer registry
+//! // id (`wasm/stateless.id`), so `address(env)` takes NO registry arg. Missing
+//! // files are build errors — fetch them first. Group in a module if the derived
+//! // name would collide with the like-named crate:
+//! mod infra {
+//!     registry_contract!(perch_doc_compiler); // wasm "perch-doc-compiler"
+//!     registry_contract!(perch_interpreter);
+//!     // registry_contract!("perch-doc-compiler@1.0.0"); // pin a specific version
+//! }
+//! // infra::perch_doc_compiler::address(env) -> Address   (registry baked in)
+//!
 //! // Pinned mode — compile-time hash literal, zero cross-contract calls, offline.
 //! // Hashes below are the perch infra published to `unverified/perch/stateless`
 //! // on **testnet** (registry CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O);
@@ -61,25 +75,60 @@
 //!     // → CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY
 //! }
 //!
-//! // Both expand to a module `interpreter` / `compiler` exposing:
+//! // Name-salted mode — `deploy_name:` instead of `wasm_name:`. Resolves a
+//! // *named* deploy (salt = sha256(name), the base `deploy` convention) from its
+//! // PARENT registry, so e.g. the stateless subregistry derives from the perch
+//! // registry id — no need to hardcode the child's strkey.
+//! registry_contract! {
+//!     mod: stateless,
+//!     deploy_name: "stateless",
+//! }
+//! // stateless::address(env, &perch_registry) → CC6ELNH6…RY26O (on testnet)
+//!
+//! // Content-addressed modes expand to a module exposing:
 //! //   pub fn address(env: &Env, registry: &Address) -> Address
-//! //   pub fn client<'a>(env: &Env, registry: &Address) -> <client>
 //! //   pub const WASM_NAME: &str
+//! //   pub fn client<'a>(env: &Env, registry: &Address) -> <client>  // iff `client:` given
 //! // Pinned mode also exposes `WASM_HASH: [u8; 32]` and `hash(env)`.
 //! // Runtime mode also exposes `hash(env, registry)`, plus `address_memoized`
 //! // and `clear_memo` for an opt-in instance-storage memo.
+//! // Name-salted mode exposes `address(env, parent)` + `DEPLOY_NAME: &str`
+//! // (+ `client()` iff `client:` given).
 //! ```
 //!
 //! ## Grammar
 //!
+//! Two forms. **Name-only** (positional): `registry_contract!(<name>)` where
+//! `<name>` is a bare ident (module = the ident, wasm name = it with `_`→`-`) or a
+//! string literal (module = leaf with `-`→`_`, optional channel prefix +
+//! `@version`). It pins the wasm hash to `sha256(wasm/<leaf>.wasm)` AND bakes the
+//! deployer registry id from `wasm/stateless.id`, both at build time — so
+//! `address(env)` takes no `registry` arg and no `client()` is generated. **Keyed**
+//! (`{ … }`), whose `address(env, registry)` takes the registry explicitly — the
+//! fields below:
+//!
 //! - `mod:` — required — identifier naming the generated module.
-//! - `wasm_name:` — required — string literal; the registry name (used verbatim
-//!   in runtime mode's `fetch_hash`).
-//! - `client:` — required — path to the typed client `client()` returns. Use an
+//! - `wasm_name:` — string literal; the registry name (used verbatim in runtime
+//!   mode's `fetch_hash`). Selects **content-addressed** derivation
+//!   (`salt = wasm_hash`). Mutually exclusive with `deploy_name:`; exactly one is
+//!   required.
+//! - `deploy_name:` — string literal; a *named* deploy. Selects **name-salted**
+//!   derivation (`salt = sha256(normalized_name)`), the base `deploy` convention —
+//!   `address(env, parent)` resolves the child from its PARENT registry id.
+//!   Normalized (lowercased, `_`→`-`) at expansion time. No `hash:`/`fetch_hash`.
+//! - `client:` — optional — path to the typed client `client()` returns. Use an
 //!   absolute/extern-crate path (e.g. `perch_interpreter::PolicyClient`); the
-//!   path is re-emitted inside the generated child module.
-//! - `hash:` — optional — 64-hex-char string (optional `0x` prefix). Present
-//!   selects **pinned mode**; absent selects **runtime mode**.
+//!   path is re-emitted inside the generated child module. Omit it for
+//!   address-only resolution (no `client()` is generated, and no client type is
+//!   linked) — e.g. an interpreter used solely as a policy-map key.
+//! - `hash:` — optional; **content-addressed only** — 64-hex-char string
+//!   (optional `0x` prefix). A compile-time-pinned wasm hash.
+//! - `wasm_file:` — optional; **content-addressed only**; mutually exclusive with
+//!   `hash:` — path (relative to the invoking crate's `CARGO_MANIFEST_DIR`) to a
+//!   local `.wasm`. The macro reads it at build time and pins `sha256(bytes)` (the
+//!   content-address salt). A missing file is a build error naming it, so the pin
+//!   comes from a wasm you have on disk — fetch it first. Present `hash:`/`wasm_file:`
+//!   selects **pinned mode**; both absent selects **runtime mode** (call-time `fetch_hash`).
 //!
 //! [`CompileConfig::interpreter_wasm_hash`]: https://github.com/stellar-registry/perch
 //! [`Env::get_contract_id`]: soroban_sdk::Env
@@ -88,3 +137,23 @@
 /// Generate a module that resolves a registry-published contract's address and
 /// client. See the [crate-level docs](crate) for the grammar and modes.
 pub use perch_registry_resolve_macro::registry_contract;
+
+use soroban_sdk::{Address, BytesN, Env};
+
+/// The one derivation the macro is built on, as a plain function: the on-chain
+/// address of a stateless contract deployed with `salt == wasm_hash`, from the
+/// registry id and that hash.
+///
+/// `address = env.deployer().with_address(registry, wasm_hash).deployed_address()`
+/// `        = sha256(network_id ‖ Address-preimage(registry, salt = wasm_hash))`.
+///
+/// Pure and offline — no deploy, no RPC — but **network-specific**: it reads the
+/// current env's ledger network id, so the same `(registry, wasm_hash)` yields
+/// different ids on testnet vs mainnet. Use this when you only need the address
+/// (e.g. an interpreter attached as a policy-map key) and don't want the typed
+/// client the [`registry_contract!`] macro also generates.
+pub fn address(env: &Env, registry: &Address, wasm_hash: &BytesN<32>) -> Address {
+    env.deployer()
+        .with_address(registry.clone(), wasm_hash.clone())
+        .deployed_address()
+}

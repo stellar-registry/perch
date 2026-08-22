@@ -7,7 +7,9 @@
 //! and against a real cross-contract `fetch_hash` (runtime mode).
 
 use perch_registry_resolve::registry_contract;
-use soroban_sdk::{contract, contractimpl, testutils::Address as _, Address, BytesN, Env, String};
+use soroban_sdk::{
+    contract, contractimpl, testutils::Address as _, Address, Bytes, BytesN, Env, String,
+};
 
 /// The soroban-sdk doctest `test_add_u64` contract — a real, deployable wasm,
 /// embedded as bytes (see the module docs for why it isn't a `.wasm` file).
@@ -59,6 +61,30 @@ registry_contract! {
     mod: runtime,
     wasm_name: "fixture",
     client: crate::FixtureClient,
+}
+
+// Address-only: no `client:` — resolves the address (and, pinned, the hash)
+// without naming or linking any client type. This is how the account resolves
+// the interpreter, which it uses solely as a policy-map key.
+registry_contract! {
+    mod: address_only,
+    wasm_name: "fixture",
+    hash: "33d12fec8f6f3ddf2eb0ec76ee9a75a9e37d1fa20af35908d90d278af8264311",
+}
+
+// Name-salted mode: salt = sha256(normalized name). Resolves a *named* deploy
+// (e.g. a subregistry) from its PARENT registry — how the account derives the
+// stateless subregistry from the pinned perch registry.
+registry_contract! {
+    mod: named,
+    deploy_name: "fixture",
+}
+
+// Name-salted mode normalizes the name (lowercase, `_`→`-`) before hashing, to
+// match the registry's `NormalizedName` salt.
+registry_contract! {
+    mod: named_norm,
+    deploy_name: "My_Sub",
 }
 
 fn hex32(s: &str) -> [u8; 32] {
@@ -124,6 +150,53 @@ fn pinned_address_matches_actual_deployment() {
 
     // The macro-derived address equals the actually-deployed instance address.
     assert_eq!(pinned::address(&env, &registry), deployed);
+}
+
+#[test]
+fn address_only_matches_pinned_derivation() {
+    // The no-`client:` module derives the identical address + hash as the
+    // client-bearing one; it only omits `client()`.
+    let env = Env::default();
+    let registry = Address::generate(&env);
+    assert_eq!(
+        address_only::address(&env, &registry),
+        pinned::address(&env, &registry)
+    );
+    assert_eq!(address_only::WASM_HASH, pinned::WASM_HASH);
+}
+
+#[test]
+fn named_address_equals_name_salt_derivation() {
+    // salt = sha256(name); address = deployer(parent, salt).deployed_address().
+    let env = Env::default();
+    let parent = Address::generate(&env);
+    let salt = env
+        .crypto()
+        .sha256(&Bytes::from_slice(&env, b"fixture"))
+        .to_bytes();
+    let expected = env
+        .deployer()
+        .with_address(parent.clone(), salt)
+        .deployed_address();
+    assert_eq!(named::address(&env, &parent), expected);
+    assert_eq!(named::DEPLOY_NAME, "fixture");
+}
+
+#[test]
+fn named_normalizes_the_name_for_the_salt() {
+    // "My_Sub" → "my-sub"; the salt hashes the normalized form.
+    let env = Env::default();
+    let parent = Address::generate(&env);
+    assert_eq!(named_norm::DEPLOY_NAME, "my-sub");
+    let salt = env
+        .crypto()
+        .sha256(&Bytes::from_slice(&env, b"my-sub"))
+        .to_bytes();
+    let expected = env
+        .deployer()
+        .with_address(parent.clone(), salt)
+        .deployed_address();
+    assert_eq!(named_norm::address(&env, &parent), expected);
 }
 
 #[test]

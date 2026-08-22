@@ -54,8 +54,6 @@ pub fn run(
     passphrase: &str,
     account: &str,
     doc_path: &std::path::Path,
-    compiler: &str,
-    interpreter: &str,
     dry_run: bool,
 ) -> Result<()> {
     let doc_json = std::fs::read_to_string(doc_path)
@@ -79,17 +77,15 @@ pub fn run(
     let doc_hash = perch_ir::doc_hash_hex(&doc);
     println!("canonical doc_hash: {doc_hash}");
 
-    let args = vec![
-        ScVal::Bytes(ScBytes(
-            doc_json
-                .clone()
-                .into_bytes()
-                .try_into()
-                .context("document too large for an ScVal bytes value")?,
-        )),
-        scv::address(compiler)?,
-        scv::address(interpreter)?,
-    ];
+    // Only the document bytes: the account resolves the compiler + interpreter
+    // itself through its pinned stateless registry.
+    let args = vec![ScVal::Bytes(ScBytes(
+        doc_json
+            .clone()
+            .into_bytes()
+            .try_into()
+            .context("document too large for an ScVal bytes value")?,
+    ))];
 
     let key = SeedKey::from_env("PERCH_ADMIN_KEY")?;
     let verifier = onchain_rule0_verifier(rpc, account, &key.public)?;

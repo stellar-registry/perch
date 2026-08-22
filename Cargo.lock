@@ -1503,6 +1503,7 @@ dependencies = [
  "perch-ir",
  "perch-program",
  "perch-registry-resolve",
+ "perch-smart-account",
  "perch-testkit",
  "soroban-sdk",
  "stellar-accounts",
@@ -1548,6 +1549,7 @@ version = "0.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
+ "sha2",
  "syn 2.0.119",
 ]
 
@@ -1556,6 +1558,7 @@ name = "perch-smart-account"
 version = "0.1.0"
 dependencies = [
  "perch-doc-compiler",
+ "perch-registry-resolve",
  "soroban-sdk",
  "soroban-sdk-tools",
  "stellar-accounts",
@@ -1579,6 +1582,7 @@ dependencies = [
  "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",
+ "perch-smart-account",
  "soroban-sdk",
  "stellar-accounts",
 ]

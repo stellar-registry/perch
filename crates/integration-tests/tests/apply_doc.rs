@@ -20,8 +20,7 @@ fn setup() -> World {
 
 fn apply_fixture(w: &World) -> BytesN<32> {
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    w.account_client()
-        .apply_doc(&doc, &w.compiler, &w.interpreter)
+    w.account_client().apply_doc(&doc)
 }
 
 #[test]
@@ -72,11 +71,7 @@ fn reapply_replaces_the_whole_rule_set() {
   ]
 }}"#
     );
-    let second = client.apply_doc(
-        &Bytes::from_slice(&w.env, doc2.as_bytes()),
-        &w.compiler,
-        &w.interpreter,
-    );
+    let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()));
 
     assert_ne!(first, second);
     assert_eq!(client.applied_doc_hash(), Some(second));
@@ -137,11 +132,7 @@ fn doc_without_admin_rule_is_rejected_anti_brick() {
 }}"#
     );
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, doc.as_bytes()),
-            &w.compiler,
-            &w.interpreter
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()))
         .is_err());
     // Nothing changed: the constructor's rule 0 is still the only rule.
     assert_eq!(client.get_context_rules_count(), 1);
@@ -161,12 +152,14 @@ fn doc_for_another_network_is_rejected() {
         ))
         .to_array();
     w.env.ledger().with_mut(|l| l.network_id = other);
+    // Content addresses are network-dependent, so on the rebound network the
+    // account resolves the compiler to a new address — put a real compiler there
+    // so the rejection is the compiler's own `WrongNetwork`, not a missing infra.
+    w.reregister_infra_for_current_network();
 
     let client = w.account_client();
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    assert!(client
-        .try_apply_doc(&doc, &w.compiler, &w.interpreter)
-        .is_err());
+    assert!(client.try_apply_doc(&doc).is_err());
     assert_eq!(client.applied_doc_hash(), None);
 }
 
@@ -176,19 +169,11 @@ fn garbage_and_unknown_fields_are_rejected() {
     let client = w.account_client();
     // Not JSON at all.
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, b"not json"),
-            &w.compiler,
-            &w.interpreter
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"))
         .is_err());
     // Unknown field: fail closed, never skipped.
     let doc = fixture().replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, doc.as_bytes()),
-            &w.compiler,
-            &w.interpreter
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()))
         .is_err());
 }

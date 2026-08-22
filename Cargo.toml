@@ -16,6 +16,7 @@ members = [
     "crates/perch-smart-account",
     "crates/perch-account",
     "crates/perch-deploy",
+    "crates/perch-derive-id",
     "crates/perch-stateless-registry",
     "crates/perch-registry-resolve-macro",
     "crates/perch-registry-resolve",

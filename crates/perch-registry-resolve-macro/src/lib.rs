@@ -46,6 +46,11 @@ enum Mode {
     Content {
         wasm_name: LitStr,
         hash: Option<[u8; 32]>,
+        /// When set (the name-only form), the deployer registry id is baked from
+        /// this file (`include_str!`, relative to the invoking crate) and
+        /// `address(env)` takes no `registry` arg. When `None` (keyed forms),
+        /// `address(env, registry)` takes it explicitly.
+        registry_id_file: Option<String>,
     },
     /// Name-salted: `salt == sha256(normalized_name)` — the base registry
     /// `deploy` convention. This is how a *named* deploy (e.g. a subregistry
@@ -180,7 +185,11 @@ impl Parse for RegistrySpec {
                         (None, Some(f)) => Some(hash_wasm_at(&f.value(), f.span())?),
                         (h, None) => h,
                     };
-                Mode::Content { wasm_name, hash }
+                Mode::Content {
+                    wasm_name,
+                    hash,
+                    registry_id_file: None,
+                }
             }
             (None, Some(deploy_name)) => {
                 if hash.is_some() || wasm_file.is_some() {
@@ -253,6 +262,9 @@ fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
         mode: Mode::Content {
             wasm_name: LitStr::new(&name_part, span),
             hash: Some(hash),
+            // The name-only form bakes the deployer registry too (from the
+            // fetched id file), so `address(env)` needs no `registry` arg.
+            registry_id_file: Some("wasm/stateless.id".to_string()),
         },
         client: None,
     })
@@ -388,7 +400,12 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
     }
 
     // Content-addressed mode below (`salt == wasm_hash`).
-    let Mode::Content { wasm_name, hash } = &spec.mode else {
+    let Mode::Content {
+        wasm_name,
+        hash,
+        registry_id_file,
+    } = &spec.mode
+    else {
         unreachable!("named mode handled above");
     };
 
@@ -411,15 +428,38 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
                 ::soroban_sdk::BytesN::from_array(env, &WASM_HASH)
             }
         };
-        let derive_impl = quote! {
-            /// Derive this contract's address from the registry id — pure, offline.
-            pub fn address(
-                env: &::soroban_sdk::Env,
-                registry: &::soroban_sdk::Address,
-            ) -> ::soroban_sdk::Address {
-                env.deployer()
-                    .with_address(registry.clone(), hash(env))
-                    .deployed_address()
+        let derive_impl = if let Some(id_file) = registry_id_file {
+            // Name-only form: the deployer registry id is baked from the fetched
+            // id file at build time, so `address(env)` needs no `registry` arg.
+            quote! {
+                /// Derive this contract's address — pure, offline. The deployer
+                /// registry is baked from the fetched id file at build time.
+                pub fn address(env: &::soroban_sdk::Env) -> ::soroban_sdk::Address {
+                    let registry = ::soroban_sdk::Address::from_str(
+                        env,
+                        ::core::include_str!(::core::concat!(
+                            ::core::env!("CARGO_MANIFEST_DIR"),
+                            "/",
+                            #id_file
+                        ))
+                        .trim(),
+                    );
+                    env.deployer()
+                        .with_address(registry, hash(env))
+                        .deployed_address()
+                }
+            }
+        } else {
+            quote! {
+                /// Derive this contract's address from the registry id — pure, offline.
+                pub fn address(
+                    env: &::soroban_sdk::Env,
+                    registry: &::soroban_sdk::Address,
+                ) -> ::soroban_sdk::Address {
+                    env.deployer()
+                        .with_address(registry.clone(), hash(env))
+                        .deployed_address()
+                }
             }
         };
         (hash_items, derive_impl)

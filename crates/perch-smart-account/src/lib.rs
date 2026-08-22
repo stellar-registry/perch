@@ -37,19 +37,25 @@ use stellar_accounts::smart_account::{
 pub use soroban_sdk;
 pub use stellar_accounts;
 
-/// The stateless subregistry (`unverified/perch/stateless`) on testnet — the
-/// content-addressed deployer the infra derive their address from, and the one
-/// pinned anchor (a contract id, not a wasm hash).
-// TODO(mainnet): feature-gate STATELESS_REGISTRY per network.
-pub const STATELESS_REGISTRY: &str = "CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O";
+/// The stateless subregistry (`unverified/perch/stateless`) — the content-addressed
+/// deployer the infra derive their address from. Its id is **resolved by name at
+/// build time** (never hardcoded): `scripts/fetch-infra-wasm.sh` runs
+/// `stellar registry fetch-contract-id unverified/perch/stateless` into
+/// `wasm/stateless.id`, which is `include_str!`'d here. A missing file is a build
+/// error — fetch it first. Only the human-readable name lives in source.
+pub fn stateless_registry(env: &Env) -> Address {
+    Address::from_str(env, include_str!("../wasm/stateless.id").trim())
+}
 
 /// Content-addressed resolvers for the shared infra, named like
-/// `import_contract_client!`: each pins `deployer(STATELESS_REGISTRY, sha256(wasm))`
-/// where the wasm is looked up at `wasm/<name>.wasm` **at build time** (fetched by
-/// `scripts/fetch-infra-wasm.sh` — git-ignored, not committed; a missing file is a
-/// build error). Pinned ⇒ a registry republish can't change a deployed account's
-/// behavior (`installed == reviewed`), and only the names live in source. Grouped
-/// in a module so the derived names don't collide with the `perch_doc_compiler` crate.
+/// `import_contract_client!`. Each `infra::<name>::address(env)` derives
+/// `deployer(stateless_id, sha256(wasm))` fully offline, with **both** the
+/// stateless registry id (from `wasm/stateless.id`) and the wasm hash (from
+/// `wasm/<name>.wasm`) baked at build time from the fetched, git-ignored cache
+/// (`scripts/fetch-infra-wasm.sh`; a missing file is a build error). Pinned ⇒ a
+/// registry republish can't change a deployed account's behavior (`installed ==
+/// reviewed`), and only the names live in source. Grouped in a module so the
+/// derived names don't collide with the `perch_doc_compiler` crate.
 pub mod infra {
     perch_registry_resolve::registry_contract!(perch_doc_compiler);
     perch_registry_resolve::registry_contract!(perch_interpreter);
@@ -95,7 +101,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// Apply a policy document — **the only way authorization changes**.
     /// Takes just the document's JSON bytes; the two shared, immutable infra
     /// contracts (the stateless doc compiler and the interpreter) are *derived*
-    /// from the pinned [`STATELESS_REGISTRY`] — each address is
+    /// from the build-time-resolved [`stateless_registry`] — each address is
     /// `deployer(stateless, wasm_hash)` where `wasm_hash` is the build-time
     /// sha256 of the pinned local wasm (see [`infra`]) — computed offline (no
     /// cross-contract call), never passed in. Replaces the entire rule set
@@ -104,17 +110,17 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     fn apply_doc(e: &Env, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
         e.current_contract_address().require_auth();
 
-        // Resolve the infra offline from the pinned stateless registry: each
-        // address is `deployer(stateless, pinned_wasm_hash).deployed_address()`.
-        // Pinned (not runtime-fetched), so a registry republish can't change what
-        // a deployed account runs; no admin-supplied addresses to vouch for.
-        let stateless = Address::from_str(e, STATELESS_REGISTRY);
-        let interpreter = infra::perch_interpreter::address(e, &stateless);
+        // Resolve the infra offline: each `address(e)` derives
+        // `deployer(stateless, pinned_wasm_hash).deployed_address()`, with both the
+        // stateless registry id and the wasm hash baked from the fetched cache at
+        // build time. Pinned (not runtime-fetched), so a registry republish can't
+        // change what a deployed account runs; no admin-supplied addresses to vouch for.
+        let interpreter = infra::perch_interpreter::address(e);
 
         // Stateless compile: parse, validate, network-bind, lower. Every
         // compiler refusal surfaces here as a typed error.
         let compiled: CompiledDoc =
-            DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e, &stateless))
+            DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
                 .try_compile_doc(&doc_json)??;
 
         ensure_admin_survives(&compiled)?;

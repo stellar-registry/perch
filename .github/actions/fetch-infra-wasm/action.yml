@@ -1,22 +1,28 @@
-name: Fetch pinned infra wasm
+name: Fetch pinned infra
 description: >
-  Install the Stellar CLI and fetch the deployed perch infra wasm that the
-  account pins (by sha256) at build time. Any job that compiles perch-smart-account
-  needs this before cargo runs, because crates/perch-smart-account/wasm/*.wasm is
-  git-ignored (fetched, not committed). Core CLI only — no registry plugin.
+  Install the Stellar CLI + registry plugin and resolve the perch infra by NAME
+  into the git-ignored cache (crates/perch-smart-account/wasm/: stateless.id +
+  the two .wasm) that the account reads at build time. Any job that compiles
+  perch-smart-account needs this before cargo runs.
 runs:
   using: composite
   steps:
-    - name: Install stellar-cli
+    - name: Install Stellar CLI + registry plugin
       shell: bash
       run: |
+        # Core CLI (host for the `stellar registry` plugin).
         if ! command -v stellar >/dev/null; then
           v=27.1.0
           curl -fsSL -o /tmp/stellar.tar.gz \
             "https://github.com/stellar/stellar-cli/releases/download/v${v}/stellar-cli-${v}-x86_64-unknown-linux-gnu.tar.gz"
-          # Extract onto an existing PATH dir rather than writing $GITHUB_PATH.
           sudo tar -xzf /tmp/stellar.tar.gz -C /usr/local/bin stellar
         fi
-    - name: Fetch pinned infra wasm
+        # Registry plugin (adds `stellar registry …`), via cargo-binstall (prebuilt).
+        if ! stellar registry --help >/dev/null 2>&1; then
+          command -v cargo-binstall >/dev/null || \
+            curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall -y stellar-registry-cli
+        fi
+    - name: Fetch pinned infra by name
       shell: bash
-      run: PLUGIN_FREE=1 scripts/fetch-infra-wasm.sh
+      run: scripts/fetch-infra-wasm.sh

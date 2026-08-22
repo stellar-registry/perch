@@ -1,26 +1,24 @@
-# Pinned infra wasm (fetched, not committed)
+# Fetched infra cache (not committed)
 
-The account's `registry_contract!("perch-doc-compiler")` / `("perch-interpreter")`
-invocations pin each infra address to `deployer(STATELESS_REGISTRY, sha256(wasm))`,
-computed **at build time** from the wasm at `perch-doc-compiler.wasm` /
-`perch-interpreter.wasm` in this directory.
-
-These `.wasm` files are **not committed** (they're `.gitignore`d like all wasm) —
-they are the *deployed* testnet artifacts and are **fetched on demand**:
+The account resolves its shared infra **by name at build time** into this
+git-ignored directory; nothing but the names lives in source. Populate it with:
 
 ```sh
-scripts/fetch-infra-wasm.sh            # needs stellar-registry-cli (resolves by name)
-PLUGIN_FREE=1 scripts/fetch-infra-wasm.sh   # plugin-free: `stellar contract fetch` by id
+scripts/fetch-infra-wasm.sh   # needs the Stellar CLI + registry plugin
+                              # (cargo binstall -y stellar-registry-cli)
 ```
 
-CI runs the fetch before building. If the files are absent, the account build
-fails with an error naming the missing wasm and the fetch command — resolution is
-pinned to a wasm you have on disk, never a silent network reach.
+CI runs this before building (see `.github/actions/fetch-infra-wasm`). A missing
+file is a build error naming it.
 
-After a refresh, `cargo test -p perch-integration-tests --test testnet_pins`
-asserts the new hashes still derive the live testnet ids.
-
-| file | published name | sha256 (the content-address salt) |
+| file | resolved from (by name) | used for |
 |---|---|---|
-| `perch-doc-compiler.wasm` | `perch-doc-compiler` | `3645bd0d…b27f` |
-| `perch-interpreter.wasm` | `perch-interpreter` | `f8320d30…d858` |
+| `stateless.id` | `stellar registry fetch-contract-id unverified/perch/stateless` | the deployer registry id (baked via `include_str!`) |
+| `perch-doc-compiler.wasm` | `stellar registry download …/perch-doc-compiler` | `sha256` → the content-address salt |
+| `perch-interpreter.wasm` | `stellar registry download …/perch-interpreter` | `sha256` → the content-address salt |
+
+Each `infra::<name>::address(env)` derives `deployer(stateless.id, sha256(wasm))`
+offline. Pinning is what keeps a registry republish from changing a deployed
+account's behavior (`installed == reviewed`). After a refresh, run
+`cargo test -p perch-integration-tests --test testnet_pins` — it asserts the
+resolved id + hashes still derive the live testnet addresses.

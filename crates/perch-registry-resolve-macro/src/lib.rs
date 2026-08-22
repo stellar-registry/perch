@@ -64,6 +64,15 @@ struct RegistrySpec {
 
 impl Parse for RegistrySpec {
     fn parse(input: ParseStream) -> syn::Result<Self> {
+        // Name-only form, à la `import_contract_client!`: a bare wasm name (ident
+        // or string literal, optional channel prefix + `@version`). The module is
+        // derived from the name, and the pin is the sha256 of the wasm looked up
+        // at `wasm/<leaf>.wasm`. The keyed `{ mod: … }` form always leads with the
+        // `mod` keyword, so its absence selects this form.
+        if !input.peek(Token![mod]) {
+            return parse_named(input);
+        }
+
         let mut module: Option<Ident> = None;
         let mut wasm_name: Option<LitStr> = None;
         let mut deploy_name: Option<LitStr> = None;
@@ -164,7 +173,7 @@ impl Parse for RegistrySpec {
                         // `wasm_file:` — hash a local wasm at build time (its sha256
                         // is the content-address salt). A missing file is a build
                         // error telling you to fetch it.
-                        (None, Some(f)) => Some(hash_wasm_file(f)?),
+                        (None, Some(f)) => Some(hash_wasm_at(&f.value(), f.span())?),
                         (h, None) => h,
                     };
                 Mode::Content { wasm_name, hash }
@@ -196,24 +205,77 @@ impl Parse for RegistrySpec {
 /// `CARGO_MANIFEST_DIR`. A missing file is a **build error** naming the file, so
 /// resolution is pinned to a wasm you have on disk (fetch it first) rather than
 /// silently reaching the network.
-fn hash_wasm_file(lit: &LitStr) -> syn::Result<[u8; 32]> {
-    use sha2::{Digest, Sha256};
-    let rel = lit.value();
-    let manifest = std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
+/// Parse the name-only `registry_contract!(<name>)` form: a wasm name (ident or
+/// string literal), optional channel prefix (`unverified/…`) and `@version`. The
+/// module is the leaf name with `-`→`_`; the pin is the sha256 of the wasm at
+/// `wasm/<leaf>[_<version>].wasm` (relative to the crate), which must exist —
+/// fetch it first.
+fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
+    let (raw, span) = if input.peek(LitStr) {
+        let lit: LitStr = input.parse()?;
+        (lit.value(), lit.span())
+    } else {
+        let id: Ident = input.parse()?;
+        (id.to_string(), id.span())
+    };
+    if input.peek(Token![,]) {
+        input.parse::<Token![,]>()?;
+    }
+    if !input.is_empty() {
+        return Err(input.error("the name-only form takes a single wasm name and nothing else"));
+    }
+
+    let (name_part, version) = match raw.split_once('@') {
+        Some((n, v)) => (n.to_string(), Some(v.to_string())),
+        None => (raw.clone(), None),
+    };
+    if name_part.is_empty() {
+        return Err(syn::Error::new(span, "empty wasm name"));
+    }
+    let leaf = name_part
+        .rsplit('/')
+        .next()
+        .unwrap_or(&name_part)
+        .to_string();
+    let mod_name = leaf.replace('-', "_");
+    let module = syn::parse_str::<Ident>(&mod_name).map_err(|_| {
         syn::Error::new(
-            lit.span(),
-            "CARGO_MANIFEST_DIR unset — cannot resolve `wasm_file`",
+            span,
+            format!("wasm name {leaf:?} is not a valid module identifier ({mod_name:?})"),
         )
     })?;
-    let path = std::path::Path::new(&manifest).join(&rel);
+    let file = match &version {
+        Some(v) => format!("wasm/{leaf}_{}.wasm", v.replace('.', "_")),
+        None => format!("wasm/{leaf}.wasm"),
+    };
+    let hash = hash_wasm_at(&file, span)?;
+    Ok(RegistrySpec {
+        module,
+        mode: Mode::Content {
+            wasm_name: LitStr::new(&name_part, span),
+            hash: Some(hash),
+        },
+        client: None,
+    })
+}
+
+fn hash_wasm_at(rel: &str, span: proc_macro2::Span) -> syn::Result<[u8; 32]> {
+    use sha2::{Digest, Sha256};
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
+        syn::Error::new(
+            span,
+            "CARGO_MANIFEST_DIR unset — cannot resolve the wasm path",
+        )
+    })?;
+    let path = std::path::Path::new(&manifest).join(rel);
     let bytes = std::fs::read(&path).map_err(|e| {
         syn::Error::new(
-            lit.span(),
+            span,
             format!(
-                "`wasm_file` {rel:?} not found ({e}).\n\
-                 Fetch the published wasm to {path} first, e.g.\n\
-                 `stellar registry download <wasm-name> --out-file {path}`\n\
-                 (or `stellar contract fetch --id <deployed-id> --out-file {path}`).",
+                "wasm {rel:?} not found ({e}).\n\
+                 Fetch the published wasm to {path} first — e.g. run\n\
+                 `scripts/fetch-infra-wasm.sh` (or\n\
+                 `stellar registry download <wasm-name> --out-file {path}`).",
                 path = path.display(),
             ),
         )

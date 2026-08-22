@@ -3,20 +3,19 @@
 //! binds the network, mocks auth, and hands back a fully wired [`World`] with
 //! typed clients.
 //!
-//! The compiler + interpreter are registered at exactly the content addresses
-//! the account's `apply_doc` resolves them to: `stateless` = name-salt(perch
-//! registry, "stateless"), then each infra's pinned wasm hash derives
-//! `deployer(stateless, hash)`, and the infra type is registered there.
-//! Resolution is pinned (offline, no `fetch_hash` XCC), so native mode needs no
-//! registry contract, no mock, and no wasm artifact — just the same derivation
-//! the account uses. See [`crate::faithful`] for the phase-2 variant on the true
-//! registry wasm.
+//! The compiler and interpreter are registered at exactly the content addresses
+//! the account's `apply_doc` resolves them to: each infra address is
+//! `deployer(STATELESS_REGISTRY, pinned_wasm_hash)`, and the infra type is
+//! registered there. Resolution is pinned (offline, no `fetch_hash` XCC), so
+//! native mode needs no registry contract, no mock, and no wasm artifact — just
+//! the same derivation the account uses. See [`crate::faithful`] for the phase-2
+//! variant on the true registry wasm.
 
 use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use perch_interpreter::{PerchInterpreter, PerchInterpreterClient};
-use perch_smart_account::{compiler, interpreter, stateless, PERCH_REGISTRY};
+use perch_smart_account::{infra, STATELESS_REGISTRY};
 use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Vec};
 use stellar_accounts::smart_account::Signer;
@@ -30,18 +29,12 @@ use crate::Bootstrap;
 /// the network is bound, and again if a test rebinds the ledger (see
 /// [`World::reregister_infra_for_current_network`]).
 fn register_infra_at_derived(env: &Env) -> (Address, Address) {
-    let stateless = stateless_address(env);
-    let compiler_addr = compiler::address(env, &stateless);
+    let stateless = Address::from_str(env, STATELESS_REGISTRY);
+    let compiler_addr = infra::perch_doc_compiler::address(env, &stateless);
     env.register_at(&compiler_addr, PerchDocCompiler, ());
-    let interpreter_addr = interpreter::address(env, &stateless);
+    let interpreter_addr = infra::perch_interpreter::address(env, &stateless);
     env.register_at(&interpreter_addr, PerchInterpreter, ());
     (compiler_addr, interpreter_addr)
-}
-
-/// The `stateless` subregistry address the account derives — name-salt(perch
-/// registry, "stateless") under the current env's network.
-fn stateless_address(env: &Env) -> Address {
-    stateless::address(env, &Address::from_str(env, PERCH_REGISTRY))
 }
 
 /// A fully wired unit-`Env` world: the account, the three stateless infra
@@ -141,7 +134,7 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
     ];
     let account = env.register(PerchAccount, (admin_signers.clone(),));
 
-    let registry = stateless_address(&env);
+    let registry = Address::from_str(&env, STATELESS_REGISTRY);
     World {
         env,
         registry: Some(registry),

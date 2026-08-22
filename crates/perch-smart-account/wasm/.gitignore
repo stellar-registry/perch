@@ -1,7 +1,0 @@
-# The repo-wide `*.wasm` ignore is for build artifacts. These deployed infra wasm
-# are intentionally committed: the account's `wasm_file:` macro pins each infra
-# address to their sha256 at build time, and they are the reviewed "source of
-# truth" for what the account resolves to. Committed so builds are offline and
-# deterministic (no registry fetch in CI). Refresh via scripts/fetch-infra-wasm.sh.
-!perch-doc-compiler.wasm
-!perch-interpreter.wasm

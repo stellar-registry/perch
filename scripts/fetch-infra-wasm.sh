@@ -39,9 +39,11 @@ fetch() {
 if [[ "${PLUGIN_FREE:-0}" == "1" ]]; then
   # No registry plugin: fetch by the deployed content-addressed contract id with
   # the core CLI. Ids are the current testnet deployment; update on redeploy.
-  stellar contract fetch --id CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY \
+  stellar contract fetch --network "$STELLAR_NETWORK" \
+    --id CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY \
     --out-file "$dir/perch-doc-compiler.wasm"
-  stellar contract fetch --id CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM \
+  stellar contract fetch --network "$STELLAR_NETWORK" \
+    --id CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM \
     --out-file "$dir/perch-interpreter.wasm"
 else
   fetch "unverified/perch/stateless/perch-doc-compiler" "$dir/perch-doc-compiler.wasm"

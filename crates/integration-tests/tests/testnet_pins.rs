@@ -1,18 +1,26 @@
-//! Guards the **account's actual shipped pins** — the `PERCH_REGISTRY` anchor and
-//! the `compiler`/`interpreter` modules whose hashes are the sha256 of the
-//! committed `crates/perch-smart-account/wasm/*.wasm` — against the live testnet
-//! deployment. Binds testnet's network id and asserts that `stateless` =
-//! name-salt(perch registry, "stateless") and that the pinned wasm hashes derive
-//! the exact content-addressed ids live on testnet. So if the committed wasm is
-//! refreshed to a version that isn't deployed (or the anchor drifts), CI fails
-//! here.
+//! Guards the **account's actual shipped pins** — the `STATELESS_REGISTRY` anchor
+//! and the `infra::*` modules whose hashes are the sha256 of the fetched
+//! `crates/perch-smart-account/wasm/*.wasm` — against the live testnet deployment.
+//! Binds testnet's network id and asserts (a) the pinned `STATELESS_REGISTRY`
+//! equals `name-salt(perch registry, "stateless")` and (b) the pinned wasm hashes
+//! derive the exact content-addressed ids live on testnet. So if the fetched wasm
+//! is a version that isn't deployed (or the anchor drifts), CI fails here.
 use perch_registry_resolve::registry_contract;
-use perch_smart_account::{compiler, interpreter, stateless, PERCH_REGISTRY};
+use perch_smart_account::{infra, STATELESS_REGISTRY};
 use soroban_sdk::testutils::Ledger;
 use soroban_sdk::{Address, Bytes, Env};
 
-// The verifier is content-addressed too, but the account doesn't resolve it
-// (docs name it directly); pinned here only to guard its live id.
+/// The perch registry (`unverified/perch`) on testnet — used to cross-check the
+/// pinned stateless id against `name-salt(perch registry, "stateless")`.
+const PERCH_REGISTRY: &str = "CASB2M4JQSGP3QHFBGK5U6DGJXJX34GX37C2JFBU73LKKDXXNNIZHCP7";
+
+// The stateless subregistry by name-salt, and the verifier (content-addressed but
+// not resolved by the account — docs name it directly), pinned here to guard the
+// live ids.
+registry_contract! {
+    mod: stateless,
+    deploy_name: "stateless",
+}
 registry_contract! {
     mod: verifier,
     wasm_name: "perch-ed25519-verifier",
@@ -34,22 +42,23 @@ fn account_pins_derive_the_deployed_testnet_addresses() {
         .to_array();
     env.ledger().with_mut(|l| l.network_id = net);
 
-    // The account pins only the perch registry; the `stateless` subregistry is a
-    // name-salt derivation off it (the account uses this exact module).
+    // The account pins the stateless registry id; cross-check it is exactly the
+    // name-salt derivation from the perch registry.
+    let stateless = Address::from_str(&env, STATELESS_REGISTRY);
     let perch_registry = Address::from_str(&env, PERCH_REGISTRY);
-    let stateless = stateless::address(&env, &perch_registry);
+    assert_eq!(stateless, stateless::address(&env, &perch_registry));
 
     // The account's *actual* pinned compiler + interpreter (hashes = sha256 of
-    // the committed `wasm/*.wasm`) derive the live ids.
+    // the fetched `wasm/*.wasm`) derive the live ids.
     assert_eq!(
-        compiler::address(&env, &stateless),
+        infra::perch_doc_compiler::address(&env, &stateless),
         Address::from_str(
             &env,
             "CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY"
         ),
     );
     assert_eq!(
-        interpreter::address(&env, &stateless),
+        infra::perch_interpreter::address(&env, &stateless),
         Address::from_str(
             &env,
             "CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM"

@@ -20,7 +20,9 @@
 //! installed == reviewed via [`PerchSmartAccount::applied_doc_hash`].
 #![no_std]
 
-use perch_doc_compiler::{CompiledDoc, CompiledRule, DocCompilerError, RuleScope};
+use perch_doc_compiler::{
+    CompiledDoc, CompiledRule, DocCompilerClient, DocCompilerError, RuleScope,
+};
 use soroban_sdk::{
     auth::CustomAccountInterface, contractevent, contracttrait, Address, Bytes, BytesN, Env, Map,
     String, Val, Vec,
@@ -35,39 +37,22 @@ use stellar_accounts::smart_account::{
 pub use soroban_sdk;
 pub use stellar_accounts;
 
-/// The perch registry (`unverified/perch`) — the account's own registry and the
-/// single pinned anchor (a contract id, not a wasm hash). The `stateless`
-/// subregistry derives from it by name-salt; the compiler + interpreter derive
-/// from `stateless` by the sha256 of their **local wasm file** (see the
-/// `wasm_file:` invocations below), pinned at build time.
-// TODO(mainnet): feature-gate PERCH_REGISTRY per network.
-pub const PERCH_REGISTRY: &str = "CASB2M4JQSGP3QHFBGK5U6DGJXJX34GX37C2JFBU73LKKDXXNNIZHCP7";
+/// The stateless subregistry (`unverified/perch/stateless`) on testnet — the
+/// content-addressed deployer the infra derive their address from, and the one
+/// pinned anchor (a contract id, not a wasm hash).
+// TODO(mainnet): feature-gate STATELESS_REGISTRY per network.
+pub const STATELESS_REGISTRY: &str = "CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O";
 
-// The `stateless` subregistry: name-salt(perch registry, "stateless").
-perch_registry_resolve::registry_contract! {
-    mod: stateless,
-    deploy_name: "stateless",
-}
-
-// Compiler + interpreter: content-addressed off `stateless`, hash **pinned** to
-// the sha256 of the local wasm file (resolved at build time by the macro). The
-// files are fetched from the registry into `wasm/` (see `scripts/fetch-infra-wasm.sh`
-// and `wasm/README.md`); a missing file is a build error telling you to fetch it.
-// Pinned ⇒ a registry republish cannot change a deployed account's behavior
-// (`installed == reviewed` holds), and nothing but the wasm bytes + names lives
-// in source — no hand-copied hashes, no generated code.
-perch_registry_resolve::registry_contract! {
-    mod: compiler,
-    wasm_name: "perch-doc-compiler",
-    client: perch_doc_compiler::DocCompilerClient,
-    wasm_file: "wasm/perch-doc-compiler.wasm",
-}
-// Address-only: the interpreter is used solely as a rule's policy-map key, so no
-// client type is named and no interpreter code links into the account.
-perch_registry_resolve::registry_contract! {
-    mod: interpreter,
-    wasm_name: "perch-interpreter",
-    wasm_file: "wasm/perch-interpreter.wasm",
+/// Content-addressed resolvers for the shared infra, named like
+/// `import_contract_client!`: each pins `deployer(STATELESS_REGISTRY, sha256(wasm))`
+/// where the wasm is looked up at `wasm/<name>.wasm` **at build time** (fetched by
+/// `scripts/fetch-infra-wasm.sh`; a missing file is a build error). Pinned ⇒ a
+/// registry republish can't change a deployed account's behavior (`installed ==
+/// reviewed`), and nothing but the wasm bytes + names lives in source. Grouped in
+/// a module so the derived names don't collide with the `perch_doc_compiler` crate.
+pub mod infra {
+    perch_registry_resolve::registry_contract!("perch-doc-compiler");
+    perch_registry_resolve::registry_contract!("perch-interpreter");
 }
 
 /// Everything `apply_doc` can refuse. Compiler failures flatten in via
@@ -110,29 +95,27 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// Apply a policy document — **the only way authorization changes**.
     /// Takes just the document's JSON bytes; the two shared, immutable infra
     /// contracts (the stateless doc compiler and the interpreter) are *derived*
-    /// from the pinned [`PERCH_REGISTRY`] — the `stateless` subregistry by
-    /// name-salt, then each infra's content-addressed address
+    /// from the pinned [`STATELESS_REGISTRY`] — each address is
     /// `deployer(stateless, wasm_hash)` where `wasm_hash` is the build-time
-    /// sha256 of the pinned local wasm — computed offline (no cross-contract
-    /// call), never passed in. Replaces the entire rule set atomically and
-    /// returns the canonical `doc_hash`. Runs under the account's own
-    /// authorization: the admin rule must approve the call.
+    /// sha256 of the pinned local wasm (see [`infra`]) — computed offline (no
+    /// cross-contract call), never passed in. Replaces the entire rule set
+    /// atomically and returns the canonical `doc_hash`. Runs under the account's
+    /// own authorization: the admin rule must approve the call.
     fn apply_doc(e: &Env, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
         e.current_contract_address().require_auth();
 
-        // Resolve the infra offline: derive the `stateless` subregistry from the
-        // pinned perch registry (name-salt), then each infra address as
-        // `deployer(stateless, pinned_wasm_hash).deployed_address()`. Pinned (not
-        // runtime-fetched), so a registry republish can't change what a deployed
-        // account runs; no admin-supplied addresses to vouch for.
-        let perch_registry = Address::from_str(e, PERCH_REGISTRY);
-        let stateless = stateless::address(e, &perch_registry);
-        let interpreter = interpreter::address(e, &stateless);
+        // Resolve the infra offline from the pinned stateless registry: each
+        // address is `deployer(stateless, pinned_wasm_hash).deployed_address()`.
+        // Pinned (not runtime-fetched), so a registry republish can't change what
+        // a deployed account runs; no admin-supplied addresses to vouch for.
+        let stateless = Address::from_str(e, STATELESS_REGISTRY);
+        let interpreter = infra::perch_interpreter::address(e, &stateless);
 
         // Stateless compile: parse, validate, network-bind, lower. Every
         // compiler refusal surfaces here as a typed error.
         let compiled: CompiledDoc =
-            compiler::client(e, &stateless).try_compile_doc(&doc_json)??;
+            DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e, &stateless))
+                .try_compile_doc(&doc_json)??;
 
         ensure_admin_survives(&compiled)?;
 

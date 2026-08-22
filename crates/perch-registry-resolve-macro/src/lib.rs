@@ -17,11 +17,15 @@ use syn::{
 /// See the crate-level docs of `perch-registry-resolve` for the full grammar.
 ///
 /// ```ignore
+/// // Name-only (positional), like `import_contract_client!`:
+/// registry_contract!(perch_interpreter);   // wasm "perch-interpreter", pin = sha256(wasm/…)
+///
+/// // Keyed, e.g. a compile-time-pinned hash literal:
 /// registry_contract! {
 ///     mod: interpreter,
 ///     wasm_name: "perch-interpreter",
 ///     client: perch_interpreter::PolicyClient,
-///     hash: "9f3c…",   // optional: present => pinned (offline) mode
+///     hash: "9f3c…",
 /// }
 /// ```
 #[proc_macro]
@@ -199,24 +203,32 @@ impl Parse for RegistrySpec {
     }
 }
 
-/// Read a local wasm file at macro-expansion (build) time and return its
-/// sha256 — the same digest the registry stores as the `deploy_stateless`
-/// content-address salt. The path is relative to the invoking crate's
-/// `CARGO_MANIFEST_DIR`. A missing file is a **build error** naming the file, so
-/// resolution is pinned to a wasm you have on disk (fetch it first) rather than
-/// silently reaching the network.
-/// Parse the name-only `registry_contract!(<name>)` form: a wasm name (ident or
-/// string literal), optional channel prefix (`unverified/…`) and `@version`. The
-/// module is the leaf name with `-`→`_`; the pin is the sha256 of the wasm at
-/// `wasm/<leaf>[_<version>].wasm` (relative to the crate), which must exist —
-/// fetch it first.
+/// Parse the name-only `registry_contract!(<name>)` form, à la
+/// `import_contract_client!`. `<name>` is either a **bare ident** matching the
+/// crate (`perch_doc_compiler`) — the module is that ident and the wasm/registry
+/// name is it with `_`→`-` — or a **string literal** (`"perch-doc-compiler"`,
+/// optional channel prefix and `@version`) — the module is the leaf with
+/// `-`→`_`. The pin is the sha256 of the wasm at `wasm/<leaf>[_<version>].wasm`
+/// (relative to the crate), which must exist — fetch it first.
 fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
-    let (raw, span) = if input.peek(LitStr) {
+    // (registry/wasm name, version, module ident string, span)
+    let (name_part, version, mod_name, span) = if input.peek(LitStr) {
         let lit: LitStr = input.parse()?;
-        (lit.value(), lit.span())
+        let (np, ver) = match lit.value().split_once('@') {
+            Some((n, v)) => (n.to_string(), Some(v.to_string())),
+            None => (lit.value(), None),
+        };
+        let leaf = np.rsplit('/').next().unwrap_or(&np).replace('-', "_");
+        (np, ver, leaf, lit.span())
     } else {
+        // Bare ident matches the crate name; the registry/wasm name uses hyphens.
         let id: Ident = input.parse()?;
-        (id.to_string(), id.span())
+        (
+            id.to_string().replace('_', "-"),
+            None,
+            id.to_string(),
+            id.span(),
+        )
     };
     if input.peek(Token![,]) {
         input.parse::<Token![,]>()?;
@@ -224,26 +236,13 @@ fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
     if !input.is_empty() {
         return Err(input.error("the name-only form takes a single wasm name and nothing else"));
     }
-
-    let (name_part, version) = match raw.split_once('@') {
-        Some((n, v)) => (n.to_string(), Some(v.to_string())),
-        None => (raw.clone(), None),
-    };
     if name_part.is_empty() {
         return Err(syn::Error::new(span, "empty wasm name"));
     }
-    let leaf = name_part
-        .rsplit('/')
-        .next()
-        .unwrap_or(&name_part)
-        .to_string();
-    let mod_name = leaf.replace('-', "_");
-    let module = syn::parse_str::<Ident>(&mod_name).map_err(|_| {
-        syn::Error::new(
-            span,
-            format!("wasm name {leaf:?} is not a valid module identifier ({mod_name:?})"),
-        )
-    })?;
+
+    let module = syn::parse_str::<Ident>(&mod_name)
+        .map_err(|_| syn::Error::new(span, format!("{mod_name:?} is not a valid module name")))?;
+    let leaf = name_part.rsplit('/').next().unwrap_or(&name_part);
     let file = match &version {
         Some(v) => format!("wasm/{leaf}_{}.wasm", v.replace('.', "_")),
         None => format!("wasm/{leaf}.wasm"),
@@ -259,6 +258,11 @@ fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
     })
 }
 
+/// Read a local wasm file at macro-expansion (build) time and return its sha256 —
+/// the digest the registry stores as the `deploy_stateless` content-address salt.
+/// `rel` is relative to the invoking crate's `CARGO_MANIFEST_DIR`. A missing file
+/// is a **build error** naming it, so resolution is pinned to a wasm you have on
+/// disk (fetch it first) rather than silently reaching the network.
 fn hash_wasm_at(rel: &str, span: proc_macro2::Span) -> syn::Result<[u8; 32]> {
     use sha2::{Digest, Sha256};
     let manifest = std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {

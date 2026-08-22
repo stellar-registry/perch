@@ -46,13 +46,13 @@ pub const STATELESS_REGISTRY: &str = "CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7
 /// Content-addressed resolvers for the shared infra, named like
 /// `import_contract_client!`: each pins `deployer(STATELESS_REGISTRY, sha256(wasm))`
 /// where the wasm is looked up at `wasm/<name>.wasm` **at build time** (fetched by
-/// `scripts/fetch-infra-wasm.sh`; a missing file is a build error). Pinned ⇒ a
-/// registry republish can't change a deployed account's behavior (`installed ==
-/// reviewed`), and nothing but the wasm bytes + names lives in source. Grouped in
-/// a module so the derived names don't collide with the `perch_doc_compiler` crate.
+/// `scripts/fetch-infra-wasm.sh` — git-ignored, not committed; a missing file is a
+/// build error). Pinned ⇒ a registry republish can't change a deployed account's
+/// behavior (`installed == reviewed`), and only the names live in source. Grouped
+/// in a module so the derived names don't collide with the `perch_doc_compiler` crate.
 pub mod infra {
-    perch_registry_resolve::registry_contract!("perch-doc-compiler");
-    perch_registry_resolve::registry_contract!("perch-interpreter");
+    perch_registry_resolve::registry_contract!(perch_doc_compiler);
+    perch_registry_resolve::registry_contract!(perch_interpreter);
 }
 
 /// Everything `apply_doc` can refuse. Compiler failures flatten in via

@@ -32,6 +32,19 @@
 //! ```ignore
 //! use perch_registry_resolve::registry_contract;
 //!
+//! // Name-only mode — the ergonomic default, like `import_contract_client!`. A
+//! // bare ident matching the crate (or a "hyphenated-string", optional channel
+//! // prefix + `@version`) generates a same-named module; the pin is the sha256 of
+//! // the wasm looked up at `wasm/<name>.wasm` at build time (a missing file is a
+//! // build error naming it — fetch it first). Group in a module if the derived
+//! // name would collide with the like-named crate:
+//! mod infra {
+//!     registry_contract!(perch_doc_compiler); // wasm "perch-doc-compiler"
+//!     registry_contract!(perch_interpreter);
+//!     // registry_contract!("perch-doc-compiler@1.0.0"); // pin a specific version
+//! }
+//! // infra::perch_doc_compiler::address(env, &stateless) -> Address
+//!
 //! // Pinned mode — compile-time hash literal, zero cross-contract calls, offline.
 //! // Hashes below are the perch infra published to `unverified/perch/stateless`
 //! // on **testnet** (registry CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O);
@@ -83,6 +96,13 @@
 //! ```
 //!
 //! ## Grammar
+//!
+//! Two forms. **Name-only** (positional): `registry_contract!(<name>)` where
+//! `<name>` is a bare ident (module = the ident, wasm name = it with `_`→`-`) or a
+//! string literal (module = leaf with `-`→`_`, optional channel prefix +
+//! `@version`). Equivalent to the keyed content-addressed form with the wasm hash
+//! pinned to `sha256(wasm/<leaf>.wasm)`, resolved at build time; no `client()` is
+//! generated. **Keyed** (`{ … }`) — the fields below:
 //!
 //! - `mod:` — required — identifier naming the generated module.
 //! - `wasm_name:` — string literal; the registry name (used verbatim in runtime

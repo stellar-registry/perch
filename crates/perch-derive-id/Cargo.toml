@@ -1,0 +1,17 @@
+[package]
+name = "perch-derive-id"
+description = "Offline: derive deployer(parent, sha256(name)) contract ids for the infra fetch script"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "perch-derive-id"
+path = "src/main.rs"
+
+[dependencies]
+# testutils gives a std `Env` whose `deployer().deployed_address()` is the exact
+# on-chain contract-id derivation, so the derived ids match the chain.
+soroban-sdk = { workspace = true, features = ["testutils"] }

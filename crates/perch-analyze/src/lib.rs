@@ -147,6 +147,9 @@ impl Encoder {
 
         let n = match &rule.principals {
             Principals::All(a) => a.signers.len().max(1),
+            // M-of-N: the floor is the quorum `m`, matching the `MinSigners(m)`
+            // the compiler emits (validation guarantees 1 <= m <= N).
+            Principals::Threshold(t) => (t.m.max(1)) as usize,
             // Not lowerable in v1 (perch-compile rejects it); encode as the
             // signer floor 1 so analysis still says something sensible.
             Principals::SelfAuthenticating(_) => 1,

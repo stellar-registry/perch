@@ -165,9 +165,11 @@ fn lower_rule(
         Scope::SelfAdmin(_) => ScopeSpec::SelfAdmin,
     };
 
-    // Resolve the referenced signer ids to their declared verifier + key.
-    let signer_ids: &[String] = match &rule.principals {
-        Principals::All(all) => &all.signers,
+    // Resolve the referenced signer ids to their declared verifier + key, and
+    // the interpreter's signer floor: N-of-N for `all`, M-of-N for `threshold`.
+    let (signer_ids, min_signers): (&[String], u32) = match &rule.principals {
+        Principals::All(all) => (&all.signers, all.signers.len() as u32),
+        Principals::Threshold(t) => (&t.signers, t.m),
         Principals::SelfAuthenticating(_) => {
             return Err(LowerError::Unsupported {
                 rule: rule.name.clone(),
@@ -212,15 +214,21 @@ fn lower_rule(
         }
     };
 
-    // INV-2: a constraint-free All-rule lowers policy-free — but only if it is
-    // *also* cap-free. A capped rule always attaches the interpreter so INV-1's
-    // `MinSigners(n)` floor enforces the full signer set; spending_limit's own
-    // single-signer floor is not a substitute for it.
-    let constraint_free = rule.functions.is_none() && rule.args.is_none() && cap.is_none();
+    // INV-2: only a bare `all` (N-of-N) rule lowers policy-free and rides OZ's
+    // native all-signers check. It must also be function/arg/cap-free — a capped
+    // rule always attaches the interpreter so INV-1's `MinSigners(n)` floor
+    // enforces the full signer set (spending_limit's own single-signer floor is
+    // not a substitute). A `threshold` rule is never constraint-free: it must
+    // attach the interpreter so `MinSigners(m)` — not OZ's N-of-N — is the
+    // quorum, otherwise a bare threshold would silently enforce N-of-N.
+    let constraint_free = matches!(rule.principals, Principals::All(_))
+        && rule.functions.is_none()
+        && rule.args.is_none()
+        && cap.is_none();
     let install = if constraint_free {
         None
     } else {
-        let program = build_program(env, rule, signer_ids.len() as u32)?;
+        let program = build_program(env, rule, min_signers)?;
         Some(InstallParams {
             program,
             doc_hash: doc_hash.clone(),
@@ -242,15 +250,16 @@ fn lower_rule(
     })
 }
 
-/// Build the interpreter program for a constrained rule: `All(` MinSigners(n) +
-/// the function allowlist + each argument predicate `)`.
-fn build_program(env: &Env, rule: &Rule, signer_count: u32) -> Result<RpnProgram, LowerError> {
+/// Build the interpreter program for a constrained rule: `All(` MinSigners(m) +
+/// the function allowlist + each argument predicate `)`, where `m` is the signer
+/// floor — N for an `all` rule, the quorum M for a `threshold` rule.
+fn build_program(env: &Env, rule: &Rule, min_signers: u32) -> Result<RpnProgram, LowerError> {
     let mut ops: SVec<Op> = SVec::new(env);
 
     // INV-1: a constrained (interpreter-attached) rule must fail zero-signature
-    // auth. n>=1 because an All-rule always references at least one signer
-    // (perch-ir validation rejects empty principals).
-    ops.push_back(Op::MinSigners(signer_count.max(1)));
+    // auth. `min_signers` is >= 1 because validation rejects empty principals
+    // and a zero threshold; `.max(1)` is a defensive floor either way.
+    ops.push_back(Op::MinSigners(min_signers.max(1)));
     let mut leaves = 1u32;
 
     if let Some(funcs) = &rule.functions {

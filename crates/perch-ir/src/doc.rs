@@ -176,13 +176,23 @@ pub struct ContractScope {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelfAdminScope {}
 
-/// Who a rule authorizes. Tagged with `"type"`: `"all"` or
+/// Who a rule authorizes. Tagged with `"type"`: `"all"`, `"threshold"`, or
 /// `"self-authenticating"`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Principals {
     /// All of the referenced signers must authorize (list must be non-empty
-    /// and reference declared signer ids).
+    /// and reference declared signer ids). This is N-of-N: the equivalent of
+    /// [`Principals::Threshold`] with `m == signers.len()`, kept as its own
+    /// variant so a plain N-of-N rule reads (and hashes) as `all`.
     All(AllPrincipals),
+    /// Any `m` of the referenced signers must authorize — an M-of-N quorum
+    /// (`1 <= m <= signers.len()`). Lowers to the interpreter's
+    /// `MinSigners(m)` op over the OZ-matched signer subset, so perch expresses
+    /// the quorum itself with no external threshold policy. Because `m` can be
+    /// below the signer count, this rule can never lower policy-free: it always
+    /// attaches the interpreter, whose `MinSigners(m)` floor is the quorum
+    /// (see the compiler's INV-1/INV-2 notes).
+    Threshold(ThresholdPrincipals),
     /// No document signer signs at all: an external policy contract
     /// authenticates the invocation itself. Because this removes every
     /// signature check, the author must acknowledge it explicitly via
@@ -190,11 +200,42 @@ pub enum Principals {
     SelfAuthenticating(SelfAuthenticatingPrincipals),
 }
 
+impl Principals {
+    /// Convenience constructor for an `all` (N-of-N) principals list.
+    #[must_use]
+    pub fn all(signers: impl IntoIterator<Item = impl Into<String>>) -> Principals {
+        Principals::All(AllPrincipals {
+            signers: signers.into_iter().map(Into::into).collect(),
+        })
+    }
+
+    /// Convenience constructor for a `threshold` (M-of-N) principals list.
+    #[must_use]
+    pub fn threshold(signers: impl IntoIterator<Item = impl Into<String>>, m: u32) -> Principals {
+        Principals::Threshold(ThresholdPrincipals {
+            signers: signers.into_iter().map(Into::into).collect(),
+            m,
+        })
+    }
+}
+
 /// Payload of [`Principals::All`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllPrincipals {
     /// Ids of declared signers, all of which must authorize.
     pub signers: Vec<String>,
+}
+
+/// Payload of [`Principals::Threshold`]: an M-of-N quorum over declared signers.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ThresholdPrincipals {
+    /// Ids of declared signers the quorum draws from (the N). Must be
+    /// non-empty, reference declared signer ids, and contain no id twice.
+    pub signers: Vec<String>,
+    /// How many of `signers` must authorize (the M). Validation requires
+    /// `1 <= m <= signers.len()`: `m == 0` would authorize with no signatures
+    /// (INV-1), and `m > N` could never be met.
+    pub m: u32,
 }
 
 /// Payload of [`Principals::SelfAuthenticating`].

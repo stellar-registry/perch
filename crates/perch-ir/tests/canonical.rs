@@ -87,6 +87,25 @@ fn canonical_form_of_minimal_doc_is_pinned_byte_for_byte() {
 }
 
 #[test]
+fn threshold_principals_canonicalize_byte_for_byte() {
+    // A `threshold` rule serializes with its `m` (a plain u32 decimal) and
+    // `signers`, keys sorted `m` < `signers` < `type`. An `all` document is
+    // unaffected (pinned by the goldens above); this pins the new shape.
+    let mut doc = base_doc();
+    common::set_key(&mut doc.signers[0], "ab");
+    doc.signers.push(signer("ci", ED25519_VERIFIER, "cd"));
+    doc.rules[0].principals = perch_ir::Principals::threshold(["admin", "ci"], 1);
+    let expected = format!(
+        r#"{{"rules":[{{"name":"admin","principals":{{"m":1,"signers":["admin","ci"],"type":"threshold"}},"scope":{{"type":"self-admin"}}}}],"signers":[{{"id":"admin","key":"ab","verifier":"{WEBAUTHN_VERIFIER}"}},{{"id":"ci","key":"cd","verifier":"{ED25519_VERIFIER}"}}],"version":1}}"#
+    );
+    assert_eq!(canonical_json(&doc), expected);
+    // And it parses back to the same document (fixed point).
+    let reparsed = from_json(&canonical_json(&doc)).expect("threshold canonical form must parse");
+    assert_eq!(doc, reparsed);
+    assert_eq!(doc_hash(&doc), doc_hash(&reparsed));
+}
+
+#[test]
 fn round_trip_is_a_fixed_point() {
     let doc = golden_doc();
     let canon1 = canonical_json(&doc);

@@ -74,7 +74,7 @@ pub use canon::{doc_hash, doc_hash_hex};
 pub use doc::{
     AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, CapConstraint, ContractScope, IsSelfPred,
     PolicyDoc, Principals, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
-    SignerMethod, StringInPred, StringPrefixPred, U32EqPred,
+    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred,
 };
 pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{

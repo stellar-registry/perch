@@ -171,6 +171,17 @@ fn principals_to_cv(p: &Principals) -> Cv<'_> {
                 Cv::Arr(a.signers.iter().map(|s| Cv::Str(s)).collect()),
             ),
         ]),
+        // `m` is a `u32`, so it canonicalizes as a plain JCS decimal (unlike the
+        // cap `limit`, which is an i128-as-string). A `threshold` never collides
+        // with an `all` document: the `type` tag and the extra `m` field differ.
+        Principals::Threshold(t) => Cv::Obj(vec![
+            ("type", Cv::Str("threshold")),
+            (
+                "signers",
+                Cv::Arr(t.signers.iter().map(|s| Cv::Str(s)).collect()),
+            ),
+            ("m", Cv::U32(t.m)),
+        ]),
         Principals::SelfAuthenticating(s) => Cv::Obj(vec![
             ("type", Cv::Str("self-authenticating")),
             ("policy", Cv::Str(&s.policy)),

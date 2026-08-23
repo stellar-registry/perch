@@ -150,6 +150,56 @@ fn rejects_unknown_field_in_all_principals() {
 }
 
 #[test]
+fn threshold_principals_parse_clean() {
+    let input = doc(
+        &contract_scope(),
+        r#"{"type":"threshold","signers":["admin"],"m":1}"#,
+        IS_SELF,
+    );
+    let parsed = from_json(&input).expect("threshold must parse");
+    match &parsed.rules[0].principals {
+        perch_ir::Principals::Threshold(t) => {
+            assert_eq!(t.m, 1);
+            assert_eq!(t.signers, vec!["admin".to_string()]);
+        }
+        other => panic!("expected threshold principals, got {other:?}"),
+    }
+    perch_ir::validate(&parsed).expect("and validate");
+}
+
+#[test]
+fn rejects_unknown_field_in_threshold_principals() {
+    let input = doc(
+        &contract_scope(),
+        r#"{"type":"threshold","signers":["admin"],"m":1,"note":"x"}"#,
+        IS_SELF,
+    );
+    assert_json_err(&input, "note");
+}
+
+#[test]
+fn rejects_threshold_missing_m() {
+    let input = doc(
+        &contract_scope(),
+        r#"{"type":"threshold","signers":["admin"]}"#,
+        IS_SELF,
+    );
+    assert_json_err(&input, "missing field `m`");
+}
+
+#[test]
+fn rejects_threshold_non_integer_m() {
+    // A fractional `m` is rejected before any float can materialize (the
+    // hand-written u32 reader refuses non-integers).
+    let input = doc(
+        &contract_scope(),
+        r#"{"type":"threshold","signers":["admin"],"m":1.5}"#,
+        IS_SELF,
+    );
+    assert_json_err(&input, "expected u32");
+}
+
+#[test]
 fn rejects_unknown_field_in_self_authenticating_principals() {
     let principals = format!(
         r#"{{"type":"self-authenticating","policy":"{POLICY_CONTRACT}","install-param-hex":"","ack":"{ACK_SENTINEL}","note":"x"}}"#

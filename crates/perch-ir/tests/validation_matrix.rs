@@ -348,6 +348,101 @@ fn accepts_references_to_declared_signers() {
     assert_accepts(&doc);
 }
 
+// --- Threshold (M-of-N) ------------------------------------------------------
+
+/// A two-signer base doc whose admin rule is an M-of-N threshold.
+fn threshold_doc(m: u32) -> perch_ir::PolicyDoc {
+    let mut doc = base_doc();
+    doc.signers.push(signer("ci", ED25519_VERIFIER, CI_KEY_HEX));
+    doc.rules[0].principals = Principals::Threshold(perch_ir::ThresholdPrincipals {
+        signers: vec!["admin".into(), "ci".into()],
+        m,
+    });
+    doc
+}
+
+#[test]
+fn accepts_valid_threshold() {
+    // 1-of-2 and 2-of-2 are both in range.
+    assert_accepts(&threshold_doc(1));
+    assert_accepts(&threshold_doc(2));
+}
+
+#[test]
+fn rejects_zero_threshold() {
+    // m = 0 would authorize with no signatures (INV-1).
+    assert_rejects(
+        &threshold_doc(0),
+        &ValidationError::InvalidThreshold {
+            rule: "admin".into(),
+            m: 0,
+            n: 2,
+        },
+    );
+}
+
+#[test]
+fn rejects_threshold_above_signer_count() {
+    // m > N can never be met.
+    assert_rejects(
+        &threshold_doc(3),
+        &ValidationError::InvalidThreshold {
+            rule: "admin".into(),
+            m: 3,
+            n: 2,
+        },
+    );
+}
+
+#[test]
+fn rejects_empty_threshold_principals() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = Principals::Threshold(perch_ir::ThresholdPrincipals {
+        signers: vec![],
+        m: 1,
+    });
+    assert_rejects(
+        &doc,
+        &ValidationError::EmptyPrincipalSigners {
+            rule: "admin".into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_repeated_signer_in_threshold() {
+    let mut doc = base_doc();
+    // Two ids resolving to the "admin" ref would silently lower the real
+    // quorum, so the duplicate reference is rejected.
+    doc.rules[0].principals = Principals::Threshold(perch_ir::ThresholdPrincipals {
+        signers: vec!["admin".into(), "admin".into()],
+        m: 2,
+    });
+    assert_rejects(
+        &doc,
+        &ValidationError::DuplicatePrincipalSigner {
+            rule: "admin".into(),
+            id: "admin".into(),
+        },
+    );
+}
+
+#[test]
+fn rejects_undeclared_signer_in_threshold() {
+    let mut doc = base_doc();
+    doc.rules[0].principals = Principals::Threshold(perch_ir::ThresholdPrincipals {
+        signers: vec!["admin".into(), "ghost".into()],
+        m: 1,
+    });
+    assert_rejects(
+        &doc,
+        &ValidationError::UnknownSignerRef {
+            rule: "admin".into(),
+            id: "ghost".into(),
+        },
+    );
+}
+
 // --- WrongAckSentinel / InvalidPolicyAddress / InvalidInstallParamHex --------
 
 fn self_auth(policy: &str, install_param_hex: &str, ack: &str) -> Principals {

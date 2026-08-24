@@ -1,0 +1,22 @@
+[package]
+name = "perch-spending-limit"
+description = "Deployable OZ spending_limit policy: the cumulative spend cap perch attaches beside the interpreter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+stellar-accounts = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

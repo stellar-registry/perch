@@ -19,6 +19,7 @@ perch-account = { path = "../perch-account" }
 perch-smart-account = { path = "../perch-smart-account" }
 perch-doc-compiler = { path = "../perch-doc-compiler" }
 perch-ed25519-verifier = { path = "../perch-ed25519-verifier" }
+perch-spending-limit = { path = "../perch-spending-limit" }
 perch-testkit = { path = "../perch-testkit" }
 perch-registry-resolve = { path = "../perch-registry-resolve" }
 stellar-accounts = { workspace = true }

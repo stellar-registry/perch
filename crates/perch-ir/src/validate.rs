@@ -14,7 +14,7 @@
 //! applied to a few additional ambiguity/sloppiness cases: empty signer ids
 //! ([`ValidationError::EmptySignerId`]), empty rule names
 //! ([`ValidationError::EmptyRuleName`]), repeated signer references within
-//! one `all` principals list
+//! an `all` or `threshold` principals list
 //! ([`ValidationError::DuplicatePrincipalSigner`]), and repeated values in a
 //! `string-in` predicate ([`ValidationError::DuplicateStringInValue`]).
 
@@ -115,15 +115,17 @@ pub enum ValidationError {
         /// The malformed address string.
         address: String,
     },
-    /// An `all` principals list is empty — that would mean "no signature
-    /// required", which must be said explicitly via `self-authenticating`.
+    /// An `all` or `threshold` principals list is empty — that would mean "no
+    /// signature required", which must be said explicitly via
+    /// `self-authenticating`.
     EmptyPrincipalSigners {
         /// The offending rule name.
         rule: String,
     },
-    /// An `all` principals list references the same signer id twice. The
-    /// duplicate is meaningless (a signer cannot co-sign with itself) and
-    /// suggests the author meant a different signer.
+    /// An `all` or `threshold` principals list references the same signer id
+    /// twice. The duplicate is meaningless (a signer cannot co-sign with
+    /// itself), and in a `threshold` rule it silently lowers the real quorum,
+    /// so it is rejected.
     DuplicatePrincipalSigner {
         /// The offending rule name.
         rule: String,
@@ -136,6 +138,17 @@ pub enum ValidationError {
         rule: String,
         /// The undeclared signer id that was referenced.
         id: String,
+    },
+    /// A `threshold` principals `m` is out of range. `m` must satisfy
+    /// `1 <= m <= signers.len()`: `m == 0` would authorize with no signatures
+    /// (INV-1), and an `m` above the referenced signer count can never be met.
+    InvalidThreshold {
+        /// The offending rule name.
+        rule: String,
+        /// The declared threshold `m`.
+        m: u32,
+        /// The referenced signer count (the N).
+        n: u32,
     },
     /// A `self-authenticating` rule's `ack` is not exactly [`ACK_SENTINEL`].
     WrongAckSentinel {
@@ -291,7 +304,7 @@ impl fmt::Display for ValidationError {
                 "rule `{rule}`: contract scope address `{address}` is not a C-address strkey"
             ),
             E::EmptyPrincipalSigners { rule } => {
-                write!(f, "rule `{rule}`: `all` principals list is empty")
+                write!(f, "rule `{rule}`: principals list is empty")
             }
             E::DuplicatePrincipalSigner { rule, id } => {
                 write!(f, "rule `{rule}`: principals list repeats signer `{id}`")
@@ -299,6 +312,10 @@ impl fmt::Display for ValidationError {
             E::UnknownSignerRef { rule, id } => {
                 write!(f, "rule `{rule}`: references undeclared signer `{id}`")
             }
+            E::InvalidThreshold { rule, m, n } => write!(
+                f,
+                "rule `{rule}`: threshold m={m} out of range 1..={n} (referenced signer count)"
+            ),
             E::WrongAckSentinel { rule } => write!(
                 f,
                 "rule `{rule}`: self-authenticating ack must be exactly `{ACK_SENTINEL}`"
@@ -501,6 +518,37 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
     }
 }
 
+/// Shared signer-list checks for `all` and `threshold` principals: the list is
+/// non-empty, references no id twice, and every id is declared. A `threshold`
+/// rule layers its `1 <= m <= N` range check on top of these.
+fn validate_principal_signers(
+    rule: &str,
+    signers: &[String],
+    declared: &BTreeSet<&str>,
+    errors: &mut Vec<ValidationError>,
+) {
+    if signers.is_empty() {
+        errors.push(ValidationError::EmptyPrincipalSigners {
+            rule: rule.to_string(),
+        });
+    }
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    for id in signers {
+        if !seen.insert(id) {
+            errors.push(ValidationError::DuplicatePrincipalSigner {
+                rule: rule.to_string(),
+                id: id.clone(),
+            });
+        }
+        if !declared.contains(id.as_str()) {
+            errors.push(ValidationError::UnknownSignerRef {
+                rule: rule.to_string(),
+                id: id.clone(),
+            });
+        }
+    }
+}
+
 /// Validate one rule's scope, principals, functions, args, and expiry.
 fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<ValidationError>) {
     let name = || rule.name.clone();
@@ -519,23 +567,19 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
 
     match &rule.principals {
         Principals::All(all) => {
-            if all.signers.is_empty() {
-                errors.push(ValidationError::EmptyPrincipalSigners { rule: name() });
-            }
-            let mut seen: BTreeSet<&str> = BTreeSet::new();
-            for id in &all.signers {
-                if !seen.insert(id) {
-                    errors.push(ValidationError::DuplicatePrincipalSigner {
-                        rule: name(),
-                        id: id.clone(),
-                    });
-                }
-                if !declared.contains(id.as_str()) {
-                    errors.push(ValidationError::UnknownSignerRef {
-                        rule: name(),
-                        id: id.clone(),
-                    });
-                }
+            validate_principal_signers(&rule.name, &all.signers, declared, errors);
+        }
+        Principals::Threshold(t) => {
+            validate_principal_signers(&rule.name, &t.signers, declared, errors);
+            // INV-1: `m` must be at least 1 (no zero-signature quorum) and at
+            // most N (the referenced signer count), mirroring OZ
+            // `simple_threshold`'s `1 <= M <= N` install invariant.
+            if t.m == 0 || (t.m as usize) > t.signers.len() {
+                errors.push(ValidationError::InvalidThreshold {
+                    rule: name(),
+                    m: t.m,
+                    n: t.signers.len() as u32,
+                });
             }
         }
         Principals::SelfAuthenticating(sa) => {

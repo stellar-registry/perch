@@ -54,7 +54,7 @@ use hifijson::SliceLexer;
 use crate::doc::{
     AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, CapConstraint, ContractScope, IsSelfPred,
     PolicyDoc, Principals, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
-    SignerMethod, StringInPred, StringPrefixPred, U32EqPred,
+    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred,
 };
 
 /// Maximum JSON nesting depth accepted by [`from_json`]. A valid `PolicyDoc`
@@ -421,6 +421,16 @@ fn principals_from_value<N: AsRef<str>, S: AsRef<str>>(
                     .iter()
                     .map(|e| as_str(e, "signer id"))
                     .collect::<Result<Vec<_>, _>>()?,
+            }))
+        }
+        "threshold" => {
+            deny_unknown(obj, &["type", "signers", "m"])?;
+            Ok(Principals::Threshold(ThresholdPrincipals {
+                signers: as_array(req_field(obj, "signers")?, "signers")?
+                    .iter()
+                    .map(|e| as_str(e, "signer id"))
+                    .collect::<Result<Vec<_>, _>>()?,
+                m: as_u32(req_field(obj, "m")?, "threshold m")?,
             }))
         }
         "self-authenticating" => {

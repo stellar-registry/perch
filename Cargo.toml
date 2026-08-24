@@ -12,6 +12,7 @@ members = [
     "crates/perch-conformance",
     "crates/perch-analyze",
     "crates/perch-ed25519-verifier",
+    "crates/perch-spending-limit",
     "crates/perch-doc-compiler",
     "crates/perch-smart-account",
     "crates/perch-account",

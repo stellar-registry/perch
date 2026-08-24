@@ -109,6 +109,98 @@ fn inv1_lowered_program_denies_zero_signature() {
     assert!(!deny.allows(), "zero signatures must be denied (INV-1)");
 }
 
+// --- threshold (M-of-N) lowering -------------------------------------------
+
+#[test]
+fn threshold_lowers_to_min_signers_m_not_n() {
+    let env = Env::default();
+    let mut doc = perch_ir::from_json(&fixture()).expect("parse");
+    // ci-publish becomes a 1-of-2 quorum over {admin, ci}: m=1 < N=2.
+    doc.rules[1].principals = perch_ir::Principals::threshold(["admin", "ci"], 1);
+    perch_ir::validate(&doc).expect("valid");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let ci = &plan.rules[1];
+    assert_eq!(ci.signers.len(), 2, "two signers referenced (the N)");
+    let ops = &ci
+        .install
+        .as_ref()
+        .expect("threshold attaches the interpreter")
+        .program
+        .ops;
+    // The floor is the quorum m=1, not the referenced count N=2.
+    assert_eq!(ops.get(0).unwrap(), Op::MinSigners(1));
+
+    // Contrast: `all` over the same two signers floors at MinSigners(2).
+    doc.rules[1].principals = perch_ir::Principals::all(["admin", "ci"]);
+    let plan_all = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let ops_all = &plan_all.rules[1].install.as_ref().unwrap().program.ops;
+    assert_eq!(ops_all.get(0).unwrap(), Op::MinSigners(2));
+}
+
+#[test]
+fn bare_threshold_is_never_constraint_free() {
+    // A threshold self-admin rule with no functions/args/cap: as `all` it would
+    // lower policy-free (INV-2), but a threshold must attach the interpreter so
+    // MinSigners(m) — not OZ's native N-of-N — is the quorum.
+    let env = Env::default();
+    let mut doc = perch_ir::from_json(&fixture()).expect("parse");
+    doc.rules[0].principals = perch_ir::Principals::threshold(["admin"], 1);
+    perch_ir::validate(&doc).expect("valid");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let program = &plan.rules[0]
+        .install
+        .as_ref()
+        .expect("threshold forces the interpreter (never policy-free)")
+        .program;
+    // Bare signer floor: [MinSigners(1), All(1)].
+    assert_eq!(program.ops.len(), 2);
+    assert_eq!(program.ops.get(0).unwrap(), Op::MinSigners(1));
+    assert_eq!(program.ops.get(1).unwrap(), Op::All(1));
+}
+
+#[test]
+fn threshold_program_enforces_the_quorum() {
+    // A 2-of-3 quorum: the compiled program denies with <2 signatures and
+    // allows with >=2 — INV-1 generalized to M-of-N.
+    let env = Env::default();
+    let mut doc = perch_ir::from_json(&fixture()).expect("parse");
+    doc.signers.push(perch_ir::SignerDecl {
+        id: "backup".into(),
+        method: perch_ir::SignerMethod::External {
+            verifier: "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG".into(),
+            // Distinct key material from `ci` (else DuplicateSignerKey).
+            key: "1ce6040b0d03232ac6c911b0c375f1a52ebdefff56fd361d13680e23ca578a18".into(),
+        },
+    });
+    // Bare 2-of-3 self-admin rule so the program is purely the signer floor.
+    doc.rules[0].principals = perch_ir::Principals::threshold(["admin", "ci", "backup"], 2);
+    perch_ir::validate(&doc).expect("valid");
+    let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
+    let program = &plan.rules[0].install.as_ref().unwrap().program;
+
+    let self_addr = Address::generate(&env);
+    let ctx = Context::Contract(ContractContext {
+        contract: Address::generate(&env),
+        fn_name: Symbol::new(&env, "set_admin"),
+        args: vec![&env],
+    });
+    let verdict = |count: u32| {
+        rpn::eval(
+            &env,
+            program,
+            &EvalInputs {
+                context: &ctx,
+                signer_count: count,
+                self_addr: &self_addr,
+            },
+        )
+    };
+    assert!(!verdict(0).allows(), "zero signatures denied (INV-1)");
+    assert!(!verdict(1).allows(), "1 of 3 is below the 2-of-3 quorum");
+    assert_eq!(verdict(2), Verdict::True, "2 of 3 meets the quorum");
+    assert_eq!(verdict(3), Verdict::True, "3 of 3 meets the quorum");
+}
+
 #[test]
 fn self_authenticating_is_a_typed_error() {
     let env = Env::default();

@@ -17,7 +17,8 @@
 use perch_compile::{compile, CompileConfig};
 use perch_ir::{
     validate, AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, CapConstraint, PolicyDoc,
-    Principals, Rule, Scope, SignerDecl, SignerMethod, StringInPred, StringPrefixPred, U32EqPred,
+    Principals, Rule, Scope, SignerDecl, SignerMethod, StringInPred, StringPrefixPred,
+    ThresholdPrincipals, U32EqPred,
 };
 use perch_program::{rpn, EvalInputs, Verdict};
 use soroban_sdk::auth::{Context, ContractContext};
@@ -133,6 +134,21 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
         let take = 1 + rng.below(n_signers as u32) as usize;
         let principal_ids: Vec<String> = signers[..take].iter().map(|s| s.id.clone()).collect();
 
+        // Roughly half the time make it an M-of-N quorum (m in 1..=N) rather
+        // than N-of-N `all`, so the oracle exercises the threshold arithmetic
+        // and the `MinSigners(m)` lowering, not just N-of-N.
+        let principals = if rng.chance(2) {
+            let m = 1 + rng.below(principal_ids.len() as u32);
+            Principals::Threshold(ThresholdPrincipals {
+                signers: principal_ids,
+                m,
+            })
+        } else {
+            Principals::All(AllPrincipals {
+                signers: principal_ids,
+            })
+        };
+
         let functions = if rng.chance(3) {
             None
         } else {
@@ -185,9 +201,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
         rules.push(Rule {
             name: format!("rule-{doc_idx}-{r}"),
             scope,
-            principals: Principals::All(AllPrincipals {
-                signers: principal_ids,
-            }),
+            principals,
             functions,
             args,
             not_after_ledger: if rng.chance(3) {
@@ -291,6 +305,7 @@ fn ref_pred(pred: &ArgPred, inv: &GInv, index: u32) -> Verdict {
 fn ref_rule(rule: &Rule, inv: &GInv) -> Verdict {
     let n = match &rule.principals {
         Principals::All(all) => all.signers.len().max(1) as u32,
+        Principals::Threshold(t) => t.m.max(1),
         Principals::SelfAuthenticating(_) => unreachable!("generator never emits these"),
     };
     let mut v = Verdict::from(inv.signer_count >= n);
@@ -401,9 +416,13 @@ fn compiled_programs_agree_with_the_doc_level_reference() {
                 rule.name
             );
 
-            // INV-2 (+ cap proviso): policy-free iff constraint-free and cap-free.
-            let constraint_free =
-                rule.functions.is_none() && rule.args.is_none() && rule.cap.is_none();
+            // INV-2 (+ cap proviso): policy-free iff it is a bare `all` rule —
+            // N-of-N, constraint-free, and cap-free. A `threshold` rule always
+            // attaches the interpreter so `MinSigners(m)` is the quorum.
+            let constraint_free = matches!(rule.principals, Principals::All(_))
+                && rule.functions.is_none()
+                && rule.args.is_none()
+                && rule.cap.is_none();
             assert_eq!(
                 lowered.install.is_none(),
                 constraint_free,

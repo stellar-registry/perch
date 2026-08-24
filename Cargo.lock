@@ -1511,6 +1511,7 @@ dependencies = [
  "perch-program",
  "perch-registry-resolve",
  "perch-smart-account",
+ "perch-spending-limit",
  "perch-testkit",
  "soroban-sdk",
  "stellar-accounts",
@@ -1568,6 +1569,14 @@ dependencies = [
  "perch-registry-resolve",
  "soroban-sdk",
  "soroban-sdk-tools",
+ "stellar-accounts",
+]
+
+[[package]]
+name = "perch-spending-limit"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
  "stellar-accounts",
 ]
 

@@ -8,17 +8,15 @@
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_compile::{compile, CompileConfig};
 use perch_ed25519_verifier::PerchEd25519Verifier;
+use perch_spending_limit::{PerchSpendingLimit, SpendingLimitAccountParams};
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{
-    contract, contractimpl, crypto::Hash, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map,
-    String as SString, Symbol, Val,
-};
-use stellar_accounts::policies::{
-    spending_limit, spending_limit::SpendingLimitAccountParams, Policy,
+    contract, crypto::Hash, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString,
+    Symbol, Val,
 };
 use stellar_accounts::smart_account::{
-    add_context_rule, do_check_auth, AuthPayload, ContextRule, ContextRuleType, Signer,
+    add_context_rule, do_check_auth, AuthPayload, ContextRuleType, Signer,
 };
 
 use perch_testkit::auth_digest;
@@ -32,49 +30,13 @@ const ED25519_VERIFIER: &str = "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO5
 const LIMIT: i128 = 10;
 const PERIOD_LEDGERS: u32 = 1000;
 
-// --- account, verifier, and the spending_limit policy wrapper ---------------
+// --- account + verifier ------------------------------------------------------
+//
+// The cap is enforced by the real `perch-spending-limit` policy contract — the
+// deployable an applier attaches beside the interpreter — registered below.
 
 #[contract]
 struct Account;
-
-/// The reusable OZ spending-limit policy wrapped as a `Policy` contract, exactly
-/// as an applier would deploy it.
-#[contract]
-struct SpendingLimitPolicy;
-
-#[contractimpl]
-impl Policy for SpendingLimitPolicy {
-    type AccountParams = SpendingLimitAccountParams;
-
-    fn enforce(
-        e: &Env,
-        context: Context,
-        authenticated_signers: soroban_sdk::Vec<Signer>,
-        context_rule: ContextRule,
-        smart_account: Address,
-    ) {
-        spending_limit::enforce(
-            e,
-            &context,
-            &authenticated_signers,
-            &context_rule,
-            &smart_account,
-        )
-    }
-
-    fn install(
-        e: &Env,
-        install_params: Self::AccountParams,
-        context_rule: ContextRule,
-        smart_account: Address,
-    ) {
-        spending_limit::install(e, &install_params, &context_rule, &smart_account)
-    }
-
-    fn uninstall(e: &Env, context_rule: ContextRule, smart_account: Address) {
-        spending_limit::uninstall(e, &context_rule, &smart_account)
-    }
-}
 
 // --- a capped document, built in-code ---------------------------------------
 
@@ -133,7 +95,7 @@ fn setup() -> World {
     let account = env.register(Account, ());
     let verifier = env.register(PerchEd25519Verifier, ());
     let interpreter = env.register(perch_interpreter::PerchInterpreter, ());
-    let spending = env.register(SpendingLimitPolicy, ());
+    let spending = env.register(PerchSpendingLimit, ());
 
     let signing_key = SigningKey::from_bytes(&[9u8; 32]);
     let pubkey = BytesN::from_array(&env, &signing_key.verifying_key().to_bytes());

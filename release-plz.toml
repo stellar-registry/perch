@@ -26,18 +26,47 @@ git_tag_enable = true
 git_tag_name = "{{ package }}-v{{ version }}"
 # No GitHub Release per crate by default (avoids one release per member)...
 git_release_enable = false
+# CONTRACTS ONLY for now: releases are on-chain wasm publishes, so only the
+# deployable contract crates take part (allowlisted below with
+# `release = true`). Follow-up: enable the library crates too and publish
+# those to crates.io (needs the stellar-accounts git pin resolved first).
+release = false
 
-# ...except the deployable contract, which drives the on-chain publish. The
-# publish workflow attaches the built wasm + on-chain receipt to this release.
+# The deployable contracts. Only two have publish automation today —
+# perch-interpreter (tag → publish.yml, needs the GitHub App installed) and
+# perch-spending-limit (same-run chain in release.yml) — the rest get
+# tags + changelogs so their on-chain publishes stay versionable.
+[[package]]
+name = "perch-account"
+release = true
+
+[[package]]
+name = "perch-doc-compiler"
+release = true
+
+[[package]]
+name = "perch-ed25519-verifier"
+release = true
+
+[[package]]
+name = "perch-stateless-registry"
+release = true
+
+# ...and the interpreter, which drives the on-chain publish via publish.yml.
+# The publish workflow attaches the built wasm + on-chain receipt to this
+# release.
 [[package]]
 name = "perch-interpreter"
+release = true
 git_release_enable = true
 git_release_name = "perch-interpreter v{{ version }}"
 
-# perch-spending-limit needs NO override: its tag alone gates the
-# build→attest→publish chain that runs inside release.yml itself (same-run
-# `needs:` on the release-plz `releases` output, not a tag trigger). Its
-# GitHub release is deliberately NOT created here — the
-# stellar-registry/actions reusable workflow creates it at the tag (`gh
-# release create` would fail on an existing release) and attaches the
-# attested wasm + on-chain publish receipt.
+# perch-spending-limit's tag alone gates the build→attest→publish chain that
+# runs inside release.yml itself (same-run `needs:` on the release-plz
+# `releases` output, not a tag trigger). Its GitHub release is deliberately
+# NOT created here — the stellar-registry/actions reusable workflow creates it
+# at the tag (`gh release create` would fail on an existing release) and
+# attaches the attested wasm + on-chain publish receipt.
+[[package]]
+name = "perch-spending-limit"
+release = true

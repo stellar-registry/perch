@@ -14,6 +14,8 @@
     [],
     [],
     [],
+    [],
+    [],
     []
   ],
   "ledger": {
@@ -296,6 +298,29 @@
           "data": {
             "contract_data": {
               "ext": "v0",
+              "contract": "CAW764KLXZHK5G35XKMXCMF43U54OZQZ24MCPUTVOFM5VORXTWKGUKRA",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
               "contract": "CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
@@ -366,6 +391,29 @@
             "contract_data": {
               "ext": "v0",
               "contract": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CDTHLKYOFISMQ4G74JXMSYCAQFHD6CHMZ52YMEX24WRRY77U224ASD2V",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {

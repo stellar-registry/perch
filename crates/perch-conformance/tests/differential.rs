@@ -185,12 +185,13 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
             }
         };
 
-        // A cap is only generated on contract-scoped rules with a token, keeping
-        // the document trivially valid; it forces the interpreter on even for a
+        // A cap is only generated on contract-scoped rules, its token equal to
+        // the scope (validation requires token == scope, since OZ meters the
+        // rule's CallContract token). It forces the interpreter on even for a
         // constraint-free rule (INV-2's cap-free proviso).
         let cap = if contract_scope && rng.chance(5) {
             Some(CapConstraint {
-                token: Some(VERIFIER_A.into()),
+                token: Some(CONTRACT_C.into()),
                 limit: "1000000".into(),
                 period_ledgers: 17280,
             })

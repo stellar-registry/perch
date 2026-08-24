@@ -1599,6 +1599,7 @@ dependencies = [
  "perch-ed25519-verifier",
  "perch-interpreter",
  "perch-smart-account",
+ "perch-spending-limit",
  "soroban-sdk",
  "stellar-accounts",
 ]

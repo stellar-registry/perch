@@ -257,11 +257,25 @@ pub enum ValidationError {
         /// The malformed token address string.
         address: String,
     },
-    /// A `cap` omits `token` on a non-`contract` scope, so there is no token to
-    /// denominate the cap in. Give the cap an explicit `token`.
+    /// A `cap` is on a `self-admin` scope (or otherwise non-`contract` scope),
+    /// so there is no `CallContract` token for OZ `spending_limit` to meter.
+    /// A capped rule must be scoped to the token contract.
     CapWithoutToken {
         /// The offending rule name.
         rule: String,
+    },
+    /// A `cap`'s explicit `token` differs from the rule's `contract` scope
+    /// address. OZ `spending_limit` meters the token pinned by the rule's
+    /// `CallContract` context type — which is the scope contract — so a
+    /// differing token would silently cap a different contract than named.
+    /// Omit `token` (it defaults to the scope) or set it equal to the scope.
+    CapTokenMismatch {
+        /// The offending rule name.
+        rule: String,
+        /// The cap's declared token.
+        token: String,
+        /// The rule's contract scope address.
+        scope: String,
     },
 }
 
@@ -377,7 +391,11 @@ impl fmt::Display for ValidationError {
             }
             E::CapWithoutToken { rule } => write!(
                 f,
-                "rule `{rule}`: cap omits token on a non-contract scope (give it an explicit token)"
+                "rule `{rule}`: cap on a non-contract scope has no token to meter (scope the rule to the token contract)"
+            ),
+            E::CapTokenMismatch { rule, token, scope } => write!(
+                f,
+                "rule `{rule}`: cap token `{token}` differs from the contract scope `{scope}` (omit it or set it equal)"
             ),
         }
     }
@@ -675,21 +693,30 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
         if cap.period_ledgers == 0 {
             errors.push(ValidationError::ZeroCapPeriod { rule: name() });
         }
-        match &cap.token {
-            Some(token) => {
-                if !is_contract_address_shape(token) {
+        // OZ `spending_limit` meters the token pinned by the rule's
+        // `CallContract` context type — the rule's scope contract. So a capped
+        // rule must be contract-scoped, and an explicit `token` must equal that
+        // scope; otherwise the cap would silently meter a different contract.
+        match &rule.scope {
+            Scope::Contract(scope) => match &cap.token {
+                Some(token) if !is_contract_address_shape(token) => {
                     errors.push(ValidationError::InvalidCapToken {
                         rule: name(),
                         address: token.clone(),
                     });
                 }
-            }
-            // No explicit token: the cap denominates in the scope contract, so
-            // the scope must be a `contract` (not `self-admin`).
-            None => {
-                if !matches!(rule.scope, Scope::Contract(_)) {
-                    errors.push(ValidationError::CapWithoutToken { rule: name() });
+                Some(token) if token != &scope.address => {
+                    errors.push(ValidationError::CapTokenMismatch {
+                        rule: name(),
+                        token: token.clone(),
+                        scope: scope.address.clone(),
+                    });
                 }
+                // `None` (denominate in the scope) or `token == scope`: ok.
+                _ => {}
+            },
+            Scope::SelfAdmin(_) => {
+                errors.push(ValidationError::CapWithoutToken { rule: name() });
             }
         }
     }

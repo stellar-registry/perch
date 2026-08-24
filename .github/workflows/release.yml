@@ -45,16 +45,14 @@ name: Release-plz
 on:
   push:
     branches: [main]
-  # Recovery path: rerun build-attest + on-chain publish for an existing
-  # perch-spending-limit tag (e.g. a transient RPC or stellar.expert failure
-  # after the tag landed — the pinned reusable workflow hard-fails if its
-  # stellar.expert validation POST times out, even though the release was
-  # already created). Dispatch from a ref whose TIP IS THE TAG COMMIT: the
-  # reusable workflow builds this run's sha, and the gate job refuses a
-  # mismatch (the binver meta can't catch drift — the crate version doesn't
-  # change between releases). If the GitHub release already exists, delete it
-  # first (`gh release delete <tag>` — keep the tag); the reusable workflow
-  # re-creates it.
+  # Recovery path — PUBLISH-ONLY: re-run the on-chain half against the
+  # existing, already-attested release asset for the tag (e.g. after a
+  # transient RPC failure). It never rebuilds, so it doesn't matter how far
+  # main has moved: integrity comes from `gh attestation verify` against the
+  # pinned reusable signer workflow, not from git position. If the BUILD half
+  # failed instead, use the failed run's native "Re-run failed jobs" (same
+  # sha), after deleting the GitHub release if it got as far as creating one
+  # (`gh release delete <tag>` — keep the tag).
   workflow_dispatch:
     inputs:
       spending_limit_tag:
@@ -156,29 +154,6 @@ jobs:
             echo "tag=$TAG"
             echo "version=${TAG#perch-spending-limit-v}"
           } >>"$GITHUB_OUTPUT"
-      # The reusable build workflow has no ref input — it builds this run's
-      # github.sha. On push that IS the commit release-plz tagged; on dispatch
-      # nothing ties the two, and the binver meta can't catch drift (the crate
-      # version doesn't change between releases). So refuse any dispatch whose
-      # run sha isn't exactly the tag's commit.
-      - name: Assert the dispatched tag points at this run's commit
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Compare tag commit to run sha
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          TAG: ${{ steps.params.outputs.tag }}
-        run: |
-          git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
-          tag_sha=$(git rev-parse "refs/tags/$TAG^{commit}")
-          if [ "$tag_sha" != "$GITHUB_SHA" ]; then
-            echo "tag $TAG is at $tag_sha but this run builds $GITHUB_SHA —" \
-                 "dispatch from a ref whose tip is the tag commit" >&2
-            exit 1
-          fi
-
   # Build + attest + GitHub release via stellar-registry/actions: scaffold
   # build with source_repo meta, `stellar contract optimize` (preserves the
   # name/binver contractmeta — verified), a GitHub release at the release-plz
@@ -188,9 +163,18 @@ jobs:
   # on-chain). release-plz deliberately does NOT create this release
   # (git_release_enable stays false): the reusable workflow's `gh release
   # create` fails on an existing release.
+  #
+  # Push-only: the reusable workflow has no ref input — it builds this run's
+  # github.sha, which on push IS the commit release-plz tagged, but on
+  # dispatch is wherever main has drifted to. So a dispatch never rebuilds; it
+  # republishes the existing attested asset (see the recovery note at the
+  # top).
   build-attest:
     needs: spending-limit-release
-    if: ${{ !cancelled() && needs.spending-limit-release.result == 'success' }}
+    if: >-
+      !cancelled() &&
+      needs.spending-limit-release.result == 'success' &&
+      github.event_name == 'push'
     permissions:
       id-token: write
       contents: write
@@ -212,12 +196,17 @@ jobs:
   # name (see the bootstrap note at the top) — author auth is all a
   # subsequent-version publish needs, and deploy_stateless (deployer = the
   # registry itself) needs no auth at all and is idempotent.
+  # On push, build-attest must have succeeded; on dispatch it is skipped by
+  # design and the existing release asset is republished (its provenance is
+  # verified below either way — that check, not git position, is what makes
+  # the asset trustworthy).
   publish-stateless:
     needs: [spending-limit-release, build-attest]
     if: >-
       !cancelled() &&
       needs.spending-limit-release.result == 'success' &&
-      needs.build-attest.result == 'success'
+      (needs.build-attest.result == 'success' ||
+       (github.event_name == 'workflow_dispatch' && needs.build-attest.result == 'skipped'))
     runs-on: ubuntu-latest
     # mainnet would add required-reviewer protection on the environment (and
     # needs the stateless registry deployed there first); testnet none.
@@ -253,12 +242,18 @@ jobs:
           test -s "dist/$WASM" || { echo "release asset $WASM missing" >&2; exit 1; }
           echo "WASM=dist/$WASM" >>"$GITHUB_ENV"
       - name: Verify build provenance
+        # The attestation's SIGNER is the reusable workflow we call, not this
+        # repo's own workflow — in a reusable-workflow run the certificate's
+        # job_workflow_ref points at stellar-registry/actions. Without
+        # --signer-workflow, `gh attestation verify --repo <this repo>` finds
+        # the attestation but rejects the signer (the v0.1.0 failure:
+        # 'Error: verifying with issuer "sigstore.dev"').
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh attestation verify "$WASM" --repo "$GITHUB_REPOSITORY"
+        run: |
+          gh attestation verify "$WASM" --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "stellar-registry/actions/.github/workflows/contract-release.yml"
       - name: Cross-check wasm meta binver against the tag
-        # Also guards the workflow_dispatch recovery path: an asset rebuilt
-        # from a main that moved past the tag carries the newer binver.
         run: |
           meta_binver=$(stellar contract info meta --wasm "$WASM" | sed -n 's/^ • binver: \(.*\)$/\1/p')
           if [ "$meta_binver" != "$VERSION" ]; then

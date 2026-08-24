@@ -5,7 +5,10 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+# No cargo-manifest `publish = false`: release-plz's `release` command skips
+# manifest-unpublishable packages (no tag ever — the missing-4-tags bug of the
+# v0.1.0 release). crates.io publish is blocked workspace-wide in
+# release-plz.toml instead.
 
 [package.metadata.stellar]
 cargo_inherit = true

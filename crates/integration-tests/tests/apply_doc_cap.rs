@@ -5,7 +5,7 @@
 //! proves the wiring; the cap's runtime allow/deny semantics are proven in
 //! `perch-spending-limit`'s own test and `cap_matrix`.
 
-use perch_smart_account::{infra, stateless_registry};
+use perch_smart_account::infra;
 use perch_testkit::{Bootstrap, World, FIXTURE_NETWORK};
 use soroban_sdk::{Address, Bytes, BytesN, String as SString};
 
@@ -50,7 +50,7 @@ fn capped_doc(token_field: &str) -> String {
 /// The content-addressed spending-limit address the account resolves in
 /// `install_rule` — recomputed here to assert the rule carries exactly it.
 fn spending_limit_addr(w: &World) -> Address {
-    infra::perch_spending_limit::address(&w.env, &stateless_registry(&w.env))
+    infra::perch_spending_limit::address(&w.env)
 }
 
 #[test]
@@ -76,7 +76,7 @@ fn apply_doc_installs_the_cap_beside_the_interpreter() {
     assert_eq!(capped.name, SString::from_str(&w.env, "capped"));
     assert_eq!(capped.policies.len(), 2, "interpreter + spending_limit");
     assert!(capped.policies.contains(&w.interpreter));
-    assert!(capped.policies.contains(&spending_limit_addr(&w)));
+    assert!(capped.policies.contains(spending_limit_addr(&w)));
 }
 
 #[test]

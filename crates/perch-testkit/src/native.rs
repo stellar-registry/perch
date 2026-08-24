@@ -37,7 +37,7 @@ fn register_infra_at_derived(env: &Env) -> (Address, Address) {
     // The stateful cap policy, at its (placeholder-pinned) content-addressed
     // derivation, so `apply_doc` on a capped document resolves a real contract
     // here and installs the cap beside the interpreter.
-    let spending_addr = infra::perch_spending_limit::address(env, &stateless_registry(env));
+    let spending_addr = infra::perch_spending_limit::address(env);
     env.register_at(&spending_addr, PerchSpendingLimit, ());
     (compiler_addr, interpreter_addr)
 }

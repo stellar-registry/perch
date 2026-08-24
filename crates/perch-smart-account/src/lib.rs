@@ -60,23 +60,11 @@ pub mod infra {
     perch_registry_resolve::registry_contract!(perch_doc_compiler);
     perch_registry_resolve::registry_contract!(perch_interpreter);
 
-    // PLACEHOLDER PIN — perch-spending-limit is not yet deployed to the stateless
-    // registry, so (unlike the two above) it cannot be fetched into the
-    // git-ignored `wasm/` cache and pinned by name. Pin its wasm hash as a
-    // compile-time literal — the `stellar contract build` output of
-    // `crates/perch-spending-limit` — so the account builds and derives a stable
-    // address (`deployer(stateless, hash)`) that tests can register the policy at.
-    // ON DEPLOY: publish the crate to `unverified/perch/stateless`, fetch its
-    // wasm, and replace this literal with the fetched hash — or switch to
-    // name-only `registry_contract!(perch_spending_limit)` once
-    // `wasm/perch-spending-limit.wasm` exists — so the pin becomes the deployed
-    // bytes, matching the interpreter/doc-compiler. Keyed `hash:` mode yields
-    // `address(env, registry)`; the caller passes the stateless registry id.
-    perch_registry_resolve::registry_contract! {
-        mod: perch_spending_limit,
-        wasm_name: "perch-spending-limit",
-        hash: "0c201428d0fedefb706c67d022dd9de808fc618d26ade38f24c8df023de5a712",
-    }
+    // Published to `unverified/perch/stateless` and `deploy_stateless`\'d like
+    // the two above; its wasm is downloaded by NAME from the stateless registry
+    // (`stellar registry download` — it has no name-salted perch-registry
+    // instance for `contract fetch` to pull from).
+    perch_registry_resolve::registry_contract!(perch_spending_limit);
 }
 
 /// Everything `apply_doc` can refuse. Compiler failures flatten in via
@@ -239,7 +227,7 @@ fn install_rule(e: &Env, interpreter: &Address, rule: &CompiledRule) {
     // AND the rolling cap must pass. The metered token is this rule's
     // `CallContract` scope (validation pins `token == scope`).
     if let Some(cap) = rule.cap.first() {
-        let spending_limit = infra::perch_spending_limit::address(e, &stateless_registry(e));
+        let spending_limit = infra::perch_spending_limit::address(e);
         let params = SpendingLimitAccountParams {
             spending_limit: cap.spending_limit,
             period_ledgers: cap.period_ledgers,

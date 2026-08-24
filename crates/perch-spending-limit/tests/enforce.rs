@@ -5,7 +5,9 @@
 //! who signed, so this isolates the wrapped cap. The full composition with the
 //! interpreter + real ed25519 auth is proven in `integration-tests/cap_matrix`.
 
-use perch_spending_limit::{PerchSpendingLimit, PerchSpendingLimitClient, SpendingLimitAccountParams};
+use perch_spending_limit::{
+    PerchSpendingLimit, PerchSpendingLimitClient, SpendingLimitAccountParams,
+};
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{

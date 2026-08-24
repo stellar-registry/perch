@@ -37,17 +37,24 @@ name: Release-plz
 #     --wasm_hash <hash-from-upload> --version 0.0.1
 #
 # (0.0.1 < the first release-plz version 0.1.0 — versions must be strictly
-# increasing.) After that the chain is autonomous.
+# increasing.) After that the chain is autonomous. Sequencing: release-plz.toml
+# sets release_always = false, so nothing is tagged until a RELEASE PR merges —
+# run the bootstrap any time after this workflow lands and before merging the
+# first release PR.
 
 on:
   push:
     branches: [main]
   # Recovery path: rerun build-attest + on-chain publish for an existing
-  # perch-spending-limit tag (e.g. a transient RPC failure after the tag
-  # landed). Only valid while main still matches the tag content — the
-  # publish job's binver cross-check aborts otherwise. If the GitHub release
-  # already exists, delete it first (`gh release delete <tag>` — keep the
-  # tag); the reusable workflow re-creates it.
+  # perch-spending-limit tag (e.g. a transient RPC or stellar.expert failure
+  # after the tag landed — the pinned reusable workflow hard-fails if its
+  # stellar.expert validation POST times out, even though the release was
+  # already created). Dispatch from a ref whose TIP IS THE TAG COMMIT: the
+  # reusable workflow builds this run's sha, and the gate job refuses a
+  # mismatch (the binver meta can't catch drift — the crate version doesn't
+  # change between releases). If the GitHub release already exists, delete it
+  # first (`gh release delete <tag>` — keep the tag); the reusable workflow
+  # re-creates it.
   workflow_dispatch:
     inputs:
       spending_limit_tag:
@@ -57,8 +64,14 @@ on:
 
 permissions: {}
 
+# Dispatch recovery runs get their own group: the shared group has ONE pending
+# slot, and a push landing while another push run is active would silently
+# cancel a queued dispatch (cancel-in-progress only protects the RUNNING run).
+# A dispatch racing a push run is on-chain-safe: the fetch_hash preflight
+# skips a same-hash republish and refuses a different-hash one, and
+# deploy_stateless is idempotent.
 concurrency:
-  group: release-plz
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-plz-dispatch-{0}', inputs.spending_limit_tag) || 'release-plz' }}
   cancel-in-progress: false
 
 jobs:
@@ -125,20 +138,46 @@ jobs:
     steps:
       - name: Extract tag and version
         id: params
+        # Strict allow-list, not a prefix glob: the tag flows into the reusable
+        # workflow's release_name input, which that workflow interpolates
+        # directly into `run:` shell — any character beyond exact semver shape
+        # would be a cross-workflow command injection.
         run: |
           if [ -n "$DISPATCH_TAG" ]; then
             TAG="$DISPATCH_TAG"
           else
             TAG=$(jq -r '.[] | select(.package_name == "perch-spending-limit") | .tag' <<<"$RELEASES")
           fi
-          case "$TAG" in
-            perch-spending-limit-v[0-9]*) ;;
-            *) echo "unexpected spending-limit tag: '$TAG'" >&2; exit 1 ;;
-          esac
+          if ! [[ "$TAG" =~ ^perch-spending-limit-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "unexpected spending-limit tag: '$TAG'" >&2
+            exit 1
+          fi
           {
             echo "tag=$TAG"
             echo "version=${TAG#perch-spending-limit-v}"
           } >>"$GITHUB_OUTPUT"
+      # The reusable build workflow has no ref input — it builds this run's
+      # github.sha. On push that IS the commit release-plz tagged; on dispatch
+      # nothing ties the two, and the binver meta can't catch drift (the crate
+      # version doesn't change between releases). So refuse any dispatch whose
+      # run sha isn't exactly the tag's commit.
+      - name: Assert the dispatched tag points at this run's commit
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compare tag commit to run sha
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          TAG: ${{ steps.params.outputs.tag }}
+        run: |
+          git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+          tag_sha=$(git rev-parse "refs/tags/$TAG^{commit}")
+          if [ "$tag_sha" != "$GITHUB_SHA" ]; then
+            echo "tag $TAG is at $tag_sha but this run builds $GITHUB_SHA —" \
+                 "dispatch from a ref whose tip is the tag commit" >&2
+            exit 1
+          fi
 
   # Build + attest + GitHub release via stellar-registry/actions: scaffold
   # build with source_repo meta, `stellar contract optimize` (preserves the
@@ -242,9 +281,12 @@ jobs:
           # publish; a different hash under the same version is a supply-chain
           # smell and refuses. Registry errors #1 NoSuchWasmPublished and
           # #2 NoSuchVersion mean "not published yet" and proceed.
+          # fetch_hash's version is Option<String>: the CLI parses Option args
+          # as JSON, so the value must be a JSON string ("0.1.0", quotes and
+          # all) — bare 0.1.0 is rejected as invalid JSON before simulation.
           set +e
           onchain=$(stellar contract invoke --id "$REGISTRY" --network "$STELLAR_NETWORK" -- \
-            fetch_hash --wasm_name "$WASM_NAME" --version "$VERSION" 2>preflight.err)
+            fetch_hash --wasm_name "$WASM_NAME" --version "\"$VERSION\"" 2>preflight.err)
           rc=$?
           set -e
           onchain=${onchain//\"/}
@@ -277,9 +319,10 @@ jobs:
         run: |
           # deployer = the registry itself → address is the pure function
           # deployer(registry, wasm_hash); a redeploy of identical bytes is a
-          # no-op returning the same address.
+          # no-op returning the same address. version is Option<String> → JSON
+          # string, same as the preflight.
           addr=$(stellar contract invoke --id "$REGISTRY" --network "$STELLAR_NETWORK" -- \
-            deploy_stateless --wasm_name "$WASM_NAME" --version "$VERSION")
+            deploy_stateless --wasm_name "$WASM_NAME" --version "\"$VERSION\"")
           CONTRACT_ID=${addr//\"/}
           echo "CONTRACT_ID=$CONTRACT_ID" >>"$GITHUB_ENV"
       - name: Attach the publish receipt to the release

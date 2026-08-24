@@ -113,3 +113,10 @@ fn denies_cumulative_spend_over_the_limit() {
     enforce(&h, 6); // total 6, within the cap
     enforce(&h, 6); // total 12 > 10 → spending_limit denies
 }
+
+#[test]
+fn reports_the_wrapper_policy_version() {
+    let h = setup();
+    let client = PerchSpendingLimitClient::new(&h.env, &h.policy);
+    assert_eq!(client.policy_version(), 1);
+}

@@ -80,3 +80,13 @@ impl Policy for PerchSpendingLimit {
         spending_limit::uninstall(e, &context_rule, &smart_account)
     }
 }
+
+#[contractimpl]
+impl PerchSpendingLimit {
+    /// Wrapper revision, mirroring the interpreter's `program_version()`: lets
+    /// an applier (or a pin cross-check) confirm on-chain which wrapper
+    /// generation a content-addressed instance runs without fetching its wasm.
+    pub fn policy_version() -> u32 {
+        1
+    }
+}

@@ -24,3 +24,11 @@ git_release_enable = false
 name = "perch-interpreter"
 git_release_enable = true
 git_release_name = "perch-interpreter v{{ version }}"
+
+# perch-spending-limit needs NO override: its tag alone gates the
+# build→attest→publish chain that runs inside release.yml itself (same-run
+# `needs:` on the release-plz `releases` output, not a tag trigger). Its
+# GitHub release is deliberately NOT created here — the
+# stellar-registry/actions reusable workflow creates it at the tag (`gh
+# release create` would fail on an existing release) and attaches the
+# attested wasm + on-chain publish receipt.

@@ -5,7 +5,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+# No cargo-manifest `publish = false` here: release-plz's `release` command
+# SKIPS manifest-unpublishable packages entirely (no tag, absent from its
+# `releases` output), which would kill the release.yml spending-limit chain.
+# crates.io publishes are already impossible workspace-wide (release-plz.toml
+# `[workspace] publish = false`, and the stellar-accounts git pin would be
+# rejected anyway).
 
 [package.metadata.stellar]
 cargo_inherit = true

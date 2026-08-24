@@ -11,8 +11,17 @@ publish = false
 semver_check = false
 changelog_update = true
 dependencies_update = false
-# Tags are the release markers (publish = false makes release-plz detect
-# released versions from tags; release.yml checks out with fetch-depth: 0).
+# Tags are the release markers. `publish = false` alone does NOT make
+# release-plz read released versions from tags — that is `git_only` (without
+# it, version detection queries crates.io, where no perch crate exists, and
+# every version-bump PR would stall at the current version forever).
+# `git_only = true` is why release.yml checks out with fetch-depth: 0.
+git_only = true
+# Only release (tag) on the merge of a release PR — never straight off an
+# ordinary main push. Without this (default true) the FIRST successful run on
+# main would tag every crate at its current version immediately, firing the
+# publish chains before anyone merged a release PR.
+release_always = false
 git_tag_enable = true
 git_tag_name = "{{ package }}-v{{ version }}"
 # No GitHub Release per crate by default (avoids one release per member)...
@@ -24,3 +33,11 @@ git_release_enable = false
 name = "perch-interpreter"
 git_release_enable = true
 git_release_name = "perch-interpreter v{{ version }}"
+
+# perch-spending-limit needs NO override: its tag alone gates the
+# build→attest→publish chain that runs inside release.yml itself (same-run
+# `needs:` on the release-plz `releases` output, not a tag trigger). Its
+# GitHub release is deliberately NOT created here — the
+# stellar-registry/actions reusable workflow creates it at the tag (`gh
+# release create` would fail on an existing release) and attaches the
+# attested wasm + on-chain publish receipt.

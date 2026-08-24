@@ -9,19 +9,26 @@ runs:
   steps:
     - name: Install Stellar CLI + registry plugin
       shell: bash
+      # Version-pinned AND integrity-checked: this composite also runs in the
+      # release publish job, which later hands the `stellar` binary the CI
+      # signing seed — an unverified curl|tar there would let a swapped
+      # release asset exfiltrate the key.
       run: |
         # Core CLI (host for the `stellar registry` plugin + `contract fetch`).
         if ! command -v stellar >/dev/null; then
           v=27.1.0
+          sha=9915fe63753d7154c26bb9e6410cf1d1ff9727a9b378e663c2790ab7a266af94
           curl -fsSL -o /tmp/stellar.tar.gz \
             "https://github.com/stellar/stellar-cli/releases/download/v${v}/stellar-cli-${v}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$sha  /tmp/stellar.tar.gz" | sha256sum -c -
           sudo tar -xzf /tmp/stellar.tar.gz -C /usr/local/bin stellar
         fi
-        # Registry plugin (resolves `unverified/perch`), via cargo-binstall (prebuilt).
+        # Registry plugin (resolves `unverified/perch`), via cargo-binstall
+        # (prebuilt). The bootstrap script is pinned to a commit, not `main`.
         if ! stellar registry --help >/dev/null 2>&1; then
           command -v cargo-binstall >/dev/null || \
-            curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
-          cargo binstall -y stellar-registry-cli
+            curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/75b4bfae1b2c753a6806bbce6e6cb89b602de33c/install-from-binstall-release.sh | bash # v1.22.0
+          cargo binstall -y stellar-registry-cli@0.1.0
         fi
     - name: Fetch pinned infra by name
       shell: bash

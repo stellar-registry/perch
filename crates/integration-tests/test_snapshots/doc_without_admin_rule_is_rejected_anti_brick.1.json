@@ -13,6 +13,7 @@
     [],
     [],
     [],
+    [],
     []
   ],
   "ledger": {
@@ -273,6 +274,29 @@
             "contract_data": {
               "ext": "v0",
               "contract": "CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CCPBUYP4VEZAFQP2FKOXMKA2IDUCC2GGDFFZQ2SDHQVYXU75IJ6HLLXU",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {

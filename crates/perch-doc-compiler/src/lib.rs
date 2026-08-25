@@ -45,9 +45,6 @@ pub enum DocCompilerError {
     WrongNetwork,
     /// The document cannot be lowered to rules (unsupported rule shape).
     DocCompile,
-    /// The document carries a cumulative cap, which needs the `spending_limit`
-    /// policy address — not yet compilable for on-chain application.
-    CapUnsupported,
 }
 
 /// Where a compiled rule applies. `SelfAdmin` is account-agnostic: the
@@ -73,6 +70,25 @@ pub struct CompiledRule {
     /// `Option<contracttype>` cannot cross the ScVal boundary that testutils
     /// clients use. Empty ⇒ policy-free rule.
     pub install: Vec<InstallParams>,
+    /// Zero or one entries (a `Vec` for the same ScVal reason as `install`).
+    /// Present ⇒ also attach OZ `spending_limit` with these params — the
+    /// cumulative cap the stateless interpreter cannot express. The applier
+    /// resolves the policy's content-addressed address and keys it into the
+    /// rule's policy map beside the interpreter; the tracked token is the rule's
+    /// `Contract` scope (validation pins `token == scope`).
+    pub cap: Vec<CompiledCap>,
+}
+
+/// A cumulative spend cap lowered to OZ `spending_limit`'s install params
+/// (`SpendingLimitAccountParams`). The tracked token is the rule's scope
+/// contract, so it is not carried here.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompiledCap {
+    /// Cumulative amount ceiling over the rolling window.
+    pub spending_limit: i128,
+    /// Rolling-window length in ledgers.
+    pub period_ledgers: u32,
 }
 
 /// A compiled document: its canonical identity and the rules it becomes.
@@ -137,9 +153,6 @@ impl PerchDocCompiler {
 
         let mut rules: Vec<CompiledRule> = Vec::new(e);
         for rule in plan.rules.iter() {
-            if rule.cap.is_some() {
-                return Err(DocCompilerError::CapUnsupported);
-            }
             rules.push_back(to_compiled(e, rule)?);
         }
 
@@ -173,12 +186,20 @@ fn to_compiled(e: &Env, rule: &LoweredRule) -> Result<CompiledRule, DocCompilerE
     if let Some(params) = &rule.install {
         install.push_back(params.clone());
     }
+    let mut cap: Vec<CompiledCap> = Vec::new(e);
+    if let Some(c) = &rule.cap {
+        cap.push_back(CompiledCap {
+            spending_limit: c.limit,
+            period_ledgers: c.period_ledgers,
+        });
+    }
     Ok(CompiledRule {
         name: String::from_str(e, &rule.name),
         scope,
         signers,
         valid_until: rule.valid_until,
         install,
+        cap,
     })
 }
 

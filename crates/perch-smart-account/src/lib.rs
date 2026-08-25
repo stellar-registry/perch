@@ -28,6 +28,7 @@ use soroban_sdk::{
     String, Val, Vec,
 };
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem};
+use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 use stellar_accounts::smart_account::{
     self, ContextRule, ContextRuleType, Signer, SmartAccount, SmartAccountStorageKey,
 };
@@ -58,6 +59,12 @@ pub fn stateless_registry(env: &Env) -> Address {
 pub mod infra {
     perch_registry_resolve::registry_contract!(perch_doc_compiler);
     perch_registry_resolve::registry_contract!(perch_interpreter);
+
+    // Published to `unverified/perch/stateless` and `deploy_stateless`\'d like
+    // the two above; its wasm is downloaded by NAME from the stateless registry
+    // (`stellar registry download` — it has no name-salted perch-registry
+    // instance for `contract fetch` to pull from).
+    perch_registry_resolve::registry_contract!(perch_spending_limit);
 }
 
 /// Everything `apply_doc` can refuse. Compiler failures flatten in via
@@ -190,7 +197,10 @@ pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
 /// on the interpreter — refuse before touching anything.
 fn ensure_admin_survives(compiled: &CompiledDoc) -> Result<(), PerchAccountError> {
     let ok = compiled.rules.iter().any(|r| {
-        matches!(r.scope, RuleScope::SelfAdmin) && !r.signers.is_empty() && r.install.is_empty()
+        matches!(r.scope, RuleScope::SelfAdmin)
+            && !r.signers.is_empty()
+            && r.install.is_empty()
+            && r.cap.is_empty()
     });
     if ok {
         Ok(())
@@ -209,6 +219,20 @@ fn install_rule(e: &Env, interpreter: &Address, rule: &CompiledRule) {
     let mut policies: Map<Address, Val> = Map::new(e);
     if let Some(install) = rule.install.first() {
         policies.set(interpreter.clone(), install.into_val(e));
+    }
+    // A capped rule also attaches OZ `spending_limit` (the stateful cumulative
+    // cap the interpreter cannot express), keyed by its content-addressed
+    // address — resolved offline like the interpreter, never admin-supplied. OZ
+    // enforces every attached policy (AND): the interpreter's per-call program
+    // AND the rolling cap must pass. The metered token is this rule's
+    // `CallContract` scope (validation pins `token == scope`).
+    if let Some(cap) = rule.cap.first() {
+        let spending_limit = infra::perch_spending_limit::address(e);
+        let params = SpendingLimitAccountParams {
+            spending_limit: cap.spending_limit,
+            period_ledgers: cap.period_ledgers,
+        };
+        policies.set(spending_limit, params.into_val(e));
     }
     smart_account::add_context_rule(
         e,

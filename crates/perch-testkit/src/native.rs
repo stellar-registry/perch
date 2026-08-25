@@ -16,6 +16,7 @@ use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use perch_interpreter::{PerchInterpreter, PerchInterpreterClient};
 use perch_smart_account::{infra, stateless_registry};
+use perch_spending_limit::PerchSpendingLimit;
 use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Vec};
 use stellar_accounts::smart_account::Signer;
@@ -33,6 +34,11 @@ fn register_infra_at_derived(env: &Env) -> (Address, Address) {
     env.register_at(&compiler_addr, PerchDocCompiler, ());
     let interpreter_addr = infra::perch_interpreter::address(env);
     env.register_at(&interpreter_addr, PerchInterpreter, ());
+    // The stateful cap policy, at its (placeholder-pinned) content-addressed
+    // derivation, so `apply_doc` on a capped document resolves a real contract
+    // here and installs the cap beside the interpreter.
+    let spending_addr = infra::perch_spending_limit::address(env);
+    env.register_at(&spending_addr, PerchSpendingLimit, ());
     (compiler_addr, interpreter_addr)
 }
 

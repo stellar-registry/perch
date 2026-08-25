@@ -771,7 +771,7 @@ fn display_names_the_offender() {
 }
 
 // --- cap (#19 PR6): InvalidCapLimit / ZeroCapPeriod / InvalidCapToken /
-// --- CapWithoutToken --------------------------------------------------------
+// --- CapWithoutToken / CapTokenMismatch -------------------------------------
 
 fn capped_doc(token: Option<&str>, limit: &str, period: u32) -> perch_ir::PolicyDoc {
     let mut doc = base_doc();
@@ -787,16 +787,30 @@ fn capped_doc(token: Option<&str>, limit: &str, period: u32) -> perch_ir::Policy
 
 #[test]
 fn accepts_valid_cap_with_and_without_token() {
-    // Explicit token, and token-less on a contract scope (denominates in scope).
-    assert_accepts(&capped_doc(Some(POLICY_CONTRACT), "1000", 100));
+    // Explicit token equal to the scope, and token-less (denominates in scope).
+    assert_accepts(&capped_doc(Some(REGISTRY), "1000", 100));
     assert_accepts(&capped_doc(None, "1000", 100));
+}
+
+#[test]
+fn rejects_cap_token_differing_from_scope() {
+    // OZ spending_limit meters the scope contract's token, so an explicit token
+    // that isn't the scope would silently cap a different contract.
+    assert_rejects(
+        &capped_doc(Some(POLICY_CONTRACT), "1000", 100),
+        &ValidationError::CapTokenMismatch {
+            rule: "spend".into(),
+            token: POLICY_CONTRACT.into(),
+            scope: REGISTRY.into(),
+        },
+    );
 }
 
 #[test]
 fn rejects_non_positive_or_unparsable_cap_limit() {
     for bad in ["0", "-5", "abc"] {
         assert_rejects(
-            &capped_doc(Some(POLICY_CONTRACT), bad, 100),
+            &capped_doc(Some(REGISTRY), bad, 100),
             &ValidationError::InvalidCapLimit {
                 rule: "spend".into(),
                 limit: bad.into(),
@@ -808,7 +822,7 @@ fn rejects_non_positive_or_unparsable_cap_limit() {
 #[test]
 fn rejects_zero_cap_period() {
     assert_rejects(
-        &capped_doc(Some(POLICY_CONTRACT), "1000", 0),
+        &capped_doc(Some(REGISTRY), "1000", 0),
         &ValidationError::ZeroCapPeriod {
             rule: "spend".into(),
         },

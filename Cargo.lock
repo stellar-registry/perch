@@ -1385,7 +1385,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "perch-account"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-smart-account",
  "soroban-sdk",
@@ -1394,7 +1394,7 @@ dependencies = [
 
 [[package]]
 name = "perch-analyze"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-compile",
  "perch-ir",
@@ -1403,7 +1403,7 @@ dependencies = [
 
 [[package]]
 name = "perch-bench"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-program",
  "soroban-sdk",
@@ -1411,7 +1411,7 @@ dependencies = [
 
 [[package]]
 name = "perch-bench-rpn"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-program",
  "soroban-sdk",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "perch-compile"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-ir",
  "perch-program",
@@ -1428,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "perch-conformance"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-bench-rpn",
  "perch-compile",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "perch-deploy"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -1461,14 +1461,14 @@ dependencies = [
 
 [[package]]
 name = "perch-derive-id"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "soroban-sdk",
 ]
 
 [[package]]
 name = "perch-doc-compiler"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-compile",
  "perch-ir",
@@ -1480,7 +1480,7 @@ dependencies = [
 
 [[package]]
 name = "perch-ed25519-verifier"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",
@@ -1488,7 +1488,7 @@ dependencies = [
 
 [[package]]
 name = "perch-golden"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hex",
  "perch-program",
@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "perch-integration-tests"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -1519,7 +1519,7 @@ dependencies = [
 
 [[package]]
 name = "perch-interpreter"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-program",
  "soroban-sdk",
@@ -1528,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "perch-ir"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hex",
  "hifijson",
@@ -1537,7 +1537,7 @@ dependencies = [
 
 [[package]]
 name = "perch-program"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "soroban-flux",
  "soroban-sdk",
@@ -1545,7 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "perch-registry-resolve"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-registry-resolve-macro",
  "soroban-sdk",
@@ -1553,7 +1553,7 @@ dependencies = [
 
 [[package]]
 name = "perch-registry-resolve-macro"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "perch-smart-account"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "perch-doc-compiler",
  "perch-registry-resolve",
@@ -1574,7 +1574,7 @@ dependencies = [
 
 [[package]]
 name = "perch-spending-limit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",
@@ -1582,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "perch-stateless-registry"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "admin-sep",
  "registry-traits",
@@ -1591,7 +1591,7 @@ dependencies = [
 
 [[package]]
 name = "perch-testkit"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "hex",
  "perch-account",

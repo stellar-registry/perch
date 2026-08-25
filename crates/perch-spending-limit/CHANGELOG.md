@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/stellar-registry/perch/releases/tag/perch-spending-limit-v0.1.1) - 2026-08-25
+
+### Added
+
+- *(ir,compile)* native M-of-N via Principals::Threshold → MinSigners(m) ([#52](https://github.com/stellar-registry/perch/pull/52))
+
+### Fixed
+
+- *(release)* version the six release-tracked contracts independently ([#69](https://github.com/stellar-registry/perch/pull/69))
+
+### Other
+
+- release v0.1.0 ([#57](https://github.com/stellar-registry/perch/pull/57))
+- *(release)* build, attest, and publish perch-spending-limit to the stateless registry ([#55](https://github.com/stellar-registry/perch/pull/55))
+
 ## [0.1.0](https://github.com/stellar-registry/perch/releases/tag/perch-spending-limit-v0.1.0) - 2026-08-24
 
 ### Added

@@ -31,7 +31,7 @@ soroban-sdk = { workspace = true, features = ["alloc"] }
 # TODO(registry upstream): this points at the unmerged `feat/registry-importable-stateless-deploy`
 # branch (stellar-registry/contracts PR #33). Re-pin to a merged `rev`/tag (or a
 # published `registry-traits` crate version) once #33 lands. Tracked in perch#37.
-registry-traits = { git = "https://github.com/stellar-registry/contracts", branch = "feat/registry-importable-stateless-deploy", package = "registry-traits", optional = true }
+registry-traits = { version = "0.1.0", git = "https://github.com/stellar-registry/contracts", branch = "feat/registry-importable-stateless-deploy", package = "registry-traits", optional = true }
 
 # admin-sep (theahaco/admin-sep v0.27.0, released on soroban-sdk 27) ships the
 # real `Administratable`/`Upgradable` `#[contracttrait]`s that the canonical

@@ -1,7 +1,7 @@
 [package]
 name = "perch-stateless-registry"
 description = "Managed 'stateless' subregistry: publish-here-iff-stateless; content-addressed deploy (salt = wasm_hash). Composed from the imported registry contracttraits."
-version.workspace = true
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

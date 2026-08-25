@@ -1,7 +1,7 @@
 # The perch formal model
 
-An executable Lean 4 twin of the perch-program v1 semantics — the
-verification-guided-development backbone from
+An executable Lean 4 twin of the perch-program v1 semantics, the core of the
+verification-guided-development plan in
 [`docs/verification/PLAN.md`](../docs/verification/PLAN.md), in the style of
 [AWS Cedar's `cedar-spec`](https://github.com/cedar-policy/cedar-spec). No
 dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
@@ -13,8 +13,8 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
 | `PerchFormal/Lowering.lean` | `build_program` twin + the doc-level meaning of a rule |
 | `PerchFormal/Theorems.lean` | the evaluator/lowering proofs (below) |
 | `PerchFormal/Canon.lean` | CANON v1 twin: the canonical JSON emitter + its verified inverse parser |
-| `PerchFormal/CanonProofs.lean` | round-trip + `emitDoc_injective` — doc_hash names exactly one document |
-| `Main.lean` | `lake exe drt` — replays `testdata/eval/eval-vectors.json` through the model, and round-trips Rust-emitted `*.canonical.json` files through the verified canonicalizer |
+| `PerchFormal/CanonProofs.lean` | round-trip + `emitDoc_injective`. doc_hash names exactly one document |
+| `Main.lean` | `lake exe drt`. Replays `testdata/eval/eval-vectors.json` through the model, and round-trips Rust-emitted `*.canonical.json` files through the verified canonicalizer |
 
 ## Theorems (all sorry-free)
 
@@ -22,18 +22,18 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
   negation, `neg U = U`.
 - **T2** fail-closed root: only `T` allows; an `U` conjunct can never raise a
   verdict to `T`; `U` under negation still denies (the fail-open trap).
-- **T3** totality/termination: inherent — `eval` is a total function by
+- **T3** totality/termination: inherent. `eval` is a total function by
   structural recursion.
 - **T4** `validate_sound`: a program accepted by `validate` never trips a
-  defensive guard — the guarded machine agrees with a purely structural one,
+  defensive guard. The guarded machine agrees with a purely structural one,
   so a validated program's verdict is a pure function of its leaves
   ("Validation ⇒ analyzable").
 - **T5** `zero_signers_denied`: every lowered rule (whose leaves fit the
-  stack cap — guaranteed in Rust by compile's re-validation) evaluates to a
-  definite `F` on any invocation with zero authenticated signers — INV-1 at
-  the model level.
+  stack cap, guaranteed in Rust by compile's re-validation) evaluates to a
+  definite `F` on any invocation with zero authenticated signers. This is
+  INV-1 at the model level.
 - **T7** `emitDoc_injective`: the CANON v1 canonical form is injective on the
-  document domain — proved by exhibiting a verified inverse parser
+  document domain, proved by exhibiting a verified inverse parser
   (`pDoc_rt : pDoc (emitDoc d ++ rest) = some (d, rest)`), covering the JCS
   escaping table, plain-decimal `u32`s, sorted keys, and omitted `None`s. So
   `doc_hash` identifies exactly one document up to a SHA-256 collision. As of
@@ -42,7 +42,7 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
 - **T6** `lowering_preserves`: the machine over `build_program`'s postfix
   output computes exactly the rule's doc-level Kleene conjunction, where the
   doc side is stated over predicates directly and `leafEval_lowerPred` proves
-  the op translation meaning-preserving — so encoding, machine, and
+  the op translation meaning-preserving. So encoding, machine, and
   translation are all inside the theorem; only the model↔Rust leaf-semantics
   link remains empirical (the vectors + differential suite below).
 
@@ -60,7 +60,7 @@ cd formal && lake exe drt ../testdata/eval/eval-vectors.json
 
 Green means the hand-authored spec, the Rust evaluator, and this proved model
 agree on every case. The model↔Rust link is differential (empirical), not
-deductive — see PLAN.md phase 2 for the planned deepening (Verus or Aeneas).
+deductive. See PLAN.md phase 2 for the planned deepening (Verus or Aeneas).
 
 ## Setup
 

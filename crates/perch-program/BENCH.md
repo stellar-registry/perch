@@ -6,12 +6,12 @@ Both candidate encodings of the on-chain constraint program are implemented
 side by side in this crate (`arena` and `rpn` modules, sharing the `leaf`
 evaluation semantics and the Kleene `Verdict`). This report records their
 real, metered evaluation cost as compiled wasm, and recommends which format
-to freeze. Neither implementation is deleted — the freeze decision happens
+to freeze. Neither implementation is deleted. The freeze decision happens
 on top of these numbers.
 
 ## Methodology
 
-Metered costs only accrue to code executing **as wasm** — native test
+Metered costs only accrue to code executing **as wasm**. Native test
 execution goes through unmetered host-native code and would understate
 everything. So:
 
@@ -22,7 +22,7 @@ everything. So:
    contracts so each wasm's size isolates one encoding's code contribution.
 2. Both are built with `cargo build --target wasm32v1-none --release`
    (workspace release profile: `opt-level = "z"`, LTO, panic=abort; no
-   `wasm-opt` post-pass — it would shrink both wasms but not change the
+   `wasm-opt` post-pass, which would shrink both wasms but not change the
    comparison).
 3. The harness test (`crates/perch-bench/tests/metered.rs`) registers each
    contract **from its wasm bytes** (`env.register(&wasm[..], ())`) so every
@@ -40,19 +40,19 @@ abstract `Spec` lowered into both encodings, so every comparison is the
 same logical program; the harness asserts both encodings produce the same
 verdict natively and metered before recording anything.
 
-Composites deliberately do **not** short-circuit in either encoding: every
+Composites deliberately do **not** short-circuit in either encoding. Every
 node is evaluated, so measured cost depends on program shape only, not on
 runtime data, and the two encodings do identical logical work per program.
-(Short-circuiting is discussed under "Analysis" — it is an arena-only
+(Short-circuiting is discussed under "Analysis". It is an arena-only
 option, and giving it to arena would have made the comparison
 data-dependent.)
 
 Matrix:
 
-- **ci-publish (4 nodes)** — the expected common case:
+- **ci-publish (4 nodes)**, the expected common case:
   `All(MinSigners(1), FnIn["publish","yank"], ArgAddrIsSelf(1))`,
   1 authenticated signer.
-- **mixed-8 / mixed-32 / mixed-64** — synthetic mixed-op programs with
+- **mixed-8 / mixed-32 / mixed-64**, synthetic mixed-op programs with
   exactly 8/32/64 nodes: a root `All` over a `Not(LedgerBefore)` subtree
   and a nested `Any` (itself containing a `Not`), padded with leaves
   cycling through all leaf kinds so dispatch is realistic; 2 signers.
@@ -60,7 +60,7 @@ Matrix:
 The evaluation context is a contract-call context
 (`transfer(42u32, Symbol("transfer"), self_addr)`), which exercises True,
 False, and Unknown (decode-failure) leaf paths. All matrix programs
-evaluate to `False` in both encodings (identical work either way — no
+evaluate to `False` in both encodings (identical work either way, no
 short-circuit).
 
 Reproduce with `just bench`. Numbers below are from a run on 2026-08-07,
@@ -80,7 +80,7 @@ soroban-sdk 26.0.1 / soroban-env-host 26.1.3, rustc stable, Apple Silicon
 | mixed-64 | arena | 2,573,880 | 1,207,231 | 1,969,401 | 3,640 |
 | mixed-64 | rpn   | 2,390,322 | 1,207,600 | 1,727,919 | 3,124 |
 
-Bench contract wasm sizes (identical scaffolding, so the delta is the
+Bench contract wasm sizes (identical boilerplate, so the delta is the
 encoding machinery):
 
 | bench contract | wasm bytes |
@@ -91,24 +91,24 @@ encoding machinery):
 ## Analysis
 
 **Eval CPU.** The crossover sits between 4 and 8 nodes. At the 4-node
-common case arena is 1.5% cheaper (6,478 insns — noise against the ~380k
+common case arena is 1.5% cheaper (6,478 insns, noise against the ~380k
 per-invocation VM floor, and 0.002% of the 400M per-transaction budget).
 From 8 nodes up RPN wins, and the gap widens with size: 1.3% at 8, 5.9% at
 32, 7.1% at 64. Marginal cost per node (mixed-8 → mixed-64 slope):
-~36.4k insns/node arena vs ~33.3k insns/node RPN. The reason: arena
-composites carry a `Vec<u32>` of child indices — a host object per
+~36.4k insns/node arena vs ~33.3k insns/node RPN. The reason is that arena
+composites carry a `Vec<u32>` of child indices, a host object per
 composite plus a metered `vec_get` per child edge on top of the per-node
-fetch both encodings pay; RPN combiners pop verdicts from a wasm-local
+fetch both encodings pay. RPN combiners pop verdicts from a wasm-local
 array, which the host meters as plain wasm instructions. Both scale
 linearly; there is no second crossover.
 
 **Validate CPU.** RPN is cheaper at every size (4.5% at 4 nodes, 12.3% at
-64): stack-effect simulation reads each op's arity and keeps one counter,
+64). Stack-effect simulation reads each op's arity and keeps one counter,
 while arena validation must iterate every child-index vector (host reads
 per edge) to prove forward-only references.
 
-**Memory.** Identical to within ~400 bytes at every size; both are
-dominated by the fixed ~1.2 MB VM-instantiation baseline. RPN's fixed
+**Memory.** Identical to within ~400 bytes at every size; the fixed
+~1.2 MB VM-instantiation baseline dominates both. RPN's fixed
 128-slot verdict stack costs nothing measurable.
 
 **Wire size.** RPN is smaller for every program (11.8% at 4 nodes, 14.2%
@@ -122,15 +122,15 @@ One-time, per-interpreter-deployment cost; both trivial.
 
 **Validation complexity.** RPN's validator is O(ops) with O(1) state, and
 validity gives a strong structural guarantee: every op pushes exactly one
-value and the program nets to one, so `pops = ops − 1` — every
+value and the program nets to one, so `pops = ops − 1`. Every
 intermediate verdict is consumed exactly once and **dead code is
 unrepresentable** in a valid program. Arena's single forward pass proves
 acyclicity (that is the point of forward-only indices), but must also
 check per-edge range and arity, and *unreachable nodes remain
-representable* — rejecting them would need an extra reachability pass that
+representable*. Rejecting them would need an extra reachability pass that
 the current validator deliberately does not do.
 
-**Decompilability.** Arena is already tree-shaped: pretty-printing walks
+**Decompilability.** Arena is already tree-shaped. Pretty-printing walks
 from node 0. RPN reconstructs the AST with the standard single reverse
 pass (pop one subtree per operand); equally mechanical, and the
 no-dead-code property means the decompiled tree is exactly the whole
@@ -141,7 +141,7 @@ could skip whole subtrees on `All`-meets-`False` / `Any`-meets-`True`;
 RPN evaluates operands before their combiner and cannot. Two reasons this
 doesn't move the decision: budgets and fees must provision for the
 worst case, which short-circuiting doesn't improve; and at realistic
-policy sizes the entire evaluation is ≤ 2.6M insns — 0.65% of one
+policy sizes the entire evaluation is ≤ 2.6M insns, 0.65% of one
 transaction's 400M CPU allowance.
 
 ## Recommendation
@@ -152,13 +152,13 @@ transaction's 400M CPU allowance.
   and the 4-node case where arena wins by 1.5% is inside measurement
   noise relative to the invocation floor.
 - Cheaper to validate at every size (−4.5% to −12.3%).
-- Smaller on the wire at every size (−11.8% to −14.2%) — recurring
+- Smaller on the wire at every size (−11.8% to −14.2%), recurring
   ledger-rent savings per installed policy.
 - Materially simpler validator (one counter) with a stronger guarantee:
   valid programs cannot contain dead ops, whereas arena admits
   unreachable nodes unless a second pass is added.
-- Arena's remaining advantages — 625 bytes of one-time wasm and the
-  *option* of short-circuit evaluation — are immaterial at policy scale
+- Arena's remaining advantages, 625 bytes of one-time wasm and the
+  *option* of short-circuit evaluation, are immaterial at policy scale
   (≤ 256 ops by `MAX_PROGRAM_LEN`, ≤ 0.65% of a transaction's CPU
   budget worst-case).
 

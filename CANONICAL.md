@@ -3,7 +3,7 @@
 `doc_hash = SHA-256(canonical_bytes(doc))` is the identity of a policy document:
 what a reviewer approves off-chain, what the compiler lowers, and what on-chain
 state commits to. For that identity to be trustworthy, **every implementation
-must produce the same bytes for the same document** — in Rust
+must produce the same bytes for the same document**, in Rust
 (`perch-ir/src/canon.rs`), in TypeScript (`perch-js/src/canonical.ts`), and in
 anything written later.
 
@@ -23,31 +23,31 @@ below directly, and the shared conformance vector pins the result.
 
 `CANON_VERSION = 1`.
 
-The version is a **format identifier**, exported as a constant in each
+The version is a format identifier, exported as a constant in each
 implementation (`perch_ir::CANON_VERSION`, `perch-js` `CANON_VERSION`). It is
-**not** part of the hash preimage — the bytes below contain no version marker,
+**not** part of the hash preimage. The bytes below contain no version marker,
 so `doc_hash` is exactly `SHA-256` of the canonical serialization and nothing
 else. The constant exists so that any change to the rules in this document is an
-explicit, greppable, reviewable event: **any change here is a breaking change**
-that must bump `CANON_VERSION`, re-freeze the conformance vectors, and be treated
-as a new format — never a silent hash drift.
+explicit, greppable, reviewable event. **Any change here is a breaking change** that must
+bump `CANON_VERSION`, re-freeze the conformance vectors, and be treated as a new
+format, never a silent hash drift.
 
 ## Codec decision: JSON (JCS), not CBOR
 
-The canonical form is JSON per **RFC 8785 (JSON Canonicalization Scheme)**,
+The canonical form is JSON per RFC 8785 (JSON Canonicalization Scheme),
 restricted to the subset a `PolicyDoc` can produce (below). DAG-CBOR was
-considered (it is what UCAN uses, precisely because CBOR defines deterministic
+considered (it is what UCAN uses, because CBOR defines deterministic
 map-key ordering) and rejected for v1:
 
-- A `PolicyDoc` is a **human-authored, human-reviewed** artifact. JSON stays
+- A `PolicyDoc` is a human-authored, human-reviewed artifact. JSON stays
   diffable in a PR and readable in a wallet prompt; a binary codec does not.
-- The parity guarantee CBOR would buy — byte-identical output across languages —
-  is **already met**: `perch-ir` (Rust) and `perch-js` (TypeScript) reproduce
+- The parity guarantee CBOR would buy, byte-identical output across languages,
+  is already met. `perch-ir` (Rust) and `perch-js` (TypeScript) reproduce
   the same canonical bytes and `doc_hash` for the shared `ci-publish` fixture,
   proven in CI on both sides.
 
-Revisit only if a future value type makes JSON canonicalization genuinely
-painful (e.g. arbitrary-precision or binary fields) — and if so, that is a
+Revisit only if a future value type makes JSON canonicalization painful
+(e.g. arbitrary-precision or binary fields). If so, that is a
 `CANON_VERSION` bump, per above.
 
 ## The bytes
@@ -79,7 +79,7 @@ are ordered; only object members are sorted).
 Every number a `PolicyDoc` can hold is a `u32`. It is serialized as **plain
 decimal ASCII digits**: no sign, no exponent, no decimal point, no leading zero
 (except the value `0`, which is `0`). A non-integer or out-of-range number is a
-bug, not input — implementations fail closed rather than emit an exponent form.
+bug, not input. Implementations fail closed rather than emit an exponent form.
 
 ### Strings
 
@@ -102,7 +102,7 @@ Consequences worth stating explicitly, because they are where naive
 implementations differ:
 
 - **Forward slash `/` is not escaped.**
-- **Non-ASCII is not escaped** — it is emitted as literal UTF-8, never `\uXXXX`.
+- **Non-ASCII is not escaped.** It is emitted as literal UTF-8, never `\uXXXX`.
 - **`\uXXXX` escapes are lowercase** and only ever used for control characters
   U+0000–U+001F that lack a short form.
 - **DEL (U+007F) is not a control character for this purpose** (it is ≥ U+0020)
@@ -111,7 +111,7 @@ implementations differ:
 ### Booleans and null
 
 `true` / `false` are defined for completeness but are unreachable from the
-current model. **`null` never appears**: an absent optional field is omitted
+current model. **`null` never appears.** An absent optional field is omitted
 from its object entirely, not serialized as `null`. Encountering `null` while
 canonicalizing is malformed input and fails closed.
 
@@ -119,9 +119,9 @@ canonicalizing is malformed input and fails closed.
 
 The shared vector lives in `testdata/`:
 
-- `ci-publish.json` — a real policy document (the flagship CI-publish policy).
-- `ci-publish.canonical.json` — its canonical bytes, exactly as defined above.
-- `ci-publish.doc-hash` — `27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98`.
+- `ci-publish.json`: a real policy document (the CI-publish policy).
+- `ci-publish.canonical.json`: its canonical bytes, exactly as defined above.
+- `ci-publish.doc-hash`: `27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98`.
 
 Both suites assert, against these files, that canonicalization is byte-identical
 and the hash matches:
@@ -130,4 +130,4 @@ and the hash matches:
 - TypeScript: `packages/perch-js/test/parity.test.ts`
 
 A change to any byte of `ci-publish.canonical.json` or `ci-publish.doc-hash` is,
-by definition, a canonical-form break — see **Version** above.
+by definition, a canonical-form break; see **Version** above.

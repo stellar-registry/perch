@@ -2,9 +2,9 @@
 
 A composable policy layer for Soroban smart accounts.
 
-Perch is a policy library and toolchain on top of [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts): a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do, with builders in Rust and TypeScript and a compiler that lowers documents onto OZ context rules — stock OZ policies where the shape fits, one small audited interpreter contract for what they can't express.
+Perch is a policy library and toolchain on top of [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts). At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, and a compiler lowers it onto OZ context rules: stock OZ policies where the shape fits, one small audited interpreter contract for what they can't express.
 
-The motivating use-case: a CI key stored in GitHub that can publish Wasm releases to the [Stellar Registry](https://github.com/stellar-registry) as a smart account — and do nothing else.
+The motivating use-case is a CI key stored in GitHub that can publish Wasm releases to the [Stellar Registry](https://github.com/stellar-registry) as a smart account, and do nothing else.
 
 ```ts
 const doc = policy()
@@ -24,7 +24,7 @@ const doc = policy()
 
 ## Stateless policies (and what that excludes)
 
-Every perch constraint is a stateless predicate over a *single* invocation — this call's function and arguments. Perch holds no state, so it cannot express a **cumulative** limit (spend caps, rate limits, "N per day"): a numeric argument bound limits one call, not a running total, and a signer can call repeatedly to exceed any intended total. Cumulative caps require a stateful sibling policy — e.g. OpenZeppelin's `spending_limit` — attached to the same OZ context rule alongside perch's interpreter (OZ enforces every attached policy, so both must pass). Perch is the "what may be called" layer; cumulative accounting lives in a purpose-built stateful contract. See [#19](https://github.com/stellar-registry/perch/issues/19) for the compiler support that will lower a cap clause onto that sibling policy.
+Every perch constraint is a stateless predicate over a *single* invocation, this call's function and arguments. Perch holds no state, so it cannot express a **cumulative** limit (spend caps, rate limits, "N per day"). A numeric argument bound limits one call, not a running total, and a signer can call repeatedly to exceed any intended total. Cumulative caps require a stateful sibling policy, e.g. OpenZeppelin's `spending_limit`, attached to the same OZ context rule alongside perch's interpreter (OZ enforces every attached policy, so both must pass). Perch is the "what may be called" layer; cumulative accounting lives in a purpose-built stateful contract. See [#19](https://github.com/stellar-registry/perch/issues/19) for the compiler support that will lower a cap clause onto that sibling policy.
 
 ## Layout
 
@@ -85,8 +85,8 @@ just mutants           # mutation testing of the security core (cargo-mutants)
 just coverage          # branch coverage incl. the conformance suite (cargo-llvm-cov)
 ```
 
-The verification story — what is proved, what is differentially tested, and
-what is planned — lives in [`docs/verification/PLAN.md`](./docs/verification/PLAN.md).
+[`docs/verification/PLAN.md`](./docs/verification/PLAN.md) covers what is
+proved, what is differentially tested, and what is planned.
 
 ## License
 

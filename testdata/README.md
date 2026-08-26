@@ -18,6 +18,16 @@ in [`../CANONICAL.md`](../CANONICAL.md) (CANON v1). A change to
 `ci-publish.canonical.json` or `ci-publish.doc-hash` is a canonical-form break
 and requires a `CANON_VERSION` bump.
 
+## `web/`: Web policy golden vectors
+
+`web/` contains independent `perch-web/v1` vectors. Those vectors use the Web
+canonical form in [`../WEB_POLICY.md`](../WEB_POLICY.md). They do not use or
+change Perch CANON v1.
+
+A change to `web/site-rescue.canonical.json` or
+`web/site-rescue.policy-hash` is a Web canonical form break. Such a change
+requires a new Web canonical version after this profile is released.
+
 ## `deploy/`: not golden vectors
 
 `deploy/` holds the deployment PolicyDoc template

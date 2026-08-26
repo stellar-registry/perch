@@ -1,0 +1,76 @@
+{
+  "plan": "perch-web-browser-plan/v1",
+  "policy-hash": "874cf21112f5067d939b951570f6d7554db8b3f32e0d1e4c8c491bac1532f138",
+  "profile": "perch-web/v1",
+  "origin": "https://rescue.example",
+  "target": {
+    "type": "package",
+    "id": "site-rescue:tools@1.0.0"
+  },
+  "manifest-sha256": "8f43c2a0819f5ec24caea9e20201932850cf47e2ae21f50a6c67a2d3f1852d76",
+  "principal": "user:site-owner",
+  "expires-at": "2027-08-26T12:00:00Z",
+  "grants": [
+    {
+      "id": "inspect-site",
+      "tool-export": "site-rescue:tools/rescue#inspect-site",
+      "arguments": [
+        {
+          "name": "url",
+          "predicate": {
+            "type": "string-eq",
+            "value": "https://damaged.example/"
+          }
+        },
+        {
+          "name": "include-assets",
+          "predicate": {
+            "type": "bool-eq",
+            "value": true
+          }
+        },
+        {
+          "name": "mode",
+          "predicate": {
+            "type": "string-in",
+            "values": [
+              "safe",
+              "deep"
+            ]
+          }
+        },
+        {
+          "name": "max-bytes",
+          "predicate": {
+            "type": "u64-eq",
+            "value": "1048576"
+          }
+        }
+      ],
+      "effects": [
+        "dom-read",
+        "network-request"
+      ],
+      "approval": "none",
+      "revocation-id": "site-rescue/inspection/2027-01"
+    },
+    {
+      "id": "download-archive",
+      "tool-export": "site-rescue:tools/rescue#download-archive",
+      "arguments": [
+        {
+          "name": "archive-name",
+          "predicate": {
+            "type": "string-eq",
+            "value": "site-rescue.zip"
+          }
+        }
+      ],
+      "effects": [
+        "user-download"
+      ],
+      "approval": "required",
+      "revocation-id": "site-rescue/download/2027-01"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ Every perch constraint is a stateless predicate over a *single* invocation, this
 
 ```
 CANONICAL.md          normative definition of the canonical form + doc_hash (CANON v1)
+WEB_POLICY.md         independent perch-web/v1 profile and integration contract
 crates/
   perch-ir/           policy document model — canonical JSON, doc_hash, validation
   perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)
@@ -44,8 +45,11 @@ crates/
                       invocation) → verdict cases + compile→eval differential + wasm-leg suites
   perch-analyze/      per-policy SMT prover (PolicyDoc → SMT-LIB, z3): dead rules, intent
                       conformance (only-calls), semantic attenuation (narrows)
+  perch-web-ir/       strict WebMCP/WIT policy model and canonical identity
+  perch-web-compile/  data-only BrowserPlan and ServerPlan compiler and checks
 packages/
   perch-js/           TypeScript surface: schemas, builder, compile parity, apply, signing helpers
+  perch-web-js/       TypeScript perch-web/v1 parser, compiler, and checks
 formal/               Lean 4 model of the v1 semantics + machine-checked theorems
                       (fail-closed, validation soundness, lowering preservation, and CANON v1
                       canonicalizer injectivity); replays the conformance + canonical vectors
@@ -57,6 +61,7 @@ scripts/              bootstrap-testnet.sh — one-time registry + account boots
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
 docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
 testdata/             golden vectors shared by the Rust and TS suites (frozen)
+testdata/web/         perch-web/v1 Site Rescue policy and matched plan vectors
 testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and the wasm leg
 testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)
 ```

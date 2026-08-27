@@ -1,0 +1,28 @@
+{
+  "name": "@stellar-registry/perch-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TypeScript perch-web/v1 parser, canonical identity, plans, and call checks",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.2.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stellar-registry/perch",
+    "directory": "packages/perch-web-js"
+  }
+}

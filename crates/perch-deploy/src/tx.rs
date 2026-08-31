@@ -223,7 +223,14 @@ pub fn run_signed(
         return Ok(None);
     }
 
-    let (envelope, local_hash) = sign_envelope(&tx, passphrase, payer)?;
+    Ok(Some(submit(rpc, &tx, passphrase, payer)?))
+}
+
+/// Sign a fully-prepared tx (fee + soroban data already set), send it, and poll
+/// to SUCCESS. Shared by the smart-account invoke flow (`run_signed`) and the
+/// plain wasm upload (`run_upload`).
+fn submit(rpc: &Rpc, tx: &Transaction, passphrase: &str, payer: &SeedKey) -> Result<Submitted> {
+    let (envelope, local_hash) = sign_envelope(tx, passphrase, payer)?;
     let hash = rpc.send(&envelope)?;
     if hash != local_hash {
         eprintln!("warning: rpc tx hash {hash} != locally computed {local_hash}");
@@ -233,10 +240,10 @@ pub fn run_signed(
     loop {
         match rpc.get_transaction(&hash)? {
             TxStatus::Success { ledger } => {
-                return Ok(Some(Submitted {
+                return Ok(Submitted {
                     tx_hash: hash,
                     ledger,
-                }))
+                })
             }
             TxStatus::Failed { result_xdr } => bail!("transaction {hash} FAILED: {result_xdr}"),
             TxStatus::NotFound => {
@@ -247,6 +254,84 @@ pub fn run_signed(
             }
         }
     }
+}
+
+/// Build a wasm-upload tx: `HostFunction::UploadContractWasm(bytes)`. Upload is
+/// authorized by the source-account signature alone (no Soroban auth entry), so
+/// it carries no `auth` — unlike the smart-account invoke in `build_tx`.
+fn build_upload_tx(source_pubkey: [u8; 32], seq: i64, wasm: &[u8]) -> Result<Transaction> {
+    let op = Operation {
+        source_account: None,
+        body: OperationBody::InvokeHostFunction(InvokeHostFunctionOp {
+            host_function: HostFunction::UploadContractWasm(wasm.to_vec().try_into()?),
+            auth: Default::default(),
+        }),
+    };
+    Ok(Transaction {
+        source_account: MuxedAccount::Ed25519(Uint256(source_pubkey)),
+        fee: 100,
+        seq_num: SequenceNumber(seq),
+        cond: Preconditions::None,
+        memo: Memo::None,
+        operations: vec![op].try_into()?,
+        ext: TransactionExt::V0,
+    })
+}
+
+/// Install wasm bytes on-chain via `UploadContractWasm`, paid + signed by
+/// `payer`. Needed for wasm too large to inline in the registry `publish` invoke
+/// (the whole binary would overflow the transaction envelope): the caller
+/// uploads here, then records name→hash with `publish_hash`. `publish_hash` does
+/// NOT re-check the upload, so this MUST precede it. Idempotent — re-uploading
+/// identical bytes is a cheap no-op success. Returns the wasm hash (sha256 of
+/// the bytes, the ledger's content id); `None` is never returned — the `Option`
+/// mirrors `run_signed` so `--dry-run` short-circuits uniformly, and on dry run
+/// it simulates only and returns the hash without sending.
+pub fn run_upload(
+    rpc: &Rpc,
+    passphrase: &str,
+    payer: &SeedKey,
+    wasm: &[u8],
+    dry_run: bool,
+) -> Result<Option<[u8; 32]>> {
+    let hash: [u8; 32] = Sha256::digest(wasm).into();
+    let seq = rpc
+        .account_seq(&payer.public)
+        .with_context(|| format!("fee payer {}", payer.account()))?;
+    let mut tx = build_upload_tx(payer.public, seq + 1, wasm)?;
+
+    // One simulation suffices: with no auth entry to sign, the footprint doesn't
+    // change under signing (unlike run_signed's verifier/policy cross-calls).
+    let sim = rpc.simulate(&envelope_b64(&tx)?)?;
+    if let Some(e) = sim.error {
+        bail!("upload simulation failed: {e}");
+    }
+    let td = sim
+        .transaction_data
+        .context("upload simulation returned no transactionData")?;
+    let soroban_data = SorobanTransactionData::from_xdr_base64(&td, Limits::none())?;
+    let fee = 100u64 + (sim.min_resource_fee * 115).div_ceil(100);
+    tx.fee = u32::try_from(fee).context("computed upload fee overflows u32")?;
+    tx.ext = TransactionExt::V1(soroban_data.clone());
+
+    if dry_run {
+        println!("upload footprint: {:?}", soroban_data.resources.footprint);
+        println!(
+            "upload fee: {} stroops (min resource fee {})",
+            tx.fee, sim.min_resource_fee
+        );
+        println!("DRY RUN OK (upload {})", hex::encode(hash));
+        return Ok(Some(hash));
+    }
+
+    let submitted = submit(rpc, &tx, passphrase, payer)?;
+    println!(
+        "uploaded wasm {} in tx {} at ledger {}",
+        hex::encode(hash),
+        submitted.tx_hash,
+        submitted.ledger
+    );
+    Ok(Some(hash))
 }
 
 /// Outcome of a read-only simulation: a value, or a *contract* error (which

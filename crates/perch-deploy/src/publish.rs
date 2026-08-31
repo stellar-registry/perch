@@ -42,6 +42,12 @@ pub struct PublishArgs {
     pub dry_run: bool,
     #[arg(long, default_value = "publish-receipt.json")]
     pub receipt: PathBuf,
+    /// Wasm at or below this many bytes is published inline — the bytes ride in
+    /// the `publish` invoke and the registry uploads them. Larger wasm can't fit
+    /// the transaction envelope, so it is uploaded via `UploadContractWasm`
+    /// first, then recorded with `publish_hash`. Default 48 KiB.
+    #[arg(long, default_value_t = 49152)]
+    pub inline_max_bytes: u64,
 }
 
 /// Registry `Error` discriminants (contracts/contracts/registry/src/error.rs —
@@ -131,16 +137,6 @@ pub fn run(rpc: &Rpc, passphrase: &str, args: &PublishArgs) -> Result<()> {
     }
 
     let key = SeedKey::from_env("PERCH_CI_KEY")?;
-    let spec = InvokeSpec {
-        contract: args.registry.clone(),
-        func: "publish".to_string(),
-        args: vec![
-            scv::string(&args.wasm_name)?,
-            scv::address(&args.author)?,
-            scv::bytes(&wasm)?,
-            scv::string(&args.binver)?,
-        ],
-    };
     let auth = AuthSpec {
         mode: match &args.verifier {
             Some(v) => tx::AuthMode::External {
@@ -151,6 +147,41 @@ pub fn run(rpc: &Rpc, passphrase: &str, args: &PublishArgs) -> Result<()> {
         rule_id: args.rule_id,
         account: args.author.clone(),
     };
+
+    // Small wasm rides inline in `publish` (the registry uploads the bytes);
+    // large wasm is uploaded first, then bound to its name with `publish_hash` —
+    // both calls are the same author-authorized registry invoke, so the auth
+    // spec is identical. The CI rule scopes both `publish` and `publish_hash`.
+    let spec = if wasm.len() as u64 <= args.inline_max_bytes {
+        InvokeSpec {
+            contract: args.registry.clone(),
+            func: "publish".to_string(),
+            args: vec![
+                scv::string(&args.wasm_name)?,
+                scv::address(&args.author)?,
+                scv::bytes(&wasm)?,
+                scv::string(&args.binver)?,
+            ],
+        }
+    } else {
+        println!(
+            "wasm is {} bytes (> {} inline max): upload then publish_hash",
+            wasm.len(),
+            args.inline_max_bytes
+        );
+        tx::run_upload(rpc, passphrase, &key, &wasm, args.dry_run)?;
+        InvokeSpec {
+            contract: args.registry.clone(),
+            func: "publish_hash".to_string(),
+            args: vec![
+                scv::string(&args.wasm_name)?,
+                scv::address(&args.author)?,
+                scv::bytes(&local_hash)?,
+                scv::string(&args.binver)?,
+            ],
+        }
+    };
+
     let Some(submitted) = tx::run_signed(rpc, passphrase, &key, &auth, &spec, args.dry_run)? else {
         return Ok(()); // dry run
     };

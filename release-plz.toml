@@ -1,7 +1,9 @@
 # Releases are ON-CHAIN wasm publishes, not crates.io: release-plz only does
-# version bump + changelog + per-crate git tags; the perch-interpreter tag
-# triggers .github/workflows/publish.yml, which publishes to the registry with
-# the scoped delegated CI key.
+# version bump + changelog + per-crate git tags. The publish itself runs in the
+# SAME release.yml run — gated on this run's `releases` output — so no tag/release
+# trigger (and no GitHub App) is needed. The constructorless contracts publish to
+# unverified/perch/constructorless via the scoped delegated CI key; spending-limit
+# to the stateless registry.
 
 [workspace]
 # Never `cargo publish` — the workspace pins a git rev of stellar-accounts,
@@ -32,10 +34,14 @@ git_release_enable = false
 # those to crates.io (needs the stellar-accounts git pin resolved first).
 release = false
 
-# The deployable contracts. Only two have publish automation today —
-# perch-interpreter (tag → publish.yml, needs the GitHub App installed) and
-# perch-spending-limit (same-run chain in release.yml) — the rest get
-# tags + changelogs so their on-chain publishes stay versionable.
+# The deployable contracts. The three CONSTRUCTORLESS infra wasms
+# (perch-interpreter / perch-doc-compiler / perch-ed25519-verifier) are tagged
+# here; release.yml then drives the reusable stellar-registry/actions workflows
+# (contract-release build+attest → registry-publish to
+# unverified/perch/constructorless). Their GitHub Releases are created by that
+# reusable build (git_release_enable stays off, so release-plz doesn't clash with
+# its `gh release create`) — same arrangement as perch-spending-limit's chain.
+# perch-account / perch-stateless-registry get tags + changelogs only.
 [[package]]
 name = "perch-account"
 release = true
@@ -52,14 +58,9 @@ release = true
 name = "perch-stateless-registry"
 release = true
 
-# ...and the interpreter, which drives the on-chain publish via publish.yml.
-# The publish workflow attaches the built wasm + on-chain receipt to this
-# release.
 [[package]]
 name = "perch-interpreter"
 release = true
-git_release_enable = true
-git_release_name = "perch-interpreter v{{ version }}"
 
 # perch-spending-limit's tag alone gates the build→attest→publish chain that
 # runs inside release.yml itself (same-run `needs:` on the release-plz

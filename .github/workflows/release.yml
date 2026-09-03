@@ -1,6 +1,6 @@
 name: Release-plz
 
-# Two chained halves:
+# Three chained halves:
 #
 #   1. `release-plz` — version bump + changelog PRs, and per-crate git tags on
 #      merge (releases are ON-CHAIN wasm publishes, not crates.io — see
@@ -13,13 +13,23 @@ name: Release-plz
 #      attestation), then publish it to the STATELESS registry
 #      (content-addressed, salt = wasm_hash) and `deploy_stateless` it,
 #      authorized by the CI_PUBLISH_SECRET_KEY author key.
+#   3. The constructorless publishes (`publish-plan` → `constructorless-build`
+#      → `constructorless-publish`) — a generic, contract-AGNOSTIC fan-out:
+#      whichever constructorless contracts this run released (perch-interpreter
+#      / perch-doc-compiler / perch-ed25519-verifier) are each built+attested and
+#      published to unverified/perch/constructorless via the reusable
+#      stellar-registry/actions workflows (contract-release → registry-publish),
+#      authored by the perch-author-account smart account and signed by the
+#      theahaco/stellar-cli fork (on-chain rule discovery — no perch-deploy).
+#      No per-contract code — the set is data (see publish-plan).
 #
-# The chain hangs off `needs:` in the SAME run (gated on the release-plz
-# `releases` output) instead of a tag trigger, so it fires even when the tag
-# was pushed with the default GITHUB_TOKEN — unlike publish.yml, which needs
-# the App token's tag push to retrigger. The App token step below therefore
-# only best-efforts: when the App isn't installed on the repo it falls back to
-# GITHUB_TOKEN and only the perch-interpreter tag→publish.yml trigger is lost.
+# Both publish halves hang off `needs:` in the SAME run (gated on the release-plz
+# `releases` output) instead of a tag/release trigger, so they fire even when the
+# tag was pushed with the default GITHUB_TOKEN — no GitHub App required. (This is
+# why the old per-contract publish.yml, which needed the App token's tag push to
+# retrigger, was folded in here and removed.) The App token step below is now
+# only a nicety for release-plz's own PR/tag operations; on fallback to
+# GITHUB_TOKEN nothing on-chain is lost.
 #
 # ONE-TIME BOOTSTRAP (manager-signed): the stateless registry is MANAGED — the
 # manager must approve the INITIAL publish of a new wasm name; that first
@@ -56,8 +66,12 @@ on:
   workflow_dispatch:
     inputs:
       spending_limit_tag:
-        description: "Existing tag to (re)publish, e.g. perch-spending-limit-v0.1.0"
-        required: true
+        description: "Existing spending-limit tag to (re)publish to the STATELESS registry, e.g. perch-spending-limit-v0.1.0"
+        required: false
+        type: string
+      publish_tag:
+        description: "Existing constructorless-contract tag to (re)publish to unverified/perch/constructorless, e.g. perch-interpreter-v0.1.0"
+        required: false
         type: string
 
 permissions: {}
@@ -69,7 +83,7 @@ permissions: {}
 # skips a same-hash republish and refuses a different-hash one, and
 # deploy_stateless is idempotent.
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && format('release-plz-dispatch-{0}', inputs.spending_limit_tag) || 'release-plz' }}
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-plz-dispatch-{0}{1}', inputs.spending_limit_tag, inputs.publish_tag) || 'release-plz' }}
   cancel-in-progress: false
 
 jobs:
@@ -121,7 +135,7 @@ jobs:
     # otherwise skip everything downstream of this `needs:`.
     if: >-
       !cancelled() && (
-        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'workflow_dispatch' && inputs.spending_limit_tag != '') ||
         (needs.release-plz.outputs.releases_created == 'true' &&
          contains(needs.release-plz.outputs.releases, '"perch-spending-limit"'))
       )
@@ -340,3 +354,140 @@ jobs:
             cat publish-receipt.json
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
+
+  # ── Constructorless contract publishes ────────────────────────────────────
+  # The generic, contract-agnostic half: any released CONSTRUCTORLESS contract
+  # (the reusable infra wasms authored by the perch-author-account smart
+  # account) is published to unverified/perch/constructorless. There is no
+  # per-contract workflow code — the set is data (the ALLOW list below, kept in
+  # step with release=true in release-plz.toml), and everything else (wasm path,
+  # registry name, version) derives from the release tag. Adding a contract is a
+  # one-line edit here + a release-plz.toml entry, not new YAML.
+  #
+  # Like the spending-limit chain this hangs off release-plz's `releases` output
+  # in the SAME run, not a tag/release trigger — so it fires even though tags are
+  # pushed with the default GITHUB_TOKEN (no GitHub App required).
+
+  # Which constructorless contracts did THIS run release (or was one passed by
+  # hand)? Emit the publish matrix; empty ⇒ publish-constructorless skips.
+  publish-plan:
+    needs: release-plz
+    if: >-
+      !cancelled() && (
+        (github.event_name == 'workflow_dispatch' && inputs.publish_tag != '') ||
+        (github.event_name == 'push' && needs.release-plz.outputs.releases_created == 'true')
+      )
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      any: ${{ steps.plan.outputs.any }}
+    env:
+      RELEASES: ${{ needs.release-plz.outputs.releases }}
+      DISPATCH_TAG: ${{ inputs.publish_tag }}
+    steps:
+      - name: Build the publish matrix
+        id: plan
+        run: |
+          # The constructorless set. Keep in step with release=true in
+          # release-plz.toml. A contract not listed here is tagged/changelogged
+          # but never published to the constructorless registry.
+          ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier"]'
+          if [ -n "$DISPATCH_TAG" ]; then
+            # Strict allow-list regex, not a prefix glob: the tag and the package
+            # parsed from it flow into later `run:` shells and perch-deploy args,
+            # so anything beyond exact <pkg>-v<semver> shape is rejected.
+            if [[ "$DISPATCH_TAG" =~ ^(perch-interpreter|perch-doc-compiler|perch-ed25519-verifier)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+              matrix=$(jq -cn \
+                --arg p "${BASH_REMATCH[1]}" --arg t "$DISPATCH_TAG" --arg v "${BASH_REMATCH[2]}" \
+                '[{package: $p, tag: $t, version: $v}]')
+            else
+              echo "publish_tag '$DISPATCH_TAG' is not a constructorless contract tag" >&2
+              exit 1
+            fi
+          else
+            # releases is [{package_name, tag, version}, …]; keep the allowed set.
+            matrix=$(jq -c --argjson allow "$ALLOW" \
+              '[.[] | select(.package_name as $p | $allow | index($p)) | {package: .package_name, tag: .tag, version: .version}]' \
+              <<<"$RELEASES")
+          fi
+          n=$(jq length <<<"$matrix")
+          {
+            echo "matrix={\"include\":$matrix}"
+            echo "any=$([ "$n" -gt 0 ] && echo true || echo false)"
+          } >>"$GITHUB_OUTPUT"
+          if [ "$n" -eq 0 ]; then
+            echo "no constructorless contracts released this run — nothing to publish"
+          else
+            echo "publishing: $(jq -r '[.[].tag] | join(", ")' <<<"$matrix")"
+          fi
+
+  # Build + attest each released constructorless contract, then publish it to
+  # unverified/perch/constructorless — both via the reusable stellar-registry/
+  # actions workflows. The publish is authored by the perch-author-account smart
+  # account and signed by the CAP-71 delegate CI key (perch-ci); the reusable
+  # registry-publish installs the theahaco/stellar-cli fork, which signs
+  # smart-account auth by discovering the account's context rule on-chain — no
+  # perch-deploy shim, no smart-account flags.
+
+  # Attested build (scaffold build + optimize + GitHub release + provenance).
+  # Push-only: the reusable workflow has no ref input and builds this run's sha
+  # (the release-plz-tagged commit); a dispatch republishes the existing asset.
+  constructorless-build:
+    needs: publish-plan
+    if: >-
+      !cancelled() && needs.publish-plan.outputs.any == 'true' &&
+      github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.publish-plan.outputs.matrix) }}
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+    uses: stellar-registry/actions/.github/workflows/contract-release.yml@470d61ccad7240f496497c66906a03e6540e8405 # main 2026-08
+    with:
+      package: ${{ matrix.package }}
+      release_name: ${{ matrix.tag }}
+      release_description: >-
+        Attested build of ${{ matrix.package }}, published content-addressed to
+        the perch constructorless registry (see the attached publish receipt).
+    secrets:
+      release_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # On-chain publish via the reusable registry-publish (upload + smart-account-
+  # signed publish_hash + deploy_stateless), authored by the SA. On push it
+  # consumes the freshly attested asset; on dispatch it republishes the existing
+  # one (build is skipped by design).
+  constructorless-publish:
+    needs: [publish-plan, constructorless-build]
+    if: >-
+      !cancelled() && needs.publish-plan.outputs.any == 'true' && (
+        needs.constructorless-build.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' &&
+         needs.constructorless-build.result == 'skipped')
+      )
+    strategy:
+      fail-fast: false
+      # One leg at a time: every publish signs with the same CI key, so parallel
+      # legs would collide on its source-account sequence number.
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.publish-plan.outputs.matrix) }}
+    permissions:
+      contents: write
+      id-token: write # gh attestation verify
+    uses: stellar-registry/actions/.github/workflows/registry-publish.yml@fcfebed27b865a8ddfe5439926a13ba9013ccef7 # main 2026-09
+    with:
+      # The constructorless subregistry (unverified/perch/constructorless) id and
+      # the perch-author-account smart account (C…). Repo/testnet vars.
+      registry: ${{ vars.PERCH_REGISTRY_CONTRACT_ID }}
+      author: ${{ vars.PERCH_AUTHOR_ADDRESS }}
+      wasm_name: ${{ matrix.package }}
+      version: ${{ matrix.version }}
+      release_tag: ${{ matrix.tag }}
+      wasm_asset: ${{ matrix.package }}_v${{ matrix.version }}.wasm
+      network: testnet
+    secrets:
+      # perch-ci: the account's ci-publish delegate (also the fee source).
+      signing_key: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
+      release_token: ${{ secrets.GITHUB_TOKEN }}

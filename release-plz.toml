@@ -35,12 +35,13 @@ git_release_enable = false
 release = false
 
 # The deployable contracts. The three CONSTRUCTORLESS infra wasms
-# (perch-interpreter / perch-doc-compiler / perch-ed25519-verifier) each get a
-# GitHub Release; release.yml's publish-constructorless job builds them at the
-# tag and publishes to unverified/perch/constructorless, attaching the wasm +
-# on-chain receipt to that release. perch-spending-limit has its own same-run
-# chain (→ stateless registry). perch-account / perch-stateless-registry get
-# tags + changelogs only, so their on-chain publishes stay versionable.
+# (perch-interpreter / perch-doc-compiler / perch-ed25519-verifier) are tagged
+# here; release.yml then drives the reusable stellar-registry/actions workflows
+# (contract-release build+attest → registry-publish to
+# unverified/perch/constructorless). Their GitHub Releases are created by that
+# reusable build (git_release_enable stays off, so release-plz doesn't clash with
+# its `gh release create`) — same arrangement as perch-spending-limit's chain.
+# perch-account / perch-stateless-registry get tags + changelogs only.
 [[package]]
 name = "perch-account"
 release = true
@@ -48,26 +49,18 @@ release = true
 [[package]]
 name = "perch-doc-compiler"
 release = true
-git_release_enable = true
-git_release_name = "perch-doc-compiler v{{ version }}"
 
 [[package]]
 name = "perch-ed25519-verifier"
 release = true
-git_release_enable = true
-git_release_name = "perch-ed25519-verifier v{{ version }}"
 
 [[package]]
 name = "perch-stateless-registry"
 release = true
 
-# ...and the interpreter, published to the constructorless registry by the same
-# publish-constructorless job (wasm + on-chain receipt attached to this release).
 [[package]]
 name = "perch-interpreter"
 release = true
-git_release_enable = true
-git_release_name = "perch-interpreter v{{ version }}"
 
 # perch-spending-limit's tag alone gates the build→attest→publish chain that
 # runs inside release.yml itself (same-run `needs:` on the release-plz

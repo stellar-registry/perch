@@ -13,13 +13,15 @@ name: Release-plz
 #      attestation), then publish it to the STATELESS registry
 #      (content-addressed, salt = wasm_hash) and `deploy_stateless` it,
 #      authorized by the CI_PUBLISH_SECRET_KEY author key.
-#   3. The constructorless publishes (`publish-plan` → `publish-constructorless`)
-#      — a generic, contract-AGNOSTIC fan-out: whichever constructorless
-#      contracts this run released (perch-interpreter / perch-doc-compiler /
-#      perch-ed25519-verifier) are each built at their tag and published to
-#      unverified/perch/constructorless via perch-deploy, authored by the
-#      perch-author-account smart account (CAP-0071 delegated CI key). No
-#      per-contract code — the set is data (see publish-plan).
+#   3. The constructorless publishes (`publish-plan` → `constructorless-build`
+#      → `constructorless-publish`) — a generic, contract-AGNOSTIC fan-out:
+#      whichever constructorless contracts this run released (perch-interpreter
+#      / perch-doc-compiler / perch-ed25519-verifier) are each built+attested and
+#      published to unverified/perch/constructorless via the reusable
+#      stellar-registry/actions workflows (contract-release → registry-publish),
+#      authored by the perch-author-account smart account and signed by the
+#      theahaco/stellar-cli fork (on-chain rule discovery — no perch-deploy).
+#      No per-contract code — the set is data (see publish-plan).
 #
 # Both publish halves hang off `needs:` in the SAME run (gated on the release-plz
 # `releases` output) instead of a tag/release trigger, so they fire even when the
@@ -420,116 +422,72 @@ jobs:
             echo "publishing: $(jq -r '[.[].tag] | join(", ")' <<<"$matrix")"
           fi
 
-  # Build each contract at its tag and publish it to the constructorless
-  # subregistry, authored by the perch-author-account smart account. The CI key
-  # is a CAP-0071 DELEGATED signer the account's ci-publish rule scopes to
-  # publish/publish_hash with author = the account itself — it can do nothing
-  # else. Wasm too large to inline (e.g. the ~71 KB doc-compiler) is uploaded via
-  # UploadContractWasm then bound with publish_hash — perch-deploy picks the path
-  # by size.
-  publish-constructorless:
+  # Build + attest each released constructorless contract, then publish it to
+  # unverified/perch/constructorless — both via the reusable stellar-registry/
+  # actions workflows. The publish is authored by the perch-author-account smart
+  # account and signed by the CAP-71 delegate CI key (perch-ci); the reusable
+  # registry-publish installs the theahaco/stellar-cli fork, which signs
+  # smart-account auth by discovering the account's context rule on-chain — no
+  # perch-deploy shim, no smart-account flags.
+
+  # Attested build (scaffold build + optimize + GitHub release + provenance).
+  # Push-only: the reusable workflow has no ref input and builds this run's sha
+  # (the release-plz-tagged commit); a dispatch republishes the existing asset.
+  constructorless-build:
     needs: publish-plan
-    if: ${{ !cancelled() && needs.publish-plan.outputs.any == 'true' }}
-    runs-on: ubuntu-latest
-    # mainnet would add required-reviewer protection on the environment (and
-    # needs the constructorless registry deployed there first); testnet none.
-    environment: testnet
-    permissions:
-      contents: write # gh release upload
+    if: >-
+      !cancelled() && needs.publish-plan.outputs.any == 'true' &&
+      github.event_name == 'push'
     strategy:
       fail-fast: false
-      # One leg at a time: every publish signs with the same CI key G-account, so
-      # parallel legs would collide on its sequence number.
+      matrix: ${{ fromJSON(needs.publish-plan.outputs.matrix) }}
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+    uses: stellar-registry/actions/.github/workflows/contract-release.yml@470d61ccad7240f496497c66906a03e6540e8405 # main 2026-08
+    with:
+      package: ${{ matrix.package }}
+      release_name: ${{ matrix.tag }}
+      release_description: >-
+        Attested build of ${{ matrix.package }}, published content-addressed to
+        the perch constructorless registry (see the attached publish receipt).
+    secrets:
+      release_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # On-chain publish via the reusable registry-publish (upload + smart-account-
+  # signed publish_hash + deploy_stateless), authored by the SA. On push it
+  # consumes the freshly attested asset; on dispatch it republishes the existing
+  # one (build is skipped by design).
+  constructorless-publish:
+    needs: [publish-plan, constructorless-build]
+    if: >-
+      !cancelled() && needs.publish-plan.outputs.any == 'true' && (
+        needs.constructorless-build.result == 'success' ||
+        (github.event_name == 'workflow_dispatch' &&
+         needs.constructorless-build.result == 'skipped')
+      )
+    strategy:
+      fail-fast: false
+      # One leg at a time: every publish signs with the same CI key, so parallel
+      # legs would collide on its source-account sequence number.
       max-parallel: 1
       matrix: ${{ fromJSON(needs.publish-plan.outputs.matrix) }}
-    env:
-      TAG: ${{ matrix.tag }}
-      WASM_NAME: ${{ matrix.package }}
-      BINVER: ${{ matrix.version }}
-      STELLAR_NETWORK: testnet
-      STELLAR_RPC_URL: ${{ vars.STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org' }}
-      STELLAR_NETWORK_PASSPHRASE: ${{ vars.STELLAR_NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015' }}
-      # The perch registry ROOT id (unverified/perch). The constructorless
-      # subregistry id is derived from it offline — deployer(perch, sha256(name))
-      # via perch-derive-id — so nothing but the root is configured. Set
-      # PERCH_REGISTRY_CONTRACT_ID instead to pin the subregistry id directly and
-      # skip derivation.
-      PERCH_REGISTRY_ID: ${{ vars.PERCH_REGISTRY_ID }}
-      PERCH_REGISTRY_CONTRACT_ID: ${{ vars.PERCH_REGISTRY_CONTRACT_ID }}
-      # The perch-author-account smart account (C…) that authors every name.
-      PERCH_AUTHOR_ADDRESS: ${{ vars.PERCH_AUTHOR_ADDRESS }}
-      # The account's ci-publish context-rule id. It SHIFTS whenever the account's
-      # policy doc is re-applied — keep this var in step with the live account.
-      PERCH_CI_RULE_ID: ${{ vars.PERCH_CI_RULE_ID }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ matrix.tag }}
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-        with:
-          targets: wasm32v1-none
-      - uses: stellar/stellar-cli@5a7c5fe76530bf4248477ac812fc757146b98cc4 # v27.0.0
-      - name: Install stellar-scaffold-cli
-        run: cargo install --locked stellar-scaffold-cli
-      # No build caches in a publish job (zizmor cache-poisoning: nothing a cache
-      # write could later inject into a signed publish).
-      - name: Build the contract wasm (name/binver meta via cargo_inherit)
-        # The constructorless contracts don't depend on perch-smart-account, so a
-        # single-package build needs no fetched infra-wasm cache.
-        run: stellar scaffold build --package "$WASM_NAME"
-      - name: Locate the wasm and cross-check its meta against the tag
-        run: |
-          WASM="target/stellar/$STELLAR_NETWORK/${WASM_NAME//-/_}.wasm"
-          test -s "$WASM" || { echo "expected wasm $WASM was not built" >&2; exit 1; }
-          echo "WASM=$WASM" >>"$GITHUB_ENV"
-          meta=$(stellar contract info meta --wasm "$WASM")
-          meta_name=$(sed -n 's/^ • name: \(.*\)$/\1/p' <<<"$meta")
-          meta_binver=$(sed -n 's/^ • binver: \(.*\)$/\1/p' <<<"$meta")
-          if [ "$meta_name" != "$WASM_NAME" ]; then
-            echo "wasm meta name '$meta_name' != package '$WASM_NAME'" >&2; exit 1
-          fi
-          if [ "$meta_binver" != "$BINVER" ]; then
-            echo "tag version $BINVER != wasm meta binver $meta_binver" >&2; exit 1
-          fi
-      - name: Resolve the constructorless registry id
-        run: |
-          if [ -n "$PERCH_REGISTRY_CONTRACT_ID" ]; then
-            REGISTRY="$PERCH_REGISTRY_CONTRACT_ID"
-          elif [ -n "$PERCH_REGISTRY_ID" ]; then
-            REGISTRY=$(cargo run -q -p perch-derive-id -- \
-              "$PERCH_REGISTRY_ID" constructorless "$STELLAR_NETWORK_PASSPHRASE")
-          else
-            echo "set PERCH_REGISTRY_ID (the unverified/perch id) or PERCH_REGISTRY_CONTRACT_ID" >&2
-            exit 1
-          fi
-          [[ "$REGISTRY" =~ ^C[A-Z2-7]{55}$ ]] || { echo "bad registry id '$REGISTRY'" >&2; exit 1; }
-          echo "REGISTRY=$REGISTRY" >>"$GITHUB_ENV"
-      - name: Preflight (simulate only)
-        env:
-          PERCH_CI_KEY: ${{ secrets.PERCH_CI_KEY }}
-        run: |
-          cargo run -q -p perch-deploy -- publish --dry-run \
-            --wasm "$WASM" --wasm-name "$WASM_NAME" --binver "$BINVER" \
-            --registry "$REGISTRY" --author "$PERCH_AUTHOR_ADDRESS" \
-            --rule-id "$PERCH_CI_RULE_ID"
-      - name: Publish on-chain
-        env:
-          PERCH_CI_KEY: ${{ secrets.PERCH_CI_KEY }}
-        run: |
-          cargo run -q -p perch-deploy -- publish \
-            --wasm "$WASM" --wasm-name "$WASM_NAME" --binver "$BINVER" \
-            --registry "$REGISTRY" --author "$PERCH_AUTHOR_ADDRESS" \
-            --rule-id "$PERCH_CI_RULE_ID" --receipt publish-receipt.json
-      - name: Attach wasm + receipt to the GitHub release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "$TAG" "$WASM" publish-receipt.json --clobber \
-            --repo "$GITHUB_REPOSITORY"
-          {
-            echo "### $WASM_NAME $BINVER published to unverified/perch/constructorless"
-            echo '```json'
-            cat publish-receipt.json
-            echo '```'
-          } >>"$GITHUB_STEP_SUMMARY"
+    permissions:
+      contents: write
+      id-token: write # gh attestation verify
+    uses: stellar-registry/actions/.github/workflows/registry-publish.yml@fcfebed27b865a8ddfe5439926a13ba9013ccef7 # main 2026-09
+    with:
+      # The constructorless subregistry (unverified/perch/constructorless) id and
+      # the perch-author-account smart account (C…). Repo/testnet vars.
+      registry: ${{ vars.PERCH_REGISTRY_CONTRACT_ID }}
+      author: ${{ vars.PERCH_AUTHOR_ADDRESS }}
+      wasm_name: ${{ matrix.package }}
+      version: ${{ matrix.version }}
+      release_tag: ${{ matrix.tag }}
+      wasm_asset: ${{ matrix.package }}_v${{ matrix.version }}.wasm
+      network: testnet
+    secrets:
+      # perch-ci: the account's ci-publish delegate (also the fee source).
+      signing_key: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
+      release_token: ${{ secrets.GITHUB_TOKEN }}

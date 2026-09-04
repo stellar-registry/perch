@@ -10,9 +10,13 @@
 //!
 //! ## Security contract
 //! - **Multi-tenant auth (C1):** `smart_account` is an *argument* to the Policy
-//!   trait, and one interpreter instance serves every account. Every entry
-//!   point calls `smart_account.require_auth()` first, so nobody can plant or
-//!   read another account's `(account, rule)` state.
+//!   trait, and one interpreter instance serves every account. Every mutating
+//!   or authorizing entry point (`install`, `uninstall`, `enforce`) calls
+//!   `smart_account.require_auth()` first, so nobody can plant or drop another
+//!   account's `(account, rule)` state. Reads are not gated:
+//!   [`PerchInterpreter::get_program`] is a public view — programs live in
+//!   ledger state, which is world-readable over RPC regardless, so auth there
+//!   would be theater, not protection.
 //! - **Dangling-deny (C2):** `enforce` panics `NotInstalled` when no program
 //!   exists for the rule — a rule that still lists the interpreter after an
 //!   uninstall degrades to deny, never allow.
@@ -83,6 +87,10 @@ impl PerchInterpreter {
     /// The install params stored for one `(account, rule)`, or `None`.
     /// Exposes `doc_hash` so lift/diff can check provenance against the
     /// reviewed document rather than guess from the lowered rule.
+    ///
+    /// Deliberately unauthenticated (unlike the C1-gated entry points):
+    /// programs are ledger state and readable over RPC by anyone, so gating
+    /// this view would only break tooling, not hide anything.
     pub fn get_program(
         env: Env,
         smart_account: Address,

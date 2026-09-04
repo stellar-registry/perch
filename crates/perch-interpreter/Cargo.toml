@@ -1,7 +1,7 @@
 [package]
 name = "perch-interpreter"
 description = "The single deployable OZ Policy contract evaluating perch constraint programs"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

@@ -9,7 +9,7 @@ repository.workspace = true
 [dependencies]
 # Direct path (not `workspace = true`) so `default-features = false` is honored —
 # cargo ignores it on workspace-inherited deps. Keeps perch-ir no_std here.
-perch-ir = { path = "../perch-ir", default-features = false }
+perch-ir = { version = "0.1.1", path = "../perch-ir", default-features = false }
 perch-program = { workspace = true }
 soroban-sdk = { workspace = true }
 

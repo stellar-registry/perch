@@ -26,8 +26,8 @@ stellar-accounts = { workspace = true }
 perch-program = { workspace = true }
 # Direct paths (not `workspace = true`) so `default-features = false` is
 # honored — cargo ignores it on workspace-inherited deps. Keeps both no_std.
-perch-ir = { path = "../perch-ir", default-features = false, optional = true }
-perch-compile = { path = "../perch-compile", default-features = false, optional = true }
+perch-ir = { version = "0.1.1", path = "../perch-ir", default-features = false, optional = true }
+perch-compile = { version = "0.1.1", path = "../perch-compile", default-features = false, optional = true }
 
 [features]
 # The deployable contract + its parser/compiler deps. Consumers that only

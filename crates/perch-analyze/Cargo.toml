@@ -13,5 +13,5 @@ perch-ir = { workspace = true }
 
 [dev-dependencies]
 # Cross-checks against the coarse op-level analyzer.
-perch-compile = { path = "../perch-compile" }
+perch-compile = { version = "0.1.1", path = "../perch-compile" }
 soroban-sdk = { workspace = true, features = ["testutils"] }

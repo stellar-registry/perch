@@ -154,6 +154,96 @@ jobs:
             jq -r 'if length==0 then "_none — no contract version bumped_" else (.[] | "- \(.tag)") end' <<<"$releases"
           } >>"$GITHUB_STEP_SUMMARY"
 
+  # Version bumps + changelogs — git-cliff driven, NO cargo package. Companion to
+  # detect-releases (which tags on merge): on every push to main this computes
+  # each contract's next version from its conventional commits (scoped to its
+  # crate tree + the intra-workspace libs it embeds), bumps the manifest,
+  # regenerates crates/<c>/CHANGELOG.md, and opens/updates one "chore: release"
+  # PR. Merging that PR bumps the versions on main, which detect-releases then
+  # tags + publishes. This is release-plz's UX (auto semver bump + changelog +
+  # release PR) rebuilt on git history, sidestepping the cargo-package wedge.
+  # (The PR is opened with GITHUB_TOKEN, so its own CI checks don't run — the
+  # bumps are mechanical; real CI ran on the feature PRs.)
+  release-pr:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
+        with:
+          fetch-depth: 0 # git-cliff needs full history + tags
+      - name: Install git-cliff
+        run: |
+          mkdir -p "$RUNNER_TEMP/gc"
+          curl -fsSL https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-unknown-linux-gnu.tar.gz -o "$RUNNER_TEMP/gc.tar.gz"
+          echo "bb40f68e752db1a32526c43e0108e8eff785f7c24c67024cffe1c316e034372975fd78c9af8e9a48148235aad15c9a103f1a5b490c282f1db09a7a793794b69f  $RUNNER_TEMP/gc.tar.gz" | sha512sum -c -
+          tar -xz -C "$RUNNER_TEMP/gc" --strip-components=1 -f "$RUNNER_TEMP/gc.tar.gz"
+          echo "$RUNNER_TEMP/gc" >>"$GITHUB_PATH"
+      - name: Compute version bumps + changelogs
+        id: prep
+        run: |
+          set -uo pipefail
+          # Each contract's changelog/version scope = its own crate tree + the
+          # intra-workspace lib crates it embeds, so a lib change re-releases the
+          # contract that ships it. Update these lists if a contract's perch deps
+          # change; a miss just means that release needs a manual version bump.
+          paths_for() { case "$1" in
+            perch-interpreter) echo "perch-interpreter perch-program";;
+            perch-doc-compiler) echo "perch-doc-compiler perch-compile perch-ir perch-program";;
+            perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro";;
+            *) echo "$1";;
+          esac; }
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry"
+          summary=""
+          for c in $CONTRACTS; do
+            inc=()
+            for d in $(paths_for "$c"); do inc+=(--include-path "crates/$d/**"); done
+            # feat -> minor, fix -> patch; pre-1.0 breaking stays minor (cliff.toml).
+            # Returns the crate's current version when nothing is releasable.
+            next_tag=$(git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" --bumped-version 2>/dev/null) || true
+            next_ver=${next_tag#"$c"-v}
+            cur=$(grep -m1 '^version = "' "crates/$c/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')
+            [ -n "$next_ver" ] || continue
+            [ "$next_ver" != "$cur" ] || continue
+            # Only a strict increase (guards the race where detect-releases has
+            # already tagged this version on the release-PR merge push).
+            [ "$(printf '%s\n%s\n' "$cur" "$next_ver" | sort -V | tail -1)" = "$next_ver" ] || continue
+            sed -i "s|^version = \"[^\"]*\"|version = \"$next_ver\"|" "crates/$c/Cargo.toml"
+            git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" --bump -o "crates/$c/CHANGELOG.md" 2>/dev/null
+            summary="${summary}- \`$c\`: $cur -> $next_ver"$'\n'
+            echo "bump $c: $cur -> $next_ver"
+          done
+          if [ -n "$summary" ]; then echo "any=true" >>"$GITHUB_OUTPUT"; else echo "any=false" >>"$GITHUB_OUTPUT"; fi
+          {
+            echo "body<<__RPBODY__"
+            echo "Automated by the \`release-pr\` job (git-cliff) — version bumps + changelogs, no cargo package."
+            echo ""
+            echo "### Contracts to release"
+            printf "%s" "${summary:-_none_}"
+            echo ""
+            echo ""
+            echo "Merging bumps the versions on main; \`detect-releases\` then tags and publishes them."
+            echo "__RPBODY__"
+          } >>"$GITHUB_OUTPUT"
+      - name: Open / update the release PR
+        if: steps.prep.outputs.any == 'true'
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          branch: release/next
+          delete-branch: true
+          title: "chore: release"
+          commit-message: "chore: release — version bumps + changelogs"
+          body: ${{ steps.prep.outputs.body }}
+      - name: Close the release PR when nothing is pending
+        if: steps.prep.outputs.any != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr=$(gh pr list --head release/next --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "$pr" ]; then gh pr close "$pr" --delete-branch --comment "No releasable changes remain." || true; fi
+
   # Gate + parameters for the spending-limit chain: did THIS run tag
   # perch-spending-limit (or was a tag passed by hand via dispatch)?
   spending-limit-release:

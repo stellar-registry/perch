@@ -1,0 +1,67 @@
+# git-cliff configuration — powers the per-contract changelog + version bump in
+# the Release workflow's `release-pr` job (replaces release-plz; no cargo
+# package). Each release-tracked contract is changelogged/versioned independently
+# by running git-cliff scoped to its crate tree via --include-path + --tag-pattern
+# (a per-crate tag like `perch-interpreter-v0.2.0`). See
+# .github/workflows/release.yml. This is a COMPLETE config (not a partial
+# override) so git-cliff doesn't merge its built-in defaults back in.
+
+[changelog]
+header = """
+# Changelog\n
+All notable changes to this contract are documented here. Versions are the
+on-chain wasm publishes; the format follows [Keep a Changelog](https://keepachangelog.com).\n
+"""
+# `version` is the per-crate tag (e.g. perch-interpreter-v0.2.0); split on "-v"
+# and take the last segment so the heading reads as a plain semver. (The version
+# never contains "-v", so `last` is always the semver even for names like
+# perch-ed25519-verifier that embed "-v".)
+body = """
+{% if version %}\
+    ## [{{ version | split(pat="-v") | last }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [unreleased]
+{% endif %}\
+{% for entry in commits | commit_groups(groups=commit_parsers_groups) %}
+    ### {{ entry.group | striptags | trim | upper_first }}
+    {% for commit in entry.commits %}
+        - {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
+            {% if commit.breaking %}[**breaking**] {% endif %}\
+            {{ commit.message | upper_first }}\
+    {% endfor %}
+{% endfor %}\n
+"""
+trim = true
+render_always = false
+footer = ""
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = false
+filter_commits = false
+topo_order = false
+sort_commits = "oldest"
+# Chores/CI/build/style are noise in a contract changelog — skip them.
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->🚀 Features" },
+  { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+  { message = "^perf", group = "<!-- 2 -->⚡ Performance" },
+  { message = "^refactor", group = "<!-- 3 -->🚜 Refactor" },
+  { message = "^doc", group = "<!-- 4 -->📚 Documentation" },
+  { message = "^test", group = "<!-- 5 -->🧪 Testing" },
+  { message = "^ci", skip = true },
+  { message = "^build", skip = true },
+  { message = "^chore", skip = true },
+  { message = "^style", skip = true },
+  { body = ".*security", group = "<!-- 6 -->🛡️ Security" },
+  { message = "^revert", group = "<!-- 7 -->◀️ Revert" },
+  { message = ".*", group = "<!-- 8 -->💼 Other" },
+]
+
+[bump]
+# feat -> minor, fix/other -> patch, breaking -> major. Pre-1.0 (0.x): keep
+# breaking changes as minor bumps so a stray `!` doesn't jump straight to 1.0.0.
+breaking_always_bump_major = false
+features_always_bump_minor = true

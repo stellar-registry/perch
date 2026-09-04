@@ -1,10 +1,15 @@
-name: Release-plz
+name: Release
 
 # Three chained halves:
 #
-#   1. `release-plz` — version bump + changelog PRs, and per-crate git tags on
-#      merge (releases are ON-CHAIN wasm publishes, not crates.io — see
-#      release-plz.toml).
+#   1. `detect-releases` — on every push to main, tag any contract whose crate
+#      manifest `version` has no matching `<contract>-v<version>` tag yet (i.e.
+#      it was bumped in the merged PR). Releases are ON-CHAIN wasm publishes, not
+#      crates.io, so this is pure git — NO release-plz / `cargo package`, which
+#      couldn't resolve the workspace's git-only + intra-workspace path deps
+#      against the crates.io index and also packaged the immutable last-release
+#      tags as its diff baseline, wedging the pipeline. To release a contract,
+#      bump its version in a PR.
 #   2. The spending-limit chain (`spending-limit-release` → `build-attest` →
 #      `publish-stateless`) — when a run of this workflow tags
 #      `perch-spending-limit-v*`, build the wasm via the
@@ -23,13 +28,11 @@ name: Release-plz
 #      theahaco/stellar-cli fork (on-chain rule discovery — no perch-deploy).
 #      No per-contract code — the set is data (see publish-plan).
 #
-# Both publish halves hang off `needs:` in the SAME run (gated on the release-plz
-# `releases` output) instead of a tag/release trigger, so they fire even when the
-# tag was pushed with the default GITHUB_TOKEN — no GitHub App required. (This is
-# why the old per-contract publish.yml, which needed the App token's tag push to
-# retrigger, was folded in here and removed.) The App token step below is now
-# only a nicety for release-plz's own PR/tag operations; on fallback to
-# GITHUB_TOKEN nothing on-chain is lost.
+# Both publish halves hang off `needs:` in the SAME run (gated on the
+# detect-releases `releases` output) instead of a tag/release trigger, so they
+# fire even though the tag was pushed with the default GITHUB_TOKEN — no GitHub
+# App required. (This is why the old per-contract publish.yml, which needed the
+# App token's tag push to retrigger, was folded in here and removed.)
 #
 # ONE-TIME BOOTSTRAP (manager-signed): the stateless registry is MANAGED — the
 # manager must approve the INITIAL publish of a new wasm name; that first
@@ -46,11 +49,10 @@ name: Release-plz
 #     --wasm_name perch-spending-limit --author <CI-public-key> \
 #     --wasm_hash <hash-from-upload> --version 0.0.1
 #
-# (0.0.1 < the first release-plz version 0.1.0 — versions must be strictly
-# increasing.) After that the chain is autonomous. Sequencing: release-plz.toml
-# sets release_always = false, so nothing is tagged until a RELEASE PR merges —
-# run the bootstrap any time after this workflow lands and before merging the
-# first release PR.
+# (0.0.1 < the first released version 0.1.0 — versions must be strictly
+# increasing.) After that the chain is autonomous: bump a contract's version in
+# a merged PR and detect-releases tags + publishes it. Run the bootstrap any
+# time after this workflow lands and before the first version bump merges.
 
 on:
   push:
@@ -87,57 +89,82 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-plz:
+  # Detect which contracts to release — WITHOUT release-plz or `cargo package`.
+  # Perch never publishes to crates.io (releases are on-chain wasm publishes), so
+  # release-plz's `cargo package --workspace` change-detection was a structural
+  # mismatch: the workspace's git-only + intra-workspace path deps can't all
+  # resolve on the crates.io index, and release-plz also packages the immutable
+  # last-release tags as its diff baseline — commits whose manifests can't be
+  # retroactively fixed — which permanently wedged the pipeline. Instead: a
+  # contract is "released" when its crate manifest `version` has no matching
+  # `<contract>-v<version>` tag yet (i.e. someone bumped it in a merged PR). Pure
+  # git, no packaging. Emits the same `releases` shape the publish halves consume,
+  # so everything downstream is unchanged.
+  detect-releases:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write # create + push the per-contract tags
     outputs:
-      releases_created: ${{ steps.release-plz.outputs.releases_created }}
-      releases: ${{ steps.release-plz.outputs.releases }}
+      releases_created: ${{ steps.detect.outputs.releases_created }}
+      releases: ${{ steps.detect.outputs.releases }}
     steps:
-      # A GitHub App token (not GITHUB_TOKEN): tags pushed with the default
-      # token do NOT retrigger workflows, and publish.yml must fire on the
-      # perch-interpreter-v* tag this job creates. Best-effort: the App isn't
-      # installed on this repo yet, so fall back to GITHUB_TOKEN — release PRs
-      # + tags still work, and the spending-limit chain below runs via
-      # `needs:` in this same run, which no token can break.
-      - name: Generate GitHub App token
-        id: app-token
-        continue-on-error: true
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          # Scope the app token to exactly what release-plz needs.
-          permission-contents: write
-          permission-pull-requests: write
-      # release-plz pushes release branches/tags, so this checkout must keep
-      # its credentials.
+      # Default token + persisted credentials are enough to push a tag. Tags
+      # pushed with GITHUB_TOKEN do NOT retrigger workflows, but the publish
+      # halves below run via `needs:` in THIS same run, so no retrigger (and no
+      # GitHub App) is needed.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         with:
-          fetch-depth: 0 # tag-based released-version detection needs history
-          token: ${{ steps.app-token.outputs.token || github.token }}
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-      - name: Run release-plz
-        id: release-plz
-        uses: MarcoIeni/release-plz-action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-          # No CARGO_REGISTRY_TOKEN: releases are on-chain only (release-plz.toml).
+          fetch-depth: 0 # full tag history for the version-bump comparison
+      - name: Detect released contracts (manifest version bumped past its tag)
+        id: detect
+        run: |
+          set -euo pipefail
+          # The release-tracked contracts. To release one, bump its `version` in
+          # crates/<contract>/Cargo.toml in a PR; on merge this tags + publishes
+          # it. The constructorless allow-list in publish-plan decides which of
+          # these actually publish on-chain (the rest just get a tag).
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          releases='[]'
+          for c in $CONTRACTS; do
+            ver=$(grep -m1 '^version = "' "crates/$c/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')
+            tag="$c-v$ver"
+            # Already released? (tag exists) — skip.
+            if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then continue; fi
+            # Guard against a downgrade: never tag a version <= the highest existing tag.
+            last=$(git tag -l "$c-v*" | sed "s|^$c-v||" | sort -V | tail -1)
+            if [ -n "$last" ] && [ "$(printf '%s\n%s\n' "$ver" "$last" | sort -V | tail -1)" != "$ver" ]; then
+              echo "::warning::$c manifest version $ver is not greater than last tag $last — skipping"
+              continue
+            fi
+            git tag "$tag"
+            git push origin "$tag"
+            releases=$(jq -c --arg p "$c" --arg t "$tag" --arg v "$ver" '. + [{package_name:$p, tag:$t, version:$v}]' <<<"$releases")
+            echo "released $tag"
+          done
+          {
+            echo "releases=$releases"
+            n=$(jq length <<<"$releases")
+            echo "releases_created=$([ "$n" -gt 0 ] && echo true || echo false)"
+          } >>"$GITHUB_OUTPUT"
+          {
+            echo "### Released this run"
+            jq -r 'if length==0 then "_none — no contract version bumped_" else (.[] | "- \(.tag)") end' <<<"$releases"
+          } >>"$GITHUB_STEP_SUMMARY"
 
   # Gate + parameters for the spending-limit chain: did THIS run tag
   # perch-spending-limit (or was a tag passed by hand via dispatch)?
   spending-limit-release:
-    needs: release-plz
-    # !cancelled(): on dispatch the release-plz job is skipped, which would
+    needs: detect-releases
+    # !cancelled(): on dispatch the detect-releases job is skipped, which would
     # otherwise skip everything downstream of this `needs:`.
     if: >-
       !cancelled() && (
         (github.event_name == 'workflow_dispatch' && inputs.spending_limit_tag != '') ||
-        (needs.release-plz.outputs.releases_created == 'true' &&
-         contains(needs.release-plz.outputs.releases, '"perch-spending-limit"'))
+        (needs.detect-releases.outputs.releases_created == 'true' &&
+         contains(needs.detect-releases.outputs.releases, '"perch-spending-limit"'))
       )
     runs-on: ubuntu-latest
     permissions: {}
@@ -145,7 +172,7 @@ jobs:
       tag: ${{ steps.params.outputs.tag }}
       version: ${{ steps.params.outputs.version }}
     env:
-      RELEASES: ${{ needs.release-plz.outputs.releases }}
+      RELEASES: ${{ needs.detect-releases.outputs.releases }}
       DISPATCH_TAG: ${{ inputs.spending_limit_tag }}
     steps:
       - name: Extract tag and version
@@ -170,16 +197,15 @@ jobs:
           } >>"$GITHUB_OUTPUT"
   # Build + attest + GitHub release via stellar-registry/actions: scaffold
   # build with source_repo meta, `stellar contract optimize` (preserves the
-  # name/binver contractmeta — verified), a GitHub release at the release-plz
-  # tag holding perch-spending-limit_v<version>.wasm, the hash submitted to
+  # name/binver contractmeta — verified), a GitHub release at the release tag
+  # holding perch-spending-limit_v<version>.wasm, the hash submitted to
   # stellar.expert contract-validation, and GitHub build provenance signed for
   # the asset (verified again in publish-stateless before anything goes
-  # on-chain). release-plz deliberately does NOT create this release
-  # (git_release_enable stays false): the reusable workflow's `gh release
-  # create` fails on an existing release.
+  # on-chain). detect-releases deliberately does NOT create this release: the
+  # reusable workflow's `gh release create` fails on an existing release.
   #
   # Push-only: the reusable workflow has no ref input — it builds this run's
-  # github.sha, which on push IS the commit release-plz tagged, but on
+  # github.sha, which on push IS the commit detect-releases tagged, but on
   # dispatch is wherever main has drifted to. So a dispatch never rebuilds; it
   # republishes the existing attested asset (see the recovery note at the
   # top).
@@ -360,22 +386,22 @@ jobs:
   # (the reusable infra wasms authored by the perch-author-account smart
   # account) is published to unverified/perch/constructorless. There is no
   # per-contract workflow code — the set is data (the ALLOW list below, kept in
-  # step with release=true in release-plz.toml), and everything else (wasm path,
-  # registry name, version) derives from the release tag. Adding a contract is a
-  # one-line edit here + a release-plz.toml entry, not new YAML.
+  # step with the detect-releases CONTRACTS list), and everything else (wasm
+  # path, registry name, version) derives from the release tag. Adding a
+  # contract is a one-line edit here + a detect-releases CONTRACTS entry.
   #
-  # Like the spending-limit chain this hangs off release-plz's `releases` output
+  # Like the spending-limit chain this hangs off detect-releases's `releases` output
   # in the SAME run, not a tag/release trigger — so it fires even though tags are
   # pushed with the default GITHUB_TOKEN (no GitHub App required).
 
   # Which constructorless contracts did THIS run release (or was one passed by
   # hand)? Emit the publish matrix; empty ⇒ publish-constructorless skips.
   publish-plan:
-    needs: release-plz
+    needs: detect-releases
     if: >-
       !cancelled() && (
         (github.event_name == 'workflow_dispatch' && inputs.publish_tag != '') ||
-        (github.event_name == 'push' && needs.release-plz.outputs.releases_created == 'true')
+        (github.event_name == 'push' && needs.detect-releases.outputs.releases_created == 'true')
       )
     runs-on: ubuntu-latest
     permissions: {}
@@ -383,15 +409,15 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       any: ${{ steps.plan.outputs.any }}
     env:
-      RELEASES: ${{ needs.release-plz.outputs.releases }}
+      RELEASES: ${{ needs.detect-releases.outputs.releases }}
       DISPATCH_TAG: ${{ inputs.publish_tag }}
     steps:
       - name: Build the publish matrix
         id: plan
         run: |
-          # The constructorless set. Keep in step with release=true in
-          # release-plz.toml. A contract not listed here is tagged/changelogged
-          # but never published to the constructorless registry.
+          # The constructorless set. Keep in step with the detect-releases
+          # CONTRACTS list. A contract not listed here is tagged but never
+          # published to the constructorless registry.
           ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier"]'
           if [ -n "$DISPATCH_TAG" ]; then
             # Strict allow-list regex, not a prefix glob: the tag and the package
@@ -432,7 +458,7 @@ jobs:
 
   # Attested build (scaffold build + optimize + GitHub release + provenance).
   # Push-only: the reusable workflow has no ref input and builds this run's sha
-  # (the release-plz-tagged commit); a dispatch republishes the existing asset.
+  # (the detect-releases-tagged commit); a dispatch republishes the existing asset.
   constructorless-build:
     needs: publish-plan
     if: >-

@@ -42,14 +42,18 @@ soroban-sdk-tools = "0.1.3"
 # Re-pin to upstream OpenZeppelin/stellar-contracts once the patch lands there.
 stellar-accounts = { version = "0.7.1", git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "82002206b1da48167091f33fe2ecfc97ce915857", package = "stellar-accounts" }
 
-perch-ir = { path = "crates/perch-ir" }
-perch-program = { path = "crates/perch-program" }
+perch-ir = { version = "0.1.1", path = "crates/perch-ir" }
+perch-program = { version = "0.1.1", path = "crates/perch-program" }
 
 # Flux refinement-type bridge (attrs erase to no-ops on stable; verification
-# runs via `just flux` under flux's pinned nightly). Rev tracks
-# nidohq/soroban-flux main (this rev carries the soroban-sdk 26–27 compat
-# range); its COMPATIBILITY.md pins the matching flux toolchain rev.
-soroban-flux = { version = "0.1.0", git = "https://github.com/nidohq/soroban-flux.git", rev = "3170467" }
+# runs via `just flux` under flux's pinned nightly). Published to crates.io
+# from nidohq/soroban-flux (its COMPATIBILITY.md pins the matching flux
+# toolchain rev). A crates.io release — NOT a git dep — because release-plz
+# runs `cargo package` across the whole workspace to compute version bumps,
+# and cargo package can only resolve deps that exist on the index; a git-only
+# soroban-flux blocked the entire release pipeline. 0.1.0 was cut from the
+# same source the git rev pinned, so builds stay byte-identical.
+soroban-flux = "0.1.0"
 
 [profile.release]
 opt-level = "z"

@@ -13,6 +13,25 @@ build:
 build-contracts:
     stellar scaffold build
 
+# Regenerate the interpreter TS bindings (packages/perch-interpreter-js/
+# src/index.ts) from the scaffold-built wasm. The committed file is generated,
+# never hand-edited; the recipe preserves its leading comment header. Run after
+# changing the interpreter's exported surface or `#[contracttype]`s, review the
+# diff, then rerun the package suite (its golden XDR tests catch wire drift).
+bindings-interpreter-js:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    stellar scaffold build
+    out=$(mktemp -d)
+    stellar contract bindings typescript \
+      --wasm "target/stellar/${STELLAR_NETWORK:-local}/perch_interpreter.wasm" \
+      --output-dir "$out/bindings" --overwrite
+    dst=packages/perch-interpreter-js/src/index.ts
+    awk '/^import/{exit} {print}' "$dst" > "$out/header"
+    cat "$out/header" "$out/bindings/src/index.ts" > "$dst"
+    rm -rf "$out"
+    echo "regenerated $dst"
+
 check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings

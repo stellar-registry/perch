@@ -39,6 +39,39 @@ describe('fluent builder', () => {
     expect(s.key).toBe('04abcd');
   });
 
+  it('reproduces the ci-publish-threshold fixture (threshold + cap) byte-for-byte', () => {
+    const doc = policy()
+      .network('Test SDF Network ; September 2015')
+      .signer('admin', external(WEBAUTHN_VERIFIER, ADMIN_KEY))
+      .signer('ci', external(ED25519_VERIFIER, CI_KEY))
+      .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
+      .rule('ci-publish', (r) =>
+        r
+          .callContract(REGISTRY)
+          .signedByThreshold(1, 'admin', 'ci')
+          .func('publish', 'publish_hash')
+          .arg(1, isSelf())
+          .notAfter(55000000)
+          .cap({ limit: 1_000_000_000n, periodLedgers: 17280 }),
+      )
+      .build();
+
+    expect(docHash(doc)).toBe('6748e7aa1340fbd97dce386fbeaef41c474edde0e4dd7fa75df482a2d58cd748');
+  });
+
+  it('cap() carries an explicit token and accepts a decimal-string limit', () => {
+    const doc = policy()
+      .signer('k', external(WEBAUTHN_VERIFIER, '04'))
+      .rule('r', (r) =>
+        r
+          .callContract(REGISTRY)
+          .signedBy('k')
+          .cap({ token: REGISTRY, limit: '25', periodLedgers: 100 }),
+      )
+      .build();
+    expect(doc.rules[0]!.cap).toEqual({ token: REGISTRY, limit: '25', 'period-ledgers': 100 });
+  });
+
   it('throws on build() when a rule has no scope', () => {
     expect(() =>
       policy()

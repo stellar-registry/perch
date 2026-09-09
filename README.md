@@ -47,6 +47,9 @@ crates/
 packages/
   perch-js/           TypeScript surface, published to npm as @stellar-registry/perch:
                       schemas, builder, canonical JSON + doc_hash (compile/apply/signing planned)
+  perch-interpreter-js/  interpreter contract client bindings, published to npm as
+                      @stellar-registry/perch-interpreter (generated from the wasm;
+                      regen via `just bindings-interpreter-js`)
 formal/               Lean 4 model of the v1 semantics + machine-checked theorems
                       (fail-closed, validation soundness, lowering preservation, and CANON v1
                       canonicalizer injectivity); replays the conformance + canonical vectors

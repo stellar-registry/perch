@@ -42,4 +42,5 @@ export {
   PolicyBuilder,
   RuleBuilder,
   type SignerSpec,
+  type CapSpec,
 } from './builder.js';

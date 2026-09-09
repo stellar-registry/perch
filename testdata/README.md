@@ -5,7 +5,9 @@ Golden vectors shared by the Rust and TypeScript test suites:
 - policy documents (canonical JSON) and their expected `doc_hash`
   (`ci-publish.*`, the primary External-signer doc; `ci-publish-delegated.*`,
   the same doc with the ci signer as a CAP-0071 delegated address, pinning
-  the delegated signer shape)
+  the delegated signer shape; `ci-publish-threshold.*`, the same doc with the
+  publish rule as a 1-of-2 `threshold` quorum carrying a `cap`, pinning those
+  two rule shapes)
 - compiled plans (expected XDR, byte-exact)
 - constraint program encodings, three-way checked: compiler-built structural
   `ScVal` == `#[contracttype]` encoding from a test `Env` == TS serializer bytes

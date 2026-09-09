@@ -33,6 +33,33 @@ describe('fail-closed schema', () => {
     ).toThrow();
   });
 
+  it('accepts threshold principals (M-of-N quorum)', () => {
+    expect(() =>
+      parsePolicyDoc({
+        ...valid,
+        rules: [
+          {
+            name: 'r',
+            scope: { type: 'self-admin' },
+            principals: { type: 'threshold', signers: ['a'], m: 1 },
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects threshold principals missing m, with an unknown field, or a non-u32 m', () => {
+    const rule = (principals: unknown) => ({
+      ...valid,
+      rules: [{ name: 'r', scope: { type: 'self-admin' }, principals }],
+    });
+    expect(() => parsePolicyDoc(rule({ type: 'threshold', signers: ['a'] }))).toThrow();
+    expect(() =>
+      parsePolicyDoc(rule({ type: 'threshold', signers: ['a'], m: 1, bogus: 1 })),
+    ).toThrow();
+    expect(() => parsePolicyDoc(rule({ type: 'threshold', signers: ['a'], m: 1.5 }))).toThrow();
+  });
+
   it('rejects a non-integer / out-of-range u32 (not-after-ledger)', () => {
     expect(() =>
       parsePolicyDoc({ ...valid, rules: [{ ...valid.rules[0], 'not-after-ledger': 1.5 }] }),

@@ -1,6 +1,6 @@
 {
   "name": "@stellar-registry/perch",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "TypeScript surface for perch policy documents: schema, canonical JSON + doc_hash, builder",
   "license": "Apache-2.0",
   "type": "module",

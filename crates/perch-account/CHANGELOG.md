@@ -1,28 +1,46 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this component are documented here. Contract versions
+are the on-chain wasm publishes and `perch-js` versions are the npm releases of
+`@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.2.0] - 2026-09-09
 
-## [Unreleased]
+### 🚀 Features
 
-## [0.1.1](https://github.com/stellar-registry/perch/releases/tag/perch-account-v0.1.1) - 2026-08-25
+- Interpreter TS bindings (@stellar-registry/perch-interpreter) + perch-js threshold/cap parity (#77)
 
-### Fixed
+## [0.1.1] - 2026-08-25
 
-- *(release)* version the six release-tracked contracts independently ([#69](https://github.com/stellar-registry/perch/pull/69))
-- *(release)* verify the reusable signer + publish-only dispatch + tag all six contracts ([#59](https://github.com/stellar-registry/perch/pull/59))
+### 🚀 Features
 
-### Other
+- Canonical-form spec + CANON_VERSION; own the escaper, not the serializer (#19) (#29)
+- *(perch-compile)* Static analysis over a compiled Plan (#19) (#24)
+- *(perch-compile)* Fail-closed activation — verify doc_hash before attach (#25)
+- *(perch-ir,perch-compile)* Cumulative-cap clause lowering to OZ spending_limit (#26)
+- *(perch-compile)* Monotone attenuation, enforced by reachable_calls (#28)
+- *(perch-program)* Flux-verified evaluator core (#32)
+- *(registry-resolve)* Pin the resolver macro to the testnet infra deployment (#47)
+- *(ir,compile)* Native M-of-N via Principals::Threshold → MinSigners(m) (#52)
+- *(spending-limit)* Wire cap composition through apply_doc (#54)
 
-- release v0.1.0 ([#57](https://github.com/stellar-registry/perch/pull/57))
-- the `admin-root` rule → `admin` (closes #50) ([#51](https://github.com/stellar-registry/perch/pull/51))
-- Perch on-chain deployment + stateless-registry epic ([#35](https://github.com/stellar-registry/perch/pull/35))
+### 🐛 Bug Fixes
 
-## [0.1.0](https://github.com/stellar-registry/perch/releases/tag/perch-account-v0.1.0) - 2026-08-24
+- *(release)* Verify the reusable signer + publish-only dispatch + tag all six contracts (#59)
+- *(release)* Version the six release-tracked contracts independently (#69)
 
-### Other
+### 📚 Documentation
 
-- the `admin-root` rule → `admin` (closes #50) ([#51](https://github.com/stellar-registry/perch/pull/51))
-- Perch on-chain deployment + stateless-registry epic ([#35](https://github.com/stellar-registry/perch/pull/35))
+- *(perch-ir)* Mark policies stateless — a per-call bound is not a spend cap (#21)
+- Strip AI-writing tells from markdown (#61)
+
+### 🧪 Testing
+
+- *(perch-program)* Pin the decidable-fragment invariant of v1 (#19) (#23)
+
+### 💼 Other
+
+- Wire-format benchmark — freeze postfix as v1 (#2) (#14)
+- The `admin-root` rule → `admin` (closes #50) (#51)
+
+

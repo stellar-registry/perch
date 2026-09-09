@@ -115,7 +115,6 @@ jobs:
       releases_created: ${{ steps.detect.outputs.releases_created }}
       releases: ${{ steps.detect.outputs.releases }}
       npm_released: ${{ steps.npm.outputs.npm_released }}
-      npm_version: ${{ steps.npm.outputs.npm_version }}
     steps:
       # Default token + persisted credentials are enough to push a tag. Tags
       # pushed with GITHUB_TOKEN do NOT retrigger workflows, but the publish
@@ -190,10 +189,7 @@ jobs:
               echo "- $tag (npm)" >>"$GITHUB_STEP_SUMMARY"
             fi
           fi
-          {
-            echo "npm_released=$released"
-            echo "npm_version=$ver"
-          } >>"$GITHUB_OUTPUT"
+          echo "npm_released=$released" >>"$GITHUB_OUTPUT"
 
   # Version bumps + changelogs — git-cliff driven, NO cargo package. Companion to
   # detect-releases (which tags on merge): on every push to main this computes

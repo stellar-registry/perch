@@ -8,8 +8,8 @@ bootstrap is live; nothing needs `--execute`.
 
 Testnet resets quarterly — after a reset, re-run the bootstrap and refresh this
 table. Consumers (e.g. nido) should resolve addresses by name through the
-registry (or use `vars.PERCH_AUTHOR_ADDRESS` / `vars.PERCH_REGISTRY_CONTRACT_ID`
-from the repo's `testnet` environment) rather than hardcoding them.
+registry (or use `vars.PERCH_AUTHOR_ADDRESS` / `vars.PERCH_REGISTRY_CONTRACT_ID`,
+repo-level Actions variables) rather than hardcoding them.
 
 ## Live contracts
 

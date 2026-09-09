@@ -133,6 +133,7 @@ jobs:
           cache-dependency-path: packages/perch-js/package-lock.json
       - run: npm ci
       - run: npm run check
+      - run: npm run build
       - run: npm test
 
   zizmor:

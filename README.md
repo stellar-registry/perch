@@ -45,7 +45,8 @@ crates/
   perch-analyze/      per-policy SMT prover (PolicyDoc → SMT-LIB, z3): dead rules, intent
                       conformance (only-calls), semantic attenuation (narrows)
 packages/
-  perch-js/           TypeScript surface: schemas, builder, compile parity, apply, signing helpers
+  perch-js/           TypeScript surface, published to npm as @stellar-registry/perch:
+                      schemas, builder, canonical JSON + doc_hash (compile/apply/signing planned)
 formal/               Lean 4 model of the v1 semantics + machine-checked theorems
                       (fail-closed, validation soundness, lowering preservation, and CANON v1
                       canonicalizer injectivity); replays the conformance + canonical vectors
@@ -56,6 +57,7 @@ komet/                Komet (K-framework) symbolic property tests — an indepen
 scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
 docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
+docs/testnet-deployment.md  verified live-state map of the canonical testnet deployment
 testdata/             golden vectors shared by the Rust and TS suites (frozen)
 testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and the wasm leg
 testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)

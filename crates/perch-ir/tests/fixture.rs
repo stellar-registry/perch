@@ -102,3 +102,41 @@ fn delegated_fixture_parses_validates_and_matches_committed_files() {
     assert_eq!(hash, read("ci-publish-delegated.doc-hash").trim());
     assert_eq!(hash, DELEGATED_FIXTURE_HASH_HEX);
 }
+
+// --- the threshold + cap variant of the fixture -------------------------------
+//
+// Same document with the publish rule authorized by a 1-of-2 quorum over
+// {admin, ci} and carrying a cumulative spend cap. Pins the `threshold`
+// principals and `cap` canonical forms (the two rule shapes the base fixtures
+// don't reach).
+
+/// Pinned doc_hash (hex) of the threshold+cap fixture. Must match
+/// `testdata/ci-publish-threshold.doc-hash`.
+const THRESHOLD_FIXTURE_HASH_HEX: &str =
+    "6748e7aa1340fbd97dce386fbeaef41c474edde0e4dd7fa75df482a2d58cd748";
+
+#[test]
+fn threshold_fixture_parses_validates_and_matches_committed_files() {
+    let doc = from_json(&read("ci-publish-threshold.json")).expect("fixture must parse");
+    validate(&doc).expect("fixture must validate");
+
+    let publish = &doc.rules[1];
+    match &publish.principals {
+        Principals::Threshold(t) => {
+            assert_eq!(t.signers, ["admin".to_string(), "ci".to_string()]);
+            assert_eq!(t.m, 1);
+        }
+        other => panic!("expected threshold principals, got {other:?}"),
+    }
+    let cap = publish.cap.as_ref().expect("publish rule must carry a cap");
+    assert_eq!(cap.token, None);
+    assert_eq!(cap.limit, "1000000000");
+    assert_eq!(cap.period_ledgers, 17280);
+
+    let committed = read("ci-publish-threshold.canonical.json");
+    assert_eq!(canonical_json(&doc), committed.trim_end_matches('\n'));
+
+    let hash = doc_hash_hex(&doc);
+    assert_eq!(hash, read("ci-publish-threshold.doc-hash").trim());
+    assert_eq!(hash, THRESHOLD_FIXTURE_HASH_HEX);
+}

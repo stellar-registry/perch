@@ -33,6 +33,14 @@ const scope = z.discriminatedUnion('type', [contractScope, selfAdminScope]);
 const allPrincipals = z
   .object({ type: z.literal('all'), signers: z.array(z.string()) })
   .strict();
+// M-of-N quorum over declared signers, mirroring perch-ir's
+// Principals::Threshold. `m` is shape-checked as a u32 here; the semantic
+// range `1 <= m <= signers.length` (INV-1) lives in Rust `validate()` and is
+// part of the tracked TS `validate()` follow-up on #8, like the ack-sentinel
+// check below.
+const thresholdPrincipals = z
+  .object({ type: z.literal('threshold'), signers: z.array(z.string()), m: u32 })
+  .strict();
 const selfAuthenticatingPrincipals = z
   .object({
     type: z.literal('self-authenticating'),
@@ -41,7 +49,11 @@ const selfAuthenticatingPrincipals = z
     ack: z.string(),
   })
   .strict();
-const principals = z.discriminatedUnion('type', [allPrincipals, selfAuthenticatingPrincipals]);
+const principals = z.discriminatedUnion('type', [
+  allPrincipals,
+  thresholdPrincipals,
+  selfAuthenticatingPrincipals,
+]);
 
 const isSelfPred = z.object({ type: z.literal('is-self') }).strict();
 const addressEqPred = z.object({ type: z.literal('address-eq'), address: z.string() }).strict();

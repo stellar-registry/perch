@@ -42,3 +42,30 @@ describe('perch-ir parity: ci-publish-delegated fixture', () => {
     expect(docHash(doc)).toBe('0e2f8e7c826d8252ce0bec1528a079e21ba6b628649762a7cae3fb823e6155ea');
   });
 });
+
+// The threshold + cap variant: the publish rule as a 1-of-2 quorum carrying a
+// cumulative spend cap. Pins the `threshold` principals and `cap` canonical
+// forms against the Rust vector (the shapes the base fixtures don't reach).
+describe('perch-ir parity: ci-publish-threshold fixture', () => {
+  const doc = parsePolicyDoc(JSON.parse(readFileSync(td('ci-publish-threshold.json'), 'utf8')));
+
+  it('canonical JSON is byte-identical to the Rust canonical form', () => {
+    const committed = readFileSync(td('ci-publish-threshold.canonical.json'), 'utf8').replace(
+      /\n+$/,
+      '',
+    );
+    expect(canonicalJson(doc)).toBe(committed);
+  });
+
+  it('doc_hash matches the committed and pinned Rust hash', () => {
+    expect(docHash(doc)).toBe(readFileSync(td('ci-publish-threshold.doc-hash'), 'utf8').trim());
+    expect(docHash(doc)).toBe('6748e7aa1340fbd97dce386fbeaef41c474edde0e4dd7fa75df482a2d58cd748');
+  });
+
+  it('the canonical form round-trips through the schema to the same bytes', () => {
+    const reparsed = parsePolicyDoc(
+      JSON.parse(readFileSync(td('ci-publish-threshold.canonical.json'), 'utf8')),
+    );
+    expect(canonicalJson(reparsed)).toBe(canonicalJson(doc));
+  });
+});

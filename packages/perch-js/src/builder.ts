@@ -45,12 +45,27 @@ export const stringIn = (values: string[]): ArgPred => ({ type: 'string-in', val
 export const stringPrefix = (prefix: string): ArgPred => ({ type: 'string-prefix', prefix });
 export const u32Eq = (value: number): ArgPred => ({ type: 'u32-eq', value });
 
+/** Cumulative spend cap for {@link RuleBuilder.cap}, camelCase like the other
+ *  builder inputs; `toWire` maps it onto the kebab-case CapConstraint shape. */
+export interface CapSpec {
+  /** Token contract (C-strkey) the cap is denominated in; defaults to the
+   *  rule's scope contract (the scope must then be a `contract` scope). */
+  token?: string;
+  /** Maximum cumulative amount over the window. A decimal string or bigint —
+   *  never a JS number, because the canonical form carries the limit as an
+   *  i128-as-string (see CANONICAL.md / perch-ir's CapConstraint). */
+  limit: string | bigint;
+  /** Rolling-window length in ledgers (non-zero). */
+  periodLedgers: number;
+}
+
 export class RuleBuilder {
   private _scope: Rule['scope'] | null = null;
   private _principals: Rule['principals'] | null = null;
   private _functions?: string[];
   private _args?: Rule['args'];
   private _notAfterLedger?: number;
+  private _cap?: Rule['cap'];
 
   constructor(private readonly name: string) {}
 
@@ -64,6 +79,13 @@ export class RuleBuilder {
   }
   signedBy(...signerIds: string[]): this {
     this._principals = { type: 'all', signers: signerIds };
+    return this;
+  }
+  /** M-of-N quorum: any `m` of the listed signers must authorize (mirrors
+   *  perch-ir's `Principals::threshold`). Validation requires
+   *  `1 <= m <= signerIds.length`. */
+  signedByThreshold(m: number, ...signerIds: string[]): this {
+    this._principals = { type: 'threshold', signers: signerIds, m };
     return this;
   }
   selfAuthenticating(policy: string, installParamHex = '', ack: string = ACK_SENTINEL): this {
@@ -82,11 +104,23 @@ export class RuleBuilder {
     this._notAfterLedger = ledger;
     return this;
   }
+  /** Cumulative spend cap over a rolling window. Perch itself is stateless, so
+   *  the compiler lowers this to a stateful sibling policy (OZ
+   *  `spending_limit`) attached to the same context rule alongside the
+   *  interpreter — both must pass. */
+  cap({ token, limit, periodLedgers }: CapSpec): this {
+    this._cap = {
+      ...(token !== undefined ? { token } : {}),
+      limit: typeof limit === 'bigint' ? limit.toString() : limit,
+      'period-ledgers': periodLedgers,
+    };
+    return this;
+  }
 
   /** @internal */
   toWire(): Rule {
     if (!this._scope) throw new Error(`rule "${this.name}": scope not set (call selfAdmin/callContract)`);
-    if (!this._principals) throw new Error(`rule "${this.name}": principals not set (call signedBy/selfAuthenticating)`);
+    if (!this._principals) throw new Error(`rule "${this.name}": principals not set (call signedBy/signedByThreshold/selfAuthenticating)`);
     const r: Record<string, unknown> = {
       name: this.name,
       scope: this._scope,
@@ -95,6 +129,7 @@ export class RuleBuilder {
     if (this._functions !== undefined) r.functions = this._functions;
     if (this._args !== undefined) r.args = this._args;
     if (this._notAfterLedger !== undefined) r['not-after-ledger'] = this._notAfterLedger;
+    if (this._cap !== undefined) r.cap = this._cap;
     return r as Rule;
   }
 }

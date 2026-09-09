@@ -28,7 +28,13 @@ name: Release
 #      theahaco/stellar-cli fork (on-chain rule discovery — no perch-deploy).
 #      No per-contract code — the set is data (see publish-plan).
 #
-# Both publish halves hang off `needs:` in the SAME run (gated on the
+# A fourth, off-chain leg — `npm-publish` — mirrors the same convention for
+# the TypeScript package: detect-releases also tags `perch-js-v<version>` when
+# packages/perch-js's manifest version was bumped in the merged PR, and the
+# npm-publish job then publishes @stellar-registry/perch to npm (NPM_TOKEN
+# secret).
+#
+# All publish halves hang off `needs:` in the SAME run (gated on the
 # detect-releases `releases` output) instead of a tag/release trigger, so they
 # fire even though the tag was pushed with the default GITHUB_TOKEN — no GitHub
 # App required. (This is why the old per-contract publish.yml, which needed the
@@ -108,6 +114,8 @@ jobs:
     outputs:
       releases_created: ${{ steps.detect.outputs.releases_created }}
       releases: ${{ steps.detect.outputs.releases }}
+      npm_released: ${{ steps.npm.outputs.npm_released }}
+      npm_version: ${{ steps.npm.outputs.npm_version }}
     steps:
       # Default token + persisted credentials are enough to push a tag. Tags
       # pushed with GITHUB_TOKEN do NOT retrigger workflows, but the publish
@@ -153,6 +161,39 @@ jobs:
             echo "### Released this run"
             jq -r 'if length==0 then "_none — no contract version bumped_" else (.[] | "- \(.tag)") end' <<<"$releases"
           } >>"$GITHUB_STEP_SUMMARY"
+      # Same convention for the npm package: packages/perch-js is "released"
+      # when its manifest version has no perch-js-v<version> tag yet. Feeds the
+      # npm-publish job below (npm registry instead of on-chain wasm).
+      - name: Detect released npm package (perch-js manifest version bumped past its tag)
+        id: npm
+        run: |
+          set -euo pipefail
+          ver=$(jq -r .version packages/perch-js/package.json)
+          # Strict semver shape — the version flows into later `run:` shells.
+          if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "unexpected perch-js version: '$ver'" >&2
+            exit 1
+          fi
+          tag="perch-js-v$ver"
+          released=false
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists — nothing to release"
+          else
+            last=$(git tag -l 'perch-js-v*' | sed 's|^perch-js-v||' | sort -V | tail -1)
+            if [ -n "$last" ] && [ "$(printf '%s\n%s\n' "$ver" "$last" | sort -V | tail -1)" != "$ver" ]; then
+              echo "::warning::perch-js manifest version $ver is not greater than last tag $last — skipping"
+            else
+              git tag "$tag"
+              git push origin "$tag"
+              released=true
+              echo "released $tag"
+              echo "- $tag (npm)" >>"$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+          {
+            echo "npm_released=$released"
+            echo "npm_version=$ver"
+          } >>"$GITHUB_OUTPUT"
 
   # Version bumps + changelogs — git-cliff driven, NO cargo package. Companion to
   # detect-releases (which tags on merge): on every push to main this computes
@@ -215,6 +256,19 @@ jobs:
             summary="${summary}- \`$c\`: $cur -> $next_ver"$'\n'
             echo "bump $c: $cur -> $next_ver"
           done
+          # The npm package rides the same convention: tag-pattern perch-js-v*,
+          # scoped to packages/perch-js. Bump via `npm version` so
+          # package-lock.json stays in sync with the manifest.
+          next_tag=$(git cliff --config cliff.toml --tag-pattern 'perch-js-v.*' --include-path 'packages/perch-js/**' --bumped-version 2>/dev/null) || true
+          next_ver=${next_tag#perch-js-v}
+          cur=$(jq -r .version packages/perch-js/package.json)
+          if [ -n "$next_ver" ] && [ "$next_ver" != "$cur" ] && \
+             [ "$(printf '%s\n%s\n' "$cur" "$next_ver" | sort -V | tail -1)" = "$next_ver" ]; then
+            npm version "$next_ver" --no-git-tag-version --prefix packages/perch-js >/dev/null
+            git cliff --config cliff.toml --tag-pattern 'perch-js-v.*' --include-path 'packages/perch-js/**' --bump -o packages/perch-js/CHANGELOG.md 2>/dev/null
+            summary="${summary}- \`perch-js\` (npm \`@stellar-registry/perch\`): $cur -> $next_ver"$'\n'
+            echo "bump perch-js: $cur -> $next_ver"
+          fi
           if [ -n "$summary" ]; then echo "any=true" >>"$GITHUB_OUTPUT"; else echo "any=false" >>"$GITHUB_OUTPUT"; fi
           {
             echo "body<<__RPBODY__"
@@ -243,6 +297,45 @@ jobs:
         run: |
           pr=$(gh pr list --head release/next --state open --json number --jq '.[0].number // empty' 2>/dev/null || true)
           if [ -n "$pr" ]; then gh pr close "$pr" --delete-branch --comment "No releasable changes remain." || true; fi
+
+  # npm mirror of the on-chain publish chains: when detect-releases tags
+  # perch-js-v* (the packages/perch-js manifest version was bumped in a merged
+  # PR), publish @stellar-registry/perch to the npm registry. Same release
+  # convention as the contracts — bump the version in a PR to release; the
+  # release-pr job proposes that bump from conventional commits.
+  # Requires the NPM_TOKEN repo secret (an npm automation token that can
+  # publish @stellar-registry/perch). If the secret is absent the publish step
+  # fails and the job can be re-run after the secret is added — the tag and
+  # github.sha are unchanged on a re-run, so it publishes exactly the tagged
+  # commit.
+  npm-publish:
+    needs: detect-releases
+    if: >-
+      !cancelled() && needs.detect-releases.outputs.npm_released == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm --provenance (sigstore attestation of the CI build)
+    defaults:
+      run:
+        working-directory: packages/perch-js
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No dependency cache in a publish job (zizmor cache-poisoning: nothing a
+      # cache write could later inject into a signed publish).
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      # prepack builds dist/; publishConfig pins access=public for the scope.
+      - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # Gate + parameters for the spending-limit chain: did THIS run tag
   # perch-spending-limit (or was a tag passed by hand via dispatch)?

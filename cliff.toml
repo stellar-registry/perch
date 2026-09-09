@@ -1,16 +1,17 @@
-# git-cliff configuration — powers the per-contract changelog + version bump in
+# git-cliff configuration — powers the per-component changelog + version bump in
 # the Release workflow's `release-pr` job (replaces release-plz; no cargo
-# package). Each release-tracked contract is changelogged/versioned independently
-# by running git-cliff scoped to its crate tree via --include-path + --tag-pattern
-# (a per-crate tag like `perch-interpreter-v0.2.0`). See
-# .github/workflows/release.yml. This is a COMPLETE config (not a partial
-# override) so git-cliff doesn't merge its built-in defaults back in.
+# package). Each release-tracked component is changelogged/versioned independently
+# by running git-cliff scoped to its tree via --include-path + --tag-pattern
+# (a per-component tag like `perch-interpreter-v0.2.0`, or `perch-js-v0.2.0` for
+# the npm package). See .github/workflows/release.yml. This is a COMPLETE config
+# (not a partial override) so git-cliff doesn't merge its built-in defaults back in.
 
 [changelog]
 header = """
 # Changelog\n
-All notable changes to this contract are documented here. Versions are the
-on-chain wasm publishes; the format follows [Keep a Changelog](https://keepachangelog.com).\n
+All notable changes to this component are documented here. Contract versions
+are the on-chain wasm publishes and `perch-js` versions are the npm releases of
+`@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).\n
 """
 # `version` is the per-crate tag (e.g. perch-interpreter-v0.2.0); split on "-v"
 # and take the last segment so the heading reads as a plain semver. (The version

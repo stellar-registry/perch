@@ -4,6 +4,12 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.2.1] - 2026-09-10
+
+### 🐛 Bug Fixes
+
+- Retag/republish after 0.2.0's release build broke on stale intra-workspace `perch-account`/`perch-doc-compiler` path-dep pins (still "0.1.1" after those crates bumped to 0.2.0), which failed `cargo metadata` for the whole workspace and blocked `constructorless-build` — no source change to this crate; same cap-capable compiler as 0.2.0.
+
 ## [0.2.0] - 2026-09-09
 
 ### 🚀 Features

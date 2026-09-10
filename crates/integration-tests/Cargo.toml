@@ -15,9 +15,9 @@ perch-ir = { workspace = true }
 perch-program = { workspace = true }
 perch-compile = { version = "0.1.1", path = "../perch-compile" }
 perch-interpreter = { version = "0.1.1", path = "../perch-interpreter" }
-perch-account = { version = "0.1.1", path = "../perch-account" }
+perch-account = { version = "0.2.0", path = "../perch-account" }
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }
-perch-doc-compiler = { version = "0.1.1", path = "../perch-doc-compiler" }
+perch-doc-compiler = { version = "0.2.0", path = "../perch-doc-compiler" }
 perch-ed25519-verifier = { version = "0.1.1", path = "../perch-ed25519-verifier" }
 perch-spending-limit = { version = "0.1.1", path = "../perch-spending-limit" }
 perch-testkit = { version = "0.1.1", path = "../perch-testkit" }

@@ -1468,7 +1468,7 @@ dependencies = [
 
 [[package]]
 name = "perch-doc-compiler"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "perch-compile",
  "perch-ir",

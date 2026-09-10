@@ -1,7 +1,7 @@
 [package]
 name = "perch-account"
 description = "Deployable OZ smart account governed by perch policies; admin for the perch registry"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

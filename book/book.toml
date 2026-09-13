@@ -1,0 +1,20 @@
+[book]
+title = "The Perch Book"
+authors = ["Perch contributors"]
+description = "Learn Perch policies, evaluation, and formal guarantees without a programming-languages background."
+language = "en"
+src = "src"
+
+[build]
+build-dir = "../target/perch-book"
+create-missing = false
+extra-watch-dirs = ["examples", "../testdata"]
+
+[output.html]
+# Relative URLs also work under /pr-preview/pr-N/book/.
+site-url = "./"
+git-repository-url = "https://github.com/stellar-registry/perch"
+edit-url-template = "https://github.com/stellar-registry/perch/edit/main/book/{path}"
+
+[output.html.playground]
+runnable = false

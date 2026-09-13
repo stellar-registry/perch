@@ -1,0 +1,319 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Your first policy - The Perch Book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="Learn Perch policies, evaluation, and formal guarantees without a programming-languages background.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">The Perch Book</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/stellar-registry/perch" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+                        <a href="https://github.com/stellar-registry/perch/edit/main/book/src/first-policy.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <i id="git-edit-button" class="fa fa-edit"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="your-first-policy-a-release-key"><a class="header" href="#your-first-policy-a-release-key">Your first policy: a release key</a></h1>
+<p>Imagine a maintainer who administers a smart account and a CI job that publishes releases. Giving both the same key would also give CI the maintainer's administrative power. Instead, give them different signers and separate rules.</p>
+<p>The repository already contains a complete example. The following is included directly from <code>testdata/ci-publish-delegated.json</code>, so the book and fixture stay together. These are fixture identities and a historical ledger cutoff, not credentials or a deployment configuration to reuse.</p>
+<pre><code class="language-json">{
+  "version": 1,
+  "network": "Test SDF Network ; September 2015",
+  "signers": [
+    {
+      "id": "admin",
+      "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN",
+      "key": "045e2a7589b73c19d5341cf12ac0c5f6c45c298d4c20002c794daadafdb83f35f5be23963648d7aaccf5e273803f2fec7a8f0eb4d4845c9b89a972b4a09298b17e"
+    },
+    {
+      "id": "ci",
+      "address": "GA327GGWT6747B57DRWJJ3SWBVIQ354TTDRHR76CVAWO6OBPZ4Z57YGA"
+    }
+  ],
+  "rules": [
+    {
+      "name": "admin",
+      "scope": {
+        "type": "self-admin"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish",
+      "scope": {
+        "type": "contract",
+        "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish",
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 55000000
+    }
+  ]
+}
+</code></pre>
+<p>Read the document from the outside in. <code>version</code> selects document format 1. <code>network</code> names the test network. <code>signers</code> gives local names to authentication methods. <code>rules</code> describes the authority granted to those names.</p>
+<p>The <code>admin</code> rule applies to account administration and requires the <code>admin</code> signer. The <code>ci-publish</code> rule applies to one registry contract and requires <code>ci</code>. Its function allowlist contains <code>publish</code> and <code>publish_hash</code>. Its argument constraint requires argument <strong>1</strong>, the second argument, to equal the smart account's own address. Finally, it stops authorizing at ledger 55,000,000.</p>
+<p>The argument index only makes sense with the target contract's interface. In this example it selects the publisher address. Perch does not infer argument meaning from a function name. If an interface changes, review the index again.</p>
+<h2 id="try-predicting-the-decision"><a class="header" href="#try-predicting-the-decision">Try predicting the decision</a></h2>
+<p>Assume the correct CI signer is authenticated, the registry is the one in the rule, the ledger is before the cutoff, and all other account requirements are met.</p>
+<div class="table-wrapper"><table><thead><tr><th>Proposed call</th><th>Does this rule permit it?</th><th>Why?</th></tr></thead><tbody>
+<tr><td><code>publish</code>, argument 1 is the smart account</td><td>Yes</td><td>All of this rule's conditions pass</td></tr>
+<tr><td><code>publish_hash</code>, argument 1 is someone else</td><td>No</td><td><code>is-self</code> fails</td></tr>
+<tr><td><code>upgrade</code> on the registry</td><td>No</td><td>Function is outside the allowlist</td></tr>
+<tr><td><code>publish</code> with argument 1 missing</td><td>No</td><td>The argument cannot be checked</td></tr>
+<tr><td>The valid call at ledger 55,000,000</td><td>No</td><td>The cutoff is exclusive</td></tr>
+</tbody></table>
+</div>
+<p>A passing policy check does not guarantee a successful transaction. The target may reject the call for its own reasons, and the host may enforce other authorization and resource requirements.</p>
+<h2 id="run-a-local-check"><a class="header" href="#run-a-local-check">Run a local check</a></h2>
+<p>From a repository checkout, install the Rust toolchain selected by <code>rust-toolchain.toml</code> using rustup, and install Z3 so <code>z3</code> is on your PATH. For example, Homebrew users can run <code>brew install z3</code>. No network transaction or private key is needed for this analysis:</p>
+<pre><code class="language-sh">cargo run -q -p perch-analyze -- only-calls \
+  testdata/ci-publish-delegated.json \
+  CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL \
+  publish publish_hash
+</code></pre>
+<p>The command should report that only those functions can be authorized on that contract. It asks a question about the document's modeled possibilities; it does not check whether the historical fixture is usable on today's ledger. We will examine the analyzer's scope in <a href="analysis.html">Checking a particular policy</a>.</p>
+<p><strong>Exercise:</strong> Remove <code>functions</code> from the CI rule. What changes?</p>
+<p><strong>Answer:</strong> The function restriction disappears. The signer, argument, scope, and expiry checks remain, but any function in that scope satisfying them could qualify. An omitted allowlist does not mean “allow nothing.”</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="introduction.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="language.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="introduction.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="language.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

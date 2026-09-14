@@ -579,3 +579,80 @@ fn a_completed_attempts_nullifier_is_never_released() {
         .try_submit_zk_proof(&w.account, &nullifier, &proof)
         .is_err());
 }
+
+#[test]
+fn guardian_cancellation_is_refused_once_the_attempt_has_completed() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let g1 = Address::generate(&w.env);
+
+    let doc = enroll_doc(&controller, &[g1.clone()], 1);
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let rule_id = recovery_rule_id(&w);
+    let target = target_doc(&controller, &[g1.clone()], 1);
+    let target_bytes = Bytes::from_slice(&w.env, target.as_bytes());
+    let target_hash: BytesN<32> = w.env.crypto().sha256(&target_bytes).to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+    recovery.submit_guardian_approval(&w.account, &g1);
+    let attempt = recovery.get_attempt(&w.account).unwrap();
+    w.env
+        .ledger()
+        .with_mut(|l| l.sequence_number = attempt.executable_after);
+    assert!(complete_via_rule(&w, &w.account, rule_id, &target_bytes).is_ok());
+
+    // A cancellation factor arriving after completion must not flip the
+    // attempt back to `Cancelled`.
+    assert!(recovery
+        .try_submit_guardian_cancel(&w.account, &g1)
+        .is_err());
+    assert_eq!(
+        recovery.get_attempt(&w.account).unwrap().state,
+        perch_recovery::types::AttemptState::Completed
+    );
+}
+
+#[test]
+fn zk_cancellation_is_refused_once_the_attempt_has_completed() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let verifier = w.env.register(MockZkVerifier, ());
+
+    let doc = enroll_doc_with_mode(&controller, &zk_only_mode_json(&verifier));
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let rule_id = recovery_rule_id(&w);
+    let target = enroll_doc_with_mode(&controller, &zk_only_mode_json(&verifier)).replace(
+        &format!(r#""verifier": "{ADMIN_VERIFIER}", "key": "{ADMIN_KEY}""#),
+        &format!(r#""verifier": "{NEW_ADMIN_VERIFIER}", "key": "{NEW_ADMIN_KEY}""#),
+    );
+    let target_bytes = Bytes::from_slice(&w.env, target.as_bytes());
+    let target_hash: BytesN<32> = w.env.crypto().sha256(&target_bytes).to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+
+    let proof = Bytes::from_array(&w.env, &[1u8; 1]);
+    let init_nullifier = BytesN::from_array(&w.env, &[6u8; 32]);
+    recovery.submit_zk_proof(&w.account, &init_nullifier, &proof);
+    let attempt = recovery.get_attempt(&w.account).unwrap();
+    w.env
+        .ledger()
+        .with_mut(|l| l.sequence_number = attempt.executable_after);
+    assert!(complete_via_rule(&w, &w.account, rule_id, &target_bytes).is_ok());
+
+    let cancel_nullifier = BytesN::from_array(&w.env, &[7u8; 32]);
+    assert!(recovery
+        .try_submit_zk_cancel(&w.account, &cancel_nullifier, &proof)
+        .is_err());
+    assert_eq!(
+        recovery.get_attempt(&w.account).unwrap().state,
+        perch_recovery::types::AttemptState::Completed
+    );
+}

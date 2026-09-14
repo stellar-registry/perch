@@ -386,6 +386,9 @@ impl PerchRecovery {
             return Err(RecoveryError::NotAGuardian);
         }
         let mut attempt = require_attempt(e, &account)?;
+        if !is_live(e, &attempt) {
+            return Err(RecoveryError::NoLiveAttempt);
+        }
         let key = (account.clone(), attempt.id);
         let mut tally = RecoveryStorage::get_cancel_tally(e, &key).unwrap_or_else(|| Vec::new(e));
         if tally.contains(&guardian) {
@@ -419,6 +422,9 @@ impl PerchRecovery {
         let config = require_config(e, &account)?;
         let z = zk_config(&config.mode).ok_or(RecoveryError::ModeHasNoZk)?;
         let mut attempt = require_attempt(e, &account)?;
+        if !is_live(e, &attempt) {
+            return Err(RecoveryError::NoLiveAttempt);
+        }
         if RecoveryStorage::get_nullifier(e, &nullifier).unwrap_or(false) {
             return Err(RecoveryError::NullifierAlreadySpent);
         }

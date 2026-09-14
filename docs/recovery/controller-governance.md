@@ -203,6 +203,9 @@ prove):
   cancel, a ZK proof alone does not cancel, and only once both factors are
   present does the attempt cancel (§2.2).
 - A cancelled attempt allows a fresh one afterward.
+- A cancellation factor (guardian or ZK) arriving after an attempt has
+  already completed is refused, not silently accepted — a completed attempt
+  can never be flipped back to `Cancelled`.
 - A completed attempt's nullifier is never released back to unspent by a
   later `begin_*_attempt` call — only a cancelled or expired attempt's
   nullifier is released.

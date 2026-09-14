@@ -20,7 +20,10 @@ use perch_recovery::{PerchRecovery, PerchRecoveryClient};
 use perch_testkit::{no_recovery_evidence, Bootstrap, World, FIXTURE_NETWORK};
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger};
-use soroban_sdk::{crypto::Hash, vec, Address, Bytes, BytesN, IntoVal, Map, Symbol};
+use soroban_sdk::{
+    contract, contractimpl, crypto::Hash, vec, Address, Bytes, BytesN, Env, IntoVal, Map, Symbol,
+    Vec,
+};
 use stellar_accounts::smart_account::{do_check_auth, AuthPayload};
 
 const ADMIN_VERIFIER: &str = "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN";
@@ -81,6 +84,80 @@ fn target_doc(controller: &Address, guardians: &[Address], quorum: u32) -> std::
     enroll_doc(controller, guardians, quorum).replace(
         &format!(r#""verifier": "{ADMIN_VERIFIER}", "key": "{ADMIN_KEY}""#),
         &format!(r#""verifier": "{NEW_ADMIN_VERIFIER}", "key": "{NEW_ADMIN_KEY}""#),
+    )
+}
+
+/// A minimal `ZkVerifierInterface`-shaped mock: no real circuit, per
+/// `docs/recovery/controller-governance.md`'s "ZK adapter scope". Validity is
+/// controlled purely by whether the caller passed a non-empty `proof`, so
+/// tests can exercise the controller's own evidence-tracking/gating logic
+/// (which factors it requires, and when) without a real verifier.
+#[contract]
+struct MockZkVerifier;
+
+#[contractimpl]
+impl MockZkVerifier {
+    pub fn verify_proof(
+        _e: &Env,
+        _statement: BytesN<32>,
+        _nullifier: BytesN<32>,
+        proof: Bytes,
+        _pool: Vec<Address>,
+    ) -> bool {
+        proof.len() > 0
+    }
+}
+
+/// Same document shape as `enroll_doc`/`target_doc`, but with an arbitrary
+/// recovery `mode` block — for zk-only/combined-mode tests that don't need
+/// guardian-only's specific JSON.
+fn enroll_doc_with_mode(controller: &Address, mode_json: &str) -> std::string::String {
+    format!(
+        r#"{{
+  "version": 1,
+  "network": "{FIXTURE_NETWORK}",
+  "signers": [
+    {{ "id": "admin", "verifier": "{ADMIN_VERIFIER}", "key": "{ADMIN_KEY}" }}
+  ],
+  "rules": [
+    {{ "name": "admin", "scope": {{ "type": "self-admin" }},
+       "principals": {{ "type": "all", "signers": ["admin"] }} }}
+  ],
+  "recovery": {{
+    "profile": "loss",
+    "mode": {mode_json},
+    "controller": "{controller}",
+    "replaceable": ["admin"],
+    "delay-ledgers": 5,
+    "expiry-ledgers": 1000,
+    "max-cancels": 3,
+    "pending-activity": "continue"
+  }}
+}}"#,
+        controller = strkey(controller),
+    )
+}
+
+fn zk_only_mode_json(verifier: &Address) -> std::string::String {
+    format!(
+        r#"{{ "type": "zk-only", "verifier": "{}", "circuit-id": "ab" }}"#,
+        strkey(verifier)
+    )
+}
+
+fn combined_mode_json(
+    verifier: &Address,
+    guardians: &[Address],
+    quorum: u32,
+) -> std::string::String {
+    let guardian_list = guardians
+        .iter()
+        .map(|g| format!("\"{}\"", strkey(g)))
+        .collect::<std::vec::Vec<_>>()
+        .join(",");
+    format!(
+        r#"{{ "type": "combined", "guardians": [{guardian_list}], "quorum": {quorum}, "verifier": "{}", "circuit-id": "ab" }}"#,
+        strkey(verifier)
     )
 }
 
@@ -356,4 +433,149 @@ fn protected_reconfigure_requires_guardian_evidence_admin_alone_is_refused() {
     // Nothing changed: still enrolled.
     let recovery = PerchRecoveryClient::new(&w.env, &controller);
     assert!(recovery.get_config(&w.account).is_some());
+}
+
+#[test]
+fn zk_only_cancellation_requires_a_valid_proof() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let verifier = w.env.register(MockZkVerifier, ());
+
+    let doc = enroll_doc_with_mode(&controller, &zk_only_mode_json(&verifier));
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let target_hash: BytesN<32> = w
+        .env
+        .crypto()
+        .sha256(&Bytes::from_slice(&w.env, b"target"))
+        .to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+
+    let invalid_proof = Bytes::new(&w.env);
+    let nullifier1 = BytesN::from_array(&w.env, &[1u8; 32]);
+    assert!(recovery
+        .try_submit_zk_cancel(&w.account, &nullifier1, &invalid_proof)
+        .is_err());
+    assert!(recovery.has_pending(&w.account));
+
+    let valid_proof = Bytes::from_array(&w.env, &[1u8; 1]);
+    let nullifier2 = BytesN::from_array(&w.env, &[2u8; 32]);
+    recovery.submit_zk_cancel(&w.account, &nullifier2, &valid_proof);
+    assert!(!recovery.has_pending(&w.account));
+}
+
+#[test]
+fn combined_cancellation_guardian_quorum_alone_does_not_cancel() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let verifier = w.env.register(MockZkVerifier, ());
+    let g1 = Address::generate(&w.env);
+    let g2 = Address::generate(&w.env);
+
+    let doc = enroll_doc_with_mode(
+        &controller,
+        &combined_mode_json(&verifier, &[g1.clone(), g2.clone()], 2),
+    );
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let target_hash: BytesN<32> = w
+        .env
+        .crypto()
+        .sha256(&Bytes::from_slice(&w.env, b"target"))
+        .to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+
+    // Guardian quorum alone does not cancel a `Combined`-mode attempt.
+    recovery.submit_guardian_cancel(&w.account, &g1);
+    recovery.submit_guardian_cancel(&w.account, &g2);
+    assert!(recovery.has_pending(&w.account));
+
+    // The ZK factor completes the requirement.
+    let valid_proof = Bytes::from_array(&w.env, &[1u8; 1]);
+    let nullifier = BytesN::from_array(&w.env, &[3u8; 32]);
+    recovery.submit_zk_cancel(&w.account, &nullifier, &valid_proof);
+    assert!(!recovery.has_pending(&w.account));
+}
+
+#[test]
+fn combined_cancellation_zk_proof_alone_does_not_cancel() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let verifier = w.env.register(MockZkVerifier, ());
+    let g1 = Address::generate(&w.env);
+    let g2 = Address::generate(&w.env);
+
+    let doc = enroll_doc_with_mode(
+        &controller,
+        &combined_mode_json(&verifier, &[g1.clone(), g2.clone()], 2),
+    );
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let target_hash: BytesN<32> = w
+        .env
+        .crypto()
+        .sha256(&Bytes::from_slice(&w.env, b"target"))
+        .to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+
+    // A ZK cancellation proof alone does not cancel a `Combined`-mode attempt.
+    let valid_proof = Bytes::from_array(&w.env, &[1u8; 1]);
+    let nullifier = BytesN::from_array(&w.env, &[4u8; 32]);
+    recovery.submit_zk_cancel(&w.account, &nullifier, &valid_proof);
+    assert!(recovery.has_pending(&w.account));
+
+    // The guardian factor completes the requirement.
+    recovery.submit_guardian_cancel(&w.account, &g1);
+    recovery.submit_guardian_cancel(&w.account, &g2);
+    assert!(!recovery.has_pending(&w.account));
+}
+
+#[test]
+fn a_completed_attempts_nullifier_is_never_released() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let verifier = w.env.register(MockZkVerifier, ());
+
+    let doc = enroll_doc_with_mode(&controller, &zk_only_mode_json(&verifier));
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let rule_id = recovery_rule_id(&w);
+    let target = enroll_doc_with_mode(&controller, &zk_only_mode_json(&verifier)).replace(
+        &format!(r#""verifier": "{ADMIN_VERIFIER}", "key": "{ADMIN_KEY}""#),
+        &format!(r#""verifier": "{NEW_ADMIN_VERIFIER}", "key": "{NEW_ADMIN_KEY}""#),
+    );
+    let target_bytes = Bytes::from_slice(&w.env, target.as_bytes());
+    let target_hash: BytesN<32> = w.env.crypto().sha256(&target_bytes).to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+
+    let proof = Bytes::from_array(&w.env, &[1u8; 1]);
+    let nullifier = BytesN::from_array(&w.env, &[5u8; 32]);
+    recovery.submit_zk_proof(&w.account, &nullifier, &proof);
+    let attempt = recovery.get_attempt(&w.account).unwrap();
+    w.env
+        .ledger()
+        .with_mut(|l| l.sequence_number = attempt.executable_after);
+    assert!(complete_via_rule(&w, &w.account, rule_id, &target_bytes).is_ok());
+
+    // A fresh attempt after completion must not resurrect the spent nullifier.
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+    assert!(recovery
+        .try_submit_zk_proof(&w.account, &nullifier, &proof)
+        .is_err());
 }

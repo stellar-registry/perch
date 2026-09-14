@@ -1,10 +1,11 @@
 {
   "generators": {
-    "address": 5,
+    "address": 6,
     "nonce": 0,
     "mux_id": 0
   },
   "auth": [
+    [],
     [],
     [],
     [],
@@ -23,7 +24,7 @@
               "function_name": "apply_doc",
               "args": [
                 {
-                  "bytes": "7b0a20202276657273696f6e223a20312c0a2020226e6574776f726b223a20225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c0a2020227369676e657273223a205b0a202020207b20226964223a202261646d696e222c20227665726966696572223a202243443449463735444e514a4b4354333550414a4151445057334b333337454b36534a5a444d5145564c58414836354b375a565a4d4c58594e222c20226b6579223a20223034356532613735383962373363313964353334316366313261633063356636633435633239386434633230303032633739346461616461666462383366333566356265323339363336343864376161636366356532373338303366326665633761386630656234643438343563396238396139373262346130393239386231376522207d0a20205d2c0a20202272756c6573223a205b0a202020207b20226e616d65223a202261646d696e222c202273636f7065223a207b202274797065223a202273656c662d61646d696e22207d2c0a20202020202020227072696e636970616c73223a207b202274797065223a2022616c6c222c20227369676e657273223a205b2261646d696e225d207d207d0a20205d2c0a2020227265636f76657279223a207b0a202020202270726f66696c65223a20226c6f7373222c0a20202020226d6f6465223a207b202274797065223a2022677561726469616e2d6f6e6c79222c2022677561726469616e73223a205b224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d225d2c202271756f72756d223a2032207d2c0a2020202022636f6e74726f6c6c6572223a202243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c0a20202020227265706c61636561626c65223a205b2261646d696e225d2c0a202020202264656c61792d6c656467657273223a20352c0a20202020226578706972792d6c656467657273223a20313030302c0a20202020226d61782d63616e63656c73223a20332c0a202020202270656e64696e672d6163746976697479223a2022636f6e74696e7565220a20207d0a7d"
+                  "bytes": "7b0a20202276657273696f6e223a20312c0a2020226e6574776f726b223a20225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c0a2020227369676e657273223a205b0a202020207b20226964223a202261646d696e222c20227665726966696572223a202243443449463735444e514a4b4354333550414a4151445057334b333337454b36534a5a444d5145564c58414836354b375a565a4d4c58594e222c20226b6579223a20223034356532613735383962373363313964353334316366313261633063356636633435633239386434633230303032633739346461616461666462383366333566356265323339363336343864376161636366356532373338303366326665633761386630656234643438343563396238396139373262346130393239386231376522207d0a20205d2c0a20202272756c6573223a205b0a202020207b20226e616d65223a202261646d696e222c202273636f7065223a207b202274797065223a202273656c662d61646d696e22207d2c0a20202020202020227072696e636970616c73223a207b202274797065223a2022616c6c222c20227369676e657273223a205b2261646d696e225d207d207d0a20205d2c0a2020227265636f76657279223a207b0a202020202270726f66696c65223a20226c6f7373222c0a20202020226d6f6465223a207b202274797065223a2022636f6d62696e6564222c2022677561726469616e73223a205b22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414d445234225d2c202271756f72756d223a20322c20227665726966696572223a20224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c2022636972637569742d6964223a2022616222207d2c0a2020202022636f6e74726f6c6c6572223a202243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c0a20202020227265706c61636561626c65223a205b2261646d696e225d2c0a202020202264656c61792d6c656467657273223a20352c0a20202020226578706972792d6c656467657273223a20313030302c0a20202020226d61782d63616e63656c73223a20332c0a202020202270656e64696e672d6163746976697479223a2022636f6e74696e7565220a20207d0a7d"
                 },
                 {
                   "map": [
@@ -62,50 +63,7 @@
     ],
     [],
     [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "function_name": "submit_guardian_approval",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
-              "function_name": "submit_guardian_cancel",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
+    [],
     [],
     [
       [
@@ -129,7 +87,28 @@
         }
       ]
     ],
-    [],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "function_name": "submit_guardian_cancel",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
     []
   ],
   "ledger": {
@@ -491,7 +470,7 @@
                         "symbol": "AppliedDoc"
                       },
                       "val": {
-                        "bytes": "59b02b26bde1c27a8c5cb2bf32818abc985ccec56071cde0c1a3a82a11dab563"
+                        "bytes": "5f9b4e09bbfd1ef6dbf8e512fcb1df34b35ae0bc9837a90aec541e094a3ec4f8"
                       }
                     },
                     {
@@ -648,7 +627,7 @@
                       "symbol": "id"
                     },
                     "val": {
-                      "u64": "1"
+                      "u64": "0"
                     }
                   },
                   {
@@ -678,7 +657,7 @@
                     "val": {
                       "vec": [
                         {
-                          "symbol": "CollectingEvidence"
+                          "symbol": "Cancelled"
                         }
                       ]
                     }
@@ -688,7 +667,7 @@
                       "symbol": "target_doc_hash"
                     },
                     "val": {
-                      "bytes": "c7a523d3221866b9b6753ade298ddfe37f94e0a689dee3b41a8981540e101ac5"
+                      "bytes": "34a04005bcaf206eec990bd9637d9fdb6725e0a0c0d4aebf003f17f4c956eb5c"
                     }
                   },
                   {
@@ -735,10 +714,10 @@
               "val": {
                 "vec": [
                   {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                   },
                   {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                   }
                 ]
               }
@@ -842,7 +821,7 @@
                     "val": {
                       "vec": [
                         {
-                          "symbol": "GuardianOnly"
+                          "symbol": "Combined"
                         },
                         {
                           "map": [
@@ -853,10 +832,10 @@
                               "val": {
                                 "vec": [
                                   {
-                                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
+                                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                                   },
                                   {
-                                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                                   }
                                 ]
                               }
@@ -867,6 +846,34 @@
                               },
                               "val": {
                                 "u32": 2
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "map": [
+                            {
+                              "key": {
+                                "symbol": "circuit_id"
+                              },
+                              "val": {
+                                "bytes": "ab"
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "pool"
+                              },
+                              "val": {
+                                "vec": []
+                              }
+                            },
+                            {
+                              "key": {
+                                "symbol": "verifier"
+                              },
+                              "val": {
+                                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                               }
                             }
                           ]
@@ -937,7 +944,68 @@
               },
               "durability": "persistent",
               "val": {
-                "u64": "2"
+                "u64": "1"
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Nullifier"
+                  },
+                  {
+                    "bytes": "0404040404040404040404040404040404040404040404040404040404040404"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bool": true
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "ZkCancelVerified"
+                  },
+                  {
+                    "vec": [
+                      {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                      },
+                      {
+                        "u64": "0"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "bool": true
               }
             }
           },
@@ -975,18 +1043,21 @@
             "contract_data": {
               "ext": "v0",
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "1033654523790656264"
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
                 }
-              },
-              "durability": "temporary",
-              "val": "void"
+              }
             }
           },
           "ext": "v0"
         },
-        "live_until": 6311999
+        "live_until": 4095
       },
       {
         "entry": {
@@ -994,7 +1065,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
               "key": {
                 "ledger_key_nonce": {
                   "nonce": "5541220902715666415"
@@ -1014,10 +1085,10 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "4837995959683129791"
+                  "nonce": "1033654523790656264"
                 }
               },
               "durability": "temporary",

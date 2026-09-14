@@ -180,8 +180,11 @@ own document — never anything at the existing address.
 
 ## Adversarial properties proven end-to-end
 
-`crates/integration-tests/tests/recovery.rs` (guardian-only mode, driving
-the real `do_check_auth`/`Policy::enforce` path):
+`crates/integration-tests/tests/recovery.rs` (guardian-only mode for
+completion, driving the real `do_check_auth`/`Policy::enforce` path;
+guardian-only/ZK-only/`Combined` for cancellation, the latter two against a
+mock verifier — see "ZK adapter scope" for what that does and doesn't
+prove):
 
 - No attempt at all → completion refused.
 - Below guardian quorum → completion refused, and does not promote.
@@ -195,7 +198,14 @@ the real `do_check_auth`/`Policy::enforce` path):
   only once quorum is actually reached.
 - Cancellation evidence is a separate domain from initiation evidence — an
   initiation approval does not count toward cancelling the same attempt.
+- `Combined`-mode cancellation requires BOTH a guardian quorum AND a valid ZK
+  cancellation proof for the same attempt — guardian quorum alone does not
+  cancel, a ZK proof alone does not cancel, and only once both factors are
+  present does the attempt cancel (§2.2).
 - A cancelled attempt allows a fresh one afterward.
+- A completed attempt's nullifier is never released back to unspent by a
+  later `begin_*_attempt` call — only a cancelled or expired attempt's
+  nullifier is released.
 - A `Protected` reconfiguration (here: disabling recovery entirely) with
   ordinary admin authorization alone is refused.
 

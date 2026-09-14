@@ -370,6 +370,10 @@ impl PerchRecovery {
 
     /// A guardian approves cancellation of this account's identified attempt.
     /// Own action domain — initiation approvals never count here (§2.2).
+    /// Only actually cancels once the mode's full cancellation evidence set
+    /// is present: for `Combined`, reaching guardian quorum here is not
+    /// enough by itself — a verified ZK cancellation proof is also required
+    /// (see `cancellation_satisfied`).
     pub fn submit_guardian_cancel(
         e: &Env,
         account: Address,
@@ -388,18 +392,24 @@ impl PerchRecovery {
             return Err(RecoveryError::AlreadyApproved);
         }
         tally.push_back(guardian);
-        if tally.len() >= g.quorum {
-            cancel_attempt(e, &account, &mut attempt)?;
-        } else {
-            RecoveryStorage::set_cancel_tally(e, &key, &tally);
-            RecoveryStorage::extend_cancel_tally_ttl(e, &key, TTL_THRESHOLD, TTL_EXTEND);
+        RecoveryStorage::set_cancel_tally(e, &key, &tally);
+        RecoveryStorage::extend_cancel_tally_ttl(e, &key, TTL_THRESHOLD, TTL_EXTEND);
+        let guardian_quorum_reached = tally.len() >= g.quorum;
+        if guardian_quorum_reached {
+            let zk_cancel_verified = RecoveryStorage::get_zk_cancel_verified(e, &key).unwrap_or(false);
+            if cancellation_satisfied(&config.mode, true, zk_cancel_verified) {
+                cancel_attempt(e, &account, &mut attempt)?;
+            }
         }
         Ok(())
     }
 
     /// Submit a ZK cancellation proof for this account's identified attempt.
     /// Own action domain (`Action::Cancel`) — an initiation proof never
-    /// satisfies this, and vice versa.
+    /// satisfies this, and vice versa. Only actually cancels once the mode's
+    /// full cancellation evidence set is present: for `Combined`, a valid
+    /// proof here is not enough by itself — a guardian quorum on this same
+    /// attempt is also required (see `cancellation_satisfied`).
     pub fn submit_zk_cancel(
         e: &Env,
         account: Address,
@@ -426,8 +436,22 @@ impl PerchRecovery {
         if !ZkVerifierClient::new(e, &z.verifier).verify_proof(&stmt, &nullifier, &proof, &z.pool) {
             return Err(RecoveryError::ZkProofInvalid);
         }
-        cancel_attempt(e, &account, &mut attempt)?;
         RecoveryStorage::set_nullifier(e, &nullifier, &true);
+        let key = (account.clone(), attempt.id);
+        RecoveryStorage::set_zk_cancel_verified(e, &key, &true);
+        RecoveryStorage::extend_zk_cancel_verified_ttl(e, &key, TTL_THRESHOLD, TTL_EXTEND);
+        let guardian_quorum_reached = match guardian_set(&config.mode) {
+            Some(g) => {
+                RecoveryStorage::get_cancel_tally(e, &key)
+                    .unwrap_or_else(|| Vec::new(e))
+                    .len()
+                    >= g.quorum
+            }
+            None => false,
+        };
+        if cancellation_satisfied(&config.mode, guardian_quorum_reached, true) {
+            cancel_attempt(e, &account, &mut attempt)?;
+        }
         Ok(())
     }
 
@@ -515,6 +539,22 @@ fn initiation_satisfied(mode: &CompiledRecoveryMode, attempt: &Attempt) -> bool 
     }
 }
 
+/// Mirrors `initiation_satisfied` for the cancellation domain (§2.2):
+/// `GuardianOnly`/`ZkOnly` need only their own factor, `Combined` needs both
+/// a guardian quorum AND a valid ZK cancellation proof for the same attempt —
+/// neither factor alone may cancel a `Combined`-mode attempt.
+fn cancellation_satisfied(
+    mode: &CompiledRecoveryMode,
+    guardian_quorum_reached: bool,
+    zk_cancel_verified: bool,
+) -> bool {
+    match mode {
+        CompiledRecoveryMode::GuardianOnly(_) => guardian_quorum_reached,
+        CompiledRecoveryMode::ZkOnly(_) => zk_cancel_verified,
+        CompiledRecoveryMode::Combined(_, _) => guardian_quorum_reached && zk_cancel_verified,
+    }
+}
+
 fn maybe_promote(e: &Env, config: &CompiledRecoveryConfig, attempt: &mut Attempt) {
     if attempt.state == AttemptState::CollectingEvidence
         && initiation_satisfied(&config.mode, attempt)
@@ -550,10 +590,16 @@ fn begin_attempt(
         if is_live(e, &existing) {
             return Err(RecoveryError::AttemptPending);
         }
-        // Stale (terminal or expired): release its nullifier before
-        // replacing it, so the same secret can be used again.
-        if let Some(n) = existing.nullifier.first() {
-            RecoveryStorage::set_nullifier(e, &n, &false);
+        // Stale (terminal or expired), and not a completed attempt: release
+        // its nullifier before replacing it, so the same secret can be used
+        // again. A `Completed` attempt's nullifier stays spent permanently
+        // (see `Attempt::nullifier`'s documented invariant) — completion
+        // itself already extends the nullifier's own TTL as the durable
+        // record of that.
+        if existing.state != AttemptState::Completed {
+            if let Some(n) = existing.nullifier.first() {
+                RecoveryStorage::set_nullifier(e, &n, &false);
+            }
         }
     }
     let id = RecoveryStorage::get_next_attempt_id(e, &account).unwrap_or(0);

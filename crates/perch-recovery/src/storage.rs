@@ -28,6 +28,12 @@ pub struct RecoveryStorage {
     /// deliberately separate domain from `Attempt::guardian_approvals`
     /// (initiation evidence never counts toward cancellation, per §2.2).
     pub cancel_tally: PersistentMap<(Address, u64), Vec<Address>>,
+    /// Whether a valid ZK cancellation proof has been verified for one
+    /// `(account, attempt_id)`. Tracked separately from `cancel_tally` so
+    /// `Combined` mode can require both factors before cancelling (§2.2) —
+    /// each factor's own evidence is recorded independently and
+    /// `cancel_attempt` only fires once the mode's full set is present.
+    pub zk_cancel_verified: PersistentMap<(Address, u64), bool>,
     /// Permanent, append-only fingerprints of every credential this account
     /// has ever had recovery-revoked. A later attempt — even from an old
     /// baseline — must never reintroduce one of these.

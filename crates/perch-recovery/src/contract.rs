@@ -399,7 +399,8 @@ impl PerchRecovery {
         RecoveryStorage::extend_cancel_tally_ttl(e, &key, TTL_THRESHOLD, TTL_EXTEND);
         let guardian_quorum_reached = tally.len() >= g.quorum;
         if guardian_quorum_reached {
-            let zk_cancel_verified = RecoveryStorage::get_zk_cancel_verified(e, &key).unwrap_or(false);
+            let zk_cancel_verified =
+                RecoveryStorage::get_zk_cancel_verified(e, &key).unwrap_or(false);
             if cancellation_satisfied(&config.mode, true, zk_cancel_verified) {
                 cancel_attempt(e, &account, &mut attempt)?;
             }

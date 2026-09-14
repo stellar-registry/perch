@@ -104,7 +104,7 @@ impl MockZkVerifier {
         proof: Bytes,
         _pool: Vec<Address>,
     ) -> bool {
-        proof.len() > 0
+        !proof.is_empty()
     }
 }
 
@@ -587,13 +587,13 @@ fn guardian_cancellation_is_refused_once_the_attempt_has_completed() {
     let recovery = PerchRecoveryClient::new(&w.env, &controller);
     let g1 = Address::generate(&w.env);
 
-    let doc = enroll_doc(&controller, &[g1.clone()], 1);
+    let doc = enroll_doc(&controller, std::slice::from_ref(&g1), 1);
     w.account_client().apply_doc(
         &Bytes::from_slice(&w.env, doc.as_bytes()),
         &no_recovery_evidence(&w.env),
     );
     let rule_id = recovery_rule_id(&w);
-    let target = target_doc(&controller, &[g1.clone()], 1);
+    let target = target_doc(&controller, std::slice::from_ref(&g1), 1);
     let target_bytes = Bytes::from_slice(&w.env, target.as_bytes());
     let target_hash: BytesN<32> = w.env.crypto().sha256(&target_bytes).to_bytes();
     let replaceable = recovery.get_config(&w.account).unwrap().replaceable;

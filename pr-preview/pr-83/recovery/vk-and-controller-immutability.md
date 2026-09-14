@@ -1,11 +1,11 @@
 # VK, controller, and code immutability review
 
-Per the authoritative decision record §5.4 ("Constructorless verifier and
-explicit upgrades") and the captain's instruction to review "code and VK
-immutability, controller governance," this document states the invariant
-this stage requires, shows the precedent already established elsewhere in
-this repo, and states exactly how the new `perch-recovery` crate and any ZK
-verifier meet it.
+Perch's constructorless-registry model requires verification code and
+configuration to stay immutable once deployed, with upgrades happening only
+through explicit adoption of a new instance — never in-place mutation. This
+document states that invariant, shows the precedent already established
+elsewhere in this repo, and states exactly how `perch-recovery` and any ZK
+verifier it names meet it.
 
 ## The invariant
 
@@ -15,8 +15,8 @@ verifier meet it.
 > account's own document — never rewriting code, admin state, or verification
 > configuration at an already-adopted address.
 
-Three consequences follow directly, and are treated as hard requirements
-for anything this stage ships:
+Three consequences follow directly, and are treated as hard requirements for
+`perch-recovery` and anything it names:
 
 1. **No constructor that sets mutable configuration.** If a contract's
    verification behavior (a VK, a circuit identity, a policy the controller
@@ -25,11 +25,10 @@ for anything this stage ships:
    deployer, the artifact is not immutable, no matter how it was deployed.
 2. **No admin/owner entry point at all.** An "admin-gated upgrade" is not
    the same guarantee as immutability — it's a promise that the admin key
-   won't be misused, which is exactly the kind of trust the "no mutable
-   shared controller... may silently bypass commitment" language in §5.4
-   rules out. The bar is that there is **nothing to misuse**: no pause
-   switch, no fee/parameter setter, no logic branch keyed by any mutable
-   flag.
+   won't be misused, and a mutable shared controller with such a key could
+   silently bypass whatever commitment it's supposed to enforce. The bar is
+   that there is **nothing to misuse**: no pause switch, no fee/parameter
+   setter, no logic branch keyed by any mutable flag.
 3. **Identity is content, not address history.** Deploying at a
    content-addressed address (`deployer(stateless_registry_id,
    sha256(wasm))`, as `perch-doc-compiler` and `perch-interpreter` already
@@ -42,7 +41,7 @@ for anything this stage ships:
 ## Precedent already in this repo
 
 `perch-doc-compiler` and `perch-interpreter` already meet this bar today,
-and are the model this stage follows rather than invents:
+and are the model `perch-recovery` follows rather than invents:
 
 ```rust
 #[cfg(feature = "contract")]
@@ -68,7 +67,7 @@ from a build-time-pinned WASM hash — see
 makes a schema change require a new deployed instance rather than an
 in-place change.
 
-## What this stage adds, and how each piece meets the bar
+## How `perch-recovery` and a ZK verifier meet the bar
 
 - **The recovery controller (`perch-recovery`).** No constructor beyond
   whatever the Soroban toolchain requires for deployment plumbing; no
@@ -80,21 +79,21 @@ in-place change.
   a controller-wide admin key. See
   [`controller-governance.md`](controller-governance.md) for the exact
   entry points and their authorization requirements.
-- **A ZK verifier, if a deployment enrolls a ZK-involving mode.** The bar
-  from §5.4 is explicit: *"Embedding the VK and proof-format identity in the
-  artifact is a straightforward candidate... Merely removing a constructor
-  while retaining mutable verification configuration is insufficient."*
-  Concretely, any verifier a `ZkVerifierConfig.verifier` names must:
+- **A ZK verifier, if a deployment enrolls a ZK-involving mode.** Embedding
+  the VK and proof-format identity in the artifact is the straightforward
+  way to meet the bar above — merely removing a constructor while retaining
+  mutable verification configuration would not be enough. Concretely, any
+  verifier a `ZkVerifierConfig.verifier` names must:
   - embed its verification key as a compiled-in constant (e.g.
     `include_bytes!` at build time), never a storage value a constructor or
     any other entry point writes;
   - expose no entry point that changes which VK or circuit it accepts;
   - commit to its circuit/proof-format identity in a form the account's own
-    document also carries (`ZkVerifierConfig.circuit_id`, §5.4's "defense in
-    depth" binding) — so a verifier address confused with another still
-    fails the circuit-identity check, not just the address check.
+    document also carries (`ZkVerifierConfig.circuit_id`, a defense-in-depth
+    binding) — so a verifier address confused with another still fails the
+    circuit-identity check, not just the address check.
 
-  This stage does not ship a production circuit or its verifier (see
+  This crate does not ship a production circuit or its verifier (see
   [`controller-governance.md`](controller-governance.md)'s "ZK adapter
   scope" section for why that's a deliberate, documented boundary, not an
   oversight) — but the controller's ZK adapter interface is written against

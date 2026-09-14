@@ -31,4 +31,10 @@ This is the central intuition behind the repository's [enforceability discussion
 
 **Exercise:** Would limiting the amount in each call enforce “at most 100 in total”?
 
-**Answer:** No. Multiple individually permitted calls can exceed the total. Use cumulative accounting, and check every alternative route that could authorize spending.
+<details>
+<summary>Reveal the answer</summary>
+
+No. Multiple individually permitted calls can exceed the total. Use cumulative accounting, and check every alternative route that could authorize spending.
+
+
+</details>

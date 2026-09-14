@@ -154,7 +154,11 @@ jobs:
       - run: npm run build
       - run: npm test
       - name: Check book example against the shared fixture
+        if: matrix.package == 'perch-js'
         run: node ../../book/examples/ci-publish.mjs
+      - name: Check book teaching models
+        if: matrix.package == 'perch-js'
+        run: node --test ../../book/tests/*.test.cjs
 
   zizmor:
     runs-on: ubuntu-latest

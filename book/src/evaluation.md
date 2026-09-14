@@ -18,6 +18,12 @@ A wrong address gives F. A missing argument or the wrong argument type gives U. 
 
 If a decode failure were treated as false, negating it would produce true. Perch instead defines `Not U = U`. A failure to understand input never becomes permission merely because someone negated a predicate.
 
+<div class="perch-lab" data-perch-lab="logic">
+<h3>Explore True, False, and Unknown</h3>
+<p>Predict the result, then switch between AND, OR, and NOT. These are program-level combinations; the ordinary document constraints combine with AND.</p>
+<p class="lab-fallback">NOT Unknown is Unknown and denies. True OR Unknown is True and allows. True AND Unknown is Unknown and denies. Enable JavaScript for the controls; the explanation and examples below also work without them.</p>
+</div>
+
 The complete combination table is small:
 
 | A | B | A AND B | A OR B |
@@ -47,6 +53,15 @@ All(3)
 For a valid invocation the first three operations push T, T, T; `All(3)` replaces them with T. If the publisher argument is missing, they push T, T, U; the final result is U and authorization is denied. The contract address and ledger cutoff are not missing checks: the enclosing account rule handles them.
 
 The frozen program format also has `Any`, `Not`, and further typed comparisons. Those are lower-level operations, not arbitrary JSON expressions available in `PolicyDoc`.
+
+<div class="perch-lab" data-perch-lab="trace">
+<h3>Watch the stack change</h3>
+<p>Use Next step to see each check push a verdict, then watch All combine them. Change the input to start a new trace. This is an illustration of the fixed CI program, not the Rust or Lean evaluator.</p>
+<p class="lab-fallback">For a missing publisher: MinSigners pushes T, FnIn pushes T, ArgAddrIsSelf pushes U, and All(3) leaves U. The root denies. Enable JavaScript for the controls; the explanation and examples below also work without them.</p>
+<script type="application/json" data-policy-fixture>
+{{#include ../../testdata/ci-publish-delegated.json}}
+</script>
+</div>
 
 ## Why validation comes first
 

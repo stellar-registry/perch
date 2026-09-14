@@ -8,9 +8,19 @@ Our running example is a release pipeline. A CI key should publish software on b
 
 ## How to read this book
 
+Choose a route based on what you want to do:
+
+| Your goal | Start here | Try this |
+|---|---|---|
+| Read or author a policy | [Your first policy](first-policy.md) → [The language](language.md) | Make the CI rule reject a call, then explain why |
+| Understand the runtime | [Evaluation](evaluation.md) | Step through a missing argument and compare AND with OR |
+| Assess a guarantee | [Formalization](formalization.md) → [Assurance](assurance.md) | Identify which claim the lowering theorem actually proves |
+
+The interactive examples run locally in your browser and need no wallet, installation, or keys. They are small teaching models, not production authorization tools. The text and revealable exercise answers remain readable without JavaScript and in the print view.
+
 Start with [your first policy](first-policy.md), then follow the language chapters in order. Each chapter adds to the same mental model. The second half explains the formalization: a precise, executable description of behavior and proofs about that description. You can read it without learning to write Lean.
 
-For a review, keep the [language reference](reference.md) and [assurance boundaries](assurance.md) open beside the document. Exercises are short thought experiments with answers, and require no wallet or deployed account.
+For a review, keep the [language reference](reference.md) and [assurance boundaries](assurance.md) open beside the document. Try each exercise before revealing its answer. Knowledge checks explain mistakes so you can revise your answer.
 
 The book describes the code in this checkout. It is a guide, not a replacement for [CANONICAL.md](https://github.com/stellar-registry/perch/blob/main/CANONICAL.md), the normative canonical-format specification. Features can exist in the document schema before every compiler or proof supports them. We call out those differences explicitly.
 

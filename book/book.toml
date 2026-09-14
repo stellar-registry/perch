@@ -11,6 +11,8 @@ create-missing = false
 extra-watch-dirs = ["examples", "../testdata"]
 
 [output.html]
+additional-js = ["theme/lab-model.js", "theme/labs.js"]
+additional-css = ["theme/labs.css"]
 # Relative URLs also work under /pr-preview/pr-N/book/.
 site-url = "./"
 git-repository-url = "https://github.com/stellar-registry/perch"

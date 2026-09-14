@@ -35,4 +35,10 @@ The encoding abstracts invocation data and does not simulate live chain state or
 
 **Exercise:** If `only-calls` succeeds for the registry, can the document still allow calls to a token contract?
 
-**Answer:** Yes. The query is scoped to the supplied registry address. Review the other scopes or ask additional questions about them.
+<details>
+<summary>Reveal the answer</summary>
+
+Yes. The query is scoped to the supplied registry address. Review the other scopes or ask additional questions about them.
+
+
+</details>

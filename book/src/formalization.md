@@ -10,7 +10,7 @@ Lean is a programming language and proof assistant. Its kernel checks that a pro
 
 The source in `formal/PerchFormal/Theorems.lean` contains this statement (the proof body is omitted here):
 
-```lean
+```text
 theorem lowering_preserves (r : DocRule) (inp : Inputs)
     (hcap : (leafOps r).length ≤ MAX_STACK_DEPTH) :
     eval (buildProgram r) inp = docSemantics r inp
@@ -21,6 +21,58 @@ Read it as: take any modeled rule `r` and invocation inputs `inp`. Assume the ge
 `DocRule` and `Inputs` name data types. `hcap` names an assumption. The colon introduces the proposition being proved. The equality compares two ways of computing a result. The checked proof following `:= by` explains to Lean why that equality holds.
 
 The important separation is that `docSemantics` describes predicates directly, while `buildProgram` produces operations for a stack machine. A bug in the translation cannot simply redefine both sides unnoticed: the proof must connect them.
+
+## Take the statement apart
+
+Open the part you want to understand. The three parts work together: a domain of inputs, a condition, and a conclusion.
+
+<details>
+<summary>For which inputs? — r : DocRule and inp : Inputs</summary>
+
+For every rule and invocation represented by these Lean types. The modeled rule is a slice of the full policy, so this is not a statement about arbitrary deployed accounts.
+
+</details>
+
+<details>
+<summary>Under what condition? — hcap</summary>
+
+The generated leaves must fit the stack bound. A proof with this assumption does not establish the conclusion for programs that exceed the bound. Rust revalidates generated programs separately.
+
+</details>
+
+<details>
+<summary>What follows? — the equality</summary>
+
+Two ways of computing a verdict agree: reading the modeled predicates directly and running the translated program. This rules out a mismatch inside that modeled translation. It does not establish that the policy expresses the author's intended permissions.
+
+</details>
+
+<div class="perch-lab" data-perch-lab="quiz">
+<h3>Can you spot the proof boundary?</h3>
+<p class="lab-fallback">The theorem establishes agreement within its model and stack bound. It does not prove business intent or cumulative accounting.</p>
+<script type="application/json" data-quiz>
+{
+  "question": "Which claim is supported by lowering_preserves?",
+  "answers": [
+    {
+      "text": "Within the model and stack bound, lowering preserves the rule verdict.",
+      "correct": true,
+      "feedback": "The equality connects the modeled rule meaning to the modeled generated program under hcap."
+    },
+    {
+      "text": "Every deployed Perch account always enforces the right business policy.",
+      "correct": false,
+      "feedback": "Intent, deployment, authentication, and the model-to-Rust connection are outside this theorem."
+    },
+    {
+      "text": "Cumulative spending caps can never be exceeded.",
+      "correct": false,
+      "feedback": "Cumulative accounting belongs to a stateful sibling, outside this stateless lowering statement."
+    }
+  ]
+}
+</script>
+</div>
 
 ## What the statements establish
 
@@ -47,4 +99,10 @@ The [next chapter](assurance.md) explains how these mathematical results connect
 
 **Exercise:** Does `lowering_preserves` prove that the release pipeline has the right permissions?
 
-**Answer:** No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.
+<details>
+<summary>Reveal the answer</summary>
+
+No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.
+
+
+</details>

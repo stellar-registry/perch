@@ -54,4 +54,36 @@ Omitting `functions` means any function in scope; omitting `args` means no argum
 
 **Exercise:** Does `signedBy("alice", "bob")` mean Alice or Bob?
 
-**Answer:** It means both. Use a one-of-two threshold when either signer should suffice.
+<details>
+<summary>Reveal the answer</summary>
+
+It means both. Use a one-of-two threshold when either signer should suffice.
+
+</details>
+
+<div class="perch-lab" data-perch-lab="quiz">
+<h3>Check your understanding</h3>
+<p class="lab-fallback">Two authenticated listed signers meet a two-of-three threshold. Meeting the signer requirement does not guarantee the transaction will succeed.</p>
+<script type="application/json" data-quiz>
+{
+  "question": "A rule uses a two-of-three threshold. Alice and Carol authorize; Bob does not. What happens to the signer requirement?",
+  "answers": [
+    {
+      "text": "It passes; two listed signers are authenticated.",
+      "correct": true,
+      "feedback": "Two is enough for this threshold. The other constraints still need to pass."
+    },
+    {
+      "text": "It fails because Bob did not authorize.",
+      "correct": false,
+      "feedback": "That would be the all-signers form. A threshold needs only m of the listed signers."
+    },
+    {
+      "text": "The entire transaction is guaranteed to succeed.",
+      "correct": false,
+      "feedback": "A signer check is only one condition. Other policy checks and the target contract can still reject the call."
+    }
+  ]
+}
+</script>
+</div>

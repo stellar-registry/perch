@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/labs.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -194,6 +195,11 @@
 </div>
 <p>A wrong address gives F. A missing argument or the wrong argument type gives U. This distinction matters when checks are combined, especially with negation.</p>
 <p>If a decode failure were treated as false, negating it would produce true. Perch instead defines <code>Not U = U</code>. A failure to understand input never becomes permission merely because someone negated a predicate.</p>
+<div class="perch-lab" data-perch-lab="logic">
+<h3 id="explore-true-false-and-unknown"><a class="header" href="#explore-true-false-and-unknown">Explore True, False, and Unknown</a></h3>
+<p>Predict the result, then switch between AND, OR, and NOT. These are program-level combinations; the ordinary document constraints combine with AND.</p>
+<p class="lab-fallback">NOT Unknown is Unknown and denies. True OR Unknown is True and allows. True AND Unknown is Unknown and denies. Enable JavaScript for the controls; the explanation and examples below also work without them.</p>
+</div>
 <p>The complete combination table is small:</p>
 <div class="table-wrapper"><table><thead><tr><th>A</th><th>B</th><th>A AND B</th><th>A OR B</th></tr></thead><tbody>
 <tr><td>T</td><td>T</td><td>T</td><td>T</td></tr>
@@ -215,6 +221,68 @@ All(3)
 </code></pre>
 <p>For a valid invocation the first three operations push T, T, T; <code>All(3)</code> replaces them with T. If the publisher argument is missing, they push T, T, U; the final result is U and authorization is denied. The contract address and ledger cutoff are not missing checks: the enclosing account rule handles them.</p>
 <p>The frozen program format also has <code>Any</code>, <code>Not</code>, and further typed comparisons. Those are lower-level operations, not arbitrary JSON expressions available in <code>PolicyDoc</code>.</p>
+<div class="perch-lab" data-perch-lab="trace">
+<h3 id="watch-the-stack-change"><a class="header" href="#watch-the-stack-change">Watch the stack change</a></h3>
+<p>Use Next step to see each check push a verdict, then watch All combine them. Change the input to start a new trace. This is an illustration of the fixed CI program, not the Rust or Lean evaluator.</p>
+<p class="lab-fallback">For a missing publisher: MinSigners pushes T, FnIn pushes T, ArgAddrIsSelf pushes U, and All(3) leaves U. The root denies. Enable JavaScript for the controls; the explanation and examples below also work without them.</p>
+<script type="application/json" data-policy-fixture>
+{
+  "version": 1,
+  "network": "Test SDF Network ; September 2015",
+  "signers": [
+    {
+      "id": "admin",
+      "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN",
+      "key": "045e2a7589b73c19d5341cf12ac0c5f6c45c298d4c20002c794daadafdb83f35f5be23963648d7aaccf5e273803f2fec7a8f0eb4d4845c9b89a972b4a09298b17e"
+    },
+    {
+      "id": "ci",
+      "address": "GA327GGWT6747B57DRWJJ3SWBVIQ354TTDRHR76CVAWO6OBPZ4Z57YGA"
+    }
+  ],
+  "rules": [
+    {
+      "name": "admin",
+      "scope": {
+        "type": "self-admin"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish",
+      "scope": {
+        "type": "contract",
+        "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish",
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 55000000
+    }
+  ]
+}
+</script>
+</div>
 <h2 id="why-validation-comes-first"><a class="header" href="#why-validation-comes-first">Why validation comes first</a></h2>
 <p>A malformed program could try to combine three results when only two exist. Validation simulates stack sizes without needing an invocation. It checks version, program length, operator arity, stack bounds, and a single final result. The current limits are 256 operations and stack depth 128. Leaf decoding still has its own checks, including string-length bounds.</p>
 <p>A structurally valid program can still return U for a missing or wrongly typed argument. Structural safety does not promise that every input is meaningful or authorized.</p>
@@ -268,6 +336,8 @@ All(3)
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/lab-model.js"></script>
+        <script src="theme/labs.js"></script>
 
 
 

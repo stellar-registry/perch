@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/labs.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -213,7 +214,36 @@
 <h2 id="absence-is-a-choice"><a class="header" href="#absence-is-a-choice">Absence is a choice</a></h2>
 <p>Omitting <code>functions</code> means any function in scope; omitting <code>args</code> means no argument restrictions. Explicit empty lists for these fields are rejected, and JSON <code>null</code> is not a substitute for absence. Unknown fields and tags are rejected rather than ignored. These rules make misspelled restrictions visible as errors.</p>
 <p><strong>Exercise:</strong> Does <code>signedBy("alice", "bob")</code> mean Alice or Bob?</p>
-<p><strong>Answer:</strong> It means both. Use a one-of-two threshold when either signer should suffice.</p>
+<details>
+<summary>Reveal the answer</summary>
+<p>It means both. Use a one-of-two threshold when either signer should suffice.</p>
+</details>
+<div class="perch-lab" data-perch-lab="quiz">
+<h3 id="check-your-understanding"><a class="header" href="#check-your-understanding">Check your understanding</a></h3>
+<p class="lab-fallback">Two authenticated listed signers meet a two-of-three threshold. Meeting the signer requirement does not guarantee the transaction will succeed.</p>
+<script type="application/json" data-quiz>
+{
+  "question": "A rule uses a two-of-three threshold. Alice and Carol authorize; Bob does not. What happens to the signer requirement?",
+  "answers": [
+    {
+      "text": "It passes; two listed signers are authenticated.",
+      "correct": true,
+      "feedback": "Two is enough for this threshold. The other constraints still need to pass."
+    },
+    {
+      "text": "It fails because Bob did not authorize.",
+      "correct": false,
+      "feedback": "That would be the all-signers form. A threshold needs only m of the listed signers."
+    },
+    {
+      "text": "The entire transaction is guaranteed to succeed.",
+      "correct": false,
+      "feedback": "A signer check is only one condition. Other policy checks and the target contract can still reject the call."
+    }
+  ]
+}
+</script>
+</div>
 
                     </main>
 
@@ -261,6 +291,8 @@
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/lab-model.js"></script>
+        <script src="theme/labs.js"></script>
 
 
 

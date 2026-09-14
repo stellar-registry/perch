@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/labs.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -203,8 +204,10 @@ cargo run -q -p perch-analyze -- narrows \
 <p>Two concrete assumptions deserve special attention. The encoding treats the smart account's own address as distinct from every literal address in the document. It also counts string characters, while the on-chain evaluator limits string bytes to 256. ASCII agrees across both representations; non-ASCII strings near the bound can diverge. Treat the corresponding warnings and your use of literal self-addresses as reasons to inspect whether a result applies.</p>
 <p>The encoding abstracts invocation data and does not simulate live chain state or execute target contracts. Caps need separate structural comparisons; the analyzer does not prove the stateful sibling's accounting. The SMT encoding itself has not been proved sound and complete in Lean. See <a href="https://github.com/stellar-registry/perch/blob/main/crates/perch-analyze/src/lib.rs">its source</a> for current abstractions and warnings.</p>
 <p><strong>Exercise:</strong> If <code>only-calls</code> succeeds for the registry, can the document still allow calls to a token contract?</p>
-<p><strong>Answer:</strong> Yes. The query is scoped to the supplied registry address. Review the other scopes or ask additional questions about them.</p>
-
+<details>
+<summary>Reveal the answer</summary>
+<p>Yes. The query is scoped to the supplied registry address. Review the other scopes or ask additional questions about them.</p>
+</details>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
@@ -251,6 +254,8 @@ cargo run -q -p perch-analyze -- narrows \
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/lab-model.js"></script>
+        <script src="theme/labs.js"></script>
 
 
 

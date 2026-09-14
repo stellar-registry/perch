@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/labs.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -186,8 +187,16 @@
 <p>This book is for developers, infrastructure engineers, security reviewers, and other technical readers. You should be comfortable reading configuration files and small code examples. You do <strong>not</strong> need a background in programming languages, theorem proving, Rust, or Lean. We introduce the specialist vocabulary when it becomes useful.</p>
 <p>Our running example is a release pipeline. A CI key should publish software on behalf of an account, but should not become an administrator of that account. We will read its policy, follow a call through the evaluator, and then ask what evidence supports the implementation.</p>
 <h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to read this book</a></h2>
+<p>Choose a route based on what you want to do:</p>
+<div class="table-wrapper"><table><thead><tr><th>Your goal</th><th>Start here</th><th>Try this</th></tr></thead><tbody>
+<tr><td>Read or author a policy</td><td><a href="first-policy.html">Your first policy</a> → <a href="language.html">The language</a></td><td>Make the CI rule reject a call, then explain why</td></tr>
+<tr><td>Understand the runtime</td><td><a href="evaluation.html">Evaluation</a></td><td>Step through a missing argument and compare AND with OR</td></tr>
+<tr><td>Assess a guarantee</td><td><a href="formalization.html">Formalization</a> → <a href="assurance.html">Assurance</a></td><td>Identify which claim the lowering theorem actually proves</td></tr>
+</tbody></table>
+</div>
+<p>The interactive examples run locally in your browser and need no wallet, installation, or keys. They are small teaching models, not production authorization tools. The text and revealable exercise answers remain readable without JavaScript and in the print view.</p>
 <p>Start with <a href="first-policy.html">your first policy</a>, then follow the language chapters in order. Each chapter adds to the same mental model. The second half explains the formalization: a precise, executable description of behavior and proofs about that description. You can read it without learning to write Lean.</p>
-<p>For a review, keep the <a href="reference.html">language reference</a> and <a href="assurance.html">assurance boundaries</a> open beside the document. Exercises are short thought experiments with answers, and require no wallet or deployed account.</p>
+<p>For a review, keep the <a href="reference.html">language reference</a> and <a href="assurance.html">assurance boundaries</a> open beside the document. Try each exercise before revealing its answer. Knowledge checks explain mistakes so you can revise your answer.</p>
 <p>The book describes the code in this checkout. It is a guide, not a replacement for <a href="https://github.com/stellar-registry/perch/blob/main/CANONICAL.md">CANONICAL.md</a>, the normative canonical-format specification. Features can exist in the document schema before every compiler or proof supports them. We call out those differences explicitly.</p>
 <h2 id="four-pieces-of-vocabulary"><a class="header" href="#four-pieces-of-vocabulary">Four pieces of vocabulary</a></h2>
 <p>An <strong>account</strong> holds authorization rules. An <strong>invocation</strong> is a call, including its target, function, and arguments. A <strong>signer</strong> supplies evidence of authority. A <strong>predicate</strong> is a question with an answer, such as “is argument 1 the account's own address?”</p>
@@ -233,6 +242,8 @@
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/lab-model.js"></script>
+        <script src="theme/labs.js"></script>
 
 
 

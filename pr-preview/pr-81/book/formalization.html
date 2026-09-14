@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/labs.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -187,13 +188,53 @@
 <p>Lean is a programming language and proof assistant. Its kernel checks that a proof follows from the definitions and assumptions. You do not have to trust the author's prose as the proof, but you still have to check whether the formal statement captures the behavior you care about.</p>
 <h2 id="read-one-theorem"><a class="header" href="#read-one-theorem">Read one theorem</a></h2>
 <p>The source in <code>formal/PerchFormal/Theorems.lean</code> contains this statement (the proof body is omitted here):</p>
-<pre><code class="language-lean">theorem lowering_preserves (r : DocRule) (inp : Inputs)
+<pre><code class="language-text">theorem lowering_preserves (r : DocRule) (inp : Inputs)
     (hcap : (leafOps r).length ≤ MAX_STACK_DEPTH) :
     eval (buildProgram r) inp = docSemantics r inp
 </code></pre>
 <p>Read it as: take any modeled rule <code>r</code> and invocation inputs <code>inp</code>. Assume the generated checks fit the stack limit. Evaluating the compiled program gives the same verdict as interpreting the rule directly.</p>
 <p><code>DocRule</code> and <code>Inputs</code> name data types. <code>hcap</code> names an assumption. The colon introduces the proposition being proved. The equality compares two ways of computing a result. The checked proof following <code>:= by</code> explains to Lean why that equality holds.</p>
 <p>The important separation is that <code>docSemantics</code> describes predicates directly, while <code>buildProgram</code> produces operations for a stack machine. A bug in the translation cannot simply redefine both sides unnoticed: the proof must connect them.</p>
+<h2 id="take-the-statement-apart"><a class="header" href="#take-the-statement-apart">Take the statement apart</a></h2>
+<p>Open the part you want to understand. The three parts work together: a domain of inputs, a condition, and a conclusion.</p>
+<details>
+<summary>For which inputs? — r : DocRule and inp : Inputs</summary>
+<p>For every rule and invocation represented by these Lean types. The modeled rule is a slice of the full policy, so this is not a statement about arbitrary deployed accounts.</p>
+</details>
+<details>
+<summary>Under what condition? — hcap</summary>
+<p>The generated leaves must fit the stack bound. A proof with this assumption does not establish the conclusion for programs that exceed the bound. Rust revalidates generated programs separately.</p>
+</details>
+<details>
+<summary>What follows? — the equality</summary>
+<p>Two ways of computing a verdict agree: reading the modeled predicates directly and running the translated program. This rules out a mismatch inside that modeled translation. It does not establish that the policy expresses the author's intended permissions.</p>
+</details>
+<div class="perch-lab" data-perch-lab="quiz">
+<h3 id="can-you-spot-the-proof-boundary"><a class="header" href="#can-you-spot-the-proof-boundary">Can you spot the proof boundary?</a></h3>
+<p class="lab-fallback">The theorem establishes agreement within its model and stack bound. It does not prove business intent or cumulative accounting.</p>
+<script type="application/json" data-quiz>
+{
+  "question": "Which claim is supported by lowering_preserves?",
+  "answers": [
+    {
+      "text": "Within the model and stack bound, lowering preserves the rule verdict.",
+      "correct": true,
+      "feedback": "The equality connects the modeled rule meaning to the modeled generated program under hcap."
+    },
+    {
+      "text": "Every deployed Perch account always enforces the right business policy.",
+      "correct": false,
+      "feedback": "Intent, deployment, authentication, and the model-to-Rust connection are outside this theorem."
+    },
+    {
+      "text": "Cumulative spending caps can never be exceeded.",
+      "correct": false,
+      "feedback": "Cumulative accounting belongs to a stateful sibling, outside this stateless lowering statement."
+    }
+  ]
+}
+</script>
+</div>
 <h2 id="what-the-statements-establish"><a class="header" href="#what-the-statements-establish">What the statements establish</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Result</th><th>Plain-language meaning</th><th>Scope to remember</th></tr></thead><tbody>
 <tr><td>Verdict laws</td><td>AND/OR obey the specified algebra; negating U preserves U</td><td>Three-valued verdicts</td></tr>
@@ -211,8 +252,10 @@
 <p>This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. It also requires attention to the model's domain. The current <code>CPrincipals</code> model includes <code>all</code> and <code>selfAuth</code>, <strong>but not <code>threshold</code></strong>. The canonical model does include cap fields. Do not extend the injectivity theorem to threshold documents without extending the model and proof.</p>
 <p>The <a href="assurance.html">next chapter</a> explains how these mathematical results connect to the shipped implementation.</p>
 <p><strong>Exercise:</strong> Does <code>lowering_preserves</code> prove that the release pipeline has the right permissions?</p>
-<p><strong>Answer:</strong> No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.</p>
-
+<details>
+<summary>Reveal the answer</summary>
+<p>No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.</p>
+</details>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
@@ -259,6 +302,8 @@
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/lab-model.js"></script>
+        <script src="theme/labs.js"></script>
 
 
 

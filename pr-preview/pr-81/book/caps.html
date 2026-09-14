@@ -29,6 +29,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/labs.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -199,8 +200,10 @@
 <p>Imagine two histories that end with identical invocation inputs: one account has spent nothing, the other has exhausted its allowance. A stateless function sees the same input in both cases and must return the same result. Enforcing a different decision requires additional state.</p>
 <p>This is the central intuition behind the repository's <a href="https://github.com/stellar-registry/perch/blob/main/docs/verification/THEORY.md">enforceability discussion</a>. It explains why adding more per-call comparisons would not create a cumulative limit.</p>
 <p><strong>Exercise:</strong> Would limiting the amount in each call enforce “at most 100 in total”?</p>
-<p><strong>Answer:</strong> No. Multiple individually permitted calls can exceed the total. Use cumulative accounting, and check every alternative route that could authorize spending.</p>
-
+<details>
+<summary>Reveal the answer</summary>
+<p>No. Multiple individually permitted calls can exceed the total. Use cumulative accounting, and check every alternative route that could authorize spending.</p>
+</details>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
@@ -247,6 +250,8 @@
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/lab-model.js"></script>
+        <script src="theme/labs.js"></script>
 
 
 

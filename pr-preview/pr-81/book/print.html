@@ -30,6 +30,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="theme/labs.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -184,15 +185,92 @@
 <p>This book is for developers, infrastructure engineers, security reviewers, and other technical readers. You should be comfortable reading configuration files and small code examples. You do <strong>not</strong> need a background in programming languages, theorem proving, Rust, or Lean. We introduce the specialist vocabulary when it becomes useful.</p>
 <p>Our running example is a release pipeline. A CI key should publish software on behalf of an account, but should not become an administrator of that account. We will read its policy, follow a call through the evaluator, and then ask what evidence supports the implementation.</p>
 <h2 id="how-to-read-this-book"><a class="header" href="#how-to-read-this-book">How to read this book</a></h2>
+<p>Choose a route based on what you want to do:</p>
+<div class="table-wrapper"><table><thead><tr><th>Your goal</th><th>Start here</th><th>Try this</th></tr></thead><tbody>
+<tr><td>Read or author a policy</td><td><a href="first-policy.html">Your first policy</a> → <a href="language.html">The language</a></td><td>Make the CI rule reject a call, then explain why</td></tr>
+<tr><td>Understand the runtime</td><td><a href="evaluation.html">Evaluation</a></td><td>Step through a missing argument and compare AND with OR</td></tr>
+<tr><td>Assess a guarantee</td><td><a href="formalization.html">Formalization</a> → <a href="assurance.html">Assurance</a></td><td>Identify which claim the lowering theorem actually proves</td></tr>
+</tbody></table>
+</div>
+<p>The interactive examples run locally in your browser and need no wallet, installation, or keys. They are small teaching models, not production authorization tools. The text and revealable exercise answers remain readable without JavaScript and in the print view.</p>
 <p>Start with <a href="first-policy.html">your first policy</a>, then follow the language chapters in order. Each chapter adds to the same mental model. The second half explains the formalization: a precise, executable description of behavior and proofs about that description. You can read it without learning to write Lean.</p>
-<p>For a review, keep the <a href="reference.html">language reference</a> and <a href="assurance.html">assurance boundaries</a> open beside the document. Exercises are short thought experiments with answers, and require no wallet or deployed account.</p>
+<p>For a review, keep the <a href="reference.html">language reference</a> and <a href="assurance.html">assurance boundaries</a> open beside the document. Try each exercise before revealing its answer. Knowledge checks explain mistakes so you can revise your answer.</p>
 <p>The book describes the code in this checkout. It is a guide, not a replacement for <a href="https://github.com/stellar-registry/perch/blob/main/CANONICAL.md">CANONICAL.md</a>, the normative canonical-format specification. Features can exist in the document schema before every compiler or proof supports them. We call out those differences explicitly.</p>
 <h2 id="four-pieces-of-vocabulary"><a class="header" href="#four-pieces-of-vocabulary">Four pieces of vocabulary</a></h2>
 <p>An <strong>account</strong> holds authorization rules. An <strong>invocation</strong> is a call, including its target, function, and arguments. A <strong>signer</strong> supplies evidence of authority. A <strong>predicate</strong> is a question with an answer, such as “is argument 1 the account's own address?”</p>
 <p>Perch is a small declarative language. A document describes the calls it permits; it does not give a sequence of instructions for publishing a release. The caller still makes the call, and the target contract still implements the operation.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="your-first-policy-a-release-key"><a class="header" href="#your-first-policy-a-release-key">Your first policy: a release key</a></h1>
 <p>Imagine a maintainer who administers a smart account and a CI job that publishes releases. Giving both the same key would also give CI the maintainer's administrative power. Instead, give them different signers and separate rules.</p>
-<p>The repository already contains a complete example. The following is included directly from <code>testdata/ci-publish-delegated.json</code>, so the book and fixture stay together. These are fixture identities and a historical ledger cutoff, not credentials or a deployment configuration to reuse.</p>
+<h2 id="start-with-the-permission"><a class="header" href="#start-with-the-permission">Start with the permission</a></h2>
+<p>The CI rule says: <strong>this CI signer may call <code>publish</code> or <code>publish_hash</code> on this registry, with the smart account as publisher, before ledger 55,000,000.</strong> An independent admin rule lets the maintainer manage the account.</p>
+<p>That sentence has five parts: who, which contract, which functions, which argument, and until when. Try changing one part of the call and explain the result before moving on.</p>
+<div class="perch-lab" data-perch-lab="policy">
+<h3 id="try-the-ci-rule"><a class="header" href="#try-the-ci-rule">Try the CI rule</a></h3>
+<p>An educational simulation of one rule, running entirely in your browser. It assumes authentication results; it does not verify signatures, contact a chain, or evaluate the whole account.</p>
+<p class="lab-fallback">With the CI signer, registry target, publish function, self address, and ledger 54,999,999, all checks pass. At ledger 55,000,000, the account rule has expired. Enable JavaScript for the controls; the explanation and examples below also work without them.</p>
+<script type="application/json" data-policy-fixture>
+{
+  "version": 1,
+  "network": "Test SDF Network ; September 2015",
+  "signers": [
+    {
+      "id": "admin",
+      "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN",
+      "key": "045e2a7589b73c19d5341cf12ac0c5f6c45c298d4c20002c794daadafdb83f35f5be23963648d7aaccf5e273803f2fec7a8f0eb4d4845c9b89a972b4a09298b17e"
+    },
+    {
+      "id": "ci",
+      "address": "GA327GGWT6747B57DRWJJ3SWBVIQ354TTDRHR76CVAWO6OBPZ4Z57YGA"
+    }
+  ],
+  "rules": [
+    {
+      "name": "admin",
+      "scope": {
+        "type": "self-admin"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish",
+      "scope": {
+        "type": "contract",
+        "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish",
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 55000000
+    }
+  ]
+}
+</script>
+</div>
+<p><strong>Try three experiments:</strong> remove the publisher argument; move the ledger to the cutoff; then try <code>upgrade</code> with the function allowlist removed. Each result explains which check changed. “This rule does not allow” leaves open whether another rule could authorize the call.</p>
+<h2 id="connect-the-sentence-to-json"><a class="header" href="#connect-the-sentence-to-json">Connect the sentence to JSON</a></h2>
+<p>The full fixture is available when you want to inspect the wire format. Its long addresses and public verifier key identify the example's participants; you do not need to memorize them to understand the rule. These are fixture identities and a historical cutoff, not a deployment configuration to reuse.</p>
+<details>
+<summary>Read the complete policy document</summary>
 <pre><code class="language-json">{
   "version": 1,
   "network": "Test SDF Network ; September 2015",
@@ -249,10 +327,11 @@
   ]
 }
 </code></pre>
+</details>
 <p>Read the document from the outside in. <code>version</code> selects document format 1. <code>network</code> names the test network. <code>signers</code> gives local names to authentication methods. <code>rules</code> describes the authority granted to those names.</p>
 <p>The <code>admin</code> rule applies to account administration and requires the <code>admin</code> signer. The <code>ci-publish</code> rule applies to one registry contract and requires <code>ci</code>. Its function allowlist contains <code>publish</code> and <code>publish_hash</code>. Its argument constraint requires argument <strong>1</strong>, the second argument, to equal the smart account's own address. Finally, it stops authorizing at ledger 55,000,000.</p>
 <p>The argument index only makes sense with the target contract's interface. In this example it selects the publisher address. Perch does not infer argument meaning from a function name. If an interface changes, review the index again.</p>
-<h2 id="try-predicting-the-decision"><a class="header" href="#try-predicting-the-decision">Try predicting the decision</a></h2>
+<h2 id="check-your-predictions"><a class="header" href="#check-your-predictions">Check your predictions</a></h2>
 <p>Assume the correct CI signer is authenticated, the registry is the one in the rule, the ledger is before the cutoff, and all other account requirements are met.</p>
 <div class="table-wrapper"><table><thead><tr><th>Proposed call</th><th>Does this rule permit it?</th><th>Why?</th></tr></thead><tbody>
 <tr><td><code>publish</code>, argument 1 is the smart account</td><td>Yes</td><td>All of this rule's conditions pass</td></tr>
@@ -263,7 +342,7 @@
 </tbody></table>
 </div>
 <p>A passing policy check does not guarantee a successful transaction. The target may reject the call for its own reasons, and the host may enforce other authorization and resource requirements.</p>
-<h2 id="run-a-local-check"><a class="header" href="#run-a-local-check">Run a local check</a></h2>
+<h2 id="optional-run-a-local-check"><a class="header" href="#optional-run-a-local-check">Optional: run a local check</a></h2>
 <p>From a repository checkout, install the Rust toolchain selected by <code>rust-toolchain.toml</code> using rustup, and install Z3 so <code>z3</code> is on your PATH. For example, Homebrew users can run <code>brew install z3</code>. No network transaction or private key is needed for this analysis:</p>
 <pre><code class="language-sh">cargo run -q -p perch-analyze -- only-calls \
   testdata/ci-publish-delegated.json \
@@ -272,8 +351,10 @@
 </code></pre>
 <p>The command should report that only those functions can be authorized on that contract. It asks a question about the document's modeled possibilities; it does not check whether the historical fixture is usable on today's ledger. We will examine the analyzer's scope in <a href="analysis.html">Checking a particular policy</a>.</p>
 <p><strong>Exercise:</strong> Remove <code>functions</code> from the CI rule. What changes?</p>
-<p><strong>Answer:</strong> The function restriction disappears. The signer, argument, scope, and expiry checks remain, but any function in that scope satisfying them could qualify. An omitted allowlist does not mean “allow nothing.”</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="the-language-who-where-what-and-when"><a class="header" href="#the-language-who-where-what-and-when">The language: who, where, what, and when</a></h1>
+<details>
+<summary>Reveal the answer</summary>
+<p>The function restriction disappears. The signer, argument, scope, and expiry checks remain, but any function in that scope satisfying them could qualify. An omitted allowlist does not mean “allow nothing.”</p>
+</details><div style="break-before: page; page-break-before: always;"></div><h1 id="the-language-who-where-what-and-when"><a class="header" href="#the-language-who-where-what-and-when">The language: who, where, what, and when</a></h1>
 <p>A policy document has a collection of signer declarations and a collection of named rules. Signer IDs and rule names must be unique within their respective collections. A rule refers to signers by their local IDs, making it possible to review authority separately from key material.</p>
 <h2 id="who-signers-and-principals"><a class="header" href="#who-signers-and-principals">Who: signers and principals</a></h2>
 <p>Authentication answers “which identities have authorized this call?” Authorization answers “are those identities allowed to make it?” A signer declaration specifies the first part; a rule's <code>principals</code> specifies the second.</p>
@@ -305,7 +386,36 @@
 <h2 id="absence-is-a-choice"><a class="header" href="#absence-is-a-choice">Absence is a choice</a></h2>
 <p>Omitting <code>functions</code> means any function in scope; omitting <code>args</code> means no argument restrictions. Explicit empty lists for these fields are rejected, and JSON <code>null</code> is not a substitute for absence. Unknown fields and tags are rejected rather than ignored. These rules make misspelled restrictions visible as errors.</p>
 <p><strong>Exercise:</strong> Does <code>signedBy("alice", "bob")</code> mean Alice or Bob?</p>
-<p><strong>Answer:</strong> It means both. Use a one-of-two threshold when either signer should suffice.</p>
+<details>
+<summary>Reveal the answer</summary>
+<p>It means both. Use a one-of-two threshold when either signer should suffice.</p>
+</details>
+<div class="perch-lab" data-perch-lab="quiz">
+<h3 id="check-your-understanding"><a class="header" href="#check-your-understanding">Check your understanding</a></h3>
+<p class="lab-fallback">Two authenticated listed signers meet a two-of-three threshold. Meeting the signer requirement does not guarantee the transaction will succeed.</p>
+<script type="application/json" data-quiz>
+{
+  "question": "A rule uses a two-of-three threshold. Alice and Carol authorize; Bob does not. What happens to the signer requirement?",
+  "answers": [
+    {
+      "text": "It passes; two listed signers are authenticated.",
+      "correct": true,
+      "feedback": "Two is enough for this threshold. The other constraints still need to pass."
+    },
+    {
+      "text": "It fails because Bob did not authorize.",
+      "correct": false,
+      "feedback": "That would be the all-signers form. A threshold needs only m of the listed signers."
+    },
+    {
+      "text": "The entire transaction is guaranteed to succeed.",
+      "correct": false,
+      "feedback": "A signer check is only one condition. Other policy checks and the target contract can still reject the call."
+    }
+  ]
+}
+</script>
+</div>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="authoring-and-reviewing-documents"><a class="header" href="#authoring-and-reviewing-documents">Authoring and reviewing documents</a></h1>
 <p>JSON is the common document format. Rust and TypeScript tooling produce the same format, allowing teams to build policies in code while reviewing a stable artifact.</p>
 <h2 id="build-the-running-example-in-typescript"><a class="header" href="#build-the-running-example-in-typescript">Build the running example in TypeScript</a></h2>
@@ -374,8 +484,10 @@ console.log(docHash(doc));
 <p>Imagine two histories that end with identical invocation inputs: one account has spent nothing, the other has exhausted its allowance. A stateless function sees the same input in both cases and must return the same result. Enforcing a different decision requires additional state.</p>
 <p>This is the central intuition behind the repository's <a href="https://github.com/stellar-registry/perch/blob/main/docs/verification/THEORY.md">enforceability discussion</a>. It explains why adding more per-call comparisons would not create a cumulative limit.</p>
 <p><strong>Exercise:</strong> Would limiting the amount in each call enforce “at most 100 in total”?</p>
-<p><strong>Answer:</strong> No. Multiple individually permitted calls can exceed the total. Use cumulative accounting, and check every alternative route that could authorize spending.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="how-a-call-is-evaluated"><a class="header" href="#how-a-call-is-evaluated">How a call is evaluated</a></h1>
+<details>
+<summary>Reveal the answer</summary>
+<p>No. Multiple individually permitted calls can exceed the total. Use cumulative accounting, and check every alternative route that could authorize spending.</p>
+</details><div style="break-before: page; page-break-before: always;"></div><h1 id="how-a-call-is-evaluated"><a class="header" href="#how-a-call-is-evaluated">How a call is evaluated</a></h1>
 <p>The compiler translates a policy into account rules and, when necessary, a small interpreter program. This translation is called <strong>lowering</strong>: representing the same intended checks in a form closer to the execution machinery.</p>
 <p>The account framework selects the relevant context and matched signers. Scope and expiry are enforced through account rules. The interpreter checks the program's signer floor, function restrictions, and argument predicates. Stateful caps run in a sibling policy.</p>
 <h2 id="three-answers-instead-of-two"><a class="header" href="#three-answers-instead-of-two">Three answers instead of two</a></h2>
@@ -388,6 +500,11 @@ console.log(docHash(doc));
 </div>
 <p>A wrong address gives F. A missing argument or the wrong argument type gives U. This distinction matters when checks are combined, especially with negation.</p>
 <p>If a decode failure were treated as false, negating it would produce true. Perch instead defines <code>Not U = U</code>. A failure to understand input never becomes permission merely because someone negated a predicate.</p>
+<div class="perch-lab" data-perch-lab="logic">
+<h3 id="explore-true-false-and-unknown"><a class="header" href="#explore-true-false-and-unknown">Explore True, False, and Unknown</a></h3>
+<p>Predict the result, then switch between AND, OR, and NOT. These are program-level combinations; the ordinary document constraints combine with AND.</p>
+<p class="lab-fallback">NOT Unknown is Unknown and denies. True OR Unknown is True and allows. True AND Unknown is Unknown and denies. Enable JavaScript for the controls; the explanation and examples below also work without them.</p>
+</div>
 <p>The complete combination table is small:</p>
 <div class="table-wrapper"><table><thead><tr><th>A</th><th>B</th><th>A AND B</th><th>A OR B</th></tr></thead><tbody>
 <tr><td>T</td><td>T</td><td>T</td><td>T</td></tr>
@@ -409,6 +526,68 @@ All(3)
 </code></pre>
 <p>For a valid invocation the first three operations push T, T, T; <code>All(3)</code> replaces them with T. If the publisher argument is missing, they push T, T, U; the final result is U and authorization is denied. The contract address and ledger cutoff are not missing checks: the enclosing account rule handles them.</p>
 <p>The frozen program format also has <code>Any</code>, <code>Not</code>, and further typed comparisons. Those are lower-level operations, not arbitrary JSON expressions available in <code>PolicyDoc</code>.</p>
+<div class="perch-lab" data-perch-lab="trace">
+<h3 id="watch-the-stack-change"><a class="header" href="#watch-the-stack-change">Watch the stack change</a></h3>
+<p>Use Next step to see each check push a verdict, then watch All combine them. Change the input to start a new trace. This is an illustration of the fixed CI program, not the Rust or Lean evaluator.</p>
+<p class="lab-fallback">For a missing publisher: MinSigners pushes T, FnIn pushes T, ArgAddrIsSelf pushes U, and All(3) leaves U. The root denies. Enable JavaScript for the controls; the explanation and examples below also work without them.</p>
+<script type="application/json" data-policy-fixture>
+{
+  "version": 1,
+  "network": "Test SDF Network ; September 2015",
+  "signers": [
+    {
+      "id": "admin",
+      "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN",
+      "key": "045e2a7589b73c19d5341cf12ac0c5f6c45c298d4c20002c794daadafdb83f35f5be23963648d7aaccf5e273803f2fec7a8f0eb4d4845c9b89a972b4a09298b17e"
+    },
+    {
+      "id": "ci",
+      "address": "GA327GGWT6747B57DRWJJ3SWBVIQ354TTDRHR76CVAWO6OBPZ4Z57YGA"
+    }
+  ],
+  "rules": [
+    {
+      "name": "admin",
+      "scope": {
+        "type": "self-admin"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish",
+      "scope": {
+        "type": "contract",
+        "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish",
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 55000000
+    }
+  ]
+}
+</script>
+</div>
 <h2 id="why-validation-comes-first"><a class="header" href="#why-validation-comes-first">Why validation comes first</a></h2>
 <p>A malformed program could try to combine three results when only two exist. Validation simulates stack sizes without needing an invocation. It checks version, program length, operator arity, stack bounds, and a single final result. The current limits are 256 operations and stack depth 128. Leaf decoding still has its own checks, including string-length bounds.</p>
 <p>A structurally valid program can still return U for a missing or wrongly typed argument. Structural safety does not promise that every input is meaningful or authorized.</p>
@@ -421,13 +600,53 @@ All(3)
 <p>Lean is a programming language and proof assistant. Its kernel checks that a proof follows from the definitions and assumptions. You do not have to trust the author's prose as the proof, but you still have to check whether the formal statement captures the behavior you care about.</p>
 <h2 id="read-one-theorem"><a class="header" href="#read-one-theorem">Read one theorem</a></h2>
 <p>The source in <code>formal/PerchFormal/Theorems.lean</code> contains this statement (the proof body is omitted here):</p>
-<pre><code class="language-lean">theorem lowering_preserves (r : DocRule) (inp : Inputs)
+<pre><code class="language-text">theorem lowering_preserves (r : DocRule) (inp : Inputs)
     (hcap : (leafOps r).length ≤ MAX_STACK_DEPTH) :
     eval (buildProgram r) inp = docSemantics r inp
 </code></pre>
 <p>Read it as: take any modeled rule <code>r</code> and invocation inputs <code>inp</code>. Assume the generated checks fit the stack limit. Evaluating the compiled program gives the same verdict as interpreting the rule directly.</p>
 <p><code>DocRule</code> and <code>Inputs</code> name data types. <code>hcap</code> names an assumption. The colon introduces the proposition being proved. The equality compares two ways of computing a result. The checked proof following <code>:= by</code> explains to Lean why that equality holds.</p>
 <p>The important separation is that <code>docSemantics</code> describes predicates directly, while <code>buildProgram</code> produces operations for a stack machine. A bug in the translation cannot simply redefine both sides unnoticed: the proof must connect them.</p>
+<h2 id="take-the-statement-apart"><a class="header" href="#take-the-statement-apart">Take the statement apart</a></h2>
+<p>Open the part you want to understand. The three parts work together: a domain of inputs, a condition, and a conclusion.</p>
+<details>
+<summary>For which inputs? — r : DocRule and inp : Inputs</summary>
+<p>For every rule and invocation represented by these Lean types. The modeled rule is a slice of the full policy, so this is not a statement about arbitrary deployed accounts.</p>
+</details>
+<details>
+<summary>Under what condition? — hcap</summary>
+<p>The generated leaves must fit the stack bound. A proof with this assumption does not establish the conclusion for programs that exceed the bound. Rust revalidates generated programs separately.</p>
+</details>
+<details>
+<summary>What follows? — the equality</summary>
+<p>Two ways of computing a verdict agree: reading the modeled predicates directly and running the translated program. This rules out a mismatch inside that modeled translation. It does not establish that the policy expresses the author's intended permissions.</p>
+</details>
+<div class="perch-lab" data-perch-lab="quiz">
+<h3 id="can-you-spot-the-proof-boundary"><a class="header" href="#can-you-spot-the-proof-boundary">Can you spot the proof boundary?</a></h3>
+<p class="lab-fallback">The theorem establishes agreement within its model and stack bound. It does not prove business intent or cumulative accounting.</p>
+<script type="application/json" data-quiz>
+{
+  "question": "Which claim is supported by lowering_preserves?",
+  "answers": [
+    {
+      "text": "Within the model and stack bound, lowering preserves the rule verdict.",
+      "correct": true,
+      "feedback": "The equality connects the modeled rule meaning to the modeled generated program under hcap."
+    },
+    {
+      "text": "Every deployed Perch account always enforces the right business policy.",
+      "correct": false,
+      "feedback": "Intent, deployment, authentication, and the model-to-Rust connection are outside this theorem."
+    },
+    {
+      "text": "Cumulative spending caps can never be exceeded.",
+      "correct": false,
+      "feedback": "Cumulative accounting belongs to a stateful sibling, outside this stateless lowering statement."
+    }
+  ]
+}
+</script>
+</div>
 <h2 id="what-the-statements-establish"><a class="header" href="#what-the-statements-establish">What the statements establish</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Result</th><th>Plain-language meaning</th><th>Scope to remember</th></tr></thead><tbody>
 <tr><td>Verdict laws</td><td>AND/OR obey the specified algebra; negating U preserves U</td><td>Three-valued verdicts</td></tr>
@@ -445,8 +664,10 @@ All(3)
 <p>This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. It also requires attention to the model's domain. The current <code>CPrincipals</code> model includes <code>all</code> and <code>selfAuth</code>, <strong>but not <code>threshold</code></strong>. The canonical model does include cap fields. Do not extend the injectivity theorem to threshold documents without extending the model and proof.</p>
 <p>The <a href="assurance.html">next chapter</a> explains how these mathematical results connect to the shipped implementation.</p>
 <p><strong>Exercise:</strong> Does <code>lowering_preserves</code> prove that the release pipeline has the right permissions?</p>
-<p><strong>Answer:</strong> No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="from-proofs-to-implementation-the-evidence-boundary"><a class="header" href="#from-proofs-to-implementation-the-evidence-boundary">From proofs to implementation: the evidence boundary</a></h1>
+<details>
+<summary>Reveal the answer</summary>
+<p>No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.</p>
+</details><div style="break-before: page; page-break-before: always;"></div><h1 id="from-proofs-to-implementation-the-evidence-boundary"><a class="header" href="#from-proofs-to-implementation-the-evidence-boundary">From proofs to implementation: the evidence boundary</a></h1>
 <p>“The policy is verified” is incomplete unless it says which property, which representation, and which assumptions. Perch combines several kinds of evidence; they should not be mistaken for one end-to-end theorem about every deployed contract.</p>
 <h2 id="follow-the-chain"><a class="header" href="#follow-the-chain">Follow the chain</a></h2>
 <pre><code class="language-text">Policy document → Rust compiler → account rules + interpreter program
@@ -503,8 +724,10 @@ cargo run -q -p perch-analyze -- narrows \
 <p>Two concrete assumptions deserve special attention. The encoding treats the smart account's own address as distinct from every literal address in the document. It also counts string characters, while the on-chain evaluator limits string bytes to 256. ASCII agrees across both representations; non-ASCII strings near the bound can diverge. Treat the corresponding warnings and your use of literal self-addresses as reasons to inspect whether a result applies.</p>
 <p>The encoding abstracts invocation data and does not simulate live chain state or execute target contracts. Caps need separate structural comparisons; the analyzer does not prove the stateful sibling's accounting. The SMT encoding itself has not been proved sound and complete in Lean. See <a href="https://github.com/stellar-registry/perch/blob/main/crates/perch-analyze/src/lib.rs">its source</a> for current abstractions and warnings.</p>
 <p><strong>Exercise:</strong> If <code>only-calls</code> succeeds for the registry, can the document still allow calls to a token contract?</p>
-<p><strong>Answer:</strong> Yes. The query is scoped to the supplied registry address. Review the other scopes or ask additional questions about them.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="language-reference-and-glossary"><a class="header" href="#language-reference-and-glossary">Language reference and glossary</a></h1>
+<details>
+<summary>Reveal the answer</summary>
+<p>Yes. The query is scoped to the supplied registry address. Review the other scopes or ask additional questions about them.</p>
+</details><div style="break-before: page; page-break-before: always;"></div><h1 id="language-reference-and-glossary"><a class="header" href="#language-reference-and-glossary">Language reference and glossary</a></h1>
 <p>This is a compact map of document format 1. Examples in the earlier chapters explain how the pieces work together.</p>
 <h2 id="document-fields"><a class="header" href="#document-fields">Document fields</a></h2>
 <div class="table-wrapper"><table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
@@ -585,6 +808,8 @@ cargo run -q -p perch-analyze -- narrows \
         <script src="book.js"></script>
 
         <!-- Custom JS scripts -->
+        <script src="theme/lab-model.js"></script>
+        <script src="theme/labs.js"></script>
 
         <script>
         window.addEventListener('load', function() {

@@ -23,6 +23,8 @@
 use perch_doc_compiler::{
     CompiledDoc, CompiledRule, DocCompilerClient, DocCompilerError, RuleScope,
 };
+pub use perch_recovery::ReconfigureEvidence;
+use perch_recovery::{RecoveryControllerClient, RecoveryError};
 use soroban_sdk::{
     auth::CustomAccountInterface, contractevent, contracttrait, Address, Bytes, BytesN, Env, Map,
     String, Val, Vec,
@@ -78,6 +80,8 @@ pub enum PerchAccountError {
     AdminLockout,
     #[from_contract_client]
     Compiler(DocCompilerError),
+    #[from_contract_client]
+    Recovery(RecoveryError),
 }
 
 // scerr's composed (root) mode predates sdk 27's spec-shaking marker; the
@@ -98,6 +102,13 @@ pub struct DocApplied {
 struct PerchStorage {
     /// Canonical `doc_hash` of the currently applied policy document.
     applied_doc: InstanceItem<BytesN<32>>,
+    /// The recovery-controller instance currently adopted (the address named
+    /// by the applied document's `recovery.controller`, if any). `None` when
+    /// no recovery is enrolled. Read before the next `apply_doc`'s rule swap
+    /// to gate a change against the *currently* enrolled condition — see
+    /// [`apply_doc`](PerchSmartAccount::apply_doc) and
+    /// `docs/recovery/controller-governance.md`.
+    recovery_controller: InstanceItem<Address>,
 }
 
 /// The doc-only smart account surface. Implementers get OZ evaluation from
@@ -113,7 +124,16 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// cross-contract call), never passed in. Replaces the entire rule set
     /// atomically and returns the canonical `doc_hash`. Runs under the account's
     /// own authorization: the admin rule must approve the call.
-    fn apply_doc(e: &Env, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
+    ///
+    /// `recovery_evidence` is consulted only when the document changes a
+    /// currently-`Protected` recovery configuration (including removing it);
+    /// pass an empty [`ReconfigureEvidence`] otherwise. See
+    /// `docs/recovery/controller-governance.md`.
+    fn apply_doc(
+        e: &Env,
+        doc_json: Bytes,
+        recovery_evidence: ReconfigureEvidence,
+    ) -> Result<BytesN<32>, PerchAccountError> {
         e.current_contract_address().require_auth();
 
         // Resolve the infra offline: each `address(e)` derives
@@ -130,6 +150,23 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
                 .try_compile_doc(&doc_json)??;
 
         ensure_admin_survives(&compiled)?;
+
+        // Recovery gate: only reachable when a controller is CURRENTLY
+        // enrolled (zero overhead for the common non-recovery account) —
+        // blocks unconditionally while a live attempt exists, and requires
+        // `recovery_evidence` when the currently-enrolled profile is
+        // `Protected` and the configuration is changing. Must run before any
+        // context rule is touched: OZ's `remove_context_rule` cannot be
+        // trusted to enforce anything via a policy's `uninstall` (it swallows
+        // panics — see `perch-recovery`'s controller module docs), so this
+        // cross-call, not that lifecycle hook, is the actual gate.
+        if let Some(old_controller) = PerchStorage::get_recovery_controller(e) {
+            RecoveryControllerClient::new(e, &old_controller).try_guard_apply_doc(
+                &e.current_contract_address(),
+                &compiled.recovery,
+                &recovery_evidence,
+            )??;
+        }
 
         // Replace the entire rule set. One invocation — all-or-nothing;
         // there is no observable half-migrated state.
@@ -148,6 +185,30 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         }
         for rule in compiled.rules.iter() {
             install_rule(e, &interpreter, &rule);
+        }
+
+        // The recovery rule is not one of `doc.rules` (recovery is top-level
+        // document configuration, not a rule — see `docs/recovery/schema.md`)
+        // and is installed directly here: a zero-signer `self-admin` rule
+        // whose sole attached policy is the adopted controller. `install()`
+        // receives the compiled config as install params; completion later
+        // authorizes `apply_doc` through this same rule's `enforce()`
+        // (Variant A) — see `docs/recovery/controller-governance.md`.
+        match compiled.recovery.first() {
+            Some(recovery) => {
+                let mut policies: Map<Address, Val> = Map::new(e);
+                policies.set(recovery.controller.clone(), recovery.into_val(e));
+                smart_account::add_context_rule(
+                    e,
+                    &ContextRuleType::CallContract(e.current_contract_address()),
+                    &String::from_str(e, "recovery"),
+                    None,
+                    &Vec::new(e),
+                    &policies,
+                );
+                PerchStorage::set_recovery_controller(e, &recovery.controller);
+            }
+            None => PerchStorage::remove_recovery_controller(e),
         }
 
         PerchStorage::set_applied_doc(e, &compiled.doc_hash);
@@ -262,6 +323,7 @@ macro_rules! impl_perch_smart_account {
         use $crate::soroban_sdk::auth::CustomAccountInterface;
         use $crate::stellar_accounts::smart_account::SmartAccount;
         use $crate::PerchSmartAccount;
+        use $crate::ReconfigureEvidence;
 
         #[$crate::soroban_sdk::contractimpl]
         impl CustomAccountInterface for $ty {

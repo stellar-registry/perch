@@ -23,4 +23,5 @@ perch-spending-limit = { version = "0.1.1", path = "../perch-spending-limit" }
 # The pinned infra-resolution modules (`registry_pins`), so native mode registers
 # the infra at exactly the content addresses the account derives.
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }
+perch-recovery = { version = "0.1.0", path = "../perch-recovery" }
 hex = "0.4"

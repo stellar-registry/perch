@@ -72,6 +72,83 @@ describe('fluent builder', () => {
     expect(doc.rules[0]!.cap).toEqual({ token: REGISTRY, limit: '25', 'period-ledgers': 100 });
   });
 
+  it('.recovery() reproduces the ci-publish-recovery fixture (guardian-only) byte-for-byte', () => {
+    const doc = policy()
+      .network('Test SDF Network ; September 2015')
+      .signer('admin', external(WEBAUTHN_VERIFIER, ADMIN_KEY))
+      .signer('ci', external(ED25519_VERIFIER, CI_KEY))
+      .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
+      .rule('ci-publish', (r) =>
+        r
+          .callContract(REGISTRY)
+          .signedBy('ci')
+          .func('publish', 'publish_hash')
+          .arg(1, isSelf())
+          .notAfter(55000000),
+      )
+      .recovery({
+        profile: 'protected',
+        mode: {
+          kind: 'guardian-only',
+          guardians: [
+            'GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH',
+            'GASP3KHU7JDP23WQINN5DDWC6BYMJ4MFBRLXBPGRAS3EX726YY67JISR',
+            'GDWF3WL7PYYUOLQBRMP5V5I62QU73U4KCGN2CLJDW74LPCXWY3YAUVQZ',
+          ],
+          quorum: 2,
+        },
+        controller: 'CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF',
+        baseline: { docHash: '27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98' },
+        replaceable: ['admin'],
+        delayLedgers: 17280,
+        expiryLedgers: 120960,
+        maxCancels: 3,
+        pendingActivity: 'freeze',
+      })
+      .build();
+
+    expect(docHash(doc)).toBe('dcd539d241eddba9537237f2958a639cd84ac9f1ed6111c18da4230b1b60b08d');
+  });
+
+  it('.recovery() with a combined mode reproduces the ci-publish-recovery-combined fixture', () => {
+    const doc = policy()
+      .network('Test SDF Network ; September 2015')
+      .signer('admin', external(WEBAUTHN_VERIFIER, ADMIN_KEY))
+      .signer('ci', external(ED25519_VERIFIER, CI_KEY))
+      .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
+      .rule('ci-publish', (r) =>
+        r
+          .callContract(REGISTRY)
+          .signedBy('ci')
+          .func('publish', 'publish_hash')
+          .arg(1, isSelf())
+          .notAfter(55000000),
+      )
+      .recovery({
+        profile: 'loss',
+        mode: {
+          kind: 'combined',
+          guardians: [
+            'GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH',
+            'GASP3KHU7JDP23WQINN5DDWC6BYMJ4MFBRLXBPGRAS3EX726YY67JISR',
+          ],
+          quorum: 1,
+          verifier: 'CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ',
+          circuitId: '21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb',
+          pool: 'CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5',
+        },
+        controller: 'CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF',
+        replaceable: ['admin'],
+        delayLedgers: 17280,
+        expiryLedgers: 120960,
+        maxCancels: 3,
+        pendingActivity: 'continue',
+      })
+      .build();
+
+    expect(docHash(doc)).toBe('9a6c29fdfd28746f8826a945611f31f43e6a51d131ff0bfd018b1ce2762e24bb');
+  });
+
   it('throws on build() when a rule has no scope', () => {
     expect(() =>
       policy()

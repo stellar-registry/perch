@@ -223,6 +223,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
         },
         signers,
         rules,
+        recovery: None,
     }
 }
 

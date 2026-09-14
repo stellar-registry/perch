@@ -133,7 +133,7 @@ jobs:
           # crates/<contract>/Cargo.toml in a PR; on merge this tags + publishes
           # it. The constructorless allow-list in publish-plan decides which of
           # these actually publish on-chain (the rest just get a tag).
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           releases='[]'
@@ -240,10 +240,14 @@ jobs:
           paths_for() { case "$1" in
             perch-interpreter) echo "perch-interpreter perch-program";;
             perch-doc-compiler) echo "perch-doc-compiler perch-compile perch-ir perch-program";;
-            perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro";;
+            # perch-smart-account depends on perch-recovery (the RecoveryController
+            # client apply_doc cross-calls), so a perch-recovery change re-releases
+            # the account too — see AGENTS.md's version-pin sharp edge.
+            perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery";;
+            perch-recovery) echo "perch-recovery perch-doc-compiler perch-compile perch-ir perch-program";;
             *) echo "$1";;
           esac; }
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery"
           summary=""
           for c in $CONTRACTS; do
             inc=()
@@ -618,6 +622,12 @@ jobs:
           # The constructorless set. Keep in step with the detect-releases
           # CONTRACTS list. A contract not listed here is tagged but never
           # published to the constructorless registry.
+          # perch-recovery is deliberately NOT in this allow-list yet: it is
+          # tagged/versioned (CONTRACTS above) so its intra-workspace pins stay
+          # tracked, but publishing a recovery controller on-chain is a
+          # separate, deliberate decision (see docs/recovery/section-7-gate.md)
+          # — add it here explicitly when that decision is made, not as a side
+          # effect of adding the crate.
           ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier"]'
           if [ -n "$DISPATCH_TAG" ]; then
             # Strict allow-list regex, not a prefix glob: the tag and the package

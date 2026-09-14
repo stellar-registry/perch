@@ -39,6 +39,9 @@ crates/
   perch-smart-account/  the doc-only account trait: apply_doc (the sole write path) on OZ
   perch-account/      deployable shell of perch-smart-account (6 exported functions, ~28 KB)
   perch-ed25519-verifier/  deployable ed25519 verifier for External signers
+  perch-recovery/     deployable account-recovery controller (guardian/ZK/combined modes),
+                      an OZ Policy attached via apply_doc's `recovery` document field —
+                      see docs/recovery/
   perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
   perch-conformance/  eval-semantics conformance vectors: hand-authored (program,
                       invocation) → verdict cases + compile→eval differential + wasm-leg suites
@@ -60,6 +63,8 @@ komet/                Komet (K-framework) symbolic property tests — an indepen
 scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
 docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
+docs/recovery/        opt-in account recovery: schema, controller governance, migration,
+                      and the open release-blocking pending-activity gate
 docs/testnet-deployment.md  verified live-state map of the canonical testnet deployment
 testdata/             golden vectors shared by the Rust and TS suites (frozen)
 testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and the wasm leg

@@ -1,0 +1,36 @@
+[package]
+name = "perch-recovery"
+description = "Deployable account-recovery controller: guardian/ZK/combined recovery modes as an OZ smart-account Policy"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# No cargo-manifest `publish = false`: release-plz's `release` command skips
+# manifest-unpublishable packages (no tag ever). crates.io publish is blocked
+# workspace-wide in release-plz.toml instead.
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+soroban-sdk-tools = { workspace = true, optional = true }
+stellar-accounts = { workspace = true, optional = true }
+perch-doc-compiler = { version = "0.2.1", path = "../perch-doc-compiler", default-features = false }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+perch-testkit = { path = "../perch-testkit" }
+perch-ir = { path = "../perch-ir" }
+
+[features]
+# The deployable controller (storage, ZK adapter, `Policy` impl, entry
+# points). Consumers that only cross-call an *adopted* instance (i.e.
+# perch-smart-account) disable this so their wasm links no controller state
+# or lifecycle code — mirrors perch-doc-compiler's `contract` feature split.
+default = ["contract"]
+contract = ["dep:soroban-sdk-tools", "dep:stellar-accounts"]

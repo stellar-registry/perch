@@ -22,6 +22,7 @@ members = [
     "crates/perch-registry-resolve-macro",
     "crates/perch-registry-resolve",
     "crates/perch-testkit",
+    "crates/perch-recovery",
 ]
 
 [workspace.package]

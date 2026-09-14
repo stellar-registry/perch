@@ -29,7 +29,9 @@
 //! format version.
 
 use crate::doc::{
-    ArgPred, CapConstraint, PolicyDoc, Principals, Rule, Scope, SignerDecl, SignerMethod,
+    ArgPred, CapConstraint, GuardianSet, PendingActivityPolicy, PolicyDoc, Principals,
+    RecoveryConfig, RecoveryMode, RecoveryProfile, Rule, Scope, SignerDecl, SignerMethod,
+    ZkVerifierConfig,
 };
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -110,7 +112,86 @@ fn doc_to_cv(doc: &PolicyDoc) -> Cv<'_> {
         Cv::Arr(doc.signers.iter().map(signer_to_cv).collect()),
     ));
     o.push(("rules", Cv::Arr(doc.rules.iter().map(rule_to_cv).collect())));
+    if let Some(r) = &doc.recovery {
+        o.push(("recovery", recovery_to_cv(r)));
+    }
     Cv::Obj(o)
+}
+
+fn recovery_to_cv(r: &RecoveryConfig) -> Cv<'_> {
+    let mut o: Vec<(&'static str, Cv)> = Vec::new();
+    o.push(("profile", Cv::Str(recovery_profile_str(r.profile))));
+    o.push(("mode", recovery_mode_to_cv(&r.mode)));
+    o.push(("controller", Cv::Str(&r.controller)));
+    if let Some(b) = &r.baseline {
+        o.push((
+            "baseline",
+            Cv::Obj(vec![("doc-hash", Cv::Str(&b.doc_hash))]),
+        ));
+    }
+    o.push((
+        "replaceable",
+        Cv::Arr(r.replaceable.iter().map(|s| Cv::Str(s)).collect()),
+    ));
+    o.push(("delay-ledgers", Cv::U32(r.delay_ledgers)));
+    o.push(("expiry-ledgers", Cv::U32(r.expiry_ledgers)));
+    o.push(("max-cancels", Cv::U32(r.max_cancels)));
+    o.push((
+        "pending-activity",
+        Cv::Str(pending_activity_str(r.pending_activity)),
+    ));
+    Cv::Obj(o)
+}
+
+fn recovery_profile_str(p: RecoveryProfile) -> &'static str {
+    match p {
+        RecoveryProfile::Loss => "loss",
+        RecoveryProfile::Protected => "protected",
+    }
+}
+
+fn pending_activity_str(p: PendingActivityPolicy) -> &'static str {
+    match p {
+        PendingActivityPolicy::Freeze => "freeze",
+        PendingActivityPolicy::Continue => "continue",
+    }
+}
+
+fn recovery_mode_to_cv(mode: &RecoveryMode) -> Cv<'_> {
+    match mode {
+        RecoveryMode::GuardianOnly(g) => {
+            let mut o = vec![("type", Cv::Str("guardian-only"))];
+            push_guardian_fields(&mut o, g);
+            Cv::Obj(o)
+        }
+        RecoveryMode::ZkOnly(z) => {
+            let mut o = vec![("type", Cv::Str("zk-only"))];
+            push_zk_fields(&mut o, z);
+            Cv::Obj(o)
+        }
+        RecoveryMode::Combined(g, z) => {
+            let mut o = vec![("type", Cv::Str("combined"))];
+            push_guardian_fields(&mut o, g);
+            push_zk_fields(&mut o, z);
+            Cv::Obj(o)
+        }
+    }
+}
+
+fn push_guardian_fields<'a>(o: &mut Vec<(&'static str, Cv<'a>)>, g: &'a GuardianSet) {
+    o.push((
+        "guardians",
+        Cv::Arr(g.guardians.iter().map(|s| Cv::Str(s)).collect()),
+    ));
+    o.push(("quorum", Cv::U32(g.quorum)));
+}
+
+fn push_zk_fields<'a>(o: &mut Vec<(&'static str, Cv<'a>)>, z: &'a ZkVerifierConfig) {
+    o.push(("verifier", Cv::Str(&z.verifier)));
+    o.push(("circuit-id", Cv::Str(&z.circuit_id)));
+    if let Some(pool) = &z.pool {
+        o.push(("pool", Cv::Str(pool)));
+    }
 }
 
 fn signer_to_cv(s: &SignerDecl) -> Cv<'_> {

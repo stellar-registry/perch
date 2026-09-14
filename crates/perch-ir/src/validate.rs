@@ -18,7 +18,10 @@
 //! ([`ValidationError::DuplicatePrincipalSigner`]), and repeated values in a
 //! `string-in` predicate ([`ValidationError::DuplicateStringInValue`]).
 
-use crate::doc::{ArgPred, PolicyDoc, Principals, Rule, Scope, SignerMethod};
+use crate::doc::{
+    ArgPred, GuardianSet, PolicyDoc, Principals, RecoveryConfig, RecoveryMode, Rule, Scope,
+    SignerMethod, ZkVerifierConfig,
+};
 use alloc::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -277,6 +280,83 @@ pub enum ValidationError {
         /// The rule's contract scope address.
         scope: String,
     },
+    /// `recovery.replaceable` is empty. Recovery enrolled with nothing to
+    /// replace can never restore access.
+    EmptyRecoveryReplaceable,
+    /// `recovery.replaceable` lists the same signer id twice.
+    DuplicateRecoveryReplaceable {
+        /// The duplicated signer id.
+        id: String,
+    },
+    /// `recovery.replaceable` references a signer id that is not declared.
+    UnknownRecoveryReplaceableRef {
+        /// The undeclared signer id that was referenced.
+        id: String,
+    },
+    /// `recovery.delay-ledgers` is `0`, which would make the timelock
+    /// meaningless (an attempt would be completable the instant its evidence
+    /// is satisfied).
+    ZeroRecoveryDelayLedgers,
+    /// `recovery.expiry-ledgers` is `0`, which would make an authorized
+    /// attempt expire immediately.
+    ZeroRecoveryExpiryLedgers,
+    /// `recovery.max-cancels` is `0`, which would forbid cancellation
+    /// entirely — the enrolled condition must always be able to cancel a
+    /// live attempt.
+    ZeroRecoveryMaxCancels,
+    /// `recovery.controller` is not shaped like a C-address strkey (checksum
+    /// not verified — see module docs).
+    InvalidRecoveryController {
+        /// The malformed address string.
+        address: String,
+    },
+    /// `recovery.baseline.doc-hash` is not 64 lowercase hex characters (a
+    /// SHA-256 digest).
+    InvalidBaselineDocHash {
+        /// The malformed hash string.
+        doc_hash: String,
+    },
+    /// A recovery mode's guardian set is empty. Guardian-based recovery with
+    /// no guardians can never satisfy quorum.
+    EmptyGuardianSet,
+    /// A recovery mode's guardian set lists the same address twice.
+    DuplicateGuardian {
+        /// The duplicated guardian address.
+        address: String,
+    },
+    /// A recovery mode's guardian address is not shaped like a C- or
+    /// G-address strkey (checksum not verified — see module docs).
+    InvalidGuardianAddress {
+        /// The malformed address string.
+        address: String,
+    },
+    /// A recovery mode's guardian `quorum` is out of range. Must satisfy
+    /// `1 <= quorum <= guardians.len()`, mirroring [`ValidationError::InvalidThreshold`]'s
+    /// rationale: zero would authorize with no guardian approvals, and a
+    /// quorum above the guardian count could never be met.
+    InvalidGuardianQuorum {
+        /// The declared quorum.
+        quorum: u32,
+        /// The guardian count (the N).
+        n: u32,
+    },
+    /// A recovery mode's `verifier` is not shaped like a C-address strkey
+    /// (checksum not verified — see module docs).
+    InvalidRecoveryVerifier {
+        /// The malformed address string.
+        address: String,
+    },
+    /// A recovery mode's `circuit-id` is not valid non-empty hex.
+    InvalidCircuitId {
+        /// The malformed circuit id string.
+        circuit_id: String,
+    },
+    /// A recovery mode's `pool` is not shaped like a C-address strkey
+    /// (checksum not verified — see module docs).
+    InvalidRecoveryPool {
+        /// The malformed address string.
+        address: String,
+    },
 }
 
 impl fmt::Display for ValidationError {
@@ -397,6 +477,51 @@ impl fmt::Display for ValidationError {
                 f,
                 "rule `{rule}`: cap token `{token}` differs from the contract scope `{scope}` (omit it or set it equal)"
             ),
+            E::EmptyRecoveryReplaceable => write!(
+                f,
+                "recovery: replaceable is empty (nothing for recovery to restore)"
+            ),
+            E::DuplicateRecoveryReplaceable { id } => {
+                write!(f, "recovery: replaceable repeats signer `{id}`")
+            }
+            E::UnknownRecoveryReplaceableRef { id } => write!(
+                f,
+                "recovery: replaceable references undeclared signer `{id}`"
+            ),
+            E::ZeroRecoveryDelayLedgers => write!(f, "recovery: delay-ledgers is 0"),
+            E::ZeroRecoveryExpiryLedgers => write!(f, "recovery: expiry-ledgers is 0"),
+            E::ZeroRecoveryMaxCancels => write!(f, "recovery: max-cancels is 0"),
+            E::InvalidRecoveryController { address } => write!(
+                f,
+                "recovery: controller `{address}` is not a C-address strkey"
+            ),
+            E::InvalidBaselineDocHash { doc_hash } => write!(
+                f,
+                "recovery: baseline doc-hash `{doc_hash}` is not 64 lowercase hex characters"
+            ),
+            E::EmptyGuardianSet => write!(f, "recovery: guardian set is empty"),
+            E::DuplicateGuardian { address } => {
+                write!(f, "recovery: duplicate guardian `{address}`")
+            }
+            E::InvalidGuardianAddress { address } => write!(
+                f,
+                "recovery: guardian `{address}` is not a C- or G-address strkey"
+            ),
+            E::InvalidGuardianQuorum { quorum, n } => write!(
+                f,
+                "recovery: guardian quorum={quorum} out of range 1..={n} (guardian count)"
+            ),
+            E::InvalidRecoveryVerifier { address } => write!(
+                f,
+                "recovery: verifier `{address}` is not a C-address strkey"
+            ),
+            E::InvalidCircuitId { circuit_id } => write!(
+                f,
+                "recovery: circuit-id `{circuit_id}` is not valid non-empty hex"
+            ),
+            E::InvalidRecoveryPool { address } => {
+                write!(f, "recovery: pool `{address}` is not a C-address strkey")
+            }
         }
     }
 }
@@ -527,6 +652,10 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
             });
         }
         validate_rule(rule, &declared, &mut errors);
+    }
+
+    if let Some(recovery) = &doc.recovery {
+        validate_recovery(recovery, &declared, &mut errors);
     }
 
     if errors.is_empty() {
@@ -718,6 +847,116 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
             Scope::SelfAdmin(_) => {
                 errors.push(ValidationError::CapWithoutToken { rule: name() });
             }
+        }
+    }
+}
+
+/// Whether `s` is 64 lowercase hex characters — the shape of a SHA-256 digest
+/// as [`RecoveryConfig`]'s baseline commitment stores it.
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64 && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// Validate a document's recovery configuration, if any.
+fn validate_recovery(
+    r: &RecoveryConfig,
+    declared: &BTreeSet<&str>,
+    errors: &mut Vec<ValidationError>,
+) {
+    if r.replaceable.is_empty() {
+        errors.push(ValidationError::EmptyRecoveryReplaceable);
+    }
+    let mut seen_replaceable: BTreeSet<&str> = BTreeSet::new();
+    for id in &r.replaceable {
+        if !seen_replaceable.insert(id) {
+            errors.push(ValidationError::DuplicateRecoveryReplaceable { id: id.clone() });
+        }
+        if !declared.contains(id.as_str()) {
+            errors.push(ValidationError::UnknownRecoveryReplaceableRef { id: id.clone() });
+        }
+    }
+
+    if r.delay_ledgers == 0 {
+        errors.push(ValidationError::ZeroRecoveryDelayLedgers);
+    }
+    if r.expiry_ledgers == 0 {
+        errors.push(ValidationError::ZeroRecoveryExpiryLedgers);
+    }
+    if r.max_cancels == 0 {
+        errors.push(ValidationError::ZeroRecoveryMaxCancels);
+    }
+
+    if !is_contract_address_shape(&r.controller) {
+        errors.push(ValidationError::InvalidRecoveryController {
+            address: r.controller.clone(),
+        });
+    }
+
+    if let Some(baseline) = &r.baseline {
+        if !is_sha256_hex(&baseline.doc_hash) {
+            errors.push(ValidationError::InvalidBaselineDocHash {
+                doc_hash: baseline.doc_hash.clone(),
+            });
+        }
+    }
+
+    match &r.mode {
+        RecoveryMode::GuardianOnly(g) => validate_guardian_set(g, errors),
+        RecoveryMode::ZkOnly(z) => validate_zk_verifier_config(z, errors),
+        RecoveryMode::Combined(g, z) => {
+            validate_guardian_set(g, errors);
+            validate_zk_verifier_config(z, errors);
+        }
+    }
+}
+
+/// Shared checks for a [`GuardianSet`]: non-empty, no repeated address, every
+/// address address-shaped, and `1 <= quorum <= guardians.len()` (mirroring
+/// [`Principals::Threshold`]'s INV-1 rationale — a zero quorum authorizes
+/// with no approvals; a quorum above the guardian count could never be met).
+fn validate_guardian_set(g: &GuardianSet, errors: &mut Vec<ValidationError>) {
+    if g.guardians.is_empty() {
+        errors.push(ValidationError::EmptyGuardianSet);
+    }
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    for addr in &g.guardians {
+        if !seen.insert(addr) {
+            errors.push(ValidationError::DuplicateGuardian {
+                address: addr.clone(),
+            });
+        }
+        if !is_address_shape(addr) {
+            errors.push(ValidationError::InvalidGuardianAddress {
+                address: addr.clone(),
+            });
+        }
+    }
+    if g.quorum == 0 || (g.quorum as usize) > g.guardians.len() {
+        errors.push(ValidationError::InvalidGuardianQuorum {
+            quorum: g.quorum,
+            n: g.guardians.len() as u32,
+        });
+    }
+}
+
+/// Shared checks for a [`ZkVerifierConfig`]: verifier and pool (if any) are
+/// C-address shaped, and `circuit_id` is non-empty valid hex.
+fn validate_zk_verifier_config(z: &ZkVerifierConfig, errors: &mut Vec<ValidationError>) {
+    if !is_contract_address_shape(&z.verifier) {
+        errors.push(ValidationError::InvalidRecoveryVerifier {
+            address: z.verifier.clone(),
+        });
+    }
+    if z.circuit_id.is_empty() || hex::decode(&z.circuit_id).is_err() {
+        errors.push(ValidationError::InvalidCircuitId {
+            circuit_id: z.circuit_id.clone(),
+        });
+    }
+    if let Some(pool) = &z.pool {
+        if !is_contract_address_shape(pool) {
+            errors.push(ValidationError::InvalidRecoveryPool {
+                address: pool.clone(),
+            });
         }
     }
 }

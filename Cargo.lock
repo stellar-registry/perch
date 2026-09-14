@@ -1509,6 +1509,7 @@ dependencies = [
  "perch-interpreter",
  "perch-ir",
  "perch-program",
+ "perch-recovery",
  "perch-registry-resolve",
  "perch-smart-account",
  "perch-spending-limit",
@@ -1544,6 +1545,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-recovery"
+version = "0.1.0"
+dependencies = [
+ "perch-doc-compiler",
+ "perch-ir",
+ "perch-testkit",
+ "soroban-sdk",
+ "soroban-sdk-tools",
+ "stellar-accounts",
+]
+
+[[package]]
 name = "perch-registry-resolve"
 version = "0.1.1"
 dependencies = [
@@ -1566,6 +1579,7 @@ name = "perch-smart-account"
 version = "0.1.1"
 dependencies = [
  "perch-doc-compiler",
+ "perch-recovery",
  "perch-registry-resolve",
  "soroban-sdk",
  "soroban-sdk-tools",
@@ -1598,6 +1612,7 @@ dependencies = [
  "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",
+ "perch-recovery",
  "perch-smart-account",
  "perch-spending-limit",
  "soroban-sdk",

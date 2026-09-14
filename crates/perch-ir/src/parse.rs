@@ -52,9 +52,11 @@ use hifijson::value::{self, Value};
 use hifijson::SliceLexer;
 
 use crate::doc::{
-    AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, CapConstraint, ContractScope, IsSelfPred,
-    PolicyDoc, Principals, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
-    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred,
+    AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, BaselineCommitment, CapConstraint,
+    ContractScope, GuardianSet, IsSelfPred, PendingActivityPolicy, PolicyDoc, Principals,
+    RecoveryConfig, RecoveryMode, RecoveryProfile, Rule, Scope, SelfAdminScope,
+    SelfAuthenticatingPrincipals, SignerDecl, SignerMethod, StringInPred, StringPrefixPred,
+    ThresholdPrincipals, U32EqPred, ZkVerifierConfig,
 };
 
 /// Maximum JSON nesting depth accepted by [`from_json`]. A valid `PolicyDoc`
@@ -285,7 +287,7 @@ fn tag<N, S: AsRef<str>>(obj: Members<'_, N, S>, ctx: &str) -> Result<String, Pa
 
 fn doc_from_value<N: AsRef<str>, S: AsRef<str>>(v: &Value<N, S>) -> Result<PolicyDoc, ParseError> {
     let obj = as_object(v, "document")?;
-    deny_unknown(obj, &["version", "network", "signers", "rules"])?;
+    deny_unknown(obj, &["version", "network", "signers", "rules", "recovery"])?;
     // The version pre-check in `from_json` has already rejected any numeric
     // `version != 1`; here it must be the integer `1`, a duplicate (caught by
     // `req_field`), or a non-number (caught by `as_u32` as "expected u32").
@@ -302,11 +304,16 @@ fn doc_from_value<N: AsRef<str>, S: AsRef<str>>(v: &Value<N, S>) -> Result<Polic
         .iter()
         .map(rule_from_value)
         .collect::<Result<Vec<_>, _>>()?;
+    let recovery = match opt_field(obj, "recovery")? {
+        Some(v) => Some(recovery_from_value(v)?),
+        None => None,
+    };
     Ok(PolicyDoc {
         version,
         network,
         signers,
         rules,
+        recovery,
     })
 }
 
@@ -517,4 +524,147 @@ fn cap_from_value<N: AsRef<str>, S: AsRef<str>>(
         limit: as_str(req_field(obj, "limit")?, "cap limit")?,
         period_ledgers: as_u32(req_field(obj, "period-ledgers")?, "period-ledgers")?,
     })
+}
+
+// --- recovery configuration ---------------------------------------------------
+
+fn recovery_from_value<N: AsRef<str>, S: AsRef<str>>(
+    v: &Value<N, S>,
+) -> Result<RecoveryConfig, ParseError> {
+    let obj = as_object(v, "recovery")?;
+    deny_unknown(
+        obj,
+        &[
+            "profile",
+            "mode",
+            "controller",
+            "baseline",
+            "replaceable",
+            "delay-ledgers",
+            "expiry-ledgers",
+            "max-cancels",
+            "pending-activity",
+        ],
+    )?;
+    let profile = recovery_profile_from_value(req_field(obj, "profile")?)?;
+    let mode = recovery_mode_from_value(req_field(obj, "mode")?)?;
+    let controller = as_str(req_field(obj, "controller")?, "recovery controller")?;
+    let baseline = match opt_field(obj, "baseline")? {
+        Some(v) => Some(baseline_commitment_from_value(v)?),
+        None => None,
+    };
+    let replaceable = as_array(req_field(obj, "replaceable")?, "recovery replaceable")?
+        .iter()
+        .map(|e| as_str(e, "replaceable signer id"))
+        .collect::<Result<Vec<_>, _>>()?;
+    let delay_ledgers = as_u32(req_field(obj, "delay-ledgers")?, "recovery delay-ledgers")?;
+    let expiry_ledgers = as_u32(req_field(obj, "expiry-ledgers")?, "recovery expiry-ledgers")?;
+    let max_cancels = as_u32(req_field(obj, "max-cancels")?, "recovery max-cancels")?;
+    let pending_activity = pending_activity_policy_from_value(req_field(obj, "pending-activity")?)?;
+    Ok(RecoveryConfig {
+        profile,
+        mode,
+        controller,
+        baseline,
+        replaceable,
+        delay_ledgers,
+        expiry_ledgers,
+        max_cancels,
+        pending_activity,
+    })
+}
+
+fn recovery_profile_from_value<N, S: AsRef<str>>(
+    v: &Value<N, S>,
+) -> Result<RecoveryProfile, ParseError> {
+    match as_str(v, "recovery profile")?.as_str() {
+        "loss" => Ok(RecoveryProfile::Loss),
+        "protected" => Ok(RecoveryProfile::Protected),
+        other => Err(json_err(format!(
+            "unknown value `{other}` for recovery profile"
+        ))),
+    }
+}
+
+fn recovery_mode_from_value<N: AsRef<str>, S: AsRef<str>>(
+    v: &Value<N, S>,
+) -> Result<RecoveryMode, ParseError> {
+    let obj = as_object(v, "recovery mode")?;
+    match tag(obj, "recovery mode type")?.as_str() {
+        "guardian-only" => {
+            deny_unknown(obj, &["type", "guardians", "quorum"])?;
+            Ok(RecoveryMode::GuardianOnly(guardian_set_from_fields(obj)?))
+        }
+        "zk-only" => {
+            deny_unknown(obj, &["type", "verifier", "circuit-id", "pool"])?;
+            Ok(RecoveryMode::ZkOnly(zk_verifier_config_from_fields(obj)?))
+        }
+        "combined" => {
+            deny_unknown(
+                obj,
+                &[
+                    "type",
+                    "guardians",
+                    "quorum",
+                    "verifier",
+                    "circuit-id",
+                    "pool",
+                ],
+            )?;
+            Ok(RecoveryMode::Combined(
+                guardian_set_from_fields(obj)?,
+                zk_verifier_config_from_fields(obj)?,
+            ))
+        }
+        other => Err(json_err(format!(
+            "unknown variant `{other}` for recovery mode type"
+        ))),
+    }
+}
+
+fn guardian_set_from_fields<N: AsRef<str>, S: AsRef<str>>(
+    obj: Members<'_, N, S>,
+) -> Result<GuardianSet, ParseError> {
+    Ok(GuardianSet {
+        guardians: as_array(req_field(obj, "guardians")?, "guardians")?
+            .iter()
+            .map(|e| as_str(e, "guardian address"))
+            .collect::<Result<Vec<_>, _>>()?,
+        quorum: as_u32(req_field(obj, "quorum")?, "guardian quorum")?,
+    })
+}
+
+fn zk_verifier_config_from_fields<N: AsRef<str>, S: AsRef<str>>(
+    obj: Members<'_, N, S>,
+) -> Result<ZkVerifierConfig, ParseError> {
+    Ok(ZkVerifierConfig {
+        verifier: as_str(req_field(obj, "verifier")?, "zk verifier")?,
+        circuit_id: as_str(req_field(obj, "circuit-id")?, "zk circuit-id")?,
+        pool: match opt_field(obj, "pool")? {
+            Some(v) => Some(as_str(v, "zk pool")?),
+            None => None,
+        },
+    })
+}
+
+fn baseline_commitment_from_value<N: AsRef<str>, S: AsRef<str>>(
+    v: &Value<N, S>,
+) -> Result<BaselineCommitment, ParseError> {
+    let obj = as_object(v, "recovery baseline")?;
+    deny_unknown(obj, &["doc-hash"])?;
+    Ok(BaselineCommitment {
+        doc_hash: as_str(req_field(obj, "doc-hash")?, "baseline doc-hash")?,
+    })
+}
+
+fn pending_activity_policy_from_value<N, S: AsRef<str>>(
+    v: &Value<N, S>,
+) -> Result<PendingActivityPolicy, ParseError> {
+    match as_str(v, "recovery pending-activity")?.as_str() {
+        "freeze" => Ok(PendingActivityPolicy::Freeze),
+        "continue" => Ok(PendingActivityPolicy::Continue),
+        other => Err(json_err(format!(
+            "unknown value `{other}` for recovery pending-activity"
+        ))),
+    }
 }

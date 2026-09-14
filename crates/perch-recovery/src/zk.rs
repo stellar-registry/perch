@@ -1,13 +1,13 @@
 //! Generic ZK verifier adapter: the statement a proof must bind, and the
 //! cross-contract interface any verifier implementation satisfies.
 //!
-//! This module deliberately carries **no circuit**. Per the authoritative
-//! decision record §5.4, proof-system portability is an interface goal, not
-//! a requirement to ship or validate a specific circuit in this stage — see
-//! `docs/recovery/controller-governance.md`'s "ZK adapter scope" section.
-//! What this module fixes is the *statement* a proof must be over: every
-//! recovery-specific public fact, bound the same way regardless of which
-//! proof system a given verifier implements.
+//! This module deliberately carries **no circuit** — proof-system
+//! portability is an interface goal here, not a requirement to ship or
+//! validate a specific circuit; see `docs/recovery/controller-governance.md`'s
+//! "ZK adapter scope" section for the full rationale. What this module fixes
+//! is the *statement* a proof must be over: every recovery-specific public
+//! fact, bound the same way regardless of which proof system a given
+//! verifier implements.
 
 use crate::types::Action;
 use soroban_sdk::xdr::ToXdr;
@@ -32,11 +32,13 @@ fn action_tag(action: &Action) -> u8 {
 /// configuration's own content hash (so a proof cannot outlive a
 /// reconfiguration — see `contract.rs`'s reconfigure-evidence handling); the
 /// target document's hash for `LostKey`/`Compromise` (zero for `Cancel`,
-/// which identifies its attempt by id instead, per §2.2); the attempt's
-/// nonce; and the enrolled timelock. Binding all of this in one hash means a
-/// proof for one account/action/config/target/attempt can never be replayed
-/// for another — every field the follow-up review §5.3 names for a proposal
-/// commitment is present.
+/// which identifies its attempt by id instead — cancellation and initiation
+/// are deliberately separate evidence domains, see `Action`'s own docs); the
+/// attempt's nonce; and the enrolled timelock. Binding all of this in one
+/// hash means a proof — or, via `submit_guardian_approval`/
+/// `submit_guardian_cancel`, a guardian's signature over the identical
+/// digest — for one account/action/config/target/attempt can never be
+/// replayed for another.
 #[allow(clippy::too_many_arguments)]
 pub fn statement(
     e: &Env,
@@ -86,4 +88,125 @@ pub trait ZkVerifierInterface {
         proof: Bytes,
         pool: Vec<Address>,
     ) -> bool;
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    /// `submit_guardian_approval`/`submit_guardian_cancel` bind a guardian's
+    /// signature to this statement instead of the bare `(account, guardian)`
+    /// call arguments, specifically so it can't be replayed against a
+    /// different attempt, action, or target. That property only holds if the
+    /// statement actually varies with each of those fields — this pins that
+    /// down directly, independent of any authorization mocking.
+    #[test]
+    fn statement_varies_with_every_distinguishing_field() {
+        let e = Env::default();
+        let account = Address::generate(&e);
+        let other_account = Address::generate(&e);
+        let controller = Address::generate(&e);
+        let other_controller = Address::generate(&e);
+        let cfg_hash = BytesN::from_array(&e, &[1u8; 32]);
+        let other_cfg_hash = BytesN::from_array(&e, &[2u8; 32]);
+        let target = BytesN::from_array(&e, &[3u8; 32]);
+        let other_target = BytesN::from_array(&e, &[4u8; 32]);
+
+        let base = statement(
+            &e,
+            &account,
+            &controller,
+            &Action::LostKey,
+            &cfg_hash,
+            Some(&target),
+            7,
+            100,
+        );
+        let variants = [
+            statement(
+                &e,
+                &other_account,
+                &controller,
+                &Action::LostKey,
+                &cfg_hash,
+                Some(&target),
+                7,
+                100,
+            ),
+            statement(
+                &e,
+                &account,
+                &other_controller,
+                &Action::LostKey,
+                &cfg_hash,
+                Some(&target),
+                7,
+                100,
+            ),
+            statement(
+                &e,
+                &account,
+                &controller,
+                &Action::Compromise,
+                &cfg_hash,
+                Some(&target),
+                7,
+                100,
+            ),
+            statement(
+                &e,
+                &account,
+                &controller,
+                &Action::LostKey,
+                &other_cfg_hash,
+                Some(&target),
+                7,
+                100,
+            ),
+            statement(
+                &e,
+                &account,
+                &controller,
+                &Action::LostKey,
+                &cfg_hash,
+                Some(&other_target),
+                7,
+                100,
+            ),
+            statement(
+                &e,
+                &account,
+                &controller,
+                &Action::LostKey,
+                &cfg_hash,
+                None,
+                7,
+                100,
+            ),
+            statement(
+                &e,
+                &account,
+                &controller,
+                &Action::LostKey,
+                &cfg_hash,
+                Some(&target),
+                8,
+                100,
+            ),
+            statement(
+                &e,
+                &account,
+                &controller,
+                &Action::LostKey,
+                &cfg_hash,
+                Some(&target),
+                7,
+                101,
+            ),
+        ];
+        for v in variants {
+            assert_ne!(base, v);
+        }
+    }
 }

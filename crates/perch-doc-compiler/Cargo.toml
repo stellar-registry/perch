@@ -28,10 +28,15 @@ perch-program = { workspace = true }
 # honored — cargo ignores it on workspace-inherited deps. Keeps both no_std.
 perch-ir = { version = "0.1.1", path = "../perch-ir", default-features = false, optional = true }
 perch-compile = { version = "0.1.1", path = "../perch-compile", default-features = false, optional = true }
+# Decodes a signer's hex-encoded key to its physical bytes before fingerprinting
+# it (see `credential_fingerprint`) — matching `perch-ir::validate`'s own
+# hex-decode-before-compare treatment so two casings of the same key fingerprint
+# identically.
+hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
 [features]
 # The deployable contract + its parser/compiler deps. Consumers that only
 # need the wire types and DocCompilerClient (i.e. smart accounts) disable
 # this so their wasm links no compiler code.
 default = ["contract"]
-contract = ["dep:perch-ir", "dep:perch-compile"]
+contract = ["dep:perch-ir", "dep:perch-compile", "dep:hex"]

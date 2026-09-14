@@ -1470,6 +1470,7 @@ dependencies = [
 name = "perch-doc-compiler"
 version = "0.2.1"
 dependencies = [
+ "hex",
  "perch-compile",
  "perch-ir",
  "perch-program",

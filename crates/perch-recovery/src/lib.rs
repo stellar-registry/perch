@@ -1,9 +1,12 @@
-//! `perch-recovery`: the shared account-recovery controller, generalizing the
-//! validated Nido Stage 3 experiment into a perch crate. Guardian-only,
-//! ZK-only, and combined recovery modes; strictly-additive-and-beyond
+//! `perch-recovery`: the shared account-recovery controller for opt-in
+//! account recovery, generalizing a companion smart-account implementation's
+//! validated experiment ([nidohq/nido#206]) into a perch crate. Guardian-only,
+//! ZK-only, and combined recovery modes; general (not just additive)
 //! reconfigure under `Protected`; `config_hash` commitment; constructorless
-//! deployment. See `docs/recovery/` for the full design, governance, and
-//! open release-blocking gate (§7, pending-activity policy).
+//! deployment. See `docs/recovery/` for the full design, governance, and the
+//! open release-blocking pending-activity-policy gate.
+//!
+//! [nidohq/nido#206]: https://github.com/nidohq/nido/pull/206
 //!
 //! Mirrors `perch-doc-compiler`'s split: the error type, the evidence type,
 //! and a client-only cross-contract interface are always available; the
@@ -61,9 +64,15 @@ pub enum RecoveryError {
     ReconfigureEvidenceRequired,
     /// Suspected-compromise recovery was attempted with no baseline enrolled.
     NoBaselineEnrolled,
+    /// A suspected-compromise attempt's target does not match the enrolled
+    /// baseline's committed hash.
+    TargetNotBaseline,
     /// A context rule attached this policy with the wrong shape (non-empty
     /// signers, or not scoped to the smart account calling itself).
     MalformedContextRule,
+    /// Computing this attempt's timelock/expiry ledger sequence would
+    /// overflow `u32`.
+    TimelockOverflow,
 }
 
 /// Evidence accompanying an `apply_doc` call that changes a `Protected`

@@ -18,7 +18,10 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-soroban-sdk-tools = { workspace = true, optional = true }
+# Required unconditionally: `src/lib.rs`'s always-available `RecoveryError`
+# uses `#[scerr]` regardless of the `contract` feature, so a client-only build
+# (perch-smart-account, `default-features = false`) still needs this.
+soroban-sdk-tools = { workspace = true }
 stellar-accounts = { workspace = true, optional = true }
 perch-doc-compiler = { version = "0.2.1", path = "../perch-doc-compiler", default-features = false }
 
@@ -33,4 +36,4 @@ perch-ir = { path = "../perch-ir" }
 # perch-smart-account) disable this so their wasm links no controller state
 # or lifecycle code — mirrors perch-doc-compiler's `contract` feature split.
 default = ["contract"]
-contract = ["dep:soroban-sdk-tools", "dep:stellar-accounts"]
+contract = ["dep:stellar-accounts"]

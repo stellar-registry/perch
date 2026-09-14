@@ -4,10 +4,10 @@
 already-deployed `perch-account` can gain recovery support in place, or needs
 a new account.
 
-**Hard rule this document follows throughout:** shipping this release does
-not, and cannot, change the behavior of any already-deployed `PerchAccount`
-or already-deployed `perch-doc-compiler` instance. Both are constructorless
-and immutable by construction (see
+**Hard rule this document follows throughout:** shipping recovery support
+does not, and cannot, change the behavior of any already-deployed
+`PerchAccount` or already-deployed `perch-doc-compiler` instance. Both are
+constructorless and immutable by construction (see
 [`vk-and-controller-immutability.md`](vk-and-controller-immutability.md)).
 Nothing below is a claim that a future library release changes deployed
 accounts — it is the opposite claim, worked out to its consequences.
@@ -40,29 +40,32 @@ execution entry point: replacing it means deploying a new account and moving
 Two independent immutable artifacts must both understand recovery for
 enrollment to be possible at all:
 
-1. **The doc-compiler instance the account calls.** A pre-Stage-4 compiler's
-   own statically-linked `perch-ir` has no `recovery` field in its
+1. **The doc-compiler instance the account calls.** A compiler predating
+   recovery support has its own statically-linked `perch-ir` with no
+   `recovery` field in its
    `deny_unknown_fields` list (`crates/perch-ir/src/parse.rs`) — a document
    containing a `"recovery"` key is rejected as an unknown field, on-chain,
    before anything else happens. This is not a permissions error; the old
    compiler genuinely does not know the shape exists.
 2. **The account's own `apply_doc` logic.** Even if a document could get
-   past compilation, a pre-Stage-4 account's `apply_doc` has no code path
-   that calls a recovery controller — that call only exists in a
-   post-Stage-4 build of `perch-smart-account`/`perch-account`.
+   past compilation, an account built before recovery support existed has
+   an `apply_doc` with no code path that calls a recovery controller — that
+   call only exists in a build of `perch-smart-account`/`perch-account`
+   with recovery support.
 
-Consequently: **a `PerchAccount` deployed before this release can never
-enroll recovery through its own `apply_doc`, under any circumstances.**
-This is a permanent property of that deployment, not a temporary gap this
-document works around.
+Consequently: **a `PerchAccount` deployed before recovery support existed
+can never enroll recovery through its own `apply_doc`, under any
+circumstances.** This is a permanent property of that deployment, not a
+temporary gap this document works around.
 
 ## The two cases
 
-### Case A — account built before this release
+### Case A — account built before recovery support existed
 
 Recovery is permanently unavailable in place. The only path is:
 
-1. Deploy a new `PerchAccount` from a post-Stage-4 build. Its constructor
+1. Deploy a new `PerchAccount` from a build with recovery support. Its
+   constructor
    takes the same shape as before (`admin_signers: Vec<Signer>`) — the
    user's existing signer keys/credentials are reused as-is; nothing about a
    WebAuthn credential, ed25519 key, or delegated address is
@@ -100,13 +103,13 @@ Recovery is permanently unavailable in place. The only path is:
 which `perch-account`/`perch-doc-compiler` build an account was deployed
 against, a wallet cannot currently *discover* whether a given account is
 Case A or Case B by inspecting the account alone. Until perch grows a
-queryable version marker (tracked as follow-up work, not part of this
-release), integrators should record the release each account was deployed
+queryable version marker (tracked as follow-up work), integrators should
+record the release each account was deployed
 from at deploy time (e.g. alongside however they already track deployments —
 see `DEPLOYED.md`-style records used elsewhere in this repo's tooling) and
 consult that record rather than guessing.
 
-### Case B — account built from this release or later, recovery not yet enrolled
+### Case B — account built with recovery support, not yet enrolled
 
 No migration is needed. Recovery is enrolled, changed, or removed the same
 way any other policy change is made: submit a new document via `apply_doc`.
@@ -125,8 +128,8 @@ shown above, portable as-is.
 
 ## What this document does not claim
 
-- It does not claim perch can make a pre-Stage-4 account upgradeable after
-  the fact. It cannot, by design (see
+- It does not claim perch can make an account built before recovery
+  support existed upgradeable after the fact. It cannot, by design (see
   [`vk-and-controller-immutability.md`](vk-and-controller-immutability.md)).
 - It does not claim balance or external-reference migration is automated by
   perch tooling. Both are explicit, integration-specific steps an

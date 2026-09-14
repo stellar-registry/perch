@@ -7,9 +7,8 @@
 use soroban_sdk::{contracttype, Address, BytesN, Vec};
 
 /// Which action a proposal or evidence submission is for. Domain-separates
-/// initiation from cancellation from reconfiguration (§2.2): evidence
-/// collected for one action never satisfies another, even for the same
-/// attempt or account.
+/// initiation from cancellation from reconfiguration: evidence collected for
+/// one action never satisfies another, even for the same attempt or account.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[contracttype]
 pub enum Action {
@@ -52,10 +51,19 @@ pub struct Attempt {
     /// Monotonic per-account id — the proposal commitment's nonce.
     pub id: u64,
     pub action: Action,
-    /// `sha256(canonical bytes)` of the exact document this attempt, once
-    /// completed, installs. Frozen at `begin_attempt` and never recomputed —
-    /// completion checks the caller's `apply_doc` argument against exactly
-    /// this value.
+    /// `sha256` of the exact bytes the caller must submit as `apply_doc`'s
+    /// `doc_json` argument to complete this attempt. Frozen at
+    /// `begin_attempt` and never recomputed — completion hashes the raw
+    /// argument bytes it receives (it runs *before* `apply_doc`'s body, as
+    /// part of authorization, so it has no access to the compiler's
+    /// canonical `doc_hash`, which is only computed afterward). Whoever
+    /// declares this value and whoever later submits the completion call
+    /// must agree on the exact byte serialization — in practice, both sides
+    /// should use the canonical bytes (`perch_ir::canonical_json` /
+    /// `perch-js`'s `canonicalJson`) for consistency with `doc_hash`
+    /// elsewhere in the system, but nothing here enforces that; a
+    /// byte-for-byte match against whatever was declared is all that's
+    /// checked.
     pub target_doc_hash: BytesN<32>,
     /// Credential fingerprints this attempt replaces (a subset of the
     /// enrolled config's `replaceable`, chosen by the caller at initiation —
@@ -64,6 +72,13 @@ pub struct Attempt {
     pub replaced_credentials: Vec<BytesN<32>>,
     /// Ledger sequence `begin_attempt` ran at.
     pub created_at: u32,
+    /// Ledger sequence at or after which a still-`CollectingEvidence` attempt
+    /// is no longer live (see [`crate::contract::is_live`]) — bounds how long
+    /// a permissionless `begin_*_attempt` call can hold `guard_apply_doc`'s
+    /// unconditional live-attempt block open while no evidence ever arrives.
+    /// Fixed at `begin_attempt` to `created_at + expiry_ledgers`; irrelevant
+    /// once the attempt leaves `CollectingEvidence`.
+    pub evidence_deadline: u32,
     /// Ledger sequence at or after which this attempt becomes completable,
     /// once authorized. `0` (unset) while `CollectingEvidence`.
     pub executable_after: u32,

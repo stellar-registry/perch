@@ -13,9 +13,9 @@ Lean `Semantics.lean`/`Lowering.lean`/`Theorems.lean` (T1–T6) model
 **perch-program evaluation** — the RPN machine `__check_auth` runs per
 invocation. `RecoveryConfig` never lowers to a perch-program op: it is not
 installed as, or referenced by, any interpreter program. This isn't an
-oversight; it's the load-bearing design decision from the follow-up review
-§1 and §5.1 ("Recovery state remains outside the stateless interpreter"),
-and it is *why* recovery is architecturally possible at all —
+oversight; it's a load-bearing design decision — recovery state stays
+outside the stateless interpreter entirely — and it is *why* recovery is
+architecturally possible at all —
 `docs/verification/THEORY.md`'s enforceability argument states plainly that
 no execution monitor, including perch's, can enforce "the account can
 always recover" (a liveness property), and that perch "addresses the
@@ -26,7 +26,7 @@ perch's own enforceable-fragment boundary — it was never a candidate for
 inclusion in the per-invocation-safety-property model in the first place.
 
 Concretely: `crates/perch-compile` (the crate that lowers `PolicyDoc` rules
-into perch-program `InstallParams`) is untouched by this stage — recovery
+into perch-program `InstallParams`) is untouched by adding recovery —
 lowering happens entirely inside `perch-doc-compiler`, mapping
 `perch_ir::RecoveryConfig` directly to a new wire type
 (`CompiledRecoveryConfig`) with no perch-program involvement. So T1–T6 and
@@ -46,7 +46,7 @@ engineering: a new sum-of-products shape enters the emitter and its
 verified inverse parser, and `emitDoc_injective`'s proof structure would
 need new cases throughout.
 
-**This stage does not do that work**, for two reasons stated plainly rather
+**This change does not do that work**, for two reasons stated plainly rather
 than hidden:
 
 1. **Correctness bar.** `formal/README.md` states every theorem here is
@@ -70,7 +70,7 @@ than hidden:
 replay) is unaffected and continues to pass, because it replays
 `testdata/eval/eval-vectors.json` and round-trips the existing
 (recovery-absent) `ci-publish*.canonical.json` fixtures — none of which
-gained a `recovery` field. The two new fixtures added by this stage
+gained a `recovery` field. The two new fixtures this change adds
 (`ci-publish-recovery.json`, `ci-publish-recovery-combined.json`) are
 **not** round-tripped through the Lean model, because Lean's `Doc` cannot
 represent them yet. Their canonical-form and hash agreement is instead
@@ -80,11 +80,11 @@ by the Rust (`crates/perch-ir/tests/recovery.rs`) and TypeScript
 bytes — which is real cross-implementation conformance, just not
 machine-checked against the Lean model.
 
-## Tracked follow-up (not this stage)
+## Tracked follow-up
 
 Extending `Canon.lean`/`CanonProofs.lean` to cover `RecoveryConfig` and
 re-establishing `emitDoc_injective` over the enlarged domain is legitimate
-future work, tracked here rather than attempted under this stage's time
-budget. It should be undertaken as its own reviewed change with room to get
-the injectivity argument right, not bundled into a schema-and-controller
+future work, tracked here rather than attempted as part of this change. It
+should be undertaken as its own reviewed change with room to get the
+injectivity argument right, not bundled into a schema-and-controller
 release.

@@ -75,10 +75,7 @@
               "function_name": "submit_guardian_cancel",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
+                  "bytes": "7861f13b019e85e312d1a6e1713a81cbeeed95f1950f2ff79dcf90042981231f"
                 }
               ]
             }
@@ -97,10 +94,7 @@
               "function_name": "submit_guardian_cancel",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-                },
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                  "bytes": "7861f13b019e85e312d1a6e1713a81cbeeed95f1950f2ff79dcf90042981231f"
                 }
               ]
             }
@@ -600,6 +594,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "evidence_deadline"
+                    },
+                    "val": {
+                      "u32": 1000
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "executable_after"
                     },
                     "val": {
@@ -645,7 +647,7 @@
                     "val": {
                       "vec": [
                         {
-                          "bytes": "37d1b9bad37145b43830623395939bb877c08c8a2f8e0801c769a963045f7ff1"
+                          "bytes": "1cdd641e4082e526053899cb26dec64a2856f0243c42fdccafa116c9d437d440"
                         }
                       ]
                     }
@@ -912,7 +914,7 @@
                     "val": {
                       "vec": [
                         {
-                          "bytes": "37d1b9bad37145b43830623395939bb877c08c8a2f8e0801c769a963045f7ff1"
+                          "bytes": "1cdd641e4082e526053899cb26dec64a2856f0243c42fdccafa116c9d437d440"
                         }
                       ]
                     }

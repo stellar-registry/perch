@@ -21,16 +21,17 @@ pub struct RecoveryStorage {
     /// Monotonic per-account attempt-id counter — the proposal commitment's
     /// nonce. Never reused, even across terminal attempts.
     pub next_attempt_id: PersistentMap<Address, u64>,
-    /// Cumulative cancellations across the account's whole history (§2.2's
-    /// griefing bound), never reset by a new attempt.
+    /// Cumulative cancellations across the account's whole history (a
+    /// griefing bound — see `RecoveryError::MaxCancelsReached`), never reset by
+    /// a new attempt.
     pub cancels_used: PersistentMap<Address, u32>,
     /// Guardian cancel-evidence for one `(account, attempt_id)` — a
-    /// deliberately separate domain from `Attempt::guardian_approvals`
-    /// (initiation evidence never counts toward cancellation, per §2.2).
+    /// deliberately separate domain from `Attempt::guardian_approvals`:
+    /// initiation evidence never counts toward cancellation, and vice versa.
     pub cancel_tally: PersistentMap<(Address, u64), Vec<Address>>,
     /// Whether a valid ZK cancellation proof has been verified for one
     /// `(account, attempt_id)`. Tracked separately from `cancel_tally` so
-    /// `Combined` mode can require both factors before cancelling (§2.2) —
+    /// `Combined` mode can require both factors before cancelling —
     /// each factor's own evidence is recorded independently and
     /// `cancel_attempt` only fires once the mode's full set is present.
     pub zk_cancel_verified: PersistentMap<(Address, u64), bool>,

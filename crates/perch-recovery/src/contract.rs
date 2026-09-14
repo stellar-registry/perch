@@ -60,7 +60,19 @@ pub struct RecoveryAuthorized {
 }
 
 const TTL_THRESHOLD: u32 = 1;
-const TTL_EXTEND: u32 = 3_110_400; // ~180 days at 5s ledgers; an operational tuning knob, not a security parameter.
+
+/// The network's current maximum persistent-entry TTL — the longest any
+/// extension in this module can buy, recomputed at each call site rather
+/// than pinned to a constant so it tracks the live network configuration
+/// (see `Env::storage().max_ttl()`'s own doc comment). This is deliberately
+/// *not* "forever": a persistent entry with no further activity still
+/// expires once this many ledgers pass with no renewal. [`PerchRecovery::renew`]
+/// is the explicit, permissionless keep-alive for exactly that gap — see
+/// `docs/recovery/controller-governance.md`'s "Keeping permanent state
+/// alive" section.
+fn max_ttl(e: &Env) -> u32 {
+    e.storage().max_ttl()
+}
 
 #[contract]
 pub struct PerchRecovery;
@@ -69,18 +81,28 @@ pub struct PerchRecovery;
 impl Policy for PerchRecovery {
     type AccountParams = CompiledRecoveryConfig;
 
-    /// Write the enrolled configuration. The security gate already ran (see
-    /// module docs) — this only shape-checks the rule it's attached to and
-    /// stores the value.
+    /// Write the enrolled configuration. `install`/`enforce`/`uninstall` are
+    /// exported functions on this contract like any other — reachable by a
+    /// direct call from anyone, not only via OZ's real install flow — so this
+    /// first line is load-bearing, not defensive boilerplate: it makes a
+    /// direct, forged call fail before touching storage. It succeeds for free
+    /// on the real path (`smart_account`'s own wasm is the direct invoker
+    /// when `apply_doc` re-installs its context rules — Soroban's
+    /// invoker-contract authorization, `require_auth`'s first-checked path,
+    /// grants this without a signature) and fails for any caller that isn't
+    /// `smart_account` itself. The reconfiguration gate already ran upstream
+    /// (see module docs) — this only shape-checks the rule it's attached to
+    /// and stores the value.
     fn install(
         e: &Env,
         install_params: CompiledRecoveryConfig,
         context_rule: ContextRule,
         smart_account: Address,
     ) {
+        smart_account.require_auth();
         assert_self_zero_signer_rule(e, &context_rule, &smart_account);
         RecoveryStorage::set_config(e, &smart_account, &install_params);
-        RecoveryStorage::extend_config_ttl(e, &smart_account, TTL_THRESHOLD, TTL_EXTEND);
+        RecoveryStorage::extend_config_ttl(e, &smart_account, TTL_THRESHOLD, max_ttl(e));
     }
 
     /// Variant A completion: authorize `apply_doc` exactly when a live,
@@ -114,6 +136,18 @@ fn assert_self_zero_signer_rule(e: &Env, rule: &ContextRule, smart_account: &Add
 }
 
 fn complete(e: &Env, context: &Context, smart_account: &Address) {
+    // Same reasoning as `install`: `enforce` is a directly-callable exported
+    // function, and `context` is an ordinary argument the caller fully
+    // controls — nothing about receiving a `Context::Contract` value proves
+    // it reflects a real invocation. Without this, anyone who knows (or
+    // reconstructs) the pending attempt's target document bytes could call
+    // `enforce` directly with a forged `context`, consuming the attempt
+    // (revoking credentials, spending its nullifier) without `apply_doc`'s
+    // body ever having run. This succeeds for free on the real path — OZ's
+    // `do_check_auth`, itself running because `apply_doc` required
+    // `smart_account`'s own auth, is the direct invoker of this cross-call —
+    // and fails for a direct, unrelated caller.
+    smart_account.require_auth();
     let Context::Contract(ContractContext {
         contract,
         fn_name,
@@ -162,10 +196,10 @@ fn complete(e: &Env, context: &Context, smart_account: &Address) {
         }
     }
     RecoveryStorage::set_revoked(e, smart_account, &revoked);
-    RecoveryStorage::extend_revoked_ttl(e, smart_account, TTL_THRESHOLD, TTL_EXTEND);
+    RecoveryStorage::extend_revoked_ttl(e, smart_account, TTL_THRESHOLD, max_ttl(e));
     if let Some(n) = attempt.nullifier.first() {
         RecoveryStorage::set_nullifier(e, &n, &true);
-        RecoveryStorage::extend_nullifier_ttl(e, &n, TTL_THRESHOLD, TTL_EXTEND);
+        RecoveryStorage::extend_nullifier_ttl(e, &n, TTL_THRESHOLD, max_ttl(e));
     }
     RecoveryCompleted {
         account: smart_account.clone(),
@@ -183,26 +217,40 @@ impl PerchRecovery {
     /// `account`. See module docs for why this — not `install`/`uninstall` —
     /// is the actual security gate.
     ///
-    /// Blocks unconditionally while a live attempt exists (property 9,
-    /// independent of §7 — see `docs/recovery/section-7-gate.md`). This also
-    /// reads `false` for a legitimate completion call, because `enforce`
-    /// already consumed the attempt during auth evaluation, before this runs.
+    /// Blocks unconditionally while a live attempt exists — this holds
+    /// regardless of the account's chosen pending-activity policy (see
+    /// `docs/recovery/pending-activity-policy.md`, a separate, still-open
+    /// question about *ordinary* activity during a pending attempt). This
+    /// also reads `false` for a legitimate completion call, because
+    /// `enforce` already consumed the attempt during auth evaluation, before
+    /// this runs.
     ///
     /// Otherwise: no change is always fine; a first enrollment (`old` is
-    /// `None`) is always fine; a change while `old.profile == Loss` is always
-    /// fine (§2.1); a change while `old.profile == Protected` — including
-    /// removing recovery — requires `evidence` to satisfy the *currently*
-    /// enrolled condition over a digest binding this exact transition. This
-    /// generalizes the validated experiment's strictly-additive-only
-    /// reconfigure (which remains reachable as the common case) to the full
-    /// requirement in the authoritative decision record §2 — see
-    /// `docs/recovery/controller-governance.md`.
+    /// `None`) is always fine; a change while `old.profile == Loss` is
+    /// always fine (ordinary admin authorization, already established by
+    /// `apply_doc`'s own `require_auth`, is enough); a change while
+    /// `old.profile == Protected` — including removing recovery — requires
+    /// `evidence` to satisfy the *currently* enrolled condition over a
+    /// digest binding this exact transition. This generalizes a companion
+    /// smart-account implementation's validated strictly-additive-only
+    /// reconfigure (which remains reachable as the common case) to a fully
+    /// general rule — see `docs/recovery/controller-governance.md`.
     pub fn guard_apply_doc(
         e: &Env,
         account: Address,
         new_recovery: Vec<CompiledRecoveryConfig>,
         evidence: ReconfigureEvidence,
     ) -> Result<(), RecoveryError> {
+        // Also directly callable like `install`/`enforce` above — without
+        // this, anyone who obtains valid reconfigure evidence (e.g. by
+        // observing the real `apply_doc` transaction before it lands) could
+        // call this entry point standalone, burning a one-time ZK nullifier
+        // or a guardian's signature with no document ever changing —
+        // front-running and denial-of-service against the real
+        // reconfiguration. Succeeds for free on the real path:
+        // `perch-smart-account`'s `apply_doc` is the direct invoker of this
+        // cross-call, before it touches any context rule.
+        account.require_auth();
         if let Some(attempt) = RecoveryStorage::get_attempt(e, &account) {
             if is_live(e, &attempt) {
                 return Err(RecoveryError::AttemptPending);
@@ -210,6 +258,15 @@ impl PerchRecovery {
         }
 
         let old = RecoveryStorage::get_config(e, &account);
+        // Renew here too (not only via `require_config`, which this function
+        // deliberately doesn't use since it must distinguish "no config" from
+        // "config present") — every `apply_doc` call reaches this point, so
+        // this is the read path that actually needs to keep an enrolled
+        // `Protected` config from expiring into a false "first enrollment"
+        // (which would let a reconfiguration skip the evidence requirement).
+        if old.is_some() {
+            RecoveryStorage::extend_config_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
+        }
         let new = new_recovery.first();
 
         if config_matches(&old, new.as_ref()) {
@@ -276,7 +333,10 @@ impl PerchRecovery {
 
     /// Declare intent to restore the enrolled baseline after suspected
     /// compromise, with `replaced_credentials` replaced. Requires a baseline
-    /// to be enrolled. See `begin_lost_key_attempt` for the shared mechanics.
+    /// to be enrolled, and `target_doc_hash` to equal it exactly — a
+    /// compromise attempt targets *the* approved baseline, never a
+    /// caller-chosen document (that's what `begin_lost_key_attempt` is for).
+    /// See `begin_lost_key_attempt` for the shared mechanics.
     pub fn begin_compromise_attempt(
         e: &Env,
         account: Address,
@@ -284,8 +344,11 @@ impl PerchRecovery {
         replaced_credentials: Vec<BytesN<32>>,
     ) -> Result<u64, RecoveryError> {
         let config = require_config(e, &account)?;
-        if config.baseline.is_empty() {
+        let Some(baseline) = config.baseline.first() else {
             return Err(RecoveryError::NoBaselineEnrolled);
+        };
+        if baseline != target_doc_hash {
+            return Err(RecoveryError::TargetNotBaseline);
         }
         begin_attempt(
             e,
@@ -296,13 +359,17 @@ impl PerchRecovery {
         )
     }
 
-    /// A guardian approves this account's pending attempt's initiation.
+    /// A guardian approves this account's pending attempt's initiation. The
+    /// guardian's signature is bound to a digest bound to *this exact*
+    /// attempt (id, action, target, enrolled config) — not just to the fixed
+    /// `(account, guardian)` argument pair — so a delayed or replayed
+    /// signature can never be redirected to authorize a different attempt
+    /// than the guardian actually approved.
     pub fn submit_guardian_approval(
         e: &Env,
         account: Address,
         guardian: Address,
     ) -> Result<(), RecoveryError> {
-        guardian.require_auth();
         let config = require_config(e, &account)?;
         let g = guardian_set(&config.mode).ok_or(RecoveryError::ModeHasNoGuardians)?;
         if !g.guardians.contains(&guardian) {
@@ -312,13 +379,28 @@ impl PerchRecovery {
         if attempt.state != AttemptState::CollectingEvidence {
             return Err(RecoveryError::AttemptNotAuthorized);
         }
+        if !is_live(e, &attempt) {
+            return Err(RecoveryError::NoLiveAttempt);
+        }
         if attempt.guardian_approvals.contains(&guardian) {
             return Err(RecoveryError::AlreadyApproved);
         }
+        let cfg_hash = config_hash_of(e, &config);
+        let digest = zk::statement(
+            e,
+            &account,
+            &e.current_contract_address(),
+            &attempt.action,
+            &cfg_hash,
+            Some(&attempt.target_doc_hash),
+            attempt.id,
+            config.delay_ledgers,
+        );
+        guardian.require_auth_for_args(Vec::from_array(e, [digest.into_val(e)]));
         attempt.guardian_approvals.push_back(guardian);
-        maybe_promote(e, &config, &mut attempt);
+        maybe_promote(e, &account, &config, &mut attempt)?;
         RecoveryStorage::set_attempt(e, &account, &attempt);
-        RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, TTL_EXTEND);
+        RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
         Ok(())
     }
 
@@ -341,6 +423,9 @@ impl PerchRecovery {
         if attempt.zk_verified {
             return Ok(()); // idempotent re-submission
         }
+        if !is_live(e, &attempt) {
+            return Err(RecoveryError::NoLiveAttempt);
+        }
         if RecoveryStorage::get_nullifier(e, &nullifier).unwrap_or(false) {
             return Err(RecoveryError::NullifierAlreadySpent);
         }
@@ -358,18 +443,24 @@ impl PerchRecovery {
         if !ZkVerifierClient::new(e, &z.verifier).verify_proof(&stmt, &nullifier, &proof, &z.pool) {
             return Err(RecoveryError::ZkProofInvalid);
         }
+        // Reserved immediately, not deferred to `complete` — otherwise the
+        // same nullifier could pass this check again for a second, separate
+        // account-bound statement before either attempt completes (`complete`
+        // never re-checks the global set, only writes it).
+        RecoveryStorage::set_nullifier(e, &nullifier, &true);
+        RecoveryStorage::extend_nullifier_ttl(e, &nullifier, TTL_THRESHOLD, max_ttl(e));
         attempt.zk_verified = true;
         let mut nul = Vec::new(e);
         nul.push_back(nullifier);
         attempt.nullifier = nul;
-        maybe_promote(e, &config, &mut attempt);
+        maybe_promote(e, &account, &config, &mut attempt)?;
         RecoveryStorage::set_attempt(e, &account, &attempt);
-        RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, TTL_EXTEND);
+        RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
         Ok(())
     }
 
     /// A guardian approves cancellation of this account's identified attempt.
-    /// Own action domain — initiation approvals never count here (§2.2).
+    /// Own action domain — initiation approvals never count here.
     /// Only actually cancels once the mode's full cancellation evidence set
     /// is present: for `Combined`, reaching guardian quorum here is not
     /// enough by itself — a verified ZK cancellation proof is also required
@@ -379,7 +470,6 @@ impl PerchRecovery {
         account: Address,
         guardian: Address,
     ) -> Result<(), RecoveryError> {
-        guardian.require_auth();
         let config = require_config(e, &account)?;
         let g = guardian_set(&config.mode).ok_or(RecoveryError::ModeHasNoGuardians)?;
         if !g.guardians.contains(&guardian) {
@@ -389,6 +479,23 @@ impl PerchRecovery {
         if !is_live(e, &attempt) {
             return Err(RecoveryError::NoLiveAttempt);
         }
+        // Bound to this exact attempt and the cancellation domain — the same
+        // digest shape `submit_zk_cancel` verifies a proof against below —
+        // not just the fixed `(account, guardian)` arguments, so a delayed
+        // signature can't be redirected to cancel a different, later attempt
+        // than the one the guardian actually signed for.
+        let cfg_hash = config_hash_of(e, &config);
+        let digest = zk::statement(
+            e,
+            &account,
+            &e.current_contract_address(),
+            &Action::Cancel,
+            &cfg_hash,
+            None,
+            attempt.id,
+            config.delay_ledgers,
+        );
+        guardian.require_auth_for_args(Vec::from_array(e, [digest.into_val(e)]));
         let key = (account.clone(), attempt.id);
         let mut tally = RecoveryStorage::get_cancel_tally(e, &key).unwrap_or_else(|| Vec::new(e));
         if tally.contains(&guardian) {
@@ -396,7 +503,7 @@ impl PerchRecovery {
         }
         tally.push_back(guardian);
         RecoveryStorage::set_cancel_tally(e, &key, &tally);
-        RecoveryStorage::extend_cancel_tally_ttl(e, &key, TTL_THRESHOLD, TTL_EXTEND);
+        RecoveryStorage::extend_cancel_tally_ttl(e, &key, TTL_THRESHOLD, max_ttl(e));
         let guardian_quorum_reached = tally.len() >= g.quorum;
         if guardian_quorum_reached {
             let zk_cancel_verified =
@@ -444,9 +551,10 @@ impl PerchRecovery {
             return Err(RecoveryError::ZkProofInvalid);
         }
         RecoveryStorage::set_nullifier(e, &nullifier, &true);
+        RecoveryStorage::extend_nullifier_ttl(e, &nullifier, TTL_THRESHOLD, max_ttl(e));
         let key = (account.clone(), attempt.id);
         RecoveryStorage::set_zk_cancel_verified(e, &key, &true);
-        RecoveryStorage::extend_zk_cancel_verified_ttl(e, &key, TTL_THRESHOLD, TTL_EXTEND);
+        RecoveryStorage::extend_zk_cancel_verified_ttl(e, &key, TTL_THRESHOLD, max_ttl(e));
         let guardian_quorum_reached = match guardian_set(&config.mode) {
             Some(g) => {
                 RecoveryStorage::get_cancel_tally(e, &key)
@@ -485,23 +593,69 @@ impl PerchRecovery {
     pub fn has_pending(e: &Env, account: Address) -> bool {
         RecoveryStorage::get_attempt(e, &account).is_some_and(|a| is_live(e, &a))
     }
+
+    /// Extend every one of `account`'s existing recovery entries — enrolled
+    /// config, current/most recent attempt (and its nullifier, if spent),
+    /// permanent revoked set, and the lifetime counters — to the network's
+    /// current maximum TTL. Permissionless and idempotent: it only ever
+    /// extends state that's already there, never changes what it means, so
+    /// anyone (a keeper script, a wallet's own background job) can call this
+    /// periodically for an account with no other recovery activity. Soroban
+    /// persistent entries have a finite maximum TTL — nothing renews them on
+    /// its own absent an explicit touch like this one, or the account
+    /// otherwise using recovery (`require_config`'s own read-path renewal
+    /// covers the busier entries already). See
+    /// `docs/recovery/controller-governance.md`'s "Keeping permanent state
+    /// alive" section.
+    pub fn renew(e: &Env, account: Address) {
+        let ttl = max_ttl(e);
+        if RecoveryStorage::has_config(e, &account) {
+            RecoveryStorage::extend_config_ttl(e, &account, TTL_THRESHOLD, ttl);
+        }
+        if let Some(attempt) = RecoveryStorage::get_attempt(e, &account) {
+            RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, ttl);
+            if let Some(n) = attempt.nullifier.first() {
+                RecoveryStorage::extend_nullifier_ttl(e, &n, TTL_THRESHOLD, ttl);
+            }
+        }
+        if RecoveryStorage::has_revoked(e, &account) {
+            RecoveryStorage::extend_revoked_ttl(e, &account, TTL_THRESHOLD, ttl);
+        }
+        if RecoveryStorage::has_cancels_used(e, &account) {
+            RecoveryStorage::extend_cancels_used_ttl(e, &account, TTL_THRESHOLD, ttl);
+        }
+        if RecoveryStorage::has_next_attempt_id(e, &account) {
+            RecoveryStorage::extend_next_attempt_id_ttl(e, &account, TTL_THRESHOLD, ttl);
+        }
+    }
 }
 
 fn require_config(e: &Env, account: &Address) -> Result<CompiledRecoveryConfig, RecoveryError> {
-    RecoveryStorage::get_config(e, account).ok_or(RecoveryError::NotEnrolled)
+    let config = RecoveryStorage::get_config(e, account).ok_or(RecoveryError::NotEnrolled)?;
+    // Renews on every real use (every begin/approve/proof/cancel call), not
+    // just on install — an enrolled config that nobody ever touches for
+    // longer than the network's max TTL would otherwise silently expire,
+    // and `guard_apply_doc` treats a missing config as "first enrollment"
+    // (no evidence required), which would let a `Protected` account's
+    // reconfiguration gate quietly fail open. See [`PerchRecovery::renew`]
+    // for the explicit keep-alive covering accounts with no such activity.
+    RecoveryStorage::extend_config_ttl(e, account, TTL_THRESHOLD, max_ttl(e));
+    Ok(config)
 }
 
 fn require_attempt(e: &Env, account: &Address) -> Result<Attempt, RecoveryError> {
     RecoveryStorage::get_attempt(e, account).ok_or(RecoveryError::NoLiveAttempt)
 }
 
-/// Live = not terminal, and (if authorized) not past its expiry. A
-/// `CollectingEvidence` attempt has no expiry of its own in this design (only
-/// an authorized attempt's *completion window* expires) — it is live until
-/// explicitly cancelled or replaced by a fresh `begin_*_attempt` call.
+/// Live = not terminal, and not past its current phase's deadline. A
+/// `CollectingEvidence` attempt is live until `evidence_deadline` — without
+/// this bound, a single permissionless `begin_*_attempt` call would block
+/// every ordinary `apply_doc` (via `guard_apply_doc`'s unconditional
+/// live-attempt check) indefinitely, since nothing else forces the mode's
+/// evidence to ever actually arrive.
 fn is_live(e: &Env, attempt: &Attempt) -> bool {
     match attempt.state {
-        AttemptState::CollectingEvidence => true,
+        AttemptState::CollectingEvidence => e.ledger().sequence() < attempt.evidence_deadline,
         AttemptState::AuthorizedPending => e.ledger().sequence() < attempt.expires_at,
         AttemptState::Completed | AttemptState::Cancelled => false,
     }
@@ -546,7 +700,7 @@ fn initiation_satisfied(mode: &CompiledRecoveryMode, attempt: &Attempt) -> bool 
     }
 }
 
-/// Mirrors `initiation_satisfied` for the cancellation domain (§2.2):
+/// Mirrors `initiation_satisfied` for the cancellation domain:
 /// `GuardianOnly`/`ZkOnly` need only their own factor, `Combined` needs both
 /// a guardian quorum AND a valid ZK cancellation proof for the same attempt —
 /// neither factor alone may cancel a `Combined`-mode attempt.
@@ -562,22 +716,33 @@ fn cancellation_satisfied(
     }
 }
 
-fn maybe_promote(e: &Env, config: &CompiledRecoveryConfig, attempt: &mut Attempt) {
+fn maybe_promote(
+    e: &Env,
+    account: &Address,
+    config: &CompiledRecoveryConfig,
+    attempt: &mut Attempt,
+) -> Result<(), RecoveryError> {
     if attempt.state == AttemptState::CollectingEvidence
         && initiation_satisfied(&config.mode, attempt)
     {
         let now = e.ledger().sequence();
         attempt.state = AttemptState::AuthorizedPending;
-        attempt.executable_after = now + config.delay_ledgers;
-        attempt.expires_at = attempt.executable_after + config.expiry_ledgers;
+        attempt.executable_after = now
+            .checked_add(config.delay_ledgers)
+            .ok_or(RecoveryError::TimelockOverflow)?;
+        attempt.expires_at = attempt
+            .executable_after
+            .checked_add(config.expiry_ledgers)
+            .ok_or(RecoveryError::TimelockOverflow)?;
         RecoveryAuthorized {
-            account: e.current_contract_address(),
+            account: account.clone(),
             attempt_id: attempt.id,
             executable_after: attempt.executable_after,
             expires_at: attempt.expires_at,
         }
         .publish(e);
     }
+    Ok(())
 }
 
 fn begin_attempt(
@@ -611,13 +776,27 @@ fn begin_attempt(
     }
     let id = RecoveryStorage::get_next_attempt_id(e, &account).unwrap_or(0);
     RecoveryStorage::set_next_attempt_id(e, &account, &(id + 1));
+    // The nonce must never be reused (a replayed id would let old per-attempt
+    // evidence/statements collide with a new attempt) — extend on every
+    // write, not just at install, so this counter can't silently reset to 0
+    // via TTL expiry during long account inactivity.
+    RecoveryStorage::extend_next_attempt_id_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
 
+    let created_at = e.ledger().sequence();
     let attempt = Attempt {
         id,
         action,
         target_doc_hash,
         replaced_credentials,
-        created_at: e.ledger().sequence(),
+        created_at,
+        // Bounds how long a permissionless `begin_*_attempt` call can hold
+        // `guard_apply_doc`'s unconditional live-attempt block open while no
+        // evidence arrives — see `is_live`. Reuses `expiry_ledgers` (already
+        // the account's own configured "how long this recovery gets" budget)
+        // rather than adding a new schema field for the same kind of window.
+        evidence_deadline: created_at
+            .checked_add(config.expiry_ledgers)
+            .ok_or(RecoveryError::TimelockOverflow)?,
         executable_after: 0,
         expires_at: 0,
         guardian_approvals: Vec::new(e),
@@ -626,7 +805,7 @@ fn begin_attempt(
         state: AttemptState::CollectingEvidence,
     };
     RecoveryStorage::set_attempt(e, &account, &attempt);
-    RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, TTL_EXTEND);
+    RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
     Ok(id)
 }
 
@@ -637,6 +816,9 @@ fn cancel_attempt(e: &Env, account: &Address, attempt: &mut Attempt) -> Result<(
         return Err(RecoveryError::MaxCancelsReached);
     }
     RecoveryStorage::set_cancels_used(e, account, &(used + 1));
+    // A lifetime griefing-cancellation cap only bounds anything if it can't
+    // silently reset to 0 via TTL expiry — extend on every write.
+    RecoveryStorage::extend_cancels_used_ttl(e, account, TTL_THRESHOLD, max_ttl(e));
     attempt.state = AttemptState::Cancelled;
     if let Some(n) = attempt.nullifier.first() {
         RecoveryStorage::set_nullifier(e, &n, &false);
@@ -690,5 +872,6 @@ fn require_zk_evidence(
         return Err(RecoveryError::ZkProofInvalid);
     }
     RecoveryStorage::set_nullifier(e, &nullifier, &true);
+    RecoveryStorage::extend_nullifier_ttl(e, &nullifier, TTL_THRESHOLD, max_ttl(e));
     Ok(())
 }

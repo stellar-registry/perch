@@ -1,11 +1,9 @@
 # Recovery configuration: schema design
 
 This documents the `recovery` field added to `PolicyDoc`
-(`crates/perch-ir/src/doc.rs`), why it is shaped the way it is, and how it
-was fit into `CANONICAL.md` without disturbing the canonical form of any
-document that doesn't use it. See the authoritative decision record's §5.5
-("Reviewable configuration without circular hashes") for the requirements
-this design answers.
+(`crates/perch-ir/src/doc.rs`): why it's shaped the way it is, and how it
+fits into `CANONICAL.md` without disturbing the canonical form of any
+document that doesn't use it.
 
 ## What's in scope here, and what isn't
 
@@ -30,65 +28,76 @@ the single fact that keeps every pre-existing document's hash unchanged.
 
 ```
 RecoveryConfig {
-  profile: RecoveryProfile,            // Loss | Protected           — §2.1
+  profile: RecoveryProfile,            // Loss | Protected
   mode: RecoveryMode,                  // GuardianOnly | ZkOnly | Combined
   controller: String,                  // adopted controller instance's address
   baseline: Option<BaselineCommitment>,// required to enroll compromise recovery
-  replaceable: Vec<String>,            // signer ids recovery may replace — §4.1
+  replaceable: Vec<String>,            // signer ids recovery may replace
   delay_ledgers: u32,                  // timelock window
   expiry_ledgers: u32,                 // authorized-attempt lapse window
   max_cancels: u32,                    // lifetime cancellation cap (griefing bound)
-  pending_activity: PendingActivityPolicy, // Freeze | Continue, NO default — §7
+  pending_activity: PendingActivityPolicy, // Freeze | Continue, NO default
 }
 ```
 
-- **`profile` and `mode` are orthogonal fields**, exactly per §2.1 ("Either
-  profile can use any of the three authentication modes"). Keeping them as
-  two independent fields rather than a combined enum avoids a 6-way
+- **`profile` and `mode` are orthogonal fields.** Either recovery mode
+  (guardian-only, ZK-only, combined) can pair with either profile
+  (`Loss`: ordinary admin can change or disable recovery on its own;
+  `Protected`: changing or disabling recovery additionally needs the
+  currently-enrolled recovery condition — see
+  [`controller-governance.md`](controller-governance.md)). Keeping them as
+  two independent fields rather than a combined enum avoids a six-way
   cross-product type for no benefit.
 - **`mode` is a per-variant enum, not a flattened struct with optional ZK
-  fields.** The validated experiment this stage generalizes stored mode as
-  one struct with `guardians: Vec<Address>` and `verifier: Option<Address>`
-  side by side (`RecoveryConfig` in that codebase's `types.rs`), because its
-  target SDK's `#[contracttype]` derive doesn't support `Option<CustomStruct>`
-  on a flattened struct field cleanly. Perch's document model has no such
-  constraint (`perch-ir` is plain Rust, not itself a `#[contracttype]`), so
-  `RecoveryMode::GuardianOnly(GuardianSet)` simply **cannot** carry a
-  `verifier`/`circuit-id`/`pool` field at all — "guardian-only requires no ZK
-  machinery" is enforced by the type, not by a runtime check that a ZK field
-  happens to be `None`. The wire (`perch-doc-compiler`) and JSON
-  (`perch-js`) encodings flatten the tagged variant's fields into one object
-  at the wire level (`{"type":"guardian-only","guardians":[...],"quorum":N}`)
-  for a compact document, but the *source of truth* — the Rust and TS types
-  — stay per-variant.
+  fields.** A companion smart-account implementation
+  ([nidohq/nido#206](https://github.com/nidohq/nido/pull/206)) stored mode
+  as one struct with `guardians: Vec<Address>` and `verifier: Option<Address>`
+  side by side, because its target SDK's `#[contracttype]` derive doesn't
+  support `Option<CustomStruct>` on a flattened struct field cleanly.
+  Perch's document model has no such constraint (`perch-ir` is plain Rust,
+  not itself a `#[contracttype]`), so `RecoveryMode::GuardianOnly(GuardianSet)`
+  simply **cannot** carry a `verifier`/`circuit-id`/`pool` field at all —
+  guardian-only recovery requiring no ZK machinery is enforced by the type,
+  not by a runtime check that a ZK field happens to be `None`. The wire
+  (`perch-doc-compiler`) and JSON (`perch-js`) encodings flatten the tagged
+  variant's fields into one object at the wire level
+  (`{"type":"guardian-only","guardians":[...],"quorum":N}`) for a compact
+  document, but the *source of truth* — the Rust and TS types — stay
+  per-variant.
 - **`delay_ledgers`/`expiry_ledgers` are ledger-sequence deltas, not
   durations in seconds.** This matches perch's own existing convention
-  (`Rule::not_after_ledger`) rather than the validated experiment's
-  timestamp-based fields — the account, interpreter, and every other
+  (`Rule::not_after_ledger`) — the account, interpreter, and every other
   ledger-relative quantity in this schema already speaks ledger sequence,
   and mixing units within one document would be a real (if subtle) foot-gun
   for anyone reading it.
-- **`replaceable` is required non-empty**, per §4.1: "Enrollment records...
-  identifies which signer entries or roles recovery may replace." An empty
-  list would enroll recovery that can never restore access — rejected at
-  validation, not left as a silent no-op. In the document it names
-  document-local signer **ids** (human-reviewable, e.g. `"admin"`); the
-  compiler resolves each to a `sha256` fingerprint of that signer's actual
-  credential (verifier+key, or the delegated address) for the wire form the
-  controller stores — not the id string, which a later document could
-  legitimately reuse for a different physical key. This is what lets
-  revocation (property 10: an old baseline must not restore a revoked
-  credential) survive id reuse across documents.
-- **`baseline` is optional, and its presence is what gates suspected-compromise
-  recovery**, per §4.2: lost-key recovery needs no predetermined baseline
-  (it targets "current approved document with designated credentials
-  replaced"); compromise recovery needs one to restore to. `None` therefore
-  means "lost-key recovery only," not "recovery is half-configured."
-- **`pending_activity` has no default and no third "unspecified" variant.**
-  See [`section-7-gate.md`](section-7-gate.md) — this is the schema-level
-  half of keeping §7 an explicit parameter rather than a library default.
+- **`replaceable` is required non-empty.** It identifies which signer
+  entries recovery may replace; an empty list would enroll recovery that
+  can never restore access — rejected at validation, not left as a silent
+  no-op. In the document it names document-local signer **ids**
+  (human-reviewable, e.g. `"admin"`); the compiler resolves each to a
+  `sha256` fingerprint of that signer's actual credential (verifier+key, or
+  the delegated address) for the wire form the controller stores — not the
+  id string, which a later document could legitimately reuse for a
+  different physical key. This is what lets a revoked credential stay
+  revoked (an old baseline must never restore it) even if a later document
+  reuses its old id for something else. The controller checks `replaceable`
+  membership for the caller's *declared* credential list, not the target
+  document's actual signer diff (it ships no JSON parser) — see
+  [`controller-governance.md`](controller-governance.md)'s "What the
+  commitment does, and does not, verify" for that trust boundary.
+- **`baseline` is optional, and its presence is what gates
+  suspected-compromise recovery.** Lost-key recovery needs no predetermined
+  baseline — it targets the current approved document with designated
+  credentials replaced. Compromise recovery needs an approved baseline to
+  restore to, with the same designated credentials replaced. `None`
+  therefore means "lost-key recovery only," not "recovery is
+  half-configured."
+- **`pending_activity` has no default and no third "unspecified"
+  variant.** See [`pending-activity-policy.md`](pending-activity-policy.md)
+  — this is the schema-level half of keeping that choice an explicit,
+  reviewable parameter rather than a library default.
 
-## Non-circular baseline commitment (§5.5)
+## Non-circular baseline commitment
 
 `BaselineCommitment { doc_hash: String }` names a **different, earlier**
 document's canonical hash — never the enclosing document's own hash. There
@@ -128,14 +137,14 @@ plain-decimal `u32`s, no `null`) are unchanged; only the set of fields a
 `PolicyDoc` can carry grew, which every implementation must still agree on
 byte-for-byte (verified below).
 
-**Testable compatibility condition, and its proof:** the follow-up review's
-§5.5 asks whether an additive field can preserve the existing canonical
-format — a testable condition, not a blanket claim. It's tested directly:
+**Testable compatibility condition, and its proof:** an additive field
+should preserve the existing canonical format for documents that don't use
+it — a testable condition, not a blanket claim. It's tested directly:
 `crates/perch-ir/tests/recovery.rs::recovery_absent_documents_hash_exactly_as_before_this_field_existed`
 asserts the canonical form of a recovery-absent document contains no
 `"recovery"` substring at all, and every pre-existing fixture
 (`ci-publish{,-delegated,-threshold}`) and its pinned hash is **unchanged**
-by this stage (not regenerated) — their tests in `crates/perch-ir/tests/fixture.rs`
+by this change (not regenerated) — their tests in `crates/perch-ir/tests/fixture.rs`
 and `packages/perch-js/test/parity.test.ts` still pass against the same
 committed bytes. That is the condition being claimed, made byte-for-byte
 verifiable rather than asserted.

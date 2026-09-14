@@ -318,28 +318,36 @@ fn to_compiled_recovery(
 }
 
 /// `sha256` of a tagged encoding of a signer's physical credential — the
-/// verifier+key pair for `external`, the address for `delegated`. Used only
-/// to fingerprint a `replaceable` signer's credential identity, never the
-/// document-local id string, so revocation survives that id being reused for
-/// a different physical key in a later document.
+/// verifier+decoded-key bytes for `external`, the address for `delegated`.
+/// Used only to fingerprint a `replaceable` signer's credential identity,
+/// never the document-local id string, so revocation survives that id being
+/// reused for a different physical key in a later document.
+///
+/// `key` is hex-decoded to its physical bytes before hashing — `perch-ir`
+/// validation already treats hex casing as insignificant for the same
+/// physical key (`crates/perch-ir/src/validate.rs`'s `seen_key_material`
+/// keys on decoded bytes, not the spelling), so fingerprinting the raw text
+/// instead would let the same credential, re-declared with different hex
+/// casing, evade a prior revocation entirely.
 #[cfg(feature = "contract")]
 fn credential_fingerprint(e: &Env, method: &perch_ir::SignerMethod) -> BytesN<32> {
-    let mut buf = alloc::string::String::new();
+    let mut buf = alloc::vec::Vec::new();
     match method {
         perch_ir::SignerMethod::External { verifier, key } => {
-            buf.push_str("external|");
-            buf.push_str(verifier);
-            buf.push('|');
-            buf.push_str(key);
+            buf.extend_from_slice(b"external|");
+            buf.extend_from_slice(verifier.as_bytes());
+            buf.push(b'|');
+            // Already validated hex by the time a document reaches the
+            // compiler (`perch_ir::validate`) — decode failure here would
+            // mean validation was skipped, not a reachable user input.
+            buf.extend_from_slice(&hex::decode(key).unwrap_or_default());
         }
         perch_ir::SignerMethod::Delegated { address } => {
-            buf.push_str("delegated|");
-            buf.push_str(address);
+            buf.extend_from_slice(b"delegated|");
+            buf.extend_from_slice(address.as_bytes());
         }
     }
-    e.crypto()
-        .sha256(&Bytes::from_slice(e, buf.as_bytes()))
-        .to_bytes()
+    e.crypto().sha256(&Bytes::from_slice(e, &buf)).to_bytes()
 }
 
 #[cfg(feature = "contract")]

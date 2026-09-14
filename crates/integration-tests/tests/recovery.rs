@@ -161,6 +161,46 @@ fn combined_mode_json(
     )
 }
 
+/// Same shape as `enroll_doc`, but `protected` profile with a baseline
+/// commitment — for `begin_compromise_attempt` tests, which require one.
+fn enroll_doc_with_baseline(
+    controller: &Address,
+    guardians: &[Address],
+    quorum: u32,
+    baseline_doc_hash_hex: &str,
+) -> std::string::String {
+    let guardian_list = guardians
+        .iter()
+        .map(|g| format!("\"{}\"", strkey(g)))
+        .collect::<std::vec::Vec<_>>()
+        .join(",");
+    format!(
+        r#"{{
+  "version": 1,
+  "network": "{FIXTURE_NETWORK}",
+  "signers": [
+    {{ "id": "admin", "verifier": "{ADMIN_VERIFIER}", "key": "{ADMIN_KEY}" }}
+  ],
+  "rules": [
+    {{ "name": "admin", "scope": {{ "type": "self-admin" }},
+       "principals": {{ "type": "all", "signers": ["admin"] }} }}
+  ],
+  "recovery": {{
+    "profile": "protected",
+    "mode": {{ "type": "guardian-only", "guardians": [{guardian_list}], "quorum": {quorum} }},
+    "controller": "{controller}",
+    "baseline": {{ "doc-hash": "{baseline_doc_hash_hex}" }},
+    "replaceable": ["admin"],
+    "delay-ledgers": 5,
+    "expiry-ledgers": 1000,
+    "max-cancels": 3,
+    "pending-activity": "continue"
+  }}
+}}"#,
+        controller = strkey(controller),
+    )
+}
+
 fn recovery_rule_id(w: &World) -> u32 {
     let client = w.account_client();
     let n = client.get_context_rules_count();
@@ -655,4 +695,149 @@ fn zk_cancellation_is_refused_once_the_attempt_has_completed() {
         recovery.get_attempt(&w.account).unwrap().state,
         perch_recovery::types::AttemptState::Completed
     );
+}
+
+#[test]
+fn begin_compromise_attempt_rejects_a_target_that_is_not_the_enrolled_baseline() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let g1 = Address::generate(&w.env);
+
+    let baseline_hash = BytesN::from_array(&w.env, &[3u8; 32]);
+    let baseline_hex = hex::encode(baseline_hash.to_array());
+    let doc = enroll_doc_with_baseline(&controller, std::slice::from_ref(&g1), 1, &baseline_hex);
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+
+    // A caller-chosen target that doesn't match the enrolled baseline must be
+    // refused — otherwise `baseline` would be decorative and any document
+    // could be authorized as "compromise recovery".
+    let not_the_baseline = BytesN::from_array(&w.env, &[4u8; 32]);
+    assert!(recovery
+        .try_begin_compromise_attempt(&w.account, &not_the_baseline, &replaceable)
+        .is_err());
+    assert!(!recovery.has_pending(&w.account));
+
+    // The actual baseline is accepted.
+    assert!(recovery
+        .try_begin_compromise_attempt(&w.account, &baseline_hash, &replaceable)
+        .is_ok());
+    assert!(recovery.has_pending(&w.account));
+}
+
+#[test]
+fn a_collecting_evidence_attempt_stops_blocking_apply_doc_once_its_evidence_deadline_elapses() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let g1 = Address::generate(&w.env);
+    let g2 = Address::generate(&w.env);
+
+    // 2-of-2 quorum, so a lone declared attempt never gets any evidence.
+    let doc = enroll_doc(&controller, &[g1.clone(), g2.clone()], 2);
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let target = target_doc(&controller, &[g1.clone(), g2.clone()], 2);
+    let target_bytes = Bytes::from_slice(&w.env, target.as_bytes());
+    let target_hash: BytesN<32> = w.env.crypto().sha256(&target_bytes).to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+    assert!(recovery.has_pending(&w.account));
+
+    // Before the fix, a `CollectingEvidence` attempt was live forever —
+    // permissionlessly declared, with no guardian or ZK evidence ever
+    // required to arrive, it would block every ordinary `apply_doc` call
+    // indefinitely via `guard_apply_doc`'s unconditional pending-attempt
+    // check. `evidence_deadline` (enrolled `expiry-ledgers` after
+    // `begin_lost_key_attempt`) bounds that.
+    let attempt = recovery.get_attempt(&w.account).unwrap();
+    w.env
+        .ledger()
+        .with_mut(|l| l.sequence_number = attempt.evidence_deadline);
+    assert!(!recovery.has_pending(&w.account));
+
+    // An ordinary admin `apply_doc` (re-applying the same document) is no
+    // longer blocked.
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+
+    // And a fresh attempt can be declared, replacing the lapsed one.
+    assert!(recovery
+        .try_begin_lost_key_attempt(&w.account, &target_hash, &replaceable)
+        .is_ok());
+}
+
+#[test]
+fn zk_proof_nullifier_is_reserved_immediately_not_deferred_to_completion() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let verifier = w.env.register(MockZkVerifier, ());
+
+    let doc = enroll_doc_with_mode(&controller, &zk_only_mode_json(&verifier));
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let target = enroll_doc_with_mode(&controller, &zk_only_mode_json(&verifier)).replace(
+        &format!(r#""verifier": "{ADMIN_VERIFIER}", "key": "{ADMIN_KEY}""#),
+        &format!(r#""verifier": "{NEW_ADMIN_VERIFIER}", "key": "{NEW_ADMIN_KEY}""#),
+    );
+    let target_bytes = Bytes::from_slice(&w.env, target.as_bytes());
+    let target_hash: BytesN<32> = w.env.crypto().sha256(&target_bytes).to_bytes();
+    let replaceable = recovery.get_config(&w.account).unwrap().replaceable;
+    recovery.begin_lost_key_attempt(&w.account, &target_hash, &replaceable);
+
+    let shared_nullifier = BytesN::from_array(&w.env, &[9u8; 32]);
+    let proof = Bytes::from_array(&w.env, &[1u8; 1]);
+    recovery.submit_zk_proof(&w.account, &shared_nullifier, &proof);
+    assert!(recovery.get_attempt(&w.account).unwrap().zk_verified);
+
+    // The same nullifier, reused for the *cancellation* domain on this same
+    // attempt, must be refused immediately — it's already spent. Before the
+    // fix, `submit_zk_proof` deferred reservation to `complete`, so at this
+    // point (attempt not yet completed) this call would have wrongly
+    // succeeded, letting one nullifier authorize two different statements.
+    assert!(recovery
+        .try_submit_zk_cancel(&w.account, &shared_nullifier, &proof)
+        .is_err());
+}
+
+#[test]
+fn credential_fingerprint_is_hex_case_insensitive() {
+    let w = setup();
+    let controller = w.env.register(PerchRecovery, ());
+    let recovery = PerchRecoveryClient::new(&w.env, &controller);
+    let g1 = Address::generate(&w.env);
+
+    let doc = enroll_doc(&controller, std::slice::from_ref(&g1), 1);
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let fingerprint_lower = recovery.get_config(&w.account).unwrap().replaceable;
+
+    // Re-apply the identical document, except the admin signer's key is
+    // spelled in upper case — the same physical credential, different hex
+    // casing. A revocation fingerprint keyed on the raw text instead of the
+    // decoded bytes would treat this as a different credential, letting a
+    // later document reintroduce a revoked physical key just by respelling
+    // it.
+    let doc_upper = doc.replace(ADMIN_KEY, &ADMIN_KEY.to_uppercase());
+    assert_ne!(doc, doc_upper, "test fixture must actually vary the casing");
+    w.account_client().apply_doc(
+        &Bytes::from_slice(&w.env, doc_upper.as_bytes()),
+        &no_recovery_evidence(&w.env),
+    );
+    let fingerprint_upper = recovery.get_config(&w.account).unwrap().replaceable;
+
+    assert_eq!(fingerprint_lower, fingerprint_upper);
 }

@@ -7,7 +7,10 @@ Golden vectors shared by the Rust and TypeScript test suites:
   the same doc with the ci signer as a CAP-0071 delegated address, pinning
   the delegated signer shape; `ci-publish-threshold.*`, the same doc with the
   publish rule as a 1-of-2 `threshold` quorum carrying a `cap`, pinning those
-  two rule shapes)
+  two rule shapes; `ci-publish-recovery.*`, the same doc enrolling
+  guardian-only `protected` recovery with a baseline; `ci-publish-recovery-combined.*`,
+  the same doc enrolling combined guardian+ZK `loss` recovery with no
+  baseline (lost-key only) — see [`../docs/recovery/schema.md`](../docs/recovery/schema.md))
 - compiled plans (expected XDR, byte-exact)
 - constraint program encodings, three-way checked: compiler-built structural
   `ScVal` == `#[contracttype]` encoding from a test `Env` == TS serializer bytes

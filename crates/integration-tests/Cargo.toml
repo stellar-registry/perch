@@ -22,6 +22,7 @@ perch-ed25519-verifier = { version = "0.1.1", path = "../perch-ed25519-verifier"
 perch-spending-limit = { version = "0.1.1", path = "../perch-spending-limit" }
 perch-testkit = { version = "0.1.1", path = "../perch-testkit" }
 perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }
+perch-recovery = { version = "0.1.0", path = "../perch-recovery" }
 stellar-accounts = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 ed25519-dalek = "2"

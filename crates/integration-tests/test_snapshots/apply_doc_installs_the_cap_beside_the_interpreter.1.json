@@ -23,6 +23,30 @@
               "args": [
                 {
                   "bytes": "7b0a202020202020202020202276657273696f6e223a20312c0a20202020202020202020226e6574776f726b223a20225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c0a20202020202020202020227369676e657273223a205b0a2020202020202020202020207b20226964223a202261646d696e222c20227665726966696572223a202243443449463735444e514a4b4354333550414a4151445057334b333337454b36534a5a444d5145564c58414836354b375a565a4d4c58594e222c20226b6579223a20223034356532613735383962373363313964353334316366313261633063356636633435633239386434633230303032633739346461616461666462383366333566356265323339363336343864376161636366356532373338303366326665633761386630656234643438343563396238396139373262346130393239386231376522207d2c0a2020202020202020202020207b20226964223a20226369222c20227665726966696572223a2022434359574c4e575259444341454d324132454d5457414d49475745535147554a4e4454525246494f5335434250524f3534455a3237414247222c20226b6579223a20223163653630343062306430333233326163366339313162306333373566316135326562646566666635366664333631643133363830653233636135373861313722207d0a202020202020202020205d2c0a202020202020202020202272756c6573223a205b0a2020202020202020202020207b20226e616d65223a202261646d696e222c202273636f7065223a207b202274797065223a202273656c662d61646d696e22207d2c0a202020202020202020202020202020227072696e636970616c73223a207b202274797065223a2022616c6c222c20227369676e657273223a205b2261646d696e225d207d207d2c0a2020202020202020202020207b20226e616d65223a2022636170706564222c202273636f7065223a207b202274797065223a2022636f6e7472616374222c202261646472657373223a202243434137514141364f44364c514a5455324d4b4e36454153354935325149465041594d4d51595355374b48575447543236414e364e32414c22207d2c0a202020202020202020202020202020227072696e636970616c73223a207b202274797065223a2022616c6c222c20227369676e657273223a205b226369225d207d2c0a2020202020202020202020202020202266756e6374696f6e73223a205b227472616e73666572225d2c0a20202020202020202020202020202022636170223a207b20226c696d6974223a20223130222c2022706572696f642d6c656467657273223a2031303030207d207d0a202020202020202020205d0a20202020202020207d"
+                },
+                {
+                  "map": [
+                    {
+                      "key": {
+                        "symbol": "guardians"
+                      },
+                      "val": {
+                        "vec": []
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "zk_nullifier"
+                      },
+                      "val": "void"
+                    },
+                    {
+                      "key": {
+                        "symbol": "zk_proof"
+                      },
+                      "val": "void"
+                    }
+                  ]
                 }
               ]
             }
@@ -307,7 +331,7 @@
                       "symbol": "policy"
                     },
                     "val": {
-                      "address": "CCPBUYP4VEZAFQP2FKOXMKA2IDUCC2GGDFFZQ2SDHQVYXU75IJ6HLLXU"
+                      "address": "CDC6GSNZCBZGAP3GMM4MNHEGOQKDJBZ5FHAWWHYO7NV6NXMKMGEGVEJV"
                     }
                   }
                 ]
@@ -358,7 +382,7 @@
                     "symbol": "PolicyLookup"
                   },
                   {
-                    "address": "CCPBUYP4VEZAFQP2FKOXMKA2IDUCC2GGDFFZQ2SDHQVYXU75IJ6HLLXU"
+                    "address": "CDC6GSNZCBZGAP3GMM4MNHEGOQKDJBZ5FHAWWHYO7NV6NXMKMGEGVEJV"
                   }
                 ]
               },
@@ -762,7 +786,53 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CCPBUYP4VEZAFQP2FKOXMKA2IDUCC2GGDFFZQ2SDHQVYXU75IJ6HLLXU",
+              "contract": "CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": null
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 4095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CDC6GSNZCBZGAP3GMM4MNHEGOQKDJBZ5FHAWWHYO7NV6NXMKMGEGVEJV",
               "key": {
                 "vec": [
                   {
@@ -825,53 +895,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CCPBUYP4VEZAFQP2FKOXMKA2IDUCC2GGDFFZQ2SDHQVYXU75IJ6HLLXU",
-              "key": "ledger_key_contract_instance",
-              "durability": "persistent",
-              "val": {
-                "contract_instance": {
-                  "executable": {
-                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-                  },
-                  "storage": null
-                }
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 4095
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY",
-              "key": "ledger_key_contract_instance",
-              "durability": "persistent",
-              "val": {
-                "contract_instance": {
-                  "executable": {
-                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-                  },
-                  "storage": null
-                }
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 4095
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG",
+              "contract": "CDC6GSNZCBZGAP3GMM4MNHEGOQKDJBZ5FHAWWHYO7NV6NXMKMGEGVEJV",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {

@@ -31,6 +31,18 @@ pub const FIXTURE_REGISTRY: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHW
 pub const CI_PUBLISH_DOC_HASH: &str =
     "27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98";
 
+/// Empty [`perch_recovery::ReconfigureEvidence`] — `apply_doc`'s second
+/// argument for every call that isn't reconfiguring a `Protected` recovery
+/// enrollment (the overwhelming majority of calls, including every account
+/// that never enrolls recovery at all).
+pub fn no_recovery_evidence(env: &Env) -> perch_recovery::ReconfigureEvidence {
+    perch_recovery::ReconfigureEvidence {
+        guardians: Vec::new(env),
+        zk_nullifier: None,
+        zk_proof: None,
+    }
+}
+
 /// The frozen ci-publish conformance fixture (CANON v1), read from
 /// `testdata/ci-publish.json` at the workspace root.
 pub fn fixture() -> String {

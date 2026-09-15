@@ -39,17 +39,13 @@
                       "key": {
                         "symbol": "zk_nullifier"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     },
                     {
                       "key": {
                         "symbol": "zk_proof"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     }
                   ]
                 }
@@ -84,7 +80,7 @@
               "function_name": "submit_guardian_approval",
               "args": [
                 {
-                  "bytes": "06ab197ba264900eb4fbdbf1f282d65e42122e86df832e04dbfa40d8bbedeaee"
+                  "bytes": "6e84739e72fd5af2aeb72ad49a8caba6fe505544f045c3552271654901f3f1c6"
                 }
               ]
             }
@@ -103,7 +99,7 @@
               "function_name": "submit_guardian_approval",
               "args": [
                 {
-                  "bytes": "06ab197ba264900eb4fbdbf1f282d65e42122e86df832e04dbfa40d8bbedeaee"
+                  "bytes": "6e84739e72fd5af2aeb72ad49a8caba6fe505544f045c3552271654901f3f1c6"
                 }
               ]
             }
@@ -653,9 +649,7 @@
                     "key": {
                       "symbol": "nullifier"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -729,9 +723,7 @@
                     "key": {
                       "symbol": "baseline"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {

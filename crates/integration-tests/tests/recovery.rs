@@ -22,7 +22,6 @@ use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger};
 use soroban_sdk::{
     contract, contractimpl, crypto::Hash, vec, Address, Bytes, BytesN, Env, IntoVal, Map, Symbol,
-    Vec,
 };
 use stellar_accounts::smart_account::{do_check_auth, AuthPayload};
 
@@ -102,7 +101,7 @@ impl MockZkVerifier {
         _statement: BytesN<32>,
         _nullifier: BytesN<32>,
         proof: Bytes,
-        _pool: Vec<Address>,
+        _pool: Option<Address>,
     ) -> bool {
         !proof.is_empty()
     }

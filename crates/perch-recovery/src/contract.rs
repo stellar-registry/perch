@@ -197,9 +197,9 @@ fn complete(e: &Env, context: &Context, smart_account: &Address) {
     }
     RecoveryStorage::set_revoked(e, smart_account, &revoked);
     RecoveryStorage::extend_revoked_ttl(e, smart_account, TTL_THRESHOLD, max_ttl(e));
-    if let Some(n) = attempt.nullifier.first() {
-        RecoveryStorage::set_nullifier(e, &n, &true);
-        RecoveryStorage::extend_nullifier_ttl(e, &n, TTL_THRESHOLD, max_ttl(e));
+    if let Some(n) = &attempt.nullifier {
+        RecoveryStorage::set_nullifier(e, n, &true);
+        RecoveryStorage::extend_nullifier_ttl(e, n, TTL_THRESHOLD, max_ttl(e));
     }
     RecoveryCompleted {
         account: smart_account.clone(),
@@ -344,7 +344,7 @@ impl PerchRecovery {
         replaced_credentials: Vec<BytesN<32>>,
     ) -> Result<u64, RecoveryError> {
         let config = require_config(e, &account)?;
-        let Some(baseline) = config.baseline.first() else {
+        let Some(baseline) = config.baseline else {
             return Err(RecoveryError::NoBaselineEnrolled);
         };
         if baseline != target_doc_hash {
@@ -450,9 +450,7 @@ impl PerchRecovery {
         RecoveryStorage::set_nullifier(e, &nullifier, &true);
         RecoveryStorage::extend_nullifier_ttl(e, &nullifier, TTL_THRESHOLD, max_ttl(e));
         attempt.zk_verified = true;
-        let mut nul = Vec::new(e);
-        nul.push_back(nullifier);
-        attempt.nullifier = nul;
+        attempt.nullifier = Some(nullifier);
         maybe_promote(e, &account, &config, &mut attempt)?;
         RecoveryStorage::set_attempt(e, &account, &attempt);
         RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
@@ -614,8 +612,8 @@ impl PerchRecovery {
         }
         if let Some(attempt) = RecoveryStorage::get_attempt(e, &account) {
             RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, ttl);
-            if let Some(n) = attempt.nullifier.first() {
-                RecoveryStorage::extend_nullifier_ttl(e, &n, TTL_THRESHOLD, ttl);
+            if let Some(n) = &attempt.nullifier {
+                RecoveryStorage::extend_nullifier_ttl(e, n, TTL_THRESHOLD, ttl);
             }
         }
         if RecoveryStorage::has_revoked(e, &account) {
@@ -769,8 +767,8 @@ fn begin_attempt(
         // itself already extends the nullifier's own TTL as the durable
         // record of that.
         if existing.state != AttemptState::Completed {
-            if let Some(n) = existing.nullifier.first() {
-                RecoveryStorage::set_nullifier(e, &n, &false);
+            if let Some(n) = &existing.nullifier {
+                RecoveryStorage::set_nullifier(e, n, &false);
             }
         }
     }
@@ -801,7 +799,7 @@ fn begin_attempt(
         expires_at: 0,
         guardian_approvals: Vec::new(e),
         zk_verified: false,
-        nullifier: Vec::new(e),
+        nullifier: None,
         state: AttemptState::CollectingEvidence,
     };
     RecoveryStorage::set_attempt(e, &account, &attempt);
@@ -820,8 +818,8 @@ fn cancel_attempt(e: &Env, account: &Address, attempt: &mut Attempt) -> Result<(
     // silently reset to 0 via TTL expiry — extend on every write.
     RecoveryStorage::extend_cancels_used_ttl(e, account, TTL_THRESHOLD, max_ttl(e));
     attempt.state = AttemptState::Cancelled;
-    if let Some(n) = attempt.nullifier.first() {
-        RecoveryStorage::set_nullifier(e, &n, &false);
+    if let Some(n) = &attempt.nullifier {
+        RecoveryStorage::set_nullifier(e, n, &false);
     }
     RecoveryStorage::set_attempt(e, account, attempt);
     RecoveryCancelled {
@@ -861,7 +859,7 @@ fn require_zk_evidence(
     evidence: &ReconfigureEvidence,
     digest: &BytesN<32>,
 ) -> Result<(), RecoveryError> {
-    let (Some(nullifier), Some(proof)) = (evidence.zk_nullifier.first(), evidence.zk_proof.first())
+    let (Some(nullifier), Some(proof)) = (evidence.zk_nullifier.clone(), evidence.zk_proof.clone())
     else {
         return Err(RecoveryError::ReconfigureEvidenceRequired);
     };

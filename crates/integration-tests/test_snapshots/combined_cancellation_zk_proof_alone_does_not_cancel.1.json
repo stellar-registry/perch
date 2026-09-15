@@ -40,17 +40,13 @@
                       "key": {
                         "symbol": "zk_nullifier"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     },
                     {
                       "key": {
                         "symbol": "zk_proof"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     }
                   ]
                 }
@@ -75,7 +71,7 @@
               "function_name": "submit_guardian_cancel",
               "args": [
                 {
-                  "bytes": "7861f13b019e85e312d1a6e1713a81cbeeed95f1950f2ff79dcf90042981231f"
+                  "bytes": "7fd7c6ab92eafab7b71de4b7f94efc3469582a2474e34e1ee58b83093ac3e915"
                 }
               ]
             }
@@ -94,7 +90,7 @@
               "function_name": "submit_guardian_cancel",
               "args": [
                 {
-                  "bytes": "7861f13b019e85e312d1a6e1713a81cbeeed95f1950f2ff79dcf90042981231f"
+                  "bytes": "7fd7c6ab92eafab7b71de4b7f94efc3469582a2474e34e1ee58b83093ac3e915"
                 }
               ]
             }
@@ -636,9 +632,7 @@
                     "key": {
                       "symbol": "nullifier"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -780,9 +774,7 @@
                     "key": {
                       "symbol": "baseline"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -866,9 +858,7 @@
                               "key": {
                                 "symbol": "pool"
                               },
-                              "val": {
-                                "vec": []
-                              }
+                              "val": "void"
                             },
                             {
                               "key": {

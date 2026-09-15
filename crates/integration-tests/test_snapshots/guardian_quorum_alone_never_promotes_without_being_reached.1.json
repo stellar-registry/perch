@@ -39,17 +39,13 @@
                       "key": {
                         "symbol": "zk_nullifier"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     },
                     {
                       "key": {
                         "symbol": "zk_proof"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     }
                   ]
                 }
@@ -72,7 +68,7 @@
               "function_name": "submit_guardian_approval",
               "args": [
                 {
-                  "bytes": "6d4bc1ccd20fd5bd391fd56384c1dbda70e556d2a59967b4f20e875b7d3d4ca8"
+                  "bytes": "3904d76ce3487706b566befa8525d7e7851a4075a3ae703054dc80a227f3ec2f"
                 }
               ]
             }
@@ -91,7 +87,7 @@
               "function_name": "submit_guardian_approval",
               "args": [
                 {
-                  "bytes": "6d4bc1ccd20fd5bd391fd56384c1dbda70e556d2a59967b4f20e875b7d3d4ca8"
+                  "bytes": "3904d76ce3487706b566befa8525d7e7851a4075a3ae703054dc80a227f3ec2f"
                 }
               ]
             }
@@ -111,7 +107,7 @@
               "function_name": "submit_guardian_approval",
               "args": [
                 {
-                  "bytes": "6d4bc1ccd20fd5bd391fd56384c1dbda70e556d2a59967b4f20e875b7d3d4ca8"
+                  "bytes": "3904d76ce3487706b566befa8525d7e7851a4075a3ae703054dc80a227f3ec2f"
                 }
               ]
             }
@@ -663,9 +659,7 @@
                     "key": {
                       "symbol": "nullifier"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -739,9 +733,7 @@
                     "key": {
                       "symbol": "baseline"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {

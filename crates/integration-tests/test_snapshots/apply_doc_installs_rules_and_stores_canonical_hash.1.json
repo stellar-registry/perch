@@ -38,17 +38,13 @@
                       "key": {
                         "symbol": "zk_nullifier"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     },
                     {
                       "key": {
                         "symbol": "zk_proof"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     }
                   ]
                 }

@@ -38,8 +38,8 @@ pub const CI_PUBLISH_DOC_HASH: &str =
 pub fn no_recovery_evidence(env: &Env) -> perch_recovery::ReconfigureEvidence {
     perch_recovery::ReconfigureEvidence {
         guardians: Vec::new(env),
-        zk_nullifier: Vec::new(env),
-        zk_proof: Vec::new(env),
+        zk_nullifier: None,
+        zk_proof: None,
     }
 }
 

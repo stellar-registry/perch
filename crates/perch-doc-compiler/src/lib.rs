@@ -66,16 +66,23 @@ pub struct CompiledRule {
     pub scope: RuleScope,
     pub signers: Vec<Signer>,
     pub valid_until: Option<u32>,
-    /// Zero or one entries — a `Vec` rather than `Option` because
-    /// `Option<contracttype>` cannot cross the ScVal boundary that testutils
-    /// clients use. Empty ⇒ policy-free rule.
+    /// Zero or one entries — a `Vec` rather than `Option<CompiledCap>`-style
+    /// `Option` because `InstallParams` is itself a `#[contracttype]` struct,
+    /// and `#[contracttype]`'s derive macro has no `ScVal`/spec conversion
+    /// for `Option<T>` where `T` is a custom struct or enum (confirmed
+    /// directly: it fails to compile with "the trait bound `ScVal:
+    /// TryFrom<&Option<T>>` is not satisfied" — `Option<u32>` on
+    /// `valid_until` above works because `u32` is a host-builtin type with
+    /// its own direct `ScVal` conversion, not because `Option` itself is the
+    /// problem). Empty ⇒ policy-free rule.
     pub install: Vec<InstallParams>,
-    /// Zero or one entries (a `Vec` for the same ScVal reason as `install`).
-    /// Present ⇒ also attach OZ `spending_limit` with these params — the
-    /// cumulative cap the stateless interpreter cannot express. The applier
-    /// resolves the policy's content-addressed address and keys it into the
-    /// rule's policy map beside the interpreter; the tracked token is the rule's
-    /// `Contract` scope (validation pins `token == scope`).
+    /// Zero or one entries (a `Vec` for the same reason as `install` —
+    /// `CompiledCap` is itself a `#[contracttype]` struct). Present ⇒ also
+    /// attach OZ `spending_limit` with these params — the cumulative cap the
+    /// stateless interpreter cannot express. The applier resolves the
+    /// policy's content-addressed address and keys it into the rule's policy
+    /// map beside the interpreter; the tracked token is the rule's `Contract`
+    /// scope (validation pins `token == scope`).
     pub cap: Vec<CompiledCap>,
 }
 
@@ -100,14 +107,16 @@ pub struct CompiledDoc {
     /// minified twin compile to the same hash.
     pub doc_hash: BytesN<32>,
     pub rules: Vec<CompiledRule>,
-    /// Zero or one entries (a `Vec` for the same ScVal reason as
-    /// [`CompiledRule::install`]). Present ⇒ the document enrolls account
-    /// recovery — the applier is expected to sync this configuration to the
-    /// adopted recovery-controller instance named in it. See
-    /// `docs/recovery/` for the full design; wire-compat notes live there too
-    /// (this is a new field on an existing constructorless, immutable
-    /// deployable — a compiler build carrying it is a new instance, not an
-    /// in-place change to any already-deployed one).
+    /// Zero or one entries — a `Vec` because `CompiledRecoveryConfig` is
+    /// itself a `#[contracttype]` struct (see [`CompiledRule::install`]'s
+    /// doc comment for why `Option<CompiledRecoveryConfig>` doesn't compile
+    /// here). Present ⇒ the document enrolls account recovery — the applier
+    /// is expected to sync this configuration to the adopted
+    /// recovery-controller instance named in it. See `docs/recovery/` for
+    /// the full design; wire-compat notes live there too (this is a new
+    /// field on an existing constructorless, immutable deployable — a
+    /// compiler build carrying it is a new instance, not an in-place change
+    /// to any already-deployed one).
     pub recovery: Vec<CompiledRecoveryConfig>,
 }
 
@@ -119,10 +128,13 @@ pub struct CompiledRecoveryConfig {
     pub profile: RecoveryProfile,
     pub mode: CompiledRecoveryMode,
     pub controller: Address,
-    /// Zero or one entries (a `Vec` for the same ScVal reason as
-    /// [`CompiledRule::install`]). Present ⇒ suspected-compromise recovery is
-    /// enrolled, restoring the document this hash names.
-    pub baseline: Vec<BytesN<32>>,
+    /// `Some` ⇒ suspected-compromise recovery is enrolled, restoring the
+    /// document this hash names. A plain `Option`, unlike
+    /// [`CompiledRule::install`]/`cap`/[`CompiledDoc::recovery`] above:
+    /// `BytesN<32>` is a host-builtin type (its own direct `ScVal`
+    /// conversion), not a `#[contracttype]` struct, so the derive-macro
+    /// limitation those fields work around doesn't apply here.
+    pub baseline: Option<BytesN<32>>,
     /// Fingerprint of each replaceable signer's *physical credential*
     /// (`sha256` of a tagged encoding of its `SignerMethod` — verifier+key for
     /// `external`, the address for `delegated`), resolved from
@@ -178,9 +190,11 @@ pub struct CompiledZkVerifierConfig {
     pub verifier: Address,
     /// Decoded from the document's hex `circuit-id`.
     pub circuit_id: Bytes,
-    /// Zero or one entries (a `Vec` for the same ScVal reason as
-    /// [`CompiledRule::install`]).
-    pub pool: Vec<Address>,
+    /// A membership-pool contract's address, for ZK schemes that prove
+    /// knowledge of one fixed secret against a set the pool contract tracks;
+    /// `None` for schemes with no pool. `Address` is a host-builtin type, so
+    /// (unlike [`CompiledRule::install`]/`cap`) a plain `Option` works here.
+    pub pool: Option<Address>,
 }
 
 /// Cross-contract client, generated independently of the deployable so
@@ -287,10 +301,10 @@ fn to_compiled_recovery(
             to_compiled_zk_verifier_config(e, z)?,
         ),
     };
-    let mut baseline: Vec<BytesN<32>> = Vec::new(e);
-    if let Some(b) = &r.baseline {
-        baseline.push_back(hex_bytes_32(e, &b.doc_hash)?);
-    }
+    let baseline = match &r.baseline {
+        Some(b) => Some(hex_bytes_32(e, &b.doc_hash)?),
+        None => None,
+    };
     // Precondition (validate(doc).is_ok(), guaranteed by the one caller):
     // every `replaceable` id references a declared signer
     // (`UnknownRecoveryReplaceableRef` would already have failed validation),
@@ -367,10 +381,7 @@ fn to_compiled_zk_verifier_config(
     e: &Env,
     z: &perch_ir::ZkVerifierConfig,
 ) -> Result<CompiledZkVerifierConfig, DocCompilerError> {
-    let mut pool: Vec<Address> = Vec::new(e);
-    if let Some(p) = &z.pool {
-        pool.push_back(Address::from_str(e, p));
-    }
+    let pool = z.pool.as_ref().map(|p| Address::from_str(e, p));
     Ok(CompiledZkVerifierConfig {
         verifier: Address::from_str(e, &z.verifier),
         circuit_id: hex_bytes(e, &z.circuit_id)?,

@@ -11,7 +11,7 @@
 
 use crate::types::Action;
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{Address, Bytes, BytesN, Env};
 
 /// A domain-separation tag, so a statement can never be confused with a hash
 /// computed for an unrelated purpose (`doc_hash`, `config_hash`, ...) even if
@@ -73,8 +73,9 @@ pub fn statement(
 ///
 /// `nullifier` is the prover-revealed nullifier the circuit derives from its
 /// secret; the controller tracks spent nullifiers itself (globally, across
-/// accounts — see `storage.rs`), so a verifier need not. `pool`, present only
-/// for schemes that prove membership of a secret in a set, is opaque to the
+/// accounts — see `storage.rs`), so a verifier need not. `pool` — a
+/// membership-pool contract's address, present only for schemes that prove
+/// knowledge of a secret against a set the pool tracks — is opaque to the
 /// controller: it is passed through unchanged from the enrolled
 /// `ZkVerifierConfig.pool`, and interpreting it is entirely the verifier's
 /// concern.
@@ -86,7 +87,7 @@ pub trait ZkVerifierInterface {
         statement: BytesN<32>,
         nullifier: BytesN<32>,
         proof: Bytes,
-        pool: Vec<Address>,
+        pool: Option<Address>,
     ) -> bool;
 }
 

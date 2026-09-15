@@ -40,17 +40,13 @@
                       "key": {
                         "symbol": "zk_nullifier"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     },
                     {
                       "key": {
                         "symbol": "zk_proof"
                       },
-                      "val": {
-                        "vec": []
-                      }
+                      "val": "void"
                     }
                   ]
                 }
@@ -599,9 +595,7 @@
                     "key": {
                       "symbol": "nullifier"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -702,9 +696,7 @@
                     "key": {
                       "symbol": "baseline"
                     },
-                    "val": {
-                      "vec": []
-                    }
+                    "val": "void"
                   },
                   {
                     "key": {
@@ -761,9 +753,7 @@
                               "key": {
                                 "symbol": "pool"
                               },
-                              "val": {
-                                "vec": []
-                              }
+                              "val": "void"
                             },
                             {
                               "key": {

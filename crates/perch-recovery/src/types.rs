@@ -91,9 +91,11 @@ pub struct Attempt {
     pub guardian_approvals: Vec<Address>,
     /// Whether a valid initiation proof has been submitted for this attempt.
     pub zk_verified: bool,
-    /// Nullifier consumed by this attempt's ZK evidence, if any (zero or one
-    /// entry) — released back to unspent if the attempt is replaced before
-    /// promotion, spent permanently on completion.
-    pub nullifier: Vec<BytesN<32>>,
+    /// Nullifier consumed by this attempt's ZK evidence, if any — released
+    /// back to unspent if the attempt is replaced before promotion, spent
+    /// permanently on completion. `BytesN<32>` is a host-builtin type, so
+    /// (unlike a `Vec`-emulated `Option` over a custom `#[contracttype]`,
+    /// e.g. `CompiledRule::install`) a plain `Option` works here.
+    pub nullifier: Option<BytesN<32>>,
     pub state: AttemptState,
 }

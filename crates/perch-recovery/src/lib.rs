@@ -86,9 +86,16 @@ pub struct ReconfigureEvidence {
     /// which must independently authorize this exact call (the host rejects
     /// the whole invocation if any named address didn't actually sign).
     pub guardians: Vec<Address>,
-    /// Zero or one `(nullifier, proof)` pair, for a ZK-capable enrolled mode.
-    pub zk_nullifier: Vec<BytesN<32>>,
-    pub zk_proof: Vec<Bytes>,
+    /// Zero or one `(nullifier, proof)` pair, for a ZK-capable enrolled
+    /// mode — two parallel `Option`s rather than one
+    /// `Option<(BytesN<32>, Bytes)>` (or a dedicated struct) because a tuple
+    /// isn't a `#[contracttype]`-representable field type and a wrapper
+    /// struct would hit the same `Option<contracttype>` limitation
+    /// `CompiledRule::install` documents — `BytesN<32>`/`Bytes` are
+    /// host-builtin types, so a plain `Option` works for each individually.
+    /// `require_zk_evidence` requires both present or both absent.
+    pub zk_nullifier: Option<BytesN<32>>,
+    pub zk_proof: Option<Bytes>,
 }
 
 /// Cross-contract client, generated independently of the deployable (see

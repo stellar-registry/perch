@@ -4,24 +4,24 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 
 - Add durable project-specific notes here as they are discovered through real work.
 
-## Release pipeline sharp edge: dev-only crates aren't in a contract's version-bump scope
+## Release pipeline: intra-workspace pins are auto-synced after each bump
 
 `.github/workflows/release.yml`'s `release-pr` job (git-cliff) computes each
 contract's next version from commits touching a fixed `paths_for()` path list
-per contract (see the job for the current lists). Crates that are **only**
-`[dev-dependencies]` consumers of a contract — `crates/integration-tests`,
-`crates/perch-testkit` — are not in any contract's scope, so a commit that
-only touches them never triggers a version bump there, and their
-intra-workspace `path` dependency version pins (e.g. `perch-account = {
-version = "0.1.1", path = "..." }`) can silently go stale when a contract
-bumps a 0.x **minor** version (Cargo's caret rules treat 0.x minor bumps as
-breaking). A stale pin fails `cargo metadata` for the **whole workspace**,
-which only surfaces when `release.yml`'s `constructorless-build` job runs for
-an unrelated contract — see PR #79 for a case where this silently blocked
-`perch-doc-compiler-v0.2.0`'s publish for a day. When bumping any contract's
-version, grep for its name across `crates/*/Cargo.toml` `{ version = "...",
-path = "..." }` pins and bump every match, not just the crates in that
-contract's `paths_for()` scope.
+per contract (see the job for the current lists), then — after the bump
+loop — greps **every** `crates/*/Cargo.toml` (not just the crates in scope
+for a given contract, and not just other tracked contracts; dev-only
+consumers like `crates/integration-tests`/`crates/perch-testkit` are
+included) for a `{ version = "...", path = "..." }` pin naming a
+just-bumped crate, and rewrites that pin's version to match. This exists
+specifically because a stale pin fails `cargo metadata` for the **whole
+workspace** the moment a contract bumps a 0.x **minor** version (Cargo's
+caret rules treat 0.x minor bumps as breaking) — see PR #79 for a case
+where a stale dev-only pin, fixed by hand at the time, silently blocked
+`perch-doc-compiler-v0.2.0`'s publish for a day. If you're bumping a
+version by hand outside this job (a one-off manual release), still grep for
+the crate's name across `crates/*/Cargo.toml` and bump every match — the
+automation only runs inside `release-pr`.
 
 Once a contract's tag (`<contract>-v<version>`) exists, `detect-releases`
 will never retry that version even if the build later succeeds after a

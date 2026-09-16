@@ -249,6 +249,7 @@ jobs:
           esac; }
           CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery"
           summary=""
+          bumped=""
           for c in $CONTRACTS; do
             inc=()
             for d in $(paths_for "$c"); do inc+=(--include-path "crates/$d/**"); done
@@ -266,7 +267,25 @@ jobs:
             git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" --bump -o "crates/$c/CHANGELOG.md" 2>/dev/null
             summary="${summary}- \`$c\`: $cur -> $next_ver"$'\n'
             echo "bump $c: $cur -> $next_ver"
+            bumped="${bumped}$c=$next_ver"$'\n'
           done
+          # Sync every intra-workspace path-dependency pin to the version its
+          # target crate just moved to. Without this, a 0.x MINOR bump here
+          # (breaking, under Cargo's caret rules) leaves a dependent's pin
+          # stale and `cargo metadata` fails workspace-wide the next time
+          # anything touches that dependent — see AGENTS.md's version-pin
+          # sharp edge (this used to be a manual "grep and bump every match"
+          # step, which is exactly how that failure mode happened before).
+          if [ -n "$bumped" ]; then
+            while IFS='=' read -r name ver; do
+              [ -n "$name" ] || continue
+              for f in crates/*/Cargo.toml; do
+                grep -qE "^${name} = \{ version = \"[^\"]*\", path = " "$f" || continue
+                sed -i -E "s|^(${name} = \{ version = \")[^\"]*(\", path = )|\1${ver}\2|" "$f"
+                echo "synced pin: $f -> $name $ver"
+              done
+            done <<<"$bumped"
+          fi
           # The npm packages ride the same convention: tag-pattern <pkg>-v*,
           # scoped to packages/<pkg>. Bump via `npm version` so
           # package-lock.json stays in sync with the manifest.
@@ -625,9 +644,10 @@ jobs:
           # perch-recovery is deliberately NOT in this allow-list yet: it is
           # tagged/versioned (CONTRACTS above) so its intra-workspace pins stay
           # tracked, but publishing a recovery controller on-chain is a
-          # separate, deliberate decision (see docs/recovery/section-7-gate.md)
-          # — add it here explicitly when that decision is made, not as a side
-          # effect of adding the crate.
+          # separate, deliberate decision (see
+          # docs/recovery/pending-activity-policy.md) — add it here explicitly
+          # when that decision is made, not as a side effect of adding the
+          # crate.
           ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier"]'
           if [ -n "$DISPATCH_TAG" ]; then
             # Strict allow-list regex, not a prefix glob: the tag and the package

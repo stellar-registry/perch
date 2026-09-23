@@ -1,5 +1,7 @@
 # Open decision: activity during a pending recovery attempt (release-blocking)
 
+This is now being tracked in [issue #84](https://github.com/stellar-registry/perch/issues/84).
+
 **Status: OPEN. This is a release-blocking gate, not a design note.** No
 recovery-enabled account should be deployed to production, and no
 integration should advertise recovery as safe to rely on, until this

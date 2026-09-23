@@ -87,4 +87,4 @@ re-establishing `emitDoc_injective` over the enlarged domain is legitimate
 future work, tracked here rather than attempted as part of this change. It
 should be undertaken as its own reviewed change with room to get the
 injectivity argument right, not bundled into a schema-and-controller
-release.
+release. Tracked in [#88](https://github.com/stellar-registry/perch/issues/88).

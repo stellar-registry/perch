@@ -221,7 +221,7 @@ circuit can be dropped in (any verifier satisfying this trait) without
 changing the controller. `ZkOnly`/`Combined` modes are fully represented in
 storage, compiled correctly, and gated identically to `GuardianOnly` — only
 "does a real ZK circuit exist to generate proofs against" is out of scope
-here, tracked as follow-up work.
+here, tracked as follow-up work in [issue #85](https://github.com/stellar-registry/perch/issues/85).
 
 ## Bounding permissionless evidence collection
 
@@ -372,16 +372,8 @@ carries no ZK field at all, `zk-only` carries no guardian field, quorum
 bounds, credential-fingerprint resolution, and the canonical-form regression
 for documents without recovery.
 
-Not yet covered (tracked, not silently assumed sound): a live ZK circuit
-exercising `submit_zk_proof`/`submit_zk_cancel` against a real verifier (no
-circuit is shipped — see "ZK adapter scope"); a rule-teardown scenario where
-`uninstall` itself panics (this crate's `uninstall` is a no-op by design, so
-the property to check is narrower — that removal always succeeds regardless
-— which follows directly from `uninstall` never being able to fail); the
-full pending-activity enforcement beyond blocking conflicting document
-changes (see [`pending-activity-policy.md`](pending-activity-policy.md));
-and a live rejection of a direct, unauthenticated call to `install`/
-`enforce`/`guard_apply_doc` under genuinely enforcing (non-mocked)
-authorization — the existing suite runs under mocked auth throughout (see
-"Caller authentication" above for the reasoning verified instead against the
-pinned host source directly).
+Not yet covered (tracked, not silently assumed sound):
+- a live ZK circuit exercising `submit_zk_proof`/`submit_zk_cancel` against a real verifier (no circuit is shipped — see "ZK adapter scope"). Tracked in [#85](https://github.com/stellar-registry/perch/issues/85).
+- a rule-teardown scenario where `uninstall` itself panics (this crate's `uninstall` is a no-op by design, so the property to check is narrower — that removal always succeeds regardless — which follows directly from `uninstall` never being able to fail); 
+- the full pending-activity enforcement beyond blocking conflicting document changes (see [`pending-activity-policy.md`](pending-activity-policy.md)). Tracked in [#84](https://github.com/stellar-registry/perch/issues/84).
+- a live rejection of a direct, unauthenticated call to `install`/ `enforce`/`guard_apply_doc` under genuinely enforcing (non-mocked) authorization — the existing suite runs under mocked auth throughout (see "Caller authentication" above for the reasoning verified instead against the pinned host source directly). Tracked in [#86](https://github.com/stellar-registry/perch/issues/86).

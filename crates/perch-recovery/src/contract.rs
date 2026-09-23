@@ -59,8 +59,6 @@ pub struct RecoveryAuthorized {
     pub expires_at: u32,
 }
 
-const TTL_THRESHOLD: u32 = 1;
-
 /// The network's current maximum persistent-entry TTL — the longest any
 /// extension in this module can buy, recomputed at each call site rather
 /// than pinned to a constant so it tracks the live network configuration
@@ -102,7 +100,7 @@ impl Policy for PerchRecovery {
         smart_account.require_auth();
         assert_self_zero_signer_rule(e, &context_rule, &smart_account);
         RecoveryStorage::set_config(e, &smart_account, &install_params);
-        RecoveryStorage::extend_config_ttl(e, &smart_account, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_config_ttl(e, &smart_account, max_ttl(e), max_ttl(e));
     }
 
     /// Variant A completion: authorize `apply_doc` exactly when a live,
@@ -196,10 +194,10 @@ fn complete(e: &Env, context: &Context, smart_account: &Address) {
         }
     }
     RecoveryStorage::set_revoked(e, smart_account, &revoked);
-    RecoveryStorage::extend_revoked_ttl(e, smart_account, TTL_THRESHOLD, max_ttl(e));
+    RecoveryStorage::extend_revoked_ttl(e, smart_account, max_ttl(e), max_ttl(e));
     if let Some(n) = &attempt.nullifier {
         RecoveryStorage::set_nullifier(e, n, &true);
-        RecoveryStorage::extend_nullifier_ttl(e, n, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_nullifier_ttl(e, n, max_ttl(e), max_ttl(e));
     }
     RecoveryCompleted {
         account: smart_account.clone(),
@@ -265,7 +263,7 @@ impl PerchRecovery {
         // `Protected` config from expiring into a false "first enrollment"
         // (which would let a reconfiguration skip the evidence requirement).
         if old.is_some() {
-            RecoveryStorage::extend_config_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
+            RecoveryStorage::extend_config_ttl(e, &account, max_ttl(e), max_ttl(e));
         }
         let new = new_recovery.first();
 
@@ -400,7 +398,7 @@ impl PerchRecovery {
         attempt.guardian_approvals.push_back(guardian);
         maybe_promote(e, &account, &config, &mut attempt)?;
         RecoveryStorage::set_attempt(e, &account, &attempt);
-        RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_attempt_ttl(e, &account, max_ttl(e), max_ttl(e));
         Ok(())
     }
 
@@ -448,12 +446,12 @@ impl PerchRecovery {
         // account-bound statement before either attempt completes (`complete`
         // never re-checks the global set, only writes it).
         RecoveryStorage::set_nullifier(e, &nullifier, &true);
-        RecoveryStorage::extend_nullifier_ttl(e, &nullifier, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_nullifier_ttl(e, &nullifier, max_ttl(e), max_ttl(e));
         attempt.zk_verified = true;
         attempt.nullifier = Some(nullifier);
         maybe_promote(e, &account, &config, &mut attempt)?;
         RecoveryStorage::set_attempt(e, &account, &attempt);
-        RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_attempt_ttl(e, &account, max_ttl(e), max_ttl(e));
         Ok(())
     }
 
@@ -501,7 +499,7 @@ impl PerchRecovery {
         }
         tally.push_back(guardian);
         RecoveryStorage::set_cancel_tally(e, &key, &tally);
-        RecoveryStorage::extend_cancel_tally_ttl(e, &key, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_cancel_tally_ttl(e, &key, max_ttl(e), max_ttl(e));
         let guardian_quorum_reached = tally.len() >= g.quorum;
         if guardian_quorum_reached {
             let zk_cancel_verified =
@@ -549,10 +547,10 @@ impl PerchRecovery {
             return Err(RecoveryError::ZkProofInvalid);
         }
         RecoveryStorage::set_nullifier(e, &nullifier, &true);
-        RecoveryStorage::extend_nullifier_ttl(e, &nullifier, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_nullifier_ttl(e, &nullifier, max_ttl(e), max_ttl(e));
         let key = (account.clone(), attempt.id);
         RecoveryStorage::set_zk_cancel_verified(e, &key, &true);
-        RecoveryStorage::extend_zk_cancel_verified_ttl(e, &key, TTL_THRESHOLD, max_ttl(e));
+        RecoveryStorage::extend_zk_cancel_verified_ttl(e, &key, max_ttl(e), max_ttl(e));
         let guardian_quorum_reached = match guardian_set(&config.mode) {
             Some(g) => {
                 RecoveryStorage::get_cancel_tally(e, &key)
@@ -608,22 +606,22 @@ impl PerchRecovery {
     pub fn renew(e: &Env, account: Address) {
         let ttl = max_ttl(e);
         if RecoveryStorage::has_config(e, &account) {
-            RecoveryStorage::extend_config_ttl(e, &account, TTL_THRESHOLD, ttl);
+            RecoveryStorage::extend_config_ttl(e, &account, max_ttl(e), ttl);
         }
         if let Some(attempt) = RecoveryStorage::get_attempt(e, &account) {
-            RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, ttl);
+            RecoveryStorage::extend_attempt_ttl(e, &account, max_ttl(e), ttl);
             if let Some(n) = &attempt.nullifier {
-                RecoveryStorage::extend_nullifier_ttl(e, n, TTL_THRESHOLD, ttl);
+                RecoveryStorage::extend_nullifier_ttl(e, n, max_ttl(e), ttl);
             }
         }
         if RecoveryStorage::has_revoked(e, &account) {
-            RecoveryStorage::extend_revoked_ttl(e, &account, TTL_THRESHOLD, ttl);
+            RecoveryStorage::extend_revoked_ttl(e, &account, max_ttl(e), ttl);
         }
         if RecoveryStorage::has_cancels_used(e, &account) {
-            RecoveryStorage::extend_cancels_used_ttl(e, &account, TTL_THRESHOLD, ttl);
+            RecoveryStorage::extend_cancels_used_ttl(e, &account, max_ttl(e), ttl);
         }
         if RecoveryStorage::has_next_attempt_id(e, &account) {
-            RecoveryStorage::extend_next_attempt_id_ttl(e, &account, TTL_THRESHOLD, ttl);
+            RecoveryStorage::extend_next_attempt_id_ttl(e, &account, max_ttl(e), ttl);
         }
     }
 }
@@ -637,7 +635,7 @@ fn require_config(e: &Env, account: &Address) -> Result<CompiledRecoveryConfig, 
     // (no evidence required), which would let a `Protected` account's
     // reconfiguration gate quietly fail open. See [`PerchRecovery::renew`]
     // for the explicit keep-alive covering accounts with no such activity.
-    RecoveryStorage::extend_config_ttl(e, account, TTL_THRESHOLD, max_ttl(e));
+    RecoveryStorage::extend_config_ttl(e, account, max_ttl(e), max_ttl(e));
     Ok(config)
 }
 
@@ -778,7 +776,7 @@ fn begin_attempt(
     // evidence/statements collide with a new attempt) — extend on every
     // write, not just at install, so this counter can't silently reset to 0
     // via TTL expiry during long account inactivity.
-    RecoveryStorage::extend_next_attempt_id_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
+    RecoveryStorage::extend_next_attempt_id_ttl(e, &account, max_ttl(e), max_ttl(e));
 
     let created_at = e.ledger().sequence();
     let attempt = Attempt {
@@ -803,7 +801,7 @@ fn begin_attempt(
         state: AttemptState::CollectingEvidence,
     };
     RecoveryStorage::set_attempt(e, &account, &attempt);
-    RecoveryStorage::extend_attempt_ttl(e, &account, TTL_THRESHOLD, max_ttl(e));
+    RecoveryStorage::extend_attempt_ttl(e, &account, max_ttl(e), max_ttl(e));
     Ok(id)
 }
 
@@ -816,7 +814,7 @@ fn cancel_attempt(e: &Env, account: &Address, attempt: &mut Attempt) -> Result<(
     RecoveryStorage::set_cancels_used(e, account, &(used + 1));
     // A lifetime griefing-cancellation cap only bounds anything if it can't
     // silently reset to 0 via TTL expiry — extend on every write.
-    RecoveryStorage::extend_cancels_used_ttl(e, account, TTL_THRESHOLD, max_ttl(e));
+    RecoveryStorage::extend_cancels_used_ttl(e, account, max_ttl(e), max_ttl(e));
     attempt.state = AttemptState::Cancelled;
     if let Some(n) = &attempt.nullifier {
         RecoveryStorage::set_nullifier(e, n, &false);
@@ -870,6 +868,6 @@ fn require_zk_evidence(
         return Err(RecoveryError::ZkProofInvalid);
     }
     RecoveryStorage::set_nullifier(e, &nullifier, &true);
-    RecoveryStorage::extend_nullifier_ttl(e, &nullifier, TTL_THRESHOLD, max_ttl(e));
+    RecoveryStorage::extend_nullifier_ttl(e, &nullifier, max_ttl(e), max_ttl(e));
     Ok(())
 }

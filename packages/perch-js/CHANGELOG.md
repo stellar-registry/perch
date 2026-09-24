@@ -4,6 +4,12 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.0] - 2026-09-24
+
+### 🚀 Features
+
+- *(recovery)* Stage 4 — recovery schema, shared controller, compiler + client support
+
 ## [0.2.0] - 2026-09-09
 
 ### 🚀 Features

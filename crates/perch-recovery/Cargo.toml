@@ -23,7 +23,7 @@ soroban-sdk = { workspace = true }
 # (perch-smart-account, `default-features = false`) still needs this.
 soroban-sdk-tools = { workspace = true }
 stellar-accounts = { workspace = true, optional = true }
-perch-doc-compiler = { version = "0.2.1", path = "../perch-doc-compiler", default-features = false }
+perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

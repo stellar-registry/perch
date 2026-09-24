@@ -69,3 +69,48 @@ describe('perch-ir parity: ci-publish-threshold fixture', () => {
     expect(canonicalJson(reparsed)).toBe(canonicalJson(doc));
   });
 });
+
+// The guardian-only recovery variant: a Protected-profile document enrolling
+// guardian-only recovery with a baseline pointing at the plain ci-publish
+// fixture's own hash. Pins the `recovery` field's canonical form — the schema
+// extension this stage adds (see docs/recovery/).
+describe('perch-ir parity: ci-publish-recovery fixture (guardian-only)', () => {
+  const doc = parsePolicyDoc(JSON.parse(readFileSync(td('ci-publish-recovery.json'), 'utf8')));
+
+  it('canonical JSON is byte-identical to the Rust canonical form', () => {
+    const committed = readFileSync(td('ci-publish-recovery.canonical.json'), 'utf8').replace(
+      /\n+$/,
+      '',
+    );
+    expect(canonicalJson(doc)).toBe(committed);
+  });
+
+  it('doc_hash matches the committed and pinned Rust hash', () => {
+    expect(docHash(doc)).toBe(readFileSync(td('ci-publish-recovery.doc-hash'), 'utf8').trim());
+    expect(docHash(doc)).toBe('dcd539d241eddba9537237f2958a639cd84ac9f1ed6111c18da4230b1b60b08d');
+  });
+});
+
+// The combined (guardian + ZK) recovery variant, Loss profile, no baseline
+// (lost-key recovery only). Pins the flattened `combined` mode shape and the
+// zk-only-style fields (`verifier`, `circuit-id`, `pool`).
+describe('perch-ir parity: ci-publish-recovery-combined fixture', () => {
+  const doc = parsePolicyDoc(
+    JSON.parse(readFileSync(td('ci-publish-recovery-combined.json'), 'utf8')),
+  );
+
+  it('canonical JSON is byte-identical to the Rust canonical form', () => {
+    const committed = readFileSync(
+      td('ci-publish-recovery-combined.canonical.json'),
+      'utf8',
+    ).replace(/\n+$/, '');
+    expect(canonicalJson(doc)).toBe(committed);
+  });
+
+  it('doc_hash matches the committed and pinned Rust hash', () => {
+    expect(docHash(doc)).toBe(
+      readFileSync(td('ci-publish-recovery-combined.doc-hash'), 'utf8').trim(),
+    );
+    expect(docHash(doc)).toBe('9a6c29fdfd28746f8826a945611f31f43e6a51d131ff0bfd018b1ce2762e24bb');
+  });
+});

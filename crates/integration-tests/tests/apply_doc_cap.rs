@@ -6,7 +6,7 @@
 //! `perch-spending-limit`'s own test and `cap_matrix`.
 
 use perch_smart_account::infra;
-use perch_testkit::{Bootstrap, World, FIXTURE_NETWORK};
+use perch_testkit::{no_recovery_evidence, Bootstrap, World, FIXTURE_NETWORK};
 use soroban_sdk::{Address, Bytes, BytesN, String as SString};
 
 /// admin verifier / ci verifier the testkit stands up in native mode.
@@ -60,7 +60,7 @@ fn apply_doc_installs_the_cap_beside_the_interpreter() {
 
     // Previously `CapUnsupported`; now it compiles and applies.
     let doc = Bytes::from_slice(&w.env, capped_doc("").as_bytes());
-    let hash: BytesN<32> = client.apply_doc(&doc);
+    let hash: BytesN<32> = client.apply_doc(&doc, &no_recovery_evidence(&w.env));
     assert_eq!(client.applied_doc_hash(), Some(hash));
 
     assert_eq!(client.get_context_rules_count(), 2);
@@ -86,7 +86,10 @@ fn apply_doc_rejects_a_cap_token_that_is_not_the_scope() {
     // validation (it would silently meter a different contract).
     let mismatched = format!(r#""token": "{CI_VERIFIER}", "#); // any C-addr != TOKEN
     let doc = Bytes::from_slice(&w.env, capped_doc(&mismatched).as_bytes());
-    assert!(w.account_client().try_apply_doc(&doc).is_err());
+    assert!(w
+        .account_client()
+        .try_apply_doc(&doc, &no_recovery_evidence(&w.env))
+        .is_err());
     // Nothing was installed: the account still has only its constructor admin.
     assert_eq!(w.account_client().get_context_rules_count(), 1);
 }

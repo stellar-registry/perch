@@ -344,7 +344,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CCPBUYP4VEZAFQP2FKOXMKA2IDUCC2GGDFFZQ2SDHQVYXU75IJ6HLLXU",
+              "contract": "CCJQPFITUT4GIIXFBQHHPK5M25OX5BNU4P3KQHHJTRZM6JXXBITHPYLX",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -413,7 +413,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CDYGIFKT22KR4UF3WFEKRTX7LJIMWQOGYM3SPLROFFYNDF7JWC55HIY2",
+              "contract": "CDC6GSNZCBZGAP3GMM4MNHEGOQKDJBZ5FHAWWHYO7NV6NXMKMGEGVEJV",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {

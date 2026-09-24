@@ -94,12 +94,50 @@ const rule = z
   })
   .strict();
 
+// Opt-in account-recovery enrollment, mirroring perch-ir's `RecoveryConfig`.
+// Reviewable configuration only — never the recovery attempt itself. See
+// `docs/recovery/` for the full design and CANONICAL.md for why this field
+// being omitted (not `undefined`-but-present) is what keeps recovery-absent
+// documents hash-identical to before this field existed.
+
+const guardianFields = { guardians: z.array(z.string()), quorum: u32 };
+const zkFields = {
+  verifier: z.string(),
+  'circuit-id': z.string(),
+  pool: z.string().optional(),
+};
+
+const guardianOnlyMode = z.object({ type: z.literal('guardian-only'), ...guardianFields }).strict();
+const zkOnlyMode = z.object({ type: z.literal('zk-only'), ...zkFields }).strict();
+const combinedMode = z
+  .object({ type: z.literal('combined'), ...guardianFields, ...zkFields })
+  .strict();
+const recoveryMode = z.discriminatedUnion('type', [guardianOnlyMode, zkOnlyMode, combinedMode]);
+
+const baselineCommitment = z.object({ 'doc-hash': z.string() }).strict();
+
+const recoveryConfig = z
+  .object({
+    profile: z.enum(['loss', 'protected']),
+    mode: recoveryMode,
+    controller: z.string(),
+    baseline: baselineCommitment.optional(),
+    replaceable: z.array(z.string()),
+    'delay-ledgers': u32,
+    'expiry-ledgers': u32,
+    'max-cancels': u32,
+    // No default — mirrors perch-ir's `PendingActivityPolicy` having none.
+    'pending-activity': z.enum(['freeze', 'continue']),
+  })
+  .strict();
+
 export const policyDocSchema = z
   .object({
     version: z.literal(1),
     network: z.string().optional(),
     signers: z.array(signerDecl),
     rules: z.array(rule),
+    recovery: recoveryConfig.optional(),
   })
   .strict();
 
@@ -111,6 +149,9 @@ export type Rule = z.infer<typeof rule>;
 export type ArgConstraint = z.infer<typeof argConstraint>;
 export type ArgPred = z.infer<typeof argPred>;
 export type CapConstraint = z.infer<typeof capConstraint>;
+export type RecoveryConfig = z.infer<typeof recoveryConfig>;
+export type RecoveryMode = z.infer<typeof recoveryMode>;
+export type BaselineCommitment = z.infer<typeof baselineCommitment>;
 
 /** Parse and validate an already-JSON-parsed value into a PolicyDoc, throwing a
  *  ZodError on any shape/version/unknown-field violation (fail-closed). */

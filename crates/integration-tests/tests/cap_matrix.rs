@@ -69,6 +69,7 @@ fn cap_doc(pubkey_hex: &str) -> perch_ir::PolicyDoc {
                 period_ledgers: PERIOD_LEDGERS,
             }),
         }],
+        recovery: None,
     }
 }
 

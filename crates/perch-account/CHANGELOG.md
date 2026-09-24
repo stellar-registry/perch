@@ -4,6 +4,26 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.0] - 2026-09-24
+
+### 🚀 Features
+
+- *(recovery)* Stage 4 — recovery schema, shared controller, compiler + client support
+
+### 🐛 Bug Fixes
+
+- *(doc-compiler)* Unblock 0.2.0 cap-capable release, republish as 0.2.1 (#79)
+- *(recovery)* Close review-surfaced auth/timing gaps; reframe docs as standalone
+
+### 🚜 Refactor
+
+- *(recovery)* Convert 0-or-1 Vec fields to Option where the SDK allows it
+
+### 💼 Other
+
+- *(review)* Fix(recovery): AND-gate Combined cancellation, keep completed nullifiers spent
+- *(review)* Fix(recovery): reject cancellation evidence on non-live attempts
+
 ## [0.2.0] - 2026-09-09
 
 ### 🚀 Features

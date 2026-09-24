@@ -16,7 +16,7 @@ soroban-sdk-tools = { workspace = true }
 stellar-accounts = { workspace = true }
 # Client + wire types only — `contract` off, so no compiler code (parser,
 # lowering) is ever linked into account wasm.
-perch-doc-compiler = { version = "0.2.0", path = "../perch-doc-compiler", default-features = false }
+perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
 # Client + types only for the recovery controller — apply_doc cross-calls the
 # adopted instance; `contract` off, so no controller state or Policy-lifecycle
 # code is linked into account wasm.

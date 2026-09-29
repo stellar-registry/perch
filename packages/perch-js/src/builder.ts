@@ -238,7 +238,7 @@ export class PolicyBuilder {
   }
   /** Enroll opt-in account recovery. See {@link RecoverySpec}. */
   recovery(spec: RecoverySpec): this {
-    this._recovery = recoverySpecToWire(spec)
+    this._recovery = recoverySpecToWire(spec);
     return this;
   }
 

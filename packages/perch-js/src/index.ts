@@ -43,4 +43,6 @@ export {
   RuleBuilder,
   type SignerSpec,
   type CapSpec,
+  type RecoveryModeSpec,
+  type RecoverySpec,
 } from './builder.js';

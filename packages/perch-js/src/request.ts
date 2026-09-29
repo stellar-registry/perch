@@ -12,6 +12,8 @@
 
 import type { ArgConstraint, CapConstraint, PolicyDoc, SignerDecl } from './schema.js';
 import { parsePolicyDoc } from './schema.js';
+import type { RecoverySpec } from './builder.js';
+import { recoverySpecToWire } from './builder.js';
 
 /** Where a permission applies: the account itself, or one contract. */
 export type PermissionScope = 'self-admin' | { contract: string };
@@ -36,6 +38,7 @@ export interface PolicyRequest {
   network?: string;
   signers: SignerDecl[];
   permissions: Permission[];
+  recovery?: RecoverySpec;
 }
 
 /** Lower a request to its canonical PolicyDoc, validating fail-closed. The
@@ -56,6 +59,7 @@ export function requestToPolicyDoc(req: PolicyRequest): PolicyDoc {
     ...(req.network !== undefined ? { network: req.network } : {}),
     signers: req.signers,
     rules,
+    ...(req.recovery !== undefined ? { recovery: recoverySpecToWire(req.recovery) } : {}),
   };
   // Fail closed: a request that does not map to a valid PolicyDoc throws.
   return parsePolicyDoc(doc);

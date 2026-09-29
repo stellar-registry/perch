@@ -175,6 +175,20 @@ export interface RecoverySpec {
   pendingActivity: 'freeze' | 'continue';
 }
 
+export function recoverySpecToWire(spec: RecoverySpec): Record<string, unknown> {
+  return {
+    profile: spec.profile,
+    mode: recoveryModeToWire(spec.mode),
+    controller: spec.controller,
+    ...(spec.baseline !== undefined ? { baseline: { 'doc-hash': spec.baseline.docHash } } : {}),
+    replaceable: spec.replaceable,
+    'delay-ledgers': spec.delayLedgers,
+    'expiry-ledgers': spec.expiryLedgers,
+    'max-cancels': spec.maxCancels,
+    'pending-activity': spec.pendingActivity,
+  };
+}
+
 function recoveryModeToWire(mode: RecoveryModeSpec): Record<string, unknown> {
   switch (mode.kind) {
     case 'guardian-only':
@@ -224,17 +238,7 @@ export class PolicyBuilder {
   }
   /** Enroll opt-in account recovery. See {@link RecoverySpec}. */
   recovery(spec: RecoverySpec): this {
-    this._recovery = {
-      profile: spec.profile,
-      mode: recoveryModeToWire(spec.mode),
-      controller: spec.controller,
-      ...(spec.baseline !== undefined ? { baseline: { 'doc-hash': spec.baseline.docHash } } : {}),
-      replaceable: spec.replaceable,
-      'delay-ledgers': spec.delayLedgers,
-      'expiry-ledgers': spec.expiryLedgers,
-      'max-cancels': spec.maxCancels,
-      'pending-activity': spec.pendingActivity,
-    };
+    this._recovery = recoverySpecToWire(spec);
     return this;
   }
 

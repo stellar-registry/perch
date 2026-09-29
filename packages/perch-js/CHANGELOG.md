@@ -4,6 +4,12 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.1] - 2026-09-29
+
+### 🐛 Bug Fixes
+
+- Export RecoveryModeSpec/RecoverySpec from the package root, and accept `recovery` on PolicyRequest/requestToPolicyDoc — PolicyBuilder.recovery() needed both to be usable outside the package (#96)
+
 ## [0.3.0] - 2026-09-24
 
 ### 🚀 Features

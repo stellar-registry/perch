@@ -84,7 +84,12 @@ RecoveryConfig {
   membership for the caller's *declared* credential list, not the target
   document's actual signer diff (it ships no JSON parser) — see
   [`controller-governance.md`](controller-governance.md)'s "What the
-  commitment does, and does not, verify" for that trust boundary.
+  commitment does, and does not, verify" for that trust boundary. One
+  consequence of fingerprinting: rotating the key of a signer listed here
+  changes the compiled config even if the `recovery` section is
+  byte-for-byte unchanged, so on a `Protected` account an ordinary key
+  rotation requires recovery evidence ([#92](https://github.com/stellar-registry/perch/issues/92), open: document it as
+  intended or decouple the check).
 - **`baseline` is optional, and its presence is what gates
   suspected-compromise recovery.** Lost-key recovery needs no predetermined
   baseline — it targets the current approved document with designated
@@ -120,7 +125,8 @@ nothing on-chain to check a baseline against even if perch wanted to.
 Reviewing that a declared baseline hash genuinely names a real,
 previously-approved document is part of enrollment review, the same way
 reviewing that a `Scope::Contract` address is the intended contract is part
-of ordinary rule review.
+of ordinary rule review. No defined process for that review exists yet
+([#87](https://github.com/stellar-registry/perch/issues/87)).
 
 ## CANONICAL.md treatment
 
@@ -174,9 +180,11 @@ existing `InvalidThreshold` rationale). `packages/perch-js/src/schema.ts`
 mirrors the *shape* of these rules (strict per-variant objects, required
 `pending-activity` with no default) but not yet the full semantic pass —
 consistent with, and tracked under, the same pre-existing gap noted at the
-top of `schema.ts` for the rest of the schema (issue #8: perch-js does not
+top of `schema.ts` for the rest of the schema ([#8](https://github.com/stellar-registry/perch/issues/8): perch-js does not
 yet mirror `perch-ir`'s full `validate()`).
 
 ## Lean / formal-verification impact
 
-See [`formal-verification-impact.md`](formal-verification-impact.md).
+See [`formal-verification-impact.md`](formal-verification-impact.md). The Lean
+canonical-form proofs do not yet cover `recovery`
+([#88](https://github.com/stellar-registry/perch/issues/88)).

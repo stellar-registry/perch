@@ -95,7 +95,7 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 
 ## Phases
 
-### Phase 0: baseline hardening (this PR)
+### Phase 0: baseline hardening (done)
 - [x] Verification plan (this doc) + enforceability theory writeup (`THEORY.md`)
 - [x] Eval-semantics golden vectors (`testdata/eval/`, 72 hand-authored cases) +
       `perch-conformance` replay
@@ -109,7 +109,7 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 - [x] `cargo-mutants` + `cargo-llvm-cov` recipes (justfile) + scheduled CI jobs
       (`assurance.yml`; mutants in burn-in)
 
-### Phase 1: the model + proofs (this PR, continued)
+### Phase 1: the model + proofs (done)
 - [x] Lean 4 model under `formal/` (no external deps beyond Lean core)
 - [x] Theorems T1–T6 proved, sorry-free, including lowering preservation (T6)
 - [x] Lean replay of the eval vectors wired as `just drt` + the `formal` CI job
@@ -121,7 +121,9 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
       `emitDoc_injective`). A verified inverse parser round-trips the canonical emitter, so
       two distinct documents can never share canonical bytes; the model emitter is pinned to
       the Rust emitter by round-tripping the frozen `*.canonical.json` fixtures in CI. To our
-      knowledge the first machine-verified RFC 8785-subset implementation.
+      knowledge the first machine-verified RFC 8785-subset implementation. Scope: documents
+      *without* a `recovery` field; extending the model and proof to `RecoveryConfig` is
+      open as [#88](https://github.com/stellar-registry/perch/issues/88) (see `docs/recovery/formal-verification-impact.md`).
 - [ ] Choose one deductive tie between model and Rust: Verus (`eval == spec_fn`, ghost code
       erased from the shipped crate) or Aeneas extraction to Lean. Decision gate: model + DRT
       running for a few weeks first.
@@ -164,7 +166,9 @@ WASI-Virt-style interposition component embedding the same no_std interpreter. K
 no per-call caller identity in the component model (signer binding degrades to per-instance
 provenance). The one refactor this future would force: make `perch-program`'s leaf decoders
 generic over an invocation view instead of `soroban_sdk` types. Tracked as design context, not
-scheduled work.
+scheduled work: epic [#68](https://github.com/stellar-registry/perch/issues/68), with [#62](https://github.com/stellar-registry/perch/issues/62) (landscape survey), [#63](https://github.com/stellar-registry/perch/issues/63)/[#64](https://github.com/stellar-registry/perch/issues/64)
+(invocation-view ADR + refactor), [#65](https://github.com/stellar-registry/perch/issues/65) (WIT mapping), [#66](https://github.com/stellar-registry/perch/issues/66) (wasmtime prototype), and
+[#67](https://github.com/stellar-registry/perch/issues/67) (signer binding).
 
 ## Trusted base by stage
 
@@ -188,6 +192,11 @@ scheduled work.
 - Cumulative caps (`cap`) lower to the stateful OZ `spending_limit` sibling; out of scope for
   the stateless model by design (see `THEORY.md` for why this boundary is a theorem, not a
   limitation we chose arbitrarily).
+- Account recovery (`perch-recovery`) is outside the model entirely: the controller is a
+  stateful policy, and its properties are covered by integration tests
+  (`crates/integration-tests/tests/recovery.rs`), not proofs. See
+  `docs/recovery/formal-verification-impact.md` for what is and is not covered, and
+  `docs/recovery/README.md` for open issues.
 
 ## Tooling choices
 

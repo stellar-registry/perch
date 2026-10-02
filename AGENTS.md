@@ -59,6 +59,12 @@ repoint them post-deploy. Two consequences that are easy to miss:
   accounts can use. See `docs/recovery/migration.md` for the worked-out
   consequence (an account built before a schema change can never adopt it in
   place — only a new account can).
+- `fetch-infra-wasm.sh` sources those wasm bytes from the one-time
+  name-salted deploys under `unverified/perch` (still v0.1.0), **not** from
+  the constructorless registry CI publishes releases to, so a fresh account
+  build silently pins stale infra (pre-cap, pre-recovery). Open as #95;
+  `testnet_pins` passing does not mean the pins are current. Current hashes
+  per registry: `docs/testnet-deployment.md`.
 - A new deployable that other in-repo crates need to *cross-call the client
   of* without linking its full logic (parser, storage, `Policy` impl, ...)
   should split like `perch-doc-compiler` does: a `contract` feature

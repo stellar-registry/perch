@@ -1,6 +1,7 @@
 # Golden encoding vectors
 
-Byte-level XDR fixtures that freeze the perch wire format (issue #3). Each
+Byte-level XDR fixtures that freeze the perch wire format
+([#3](https://github.com/stellar-registry/perch/issues/3)). Each
 `<name>.xdr` holds the lowercase hex of a `#[contracttype]` value's `ToXdr`
 serialization, the exact bytes that cross the contract boundary as install
 params. `manifest.json` lists every fixture (name, kind, hex file, and a
@@ -11,8 +12,11 @@ These are the shared contract for the three-way harness:
 1. **compiler-built structural `ScVal`**, how `perch-compile` assembles params,
 2. **`#[contracttype]` encoding**, pinned here by the Rust suite
    (`crates/perch-golden`),
-3. **TS serializer** (`@stellar-registry/perch`, #8), which must reproduce
-   these bytes exactly.
+3. **TS encoding**, which must reproduce these bytes exactly. Today this is
+   the generated interpreter bindings (`@stellar-registry/perch-interpreter`,
+   `packages/perch-interpreter-js/test/golden.test.ts`); a TS compiler in
+   `@stellar-registry/perch` that builds these params itself is planned
+   ([#8](https://github.com/stellar-registry/perch/issues/8)).
 
 Any mismatch is a wire drift and must fail CI. The `oz_weighted_threshold`
 fixture is the `Map<Signer, u32>` sort-order case. The Rust suite decodes it

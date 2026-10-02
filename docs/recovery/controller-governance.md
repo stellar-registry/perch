@@ -81,6 +81,12 @@ signatures and calling `apply_doc(target_doc_json, ...)` reaches
    nullifier (if ZK-sourced) — atomically, as part of authorization
    succeeding, before `apply_doc`'s body (the compile/install) even runs.
 
+> **Open issue ([#93](https://github.com/stellar-registry/perch/issues/93)):** none of these steps checks that the attempt was
+> authorized under the account's *current* enrollment. Because removing
+> recovery from a document never clears the controller's per-account config,
+> an attempt approved by a superseded guardian set can survive removal and
+> re-enrollment and still complete here.
+
 **Why the ordinary admin rule can't shortcut this:** the admin rule and the
 recovery rule are independent, alternative authorizations for the same
 `CallContract(self)` scope. An ordinary admin-authorized `apply_doc` call
@@ -116,7 +122,12 @@ with `<the relevant account>.require_auth()`:
   `smart_account` address, overwriting that account's enrolled config with
   attacker-chosen guardians/verifier/profile, entirely bypassing
   `guard_apply_doc`'s reconfiguration gate (which never runs for a direct
-  `install` call).
+  `install` call). **This check is not sufficient on its own; see
+  [#90](https://github.com/stellar-registry/perch/issues/90):** the account's authorization can also be satisfied by an
+  ordinary signed auth entry under any of its context rules scoped to the
+  controller's address, so a document that adds such a rule (leaving
+  `recovery` unchanged, so `guard_apply_doc` requires no evidence) lets that
+  rule's signers call `install` directly with a forged config.
 - **`enforce`** (via `complete`) — `context: Context` is an ordinary function
   argument the caller fully controls; nothing about receiving a
   `Context::Contract` value proves it reflects what the host is actually
@@ -191,7 +202,12 @@ recovery_evidence)` **before** touching any context rule:
 2. **No change, or no prior enrollment:** always fine — establishing new
    protection, or reapplying an unchanged configuration (including as a side
    effect of a legitimate completion, whose target document carries the same
-   `recovery` section as before), needs nothing extra.
+   `recovery` section as before), needs nothing extra. "No change" is
+   structural equality of the *compiled* config, which includes credential
+   fingerprints for `replaceable`; rotating one of those signers' keys
+   therefore counts as a change ([#92](https://github.com/stellar-registry/perch/issues/92)). "No prior enrollment" also
+   covers re-enrolling after recovery was removed, which skips this gate
+   entirely and leaves any stale attempt in place ([#93](https://github.com/stellar-registry/perch/issues/93)).
 3. **Currently `Loss`:** ordinary admin authorization (already established
    by `apply_doc`'s own `require_auth`) is sufficient for *any* new
    configuration, including removing it.
@@ -206,7 +222,10 @@ recovery_evidence)` **before** touching any context rule:
 
 `install`/`uninstall` are therefore plain bookkeeping: `install` shape-checks
 the rule it's attached to and writes the config (the gate already ran);
-`uninstall` is a deliberate no-op.
+`uninstall` is a deliberate no-op. That reasoning assumes `install` is only
+reached through `apply_doc` after the gate; it is not, which is the open
+issue [#90](https://github.com/stellar-registry/perch/issues/90). Because `uninstall` is a no-op, the controller also never
+clears an account's config when recovery is removed ([#93](https://github.com/stellar-registry/perch/issues/93)).
 
 ## ZK adapter scope
 
@@ -238,6 +257,13 @@ budget, reused rather than adding a second schema field for the same kind of
 window), bounds this: `is_live` treats a `CollectingEvidence` attempt as
 no-longer-live once its deadline passes, at which point `guard_apply_doc`
 stops blocking, and a fresh attempt can replace it.
+
+This bounds a single attempt, not repeated ones: nothing stops anyone from
+opening a fresh no-evidence attempt as soon as the previous one lapses, for
+the cost of one transaction per `expiry_ledgers` window, which keeps
+`apply_doc` blocked indefinitely. That is open as
+[#89](https://github.com/stellar-registry/perch/issues/89) (a cooldown or escalating cost, or an explicit accepted-risk
+sign-off).
 
 ## What the commitment does, and does not, verify
 
@@ -280,6 +306,11 @@ rather than on-chain-enforced properties:
   to review what they're signing before approving it — not something the
   hash commitment can substitute for.
 
+No defined process (checklist, tooling, or attestation) for this review
+exists yet ([#87](https://github.com/stellar-registry/perch/issues/87)), and this section is written for engineers reading
+the source; user-facing docs still need to say what guardians, account
+owners, and circuit authors each have to check ([#94](https://github.com/stellar-registry/perch/issues/94)).
+
 ## Keeping permanent state alive
 
 Soroban persistent storage entries have a finite maximum TTL (`Env::storage()
@@ -309,7 +340,8 @@ The controller has no constructor, no owner/admin storage key, and no entry
 point that changes its own code's behavior globally — see
 [`vk-and-controller-immutability.md`](vk-and-controller-immutability.md) for
 the full requirement and why. Per-account state changes only through: the
-account's own authorization (`install`, gated by `guard_apply_doc` upstream),
+account's own authorization (`install`, gated by `guard_apply_doc` upstream
+when reached through `apply_doc`; see [#90](https://github.com/stellar-registry/perch/issues/90) for the direct-call gap),
 the enrolled guardians' own authorization (`submit_guardian_approval`,
 `submit_guardian_cancel`), or a valid proof against the enrolled verifier
 (`submit_zk_proof`, `submit_zk_cancel`). "Upgrading" the controller is
@@ -346,7 +378,10 @@ prove):
   can never be flipped back to `Cancelled`.
 - A completed attempt's nullifier is never released back to unspent by a
   later `begin_*_attempt` call — only a cancelled or expired attempt's
-  nullifier is released.
+  nullifier is released. (Releasing a *cancelled* attempt's nullifier a
+  second time in `begin_attempt` is itself a bug: nullifiers are global, so
+  it can un-spend one another account has since claimed —
+  [#91](https://github.com/stellar-registry/perch/issues/91).)
 - A `Protected` reconfiguration (here: disabling recovery entirely) with
   ordinary admin authorization alone is refused.
 - A suspected-compromise attempt whose target does not equal the enrolled
@@ -373,6 +408,9 @@ bounds, credential-fingerprint resolution, and the canonical-form regression
 for documents without recovery.
 
 Not yet covered (tracked, not silently assumed sound):
+- the open security issues listed in [`README.md`](README.md#known-open-issues)
+  ([#89](https://github.com/stellar-registry/perch/issues/89), [#90](https://github.com/stellar-registry/perch/issues/90), [#91](https://github.com/stellar-registry/perch/issues/91), [#93](https://github.com/stellar-registry/perch/issues/93)) — each was found by review and none has a
+  reproducing test yet;
 - a live ZK circuit exercising `submit_zk_proof`/`submit_zk_cancel` against a real verifier (no circuit is shipped — see "ZK adapter scope"). Tracked in [#85](https://github.com/stellar-registry/perch/issues/85).
 - a rule-teardown scenario where `uninstall` itself panics (this crate's `uninstall` is a no-op by design, so the property to check is narrower — that removal always succeeds regardless — which follows directly from `uninstall` never being able to fail); 
 - the full pending-activity enforcement beyond blocking conflicting document changes (see [`pending-activity-policy.md`](pending-activity-policy.md)). Tracked in [#84](https://github.com/stellar-registry/perch/issues/84).

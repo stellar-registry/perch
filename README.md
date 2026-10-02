@@ -10,7 +10,7 @@ The motivating use-case is a CI key stored in GitHub that can publish Wasm relea
 const doc = policy()
   .signer('admin', external(WEBAUTHN_VERIFIER, maintainerPasskey))
   .signer('ci',    delegated(CI_ACCOUNT)) // CAP-0071: host-authenticated G-account
-  .rule('root', r => r.selfAdmin().signedBy('admin'))
+  .rule('admin', r => r.selfAdmin().signedBy('admin'))
   .rule('ci-publish', r => r
     .callContract(REGISTRY)
     .signedBy('ci')
@@ -20,11 +20,21 @@ const doc = policy()
   .build();
 ```
 
-**Status: design phase.** See the [epic](https://github.com/stellar-registry/perch/issues/1) for the problem statement, design constraints, and roadmap.
+**Status: live on testnet, pre-production.** The contracts are released
+independently (current tags: `perch-account` 0.3.0, `perch-doc-compiler` 0.3.0,
+`perch-interpreter` 0.1.2, `perch-recovery` 0.1.0; see each crate's
+`CHANGELOG.md`), the TypeScript packages are on npm
+(`@stellar-registry/perch` 0.3.1, `@stellar-registry/perch-interpreter` 0.1.0),
+and [`docs/testnet-deployment.md`](./docs/testnet-deployment.md) maps what is
+live. Account recovery is **not** production-ready: see
+[`docs/recovery/README.md`](./docs/recovery/README.md#known-open-issues) for the
+open release-blocking decision and security issues. See the
+[epic](https://github.com/stellar-registry/perch/issues/1) for the problem
+statement, design constraints, and roadmap.
 
 ## Stateless policies (and what that excludes)
 
-Every perch constraint is a stateless predicate over a *single* invocation, this call's function and arguments. Perch holds no state, so it cannot express a **cumulative** limit (spend caps, rate limits, "N per day"). A numeric argument bound limits one call, not a running total, and a signer can call repeatedly to exceed any intended total. Cumulative caps require a stateful sibling policy, e.g. OpenZeppelin's `spending_limit`, attached to the same OZ context rule alongside perch's interpreter (OZ enforces every attached policy, so both must pass). Perch is the "what may be called" layer; cumulative accounting lives in a purpose-built stateful contract. See [#19](https://github.com/stellar-registry/perch/issues/19) for the compiler support that will lower a cap clause onto that sibling policy.
+Every perch constraint is a stateless predicate over a *single* invocation, this call's function and arguments. Perch holds no state, so it cannot express a **cumulative** limit (spend caps, rate limits, "N per day"). A numeric argument bound limits one call, not a running total, and a signer can call repeatedly to exceed any intended total. Cumulative caps require a stateful sibling policy, e.g. OpenZeppelin's `spending_limit`, attached to the same OZ context rule alongside perch's interpreter (OZ enforces every attached policy, so both must pass). Perch is the "what may be called" layer; cumulative accounting lives in a purpose-built stateful contract. A rule's `cap` clause does exactly this: the compiler lowers it onto the `perch-spending-limit` policy alongside the interpreter (#26, wired through `apply_doc` in #54).
 
 ## Layout
 
@@ -37,19 +47,32 @@ crates/
   perch-compile/      lowering: PolicyDoc → executable plan (OZ call sequence)
   perch-doc-compiler/ stateless deployable: doc JSON → compiled rules + doc_hash, on-chain
   perch-smart-account/  the doc-only account trait: apply_doc (the sole write path) on OZ
-  perch-account/      deployable shell of perch-smart-account (6 exported functions, ~28 KB)
+  perch-account/      deployable shell of perch-smart-account (6 exported functions, ~34 KB)
   perch-ed25519-verifier/  deployable ed25519 verifier for External signers
+  perch-spending-limit/  deployable OZ spending_limit policy: the cumulative cap a rule's
+                      `cap` clause lowers onto, attached beside the interpreter
+  perch-stateless-registry/  the managed `stateless` subregistry: content-addressed
+                      deploys (salt = wasm hash) for the shared infra contracts
+  perch-registry-resolve/  registry_contract!: derive a stateless contract's address from
+                      registry id + wasm hash (+ its -macro proc-macro crate)
   perch-recovery/     deployable account-recovery controller (guardian/ZK/combined modes),
                       an OZ Policy attached via apply_doc's `recovery` document field —
                       see docs/recovery/
   perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
+  perch-derive-id/    offline deployer(parent, sha256(name)) id derivation for
+                      scripts/fetch-infra-wasm.sh
+  perch-testkit/      one-call bootstrap of registry + stateless infra + account for tests
+  perch-golden/       golden XDR vectors freezing the wire format across encoders
+  perch-bench/, perch-bench-rpn/  metered instruction-count benchmarks (never deployed)
+  integration-tests/  end-to-end tests against real stellar-accounts (incl. recovery)
   perch-conformance/  eval-semantics conformance vectors: hand-authored (program,
                       invocation) → verdict cases + compile→eval differential + wasm-leg suites
   perch-analyze/      per-policy SMT prover (PolicyDoc → SMT-LIB, z3): dead rules, intent
                       conformance (only-calls), semantic attenuation (narrows)
 packages/
   perch-js/           TypeScript surface, published to npm as @stellar-registry/perch:
-                      schemas, builder, canonical JSON + doc_hash (compile/apply/signing planned)
+                      schemas, builder, canonical JSON + doc_hash, ERC-7715-shaped requests
+                      (compile/apply/signing planned, #8)
   perch-interpreter-js/  interpreter contract client bindings, published to npm as
                       @stellar-registry/perch-interpreter (generated from the wasm;
                       regen via `just bindings-interpreter-js`)
@@ -60,7 +83,8 @@ formal/               Lean 4 model of the v1 semantics + machine-checked theorem
 fuzz/                 cargo-fuzz targets: evaluator totality, parser/canonicalization round-trip
 komet/                Komet (K-framework) symbolic property tests — an independent wasm-level
                       second opinion (maintainer-gated on the K toolchain; see komet/README.md)
-scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap
+scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap;
+                      fetch-infra-wasm.sh — fetch the infra wasm the account pins at build time
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
 docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
 docs/recovery/        opt-in account recovery: schema, controller governance, migration,
@@ -71,9 +95,15 @@ testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and
 testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)
 ```
 
-Three contracts deploy on-chain: the interpreter (immutable, multi-tenant policy
-evaluation), the smart account (holds the authorization rules; the CI key is one
-of its scoped signers), and the ed25519 verifier they share.
+The deployable contracts: the interpreter (immutable, multi-tenant policy
+evaluation), the doc compiler (stateless parse + compile, called by `apply_doc`),
+the smart account (holds the authorization rules; the CI key is one of its scoped
+signers), the ed25519 verifier they share, the spending-limit policy for caps,
+the stateless registry that content-addresses the shared infra, and the
+recovery controller. CI auto-publishes only the interpreter, doc compiler, and
+verifier (see `AGENTS.md`); the account's build pins its compiler and
+interpreter from a separate, older deploy, which is currently stale
+([#95](https://github.com/stellar-registry/perch/issues/95)).
 
 ## Development
 

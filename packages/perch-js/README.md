@@ -33,6 +33,38 @@ canonicalJson(doc); // the canonical wire form (what gets applied on-chain)
 docHash(doc);       // sha256 of the canonical form, hex — the document identity
 ```
 
+The rule builder also covers M-of-N signing (`signedByThreshold(m, ...ids)`),
+argument predicates (`isSelf`, `addressEq`, `stringIn`, `stringPrefix`,
+`u32Eq`), expiry (`notAfter(ledger)`), and cumulative caps
+(`cap({ token, limit, periodLedgers })`, lowered on-chain onto the
+spending-limit policy). `PolicyBuilder.recovery(spec)` enrolls account
+recovery (`RecoverySpec`/`RecoveryModeSpec`, exported from the package root
+since 0.3.1):
+
+```ts
+policy()
+  // ...signers and rules as above...
+  .recovery({
+    profile: 'protected',            // or 'loss'
+    mode: { kind: 'guardian-only', guardians: [G1, G2, G3], quorum: 2 },
+    controller: RECOVERY_CONTROLLER_ADDRESS,
+    baseline: { docHash: PREVIOUS_DOC_HASH }, // omit for lost-key recovery only
+    replaceable: ['admin'],
+    delayLedgers: 17280,
+    expiryLedgers: 120960,
+    maxCancels: 3,
+    pendingActivity: 'freeze',       // required, no default
+  })
+  .build();
+```
+
+Recovery is not production-ready; read the
+[recovery docs](https://github.com/stellar-registry/perch/tree/main/docs/recovery#known-open-issues)
+first.
+
+An ERC-7715-shaped permission request maps 1:1 onto a document with
+`requestToPolicyDoc(request)` (`PolicyRequest` accepts `recovery` since 0.3.1).
+
 Parsing/validating an existing document:
 
 ```ts
@@ -47,9 +79,13 @@ const doc = parsePolicyDocJson(jsonText); // throws on any deviation — fail cl
   implementation; both are pinned against committed golden vectors in CI.
 - The schema rejects unknown fields, out-of-range values, and non-canonical
   encodings rather than normalizing them.
+- It does **not** yet mirror perch-ir's full semantic `validate()` pass or its
+  duplicate-JSON-key rejection
+  ([#8](https://github.com/stellar-registry/perch/issues/8)). A document that
+  parses here can still be refused by the on-chain compiler.
 
-Planned (tracked in the repo): `compile()` parity with the Rust compiler,
-`applyPlan()`, and auth-entry signing helpers.
+Planned ([#8](https://github.com/stellar-registry/perch/issues/8)): `compile()`
+parity with the Rust compiler, `applyPlan()`, and auth-entry signing helpers.
 
 ## License
 

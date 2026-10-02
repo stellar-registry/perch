@@ -76,7 +76,11 @@ in-place change.
   (`Config(Address)`, `Attempt(Address)`, ...) is mutated only through the
   account's own authorization (ordinary admin, or the enrolled recovery
   condition, depending on the operation) — never through anything resembling
-  a controller-wide admin key. See
+  a controller-wide admin key. (Two open issues weaken "only through the
+  account's own authorization" in practice: `install` is reachable by a
+  direct call ([#90](https://github.com/stellar-registry/perch/issues/90)), and per-account state is never cleared when
+  recovery is removed ([#93](https://github.com/stellar-registry/perch/issues/93)). Neither adds an admin key; both are
+  about which account-level authorization reaches which write.) See
   [`controller-governance.md`](controller-governance.md) for the exact
   entry points and their authorization requirements.
 - **A ZK verifier, if a deployment enrolls a ZK-involving mode.** Embedding
@@ -93,7 +97,8 @@ in-place change.
     binding) — so a verifier address confused with another still fails the
     circuit-identity check, not just the address check.
 
-  This crate does not ship a production circuit or its verifier (see
+  This crate does not ship a production circuit or its verifier
+  ([#85](https://github.com/stellar-registry/perch/issues/85); see
   [`controller-governance.md`](controller-governance.md)'s "ZK adapter
   scope" section for why that's a deliberate, documented boundary, not an
   oversight) — but the controller's ZK adapter interface is written against

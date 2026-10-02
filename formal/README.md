@@ -38,7 +38,9 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
   escaping table, plain-decimal `u32`s, sorted keys, and omitted `None`s. So
   `doc_hash` identifies exactly one document up to a SHA-256 collision. As of
   our survey (2026-08), no other machine-verified implementation of an
-  RFC 8785 subset exists.
+  RFC 8785 subset exists. The model's `Doc` has no `recovery` field, so T7
+  covers recovery-absent documents only; extending it is open as
+  [#88](https://github.com/stellar-registry/perch/issues/88).
 - **T6** `lowering_preserves`: the machine over `build_program`'s postfix
   output computes exactly the rule's doc-level Kleene conjunction, where the
   doc side is stated over predicates directly and `leafEval_lowerPred` proves

@@ -25,6 +25,8 @@ mutate rules other than `apply_doc`.
 `PerchStorage` (`crates/perch-smart-account/src/lib.rs`) additionally tracks
 `recovery_controller: InstanceItem<Address>` — set/cleared only inside
 `apply_doc`, in lockstep with whether the applied document enrolls recovery.
+Clearing it does not clear the controller's own per-account state (config,
+attempts); that is open as [#93](https://github.com/stellar-registry/perch/issues/93).
 
 ## The recovery controller (`crates/perch-recovery`)
 
@@ -44,11 +46,11 @@ reasoning.
 
 | Entry point | What it changes | Authorization |
 |---|---|---|
-| `Policy::install` | Writes the enrolled `CompiledRecoveryConfig` for an account. | `smart_account.require_auth()` (see above). Reachable only via `apply_doc`'s own rule-(re)installation; the actual authorization *decision* already happened in `guard_apply_doc` before this runs — see [`controller-governance.md`](controller-governance.md) for why `install` itself cannot be the gate. |
+| `Policy::install` | Writes the enrolled `CompiledRecoveryConfig` for an account. | `smart_account.require_auth()` (see above). Intended to be reached only via `apply_doc`'s own rule-(re)installation, after `guard_apply_doc` has made the authorization decision — see [`controller-governance.md`](controller-governance.md) for why `install` itself cannot be the gate. **Open issue [#90](https://github.com/stellar-registry/perch/issues/90):** any account context rule scoped to the controller's address also satisfies this `require_auth`, so `install` can be called directly, without `guard_apply_doc` running. |
 | `Policy::enforce` | Consumes a live, authorized, correctly-targeted attempt (marks `Completed`, revokes credentials, spends a nullifier). | `smart_account.require_auth()` (see above), plus reachable only when the `"recovery"` context rule is selected for an `apply_doc` call — see `controller-governance.md`'s "Variant A completion." |
 | `Policy::uninstall` | Nothing (deliberate no-op). | N/A — see `controller-governance.md` for why. |
 | `guard_apply_doc` | Nothing by itself (a check); refusing it blocks the `apply_doc` call that invoked it. | `account.require_auth()` (see above); called only from `perch-smart-account`'s `apply_doc`, before it touches any context rule. Internally requires guardian/ZK evidence when gating a `Protected` change. |
-| `begin_lost_key_attempt` / `begin_compromise_attempt` | Creates or replaces the account's attempt. | Permissionless — declaring intent carries no authority (matches a companion smart-account implementation's own validated design). `begin_compromise_attempt` additionally requires a baseline to be enrolled, and requires its target to equal that baseline exactly. |
+| `begin_lost_key_attempt` / `begin_compromise_attempt` | Creates or replaces the account's attempt. | Permissionless — declaring intent carries no authority (matches a companion smart-account implementation's own validated design). `begin_compromise_attempt` additionally requires a baseline to be enrolled, and requires its target to equal that baseline exactly. Open issues: repeated attempts can block `apply_doc` indefinitely ([#89](https://github.com/stellar-registry/perch/issues/89)); replacing a stale attempt can un-spend another account's nullifier ([#91](https://github.com/stellar-registry/perch/issues/91)); attempts still work against a config the account has removed ([#93](https://github.com/stellar-registry/perch/issues/93)). |
 | `submit_guardian_approval` | Adds to `Attempt::guardian_approvals`; may promote to `AuthorizedPending`. | The named guardian's `require_auth_for_args` over a digest binding this exact attempt (id, action, target, enrolled config) — not just the bare `(account, guardian)` arguments, so a signature can't be redirected to a different attempt. |
 | `submit_zk_proof` | Marks `Attempt::zk_verified`; may promote. Reserves the proof's nullifier immediately (not deferred to completion). | Permissionless — a verified proof is itself the authorization; the controller recomputes the statement from its own stored attempt, never trusting a caller-supplied one. |
 | `submit_guardian_cancel` | Tallies a cancel vote (a domain separate from initiation approval); cancels once the mode's cancellation evidence is complete. | The named guardian's `require_auth_for_args` over a digest binding this attempt and the `Cancel` action — the same binding requirement as `submit_guardian_approval`. |
@@ -68,8 +70,12 @@ reasoning.
   condition author a document-level change while claiming recovery's
   authority.** `enforce`'s checks (live, authorized, unexpired, exact target)
   are the only way the `"recovery"` rule ever authorizes anything, and they
-  cannot be short-circuited by any other reachable path (see
+  are intended not to be short-circuitable by any other reachable path (see
   `controller-governance.md`'s discussion of `install`/`uninstall` not being
   trustworthy gates, and why the real gate sits in `apply_doc` instead).
+  **This does not hold today:** a direct `install` call can replace the
+  enrolled condition without evidence ([#90](https://github.com/stellar-registry/perch/issues/90)), and an attempt
+  approved under a removed enrollment can still complete
+  ([#93](https://github.com/stellar-registry/perch/issues/93)).
 - **The controller's own per-account state has no admin/owner mutation path
   at all** — see [`vk-and-controller-immutability.md`](vk-and-controller-immutability.md).

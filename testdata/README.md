@@ -26,8 +26,11 @@ and requires a `CANON_VERSION` bump.
 ## `deploy/`: not golden vectors
 
 `deploy/` holds the deployment PolicyDoc template
-(`perch-testnet.template.json`) and the per-network documents
-`scripts/bootstrap-testnet.sh` generates from it (`perch-testnet.json`,
-`perch-testnet.rules.json`). These are environment-specific, expected to
-change, and pinned by nothing. The frozen-vector rules above do not apply to
+(`perch-testnet.template.json`) and `stateless-manifest.json`, the list of
+infra contracts `scripts/bootstrap-testnet.sh` routes through the stateless
+registry when run with `PERCH_STATELESS=1`. The script also writes per-network
+documents here (`perch-testnet.json`, `perch-testnet.rules.json`); none has been
+committed for the live testnet deployment (see
+[`../docs/testnet-deployment.md`](../docs/testnet-deployment.md)). These files
+are environment-specific, expected to change, and pinned by nothing. The frozen-vector rules above do not apply to
 this subdirectory.

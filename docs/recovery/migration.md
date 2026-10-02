@@ -26,7 +26,7 @@ let compiled: CompiledDoc =
 ```
 
 `infra::perch_doc_compiler::address(e)` (via
-`perch_registry_resolve::registry_contract!`, `crates/perch-smart-account/src/lib.rs:59-61`)
+`perch_registry_resolve::registry_contract!`, `crates/perch-smart-account/src/lib.rs:61-63`)
 derives `deployer(stateless_registry_id, sha256(pinned_wasm_bytes))` where
 `pinned_wasm_bytes` is read from a file fetched into the build tree by
 `scripts/fetch-infra-wasm.sh` **before `perch-account` is compiled**. That
@@ -64,7 +64,14 @@ temporary gap this document works around.
 
 Recovery is permanently unavailable in place. The only path is:
 
-1. Deploy a new `PerchAccount` from a build with recovery support. Its
+1. Deploy a new `PerchAccount` from a build with recovery support. That
+   means both a `perch-account` 0.3.0+ source tree **and** a pinned
+   `perch-doc-compiler` that understands `recovery`. As of this writing,
+   `scripts/fetch-infra-wasm.sh` still fetches a pre-0.3.0 compiler (v0.1.0),
+   so a build following the documented process cannot enroll recovery even
+   from current source; see
+   [#95](https://github.com/stellar-registry/perch/issues/95) and
+   [`../testnet-deployment.md`](../testnet-deployment.md). Its
    constructor
    takes the same shape as before (`admin_signers: Vec<Signer>`) — the
    user's existing signer keys/credentials are reused as-is; nothing about a
@@ -103,11 +110,12 @@ Recovery is permanently unavailable in place. The only path is:
 which `perch-account`/`perch-doc-compiler` build an account was deployed
 against, a wallet cannot currently *discover* whether a given account is
 Case A or Case B by inspecting the account alone. Until perch grows a
-queryable version marker (tracked as follow-up work), integrators should
-record the release each account was deployed
-from at deploy time (e.g. alongside however they already track deployments —
-see `DEPLOYED.md`-style records used elsewhere in this repo's tooling) and
-consult that record rather than guessing.
+queryable version marker (not yet filed as an issue), integrators should
+record the release each account was deployed from at deploy time, including
+the doc-compiler wasm hash it pinned (e.g. alongside however they already
+track deployments; this repo's own record is
+[`../testnet-deployment.md`](../testnet-deployment.md)), and consult that
+record rather than guessing.
 
 ### Case B — account built with recovery support, not yet enrolled
 

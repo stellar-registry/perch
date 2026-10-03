@@ -5,6 +5,7 @@
   "rpc_url": "https://soroban-testnet.stellar.org",
   "channel": "beta",
   "deployed_at": "2026-10-03T09:08:17Z",
+  "deployed_ledger": 4998930,
   "source": {
     "commit": "c10a8f7986bb03f1a58b89d6bcbb5480185b4e70",
     "dirty": false

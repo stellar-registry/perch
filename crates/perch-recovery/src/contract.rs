@@ -186,9 +186,20 @@ impl PerchRecovery {
         let new = recovery.first();
         let stored = RecoveryStorage::get_config(e, &account);
 
+        // A marker counts only for the document it was written for, in the
+        // ledger it was written, while its attempt is still the authorized
+        // one. `enforce` runs for every context in an authorization tree,
+        // including a sub-invocation that never executes, so a marker can be
+        // left behind; a stale one is dropped and the call classified
+        // normally.
         if let Some(marker) = RecoveryStorage::get_completing(e, &account) {
             RecoveryStorage::remove_completing(e, &account);
-            return complete(e, &account, &marker, new.as_ref(), &doc_hash);
+            let current = marker.target_doc_hash == doc_hash
+                && marker.ledger == e.ledger().sequence()
+                && authorized_live(e, &account).is_some_and(|a| a.id == marker.attempt_id);
+            if current {
+                return complete(e, &account, &marker, new.as_ref(), &doc_hash);
+            }
         }
 
         if authorized_live(e, &account).is_some() {
@@ -400,7 +411,7 @@ impl PerchRecovery {
         }
         let statement = attempt_statement(e, &account, &config, &attempt, domain)?;
         check_fresh(e, &statement)?;
-        verify_zk(e, factor, &statement, &evidence)?;
+        verify_zk(e, &account, factor, &statement, &evidence)?;
         match domain {
             EvidenceDomain::Initiate => attempt.zk_nullifier = Some(evidence.nullifier),
             EvidenceDomain::Cancel => attempt.cancel_zk = true,
@@ -429,6 +440,7 @@ impl PerchRecovery {
         if !set.guardians.contains(&guardian) {
             return Err(RecoveryError::NotAGuardian);
         }
+        refuse_in_window(e, &account)?;
         let statement = change_statement_for(e, &account, &config, subject, valid_until)?;
         check_fresh(e, &statement)?;
         let digest = digest(e, &statement)?;
@@ -454,6 +466,7 @@ impl PerchRecovery {
     ) -> Result<(), RecoveryError> {
         let config = require_config(e, &account)?;
         let factor = config.zk().ok_or(RecoveryError::ModeHasNoZk)?;
+        refuse_in_window(e, &account)?;
         let statement = change_statement_for(e, &account, &config, subject, valid_until)?;
         check_fresh(e, &statement)?;
         let digest = digest(e, &statement)?;
@@ -462,7 +475,7 @@ impl PerchRecovery {
         if record.zk {
             return Err(RecoveryError::AlreadyCounted);
         }
-        verify_zk(e, factor, &statement, &evidence)?;
+        verify_zk(e, &account, factor, &statement, &evidence)?;
         record.zk = true;
         store_approval(e, &account, &digest, &record, valid_until);
         Ok(())
@@ -571,9 +584,9 @@ impl PerchRecovery {
             .unwrap_or_else(|| ChangeApproval::empty(e))
     }
 
-    /// The account that spent `nullifier`, if any.
-    pub fn nullifier_spent(e: &Env, nullifier: BytesN<32>) -> Option<Address> {
-        RecoveryStorage::get_nullifier(e, &nullifier)
+    /// Whether `account` spent `nullifier` (spec §11).
+    pub fn nullifier_spent(e: &Env, account: Address, nullifier: BytesN<32>) -> bool {
+        RecoveryStorage::has_nullifier(e, &(account, nullifier))
     }
 
     /// The published content of the enrolled baseline, if any.
@@ -617,9 +630,10 @@ impl PerchRecovery {
     }
 
     /// Extend a spent nullifier's record to the network maximum.
-    pub fn renew_nullifier(e: &Env, nullifier: BytesN<32>) {
-        if RecoveryStorage::has_nullifier(e, &nullifier) {
-            RecoveryStorage::extend_nullifier_ttl(e, &nullifier, max_ttl(e), max_ttl(e));
+    pub fn renew_nullifier(e: &Env, account: Address, nullifier: BytesN<32>) {
+        let key = (account, nullifier);
+        if RecoveryStorage::has_nullifier(e, &key) {
+            RecoveryStorage::extend_nullifier_ttl(e, &key, max_ttl(e), max_ttl(e));
         }
     }
 }
@@ -853,6 +867,7 @@ fn authorize_completion(
         &CompletionMarker {
             attempt_id: attempt.id,
             target_doc_hash: hash,
+            ledger: e.ledger().sequence(),
         },
     );
     Ok(())
@@ -880,11 +895,12 @@ fn complete(
         return Err(RecoveryError::WrongTarget);
     }
     if let Some(nullifier) = &attempt.zk_nullifier {
-        if RecoveryStorage::has_nullifier(e, nullifier) {
+        let key = (account.clone(), nullifier.clone());
+        if RecoveryStorage::has_nullifier(e, &key) {
             return Err(RecoveryError::NullifierSpent);
         }
-        RecoveryStorage::set_nullifier(e, nullifier, account);
-        RecoveryStorage::extend_nullifier_ttl(e, nullifier, max_ttl(e), max_ttl(e));
+        RecoveryStorage::set_nullifier(e, &key, &true);
+        RecoveryStorage::extend_nullifier_ttl(e, &key, max_ttl(e), max_ttl(e));
     }
     attempt.state = AttemptState::Completed;
     save(e, account, &attempt);
@@ -1059,10 +1075,17 @@ fn statement_error(err: StatementError) -> RecoveryError {
 }
 
 /// The adapter must accept the proof for the enrolled binding, and its
-/// nullifier must be unspent (spec §11). Accepting a proof never changes the
-/// nullifier's record.
+/// nullifier must be unspent for this account (spec §11). Accepting a proof
+/// never changes the nullifier's record.
+///
+/// Spent nullifiers are recorded per account. The circuit binds the account
+/// into the nullifier, so an honest adapter never accepts one account's
+/// nullifier for another; and any contract can enroll itself here with an
+/// adapter of its own, so a shared record would let it mark a victim's
+/// nullifier spent and block every proof the victim makes.
 fn verify_zk(
     e: &Env,
+    account: &Address,
     factor: &CompiledZkFactor,
     statement: &RecoveryStatement,
     evidence: &ZkEvidence,
@@ -1071,7 +1094,7 @@ fn verify_zk(
         .try_verify(statement, &factor.binding(), evidence)
         .map_err(|_| RecoveryError::ZkEvidenceRejected)?
         .map_err(|_| RecoveryError::ZkEvidenceRejected)?;
-    if RecoveryStorage::has_nullifier(e, &evidence.nullifier) {
+    if RecoveryStorage::has_nullifier(e, &(account.clone(), evidence.nullifier.clone())) {
         return Err(RecoveryError::NullifierSpent);
     }
     Ok(())
@@ -1080,8 +1103,14 @@ fn verify_zk(
 /// A configuration this controller can serve (spec §15): the account is not
 /// one of its own guardians (its `__check_auth` would run while this
 /// controller is on the stack collecting the approval, and could not freeze
-/// itself out of approving its own recovery), and the quorum is reachable.
+/// itself out of approving its own recovery), the quorum is reachable, and
+/// the timing terms are non-zero. The doc compiler already validates all of
+/// this; the controller checks again because any contract can call
+/// `rcv_sync` for itself.
 fn check_config(account: &Address, config: &CompiledRecoveryConfig) -> Result<(), RecoveryError> {
+    if config.delay_ledgers == 0 || config.expiry_ledgers == 0 || config.max_cancels == 0 {
+        return Err(RecoveryError::InvalidConfiguration);
+    }
     if let Some(set) = config.guardians() {
         if set.guardians.contains(account) || set.quorum == 0 || set.quorum > set.guardians.len() {
             return Err(RecoveryError::InvalidConfiguration);
@@ -1193,26 +1222,28 @@ fn load_live(e: &Env, account: &Address, attempt_id: u64) -> Result<Attempt, Rec
     Ok(attempt)
 }
 
-/// Collecting attempts live in temporary storage for their evidence window;
-/// an attempt that was ever authorized moves to persistent storage.
+/// Collecting attempts live in temporary storage for at least their
+/// evidence window (spec §3.6); an attempt that was ever authorized, or whose
+/// evidence window is longer than any temporary entry can live, is stored
+/// persistently.
 fn save(e: &Env, account: &Address, attempt: &Attempt) {
     let key = (account.clone(), attempt.id);
-    let ever_authorized = matches!(
+    let evidence_window = attempt
+        .evidence_deadline
+        .saturating_sub(e.ledger().sequence())
+        .saturating_add(1);
+    let persistent = matches!(
         attempt.state,
         AttemptState::Authorized | AttemptState::Completed
-    ) || RecoveryStorage::has_attempt(e, &key);
-    if ever_authorized {
+    ) || evidence_window > max_ttl(e)
+        || RecoveryStorage::has_attempt(e, &key);
+    if persistent {
         RecoveryStorage::remove_collecting(e, &key);
         RecoveryStorage::set_attempt(e, &key, attempt);
         RecoveryStorage::extend_attempt_ttl(e, &key, max_ttl(e), max_ttl(e));
     } else {
         RecoveryStorage::set_collecting(e, &key, attempt);
-        let live_for = attempt
-            .cancel_until
-            .saturating_sub(e.ledger().sequence())
-            .saturating_add(1)
-            .min(max_ttl(e));
-        RecoveryStorage::extend_collecting_ttl(e, &key, live_for, live_for);
+        RecoveryStorage::extend_collecting_ttl(e, &key, evidence_window, evidence_window);
     }
 }
 
@@ -1233,6 +1264,15 @@ fn is_live(e: &Env, account: &Address, a: &Attempt) -> bool {
             RecoveryStorage::get_authorized(e, account) == Some(a.id) && now < a.expires_at
         }
         AttemptState::Completed | AttemptState::Cancelled => false,
+    }
+}
+
+/// Spec §9: while an attempt is authorized, the only evidence accepted is
+/// for that attempt's cancellation.
+fn refuse_in_window(e: &Env, account: &Address) -> Result<(), RecoveryError> {
+    match authorized_live(e, account) {
+        Some(_) => Err(RecoveryError::AttemptAuthorized),
+        None => Ok(()),
     }
 }
 

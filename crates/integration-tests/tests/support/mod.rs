@@ -570,13 +570,21 @@ impl World {
         &self,
         root: SorobanAuthorizedInvocation,
     ) -> SorobanAuthorizationEntry {
+        self.recovery_rule_entry_for(&self.account, root)
+    }
+
+    /// Anyone's selection of `account`'s zero-signer recovery rule.
+    pub fn recovery_rule_entry_for(
+        &self,
+        account: &Address,
+        root: SorobanAuthorizedInvocation,
+    ) -> SorobanAuthorizationEntry {
         SorobanAuthorizationEntry {
             credentials: SorobanCredentials::Address(SorobanAddressCredentials {
-                address: self.account.clone().into(),
+                address: account.clone().into(),
                 nonce: self.next_nonce(),
                 signature_expiration_ledger: self.ledger() + 1_000_000,
-                signature: self
-                    .payload(Map::new(&self.env), self.rule_id(&self.account, "recovery")),
+                signature: self.payload(Map::new(&self.env), self.rule_id(account, "recovery")),
             }),
             root_invocation: root,
         }

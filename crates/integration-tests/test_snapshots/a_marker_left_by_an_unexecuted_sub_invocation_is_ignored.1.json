@@ -30,7 +30,7 @@
               "function_name": "apply_doc",
               "args": [
                 {
-                  "bytes": "7b2276657273696f6e223a312c226e6574776f726b223a225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c227369676e657273223a5b7b226964223a226f776e6572222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414144324b4d227d2c7b226964223a22646576696365222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414146435434227d5d2c2272756c6573223a5b7b226e616d65223a2261646d696e222c2273636f7065223a7b2274797065223a2273656c662d61646d696e227d2c227072696e636970616c73223a7b2274797065223a22616c6c222c227369676e657273223a5b226f776e6572225d7d7d2c7b226e616d65223a22746172676574222c2273636f7065223a7b2274797065223a22636f6e7472616374222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414154594f4e227d2c227072696e636970616c73223a7b2274797065223a22616c6c222c227369676e657273223a5b226f776e6572225d7d7d5d2c227265636f76657279223a7b2270726f66696c65223a2270726f746563746564222c226d6f6465223a7b2274797065223a22677561726469616e2d6f6e6c79222c22677561726469616e73223a5b2243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d225d2c2271756f72756d223a327d2c22636f6e74726f6c6c6572223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414d445234222c227265706c61636561626c65223a5b226f776e6572225d2c2264656c61792d6c656467657273223a31302c226578706972792d6c656467657273223a3130302c226d61782d63616e63656c73223a337d7d"
+                  "bytes": "7b2276657273696f6e223a312c226e6574776f726b223a225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c227369676e657273223a5b7b226964223a226f776e6572222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414144324b4d227d2c7b226964223a22646576696365222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414146435434227d5d2c2272756c6573223a5b7b226e616d65223a2261646d696e222c2273636f7065223a7b2274797065223a2273656c662d61646d696e227d2c227072696e636970616c73223a7b2274797065223a22616c6c222c227369676e657273223a5b226f776e6572225d7d7d2c7b226e616d65223a22746172676574222c2273636f7065223a7b2274797065223a22636f6e7472616374222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414154594f4e227d2c227072696e636970616c73223a7b2274797065223a22616c6c222c227369676e657273223a5b226f776e6572225d7d7d5d2c227265636f76657279223a7b2270726f66696c65223a226c6f7373222c226d6f6465223a7b2274797065223a22677561726469616e2d6f6e6c79222c22677561726469616e73223a5b2243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d225d2c2271756f72756d223a327d2c22636f6e74726f6c6c6572223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414d445234222c227265706c61636561626c65223a5b226f776e6572225d2c2264656c61792d6c656467657273223a31302c226578706972792d6c656467657273223a3130302c226d61782d63616e63656c73223a337d7d"
                 },
                 {
                   "u32": 0
@@ -48,28 +48,6 @@
     [],
     [],
     [],
-    [],
-    [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
-              "function_name": "protected",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
-                }
-              ]
-            }
-          },
-          "sub_invocations": []
-        }
-      ]
-    ],
-    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
@@ -80,7 +58,7 @@
               "function_name": "submit_guardian",
               "args": [
                 {
-                  "bytes": "44c3f22582bdc6fcac0b4c13c04c435fd314f13cf825004c7da45ad0c7432ae3"
+                  "bytes": "63e4e29732d8404b863c5142bf7246150fbe5b1d3cd5763a975243fa74fc4583"
                 }
               ]
             }
@@ -100,7 +78,7 @@
               "function_name": "submit_guardian",
               "args": [
                 {
-                  "bytes": "44c3f22582bdc6fcac0b4c13c04c435fd314f13cf825004c7da45ad0c7432ae3"
+                  "bytes": "63e4e29732d8404b863c5142bf7246150fbe5b1d3cd5763a975243fa74fc4583"
                 }
               ]
             }
@@ -109,19 +87,6 @@
         }
       ]
     ],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
-    [],
     [],
     [],
     [],
@@ -139,13 +104,20 @@
           "function": {
             "contract_fn": {
               "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-              "function_name": "apply_doc",
+              "function_name": "execute",
               "args": [
                 {
-                  "bytes": "7b226e6574776f726b223a225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c227265636f76657279223a7b22636f6e74726f6c6c6572223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414d445234222c2264656c61792d6c656467657273223a31302c226578706972792d6c656467657273223a3130302c226d61782d63616e63656c73223a332c226d6f6465223a7b22677561726469616e73223a5b2243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d225d2c2271756f72756d223a322c2274797065223a22677561726469616e2d6f6e6c79227d2c2270726f66696c65223a2270726f746563746564222c227265706c61636561626c65223a5b226f776e6572225d7d2c2272756c6573223a5b7b226e616d65223a2261646d696e222c227072696e636970616c73223a7b227369676e657273223a5b226f776e6572225d2c2274797065223a22616c6c227d2c2273636f7065223a7b2274797065223a2273656c662d61646d696e227d7d2c7b226e616d65223a22746172676574222c227072696e636970616c73223a7b227369676e657273223a5b226f776e6572225d2c2274797065223a22616c6c227d2c2273636f7065223a7b2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414154594f4e222c2274797065223a22636f6e7472616374227d7d5d2c227369676e657273223a5b7b2261646472657373223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141415849374e222c226964223a226f776e6572227d2c7b2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414146435434222c226964223a22646576696365227d5d2c2276657273696f6e223a317d"
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
                 },
                 {
-                  "u32": 0
+                  "symbol": "protected"
+                },
+                {
+                  "vec": [
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                    }
+                  ]
                 }
               ]
             }
@@ -164,11 +136,37 @@
         {
           "function": {
             "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON",
-              "function_name": "protected",
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+              "function_name": "cancel_recovery",
               "args": [
                 {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                  "u64": "0"
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
+    [],
+    [],
+    [],
+    [],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+              "function_name": "apply_doc",
+              "args": [
+                {
+                  "bytes": "7b2276657273696f6e223a312c226e6574776f726b223a225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c227369676e657273223a5b7b226964223a226f776e6572222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414144324b4d227d2c7b226964223a22646576696365222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414146435434227d5d2c2272756c6573223a5b7b226e616d65223a2261646d696e222c2273636f7065223a7b2274797065223a2273656c662d61646d696e227d2c227072696e636970616c73223a7b2274797065223a22616c6c222c227369676e657273223a5b226f776e6572225d7d7d2c7b226e616d65223a22746172676574222c2273636f7065223a7b2274797065223a22636f6e7472616374222c2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414154594f4e227d2c227072696e636970616c73223a7b2274797065223a22616c6c222c227369676e657273223a5b226f776e6572225d7d7d5d2c227265636f76657279223a7b2270726f66696c65223a226c6f7373222c226d6f6465223a7b2274797065223a22677561726469616e2d6f6e6c79222c22677561726469616e73223a5b2243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d225d2c2271756f72756d223a317d2c22636f6e74726f6c6c6572223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414d445234222c227265706c61636561626c65223a5b226f776e6572225d2c2264656c61792d6c656467657273223a31302c226578706972792d6c656467657273223a3130302c226d61782d63616e63656c73223a337d7d"
+                },
+                {
+                  "u32": 0
                 }
               ]
             }
@@ -266,7 +264,7 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "3"
+                  "nonce": "2"
                 }
               },
               "durability": "temporary",
@@ -309,7 +307,7 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "4"
+                  "nonce": "3"
                 }
               },
               "durability": "temporary",
@@ -486,7 +484,7 @@
                       "symbol": "source_doc_hash"
                     },
                     "val": {
-                      "bytes": "5836610dfb866a129afea62b65fa14001bd53887c1f87c3999a89f68ee34f6bc"
+                      "bytes": "f4a9e5b6b8106677849dc1c88fba1fd9031a15093babab2ed0b276f0f3d14246"
                     }
                   },
                   {
@@ -496,7 +494,7 @@
                     "val": {
                       "vec": [
                         {
-                          "symbol": "Completed"
+                          "symbol": "Cancelled"
                         }
                       ]
                     }
@@ -506,7 +504,7 @@
                       "symbol": "target_config_hash"
                     },
                     "val": {
-                      "bytes": "555f55e1ba8dafbe198fd527d3305bf605ab8942291977d5212ad1818b87916d"
+                      "bytes": "2e4bbb69164dcfbdef74d4b7de57f6d7de7ca6f61b54781bfa0d801c0d699de3"
                     }
                   },
                   {
@@ -514,7 +512,7 @@
                       "symbol": "target_doc_hash"
                     },
                     "val": {
-                      "bytes": "3047c34ae97423d2c8b9b5776edf4dc170a2c50f395b80d033212aebbd0f5c1e"
+                      "bytes": "c3120be01e26f351a2fb79fa67f02a740a41df661c387bbbe2f405a577f82ce3"
                     }
                   },
                   {
@@ -562,7 +560,7 @@
                       "symbol": "config_hash"
                     },
                     "val": {
-                      "bytes": "555f55e1ba8dafbe198fd527d3305bf605ab8942291977d5212ad1818b87916d"
+                      "bytes": "658ee65bde70918446f52d63bcdb001c5839d208d8a6915187681229d83dd69c"
                     }
                   },
                   {
@@ -631,7 +629,7 @@
                                 "symbol": "quorum"
                               },
                               "val": {
-                                "u32": 2
+                                "u32": 1
                               }
                             }
                           ]
@@ -646,7 +644,7 @@
                     "val": {
                       "vec": [
                         {
-                          "symbol": "Protected"
+                          "symbol": "Loss"
                         }
                       ]
                     }
@@ -841,7 +839,7 @@
                         "symbol": "hits"
                       },
                       "val": {
-                        "u32": 2
+                        "u32": 1
                       }
                     }
                   ]
@@ -865,7 +863,7 @@
               },
               "durability": "persistent",
               "val": {
-                "bytes": "7b226e6574776f726b223a225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c227265636f76657279223a7b22636f6e74726f6c6c6572223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414d445234222c2264656c61792d6c656467657273223a31302c226578706972792d6c656467657273223a3130302c226d61782d63616e63656c73223a332c226d6f6465223a7b22677561726469616e73223a5b2243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d225d2c2271756f72756d223a322c2274797065223a22677561726469616e2d6f6e6c79227d2c2270726f66696c65223a2270726f746563746564222c227265706c61636561626c65223a5b226f776e6572225d7d2c2272756c6573223a5b7b226e616d65223a2261646d696e222c227072696e636970616c73223a7b227369676e657273223a5b226f776e6572225d2c2274797065223a22616c6c227d2c2273636f7065223a7b2274797065223a2273656c662d61646d696e227d7d2c7b226e616d65223a22746172676574222c227072696e636970616c73223a7b227369676e657273223a5b226f776e6572225d2c2274797065223a22616c6c227d2c2273636f7065223a7b2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414154594f4e222c2274797065223a22636f6e7472616374227d7d5d2c227369676e657273223a5b7b2261646472657373223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141415849374e222c226964223a226f776e6572227d2c7b2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414146435434222c226964223a22646576696365227d5d2c2276657273696f6e223a317d"
+                "bytes": "7b226e6574776f726b223a225465737420534446204e6574776f726b203b2053657074656d6265722032303135222c227265636f76657279223a7b22636f6e74726f6c6c6572223a22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414d445234222c2264656c61792d6c656467657273223a31302c226578706972792d6c656467657273223a3130302c226d61782d63616e63656c73223a332c226d6f6465223a7b22677561726469616e73223a5b2243414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141484b334d222c224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414149544134222c22434141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414b33494d225d2c2271756f72756d223a312c2274797065223a22677561726469616e2d6f6e6c79227d2c2270726f66696c65223a226c6f7373222c227265706c61636561626c65223a5b226f776e6572225d7d2c2272756c6573223a5b7b226e616d65223a2261646d696e222c227072696e636970616c73223a7b227369676e657273223a5b226f776e6572225d2c2274797065223a22616c6c227d2c2273636f7065223a7b2274797065223a2273656c662d61646d696e227d7d2c7b226e616d65223a22746172676574222c227072696e636970616c73223a7b227369676e657273223a5b226f776e6572225d2c2274797065223a22616c6c227d2c2273636f7065223a7b2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414154594f4e222c2274797065223a22636f6e7472616374227d7d5d2c227369676e657273223a5b7b2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414144324b4d222c226964223a226f776e6572227d2c7b2261646472657373223a224341414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414141414146435434222c226964223a22646576696365227d5d2c2276657273696f6e223a317d"
               }
             }
           },
@@ -887,7 +885,7 @@
               "val": {
                 "vec": [
                   {
-                    "bytes": "cf4cac0f5ccf9cdf17f02049e1486d24d2a2d3ad6139ad0536fce6f68b43ef3a"
+                    "bytes": "1cdf9498f8650b2c0fee77fd6933dddb96295b4a6a490929ea5da0870f0a21e5"
                   },
                   {
                     "bytes": "0e8a36c51f27dfad24fdd823177a42aeacd59361090c3188708e9cb3f99bef40"
@@ -1212,33 +1210,6 @@
               "key": {
                 "vec": [
                   {
-                    "symbol": "Revoked"
-                  },
-                  {
-                    "bytes": "1cdf9498f8650b2c0fee77fd6933dddb96295b4a6a490929ea5da0870f0a21e5"
-                  }
-                ]
-              },
-              "durability": "persistent",
-              "val": {
-                "bool": true
-              }
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 10001009
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-              "key": {
-                "vec": [
-                  {
                     "symbol": "SignerData"
                   },
                   {
@@ -1267,7 +1238,7 @@
                           "symbol": "Delegated"
                         },
                         {
-                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAXI7N"
+                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
                         }
                       ]
                     }
@@ -1293,7 +1264,7 @@
                     "symbol": "SignerLookup"
                   },
                   {
-                    "bytes": "569946e12cb05125767d65e4858dff66ab70cc5297caf2897e3872126ce54a0d"
+                    "bytes": "25629b0c8ede2bae056765dae15b585c628bba9a2a40c47c47a7bf81a711a202"
                   }
                 ]
               },
@@ -1327,7 +1298,7 @@
                         "symbol": "AppliedDoc"
                       },
                       "val": {
-                        "bytes": "3047c34ae97423d2c8b9b5776edf4dc170a2c50f395b80d033212aebbd0f5c1e"
+                        "bytes": "6dc25550883ee4e78567c18ee09556cb06035f2c55000c8bc7dc09cb81430f96"
                       }
                     },
                     {
@@ -1432,27 +1403,7 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "2"
-                }
-              },
-              "durability": "temporary",
-              "val": "void"
-            }
-          },
-          "ext": "v0"
-        },
-        "live_until": 1001000
-      },
-      {
-        "entry": {
-          "last_modified_ledger_seq": 0,
-          "data": {
-            "contract_data": {
-              "ext": "v0",
-              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-              "key": {
-                "ledger_key_nonce": {
-                  "nonce": "8"
+                  "nonce": "4"
                 }
               },
               "durability": "temporary",
@@ -1472,7 +1423,27 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "9"
+                  "nonce": "5"
+                }
+              },
+              "durability": "temporary",
+              "val": "void"
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 1001010
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+              "key": {
+                "ledger_key_nonce": {
+                  "nonce": "6"
                 }
               },
               "durability": "temporary",
@@ -1591,5 +1562,474 @@
       }
     ]
   },
-  "events": []
+  "events": [
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "epoch_advanced"
+              },
+              {
+                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "config_hash"
+                  },
+                  "val": {
+                    "bytes": "658ee65bde70918446f52d63bcdb001c5839d208d8a6915187681229d83dd69c"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "epoch"
+                  },
+                  "val": {
+                    "u64": "2"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "context_rule_removed"
+              },
+              {
+                "u32": 1
+              }
+            ],
+            "data": {
+              "map": []
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "signer_deregistered"
+              },
+              {
+                "u32": 1
+              }
+            ],
+            "data": {
+              "map": []
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "context_rule_removed"
+              },
+              {
+                "u32": 2
+              }
+            ],
+            "data": {
+              "map": []
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "policy_deregistered"
+              },
+              {
+                "u32": 0
+              }
+            ],
+            "data": {
+              "map": []
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "context_rule_removed"
+              },
+              {
+                "u32": 3
+              }
+            ],
+            "data": {
+              "map": []
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "signer_registered"
+              },
+              {
+                "u32": 2
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "signer"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "Delegated"
+                      },
+                      {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "context_rule_added"
+              },
+              {
+                "u32": 4
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "context_type"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "CallContract"
+                      },
+                      {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "name"
+                  },
+                  "val": {
+                    "string": "admin"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "policy_ids"
+                  },
+                  "val": {
+                    "vec": []
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "signer_ids"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "u32": 2
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "valid_until"
+                  },
+                  "val": "void"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "context_rule_added"
+              },
+              {
+                "u32": 5
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "context_type"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "CallContract"
+                      },
+                      {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "name"
+                  },
+                  "val": {
+                    "string": "target"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "policy_ids"
+                  },
+                  "val": {
+                    "vec": []
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "signer_ids"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "u32": 2
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "valid_until"
+                  },
+                  "val": "void"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "policy_registered"
+              },
+              {
+                "u32": 1
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "policy"
+                  },
+                  "val": {
+                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "context_rule_added"
+              },
+              {
+                "u32": 6
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "context_type"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "symbol": "CallContract"
+                      },
+                      {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "name"
+                  },
+                  "val": {
+                    "string": "recovery"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "policy_ids"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "u32": 1
+                      }
+                    ]
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "signer_ids"
+                  },
+                  "val": {
+                    "vec": []
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "valid_until"
+                  },
+                  "val": "void"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "doc_applied"
+              },
+              {
+                "bytes": "6dc25550883ee4e78567c18ee09556cb06035f2c55000c8bc7dc09cb81430f96"
+              }
+            ],
+            "data": {
+              "map": []
+            }
+          }
+        }
+      },
+      "failed_call": false
+    }
+  ]
 }

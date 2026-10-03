@@ -120,4 +120,7 @@ impl ChangeApproval {
 pub struct CompletionMarker {
     pub attempt_id: u64,
     pub target_doc_hash: BytesN<32>,
+    /// The ledger `enforce` ran in. A marker from an earlier ledger is
+    /// stale.
+    pub ledger: u32,
 }

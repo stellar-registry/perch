@@ -299,6 +299,15 @@ fn protected_freezes_every_path_except_the_completion() {
     );
     assert_eq!(refused, Err(Ok(PerchAuthError::AccountFrozen.into())));
 
+    // Only the authorized attempt's cancellation evidence is accepted in the
+    // window: no reconfiguration or upgrade approvals.
+    let remove = StatementSubject::Reconfigure(ConfigChange::Remove);
+    assert_eq!(
+        w.ctl()
+            .try_approve_change(&w.account, &remove, &(w.ledger() + 1), &w.guardians[0]),
+        Err(Ok(RecoveryError::AttemptAuthorized))
+    );
+
     // The recovery rule still completes, and completion lifts the freeze.
     w.advance(DELAY);
     w.complete(&target).expect("completion while frozen");
@@ -800,7 +809,7 @@ fn a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment() {
     w.complete(&target)
         .expect("completion is not a reconfiguration");
     let n = nullifier(&w.env, &first.id);
-    assert_eq!(w.ctl().nullifier_spent(&n), Some(w.account.clone()));
+    assert!(w.ctl().nullifier_spent(&w.account, &n));
     assert!(w.pool_client().enrollment(&w.account, &next.id).is_some());
     assert!(w.client().is_enrolled_id(&next.id));
     let config = w.ctl().config(&w.account).unwrap();
@@ -824,6 +833,145 @@ fn a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment() {
     );
 }
 
+/// Spent nullifiers are recorded per account. Any contract can enroll at
+/// the shared controller with an adapter that accepts whatever nullifier it
+/// likes (here the mock, which binds but does not derive it); its completion
+/// must not spend the same value for anyone else.
+#[test]
+fn one_accounts_completion_never_spends_anothers_nullifier() {
+    let w = world();
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Zk))));
+    let victim_credential = enrollment(&w.env, 1).id;
+    let victim_n = nullifier(&w.env, &victim_credential);
+
+    // A second account at the same controller, adapter, and pool.
+    let other_key = w.new_key();
+    let other = w.env.register(
+        PerchAccount,
+        (vec![&w.env, Signer::Delegated(other_key.clone())],),
+    );
+    let other_client = PerchAccountClient::new(&w.env, &other);
+    let mut r = w.recovery("loss", Mode::Zk);
+    r.enrollment = Some(enrollment(&w.env, 7));
+    let other_doc = Doc {
+        signers: std::vec![("owner", other_key.clone())],
+        rules: std::vec![],
+        recovery: Some(r),
+    }
+    .bytes(&w);
+    let root = w.invocation(
+        &other,
+        "apply_doc",
+        std::vec![w.sc(other_doc.clone()), w.sc(0u32)],
+    );
+    w.env
+        .set_auths(&[w.delegated_entry(&other, &other_key, w.rule_id(&other, "admin"), root)]);
+    other_client.apply_doc(&other_doc, &0);
+    w.env.set_auths(&[]);
+
+    // It completes a recovery whose evidence carries the victim's nullifier.
+    let replacements = w.replacements(&w.new_key(), Some(enrollment(&w.env, 8)));
+    let source = other_client.applied_doc().unwrap();
+    let id = w.ctl().begin_lost_key(&other, &replacements);
+    let target = w
+        .compiler()
+        .derive_target(&source, &source, &RecoveryAction::LostKey, &replacements)
+        .canonical;
+    let own = enrollment(&w.env, 7).id;
+    let at = w.pool_client().enrollment(&other, &own).unwrap();
+    let st = w.ctl().statement(&other, &id, &Initiate);
+    let evidence = ZkEvidence {
+        tree_id: at.tree_id,
+        root: w.pool_client().tree(&at.tree_id).root,
+        nullifier: victim_n.clone(),
+        proof: mock_proof(&w.env, &w.digest(&st), &own, &victim_n),
+    };
+    w.ctl().submit_zk(&other, &id, &Initiate, &evidence);
+    w.advance(DELAY);
+    let root = w.invocation(
+        &other,
+        "apply_doc",
+        std::vec![w.sc(target.clone()), w.sc(0u32)],
+    );
+    w.env.set_auths(&[w.recovery_rule_entry_for(&other, root)]);
+    other_client.apply_doc(&target, &0);
+    w.env.set_auths(&[]);
+    assert!(w.ctl().nullifier_spent(&other, &victim_n));
+    assert!(!w.ctl().nullifier_spent(&w.account, &victim_n));
+
+    // The victim's credential still proves, and its own completion spends it.
+    let (victim_attempt, _, victim_target) = open_lost_key(&w, Some(enrollment(&w.env, 2)));
+    w.try_zk(victim_attempt, Initiate, &victim_credential)
+        .expect("the victim's proof is still accepted");
+    w.advance(DELAY);
+    w.complete(&victim_target).unwrap();
+    assert!(w.ctl().nullifier_spent(&w.account, &victim_n));
+}
+
+/// `enforce` runs for every context in an authorization tree, including a
+/// sub-invocation that never executes. The marker it leaves must not turn a
+/// later, unrelated `apply_doc` into a (failing) completion.
+#[test]
+fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
+    let w = world();
+    let doc = w.doc(Some(w.recovery("loss", Mode::Guardian)));
+    w.enroll(&doc);
+    let (id, _, target) = open_lost_key(&w, None);
+    authorize(&w, id);
+    w.advance(DELAY);
+
+    // The owner signs `execute`, with an `apply_doc(target)` sub-invocation
+    // selecting the recovery rule that never runs.
+    let f = Symbol::new(&w.env, "protected");
+    let call_args = vec![
+        &w.env,
+        IntoVal::<_, soroban_sdk::Val>::into_val(&w.account, &w.env),
+    ];
+    let mut root = w.invocation(
+        &w.account,
+        "execute",
+        std::vec![
+            w.sc(w.target.clone()),
+            w.sc(f.clone()),
+            w.sc(call_args.clone())
+        ],
+    );
+    root.sub_invocations = std::vec![w.invocation(
+        &w.account,
+        "apply_doc",
+        std::vec![w.sc(target.clone()), w.sc(0u32)],
+    )]
+    .try_into()
+    .unwrap();
+    let mut entry = w.owner_entry("admin", root);
+    if let soroban_sdk::xdr::SorobanCredentials::AddressWithDelegates(c) = &mut entry.credentials {
+        c.address_credentials.signature = w.sc(AuthPayload {
+            signers: soroban_sdk::map![
+                &w.env,
+                (Signer::Delegated(w.owner.clone()), Bytes::new(&w.env))
+            ],
+            context_rule_ids: vec![
+                &w.env,
+                w.rule_id(&w.account, "admin"),
+                w.rule_id(&w.account, "recovery"),
+            ],
+        });
+    }
+    w.env.set_auths(&[entry]);
+    w.client().execute(&w.target, &f, &call_args);
+    w.env.set_auths(&[]);
+
+    // Same ledger: the owner cancels, then applies an unrelated document.
+    let cancel = w.invocation(&w.account, "cancel_recovery", std::vec![w.sc(id)]);
+    w.env.set_auths(&[w.owner_entry("admin", cancel)]);
+    w.client().cancel_recovery(&id);
+    w.env.set_auths(&[]);
+    let mut quorum_one = w.recovery("loss", Mode::Guardian);
+    quorum_one.quorum = 1;
+    w.apply(&w.doc(Some(quorum_one)), 0)
+        .expect("the stale marker is dropped, not taken for a completion");
+}
+
 #[test]
 fn nullifiers_are_never_reserved_or_released() {
     let w = world();
@@ -836,7 +984,7 @@ fn nullifiers_are_never_reserved_or_released() {
     // The same credential evidences both attempts: nothing is reserved.
     w.try_zk(a, Initiate, &credential).unwrap();
     w.try_zk(b, Initiate, &credential).unwrap();
-    assert_eq!(w.ctl().nullifier_spent(&n), None);
+    assert!(!w.ctl().nullifier_spent(&w.account, &n));
 
     // Cancelling one attempt needs both factors, and releases nothing.
     w.guardian(0, a, Cancel);
@@ -848,7 +996,7 @@ fn nullifiers_are_never_reserved_or_released() {
     );
     w.try_zk(a, Cancel, &credential).unwrap();
     assert_eq!(state(&w, a), AttemptState::Cancelled);
-    assert_eq!(w.ctl().nullifier_spent(&n), None);
+    assert!(!w.ctl().nullifier_spent(&w.account, &n));
 
     // The other attempt needs both factors too, then completes and spends.
     w.guardian(0, b, Initiate);
@@ -857,7 +1005,7 @@ fn nullifiers_are_never_reserved_or_released() {
     assert_eq!(state(&w, b), AttemptState::Authorized);
     w.advance(DELAY);
     w.complete(&target).unwrap();
-    assert_eq!(w.ctl().nullifier_spent(&n), Some(w.account.clone()));
+    assert!(w.ctl().nullifier_spent(&w.account, &n));
 }
 
 #[test]
@@ -895,10 +1043,9 @@ fn protected_zk_reconfiguration_is_its_own_proven_action() {
     w.apply(&next, until).expect("proven reconfiguration");
     assert_eq!(w.ctl().config(&w.account).unwrap().delay_ledgers, DELAY * 2);
     // Proving a change spends nothing.
-    assert_eq!(
-        w.ctl().nullifier_spent(&nullifier(&w.env, &credential)),
-        None
-    );
+    assert!(!w
+        .ctl()
+        .nullifier_spent(&w.account, &nullifier(&w.env, &credential)));
 }
 
 #[test]

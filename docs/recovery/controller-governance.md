@@ -1,7 +1,8 @@
 # Recovery controller: design, governance, and upgrade policy
 
-> **Pre-spec.** This describes the first `perch-recovery` controller. The
-> behaviour it must have is now [`spec.md`](spec.md). Where the two
+> **Pre-spec.** This describes the first `perch-recovery` controller, which
+> the spec's implementation has replaced ([`implementation.md`](implementation.md)).
+> The behaviour it must have is now [`spec.md`](spec.md). Where the two
 > disagree, the spec wins: in particular, configuration is written by
 > `rcv_sync`, not `install` (§10); collecting attempts block nothing (§6);
 > nullifiers are never reserved or released, only spent (§11); and

@@ -37,11 +37,11 @@ crates/
   perch-compile/      lowering: PolicyDoc → executable plan (OZ call sequence)
   perch-doc-compiler/ stateless deployable: doc JSON → compiled rules + doc_hash, on-chain
   perch-smart-account/  the doc-only account trait: apply_doc (the sole write path) on OZ
-  perch-account/      deployable shell of perch-smart-account (6 exported functions, ~28 KB)
+  perch-account/      deployable shell of perch-smart-account (21 exported functions, ~46 KB)
   perch-ed25519-verifier/  deployable ed25519 verifier for External signers
-  perch-recovery/     deployable account-recovery controller (guardian/ZK/combined modes),
-                      an OZ Policy attached via apply_doc's `recovery` document field —
-                      see docs/recovery/
+  perch-recovery/     deployable account-recovery controller: the one implementation of
+                      docs/recovery/spec.md (Loss/Protected × guardian/ZK/combined),
+                      adopted through apply_doc's `recovery` document field
   perch-zk-pool/      deployable ZK recovery membership pool: account-authorized enrollment,
                       depth-32 Poseidon2 trees with rollover — see docs/zk/
   perch-zk-adapter/   deployable ZK recovery adapter: root check + statement binding + the
@@ -74,8 +74,8 @@ scripts/              bootstrap-testnet.sh — one-time registry + account boots
                       zk-toolchain.sh — pinned, checksummed nargo/bb for the ZK circuit
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
 docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
-docs/recovery/        opt-in account recovery: schema, controller governance, migration,
-                      and the open release-blocking pending-activity gate
+docs/recovery/        opt-in account recovery: the authoritative spec, statement layouts,
+                      the implementation map, and the pre-spec design records
 docs/zk/              ZK recovery circuit, pool, adapter, measurements, and the depth decision
 docs/testnet-deployment.md  verified live-state map of the canonical testnet deployment
 testdata/             golden vectors shared by the Rust and TS suites (frozen)

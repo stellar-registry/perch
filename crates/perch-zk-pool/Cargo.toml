@@ -20,6 +20,8 @@ perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# The interface the controller and account call the pool through.
+perch-recovery-interface = { path = "../perch-recovery-interface" }
 
 [features]
 # Depth-24 build of the same pool. Not a release configuration: it exists so

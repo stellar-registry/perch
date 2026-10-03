@@ -458,3 +458,23 @@ fn archived_tree_is_restored_not_reset() {
     assert!(client.is_known_root(&0, &first.root));
     assert_eq!(client.leaves(&0, &0, &2).get_unchecked(0), first.leaf);
 }
+
+/// The pool through `perch-recovery-interface`'s own `MembershipPoolClient`,
+/// as the account and the adapter call it: `rcv_insert` returns nothing and
+/// fails the call on refusal.
+#[test]
+fn implements_the_membership_pool_interface() {
+    use perch_recovery_interface::zk::MembershipPoolClient;
+    let (e, id, client) = setup();
+    e.mock_all_auths();
+    let pool = MembershipPoolClient::new(&e, &id);
+    let account = Address::generate(&e);
+
+    assert_eq!(pool.depth(), TREE_DEPTH);
+    pool.rcv_insert(&account, &enr(&e, 1), &commitment(&e, 1));
+    let root = client.tree(&0).root;
+    assert!(pool.is_known_root(&0, &root));
+    assert!(pool
+        .try_rcv_insert(&account, &enr(&e, 1), &commitment(&e, 2))
+        .is_err());
+}

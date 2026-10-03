@@ -148,16 +148,17 @@ tests. The pool's own tests exercise real authorization rules.
 
 ## Interface notes for the rest of the epic
 
-This crate implements `perch-recovery-interface` and spec §13–§14 as they
-stand on `fm/perch-epic99-spec-p5`. A few points go beyond the spec or
-differ from its prose:
+These crates implement `perch-recovery-interface` and spec §13–§14 as they
+stand on `fm/perch-epic99-spec-p5`. `perch-zk-pool` is driven through the
+interface's own `MembershipPoolClient` in its tests. A few points go beyond
+the spec or differ from its prose:
 
-- **Pool-side one leaf per `(account, enrollment_id)`.** Spec §3.4 makes the
-  account refuse to reuse an enrollment id. The pool refuses a repeat as
-  well (`EnrollmentIdTaken`), because a second leaf under an adopted id
-  would satisfy the ZK factor with someone else's secret and give the
-  credential a second nullifier. The cost is one small persistent entry per
-  insertion, which doubles as the client's lookup of its own leaf.
+- **Pool-side one leaf per `(account, enrollment_id)`.** The pool refuses a
+  repeat (`EnrollmentIdTaken`), as `MembershipPoolInterface::rcv_insert` now
+  specifies, in addition to the account's own refusal (spec §3.4). A second
+  leaf under an adopted id would satisfy the ZK factor with someone else's
+  secret and give the credential a second nullifier. The record that
+  enforces the rule is also the client's lookup of its own leaf.
 - **On-chain leaves.** Spec §14.3 sources witnesses from `LeafInserted`
   events via a persisting indexer. The pool also stores each leaf, so a
   witness for any tree, sealed ones included, can be rebuilt from contract

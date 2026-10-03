@@ -1648,6 +1648,7 @@ dependencies = [
 name = "perch-zk-pool"
 version = "0.1.0"
 dependencies = [
+ "perch-recovery-interface",
  "perch-zk-primitives",
  "soroban-sdk",
  "soroban-sdk-tools",

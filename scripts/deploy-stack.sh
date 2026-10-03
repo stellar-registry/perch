@@ -72,6 +72,10 @@ derive() { "$repo_root/target/debug/perch-derive-id" "$@" "$PASSPHRASE"; }
 invoke() { stellar contract invoke "${net[@]}" "${src[@]}" --id "$1" -- "${@:2}"; }
 read_only() { stellar contract invoke "${net[@]}" "${src[@]}" --send=no --id "$1" -- "${@:2}"; }
 
+# The first ledger an indexer needs to scan: nothing below was deployed here.
+deployed_ledger="$(curl -fsS "$RPC_URL" -H 'content-type: application/json' \
+    -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger"}' | jq -r .result.sequence)"
+
 # ---------------------------------------------------------------------------
 # 1. Registry
 # ---------------------------------------------------------------------------
@@ -150,6 +154,7 @@ circuit="$repo_root/circuits/manifest.json"
 jq -n \
     --arg network "$STELLAR_NETWORK" --arg passphrase "$PASSPHRASE" --arg rpc "$RPC_URL" \
     --arg channel "$channel" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson deployed_ledger "$deployed_ledger" \
     --arg reg "$registry" --arg reg_wasm "$registry_wasm" --arg admin "$source_g" --arg root "$ROOT" \
     --slurpfile build "$build" --argjson contracts "$deployed" \
     --arg circuit_id "$(jq -r '.circuits.perch_zk_recovery.vk_sha256 | ltrimstr("0x")' "$circuit")" \
@@ -161,6 +166,7 @@ jq -n \
       rpc_url: $rpc,
       channel: $channel,
       deployed_at: $at,
+      deployed_ledger: $deployed_ledger,
       source: $build[0].source,
       toolchain: $build[0].toolchain,
       registry: {id: $reg, wasm_hash: $reg_wasm, admin: $admin, manager: $admin, root: $root},

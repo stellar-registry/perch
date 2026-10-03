@@ -1,7 +1,7 @@
 {
   "name": "@stellar-registry/perch-zk",
   "version": "0.1.0",
-  "description": "Proof helpers for Perch ZK recovery: commitments, Merkle witnesses from pool leaves, circuit inputs, and UltraHonk proving in the browser or Node",
+  "description": "Proof helpers for Perch ZK recovery: commitments, Merkle witnesses from pool leaves, a trust-free pool indexer, circuit inputs, and UltraHonk proving in the browser or Node",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./indexer": {
+      "types": "./dist/indexer/index.d.ts",
+      "import": "./dist/indexer/index.js"
     },
     "./artifacts/*": "./artifacts/*"
   },
@@ -31,10 +35,19 @@
     "@noble/hashes": "^2.2.0",
     "@noir-lang/noir_js": "1.0.0-beta.9"
   },
+  "peerDependencies": {
+    "@stellar/stellar-sdk": "^17.0.1"
+  },
+  "peerDependenciesMeta": {
+    "@stellar/stellar-sdk": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "@stellar/stellar-sdk": "^17.0.1"
   },
   "repository": {
     "type": "git",

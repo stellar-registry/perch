@@ -8,7 +8,15 @@
 // else. Whether the signer is actually a guardian, and whether the statement
 // is still live, only the controller decides.
 
-import { Address, StrKey, xdr } from '@stellar/stellar-sdk';
+import {
+  Address,
+  Keypair,
+  StrKey,
+  buildAuthorizationEntryPreimage,
+  hash,
+  scValToNative,
+  xdr,
+} from '@stellar/stellar-sdk';
 
 export const APPROVAL_FUNCTIONS = ['submit_guardian', 'approve_change'] as const;
 export type ApprovalFunction = (typeof APPROVAL_FUNCTIONS)[number];
@@ -23,14 +31,27 @@ export interface Approval {
   expiresAt: number;
   /** The signed `SorobanAuthorizationEntry`, base64 XDR. */
   entry: string;
+  /** Whether the signature was checked here: a `G...` guardian's ed25519
+   * signature over the entry's payload, when the network passphrase was
+   * given. A contract guardian's signature only its own `__check_auth` can
+   * check. */
+  verified: boolean;
 }
 
 export class ApprovalError extends Error {}
 
 const HEX32 = /^[0-9a-f]{64}$/;
 
-/** Decode and check a signed approval entry for `controller` and `digest`. */
-export function parseApproval(entryXdr: string, controller: string, digest: string): Approval {
+/** Decode and check a signed approval entry for `controller` and `digest`.
+ * With `networkPassphrase`, a `G...` guardian's entry must carry exactly
+ * one ed25519 signature, by the guardian's own key, over the entry's
+ * authorization payload on that network. */
+export function parseApproval(
+  entryXdr: string,
+  controller: string,
+  digest: string,
+  networkPassphrase?: string,
+): Approval {
   if (!StrKey.isValidContract(controller)) throw new ApprovalError('bad controller id');
   if (!HEX32.test(digest)) throw new ApprovalError('digest must be 64 lowercase hex characters');
   let entry: xdr.SorobanAuthorizationEntry;
@@ -69,11 +90,29 @@ export function parseApproval(entryXdr: string, controller: string, digest: stri
   if (Buffer.from(arg.bytes.toBytes()).toString('hex') !== digest) {
     throw new ApprovalError('the entry approves another statement');
   }
+  const guardian = Address.fromScAddress(address.address).toString();
+  const verified = networkPassphrase !== undefined && StrKey.isValidEd25519PublicKey(guardian);
+  if (verified) {
+    const payload = hash(
+      buildAuthorizationEntryPreimage(entry, address.signatureExpirationLedger, networkPassphrase).toXDR(),
+    );
+    const sigs = scValToNative(address.signature) as { public_key?: Uint8Array; signature?: Uint8Array }[];
+    const key = Keypair.fromPublicKey(guardian);
+    const ok =
+      Array.isArray(sigs) &&
+      sigs.length === 1 &&
+      sigs[0]!.public_key !== undefined &&
+      sigs[0]!.signature !== undefined &&
+      Buffer.from(sigs[0]!.public_key).equals(key.rawPublicKey()) &&
+      key.verify(Buffer.from(payload), Buffer.from(sigs[0]!.signature));
+    if (!ok) throw new ApprovalError("the entry is not signed by the guardian's key");
+  }
   return {
-    guardian: Address.fromScAddress(address.address).toString(),
+    guardian,
     function: name as ApprovalFunction,
     digest,
     expiresAt: address.signatureExpirationLedger,
     entry: entryXdr,
+    verified,
   };
 }

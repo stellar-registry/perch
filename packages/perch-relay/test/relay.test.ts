@@ -14,12 +14,20 @@ const TESTNET_ENTRY =
 async function approval(
   guardian: Keypair,
   digest: string,
-  opts: { fn?: string; controller?: string; args?: xdr.ScVal[]; sign?: boolean } = {},
+  opts: {
+    fn?: string;
+    controller?: string;
+    args?: xdr.ScVal[];
+    sign?: boolean;
+    signer?: Keypair;
+    network?: string;
+    address?: string;
+  } = {},
 ): Promise<string> {
   const unsigned = new xdr.SorobanAuthorizationEntry({
     credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(
       new xdr.SorobanAddressCredentials({
-        address: Address.fromString(guardian.publicKey()).toScAddress(),
+        address: Address.fromString(opts.address ?? guardian.publicKey()).toScAddress(),
         nonce: 42n,
         signatureExpirationLedger: 0,
         signature: xdr.ScVal.scvVoid(),
@@ -37,16 +45,46 @@ async function approval(
     }),
   });
   if (opts.sign === false) return unsigned.toXDR('base64');
-  const signed = await authorizeEntry(unsigned, guardian, 5_000_000, Networks.TESTNET);
+  if (opts.address) {
+    // A contract guardian: some signature only its __check_auth can judge.
+    const creds = unsigned.credentials as xdr.SorobanCredentials & { address: xdr.SorobanAddressCredentials };
+    const signed = new xdr.SorobanAuthorizationEntry({
+      credentials: xdr.SorobanCredentials.sorobanCredentialsAddress(
+        new xdr.SorobanAddressCredentials({
+          address: creds.address.address,
+          nonce: creds.address.nonce,
+          signatureExpirationLedger: 5_000_000,
+          signature: nativeToScVal(Buffer.from(opts.fn ?? 'sig')),
+        }),
+      ),
+      rootInvocation: unsigned.rootInvocation,
+    });
+    return signed.toXDR('base64');
+  }
+  const signed = await authorizeEntry(unsigned, opts.signer ?? guardian, 5_000_000, opts.network ?? Networks.TESTNET);
   return signed.toXDR('base64');
 }
 
+const CONTRACT_GUARDIAN = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
+
 describe('parseApproval', () => {
-  it('accepts the approval the deployed controller accepted', () => {
-    const a = parseApproval(TESTNET_ENTRY, CONTROLLER, TESTNET_DIGEST);
+  it('accepts and verifies the approval the deployed controller accepted', () => {
+    const a = parseApproval(TESTNET_ENTRY, CONTROLLER, TESTNET_DIGEST, Networks.TESTNET);
     expect(a.function).toBe('submit_guardian');
     expect(a.guardian).toMatch(/^G[A-Z2-7]{55}$/);
     expect(a.digest).toBe(TESTNET_DIGEST);
+    expect(a.verified).toBe(true);
+    // The same signature is not valid on another network.
+    expect(() => parseApproval(TESTNET_ENTRY, CONTROLLER, TESTNET_DIGEST, Networks.PUBLIC)).toThrow(ApprovalError);
+  });
+
+  it("refuses a G guardian's entry signed by any other key", async () => {
+    const g = Keypair.random();
+    const d = 'ab'.repeat(32);
+    const forged = await approval(g, d, { signer: Keypair.random() });
+    expect(() => parseApproval(forged, CONTROLLER, d, Networks.TESTNET)).toThrow(/guardian's key/);
+    const elsewhere = await approval(g, d, { network: Networks.PUBLIC });
+    expect(() => parseApproval(elsewhere, CONTROLLER, d, Networks.TESTNET)).toThrow(/guardian's key/);
   });
 
   it('accepts both approval entry points', async () => {
@@ -78,7 +116,7 @@ describe('parseApproval', () => {
 });
 
 describe('relay', () => {
-  const opts = { controller: CONTROLLER };
+  const opts = { controller: CONTROLLER, networkPassphrase: Networks.TESTNET };
   const req = (method: string, path: string, body?: string) =>
     new Request(`https://relay.test${path}`, { method, body });
 
@@ -101,6 +139,41 @@ describe('relay', () => {
       approvals: unknown[];
     };
     expect(empty.approvals).toEqual([]);
+  });
+
+  it("never lets a forged entry displace a guardian's approval", async () => {
+    const kv = new MemoryKv();
+    const d = 'ab'.repeat(32);
+    const g = Keypair.random();
+    await handleRelay(req('PUT', `/approvals/${d}`, await approval(g, d)), kv, opts);
+    // A G guardian's entry is checked: a forgery naming it is refused.
+    const forged = await approval(g, d, { signer: Keypair.random() });
+    expect((await handleRelay(req('PUT', `/approvals/${d}`, forged), kv, opts)).status).toBe(400);
+    // A contract guardian's entries cannot be checked here, so they are kept
+    // side by side and never replaced.
+    const real = await approval(g, d, { address: CONTRACT_GUARDIAN });
+    const fake = await approval(g, d, { address: CONTRACT_GUARDIAN, fn: 'approve_change' });
+    for (const e of [real, fake]) {
+      expect((await handleRelay(req('PUT', `/approvals/${d}`, e), kv, opts)).status).toBe(201);
+    }
+    const got = (await (await handleRelay(req('GET', `/approvals/${d}`), kv, opts)).json()) as {
+      approvals: { guardian: string; entry: string; verified: boolean }[];
+    };
+    expect(got.approvals.find((a) => a.guardian === g.publicKey())!.verified).toBe(true);
+    const fromContract = got.approvals.filter((a) => a.guardian === CONTRACT_GUARDIAN);
+    expect(fromContract.map((a) => a.entry).sort()).toEqual([real, fake].sort());
+    expect(fromContract.every((a) => !a.verified)).toBe(true);
+  });
+
+  it('caps unverifiable entries per contract guardian', async () => {
+    const kv = new MemoryKv();
+    const d = 'ab'.repeat(32);
+    const capped = { ...opts, maxEntriesPerContractGuardian: 1 };
+    const first = await approval(Keypair.random(), d, { address: CONTRACT_GUARDIAN });
+    const second = await approval(Keypair.random(), d, { address: CONTRACT_GUARDIAN, fn: 'approve_change' });
+    expect((await handleRelay(req('PUT', `/approvals/${d}`, first), kv, capped)).status).toBe(201);
+    expect((await handleRelay(req('PUT', `/approvals/${d}`, first), kv, capped)).status).toBe(201);
+    expect((await handleRelay(req('PUT', `/approvals/${d}`, second), kv, capped)).status).toBe(429);
   });
 
   it('refuses entries that are not approvals of the path statement', async () => {

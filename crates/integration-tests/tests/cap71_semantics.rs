@@ -257,7 +257,9 @@ fn addr_arg(a: &Address) -> ScVal {
 
 /// An `AddressWithDelegates` entry for `account`, selecting `rule_ids`,
 /// naming `delegate` as the signer, and carrying `delegate` in the
-/// credentials iff `with_delegate`.
+/// credentials iff `with_delegate`. Nonce 7: for one entry per `Env`; tests
+/// that submit several use [`delegated_entry_with_nonce`] so a refusal can't
+/// be a nonce replay.
 fn delegated_entry(
     e: &Env,
     account: &Address,
@@ -265,6 +267,18 @@ fn delegated_entry(
     rule_ids: Vec<u32>,
     with_delegate: bool,
     root: SorobanAuthorizedInvocation,
+) -> SorobanAuthorizationEntry {
+    delegated_entry_with_nonce(e, account, delegate, rule_ids, with_delegate, root, 7)
+}
+
+fn delegated_entry_with_nonce(
+    e: &Env,
+    account: &Address,
+    delegate: &Address,
+    rule_ids: Vec<u32>,
+    with_delegate: bool,
+    root: SorobanAuthorizedInvocation,
+    nonce: i64,
 ) -> SorobanAuthorizationEntry {
     let delegates = if with_delegate {
         std::vec![SorobanDelegateSignature {
@@ -280,7 +294,7 @@ fn delegated_entry(
             SorobanAddressCredentialsWithDelegates {
                 address_credentials: SorobanAddressCredentials {
                     address: account.clone().into(),
-                    nonce: 7,
+                    nonce,
                     signature_expiration_ledger: 100,
                     signature: payload_scval(
                         e,
@@ -522,20 +536,21 @@ fn c6_reserved_names_close_signature_auth_but_keep_invoker_auth() {
         });
         (hook, rule.id)
     };
-    let signed_call = |hook: &Address, rule: u32| {
-        delegated_entry(
+    let signed_call = |hook: &Address, rule: u32, nonce: i64| {
+        delegated_entry_with_nonce(
             &env,
             &account,
             &delegate,
             vec![&env, rule],
             true,
             invocation(hook, "rcv_sync", std::vec![addr_arg(&account)]),
+            nonce,
         )
     };
 
     // Without the guard: a direct, signature-authorized call reaches the hook.
     let (exposed, exposed_rule) = hook_with_rule("exposed");
-    env.set_auths(&[signed_call(&exposed, exposed_rule)]);
+    env.set_auths(&[signed_call(&exposed, exposed_rule, 1)]);
     HookClient::new(&env, &exposed).rcv_sync(&account);
     assert!(
         HookClient::new(&env, &exposed).hit(),
@@ -545,7 +560,7 @@ fn c6_reserved_names_close_signature_auth_but_keep_invoker_auth() {
     // With the guard: the same shape is refused.
     let (guarded, guarded_rule) = hook_with_rule("guarded");
     TestAccountClient::new(&env, &account).enable_guard();
-    env.set_auths(&[signed_call(&guarded, guarded_rule)]);
+    env.set_auths(&[signed_call(&guarded, guarded_rule, 2)]);
     assert!(HookClient::new(&env, &guarded)
         .try_rcv_sync(&account)
         .is_err());
@@ -767,4 +782,59 @@ fn c8_auth_cannot_reenter_the_contract_collecting_it() {
             ScErrorCode::InvalidAction
         )))
     );
+}
+
+/// Why spec §15 allows a document rule scoped to the account's own
+/// controller: an account guarding other accounts at that controller signs
+/// its approvals there. With the reserved-name guard on, the same rule lets
+/// its signers approve `submit_guardian` as the account and still cannot
+/// reach a reserved hook (invariant I3).
+#[test]
+fn c6_rule_scoped_to_own_controller_signs_approvals_not_hooks() {
+    let env = Env::default();
+    env.ledger().with_mut(|l| l.sequence_number = 10);
+    let account = env.register(TestAccount, ());
+    let delegate = env.register(RecordingDelegate, ());
+    let controller = env.register(ApproveController, ());
+    let rule = env.as_contract(&account, || {
+        add_context_rule(
+            &env,
+            &ContextRuleType::CallContract(controller.clone()),
+            &String::from_str(&env, "guardian"),
+            None,
+            &vec![&env, Signer::Delegated(delegate.clone())],
+            &Map::new(&env),
+        )
+    });
+    let digest = BytesN::from_array(&env, &[0xd5; 32]);
+    let signed = |fn_name: &str, nonce: i64| {
+        delegated_entry_with_nonce(
+            &env,
+            &account,
+            &delegate,
+            vec![&env, rule.id],
+            true,
+            invocation(
+                &controller,
+                fn_name,
+                std::vec![ScVal::Bytes(digest.to_array().to_vec().try_into().unwrap())],
+            ),
+            nonce,
+        )
+    };
+    let client = ApproveControllerClient::new(&env, &controller);
+
+    // Control: without the guard, the rule reaches the hook.
+    env.set_auths(&[signed("rcv_sync", 1)]);
+    client.rcv_sync(&account, &digest);
+
+    // With the guard, the same rule still signs guardian approvals...
+    TestAccountClient::new(&env, &account).enable_guard();
+    env.set_auths(&[signed("submit_guardian", 2)]);
+    client.submit_guardian(&account, &digest);
+
+    // ...but no longer reaches the hook (a fresh nonce, so the guard is the
+    // only reason).
+    env.set_auths(&[signed("rcv_sync", 3)]);
+    assert!(client.try_rcv_sync(&account, &digest).is_err());
 }

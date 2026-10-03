@@ -41,7 +41,7 @@ compiler). "Refuse" means the call fails and changes no state.
 | D9 | Nullifiers | One nullifier per enrolled ZK credential, owned by that `(account, enrollment)`. It is either unspent or spent. Only a completion of that account spends it; nothing ever un-spends it. Proofs for any action need it unspent. There are no reservations, so there is nothing to release (#91). | §11 |
 | D10 | Stale state | Leaves and nullifiers bind an enrollment id the configuration names, and the account refuses to re-enroll an id it used before. Every configuration change and every completion bumps the per-account epoch, and evidence or attempts from an older epoch are dead. | §3, §11 |
 | D11 | Upgrades | Owner authorization (plus, under `Protected`, condition evidence over an `Upgrade` statement binding the Wasm hash and the epoch). Executable after 120 960 ledgers. Any epoch change invalidates the request, and executing it bumps the epoch. Blocked during an authorized attempt. | §12 |
-| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_*`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. Guardian and ZK evidence is always submitted through non-reserved entry points and recorded; hooks only read the records. | §5, §15 |
+| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_*`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. That name guard, not a ban on rules scoped to the controller, is what protects the controller: a document may scope rules to its own controller so the account can act as a guardian there. Guardian and ZK evidence is always submitted through non-reserved entry points and recorded; hooks only read the records. | §2, §5, §15 |
 | D13 | Statement | One `RecoveryStatement`, encoded at fixed width and hashed with SHA-256. Guardians authorize the digest and the circuit binds it. | §4 |
 | D14 | ZK boundary | The controller passes the structured statement to an adapter. The adapter checks the circuit id, field canonicality, root membership in the enrolled pool, and the proof. Public inputs stay `root, nullifier, statement_hash`. | §13 |
 | D15 | Pool | Depth 32, or depth 24 if depth 32 misses the budget rule. A full tree rolls over automatically. Roots are accepted as `(tree_id, root)`, and every root a tree has ever had stays acceptable. | §14 |
@@ -106,6 +106,20 @@ ZK backend; CAP-0085 governance-managed executables.
   attempt (T4), and only compromise recovery is immune to that. Wallets
   should require a baseline for `Protected`; that product choice is Nido's
   (nidohq/nido#220).
+- **A rule scoped to the account's own controller is safe, and needed.** An
+  account that is a guardian of other accounts at the controller it uses
+  itself signs those approvals in contexts naming that controller
+  (`submit_guardian`, `approve_change`). Its document therefore needs a
+  rule scoped to the controller, or a `Default` rule.
+
+  The reserved-name guard (§15, invariant I1) is what keeps such a rule's
+  signers away from the controller's sensitive entry points. It refuses
+  `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `install`, `uninstall`, and
+  `enforce` on any contract, whatever rule is selected. What such a rule
+  grants is exactly what it says: its signers approve, as this account,
+  statements for accounts that list this account as a guardian. The account
+  cannot list itself (§15), so the rule never touches the account's own
+  recovery.
 
 ## 3. Configuration
 
@@ -1024,9 +1038,32 @@ The account must therefore:
    account the invoker, which would otherwise grant invoker authorization to
    whoever can authorize `execute`;
 3. **refuse at compile time**, as defence in depth, a rule whose
-   `Scope::Contract` is the document's own controller, adapter, or pool.
+   `Scope::Contract` is the document's own ZK adapter or pool. The account
+   never needs to authorize a call to either. A rule scoped to the
+   document's **own controller is allowed**: an account that is a guardian
+   at the controller it uses itself must authorize `submit_guardian` and
+   `approve_change` there (§2). Rule 1 is what protects the controller's
+   sensitive entry points, not this compile-time check.
 
-`cap-0071.md` pins the host behaviour this relies on (properties C5 and C6).
+`cap-0071.md` pins the host behaviour this relies on (properties C5, C6,
+and C7).
+
+**Invariants this section maintains.**
+
+- **I1.** Every controller, pool, or policy entry point that acts on an
+  account's own recovery state under that account's authorization has a
+  reserved name. Today those are `rcv_sync`, `rcv_cancel`, `rcv_upgrade`,
+  `install`, `uninstall`, `enforce`, and the pool's `rcv_insert`; the
+  account's own `rcv_gate` is reserved too. Adding such an entry point
+  without adding its name to `RESERVED_INVOKER_ONLY_FNS` breaks the spec.
+- **I2.** Every other controller entry point that takes an address's
+  authorization takes it as a guardian (`submit_guardian`,
+  `approve_change`), bound to another account's statement digest. Signing
+  one never changes the signer's own recovery state.
+- **I3.** By I1 and I2, a signature path into the controller, whether
+  through a rule scoped to it or a `Default` rule, can reach only guardian
+  approvals. A rule scoped to the document's own controller is therefore
+  allowed, and the reserved-name guard alone protects the hooks.
 
 **No re-entry (D16).** Soroban refuses any call into a contract already on
 the call stack (`cap-0071.md` C8). The rules that follow from it:

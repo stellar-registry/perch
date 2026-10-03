@@ -1534,6 +1534,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "perch-account",
+ "perch-account-factory",
  "perch-compile",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
@@ -1547,6 +1548,10 @@ dependencies = [
  "perch-spending-limit",
  "perch-testkit",
  "perch-zk-pool",
+ "perch-zk-primitives",
+ "perch-zk-prover",
+ "serde_json",
+ "sha2",
  "soroban-sdk",
  "stellar-accounts",
 ]

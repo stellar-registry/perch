@@ -17,10 +17,11 @@ stellar-accounts = { workspace = true }
 # Client + wire types only — `contract` off, so no compiler code (parser,
 # lowering) is ever linked into account wasm.
 perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
-# Client + types only for the recovery controller — apply_doc cross-calls the
-# adopted instance; `contract` off, so no controller state or Policy-lifecycle
-# code is linked into account wasm.
-perch-recovery = { version = "0.1.0", path = "../perch-recovery", default-features = false }
+# The recovery controller's hook client, the pool's insertion client, the
+# account constants (upgrade delay, invoker-only names), and the compiled
+# recovery types. A plain library: no controller code is linked into account
+# wasm, and neither deployable pins the other.
+perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
 # The pure `registry_id + wasm_hash → address` derivation `apply_doc` uses to
 # resolve the compiler + interpreter from the pinned stateless-registry id.
 perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }

@@ -51,7 +51,6 @@
     "replaceable": ["admin"],
     "delay-ledgers": 17280,
     "expiry-ledgers": 120960,
-    "max-cancels": 3,
-    "pending-activity": "freeze"
+    "max-cancels": 3
   }
 }

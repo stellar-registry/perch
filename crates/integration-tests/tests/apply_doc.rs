@@ -7,7 +7,7 @@
 //! `perch_testkit::Bootstrap::native()` call; the stand-in verifier, the
 //! fixture constants and `fixture()` live in the testkit.
 
-use perch_testkit::{fixture, no_recovery_evidence, Bootstrap, World, FIXTURE_NETWORK};
+use perch_testkit::{fixture, Bootstrap, World, FIXTURE_NETWORK};
 use soroban_sdk::testutils::Ledger;
 use soroban_sdk::{vec, Bytes, BytesN, String as SString, Symbol, Val};
 
@@ -20,8 +20,7 @@ fn setup() -> World {
 
 fn apply_fixture(w: &World) -> BytesN<32> {
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    w.account_client()
-        .apply_doc(&doc, &no_recovery_evidence(&w.env))
+    w.account_client().apply_doc(&doc, &0)
 }
 
 #[test]
@@ -72,10 +71,7 @@ fn reapply_replaces_the_whole_rule_set() {
   ]
 }}"#
     );
-    let second = client.apply_doc(
-        &Bytes::from_slice(&w.env, doc2.as_bytes()),
-        &no_recovery_evidence(&w.env),
-    );
+    let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()), &0);
 
     assert_ne!(first, second);
     assert_eq!(client.applied_doc_hash(), Some(second));
@@ -136,10 +132,7 @@ fn doc_without_admin_rule_is_rejected_anti_brick() {
 }}"#
     );
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, doc.as_bytes()),
-            &no_recovery_evidence(&w.env)
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0)
         .is_err());
     // Nothing changed: the constructor's rule 0 is still the only rule.
     assert_eq!(client.get_context_rules_count(), 1);
@@ -166,9 +159,7 @@ fn doc_for_another_network_is_rejected() {
 
     let client = w.account_client();
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    assert!(client
-        .try_apply_doc(&doc, &no_recovery_evidence(&w.env))
-        .is_err());
+    assert!(client.try_apply_doc(&doc, &0).is_err());
     assert_eq!(client.applied_doc_hash(), None);
 }
 
@@ -178,17 +169,11 @@ fn garbage_and_unknown_fields_are_rejected() {
     let client = w.account_client();
     // Not JSON at all.
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, b"not json"),
-            &no_recovery_evidence(&w.env)
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"), &0)
         .is_err());
     // Unknown field: fail closed, never skipped.
     let doc = fixture().replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, doc.as_bytes()),
-            &no_recovery_evidence(&w.env)
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0)
         .is_err());
 }

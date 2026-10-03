@@ -77,15 +77,21 @@ pub fn run(
     let doc_hash = perch_ir::doc_hash_hex(&doc);
     println!("canonical doc_hash: {doc_hash}");
 
-    // Only the document bytes: the account resolves the compiler + interpreter
-    // itself through its pinned stateless registry.
-    let args = vec![ScVal::Bytes(ScBytes(
-        doc_json
-            .clone()
-            .into_bytes()
-            .try_into()
-            .context("document too large for an ScVal bytes value")?,
-    ))];
+    // The document bytes and an `approval_valid_until` of 0: the account
+    // resolves the compiler + interpreter itself through its pinned stateless
+    // registry, and the freshness bound is read only for a `Protected`
+    // recovery reconfiguration, which needs recorded approvals this tool does
+    // not collect.
+    let args = vec![
+        ScVal::Bytes(ScBytes(
+            doc_json
+                .clone()
+                .into_bytes()
+                .try_into()
+                .context("document too large for an ScVal bytes value")?,
+        )),
+        ScVal::U32(0),
+    ];
 
     let key = SeedKey::from_env("PERCH_ADMIN_KEY")?;
     let verifier = onchain_rule0_verifier(rpc, account, &key.public)?;

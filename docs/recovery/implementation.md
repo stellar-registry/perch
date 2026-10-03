@@ -100,5 +100,6 @@ against the release artifacts belong to the integration layer.
 
 - Real proofs, the release circuit, and resource measurements: workstream 2
   and the integration layer.
-- Registry publication, release pipeline, testnet deployment: workstream 4.
+- Registry publication, release pipeline, testnet deployment: workstream 4
+  ([`docs/deploy/`](../deploy/README.md)).
 - Wallet integration: Nido.

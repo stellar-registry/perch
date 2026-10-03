@@ -1,0 +1,76 @@
+{
+  "name": "@stellar-registry/perch-contracts",
+  "version": "0.1.0",
+  "description": "TypeScript clients for the perch stack contracts (account, factory, recovery controller, ZK pool and adapter, WebAuthn verifier, doc compiler), generated from the deployed wasm, with the deployment manifests",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./account": {
+      "types": "./dist/account.d.ts",
+      "import": "./dist/account.js"
+    },
+    "./factory": {
+      "types": "./dist/factory.d.ts",
+      "import": "./dist/factory.js"
+    },
+    "./recovery": {
+      "types": "./dist/recovery.d.ts",
+      "import": "./dist/recovery.js"
+    },
+    "./pool": {
+      "types": "./dist/pool.d.ts",
+      "import": "./dist/pool.js"
+    },
+    "./adapter": {
+      "types": "./dist/adapter.d.ts",
+      "import": "./dist/adapter.js"
+    },
+    "./webauthn-verifier": {
+      "types": "./dist/webauthn-verifier.d.ts",
+      "import": "./dist/webauthn-verifier.js"
+    },
+    "./doc-compiler": {
+      "types": "./dist/doc-compiler.d.ts",
+      "import": "./dist/doc-compiler.js"
+    },
+    "./deployments": {
+      "types": "./dist/deployments.d.ts",
+      "import": "./dist/deployments.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@stellar/stellar-sdk": "^17.0.1",
+    "buffer": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stellar-registry/perch",
+    "directory": "packages/perch-contracts"
+  }
+}

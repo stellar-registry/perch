@@ -50,11 +50,12 @@ use stellar_accounts::smart_account::{
 pub use soroban_sdk;
 pub use stellar_accounts;
 
-/// The stateless subregistry (`unverified/perch/stateless`) — the content-addressed
-/// deployer the infra derive their address from. Its id is **not hardcoded in
-/// source**: `scripts/fetch-infra-wasm.sh` writes it into the git-ignored
-/// `wasm/stateless.id`, which is `include_str!`'d here. A missing file is a build
-/// error — fetch it first.
+/// The registry the infra was `deploy_stateless`'d from — the content-addressed
+/// deployer the infra derive their address from: the deployment manifest's
+/// `registry.id` (`deployments/<network>.json`). Its id is **not hardcoded in
+/// source**: `scripts/fetch-infra-wasm.sh` (or `scripts/build-stack.sh`) writes it
+/// into the git-ignored `wasm/stateless.id`, which is `include_str!`'d here. A
+/// missing file is a build error — fetch it first.
 pub fn stateless_registry(env: &Env) -> Address {
     Address::from_str(env, include_str!("../wasm/stateless.id").trim())
 }
@@ -139,6 +140,16 @@ pub struct FreezeGate {
     pub attempt_id: u64,
     /// The authorized attempt's `expires_at`.
     pub until: u32,
+}
+
+/// The shared infra an account resolves, pinned when it was built (see
+/// [`infra`]): what a deployment check compares with its manifest.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InfraPins {
+    pub doc_compiler: Address,
+    pub interpreter: Address,
+    pub spending_limit: Address,
 }
 
 /// A scheduled account upgrade (spec §12).
@@ -388,6 +399,15 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// The doc compiler this account pins at build time.
     fn doc_compiler(e: &Env) -> Address {
         infra::perch_doc_compiler::address(e)
+    }
+
+    /// Every shared contract this account pins at build time.
+    fn infra(e: &Env) -> InfraPins {
+        InfraPins {
+            doc_compiler: infra::perch_doc_compiler::address(e),
+            interpreter: infra::perch_interpreter::address(e),
+            spending_limit: infra::perch_spending_limit::address(e),
+        }
     }
 
     /// Whether a credential fingerprint is permanently revoked.

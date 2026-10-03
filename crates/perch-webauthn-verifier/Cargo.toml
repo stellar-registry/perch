@@ -1,0 +1,26 @@
+[package]
+name = "perch-webauthn-verifier"
+description = "Deployable WebAuthn (passkey, secp256r1) signature verifier for OZ smart-account external signers"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# No cargo-manifest `publish = false`: release-plz's `release` command skips
+# manifest-unpublishable packages (no tag ever). crates.io publish is blocked
+# workspace-wide in release-plz.toml instead.
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+stellar-accounts = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# The software passkey that signs real WebAuthn assertions.
+perch-testkit = { version = "0.1.1", path = "../perch-testkit" }

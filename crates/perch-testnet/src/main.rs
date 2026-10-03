@@ -7,7 +7,8 @@
 //!     --out deployments/testnet-exercise.json
 //! ```
 //!
-//! Every key is fresh for the run and funded by friendbot: the fee payer, the
+//! Every key is fresh for the run, derived from OS randomness that is never
+//! recorded, and funded by friendbot: the fee payer, the
 //! G-account guardians, and the passkeys (software secp256r1 keys signing
 //! real WebAuthn assertions). Accounts come from the deployed factory. Proofs
 //! are real UltraHonk proofs from the pinned nargo/bb over the deployed
@@ -71,11 +72,15 @@ fn main() -> Result<()> {
         .as_secs()
         .to_string();
 
-    let payer = SeedKey::from_seed(Sha256::digest(format!("perch-testnet/{run}/payer")).into());
+    let secret = world::os_random()?;
+    let mut payer_seed = Sha256::new();
+    payer_seed.update(b"perch-testnet/payer/");
+    payer_seed.update(secret);
+    let payer = SeedKey::from_seed(payer_seed.finalize().into());
     let chain = Chain::new(rpc_url, passphrase, payer);
     chain.friendbot(&chain.payer.account())?;
     let stack = Stack::from_manifest(&manifest, native_asset_contract(passphrase)?)?;
-    let w = World::new(&chain, stack, run.clone());
+    let w = World::new(&chain, stack, run.clone(), secret);
     let started_ledger = chain.latest_ledger()?;
 
     let all: [(&str, Scenario); 6] = [

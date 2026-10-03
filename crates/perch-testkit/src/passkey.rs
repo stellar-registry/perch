@@ -39,10 +39,10 @@ impl SoftPasskey {
     /// order; tests use small constants).
     pub fn from_seed(seed: [u8; 32]) -> Self {
         let key = SigningKey::from_bytes(&seed.into()).expect("seed is a valid P-256 scalar");
-        Self {
-            key,
-            credential_id: seed[..16].to_vec(),
-        }
+        // Derived from the public key, never the seed: `key_data` is public.
+        let point = key.verifying_key().to_encoded_point(false);
+        let credential_id = Sha256::digest(point.as_bytes())[..16].to_vec();
+        Self { key, credential_id }
     }
 
     /// The 65-byte uncompressed SEC1 public key.

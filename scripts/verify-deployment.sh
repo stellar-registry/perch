@@ -11,22 +11,28 @@
 #     beside it;
 #   - what consumers actually resolve on-chain is the manifest's: the
 #     factory's account hash and verifier, the adapter's circuit id and depth
-#     against the pool's, and, for every account the manifest lists, its code
-#     hash and the infra it resolves.
+#     against the pool's, and, for every account the exercise report lists,
+#     its code hash and the infra it resolves.
 #
 # Usage: scripts/verify-deployment.sh [--manifest deployments/<network>.json]
+#                                     [--exercise deployments/<network>-exercise.json]
+#   --exercise  the perch-testnet report whose accounts to check (default: the
+#               manifest's sibling *-exercise.json, if present)
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 manifest="$repo_root/deployments/${STELLAR_NETWORK:-testnet}.json"
+exercise=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --manifest) manifest="$2"; shift 2 ;;
-        -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --exercise) exercise="$2"; shift 2 ;;
+        -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
 [ -f "$manifest" ] || { echo "error: no manifest at $manifest" >&2; exit 1; }
+[ -n "$exercise" ] || exercise="${manifest%.json}-exercise.json"
 
 m() { jq -r "$1" "$manifest"; }
 net=(--rpc-url "$(m .rpc_url)" --network-passphrase "$(m .network_passphrase)")
@@ -82,7 +88,9 @@ adapter="$(addr_of perch-zk-adapter)"
 check "adapter circuit id" "$(m .zk.circuit_id)" "$(view "$adapter" circuit_id)"
 check "adapter depth" "$(m .zk.tree_depth)" "$(view "$adapter" tree_depth)"
 check "pool depth" "$(m .zk.tree_depth)" "$(view "$(addr_of perch-zk-pool)" depth)"
-for account in $(jq -r '.accounts // {} | .[].address' "$manifest"); do
+accounts=""
+[ -f "$exercise" ] && accounts="$(jq -r '.accounts[].address' "$exercise")"
+for account in $accounts; do
     check "account $account code" "$(m '.contracts["perch-account"].sha256')" "$(code_hash "$account")"
     infra="$(stellar contract invoke "${net[@]}" --source-account "$reader" --send=no --id "$account" -- infra 2>/dev/null)"
     check "account $account compiler" "$(addr_of perch-doc-compiler)" "$(jq -r .doc_compiler <<<"$infra")"

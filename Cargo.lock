@@ -1669,6 +1669,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-testnet"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ed25519-dalek",
+ "hex",
+ "perch-account",
+ "perch-deploy",
+ "perch-doc-compiler",
+ "perch-recovery",
+ "perch-recovery-interface",
+ "perch-testkit",
+ "perch-zk-pool",
+ "perch-zk-primitives",
+ "perch-zk-prover",
+ "serde",
+ "serde_json",
+ "sha2",
+ "soroban-sdk",
+ "soroban-sdk-tools",
+ "stellar-accounts",
+ "stellar-strkey 0.0.16",
+ "stellar-xdr",
+ "ureq",
+]
+
+[[package]]
 name = "perch-webauthn-verifier"
 version = "0.1.0"
 dependencies = [

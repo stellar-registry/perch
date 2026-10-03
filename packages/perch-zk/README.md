@@ -40,4 +40,6 @@ proof from any other bb version does not verify on-chain.
 recomputes every committed fixture's public inputs, checks the shipped
 artifacts against `circuits/manifest.json`, and proves one fixture with bb.js,
 which must match the committed CLI proof byte for byte. `npm run bench`
-measures WASM proving time at both packaged depths.
+measures WASM proving time at both packaged depths under Node, and
+`bench/browser` (`npm install && npm run bench` there) measures it in
+headless Chromium.

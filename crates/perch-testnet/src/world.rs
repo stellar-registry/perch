@@ -93,6 +93,7 @@ pub struct Rec {
     pub zk: Option<Zk>,
     pub guardians: std::vec::Vec<String>,
     pub delay: u32,
+    pub baseline: Option<[u8; 32]>,
 }
 
 pub struct World<'a> {
@@ -258,8 +259,12 @@ impl<'a> World<'a> {
             Mode::Zk => format!(r#"{{"type":"zk-only",{}}}"#, zk_fields()),
             Mode::Combined => format!(r#"{{"type":"combined",{guardian_fields},{}}}"#, zk_fields()),
         };
+        let baseline = r
+            .baseline
+            .map(|b| format!(r#","baseline":{{"doc-hash":"{}"}}"#, hexs(&b)))
+            .unwrap_or_default();
         format!(
-            r#"{{"profile":"{}","mode":{mode},"controller":"{}","replaceable":["owner"],"delay-ledgers":{},"expiry-ledgers":{EXPIRY},"max-cancels":3}}"#,
+            r#"{{"profile":"{}","mode":{mode},"controller":"{}"{baseline},"replaceable":["owner"],"delay-ledgers":{},"expiry-ledgers":{EXPIRY},"max-cancels":3}}"#,
             r.profile, self.s.controller, r.delay,
         )
     }
@@ -267,16 +272,57 @@ impl<'a> World<'a> {
     /// The owner passkey as admin, a rule letting it move the account's XLM
     /// (ordinary activity), and `recovery`.
     pub fn doc(&self, owner: &SoftPasskey, recovery: Option<&Rec>) -> Bytes {
+        self.doc_with(owner, None, recovery)
+    }
+
+    /// [`World::doc`] plus, with `extra`, a second passkey signer "thief"
+    /// and a rule letting it move the account's XLM.
+    pub fn doc_with(
+        &self,
+        owner: &SoftPasskey,
+        extra: Option<&SoftPasskey>,
+        recovery: Option<&Rec>,
+    ) -> Bytes {
         let recovery = recovery
             .map(|r| format!(r#","recovery":{}"#, self.recovery_json(r)))
             .unwrap_or_default();
+        let signer = |id: &str, key: &SoftPasskey| {
+            format!(
+                r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                self.s.webauthn,
+                hexs(&key.key_data())
+            )
+        };
+        let xlm_rule = |name: &str, signer: &str| {
+            format!(
+                r#"{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["{signer}"]}}}}"#,
+                self.s.xlm
+            )
+        };
+        let mut signers = std::vec![signer("owner", owner)];
+        let mut rules = std::vec![
+            r#"{"name":"admin","scope":{"type":"self-admin"},"principals":{"type":"all","signers":["owner"]}}"#.to_string(),
+            xlm_rule("xlm", "owner"),
+        ];
+        if let Some(thief) = extra {
+            signers.push(signer("thief", thief));
+            rules.push(xlm_rule("thief", "thief"));
+        }
         let json = format!(
-            r#"{{"version":1,"network":"{NETWORK}","signers":[{{"id":"owner","verifier":"{}","key":"{}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"xlm","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["owner"]}}}}]{recovery}}}"#,
-            self.s.webauthn,
-            hexs(&owner.key_data()),
-            self.s.xlm,
+            r#"{{"version":1,"network":"{NETWORK}","signers":[{}],"rules":[{}]{recovery}}}"#,
+            signers.join(","),
+            rules.join(","),
         );
         Bytes::from_slice(&self.c.env, json.as_bytes())
+    }
+
+    pub fn doc_hash(&self, doc: &Bytes) -> Result<BytesN<32>> {
+        let compiled: perch_doc_compiler::CompiledDoc = self.c.read_as(
+            &self.s.compiler,
+            "compile_doc",
+            std::vec![self.c.sc(doc.clone())],
+        )?;
+        Ok(compiled.doc_hash)
     }
 
     pub fn config_hash(&self, doc: &Bytes) -> Result<BytesN<32>> {
@@ -377,7 +423,11 @@ impl<'a> World<'a> {
     /// Ordinary activity: the account sends 1 stroop of XLM, authorized
     /// directly by `key` through the `xlm` rule.
     pub fn activity(&self, label: &str, a: &Acct, key: &SoftPasskey) -> Result<()> {
-        let auth = self.owner_auth(a, key, "xlm")?;
+        self.activity_via(label, a, key, "xlm")
+    }
+
+    pub fn activity_via(&self, label: &str, a: &Acct, key: &SoftPasskey, rule: &str) -> Result<()> {
+        let auth = self.owner_auth(a, key, rule)?;
         self.c.call(
             label,
             &self.s.xlm,
@@ -389,7 +439,17 @@ impl<'a> World<'a> {
     }
 
     pub fn activity_refused(&self, label: &str, a: &Acct, key: &SoftPasskey) -> Result<()> {
-        let auth = self.owner_auth(a, key, "xlm")?;
+        self.activity_refused_via(label, a, key, "xlm")
+    }
+
+    pub fn activity_refused_via(
+        &self,
+        label: &str,
+        a: &Acct,
+        key: &SoftPasskey,
+        rule: &str,
+    ) -> Result<()> {
+        let auth = self.owner_auth(a, key, rule)?;
         self.c.refused(
             label,
             &self.s.xlm,
@@ -434,6 +494,21 @@ impl<'a> World<'a> {
             &[auth],
             None,
         )
+    }
+
+    /// The last refusal came from the account's `__check_auth` refusing
+    /// everything but the completion: the `Protected` freeze.
+    pub fn was_frozen(&self) -> Result<()> {
+        use soroban_sdk_tools::ContractError as _;
+        let want = perch_account::PerchAuthError::AccountFrozen.into_code();
+        let step = self.c.steps.borrow().last().cloned().unwrap_or_default();
+        anyhow::ensure!(
+            step.auth_error_code == Some(want),
+            "{}: refused by {:?}, not the freeze (#{want})",
+            step.label,
+            step.auth_error_code
+        );
+        Ok(())
     }
 
     // --- recovery ----------------------------------------------------------
@@ -583,13 +658,40 @@ impl<'a> World<'a> {
     pub fn target_bytes(&self, a: &Acct, r: &ReplacementSet) -> Result<Bytes> {
         let current: Option<Bytes> = self.c.read_as(&a.address, "applied_doc", std::vec![])?;
         let current = current.context("no applied document")?;
+        self.derive(current.clone(), current, RecoveryAction::LostKey, r)
+    }
+
+    /// A compromise attempt's target: the published baseline with the
+    /// current recovery member and `r`.
+    pub fn compromise_target(&self, a: &Acct, r: &ReplacementSet) -> Result<Bytes> {
+        let current: Option<Bytes> = self.c.read_as(&a.address, "applied_doc", std::vec![])?;
+        let baseline: Option<Bytes> = self.c.read_as(
+            &self.s.controller,
+            "baseline",
+            std::vec![self.c.sc(self.c.address(&a.address))],
+        )?;
+        self.derive(
+            baseline.context("no published baseline")?,
+            current.context("no applied document")?,
+            RecoveryAction::Compromise,
+            r,
+        )
+    }
+
+    fn derive(
+        &self,
+        source: Bytes,
+        current: Bytes,
+        action: RecoveryAction,
+        r: &ReplacementSet,
+    ) -> Result<Bytes> {
         let derived: perch_doc_compiler::DerivedTarget = self.c.read_as(
             &self.s.compiler,
             "derive_target",
             std::vec![
-                self.c.sc(current.clone()),
+                self.c.sc(source),
                 self.c.sc(current),
-                self.c.sc(RecoveryAction::LostKey),
+                self.c.sc(action),
                 self.c.sc(r.clone()),
             ],
         )?;
@@ -703,7 +805,7 @@ impl<'a> World<'a> {
             &repo.join("circuits"),
             "perch_zk_recovery",
             &inputs,
-            &repo.join("target/perch-testnet-proofs"),
+            &repo.join("target/perch-testnet-proofs").join(&self.run),
         )?;
         self.proving.borrow_mut().push((
             proof.execute_ms,

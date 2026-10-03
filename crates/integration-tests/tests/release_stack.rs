@@ -61,7 +61,9 @@ use support::{strkey, Key, TargetClient};
 const TX_MAX_INSTRUCTIONS: u64 = 400_000_000;
 const TX_MEMORY_LIMIT: u64 = 41_943_040;
 const TX_MAX_WRITE_BYTES: u64 = 132_096;
-const TX_MAX_WRITE_ENTRIES: u64 = 50;
+const TX_MAX_WRITE_ENTRIES: u64 = 200;
+const TX_MAX_READ_ENTRIES: u64 = 200;
+const TX_MAX_EVENTS_BYTES: u64 = 16_384;
 /// `docs/recovery/budgets.md` §2: every row within 75% of each limit.
 const BUDGET_PCT: u64 = 75;
 
@@ -96,6 +98,17 @@ fn report(label: &str, e: &Env) {
     assert!(
         within(r.write_entries as u64, TX_MAX_WRITE_ENTRIES),
         "{label}: write entries over budget"
+    );
+    assert!(
+        within(
+            (r.memory_read_entries + r.disk_read_entries) as u64,
+            TX_MAX_READ_ENTRIES
+        ),
+        "{label}: read entries over budget"
+    );
+    assert!(
+        within(r.contract_events_size_bytes as u64, TX_MAX_EVENTS_BYTES),
+        "{label}: events over budget"
     );
 }
 
@@ -223,6 +236,7 @@ struct Rec {
     mode: Mode,
     zk: Option<Zk>,
     delay: u32,
+    baseline: Option<BytesN<32>>,
 }
 
 fn world() -> World {
@@ -364,6 +378,10 @@ impl World {
 
     /// The id of the account's live rule named `name`.
     fn rule_id(&self, account: &Address, name: &str) -> u32 {
+        self.find_rule(account, name).expect("rule exists")
+    }
+
+    fn find_rule(&self, account: &Address, name: &str) -> Option<u32> {
         let next: u32 = self.env.as_contract(account, || {
             self.env
                 .storage()
@@ -376,7 +394,6 @@ impl World {
         (0..next)
             .rev()
             .find(|id| matches!(client.try_get_context_rule(id), Ok(Ok(r)) if r.name == wanted))
-            .expect("rule exists")
     }
 
     /// `key`'s passkey authorization of `root` through the rule `rule`.
@@ -472,8 +489,13 @@ impl World {
                 format!(r#"{{"type":"combined",{guardian_fields},{}}}"#, zk_fields())
             }
         };
+        let baseline = r
+            .baseline
+            .as_ref()
+            .map(|b| format!(r#","baseline":{{"doc-hash":"{}"}}"#, hex(&b.to_array())))
+            .unwrap_or_default();
         format!(
-            r#"{{"profile":"{}","mode":{mode},"controller":"{}","replaceable":["owner"],"delay-ledgers":{},"expiry-ledgers":{EXPIRY},"max-cancels":3}}"#,
+            r#"{{"profile":"{}","mode":{mode},"controller":"{}"{baseline},"replaceable":["owner"],"delay-ledgers":{},"expiry-ledgers":{EXPIRY},"max-cancels":3}}"#,
             r.profile,
             strkey(&self.controller),
             r.delay,
@@ -483,16 +505,54 @@ impl World {
     /// The owner passkey as admin, a rule letting it call the target, and
     /// `recovery`.
     fn doc(&self, owner: &SoftPasskey, recovery: Option<&Rec>) -> Bytes {
+        self.doc_with(owner, None, recovery)
+    }
+
+    /// [`World::doc`] plus, with `extra`, a second passkey signer "thief"
+    /// and a rule letting it call the target.
+    fn doc_with(
+        &self,
+        owner: &SoftPasskey,
+        extra: Option<&SoftPasskey>,
+        recovery: Option<&Rec>,
+    ) -> Bytes {
         let recovery = recovery
             .map(|r| format!(r#","recovery":{}"#, self.recovery_json(r)))
             .unwrap_or_default();
+        let signer = |id: &str, key: &SoftPasskey| {
+            format!(
+                r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                strkey(&self.webauthn),
+                hex(&key.key_data())
+            )
+        };
+        let target_rule = |name: &str, signer: &str| {
+            format!(
+                r#"{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["{signer}"]}}}}"#,
+                strkey(&self.target)
+            )
+        };
+        let mut signers = std::vec![signer("owner", owner)];
+        let mut rules = std::vec![
+            r#"{"name":"admin","scope":{"type":"self-admin"},"principals":{"type":"all","signers":["owner"]}}"#.to_string(),
+            target_rule("target", "owner"),
+        ];
+        if let Some(thief) = extra {
+            signers.push(signer("thief", thief));
+            rules.push(target_rule("thief", "thief"));
+        }
         let json = format!(
-            r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{{"id":"owner","verifier":"{}","key":"{}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"target","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["owner"]}}}}]{recovery}}}"#,
-            strkey(&self.webauthn),
-            hex(&owner.key_data()),
-            strkey(&self.target),
+            r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{}]{recovery}}}"#,
+            signers.join(","),
+            rules.join(","),
         );
         Bytes::from_slice(&self.env, json.as_bytes())
+    }
+
+    fn doc_hash(&self, doc: &Bytes) -> BytesN<32> {
+        PerchDocCompilerClient::new(&self.env, &self.compiler)
+            .compile_doc(doc)
+            .doc_hash
     }
 
     fn config_hash(&self, doc: &Bytes) -> BytesN<32> {
@@ -531,13 +591,22 @@ impl World {
 
     /// Ordinary activity: `key` authorizes the target's `protected`.
     fn activity(&self, a: &Acct, key: &SoftPasskey) -> bool {
+        self.activity_via(a, key, "target")
+    }
+
+    /// Ordinary activity through the rule named `rule`. No such rule: no
+    /// way to authorize.
+    fn activity_via(&self, a: &Acct, key: &SoftPasskey, rule: &str) -> bool {
+        if self.find_rule(&a.address, rule).is_none() {
+            return false;
+        }
         let root = self.invocation(
             &self.target,
             "protected",
             std::vec![self.sc(a.address.clone())],
         );
         self.env
-            .set_auths(&[self.passkey_entry(&a.address, key, "target", root)]);
+            .set_auths(&[self.passkey_entry(&a.address, key, rule, root)]);
         let ok = TargetClient::new(&self.env, &self.target)
             .try_protected(&a.address)
             .is_ok();
@@ -617,6 +686,21 @@ impl World {
         let current = self.account(a).applied_doc().unwrap();
         PerchDocCompilerClient::new(&self.env, &self.compiler)
             .derive_target(&current, &current, &RecoveryAction::LostKey, replacements)
+            .canonical
+    }
+
+    /// A compromise attempt's target: the published baseline with the
+    /// current recovery member and `replacements`.
+    fn compromise_target(&self, a: &Acct, replacements: &ReplacementSet) -> Bytes {
+        let current = self.account(a).applied_doc().unwrap();
+        let baseline = self.ctl().baseline(&a.address).unwrap();
+        PerchDocCompilerClient::new(&self.env, &self.compiler)
+            .derive_target(
+                &baseline,
+                &current,
+                &RecoveryAction::Compromise,
+                replacements,
+            )
             .canonical
     }
 
@@ -794,6 +878,7 @@ fn zk_lost_key_recovery_with_real_proofs_across_a_rollover() {
         mode: Mode::Zk,
         zk: Some(zk1.clone()),
         delay: DELAY,
+        baseline: None,
     };
     let doc = w.doc(&a.owner, Some(&rec));
     assert!(w.try_apply(&a, &a.owner, &doc, 0), "enrollment apply_doc");
@@ -941,6 +1026,7 @@ fn protected_combined_freeze_and_cancellation_with_real_proofs() {
         mode: Mode::Combined,
         zk: Some(zk.clone()),
         delay: DELAY,
+        baseline: None,
     };
     assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
     report("enroll Combined through apply_doc", &w.env);
@@ -1043,6 +1129,7 @@ fn protected_reconfiguration_and_upgrade_need_real_proofs() {
         mode: Mode::Zk,
         zk: Some(zk.clone()),
         delay: DELAY,
+        baseline: None,
     };
     assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
 
@@ -1163,6 +1250,7 @@ fn guardian_only_recovery_needs_no_zk_and_the_loss_owner_can_veto() {
         mode: Mode::Guardian,
         zk: None,
         delay: DELAY,
+        baseline: None,
     };
     assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
     report("enroll GuardianOnly through apply_doc", &w.env);
@@ -1190,4 +1278,139 @@ fn guardian_only_recovery_needs_no_zk_and_the_loss_owner_can_veto() {
     report("completion apply_doc (GuardianOnly)", &w.env);
     assert!(w.activity(&a, &new_owner));
     assert!(!w.activity(&a, &a.owner));
+}
+
+/// `Combined` under `Loss`: guardians and a real proof authorize, ordinary
+/// activity continues, and the completion spends the nullifier and rotates
+/// the ZK credential.
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn combined_loss_lost_key_recovery_rotates_the_zk_credential() {
+    let w = world();
+    let a = w.new_account(SoftPasskey::from_seed([51; 32]));
+    let zk1 = Zk {
+        secret: field("combined loss secret 1"),
+        id: field("combined loss enrollment 1"),
+    };
+    let rec = Rec {
+        profile: "loss",
+        mode: Mode::Combined,
+        zk: Some(zk1.clone()),
+        delay: DELAY,
+        baseline: None,
+    };
+    assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
+
+    let new_owner = SoftPasskey::from_seed([52; 32]);
+    let zk2 = Zk {
+        secret: field("combined loss secret 2"),
+        id: field("combined loss enrollment 2"),
+    };
+    let replacements = w.replacements(&new_owner, Some(&zk2));
+    let attempt = w.ctl().begin_lost_key(&a.address, &replacements);
+    w.guardian(0, &a, attempt, EvidenceDomain::Initiate);
+    let evidence = w.prove(
+        &a,
+        &zk1,
+        &w.statement(&a, attempt, EvidenceDomain::Initiate),
+    );
+    w.ctl()
+        .submit_zk(&a.address, &attempt, &EvidenceDomain::Initiate, &evidence);
+    assert_eq!(
+        w.ctl().activity_gate(&a.address).authorized_attempt,
+        None,
+        "one guardian short"
+    );
+    w.guardian(1, &a, attempt, EvidenceDomain::Initiate);
+    report(
+        "submit_guardian (promoting, Combined: ZK already in)",
+        &w.env,
+    );
+    assert!(w.activity(&a, &a.owner), "Loss keeps ordinary activity");
+
+    w.advance(DELAY);
+    assert!(w.try_complete(&a, &w.target_bytes(&a, &replacements)));
+    report("completion apply_doc (Combined, ZK rotation)", &w.env);
+    assert!(w.ctl().nullifier_spent(&a.address, &evidence.nullifier));
+    assert!(w
+        .pool()
+        .enrollment(&a.address, &BytesN::from_array(&w.env, &zk2.id))
+        .is_some());
+    assert!(w.activity(&a, &new_owner));
+    assert!(!w.activity(&a, &a.owner));
+}
+
+/// `GuardianOnly` under `Protected`, compromise recovery: a thief holding
+/// the owner key adds a signer; the guardians restore the enrolled baseline
+/// with a new owner key, and both the stolen key and the thief's signer are
+/// revoked for good.
+#[test]
+#[ignore = "needs the built stack"]
+fn guardian_protected_compromise_restores_the_baseline_and_revokes_the_thief() {
+    let w = world();
+    let a = w.new_account(SoftPasskey::from_seed([61; 32]));
+    let baseline = w.doc(&a.owner, None);
+    let rec = Rec {
+        profile: "protected",
+        mode: Mode::Guardian,
+        zk: None,
+        delay: DELAY,
+        baseline: Some(w.doc_hash(&baseline)),
+    };
+    assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
+
+    // The thief signs with the stolen owner key. Adding a signer changes no
+    // recovery text, so Protected asks for no condition.
+    let thief = SoftPasskey::from_seed([62; 32]);
+    let stolen = w.doc_with(&a.owner, Some(&thief), Some(&rec));
+    assert!(w.try_apply(&a, &a.owner, &stolen, 0));
+    assert!(w.activity_via(&a, &thief, "thief"));
+
+    let new_owner = SoftPasskey::from_seed([63; 32]);
+    let replacements = w.replacements(&new_owner, None);
+    assert_eq!(
+        w.ctl().try_begin_compromise(&a.address, &replacements),
+        Err(Ok(RecoveryError::BaselineNotPublished))
+    );
+    assert_eq!(
+        w.ctl().try_publish_baseline(&a.address, &stolen),
+        Err(Ok(RecoveryError::BaselineMismatch))
+    );
+    w.ctl().publish_baseline(&a.address, &baseline);
+    report("publish_baseline", &w.env);
+    let attempt = w.ctl().begin_compromise(&a.address, &replacements);
+    report("begin_compromise", &w.env);
+    w.guardian(0, &a, attempt, EvidenceDomain::Initiate);
+    w.guardian(1, &a, attempt, EvidenceDomain::Initiate);
+    report(
+        "submit_guardian (promoting, Protected: sets the freeze)",
+        &w.env,
+    );
+    assert!(
+        !w.activity_via(&a, &thief, "thief"),
+        "frozen for the thief too"
+    );
+
+    w.advance(DELAY);
+    assert!(w.try_complete(&a, &w.compromise_target(&a, &replacements)));
+    report(
+        "completion apply_doc (compromise: revokes the stolen and added keys)",
+        &w.env,
+    );
+
+    assert!(w.activity(&a, &new_owner));
+    assert!(!w.activity(&a, &a.owner));
+    assert!(
+        w.find_rule(&a.address, "thief").is_none(),
+        "the baseline has no thief rule"
+    );
+    assert!(!w.activity(&a, &thief));
+    // Neither revoked credential can come back, even signed by the new owner.
+    assert!(!w.try_apply(
+        &a,
+        &new_owner,
+        &w.doc_with(&new_owner, Some(&thief), Some(&rec)),
+        0
+    ));
+    assert!(!w.try_apply(&a, &new_owner, &w.doc(&a.owner, Some(&rec)), 0));
 }

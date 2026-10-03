@@ -124,9 +124,12 @@ fn sha256_hex(b: &[u8]) -> String {
 }
 
 fn load_stack() -> Stack {
-    let dir = std::env::var_os("PERCH_STACK_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repo().join("target/stack"));
+    // Relative to the repository root, like the scripts that write it.
+    let dir = repo().join(
+        std::env::var_os("PERCH_STACK_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| "target/stack".into()),
+    );
     let build: serde_json::Value =
         serde_json::from_slice(&std::fs::read(dir.join("build.json")).unwrap_or_else(|e| {
             panic!(

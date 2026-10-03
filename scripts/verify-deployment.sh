@@ -7,8 +7,9 @@
 #     deployer(registry, wasm_hash), runs exactly that wasm, and is what the
 #     registry serves for its name and version;
 #   - the account wasm is installed under its hash;
-#   - every consumer's recorded pins are the hashes of the contracts deployed
-#     beside it;
+#   - the manifest is consistent: every consumer was built against the
+#     hashes deployed beside it (on-chain, the factory's views and each
+#     exercised account's `infra()` below check what was compiled in);
 #   - what consumers actually resolve on-chain is the manifest's: the
 #     factory's account hash and verifier, the adapter's circuit id and depth
 #     against the pool's, and, for every account the exercise report lists,
@@ -17,7 +18,8 @@
 # Usage: scripts/verify-deployment.sh [--manifest deployments/<network>.json]
 #                                     [--exercise deployments/<network>-exercise.json]
 #   --exercise  the perch-testnet report whose accounts to check (default: the
-#               manifest's sibling *-exercise.json, if present)
+#               manifest's sibling *-exercise.json, if present). A report from
+#               another stack commit is skipped, with a notice.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -74,7 +76,7 @@ for name in $(jq -r '.contracts | keys[]' "$manifest"); do
         rm -f "$tmp"
     fi
     for dep in $(jq -r --arg n "$name" '.contracts[$n].pins // {} | keys[]' "$manifest"); do
-        check "$name pins $dep" "$(jq -r --arg d "$dep" '.contracts[$d].sha256' "$manifest")" \
+        check "manifest: $name built against the deployed $dep" "$(jq -r --arg d "$dep" '.contracts[$d].sha256' "$manifest")" \
             "$(jq -r --arg n "$name" --arg d "$dep" '.contracts[$n].pins[$d]' "$manifest")"
     done
 done
@@ -89,10 +91,16 @@ check "adapter circuit id" "$(m .zk.circuit_id)" "$(view "$adapter" circuit_id)"
 check "adapter depth" "$(m .zk.tree_depth)" "$(view "$adapter" tree_depth)"
 check "pool depth" "$(m .zk.tree_depth)" "$(view "$(addr_of perch-zk-pool)" depth)"
 accounts=""
-[ -f "$exercise" ] && accounts="$(jq -r '.accounts[].address' "$exercise")"
+if [ -f "$exercise" ]; then
+    if [ "$(jq -r .manifest_commit "$exercise")" = "$(m .source.commit)" ]; then
+        accounts="$(jq -r '.accounts[].address' "$exercise")"
+    else
+        echo "  note  ${exercise#"$repo_root"/} exercised another stack build; its accounts are not checked (run perch-testnet)"
+    fi
+fi
 for account in $accounts; do
     check "account $account code" "$(m '.contracts["perch-account"].sha256')" "$(code_hash "$account")"
-    infra="$(stellar contract invoke "${net[@]}" --source-account "$reader" --send=no --id "$account" -- infra 2>/dev/null)"
+    infra="$(stellar contract invoke "${net[@]}" --source-account "$reader" --send=no --id "$account" -- infra 2>/dev/null || echo '{}')"
     check "account $account compiler" "$(addr_of perch-doc-compiler)" "$(jq -r .doc_compiler <<<"$infra")"
     check "account $account interpreter" "$(addr_of perch-interpreter)" "$(jq -r .interpreter <<<"$infra")"
     check "account $account spending limit" "$(addr_of perch-spending-limit)" "$(jq -r .spending_limit <<<"$infra")"

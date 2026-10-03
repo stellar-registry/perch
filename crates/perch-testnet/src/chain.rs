@@ -55,6 +55,9 @@ pub struct Step {
     /// The contract error an account's `__check_auth` failed with, from the
     /// host's diagnostics ("failed account authentication with error").
     pub auth_error_code: Option<u32>,
+    /// Which simulation refused: `recording` (the contract refused before
+    /// any signature mattered) or `enforcing` (with every entry signed).
+    pub refused_in: Option<String>,
     pub instructions: Option<u64>,
     pub mem_bytes: Option<u64>,
     pub read_entries: Option<u32>,
@@ -66,6 +69,10 @@ pub struct Step {
     pub fee_charged_stroops: Option<i64>,
     pub latency_ms: Option<u128>,
 }
+
+/// Which simulation produced a refusal, carried as a prefix on its message.
+const RECORDING: &str = "[recording] ";
+const ENFORCING: &str = "[enforcing] ";
 
 pub struct Receipt {
     pub value: ScVal,
@@ -192,7 +199,7 @@ impl Chain {
             Entries::Recorded => {
                 let sim1 = self.rpc.simulate(&envelope_b64(&tx)?)?;
                 if let Some(e) = sim1.error {
-                    return Ok(Err(e));
+                    return Ok(Err(format!("{RECORDING}{e}")));
                 }
                 sim1.auth
                     .iter()
@@ -212,7 +219,7 @@ impl Chain {
         set_auth(&mut tx, entries)?;
         let sim2 = self.rpc.simulate(&envelope_b64(&tx)?)?;
         if let Some(e) = sim2.error {
-            return Ok(Err(e));
+            return Ok(Err(format!("{ENFORCING}{e}")));
         }
         let td = sim2
             .transaction_data
@@ -427,8 +434,15 @@ impl Chain {
         match self.prepare(contract, func, args, auths, entries)? {
             Ok(_) => bail!("{label}: expected a refusal, but it simulates successfully"),
             Err(e) => {
+                let (refused_in, e) = match e.strip_prefix(RECORDING) {
+                    Some(rest) => ("recording", rest.to_string()),
+                    None => (
+                        "enforcing",
+                        e.strip_prefix(ENFORCING).unwrap_or(&e).to_string(),
+                    ),
+                };
                 if std::env::var_os("PERCH_TESTNET_VERBOSE").is_some() {
-                    eprintln!("    {e}");
+                    eprintln!("    [{refused_in}] {e}");
                 }
                 let got = contract_error_code(&e);
                 if let Some(want) = code {
@@ -445,6 +459,7 @@ impl Chain {
                     error: Some(first_line(&e)),
                     error_code: got,
                     auth_error_code: auth_error_code(&e),
+                    refused_in: Some(refused_in.to_string()),
                     ..Step::default()
                 });
                 Ok(())

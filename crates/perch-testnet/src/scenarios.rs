@@ -424,7 +424,7 @@ pub fn zk_protected_changes(w: &World<'_>) -> Result<()> {
         "execute_upgrade",
         vec![c.sc(request_id)],
         &[owner],
-        None,
+        Some(PerchAccountError::UpgradeNotReady.into_code()),
     )?;
     Ok(())
 }

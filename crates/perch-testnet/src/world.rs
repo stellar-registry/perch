@@ -100,13 +100,30 @@ pub struct World<'a> {
     pub c: &'a Chain,
     pub s: Stack,
     pub run: String,
+    /// Random, never recorded: every key of the run derives from it, so
+    /// nobody can rederive the exercised accounts' keys from the report.
+    secret: [u8; 32],
     salt: std::cell::Cell<u32>,
     pub accounts: std::cell::RefCell<std::vec::Vec<(String, String)>>,
     pub proving: std::cell::RefCell<std::vec::Vec<(u128, u128, Option<u64>)>>,
 }
 
-fn tagged(run: &str, tag: &str) -> [u8; 32] {
-    Sha256::digest(format!("perch-testnet/{run}/{tag}").as_bytes()).into()
+fn tagged(secret: &[u8; 32], tag: &str) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(b"perch-testnet/");
+    h.update(secret);
+    h.update(tag.as_bytes());
+    h.finalize().into()
+}
+
+/// 32 bytes from the operating system's random source.
+pub fn os_random() -> Result<[u8; 32]> {
+    use std::io::Read as _;
+    let mut out = [0u8; 32];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut out))
+        .context("read /dev/urandom")?;
+    Ok(out)
 }
 
 fn hexs(b: &[u8]) -> String {
@@ -114,11 +131,12 @@ fn hexs(b: &[u8]) -> String {
 }
 
 impl<'a> World<'a> {
-    pub fn new(c: &'a Chain, s: Stack, run: String) -> Self {
+    pub fn new(c: &'a Chain, s: Stack, run: String, secret: [u8; 32]) -> Self {
         Self {
             c,
             s,
             run,
+            secret,
             salt: std::cell::Cell::new(0),
             accounts: Default::default(),
             proving: Default::default(),
@@ -128,13 +146,13 @@ impl<'a> World<'a> {
     // --- fresh keys --------------------------------------------------------
 
     pub fn passkey(&self, tag: &str) -> SoftPasskey {
-        let mut seed = tagged(&self.run, tag);
+        let mut seed = tagged(&self.secret, tag);
         seed[0] &= 0x7f; // below the P-256 group order
         SoftPasskey::from_seed(seed)
     }
 
     pub fn field(&self, tag: &str) -> [u8; 32] {
-        let mut f = tagged(&self.run, tag);
+        let mut f = tagged(&self.secret, tag);
         f[0] = 0; // a canonical BN254 element
         f
     }
@@ -142,13 +160,13 @@ impl<'a> World<'a> {
     pub fn zk(&self, tag: &str) -> Zk {
         Zk {
             secret: self.field(&format!("{tag}/secret")),
-            id: tagged(&self.run, &format!("{tag}/enrollment")),
+            id: tagged(&self.secret, &format!("{tag}/enrollment")),
         }
     }
 
     /// A funded G-account.
     pub fn g_account(&self, tag: &str) -> Result<SeedKey> {
-        let key = SeedKey::from_seed(tagged(&self.run, tag));
+        let key = SeedKey::from_seed(tagged(&self.secret, tag));
         self.c.friendbot(&key.account())?;
         Ok(key)
     }
@@ -160,7 +178,7 @@ impl<'a> World<'a> {
         self.salt.set(self.salt.get() + 1);
         let salt = BytesN::from_array(
             &self.c.env,
-            &tagged(&self.run, &format!("salt/{}", self.salt.get())),
+            &tagged(&self.secret, &format!("salt/{}", self.salt.get())),
         );
         let key_data = Bytes::from_slice(&self.c.env, &owner.key_data());
         let r = self.c.call(

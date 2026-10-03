@@ -16,7 +16,7 @@ use perch_recovery_interface::zk::{ProofVerifierClient, ZkAdapterClient, ZkBindi
 use perch_zk_pool::{PerchZkPoolClient, PoolKey, TreeState};
 use perch_zk_primitives::ZERO_HASHES;
 use perch_zk_prover::fixture::{address, h32, sha256, tag, Loaded, NETWORK_PASSPHRASE};
-use soroban_sdk::testutils::Ledger as _;
+use soroban_sdk::testutils::{EnvTestConfig, Ledger as _};
 use soroban_sdk::{Address, Bytes, BytesN, Env, Vec};
 use std::path::{Path, PathBuf};
 
@@ -42,7 +42,11 @@ fn wasm(dir: &str, name: &str) -> Option<std::vec::Vec<u8>> {
 }
 
 fn env() -> Env {
-    let e = Env::default();
+    // No test snapshot: these runs register the release wasm, which would
+    // land in the snapshot, and they are measurements, not regression tests.
+    let e = Env::new_with_config(EnvTestConfig {
+        capture_snapshot_at_drop: false,
+    });
     e.cost_estimate()
         .budget()
         .reset_limits(TX_MAX_INSTRUCTIONS, TX_MEMORY_LIMIT);

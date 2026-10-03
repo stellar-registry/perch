@@ -1,0 +1,104 @@
+{
+  "abi": {
+    "error_types": {
+      "9194866545535163956": {
+        "error_kind": "string",
+        "string": "Field failed to decompose into specified 24 limbs"
+      }
+    },
+    "parameters": [
+      {
+        "name": "root",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "public"
+      },
+      {
+        "name": "nullifier",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "public"
+      },
+      {
+        "name": "statement_hash",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "public"
+      },
+      {
+        "name": "secret",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "acct_hi",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "acct_lo",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "enr_hi",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "enr_lo",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "digest_hi",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "digest_lo",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "leaf_index",
+        "type": {
+          "kind": "field"
+        },
+        "visibility": "private"
+      },
+      {
+        "name": "siblings",
+        "type": {
+          "kind": "array",
+          "length": 24,
+          "type": {
+            "kind": "field"
+          }
+        },
+        "visibility": "private"
+      }
+    ],
+    "return_type": null
+  },
+  "bytecode": "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",
+  "hash": "3135032110439559411",
+  "noir_version": "1.0.0-beta.9+6abff2f16e1c1314ba30708d1cf032a536de3d19"
+}

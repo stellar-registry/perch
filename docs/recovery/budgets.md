@@ -117,4 +117,19 @@ before §5 runs, and the confirmed values are recorded here.
 
 ## Results
 
-*None yet (workstream 2).*
+Workstream 2's measurements and the rule's application are in
+[`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-03, protocol
+29 limits, `circuit_id`
+`2af21cd9ff84cc56e42e8086c72b6e7ac14c11e830e1fd35f60b3174b46c94c5`). In
+summary:
+
+- §1: native and single-threaded bb.js proving take 0.07 s and 0.66 s on a
+  desktop at D = 32. Client artifacts are 8.4 MB and the proof is 14.6 KB.
+  The reference phone and laptop are not yet measured.
+- §2, ZK components only: adapter `verify` is 96.9M instructions and 5.1 MB
+  at D = 32 (94.9M at D = 24); `rcv_insert` sealing a tree is 43.9M
+  instructions and 2.2 KB written (34.9M at D = 24). The full-transaction
+  rows are the controller workstream's.
+- §5: every measured row is within budget at D = 32, so **D = 32**,
+  provisional on the open rows above. D = 24 stays buildable as the
+  fallback.

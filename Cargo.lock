@@ -1632,6 +1632,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-zk-adapter"
+version = "0.1.0"
+dependencies = [
+ "perch-recovery-interface",
+ "perch-zk-pool",
+ "perch-zk-primitives",
+ "perch-zk-prover",
+ "serde_json",
+ "soroban-sdk",
+ "ultrahonk_soroban_verifier",
+]
+
+[[package]]
+name = "perch-zk-pool"
+version = "0.1.0"
+dependencies = [
+ "perch-zk-primitives",
+ "soroban-sdk",
+ "soroban-sdk-tools",
+]
+
+[[package]]
+name = "perch-zk-primitives"
+version = "0.1.0"
+dependencies = [
+ "perch-recovery-interface",
+ "soroban-poseidon",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "perch-zk-prover"
+version = "0.1.0"
+dependencies = [
+ "perch-recovery-interface",
+ "perch-zk-primitives",
+ "serde",
+ "serde_json",
+ "sha2",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2189,6 +2232,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "soroban-poseidon"
+version = "27.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b241822373adc51c23d5412e412b3b91b0d6b6bba146584946391aa32667820d"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "soroban-sdk"
 version = "27.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2505,6 +2557,13 @@ name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
+name = "ultrahonk_soroban_verifier"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
 
 [[package]]
 name = "unicode-ident"

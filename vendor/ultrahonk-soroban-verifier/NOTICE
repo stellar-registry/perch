@@ -1,0 +1,41 @@
+Vendored third-party dependency
+===============================
+
+  Library:  ultrahonk_soroban_verifier (Rust, no_std)
+  Upstream: https://github.com/NethermindEth/rs-soroban-ultrahonk
+            (originally yugocabrio/rs-soroban-ultrahonk)
+  Commit:   c2160987260284c656ffbdad8344210fc162b177
+            ("Merge pull request #42 from NethermindEth/chore/protocol27")
+  Path:     crates/ultrahonk-soroban-verifier
+  License:  MIT (see LICENSE)
+  Audits:   internal review 2026-05-28; OpenZeppelin external audit
+            2026-08-10 to 2026-08-28, findings resolved upstream before this
+            commit (see VERIFIER_PROVENANCE.md)
+  Target:   Barretenberg v0.87.0 UltraKeccakFlavor proofs (non-ZK, keccak
+            transcript), i.e. `bb prove --scheme ultra_honk --oracle_hash
+            keccak` from bb 0.87.0 / nargo 1.0.0-beta.9.
+
+Source (src/), LICENSE, README.md, and VERIFIER_PROVENANCE.md are copied
+verbatim from the commit above. Cargo.toml differs in two places only, both
+because the crate is built here as a path dependency outside its own
+workspace:
+
+  - `soroban-sdk = { workspace = true }` became the version the upstream
+    workspace pins at that commit, `{ version = "27.0.6", default-features =
+    false }`;
+  - the `[dev-dependencies]` table (upstream's test-utils crate and fixtures,
+    which are not vendored) was dropped.
+
+CHECKSUMS.sha256 pins every vendored file;
+crates/perch-zk-adapter/tests/vendor.rs fails on any drift.
+
+Updating
+--------
+Do not edit these files in place. Replace the directory wholesale from a new
+upstream commit, re-apply the two Cargo.toml changes above, update this
+NOTICE and CHECKSUMS.sha256, then regenerate the circuit artifacts
+(`just zk-artifacts`) and re-run the adapter's real-proof tests. If the new
+upstream targets a different Barretenberg version, the pinned toolchain in
+scripts/zk-toolchain.sh and crates/perch-zk-prover must move with it: proofs
+and verification keys from another bb version fail at the pairing check, not
+at parse time.

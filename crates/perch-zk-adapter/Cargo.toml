@@ -1,0 +1,37 @@
+[package]
+name = "perch-zk-adapter"
+description = "Deployable ZK recovery adapter: the controller-facing check of a membership proof against the enrolled pool and statement, with the audited UltraHonk verifier and its verification key compiled in; constructorless and immutable"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+# `alloc`: the vendored verifier allocates (`extern crate alloc`), and only
+# soroban-sdk's `alloc` feature provides a global allocator on wasm32v1-none.
+soroban-sdk = { workspace = true, features = ["alloc"] }
+perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
+perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
+# NethermindEth/rs-soroban-ultrahonk, vendored unmodified (see its NOTICE).
+ultrahonk_soroban_verifier = { path = "../../vendor/ultrahonk-soroban-verifier" }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+perch-zk-pool = { path = "../perch-zk-pool" }
+# Loads the committed real-proof fixtures (testdata/zk) and rebuilds each
+# one's statement.
+perch-zk-prover = { path = "../perch-zk-prover" }
+serde_json = "1"
+
+[features]
+# Depth-24 fallback build: compiles in the `perch_zk_recovery_d24` circuit's
+# VK. Pair with perch-zk-pool's `tree-depth-24`. Not a release configuration
+# unless docs/zk/README.md's depth decision is revisited.
+tree-depth-24 = []

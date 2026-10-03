@@ -17,7 +17,9 @@
 //! - C6: a signature can satisfy a hook's `account.require_auth()` (#90); a
 //!   reserved-name guard in `__check_auth` closes that, and the invoker path
 //!   survives the guard.
-//! - C7: a guardian authorizes exactly the statement digest it is asked for.
+//! - C7: a guardian authorizes exactly the statement digest it is asked for,
+//!   and a guardian that is itself a reserved-name-guarded account can only
+//!   do so through a non-reserved entry point.
 //!
 //! The contracts here are minimal stand-ins (an OZ `do_check_auth` account, a
 //! recording delegate, a hook, a policy), so these tests pin the pinned
@@ -558,9 +560,42 @@ struct ApproveController;
 #[contractimpl]
 impl ApproveController {
     /// A guardian approval, bound to a statement digest the way the
-    /// controller binds `submit_guardian`.
+    /// controller binds `submit_guardian` and `approve_change`.
     pub fn submit_guardian(e: Env, guardian: Address, digest: BytesN<32>) {
         guardian.require_auth_for_args(vec![&e, digest.into_val(&e)]);
+    }
+
+    /// The same check placed inside a reserved hook, the way the pre-spec
+    /// controller collected `Protected` reconfiguration evidence.
+    pub fn rcv_sync(e: Env, guardian: Address, digest: BytesN<32>) {
+        guardian.require_auth_for_args(vec![&e, digest.into_val(&e)]);
+    }
+}
+
+/// A guardian that is itself a perch-style account: its `__check_auth`
+/// refuses reserved names before approving anything else.
+#[contract]
+struct GuardedGuardian;
+
+#[contractimpl]
+impl CustomAccountInterface for GuardedGuardian {
+    type Error = SmartAccountError;
+    type Signature = Val;
+
+    fn __check_auth(
+        e: Env,
+        _signature_payload: Hash<32>,
+        _signature: Val,
+        auth_contexts: Vec<Context>,
+    ) -> Result<(), SmartAccountError> {
+        for c in auth_contexts.iter() {
+            if let Context::Contract(ContractContext { fn_name, .. }) = c {
+                if is_reserved_invoker_only(&e, &fn_name) {
+                    return Err(SmartAccountError::UnvalidatedContext);
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -603,4 +638,37 @@ fn c7_guardian_authorizes_exactly_the_digest() {
     assert_eq!(args.len(), 1);
     let signed: BytesN<32> = args.get_unchecked(0).into_val(&env);
     assert_eq!(signed, digest);
+}
+
+/// Why the spec collects every approval through a non-reserved entry point
+/// (`submit_guardian`, `approve_change`) and never inside a reserved hook: a
+/// guardian's `__check_auth` sees the function the approval is collected in,
+/// and a guardian that is itself a perch account refuses reserved names.
+#[test]
+fn c7_guarded_guardian_approves_only_outside_reserved_hooks() {
+    let env = Env::default();
+    env.ledger().with_mut(|l| l.sequence_number = 10);
+    let guardian = env.register(GuardedGuardian, ());
+    let controller = env.register(ApproveController, ());
+    let digest = BytesN::from_array(&env, &[0xd3; 32]);
+    let entry = |fn_name: &str, nonce: i64| SorobanAuthorizationEntry {
+        credentials: SorobanCredentials::Address(SorobanAddressCredentials {
+            address: guardian.clone().into(),
+            nonce,
+            signature_expiration_ledger: 100,
+            signature: ScVal::Void,
+        }),
+        root_invocation: invocation(
+            &controller,
+            fn_name,
+            std::vec![ScVal::Bytes(digest.to_array().to_vec().try_into().unwrap())],
+        ),
+    };
+    let client = ApproveControllerClient::new(&env, &controller);
+
+    env.set_auths(&[entry("rcv_sync", 1)]);
+    assert!(client.try_rcv_sync(&guardian, &digest).is_err());
+
+    env.set_auths(&[entry("submit_guardian", 2)]);
+    client.submit_guardian(&guardian, &digest);
 }

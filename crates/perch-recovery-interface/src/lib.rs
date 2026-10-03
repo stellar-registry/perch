@@ -32,6 +32,6 @@ pub mod zk;
 
 pub use encode::{address_payload, AddressKind};
 pub use statement::{
-    AttemptSubject, CancelSubject, ConfigBinding, ConfigChange, RecoveryAction, RecoveryEvidence,
-    RecoveryStatement, StatementError, StatementSubject, StatementTiming, UpgradeSubject,
+    AttemptSubject, CancelSubject, ConfigBinding, ConfigChange, RecoveryAction, RecoveryStatement,
+    StatementError, StatementSubject, StatementTiming, UpgradeSubject,
 };

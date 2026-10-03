@@ -148,6 +148,10 @@ impl StandInAdapter {
         BytesN::from_array(e, &STAND_IN_CIRCUIT)
     }
 
+    pub fn tree_depth() -> u32 {
+        32
+    }
+
     pub fn verify(
         e: &Env,
         statement: RecoveryStatement,
@@ -181,6 +185,7 @@ fn adapter_interface_round_trips_through_the_generated_client() {
     let adapter = e.register(StandInAdapter, ());
     let client = ZkAdapterClient::new(&e, &adapter);
     assert_eq!(client.circuit_id().to_array(), STAND_IN_CIRCUIT);
+    assert_eq!(client.tree_depth(), 32);
 
     let s = statement(&e, Address::generate(&e));
     let binding = ZkBinding {

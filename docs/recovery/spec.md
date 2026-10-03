@@ -34,17 +34,17 @@ compiler). "Refuse" means the call fails and changes no state.
 | D2 | Evidence-free attempts | Anyone may open an attempt. Any number may collect evidence at once, and a collecting attempt blocks nothing. | §6 |
 | D3 | Authorized window | From authorization until completion, cancellation, or expiry, both profiles refuse every policy change except that attempt's completion, and refuse upgrade scheduling and execution. | §9, §12 |
 | D4 | Reconfiguration | `Loss`: owner authorization. `Protected`: owner authorization plus the enrolled condition's evidence over a `Reconfigure` statement (`Combined`: guardian quorum and a ZK proof). | §5, §10 |
-| D5 | Cancellation | The enrolled condition's evidence over a `Cancel` statement, in both profiles. Under `Loss`, owner authorization alone also cancels. Cancelling an authorized attempt counts toward `max-cancels`. | §6 |
+| D5 | Cancellation | The enrolled condition's evidence over a `Cancel` statement, in both profiles. Under `Loss`, owner authorization alone also cancels, and that veto is never capped. An evidence-based cancellation of an authorized attempt counts toward `max-cancels`. | §6 |
 | D6 | Permitted changes | The target document is derived on-chain from the source and a declared replacement set. For lost-key the source is the applied-document snapshot; for compromise it is the enrolled baseline's signers and rules, with the current recovery section. Nobody chooses a target hash. | §7 |
 | D7 | Revocation | Credentials a recovery replaces, plus every credential a compromise recovery removes, enter the account's permanent revoked set. Every applied document is checked against that set, on every path. | §8 |
 | D8 | Completion vs. reconfiguration | A completion is recognised by the attempt consumed in the same invocation. It may change exactly what its replacement set declares. Configuration identity is the canonical text of the recovery section, so rotating a signer's key is not a reconfiguration. | §10 |
 | D9 | Nullifiers | One nullifier per enrolled ZK credential, owned by that `(account, enrollment)`. It is either unspent or spent. Only a completion of that account spends it; nothing ever un-spends it. Proofs for any action need it unspent. There are no reservations, so there is nothing to release (#91). | §11 |
 | D10 | Stale state | Leaves and nullifiers bind an enrollment id the configuration names, and the account refuses to re-enroll an id it used before. Every configuration change and every completion bumps the per-account epoch, and evidence or attempts from an older epoch are dead. | §3, §11 |
-| D11 | Upgrades | Owner authorization (plus, under `Protected`, condition evidence over an `Upgrade` statement binding the Wasm hash and the epoch). Executable after 120 960 ledgers. Any epoch change invalidates the request. Blocked during an authorized attempt. | §12 |
-| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_*`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. | §15 |
+| D11 | Upgrades | Owner authorization (plus, under `Protected`, condition evidence over an `Upgrade` statement binding the Wasm hash and the epoch). Executable after 120 960 ledgers. Any epoch change invalidates the request, and executing it bumps the epoch. Blocked during an authorized attempt. | §12 |
+| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_*`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. Guardian and ZK evidence is always submitted through non-reserved entry points and recorded; hooks only read the records. | §5, §15 |
 | D13 | Statement | One `RecoveryStatement`, encoded at fixed width and hashed with SHA-256. Guardians authorize the digest and the circuit binds it. | §4 |
 | D14 | ZK boundary | The controller passes the structured statement to an adapter. The adapter checks the circuit id, field canonicality, root membership in the enrolled pool, and the proof. Public inputs stay `root, nullifier, statement_hash`. | §13 |
-| D15 | Pool | Depth 32, or depth 24 if depth 32 misses the budget rule. A full tree rolls over automatically. Roots are accepted as `(tree_id, root)`, and every sealed tree's final root is retained permanently. | §14 |
+| D15 | Pool | Depth 32, or depth 24 if depth 32 misses the budget rule. A full tree rolls over automatically. Roots are accepted as `(tree_id, root)`, and every root a tree has ever had stays acceptable. | §14 |
 
 ## 1. Scope and vocabulary
 
@@ -94,8 +94,17 @@ ZK backend; CAP-0085 governance-managed executables.
 - No profile can tell apart two parties who hold the same factor. Under
   `ZkOnly`, a thief of the ZK secret races the owner. Under `GuardianOnly`, a
   colluding quorum is the owner as far as recovery can tell. `Combined`
-  requires both factors. `max-cancels` bounds a cancellation war; it does not
-  pick a winner.
+  requires both factors.
+- Under `Protected`, `max-cancels` bounds a cancellation war between two
+  holders of the cancelling factor. Once it is used up, the next attempt to
+  be authorized completes, whoever opened it. Under `Loss`, the owner's veto
+  (T7) is never capped, so condition-holders cannot use up the cap to remove
+  it.
+- `Protected` without a baseline does not protect against a thief who holds
+  the owner key. Any document change invalidates a collecting lost-key
+  attempt (T4), and only compromise recovery is immune to that. Wallets
+  should require a baseline for `Protected`; that product choice is Nido's
+  (nidohq/nido#220).
 
 ## 3. Configuration
 
@@ -108,8 +117,8 @@ document's `recovery` member becomes:
 recovery: {
   profile:        "loss" | "protected",
   mode:           { type: "guardian-only", guardians: [addr], quorum: u32 }
-                | { type: "zk-only",  adapter, circuit-id, pool, enrollment-id }
-                | { type: "combined", guardians, quorum, adapter, circuit-id, pool, enrollment-id },
+                | { type: "zk-only",  adapter, circuit-id, pool, enrollment-id, commitment }
+                | { type: "combined", guardians, quorum, adapter, circuit-id, pool, enrollment-id, commitment },
   controller:     C-address,
   baseline?:      { doc-hash: hex32 },
   replaceable:    [signer id],          // non-empty, declared signers
@@ -126,13 +135,19 @@ recovery: {
 | `circuit-id` is exactly 32 bytes | It is `sha256` of the verifier's embedded verification key. The adapter refuses any other value. |
 | `pool` required for ZK modes | The one supported backend is pool-based. Root acceptance is bound to this pool. |
 | `enrollment-id` added (ZK modes) | 32 random bytes naming the current ZK credential. It is bound into the leaf and the nullifier (§3.4, §11). |
+| `commitment` added (ZK modes) | The credential's inner commitment `Poseidon2(DOM_LEAF, secret)`, a canonical field element. The account inserts the leaf from it (§14.2). |
 | Compiled `replaceable` stays signer ids | Fingerprints in the compiled configuration made rotating a key look like reconfiguration (#92). Revocation fingerprints credentials separately (§8). |
 
-The ZK commitment is not part of the document. The `apply_doc` that adopts
-a new enrollment id carries the commitment as an argument, and the account
-inserts the leaf in the same invocation (§14.2). Owner authorization signs
-those arguments. A recovery completion's commitment is bound by the
-attempt's replacement set instead (§7.3).
+The commitment is part of the document, so `config_hash` binds it. Through
+`config_hash`, so do the owner's signature on `doc_json`, every
+reconfiguration approval, and every attempt's derived target.
+
+A commitment passed as a call argument instead could be swapped by anyone
+who resubmits the same approvals with a stolen owner key, or by whoever
+submits a recovery completion first. The commitment is public either way:
+the pool's insertion event reveals the leaf. The secret must therefore be a
+uniformly random field element with at least 128 bits of entropy, because a
+guessable secret can be found offline.
 
 ### 3.2 Configuration identity
 
@@ -142,8 +157,8 @@ compiler computes it and returns it with the compiled configuration.
 Evidence providers compute it from the document they are shown.
 
 Configuration identity is therefore the reviewed text: profile, mode,
-guardians, quorum, adapter, circuit id, pool, enrollment id, controller,
-baseline hash, replaceable signer ids, and timing. Rotating a signer's key
+guardians, quorum, adapter, circuit id, pool, enrollment id, commitment,
+controller, baseline hash, replaceable signer ids, and timing. Rotating a signer's key
 elsewhere in the document does not change it (#92). Renaming a replaceable
 signer id does.
 
@@ -152,7 +167,7 @@ signer id does.
 The controller keeps a per-account `epoch: u64`. It starts at 0 and
 increments by one on every successful enrollment, reconfiguration
 (including a controller switch away from or to this controller), removal,
-and completed recovery. It never decreases and is never reset. Every
+completed recovery, and executed account upgrade. It never decreases and is never reset. Every
 statement binds `(epoch, config_hash)`. Every attempt records the epoch it
 was opened under and is dead under any other. A queued upgrade records it
 too and is stale under any other (§12).
@@ -171,6 +186,21 @@ current one. A retired or consumed credential's leaf can therefore never
 become valid again, including after a switch to a different controller,
 whose nullifier records start empty. Clients generate ids as 32 random
 bytes.
+
+The ZK factor `(adapter, circuit-id, pool, enrollment-id, commitment)`
+either stays entirely unchanged across an `apply_doc` or carries a new
+`enrollment-id`. The account inserts a leaf exactly when the enrollment id
+changes, into the configured pool, from the compiled document's commitment.
+
+Whenever the ZK factor changes, at enrollment or reconfiguration,
+`rcv_sync` refuses unless:
+
+- the adapter's `circuit_id()` equals `circuit-id`;
+- the adapter's `tree_depth()` equals the pool's `depth()`.
+
+Without these checks a factor could be enrolled that no proof can ever
+satisfy, which would permanently lock a `Protected` account's
+reconfiguration and upgrades.
 
 ### 3.5 Baselines
 
@@ -201,9 +231,9 @@ the recovery configuration back to whatever the baseline carried.
 ### 3.6 Storage lifetime
 
 Per-account controller state (configuration, epoch, authorized attempt,
-cancellation count, attempt-id counter), the account's revoked set and
-enrolled-id set, nullifier records, and the pool's roots and frontier live
-in persistent storage. An archived persistent entry is unavailable, never
+`invalidate_below`, cancellation count, attempt-id counter, recorded change
+approvals), the account's revoked set and enrolled-id set, nullifier
+records, and the pool's roots and frontier live in persistent storage. An archived persistent entry is unavailable, never
 absent: a transaction touching it fails until someone restores it. A
 counter therefore cannot silently reset to zero through TTL expiry.
 Permissionless `renew` entry points extend these entries to the network
@@ -238,15 +268,22 @@ offset 25 is the action code (1 lost-key, 2 compromise, 3 cancel,
 A caller never supplies one. The caller supplies only:
 
 - the evidence;
-- for `Reconfigure` and `Upgrade`, the `valid_until_ledger` it signed;
-- for `Reconfigure`, the compiled new configuration (passed by the account
-  from the document being applied);
-- for `Upgrade`, the Wasm hash (passed by the account).
+- for `Reconfigure` and `Upgrade`, the subject and the `valid_until_ledger`
+  being approved (to `approve_change`/`submit_zk_change`, and again, as
+  `approval_valid_until`, to the `apply_doc` or `schedule_upgrade` that uses
+  the approval). The consuming hook rebuilds the subject from the compiled
+  configuration or the Wasm hash the account passes.
 
 **Binding.** Guardians authorize `require_auth_for_args((digest,))` inside
-the controller entry point that consumes their approval. The ZK circuit
-binds the digest through the `statement_hash` public input (§13). In
-`Combined` mode both factors therefore approve the identical statement.
+a non-reserved controller entry point that records their approval:
+`submit_guardian` for attempts, `approve_change` for reconfiguration and
+upgrades. Reserved hooks only read recorded approvals.
+
+This placement matters. A guardian's `__check_auth` sees the function its
+approval is collected in, and a guardian that is itself a perch account
+refuses every reserved name (§15; `cap-0071.md` C7). The ZK circuit binds the
+digest through the `statement_hash` public input (§13). In `Combined` mode
+both factors therefore approve the identical statement.
 
 **Freshness.** Evidence for statement `S` is accepted at ledger `L` only if
 `L ≤ S.valid_until_ledger` (`RecoveryStatement::check_fresh`). Who sets the
@@ -315,11 +352,22 @@ Attempt evidence (initiation and cancellation) may accumulate across
 transactions. Each guardian calls the controller's evidence entry point with
 its own authorization, and a ZK proof is submitted on its own.
 
-Reconfiguration and upgrade evidence must be complete in the transaction
-that uses it. The evidence travels in `RecoveryEvidence`, and each listed
-guardian's authorization is an auth entry in the same transaction. A
-guardian listed twice, or listed but not enrolled, is not counted. A listed
-guardian whose authorization is missing fails the transaction.
+Reconfiguration and upgrade evidence is recorded before it is used:
+
+- `approve_change(account, subject, valid_until, guardian)` records one
+  guardian's approval. The controller builds the statement from its own
+  state and the given subject.
+- `submit_zk_change(account, subject, valid_until, evidence)` records a proof
+  the adapter verified.
+
+Records are keyed by the statement digest, so they die with the epoch or
+the freshness bound. The consuming `rcv_sync` or `rcv_upgrade` rebuilds the
+digest from the change being applied and the account's
+`approval_valid_until`, then counts the recorded approvals. Only distinct,
+enrolled guardians are counted.
+
+This keeps proof verification (about 180 million instructions in Nido's
+measurement) out of the transaction that compiles and installs a document.
 
 Guardian-only recovery requires no ZK machinery: a `GuardianOnly`
 configuration has no adapter, pool, or enrollment id, and no path consults
@@ -357,7 +405,8 @@ when all of the following hold:
 
 - its recorded epoch equals the current epoch;
 - it is not terminal;
-- it is not invalidated by a sibling's authorization;
+- it is the authorized attempt, or its id is at least the account's
+  `invalidate_below` (so a sibling's authorization has not invalidated it);
 - `Collecting` and `L ≤ evidence_deadline`, or `Authorized` and
   `L < expires_at`.
 
@@ -423,9 +472,10 @@ is satisfied for a live collecting attempt `A`:
 - for lost-key, if the account's current applied-document hash differs from
   `A.source_doc_hash`, `A` is invalidated: a fresh attempt is required, and
   its evidence starts over;
-- otherwise `A` becomes `Authorized` with `authorized_at = L`, its windows
-  are fixed, every other collecting attempt of the account is invalidated,
-  and `AttemptAuthorized` is emitted.
+- otherwise `A` becomes `Authorized` with `authorized_at = L` and its
+  windows are fixed. `invalidate_below` is set to the attempt-id counter,
+  which invalidates every other collecting attempt in O(1), however many an
+  attacker opened. `AttemptAuthorized` is emitted.
 
 Promotion refuses while another attempt is authorized and live.
 
@@ -452,7 +502,9 @@ a live attempt `A`:
 1. `A` becomes `Cancelled`.
 2. If `A` was authorized, the account's cancellation count increments, and
    the cancellation is refused instead if the count has reached
-   `max-cancels`.
+   `max-cancels`. The controller keeps the count per account. Switching to
+   another controller starts a new count, and that switch needs the
+   reconfiguration authority (§10).
 3. Emits `AttemptCancelled`.
 
 Cancelling a collecting attempt never counts: it blocks nothing, so
@@ -461,10 +513,12 @@ cancelling it only tidies state.
 **T7 Cancel by owner (`Loss` only)** — the account's
 `cancel_recovery(attempt_id)` under owner authorization invokes the
 controller's `rcv_cancel`. The controller refuses under `Protected`.
-Otherwise T6's effects apply, including the `max-cancels` count for an
-authorized attempt. Once the attempt is cancelled the window has ended, so
-the owner may then reconfigure, for example to remove a guardian set that
-opened it.
+Otherwise T6's effects apply, except that an owner cancellation is never
+counted toward or refused by `max-cancels`. If it were, holders of the
+condition could use the cap up by authorizing and cancelling their own
+attempts, then authorize one more that the owner could no longer stop.
+Once the attempt is cancelled the window has ended, so the owner may then
+reconfigure, for example to remove a guardian set that opened it.
 
 **T8 Expire** — derived. No transaction is needed. The first transition
 that touches an expired attempt treats it as terminal.
@@ -539,8 +593,8 @@ against the account's `revoked` view):
    replace none, which restores the baseline as is.
 4. A ZK enrollment's id is not in the account's set of enrolled ids
    (§3.4), and its commitment is a canonical field element. The target's
-   `recovery.mode.enrollment-id` becomes the new id. Nothing else in the
-   recovery section changes.
+   `recovery.mode.enrollment-id` and `commitment` become the new values.
+   Nothing else in the recovery section changes.
 5. Nothing else changes: rules, other signers, network, version.
 6. The target passes full document validation (which rejects duplicate key
    material), the anti-brick check, and network binding.
@@ -575,6 +629,22 @@ unchanged except for the declared ZK rotation.
 - *That a circuit proves what this spec says.* The adapter's author and its
   reviewers own this (§13). The controller checks only the adapter's
   verdict.
+
+### 7.5 Bounded completion cost
+
+Under `Protected`, a thief holding the owner key can change the document
+before an attempt is authorized. Completion cost must therefore not be
+theirs to choose. It removes every rule, revokes every removed credential,
+and compiles and installs the target. Two rules bound that cost:
+
+- **Document caps.** The doc compiler refuses, on every `apply_doc` and in
+  `derive_target`, a document exceeding fixed caps on signers, rules, and
+  canonical size. Workstream 2 sizes the caps so that the worst-case
+  completion (a maximum-size pre-recovery document replaced by a
+  maximum-size target) fits the transaction budget (`budgets.md`).
+- **Bounded revocation writes.** The revoked set is one persistent entry per
+  fingerprint, so a completion writes at most one entry per removed
+  credential, a number the caps bound.
 
 ## 8. Revocation
 
@@ -636,6 +706,12 @@ freeze covers:
 While an attempt is authorized and live, `rcv_sync` refuses unless this
 invocation is that attempt's completion.
 
+**What the freeze cannot reach.** The freeze stops the account from
+authorizing anything new. A permission it granted earlier stays usable by
+whoever holds it: a token allowance, or an approval another contract
+stored. No account code can revoke those, so wallets should keep
+allowances short-lived and small.
+
 **Evidence-free griefing (#89).** A collecting attempt freezes nothing,
 blocks no policy change, no upgrade, and no other attempt (D2). Only
 satisfying a condition, which requires the enrolled guardians or secret,
@@ -644,7 +720,7 @@ starts an authorized window.
 ## 10. Completion versus reconfiguration
 
 Every `apply_doc` on an account with an adopted controller calls that
-controller's `rcv_sync(account, compiled_recovery, evidence, zk_commitment)`
+controller's `rcv_sync(account, compiled_recovery, approval_valid_until)`
 before touching any context rule.
 
 The call is invoker-only (§15). `rcv_sync` both decides and writes. No
@@ -656,10 +732,10 @@ failures.
 
 | Case | Recognised by | Authorization | Effects |
 | --- | --- | --- | --- |
-| Completion | A completing marker from this invocation's `enforce` (T5) whose target hash equals the compiled document's hash | Already established by the attempt | The compiled configuration hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared). Consumes the marker, marks the attempt `Completed`, spends its nullifier, and bumps the epoch. The account inserts the new leaf (§14.2), records the new enrollment id as used, appends the revocations (§8), and clears any pending upgrade. |
+| Completion | A completing marker from this invocation's `enforce` (T5) whose target hash equals the compiled document's hash | Already established by the attempt | The compiled configuration hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared). Consumes the marker, marks the attempt `Completed`, spends its nullifier, and bumps the epoch. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, appends the revocations (§8), and clears any pending upgrade. |
 | No change | `config_hash` and controller unchanged, and not a completion | Owner authorization (already required by `apply_doc`) | Refuses if an attempt is authorized and live (§9); otherwise nothing. |
 | Enroll | No configuration stored | Owner authorization | Stores the configuration and bumps the epoch. The account records the enrollment id as used. |
-| Reconfigure | `config_hash` differs, controller unchanged | `Loss`: owner. `Protected`: owner plus the stored configuration's condition over `Reconfigure(Set(new))` | Refuses during an authorized window. Stores the new configuration, bumps the epoch, and invalidates every attempt. |
+| Reconfigure | `config_hash` differs, controller unchanged | `Loss`: owner. `Protected`: owner plus the stored configuration's condition over `Reconfigure(Set(new))`, from recorded approvals (§5) | Refuses during an authorized window. Stores the new configuration, bumps the epoch, and invalidates every attempt. |
 | Remove or switch away | No recovery section, or a different controller | Same as reconfigure, with `Reconfigure(Remove)` or `Reconfigure(Set(new))` evaluated by the **current** controller | Clears this controller's configuration for the account and bumps its epoch. When switching, the account then calls the new controller's `rcv_sync`, which treats the call as an enrollment. |
 
 Consequences:
@@ -721,10 +797,11 @@ or upgrade.
 
 Every account, enrolled or not, upgrades in two steps:
 
-1. **`schedule_upgrade(wasm_hash, evidence)`** — owner authorization, plus
-   under `Protected` the controller's `rcv_upgrade` check of the condition
-   over `Upgrade { request_id, wasm_hash }`. Refused during an authorized
-   window. Records `{ request_id, wasm_hash, epoch, controller,
+1. **`schedule_upgrade(wasm_hash, approval_valid_until)`** — owner
+   authorization, plus under `Protected` the controller's `rcv_upgrade`
+   check of the recorded condition over `Upgrade { request_id, wasm_hash }`
+   (§5). The account's `next_upgrade_request_id` view tells approvers which
+   `request_id` to approve. Refused during an authorized window. Records `{ request_id, wasm_hash, epoch, controller,
    executable_at = L + ACCOUNT_UPGRADE_DELAY_LEDGERS }`, where the delay is
    120 960 ledgers. One request at a time; scheduling another cancels the
    previous one. `request_id` comes from a per-account counter and is never
@@ -736,15 +813,18 @@ Every account, enrolled or not, upgrades in two steps:
    - the recorded `(epoch, controller)` differs from the current one;
    - the request is not the pending one.
 
-   A stale request is cleared. On success, calls
-   `update_current_contract_wasm(wasm_hash)`.
+   A stale request is cleared. On success, the account calls the
+   controller's `rcv_upgrade`, which bumps the epoch, then
+   `update_current_contract_wasm(wasm_hash)`. The bump invalidates
+   collecting attempts, whose targets the old code's doc compiler derived,
+   and every outstanding approval.
 
 **`cancel_upgrade()`** takes owner authorization.
 
 | Rule | Why |
 | --- | --- |
 | The approval binds the exact Wasm hash, the epoch, and `config_hash` | A Protected approval cannot be carried to different code or a different configuration. |
-| Any epoch change makes a queued request stale | This is the validation of queued approvals when configuration changes. Reconfiguration, removal, and completion all bump the epoch, so a successful recovery invalidates every outstanding request. Completion also clears the slot explicitly. |
+| Any epoch change makes a queued request stale | This is the validation of queued approvals when configuration changes. Reconfiguration, removal, completion, and an executed upgrade all bump the epoch, so a successful recovery invalidates every outstanding request. Completion also clears the slot explicitly. |
 | Blocked while an attempt is authorized | Upgrading must not race or neuter an in-flight recovery. |
 | The delay applies to every account | The epic retains a seven-day delay. Accounts without recovery get the same window to notice a stolen key. |
 
@@ -827,17 +907,26 @@ Existing Nido artifacts are inputs, not release artifacts.
   constant.
 - Trees are numbered `tree_id: u32` from 0. Leaf indices and counts are
   `u64`, because a depth-32 tree's capacity of `2^32` does not fit in `u32`.
-- `is_known_root(tree_id, root)` accepts a sealed tree's final root, and the
-  active tree's last `R` roots (`R` a build constant; workstream 2 sizes it
-  against insertion rate and proving latency). It refuses anything else,
-  including roots of other pools.
+- `is_known_root(tree_id, root)` accepts every root tree `tree_id` has ever
+  had, and refuses anything else, including roots of other pools. The pool
+  keeps a root → tree entry per insertion, paid for by the inserter. Trees
+  are append-only, so a historical root is as sound as the latest one.
+
+  A recent-roots window would be a denial of service: anyone can insert
+  leaves bound to their own address, so an attacker who inserted faster
+  than a victim could prove would push the victim's root out of the window.
+  Under `Protected` `ZkOnly`, that would block the owner's ZK cancellation
+  while a thief's attempt ran out its delay.
+- `depth()` reports `D`; the controller checks it against the adapter's
+  `tree_depth()` at enrollment (§3.4).
 
 ### 14.2 Insertion
 
 `rcv_insert(account, enrollment_id, commitment)` is invoker-only (§15). The
-account calls it from `apply_doc` when the applied configuration names a new
-enrollment id: at enrollment, at a ZK reconfiguration, and at a ZK-rotating
-completion, with the commitment fixed by the attempt. The pool:
+account calls it from `apply_doc` when the compiled configuration names a
+new enrollment id (at enrollment, at a ZK reconfiguration, and at a
+ZK-rotating completion), passing the compiled document's enrollment id and
+commitment, never a call argument. The pool:
 
 1. Refuses a non-canonical commitment.
 2. Computes `leaf = P2(DOM_BIND, account split, enrollment split,
@@ -845,8 +934,8 @@ completion, with the commitment fixed by the attempt. The pool:
 3. Appends it to the active tree and emits `LeafInserted { tree_id, index,
    leaf, account, enrollment_id }`.
 
-When an insertion fills the active tree, the same call seals it (storing
-its final root permanently) and opens `tree_id + 1`. A full tree never
+When an insertion fills the active tree, the same call seals it and opens
+`tree_id + 1`. A full tree never
 blocks enrollment.
 
 Insertion failure (for example, the account is out of fee budget) reverts
@@ -857,14 +946,15 @@ leaf is absent.
 
 - A sealed tree never changes. Its witnesses can be computed once and cached
   by the client.
-- The final roots and the active frontier are persistent, renewable
-  (`renew_tree`), and restorable after archival.
+- Root entries and the active frontier are persistent, renewable
+  (`renew_tree`), and restorable after archival. A prover whose root entry
+  has been archived restores it, or proves against a newer root.
 - Witnesses come from `LeafInserted` events. RPC event retention is short,
   so the reusable indexer must persist every event, and clients should keep
   their own leaf's position.
-- A proof against an active-tree root that has left the retained window is
-  refused as `UnknownRoot`. The fix is a fresh witness and a new proof.
-  Nothing about the account changes.
+- A proof against a root the pool never had is refused as `UnknownRoot`
+  (a wrong witness). The fix is a correct witness and a new proof. Nothing
+  about the account changes.
 
 Enrollment is public: the event names the account. Concealing enrollment is
 out of scope.
@@ -897,18 +987,18 @@ The account must therefore:
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__check_auth` | Freeze (§9), then reserved names, then OZ `do_check_auth` |
-| Account | `apply_doc(doc_json, evidence, zk_commitment)` | Owner authorization, or the recovery rule (completion only) |
+| Account | `apply_doc(doc_json, approval_valid_until)` | Owner authorization, or the recovery rule (completion only) |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
-| Account | `applied_doc`, `applied_doc_hash`, `revoked`, `enrolled_ids`, `pending_upgrade`, `doc_compiler`, rule views | None (read-only) |
+| Account | `applied_doc`, `applied_doc_hash`, `revoked`, `enrolled_ids`, `pending_upgrade`, `next_upgrade_request_id`, `doc_compiler`, rule views | None (read-only) |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `install`, `uninstall`, `enforce` | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
-| Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `publish_baseline`, `renew` | Permissionless |
-| Controller | `submit_guardian` | The guardian's `require_auth_for_args((digest,))` |
+| Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew` | Permissionless |
+| Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |
 | Controller | `config`, `epoch`, `attempt`, `activity_gate`, `statement(account, attempt_id, domain)` | None (read-only; evidence providers fetch the exact statement to sign or prove) |
 | Pool | `rcv_insert` | Invoker-only |
-| Pool | `is_known_root`, tree views, `renew_tree` | None |
-| Adapter | `verify`, `circuit_id` | None (pure) |
+| Pool | `is_known_root`, `depth`, tree views, `renew_tree` | None |
+| Adapter | `verify`, `circuit_id`, `tree_depth` | None (pure) |
 
 ## 16. Dependency layering and immutability
 

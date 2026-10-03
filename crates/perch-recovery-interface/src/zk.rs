@@ -234,6 +234,11 @@ pub trait ZkAdapterInterface {
     /// embedded verification key.
     fn circuit_id(e: &Env) -> BytesN<32>;
 
+    /// The Merkle depth the circuit proves membership at. The controller
+    /// refuses to enroll a ZK factor whose pool reports a different depth,
+    /// since no proof could ever verify against it.
+    fn tree_depth(e: &Env) -> u32;
+
     /// `Ok(())` iff `evidence` proves knowledge of the credential enrolled
     /// as `binding.enrollment_id` for `statement.account`, against a root the
     /// enrolled pool accepts, for exactly this statement. Writes nothing.
@@ -251,16 +256,20 @@ pub trait ZkAdapterInterface {
     ) -> Result<(), ZkAdapterError>;
 }
 
-/// The membership pool's read surface the adapter depends on. Insertion,
-/// rollover, and renewal are the pool's own interface
+/// The membership pool's read surface the adapter and the controller depend
+/// on. Insertion, rollover, and renewal are the pool's own interface
 /// (`docs/recovery/spec.md` §14).
 #[allow(unused)]
 #[contractclient(name = "MembershipPoolClient")]
 pub trait MembershipPoolInterface {
-    /// Whether `root` is an acceptable root of tree `tree_id`: the final
-    /// root of a sealed tree, or one of the active tree's retained recent
-    /// roots.
+    /// Whether `root` is a root tree `tree_id` of this pool has ever had.
+    /// Trees are append-only, so every historical root stays acceptable; a
+    /// recent-roots window would let anyone who inserts leaves fast enough
+    /// push a victim's root out before their proof lands.
     fn is_known_root(e: &Env, tree_id: u32, root: BytesN<32>) -> bool;
+
+    /// The pool's Merkle depth (a build constant).
+    fn depth(e: &Env) -> u32;
 }
 
 /// A backend verifier's refusals. Same names, order, and codes (1, 2, 3)

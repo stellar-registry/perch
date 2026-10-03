@@ -2,9 +2,9 @@
 
 > **Pre-spec.** Spec §3 changes this schema for epic #99's fresh
 > deployments: `pending-activity` is removed, the ZK factor names an
-> `adapter` and an `enrollment-id`, and configuration identity is the
-> canonical recovery-section text (`config_hash`). The canonical-form
-> reasoning below is unchanged.
+> `adapter`, an `enrollment-id`, and a `commitment`, and configuration
+> identity is the canonical recovery-section text (`config_hash`). The
+> canonical-form reasoning below is unchanged.
 
 This documents the `recovery` field added to `PolicyDoc`
 (`crates/perch-ir/src/doc.rs`): why it's shaped the way it is, and how it

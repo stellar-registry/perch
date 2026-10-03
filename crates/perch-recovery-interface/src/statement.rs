@@ -17,8 +17,7 @@
 //! statement (see `docs/recovery/spec.md` §4).
 
 use crate::encode::contract_id;
-use crate::zk::ZkEvidence;
-use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env};
 use soroban_sdk_tools::scerr;
 
 /// Domain tag every encoding starts with. A statement digest can never
@@ -199,26 +198,6 @@ pub struct RecoveryStatement {
     pub config: ConfigBinding,
     pub timing: StatementTiming,
     pub subject: StatementSubject,
-}
-
-/// Evidence submitted alongside a statement the controller reconstructs
-/// itself (the caller never supplies the statement). Which parts are
-/// required depends on the enrolled mode — see `docs/recovery/spec.md` §5.
-#[contracttype]
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RecoveryEvidence {
-    /// For `Reconfigure`/`Upgrade`, whose freshness bound the evidence
-    /// provider chooses: the `valid_until_ledger` every guardian signed and
-    /// the proof binds. Ignored for attempt-bound actions, whose bound the
-    /// controller fixes from the attempt.
-    pub valid_until_ledger: u32,
-    /// Guardians, each of whom must authorize
-    /// `require_auth_for_args((digest,))` for this exact statement in the
-    /// same transaction. Duplicates and non-members are not counted.
-    pub guardians: Vec<Address>,
-    /// Zero or one ZK proof. A `Vec` rather than an `Option` because
-    /// `#[contracttype]` cannot derive `Option<CustomStruct>` fields.
-    pub zk: Vec<ZkEvidence>,
 }
 
 /// Fixed prefix length: domain (24) + version (1) + action (1) + network

@@ -105,11 +105,14 @@ pub struct ReplacementSet {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZkEnrollment {
-    /// The new enrollment id the target document's recovery section names.
-    /// Must never have been enrolled for this account before.
+    /// The new enrollment id. Must never have been enrolled for this
+    /// account before.
     pub id: BytesN<32>,
-    /// The new leaf's inner commitment, `Poseidon2(DOM_LEAF, secret)`, which
-    /// the completing transaction inserts into the enrolled pool.
+    /// The new leaf's inner commitment, `Poseidon2(DOM_LEAF, secret)`.
+    /// Derivation writes `id` and `commitment` into the target document's
+    /// recovery section, so the target hash binds them, and the completing
+    /// `apply_doc` inserts the leaf from the compiled target, never from a
+    /// call argument.
     pub commitment: BytesN<32>,
 }
 

@@ -23,13 +23,27 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # z3 backs the perch-analyze SMT tests (they skip loudly when absent).
       - run: sudo apt-get update && sudo apt-get install -y z3
-      # The account pins its infra to the sha256 of the deployed wasm, read at
-      # build time from crates/perch-smart-account/wasm/*.wasm (git-ignored). Fetch
-      # them from the deployment before anything compiles the account.
+      # The account and the factory pin their dependencies to the sha256 of
+      # the deployed wasm, read at build time from their git-ignored wasm/
+      # caches. Fetch them, hash- and address-checked, from
+      # deployments/testnet.json before anything compiles them; the deployed
+      # stack lands in target/stack for the release-stack suite below.
       - uses: ./.github/actions/fetch-infra-wasm
+        with:
+          stack: target/stack
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The manifest against the chain: every contract at its content address
+      # running its recorded wasm, and what the factory, adapter, pool, and
+      # exercised accounts actually resolve.
+      - run: scripts/verify-deployment.sh
+      # Every recovery flow through the deployed bytes, with real proofs from
+      # the pinned nargo/bb under enforcing authorization.
+      - name: Release stack with real proofs
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo test -p perch-integration-tests --test release_stack -- --ignored --test-threads 2
       # Wasm leg of the conformance vectors: the compiled artifact must agree
       # with the vectors under the soroban host (rustc/LLVM/wasmi in the loop).
       - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release
@@ -124,8 +138,10 @@ jobs:
       matrix:
         # One leg per npm package (see packages/): perch-js is the PolicyDoc
         # surface, perch-interpreter-js the interpreter contract bindings,
-        # perch-zk the ZK recovery proof helpers (proves with bb.js in-test).
-        package: [perch-js, perch-interpreter-js, perch-zk]
+        # perch-zk the ZK recovery proof helpers and pool indexer (proves with
+        # bb.js in-test), perch-relay the guardian-approval relay,
+        # perch-contracts the stack bindings generated from the deployment.
+        package: [perch-js, perch-interpreter-js, perch-zk, perch-relay, perch-contracts]
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
@@ -142,6 +158,22 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: npm test
+
+  # Every npm package as `npm publish` would ship it: packed, installed from
+  # the tarball into an empty project, every entry point imported. Nothing
+  # is published.
+  packages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: scripts/check-packages.sh
 
   # ZK recovery: the circuit's own tests, a byte-for-byte rebuild of every
   # committed artifact (ACIR, VKs, proof fixtures, manifest) with the pinned

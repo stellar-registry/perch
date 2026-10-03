@@ -13,7 +13,7 @@ doctest = false
 # controller, the ZK adapter, the pool, and the account never collides
 # exported entry points, and none of those deployables has to depend on
 # another deployable's crate to agree on the statement (no circular
-# build-time pins — see docs/recovery/spec.md, "Dependency layering").
+# build-time pins — see docs/recovery/spec.md §16).
 [dependencies]
 soroban-sdk = { workspace = true }
 soroban-sdk-tools = { workspace = true }

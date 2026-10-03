@@ -8,8 +8,7 @@ use soroban_sdk::{Env, Symbol};
 pub const LEDGERS_PER_DAY_NOMINAL: u32 = 17_280;
 
 /// The account-upgrade delay: ledgers between scheduling an upgrade and the
-/// earliest ledger it may execute (`docs/recovery/spec.md`, "Account
-/// upgrades"). Defined in ledgers; it is seven days only while ledgers close
+/// earliest ledger it may execute (`docs/recovery/spec.md` §12). Defined in ledgers; it is seven days only while ledgers close
 /// every five seconds, and the delay is enforced in ledgers regardless.
 pub const ACCOUNT_UPGRADE_DELAY_LEDGERS: u32 = 7 * LEDGERS_PER_DAY_NOMINAL;
 

@@ -5,8 +5,8 @@
 //!
 //! The authoritative behaviour (states, transitions, who may authorize what,
 //! which document changes a recovery may make) is `docs/recovery/spec.md`.
-//! This crate is the code half of that spec's "Recovery statement" and
-//! "ZK adapter boundary" sections, and the byte layout in
+//! This crate is the code half of that spec's §4 (the recovery statement)
+//! and §13 (the ZK adapter boundary), and of the byte layouts in
 //! `docs/recovery/statement.md`. It holds no state and exports no contract
 //! entry point, so the controller, the adapter, the pool, and the account can
 //! all link it without linking each other (no circular build-time pins).

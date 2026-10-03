@@ -14,7 +14,7 @@
 //!
 //! Timing is in native ledger-sequence counts throughout. There is no
 //! seconds field and no seconds-to-ledgers conversion anywhere in the
-//! statement (see `docs/recovery/spec.md`, "Timing").
+//! statement (see `docs/recovery/spec.md` §4).
 
 use crate::encode::contract_id;
 use crate::zk::ZkEvidence;
@@ -90,7 +90,7 @@ pub struct ConfigBinding {
     /// evidence produced under one epoch is dead under every later one.
     pub epoch: u64,
     /// `sha256` of the canonical JSON of the enrolled document's `recovery`
-    /// section (`docs/recovery/spec.md`, "Configuration identity"). Binds
+    /// section (`docs/recovery/spec.md` §3.2). Binds
     /// the whole configuration: profile, mode, guardians, quorum, ZK
     /// adapter/pool/enrollment, controller, baseline, replaceable signer
     /// ids, and timing.
@@ -199,8 +199,7 @@ pub struct RecoveryStatement {
 
 /// Evidence submitted alongside a statement the controller reconstructs
 /// itself (the caller never supplies the statement). Which parts are
-/// required depends on the enrolled mode — see `docs/recovery/spec.md`,
-/// "Evidence requirements".
+/// required depends on the enrolled mode — see `docs/recovery/spec.md` §5.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecoveryEvidence {
@@ -288,7 +287,7 @@ impl RecoveryStatement {
         Ok(e.crypto().sha256(&self.encode(e)?).to_bytes())
     }
 
-    /// Freshness (`docs/recovery/spec.md`, "Evidence freshness"): evidence
+    /// Freshness (`docs/recovery/spec.md` §4): evidence
     /// is acceptable at ledger `now` only while `now <= valid_until_ledger`,
     /// and only if `valid_until_ledger` reaches no more than
     /// `expiry_ledgers` past `now` — so an evidence provider cannot mint a

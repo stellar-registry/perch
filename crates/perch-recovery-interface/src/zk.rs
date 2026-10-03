@@ -2,7 +2,7 @@
 //! what the adapter checks, and how a statement becomes circuit inputs.
 //!
 //! Three contracts sit behind one enrolled ZK factor, each constructorless
-//! and immutable (`docs/recovery/spec.md`, "ZK adapter boundary"):
+//! and immutable (`docs/recovery/spec.md` §13):
 //!
 //! - the **adapter** ([`ZkAdapterInterface`]) — the only contract the
 //!   controller calls. It receives the *structured* [`RecoveryStatement`]
@@ -253,7 +253,7 @@ pub trait ZkAdapterInterface {
 
 /// The membership pool's read surface the adapter depends on. Insertion,
 /// rollover, and renewal are the pool's own interface
-/// (`docs/recovery/spec.md`, "Membership pool").
+/// (`docs/recovery/spec.md` §14).
 #[allow(unused)]
 #[contractclient(name = "MembershipPoolClient")]
 pub trait MembershipPoolInterface {

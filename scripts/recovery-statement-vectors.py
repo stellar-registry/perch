@@ -112,7 +112,8 @@ def encode_replacements(rs):
     if rs["zk_enrollment"] is None:
         out += b"\x00"
     else:
-        out += b"\x01" + bytes.fromhex(rs["zk_enrollment"])
+        z = rs["zk_enrollment"]
+        out += b"\x01" + bytes.fromhex(z["id"]) + bytes.fromhex(z["commitment"])
     return out
 
 
@@ -132,7 +133,7 @@ def main():
             },
             {"signer_id": "backup", "credential": {"kind": "delegated", "address": DELEGATE}},
         ],
-        "zk_enrollment": h(0x5E),
+        "zk_enrollment": {"id": h(0x5E), "commitment": h(0x0C)},
     }
     replacements_hash = sha256(b"perch/recovery/replacements" + encode_replacements(replacements))
 

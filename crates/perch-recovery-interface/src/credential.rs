@@ -5,7 +5,7 @@
 //! `stellar-accounts`, so the ZK adapter and pool need not link it). Its
 //! [`Credential::fingerprint`] is what the account's permanent revoked set
 //! stores and what every applied document is checked against
-//! (`docs/recovery/spec.md`, "Revocation"). A [`ReplacementSet`] is what a
+//! (`docs/recovery/spec.md` §8). A [`ReplacementSet`] is what a
 //! `LostKey`/`Compromise` attempt declares; its [`ReplacementSet::hash`] is
 //! bound into the attempt's statement, so every guardian and prover approves
 //! the exact new credentials, not just a target hash.
@@ -80,24 +80,45 @@ pub struct Replacement {
 }
 
 /// Everything a `LostKey`/`Compromise` attempt changes about the source
-/// document. See `docs/recovery/spec.md`, "Permitted document changes".
+/// document. See `docs/recovery/spec.md` §7.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReplacementSet {
     /// Signer replacements in strictly ascending `signer_id` byte order
     /// (sorted, no duplicates) — the one canonical order.
     pub signers: Vec<Replacement>,
-    /// The new ZK enrollment id, required exactly when the enrolled mode
-    /// has a ZK factor (a ZK-evidenced completion consumes the enrolled
-    /// credential, so it must install a fresh one).
-    pub zk_enrollment: Option<BytesN<32>>,
+    /// The fresh ZK enrollment the completion installs, required exactly
+    /// when the enrolled mode has a ZK factor (a ZK-evidenced completion
+    /// consumes the enrolled credential, so it must install a fresh one).
+    /// Empty or one entry — a `Vec` because `#[contracttype]` cannot derive
+    /// `Option<CustomStruct>`.
+    pub zk_enrollment: Vec<ZkEnrollment>,
+}
+
+/// A ZK enrollment a recovery completion installs.
+///
+/// The commitment is bound here, not only the id: completion runs under the
+/// zero-signer recovery rule, so nothing signs its arguments, and a
+/// commitment supplied only at completion could be swapped by whoever
+/// submits the completing transaction first — handing them the account's
+/// next ZK factor.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZkEnrollment {
+    /// The new enrollment id the target document's recovery section names.
+    /// Must never have been enrolled for this account before.
+    pub id: BytesN<32>,
+    /// The new leaf's inner commitment, `Poseidon2(DOM_LEAF, secret)`, which
+    /// the completing transaction inserts into the enrolled pool.
+    pub commitment: BytesN<32>,
 }
 
 impl ReplacementSet {
     /// `count (4, BE)`, then per replacement `id_len (4, BE) || id ||
-    /// Credential::encode`, then `0x00` or `0x01 || enrollment_id (32)`.
-    /// Refuses a non-canonical order rather than sorting, so two different
-    /// lists can never encode the same.
+    /// Credential::encode`, then `0x00`, or `0x01 || enrollment_id (32) ||
+    /// commitment (32)`. Refuses a non-canonical order rather than sorting,
+    /// and more than one ZK enrollment, so two different sets can never
+    /// encode the same.
     pub fn encode(&self, e: &Env) -> Result<Bytes, StatementError> {
         let mut out = Bytes::new(e);
         out.extend_from_array(&self.signers.len().to_be_bytes());
@@ -114,12 +135,15 @@ impl ReplacementSet {
             out.append(&r.credential.encode(e)?);
             prev = Some(id);
         }
-        match &self.zk_enrollment {
-            None => out.push_back(0),
-            Some(id) => {
+        match self.zk_enrollment.len() {
+            0 => out.push_back(0),
+            1 => {
+                let z = self.zk_enrollment.get_unchecked(0);
                 out.push_back(1);
-                out.extend_from_array(&id.to_array());
+                out.extend_from_array(&z.id.to_array());
+                out.extend_from_array(&z.commitment.to_array());
             }
+            _ => return Err(StatementError::ReplacementsNotCanonical),
         }
         Ok(out)
     }
@@ -209,6 +233,13 @@ mod test {
         assert_ne!(short, long);
     }
 
+    fn zk(e: &Env, id: u8, commitment: u8) -> ZkEnrollment {
+        ZkEnrollment {
+            id: BytesN::from_array(e, &[id; 32]),
+            commitment: BytesN::from_array(e, &[commitment; 32]),
+        }
+    }
+
     fn rep(e: &Env, id: &str, key: u8) -> Replacement {
         Replacement {
             signer_id: String::from_str(e, id),
@@ -221,13 +252,13 @@ mod test {
         let e = Env::default();
         let sorted = ReplacementSet {
             signers: vec![&e, rep(&e, "admin", 1), rep(&e, "backup", 2)],
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
         assert!(sorted.hash(&e).is_ok());
 
         let unsorted = ReplacementSet {
             signers: vec![&e, rep(&e, "backup", 2), rep(&e, "admin", 1)],
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
         assert_eq!(
             unsorted.hash(&e),
@@ -236,7 +267,7 @@ mod test {
 
         let duplicate = ReplacementSet {
             signers: vec![&e, rep(&e, "admin", 1), rep(&e, "admin", 2)],
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
         assert_eq!(
             duplicate.hash(&e),
@@ -246,7 +277,7 @@ mod test {
         // A proper prefix sorts first.
         let prefix = ReplacementSet {
             signers: vec![&e, rep(&e, "admin", 1), rep(&e, "admin2", 2)],
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
         assert!(prefix.hash(&e).is_ok());
     }
@@ -256,41 +287,52 @@ mod test {
         let e = Env::default();
         let base = ReplacementSet {
             signers: vec![&e, rep(&e, "admin", 1)],
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
         let h = base.hash(&e).unwrap();
         let other_id = ReplacementSet {
             signers: vec![&e, rep(&e, "owner", 1)],
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
         let other_key = ReplacementSet {
             signers: vec![&e, rep(&e, "admin", 9)],
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
         let with_zk = ReplacementSet {
             signers: vec![&e, rep(&e, "admin", 1)],
-            zk_enrollment: Some(BytesN::from_array(&e, &[5; 32])),
+            zk_enrollment: vec![&e, zk(&e, 5, 7)],
         };
         let other_zk = ReplacementSet {
             signers: vec![&e, rep(&e, "admin", 1)],
-            zk_enrollment: Some(BytesN::from_array(&e, &[6; 32])),
+            zk_enrollment: vec![&e, zk(&e, 6, 7)],
         };
         let empty = ReplacementSet {
             signers: Vec::new(&e),
-            zk_enrollment: None,
+            zk_enrollment: Vec::new(&e),
         };
-        for v in [other_id, other_key, with_zk.clone(), other_zk, empty] {
+        let zk_h = with_zk.hash(&e).unwrap();
+        for v in [other_id, other_key, with_zk, other_zk.clone(), empty] {
             assert_ne!(h, v.hash(&e).unwrap());
         }
-        assert_ne!(
-            with_zk.hash(&e).unwrap(),
-            ReplacementSet {
-                signers: vec![&e, rep(&e, "admin", 1)],
-                zk_enrollment: Some(BytesN::from_array(&e, &[6; 32])),
-            }
-            .hash(&e)
-            .unwrap()
-        );
+        // Same enrollment id, different commitment: the commitment is bound,
+        // so a completion can't install someone else's secret under the
+        // approved id.
+        let other_commitment = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1)],
+            zk_enrollment: vec![&e, zk(&e, 5, 8)],
+        };
+        assert_ne!(zk_h, other_commitment.hash(&e).unwrap());
+        assert_ne!(zk_h, other_zk.hash(&e).unwrap());
+    }
+
+    #[test]
+    fn at_most_one_zk_enrollment() {
+        let e = Env::default();
+        let two = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1)],
+            zk_enrollment: vec![&e, zk(&e, 5, 7), zk(&e, 6, 7)],
+        };
+        assert_eq!(two.hash(&e), Err(StatementError::ReplacementsNotCanonical));
     }
 
     #[test]

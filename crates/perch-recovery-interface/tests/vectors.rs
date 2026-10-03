@@ -4,7 +4,7 @@
 //! vector must match this crate byte for byte. Other implementations
 //! (perch-js, the Noir witness generator, Nido's SDK) assert the same file.
 
-use perch_recovery_interface::credential::{Credential, Replacement, ReplacementSet};
+use perch_recovery_interface::credential::{Credential, Replacement, ReplacementSet, ZkEnrollment};
 use perch_recovery_interface::zk::{
     zk_statement_fields, DOM_AUTH, DOM_BIND, DOM_LEAF, DOM_NULLIFIER,
 };
@@ -188,7 +188,13 @@ fn replacement_set_hash_matches_and_is_what_attempts_bind() {
     }
     let set = ReplacementSet {
         signers,
-        zk_enrollment: Some(h32(&e, &rv["zk_enrollment"])),
+        zk_enrollment: soroban_sdk::vec![
+            &e,
+            ZkEnrollment {
+                id: h32(&e, &rv["zk_enrollment"]["id"]),
+                commitment: h32(&e, &rv["zk_enrollment"]["commitment"]),
+            }
+        ],
     };
     assert_eq!(
         bytes_hex(&set.encode(&e).unwrap()),

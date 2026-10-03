@@ -1039,13 +1039,20 @@
                     "symbol": "Nullifier"
                   },
                   {
-                    "bytes": "002bf3c9b18d8a87d0eada4386a4d953f44f18ad6bb7954bc613e66aded2ae28"
+                    "vec": [
+                      {
+                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                      },
+                      {
+                        "bytes": "002bf3c9b18d8a87d0eada4386a4d953f44f18ad6bb7954bc613e66aded2ae28"
+                      }
+                    ]
                   }
                 ]
               },
               "durability": "persistent",
               "val": {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                "bool": true
               }
             }
           },

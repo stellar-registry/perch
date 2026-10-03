@@ -37,8 +37,8 @@ pub struct RecoveryStorage {
     pub collecting: TemporaryMap<(Address, u64), Attempt>,
     /// The completing invocation's marker (spec T5).
     pub completing: TemporaryMap<Address, CompletionMarker>,
-    /// Spent nullifiers and the account that spent each (spec §11).
-    pub nullifier: PersistentMap<BytesN<32>, Address>,
+    /// Spent nullifiers, per account (spec §11). Never cleared.
+    pub nullifier: PersistentMap<(Address, BytesN<32>), bool>,
     /// Recorded `Reconfigure`/`Upgrade` evidence, by statement digest.
     pub approval: PersistentMap<(Address, BytesN<32>), ChangeApproval>,
     /// Published baseline documents' canonical bytes, by hash (spec §3.5).

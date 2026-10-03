@@ -47,11 +47,24 @@ against the release artifacts belong to the integration layer.
   cross-contract call. `rcv_gate` clears it only for the attempt it was set
   for.
 - **Completion marker.** `enforce` writes a temporary-storage marker bound
-  to `(attempt_id, target_doc_hash)`; `rcv_sync` consumes it in the same
-  invocation. Any failure reverts both.
-- **Attempt storage.** Collecting attempts live in temporary storage until
-  their `cancel_until`; an attempt that is authorized moves to persistent
-  storage.
+  to `(attempt_id, target_doc_hash, ledger)`; `rcv_sync` consumes it and
+  treats the call as a completion only if the compiled document is that
+  target, in that ledger, while that attempt is still the authorized one.
+  `enforce` also runs for an authorization tree's sub-invocations that
+  never execute, so a stale marker is dropped rather than trusted.
+- **Spent nullifiers are recorded per account** (spec §11's `Spent{X}`).
+  Any contract can enroll itself at the shared controller with an adapter
+  of its choosing, so a controller-wide record would let it mark a victim's
+  (public) nullifier spent and block every later proof by the victim.
+  `one_accounts_completion_never_spends_anothers_nullifier` pins this.
+- **Hooks re-check what the compiler validates** (non-zero timing, quorum
+  range, the account not among its own guardians), because any contract can
+  call `rcv_sync` for itself.
+- **Change approvals are refused during an authorized window** (§9: only
+  that attempt's cancellation evidence is accepted).
+- **Attempt storage.** Collecting attempts live in temporary storage for
+  their evidence window; an attempt that is authorized, or whose evidence
+  window is longer than the network's maximum entry TTL, is persistent.
 - **Stale lost-key source (T4).** The promoting submission is refused with
   `AttemptNotLive` and changes nothing; the attempt can never promote, so a
   fresh attempt is required.
@@ -74,6 +87,11 @@ against the release artifacts belong to the integration layer.
   canonical bytes. Workstream 2's measurements (`budgets.md`) set the final
   values.
 - **`execute`** returns the called function's value.
+- **`max-cancels` is a lifetime count per controller.** Nothing resets it;
+  switching controllers starts a new one (T6).
+- **A lost-key source is compared at promotion.** If the applied document
+  changes and then changes back before promotion, the attempt promotes over
+  the same snapshot it was opened for.
 - **Account renewal.** Revoked-set and enrolled-id entries are one
   persistent entry each, so the account's `renew` takes the fingerprints and
   enrollment ids to extend.

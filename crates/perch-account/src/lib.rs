@@ -21,7 +21,9 @@ use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, V
 use stellar_accounts::smart_account::{ContextRule, Signer};
 
 #[allow(unused_imports)]
-pub use perch_smart_account::{FreezeGate, PerchAccountError, PerchAuthError, UpgradeRequest};
+pub use perch_smart_account::{
+    FreezeGate, InfraPins, PerchAccountError, PerchAuthError, UpgradeRequest,
+};
 
 #[contract]
 pub struct PerchAccount;

@@ -141,6 +141,16 @@ pub struct FreezeGate {
     pub until: u32,
 }
 
+/// The shared infra an account resolves, pinned when it was built (see
+/// [`infra`]): what a deployment check compares with its manifest.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InfraPins {
+    pub doc_compiler: Address,
+    pub interpreter: Address,
+    pub spending_limit: Address,
+}
+
 /// A scheduled account upgrade (spec §12).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -388,6 +398,15 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// The doc compiler this account pins at build time.
     fn doc_compiler(e: &Env) -> Address {
         infra::perch_doc_compiler::address(e)
+    }
+
+    /// Every shared contract this account pins at build time.
+    fn infra(e: &Env) -> InfraPins {
+        InfraPins {
+            doc_compiler: infra::perch_doc_compiler::address(e),
+            interpreter: infra::perch_interpreter::address(e),
+            spending_limit: infra::perch_spending_limit::address(e),
+        }
     }
 
     /// Whether a credential fingerprint is permanently revoked.

@@ -1,30 +1,29 @@
-# Fetched infra cache (not committed)
+# Build-time pins (not committed)
 
 The account reads its shared infra from this git-ignored directory **at build
-time**; the account *source* hardcodes no contract ids. Populate it with:
-
-```sh
-scripts/fetch-infra-wasm.sh   # needs the Stellar CLI (core; no registry plugin)
-```
-
-CI runs this before building (see `.github/actions/fetch-infra-wasm`). A missing
-file is a build error naming it.
+time**; the account *source* hardcodes no contract ids.
 
 | file | used for |
 |---|---|
-| `stateless.id` | the stateless subregistry's contract id (baked via `include_str!`) |
+| `stateless.id` | the registry the infra was `deploy_stateless`'d from (baked via `include_str!`) |
 | `perch-doc-compiler.wasm` | `sha256` → the content-address salt |
 | `perch-interpreter.wasm` | `sha256` → the content-address salt |
+| `perch-spending-limit.wasm` | `sha256` → the content-address salt |
 
-Each `infra::<name>::address(env)` derives `deployer(stateless.id, sha256(wasm))`
-offline. Pinning keeps a registry republish from changing a deployed account's
-behavior (`installed == reviewed`).
+Each `infra::<name>::address(env)` derives `deployer(stateless.id,
+sha256(wasm))` offline, and the deployed account reports the result through
+its `infra()` view. Pinning keeps a registry republish from changing a
+deployed account's behavior (`installed == reviewed`).
 
-**Why fetched by id, not name:** the registry CLI can only address `channel/name`
-(one level), so the nested `unverified/perch/stateless` subregistry, and the
-wasm published in it, aren't resolvable by name, and there is no CLI to derive a
-contract-deployer address. So `scripts/fetch-infra-wasm.sh` fetches by the
-deployed (content-addressed) ids, which live in that script (build tooling, not
-source). After a refresh, run
-`cargo test -p perch-integration-tests --test testnet_pins`. It asserts the
-resolved id + hashes still derive the live testnet addresses.
+Populate it one of two ways:
+
+- `scripts/fetch-infra-wasm.sh`: from a deployment manifest
+  (`deployments/<network>.json`). Each wasm is fetched by its recorded
+  address and refused unless its sha256 and content address match the
+  manifest. CI does this before building (`.github/actions/fetch-infra-wasm`).
+- `scripts/build-stack.sh --registry <id>`: from a fresh build, before a
+  deployment (`scripts/deploy-stack.sh` runs it).
+
+A missing file is a build error naming it, and replacing one rebuilds the
+account. After a refresh, `cargo test -p perch-integration-tests --test
+testnet_pins` checks the compiled pins against the manifest.

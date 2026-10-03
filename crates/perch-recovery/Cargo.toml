@@ -1,6 +1,6 @@
 [package]
 name = "perch-recovery"
-description = "Deployable account-recovery controller: guardian/ZK/combined recovery modes as an OZ smart-account Policy"
+description = "Deployable account-recovery controller: guardian/ZK/combined recovery under Loss and Protected profiles, as an OZ smart-account Policy"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -18,22 +18,15 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-# Required unconditionally: `src/lib.rs`'s always-available `RecoveryError`
-# uses `#[scerr]` regardless of the `contract` feature, so a client-only build
-# (perch-smart-account, `default-features = false`) still needs this.
 soroban-sdk-tools = { workspace = true }
-stellar-accounts = { workspace = true, optional = true }
+stellar-accounts = { workspace = true }
+# The statement, the compiled configuration, the hook/adapter/pool/account
+# clients, and the controller's error codes. A plain library, so the
+# controller and the account agree without either linking the other.
+perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
+# Client and wire types only (`contract` off): the controller calls the
+# account's own pinned compiler for `derive_target` and `compile_doc`.
 perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-perch-testkit = { path = "../perch-testkit" }
-perch-ir = { path = "../perch-ir" }
-
-[features]
-# The deployable controller (storage, ZK adapter, `Policy` impl, entry
-# points). Consumers that only cross-call an *adopted* instance (i.e.
-# perch-smart-account) disable this so their wasm links no controller state
-# or lifecycle code — mirrors perch-doc-compiler's `contract` feature split.
-default = ["contract"]
-contract = ["dep:stellar-accounts"]

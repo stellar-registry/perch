@@ -66,17 +66,17 @@ extern crate alloc;
 pub mod canon;
 pub mod doc;
 pub mod parse;
+pub mod recovery;
 pub mod validate;
 
-pub use canon::{canonical_json, CANON_VERSION};
+pub use canon::{canonical_json, recovery_canonical_json, CANON_VERSION};
 #[cfg(feature = "std")]
 pub use canon::{doc_hash, doc_hash_hex};
 pub use doc::{
     AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, BaselineCommitment, CapConstraint,
-    ContractScope, GuardianSet, IsSelfPred, PendingActivityPolicy, PolicyDoc, Principals,
-    RecoveryConfig, RecoveryMode, RecoveryProfile, Rule, Scope, SelfAdminScope,
-    SelfAuthenticatingPrincipals, SignerDecl, SignerMethod, StringInPred, StringPrefixPred,
-    ThresholdPrincipals, U32EqPred, ZkVerifierConfig,
+    ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig, RecoveryMode,
+    RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
+    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred, ZkFactor,
 };
 pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{

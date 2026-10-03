@@ -1,7 +1,7 @@
 //! Native proof helpers for Perch ZK recovery.
 //!
 //! - [`Tree`]: rebuilds a pool tree from its leaves (read from the pool's
-//!   `leaves` pages or replayed from its `Enrolled` events) and produces any
+//!   `leaves` pages or replayed from its `LeafInserted` events) and produces any
 //!   leaf's witness path.
 //! - [`Inputs`]: the full circuit input set for one proof, with the public
 //!   values (`root`, `nullifier`, `statement_hash`) derived exactly as the

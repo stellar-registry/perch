@@ -3,7 +3,7 @@
 //! verified by the audited UltraHonk verifier with the committed VK, through
 //! the controller's own client (`perch-recovery-interface`'s
 //! `ZkAdapterClient`). Nothing is mocked except account authorization for
-//! `enroll` (the pool's own authorization is tested in perch-zk-pool).
+//! `rcv_insert` (the pool's own authorization is tested in perch-zk-pool).
 
 extern crate std;
 

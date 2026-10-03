@@ -62,8 +62,9 @@ pub enum PoolError {
     TreeIdOverflow,
 }
 
-/// Where an insertion landed. `(tree_id, index)` is the leaf's permanent
-/// position; `root` is the tree's root right after the insertion.
+/// Where an insertion landed (the `LeafInserted` event's payload).
+/// `(tree_id, index)` is the leaf's permanent position; `root` is the
+/// tree's root right after the insertion.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Insertion {

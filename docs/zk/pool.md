@@ -12,7 +12,7 @@ factory. It also holds no recovery state machine, which is the controller's.
 
 | Entry point | Auth | Effect |
 | --- | --- | --- |
-| `rcv_insert(account, enrollment_id, commitment) -> Insertion` | `account`, invoker-only | appends `H(DOM_BIND, account, enrollment_id, commitment)`; once per `(account, enrollment_id)` |
+| `rcv_insert(account, enrollment_id, commitment)` (returns nothing) | `account`, invoker-only | appends `H(DOM_BIND, account, enrollment_id, commitment)`; once per `(account, enrollment_id)` |
 | `enrollment(account, enrollment_id) -> Option<LeafPosition>` | none | where that enrollment's leaf is |
 | `is_known_root(tree_id, root) -> bool` | none | `MembershipPoolInterface`, the adapter's root check |
 | `depth() -> u32` | none | `MembershipPoolInterface`; the controller compares it with the adapter's `tree_depth()` |

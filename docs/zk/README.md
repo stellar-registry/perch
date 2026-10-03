@@ -117,7 +117,7 @@ recorded per release build rather than in `circuits/manifest.json`.
 
 All proofs in the tests are real proofs from the pinned toolchain, verified
 by the audited verifier against a real pool. No verifier or pool is mocked.
-Only `enroll`'s account authorization is mocked, and only in the adapter's
+Only `rcv_insert`'s account authorization is mocked, and only in the adapter's
 tests. The pool's own tests exercise real authorization rules.
 
 - **Every ZK action**: `LostKey`, `Compromise`, `Cancel`,
@@ -138,7 +138,7 @@ tests. The pool's own tests exercise real authorization rules.
 - **Pool boundaries** without 2^32 inserts: the Merkle code is parameterized
   by depth and driven to fill and roll over at depth 2. The real depth-32 last
   slot (index 2^32 − 1, every path bit set) is reached by synthesizing the
-  frontier one slot short of full, then filling it through `enroll`, rolling
+  frontier one slot short of full, then filling it through `rcv_insert`, rolling
   over, and verifying a real proof for that slot afterwards (`earlier_tree`).
 - **Historical roots**: a proof against an older root still verifies after
   129 further insertions, and so does a proof against the later root

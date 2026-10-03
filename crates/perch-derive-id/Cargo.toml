@@ -1,6 +1,6 @@
 [package]
 name = "perch-derive-id"
-description = "Offline: derive deployer(parent, sha256(name)) contract ids for the infra fetch script"
+description = "Offline: derive content-addressed (salt = wasm hash) and name-salted registry contract ids for the deploy and fetch scripts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

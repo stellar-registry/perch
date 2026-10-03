@@ -30,6 +30,7 @@ members = [
     "crates/perch-zk-adapter",
     "crates/perch-webauthn-verifier",
     "crates/perch-account-factory",
+    "crates/perch-testnet",
 ]
 # Vendored third-party source, built only as a path dependency: not linted,
 # tested, or released with the workspace. See vendor/*/NOTICE.

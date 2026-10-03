@@ -35,6 +35,16 @@ name: Release
 # @stellar-registry/perch-interpreter), and the npm-publish matrix job then
 # publishes each released package to npm (NPM_TOKEN secret).
 #
+# The recovery stack (verifiers, ZK pool and adapter, controller, account,
+# factory) is deployed in pin order by scripts/deploy-stack.sh, which writes
+# the deployment manifest (deployments/<network>.json) every consumer's
+# build-time pins are fetched and verified from (scripts/fetch-infra-wasm.sh,
+# docs/deploy/README.md). Its contracts are tagged and version-tracked here
+# like the rest, but are not in the publish-plan allow-list: publishing them
+# to the canonical registries is a separate, deliberate step (see the
+# publish-plan comment). The account and the factory pin what they consume,
+# so their release always follows the publication of their tier-0 pins.
+#
 # All publish halves hang off `needs:` in the SAME run (gated on the
 # detect-releases `releases` output) instead of a tag/release trigger, so they
 # fire even though the tag was pushed with the default GITHUB_TOKEN — no GitHub
@@ -133,7 +143,7 @@ jobs:
           # crates/<contract>/Cargo.toml in a PR; on merge this tags + publishes
           # it. The constructorless allow-list in publish-plan decides which of
           # these actually publish on-chain (the rest just get a tag).
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           releases='[]'
@@ -171,6 +181,9 @@ jobs:
         id: npm
         run: |
           set -euo pipefail
+          # packages/perch-zk, perch-relay, and perch-contracts are built,
+          # tested, and pack-checked in CI but deliberately not listed:
+          # adding one here publishes it to npm on its next merge.
           NPM_PACKAGES="perch-js perch-interpreter-js"
           npm_releases='[]'
           for p in $NPM_PACKAGES; do
@@ -246,9 +259,16 @@ jobs:
             # version-pin sharp edge.
             perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface";;
             perch-recovery) echo "perch-recovery perch-recovery-interface perch-doc-compiler perch-compile perch-ir perch-program";;
+            perch-zk-pool) echo "perch-zk-pool perch-zk-primitives perch-recovery-interface";;
+            # The verification key the adapter compiles in lives in its own
+            # crate (vk/), so a circuit change re-releases it.
+            perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface";;
+            # The factory pins the account wasm and the WebAuthn verifier, so
+            # a change to either is a new factory.
+            perch-account-factory) echo "perch-account-factory perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-webauthn-verifier";;
             *) echo "$1";;
           esac; }
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory"
           summary=""
           bumped=""
           for c in $CONTRACTS; do
@@ -484,18 +504,21 @@ jobs:
       STELLAR_RPC_URL: ${{ vars.STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org' }}
       STELLAR_NETWORK_PASSPHRASE: ${{ vars.STELLAR_NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015' }}
       WASM_NAME: perch-spending-limit
+      # unverified/perch/stateless (derive: name-salt "stateless" under
+      # unverified/perch, docs/testnet-deployment.md).
+      REGISTRY: ${{ vars.PERCH_STATELESS_REGISTRY_ID || 'CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O' }}
       # Author bound to the wasm name at bootstrap = pubkey of the CI key.
       AUTHOR: ${{ vars.SPENDING_LIMIT_AUTHOR || 'GDCB32GYRIYTZGERRSDRJVXALKR3TYA3W7YXQNXDNHJAOQSMRXBNUYAX' }}
     steps:
-      # Checkout for perch-derive-id + the fetch-infra-wasm composite (which
-      # resolves the stateless registry id by NAME — nothing hardcoded here).
+      # Checkout for the setup-stellar composite. The target registry is the
+      # canonical `stateless` subregistry of unverified/perch, named here
+      # rather than read from the account's pin cache: those pins come from
+      # deployments/testnet.json, which names whichever registry the current
+      # stack was deployed to (#95).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
-      # No build caches in a publish job (zizmor cache-poisoning: nothing a
-      # cache write could later inject into a signed publish).
-      - uses: ./.github/actions/fetch-infra-wasm
+      - uses: ./.github/actions/setup-stellar
       - name: Download the attested release asset
         env:
           GH_TOKEN: ${{ github.token }}
@@ -530,8 +553,6 @@ jobs:
           # (accepts a raw S... seed) — the key never appears in argv.
           STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
         run: |
-          REGISTRY=$(cat crates/perch-smart-account/wasm/stateless.id)
-          echo "REGISTRY=$REGISTRY" >>"$GITHUB_ENV"
           LOCAL_HASH=$(sha256sum "$WASM" | cut -d' ' -f1)
           echo "LOCAL_HASH=$LOCAL_HASH" >>"$GITHUB_ENV"
 
@@ -642,13 +663,16 @@ jobs:
           # The constructorless set. Keep in step with the detect-releases
           # CONTRACTS list. A contract not listed here is tagged but never
           # published to the constructorless registry.
-          # perch-recovery is deliberately NOT in this allow-list yet: it is
-          # tagged/versioned (CONTRACTS above) so its intra-workspace pins stay
-          # tracked, but publishing a recovery controller on-chain is a
-          # separate, deliberate decision (see
-          # docs/recovery/pending-activity-policy.md) — add it here explicitly
-          # when that decision is made, not as a side effect of adding the
-          # crate.
+          # The recovery stack (perch-recovery, perch-zk-pool,
+          # perch-zk-adapter, perch-webauthn-verifier, perch-account-factory)
+          # is deliberately NOT in this allow-list: it is tagged/versioned
+          # (CONTRACTS above) so its intra-workspace pins stay tracked, but
+          # publishing it to the canonical registry is a separate, deliberate
+          # decision. Until then scripts/deploy-stack.sh deploys it, in pin
+          # order, to its own registry (deployments/testnet.json). Adding
+          # these here also needs the manager's one-time initial publish of
+          # each new name, and the factory must publish after the account
+          # build it pins.
           ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier"]'
           if [ -n "$DISPATCH_TAG" ]; then
             # Strict allow-list regex, not a prefix glob: the tag and the package

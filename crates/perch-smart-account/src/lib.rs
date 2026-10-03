@@ -50,11 +50,12 @@ use stellar_accounts::smart_account::{
 pub use soroban_sdk;
 pub use stellar_accounts;
 
-/// The stateless subregistry (`unverified/perch/stateless`) — the content-addressed
-/// deployer the infra derive their address from. Its id is **not hardcoded in
-/// source**: `scripts/fetch-infra-wasm.sh` writes it into the git-ignored
-/// `wasm/stateless.id`, which is `include_str!`'d here. A missing file is a build
-/// error — fetch it first.
+/// The registry the infra was `deploy_stateless`'d from — the content-addressed
+/// deployer the infra derive their address from: the deployment manifest's
+/// `registry.id` (`deployments/<network>.json`). Its id is **not hardcoded in
+/// source**: `scripts/fetch-infra-wasm.sh` (or `scripts/build-stack.sh`) writes it
+/// into the git-ignored `wasm/stateless.id`, which is `include_str!`'d here. A
+/// missing file is a build error — fetch it first.
 pub fn stateless_registry(env: &Env) -> Address {
     Address::from_str(env, include_str!("../wasm/stateless.id").trim())
 }

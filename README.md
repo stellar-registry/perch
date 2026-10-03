@@ -39,6 +39,11 @@ crates/
   perch-smart-account/  the doc-only account trait: apply_doc (the sole write path) on OZ
   perch-account/      deployable shell of perch-smart-account (21 exported functions, ~46 KB)
   perch-ed25519-verifier/  deployable ed25519 verifier for External signers
+  perch-webauthn-verifier/  deployable WebAuthn (passkey, secp256r1) verifier for External
+                      signers; constructorless, no admin
+  perch-account-factory/  deployable account factory: deploys the build-time-pinned account
+                      wasm at an address bound to its admin signers; passkey accounts name
+                      the pinned WebAuthn verifier
   perch-recovery/     deployable account-recovery controller: the one implementation of
                       docs/recovery/spec.md (Loss/Protected × guardian/ZK/combined),
                       adopted through apply_doc's `recovery` document field
@@ -48,7 +53,11 @@ crates/
                       audited UltraHonk verifier with the circuit's VK compiled in
   perch-zk-primitives/  host-side Poseidon2 for the circuit's formulas (no_std)
   perch-zk-prover/    native witnesses/proving + `perch-zk-fixtures` (artifacts, fixtures, bench)
-  perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
+  perch-deploy/       deploy/CI tool (lib + bin): signs smart-account auth entries
+                      (apply_doc, publish)
+  perch-testnet/      exercises a deployed stack on testnet: passkey owners, G-account
+                      guardians, real proofs, enforcing auth, measured transactions
+  perch-derive-id/    offline content-address and name-salt contract id derivation
   perch-conformance/  eval-semantics conformance vectors: hand-authored (program,
                       invocation) → verdict cases + compile→eval differential + wasm-leg suites
   perch-analyze/      per-policy SMT prover (PolicyDoc → SMT-LIB, z3): dead rules, intent
@@ -59,7 +68,11 @@ packages/
   perch-interpreter-js/  interpreter contract client bindings, published to npm as
                       @stellar-registry/perch-interpreter (generated from the wasm;
                       regen via `just bindings-interpreter-js`)
-  perch-zk/           ZK recovery proof helpers: commitments, witnesses, bb.js proving
+  perch-zk/           ZK recovery proof helpers: commitments, witnesses, bb.js proving,
+                      and a trust-free pool indexer (`@stellar-registry/perch-zk/indexer`)
+  perch-relay/        store-and-forward relay for signed guardian approvals
+  perch-contracts/    stack contract bindings generated from the deployed wasm, plus the
+                      deployment manifests (regen via scripts/bindings-contracts.sh)
 circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
                       artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
 vendor/               vendored audited UltraHonk verifier (unmodified; see its NOTICE)
@@ -70,13 +83,20 @@ formal/               Lean 4 model of the v1 semantics + machine-checked theorem
 fuzz/                 cargo-fuzz targets: evaluator totality, parser/canonicalization round-trip
 komet/                Komet (K-framework) symbolic property tests — an independent wasm-level
                       second opinion (maintainer-gated on the K toolchain; see komet/README.md)
-scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap;
+scripts/              build-stack.sh / deploy-stack.sh — the stack in pin order and its
+                      manifest; fetch-infra-wasm.sh — build-time pins from the manifest,
+                      hash- and address-checked; verify-deployment.sh — the manifest
+                      against the chain; bindings-contracts.sh, check-packages.sh;
+                      bootstrap-testnet.sh — the canonical registry + author account;
                       zk-toolchain.sh — pinned, checksummed nargo/bb for the ZK circuit
+deployments/          deployment manifests (testnet.json) and the testnet exercise report
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
 docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
 docs/recovery/        opt-in account recovery: the authoritative spec, statement layouts,
                       the implementation map, and the pre-spec design records
 docs/zk/              ZK recovery circuit, pool, adapter, measurements, and the depth decision
+docs/deploy/          build order, manifests, pin verification, and the measured testnet
+                      exercise of the stack
 docs/testnet-deployment.md  verified live-state map of the canonical testnet deployment
 testdata/             golden vectors shared by the Rust and TS suites (frozen)
 testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and the wasm leg
@@ -84,9 +104,12 @@ testdata/zk/          real-proof ZK recovery fixtures, one per action and pool b
 testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)
 ```
 
-Three contracts deploy on-chain: the interpreter (immutable, multi-tenant policy
-evaluation), the smart account (holds the authorization rules; the CI key is one
-of its scoped signers), and the ed25519 verifier they share.
+The release pipeline publishes the interpreter, the doc compiler, and the
+ed25519 verifier to the canonical registry; the smart account authors those
+releases. The recovery stack (WebAuthn verifier, ZK pool and adapter,
+controller, account, factory) is deployed in pin order by
+`scripts/deploy-stack.sh`; [`docs/deploy/`](./docs/deploy/README.md) covers the
+build order, the manifest, and the testnet deployment.
 
 ## Development
 
@@ -109,6 +132,8 @@ just coverage          # branch coverage incl. the conformance suite (cargo-llvm
 just zk-artifacts check  # rebuild the ZK circuit artifacts, VKs, and proof fixtures
                          #   with the pinned toolchain; fail on any byte of drift
 just zk-bench          # ZK proving + metered on-chain costs (docs/zk/measurements.md)
+scripts/fetch-infra-wasm.sh   # build-time pins from deployments/testnet.json
+scripts/verify-deployment.sh  # the manifest against the chain
 ```
 
 [`docs/verification/PLAN.md`](./docs/verification/PLAN.md) covers what is

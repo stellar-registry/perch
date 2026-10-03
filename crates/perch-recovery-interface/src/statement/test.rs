@@ -202,20 +202,50 @@ fn account_and_controller_must_be_contracts() {
 }
 
 #[test]
-fn freshness_window() {
+fn provider_chosen_freshness_is_bounded_by_the_expiry_window() {
     let e = Env::default();
-    let mut s = base(&e, StatementSubject::Reconfigure(ConfigChange::Remove));
-    s.timing.expiry_ledgers = 100;
-    s.timing.valid_until_ledger = 1_000;
+    for subject in [
+        StatementSubject::Reconfigure(ConfigChange::Remove),
+        StatementSubject::Upgrade(UpgradeSubject {
+            request_id: 1,
+            wasm_hash: b32(&e, 9),
+        }),
+    ] {
+        let mut s = base(&e, subject);
+        s.timing.expiry_ledgers = 100;
+        s.timing.valid_until_ledger = 1_000;
 
-    // Accepted from `valid_until - expiry` through `valid_until` inclusive.
-    assert_eq!(s.check_fresh(1_000), Ok(()));
-    assert_eq!(s.check_fresh(900), Ok(()));
-    assert_eq!(s.check_fresh(1_001), Err(StatementError::EvidenceExpired));
-    assert_eq!(
-        s.check_fresh(899),
-        Err(StatementError::EvidenceWindowTooLong)
-    );
+        // Accepted from `valid_until - expiry` through `valid_until` inclusive.
+        assert_eq!(s.check_fresh(1_000), Ok(()));
+        assert_eq!(s.check_fresh(900), Ok(()));
+        assert_eq!(s.check_fresh(1_001), Err(StatementError::EvidenceExpired));
+        assert_eq!(
+            s.check_fresh(899),
+            Err(StatementError::EvidenceWindowTooLong)
+        );
+    }
+}
+
+#[test]
+fn attempt_bound_freshness_is_only_the_controller_fixed_deadline() {
+    // A cancellation's bound is the attempt's last possible live ledger,
+    // which can sit further out than one expiry window; guardians who sign
+    // early must still be counted.
+    let e = Env::default();
+    for subject in [
+        StatementSubject::LostKey(attempt(&e)),
+        StatementSubject::Cancel(CancelSubject {
+            attempt_id: 3,
+            attempt_statement: b32(&e, 0x55),
+        }),
+    ] {
+        let mut s = base(&e, subject);
+        s.timing.expiry_ledgers = 100;
+        s.timing.valid_until_ledger = 1_000;
+        assert_eq!(s.check_fresh(1), Ok(()));
+        assert_eq!(s.check_fresh(1_000), Ok(()));
+        assert_eq!(s.check_fresh(1_001), Err(StatementError::EvidenceExpired));
+    }
 }
 
 #[test]

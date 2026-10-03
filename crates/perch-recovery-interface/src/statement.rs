@@ -76,8 +76,8 @@ pub enum StatementError {
     EmptyReplacements,
     /// The current ledger is past the statement's `valid_until_ledger`.
     EvidenceExpired,
-    /// `valid_until_ledger` reaches further past the current ledger than the
-    /// enrolled `expiry_ledgers` allows.
+    /// A provider-chosen `valid_until_ledger` reaches further past the
+    /// current ledger than the enrolled `expiry_ledgers` allows.
     EvidenceWindowTooLong,
 }
 
@@ -106,12 +106,16 @@ pub struct StatementTiming {
     pub delay_ledgers: u32,
     /// The enrolled `expiry-ledgers`: the evidence window for a collecting
     /// attempt, the completion window for an authorized one, and the upper
-    /// bound on how far ahead `valid_until_ledger` may reach.
+    /// bound on how far ahead a provider-chosen `valid_until_ledger` may
+    /// reach.
     pub expiry_ledgers: u32,
     /// The last ledger sequence (inclusive) at which this evidence may be
-    /// accepted. For `LostKey`/`Compromise` it is the attempt's evidence
-    /// deadline, fixed by the controller; for every other action the
-    /// evidence provider chooses it, within `expiry_ledgers` of submission.
+    /// accepted. The controller fixes it for attempt-bound actions:
+    /// `LostKey`/`Compromise` use the attempt's evidence deadline, and
+    /// `Cancel` the last ledger the attempt could possibly be live, so
+    /// approvals collected over several transactions all sign one
+    /// statement. For `Reconfigure`/`Upgrade` the evidence provider chooses
+    /// it, within `expiry_ledgers` of submission.
     pub valid_until_ledger: u32,
 }
 
@@ -203,10 +207,10 @@ pub struct RecoveryStatement {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecoveryEvidence {
-    /// For actions whose freshness bound the evidence provider chooses
-    /// (`Cancel`, `Reconfigure`, `Upgrade`): the `valid_until_ledger` every
-    /// guardian signed and the proof binds. Ignored for `LostKey`/
-    /// `Compromise`, whose bound is the attempt's evidence deadline.
+    /// For `Reconfigure`/`Upgrade`, whose freshness bound the evidence
+    /// provider chooses: the `valid_until_ledger` every guardian signed and
+    /// the proof binds. Ignored for attempt-bound actions, whose bound the
+    /// controller fixes from the attempt.
     pub valid_until_ledger: u32,
     /// Guardians, each of whom must authorize
     /// `require_auth_for_args((digest,))` for this exact statement in the
@@ -287,17 +291,24 @@ impl RecoveryStatement {
         Ok(e.crypto().sha256(&self.encode(e)?).to_bytes())
     }
 
-    /// Freshness (`docs/recovery/spec.md` §4): evidence
-    /// is acceptable at ledger `now` only while `now <= valid_until_ledger`,
-    /// and only if `valid_until_ledger` reaches no more than
-    /// `expiry_ledgers` past `now` — so an evidence provider cannot mint a
-    /// standing approval that outlives the account's own recovery window.
+    /// Freshness (`docs/recovery/spec.md` §4): evidence is acceptable at
+    /// ledger `now` only while `now <= valid_until_ledger`. For the actions
+    /// whose bound the evidence provider chooses (`Reconfigure`, `Upgrade`),
+    /// `valid_until_ledger` must also reach no more than `expiry_ledgers`
+    /// past `now`, so a provider cannot mint a standing approval that
+    /// outlives the account's own recovery window. Attempt-bound actions
+    /// carry a controller-fixed bound and are additionally limited by the
+    /// attempt's own liveness.
     pub fn check_fresh(&self, now: u32) -> Result<(), StatementError> {
         let until = self.timing.valid_until_ledger;
         if now > until {
             return Err(StatementError::EvidenceExpired);
         }
-        if until - now > self.timing.expiry_ledgers {
+        let provider_chosen = matches!(
+            self.action(),
+            RecoveryAction::Reconfigure | RecoveryAction::Upgrade
+        );
+        if provider_chosen && until - now > self.timing.expiry_ledgers {
             return Err(StatementError::EvidenceWindowTooLong);
         }
         Ok(())

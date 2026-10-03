@@ -4,8 +4,8 @@
 > behaviour it must have is now [`spec.md`](spec.md). Where the two
 > disagree, the spec wins: in particular, configuration is written by
 > `rcv_sync`, not `install` (§10); collecting attempts block nothing (§6);
-> nullifier release is ownership-checked (§11); and completion is
-> distinguished from reconfiguration (§10).
+> nullifiers are never reserved or released, only spent (§11); and
+> completion is distinguished from reconfiguration (§10).
 
 This documents `crates/perch-recovery`: how completion authorizes
 `apply_doc`, the reconfigure-authorization rule that governs every change to

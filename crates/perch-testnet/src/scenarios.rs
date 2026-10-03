@@ -28,6 +28,7 @@ pub fn zk_lost_key(w: &World<'_>) -> Result<()> {
         zk: Some(zk1.clone()),
         guardians: vec![],
         delay: DELAY,
+        baseline: None,
     };
     let doc = w.doc(&a.owner, Some(&rec));
     w.apply(
@@ -161,6 +162,7 @@ pub fn combined_protected(w: &World<'_>) -> Result<()> {
         zk: Some(zk.clone()),
         guardians: guardians.iter().map(|g| g.account()).collect(),
         delay: DELAY,
+        baseline: None,
     };
     w.apply(
         "enroll Combined through apply_doc",
@@ -202,8 +204,11 @@ pub fn combined_protected(w: &World<'_>) -> Result<()> {
     )?;
 
     w.activity_refused("frozen: direct authorization", &a, &a.owner)?;
+    w.was_frozen()?;
     w.execute_refused("frozen: execute", &a, &a.owner)?;
+    w.was_frozen()?;
     w.apply_refused_at_auth("frozen: apply_doc", &a, &a.owner, &w.doc(&a.owner, None))?;
+    w.was_frozen()?;
 
     c.refused(
         "an Initiate proof submitted as Cancel",
@@ -304,6 +309,7 @@ pub fn zk_protected_changes(w: &World<'_>) -> Result<()> {
         zk: Some(zk.clone()),
         guardians: vec![],
         delay: DELAY,
+        baseline: None,
     };
     w.apply(
         "enroll ZkOnly Protected",
@@ -439,6 +445,7 @@ pub fn guardian_loss(w: &World<'_>) -> Result<()> {
         zk: None,
         guardians: guardians.iter().map(|g| g.account()).collect(),
         delay: DELAY,
+        baseline: None,
     };
     w.apply(
         "enroll GuardianOnly through apply_doc",
@@ -507,5 +514,192 @@ pub fn guardian_loss(w: &World<'_>) -> Result<()> {
     w.complete("completion apply_doc (GuardianOnly)", &a, &target)?;
     w.activity_refused("the lost passkey after recovery", &a, &a.owner)?;
     w.activity("the new passkey after recovery", &a, &new_owner)?;
+    Ok(())
+}
+
+/// `Combined` under `Loss`: both factors authorize, activity continues, and
+/// the completion spends the nullifier and rotates the ZK credential.
+pub fn combined_loss(w: &World<'_>) -> Result<()> {
+    let c = w.c;
+    c.begin_scenario("combined / loss: both factors, ZK rotation");
+    let guardians = [
+        w.g_account("combined-loss/g0")?,
+        w.g_account("combined-loss/g1")?,
+        w.g_account("combined-loss/g2")?,
+    ];
+    let a = w.new_account("combined-loss", w.passkey("combined-loss/owner"))?;
+    let zk1 = w.zk("combined-loss/zk1");
+    let rec = Rec {
+        profile: "loss",
+        mode: Mode::Combined,
+        zk: Some(zk1.clone()),
+        guardians: guardians.iter().map(|g| g.account()).collect(),
+        delay: DELAY,
+        baseline: None,
+    };
+    w.apply(
+        "enroll Combined Loss",
+        &a,
+        &a.owner,
+        &w.doc(&a.owner, Some(&rec)),
+        0,
+    )?;
+    let new_owner = w.passkey("combined-loss/new-owner");
+    let zk2 = w.zk("combined-loss/zk2");
+    let r = w.replacements(&new_owner, Some(&zk2));
+    let attempt = w.begin_lost_key("begin_lost_key", &a, &r)?;
+    w.guardian(
+        "submit_guardian (1 of 2)",
+        &guardians[0],
+        &a,
+        attempt,
+        EvidenceDomain::Initiate,
+    )?;
+    let ev = w.prove(
+        &a,
+        &zk1,
+        &w.statement(&a, attempt, EvidenceDomain::Initiate)?,
+    )?;
+    c.call(
+        "submit_zk (Combined, not yet promoting)",
+        &w.s.controller,
+        "submit_zk",
+        w.zk_args(&a, attempt, EvidenceDomain::Initiate, &ev),
+        &[],
+    )?;
+    w.guardian(
+        "submit_guardian (2 of 2, promoting: ZK already in)",
+        &guardians[1],
+        &a,
+        attempt,
+        EvidenceDomain::Initiate,
+    )?;
+    w.activity("Loss: activity during the authorized window", &a, &a.owner)?;
+    let target = w.target_bytes(&a, &r)?;
+    c.wait_for_ledger(w.attempt(&a, attempt)?.executable_after)?;
+    w.complete("completion apply_doc (Combined, ZK rotation)", &a, &target)?;
+    let spent: bool = c.read_as(
+        &w.s.controller,
+        "nullifier_spent",
+        vec![c.sc(c.address(&a.address)), c.sc(ev.nullifier.clone())],
+    )?;
+    ensure!(spent, "nullifier not spent");
+    w.activity_refused("the lost passkey after recovery", &a, &a.owner)?;
+    w.activity("the new passkey after recovery", &a, &new_owner)?;
+    Ok(())
+}
+
+/// `GuardianOnly` under `Protected`, compromise recovery: a thief with the
+/// owner key adds a signer; the guardians restore the published baseline
+/// with a new owner key; the stolen key and the thief's signer are revoked.
+pub fn guardian_protected_compromise(w: &World<'_>) -> Result<()> {
+    let c = w.c;
+    c.begin_scenario("guardian-only / protected: compromise recovery from the baseline");
+    let guardians = [
+        w.g_account("compromise/g0")?,
+        w.g_account("compromise/g1")?,
+        w.g_account("compromise/g2")?,
+    ];
+    let a = w.new_account("guardian-protected", w.passkey("compromise/owner"))?;
+    let baseline = w.doc(&a.owner, None);
+    let rec = Rec {
+        profile: "protected",
+        mode: Mode::Guardian,
+        zk: None,
+        guardians: guardians.iter().map(|g| g.account()).collect(),
+        delay: DELAY,
+        baseline: Some(w.doc_hash(&baseline)?.to_array()),
+    };
+    w.apply(
+        "enroll GuardianOnly Protected with a baseline",
+        &a,
+        &a.owner,
+        &w.doc(&a.owner, Some(&rec)),
+        0,
+    )?;
+    let thief = w.passkey("compromise/thief");
+    let stolen = w.doc_with(&a.owner, Some(&thief), Some(&rec));
+    w.apply(
+        "the thief adds a signer with the stolen owner key",
+        &a,
+        &a.owner,
+        &stolen,
+        0,
+    )?;
+    w.activity_via("the thief's signer moves XLM", &a, &thief, "thief")?;
+
+    let new_owner = w.passkey("compromise/new-owner");
+    let r = w.replacements(&new_owner, None);
+    let account = c.sc(c.address(&a.address));
+    c.refused(
+        "begin_compromise before the baseline is published",
+        &w.s.controller,
+        "begin_compromise",
+        vec![account.clone(), c.sc(r.clone())],
+        &[],
+        code(RecoveryError::BaselineNotPublished),
+    )?;
+    c.refused(
+        "publish_baseline of another document",
+        &w.s.controller,
+        "publish_baseline",
+        vec![account.clone(), c.sc(stolen.clone())],
+        &[],
+        code(RecoveryError::BaselineMismatch),
+    )?;
+    c.call(
+        "publish_baseline",
+        &w.s.controller,
+        "publish_baseline",
+        vec![account.clone(), c.sc(baseline)],
+        &[],
+    )?;
+    let out = c.call(
+        "begin_compromise",
+        &w.s.controller,
+        "begin_compromise",
+        vec![account, c.sc(r.clone())],
+        &[],
+    )?;
+    let attempt: u64 = c.decode(&out.value)?;
+    w.guardian(
+        "submit_guardian (1 of 2)",
+        &guardians[0],
+        &a,
+        attempt,
+        EvidenceDomain::Initiate,
+    )?;
+    w.guardian(
+        "submit_guardian (2 of 2, promoting; sets the freeze)",
+        &guardians[1],
+        &a,
+        attempt,
+        EvidenceDomain::Initiate,
+    )?;
+    w.activity_refused_via("frozen: the thief's signer", &a, &thief, "thief")?;
+    w.was_frozen()?;
+    w.activity_refused("frozen: the owner key", &a, &a.owner)?;
+    w.was_frozen()?;
+    let target = w.compromise_target(&a, &r)?;
+    c.wait_for_ledger(w.attempt(&a, attempt)?.executable_after)?;
+    w.complete(
+        "completion apply_doc (compromise: revokes the stolen and added keys)",
+        &a,
+        &target,
+    )?;
+    w.activity("the new owner after recovery", &a, &new_owner)?;
+    w.activity_refused("the stolen owner key after recovery", &a, &a.owner)?;
+    ensure!(
+        w.rule_id(&a, "thief").is_err(),
+        "the baseline has no thief rule"
+    );
+    w.apply_refused(
+        "re-adding the thief's key, signed by the new owner",
+        &a,
+        &new_owner,
+        &w.doc_with(&new_owner, Some(&thief), Some(&rec)),
+        0,
+        Some(PerchAccountError::RevokedCredential),
+    )?;
     Ok(())
 }

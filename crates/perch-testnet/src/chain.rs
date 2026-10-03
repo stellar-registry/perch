@@ -52,6 +52,9 @@ pub struct Step {
     pub ledger: Option<u32>,
     pub error: Option<String>,
     pub error_code: Option<u32>,
+    /// The contract error an account's `__check_auth` failed with, from the
+    /// host's diagnostics ("failed account authentication with error").
+    pub auth_error_code: Option<u32>,
     pub instructions: Option<u64>,
     pub mem_bytes: Option<u64>,
     pub read_entries: Option<u32>,
@@ -441,6 +444,7 @@ impl Chain {
                     outcome: "refused".into(),
                     error: Some(first_line(&e)),
                     error_code: got,
+                    auth_error_code: auth_error_code(&e),
                     ..Step::default()
                 });
                 Ok(())
@@ -500,4 +504,13 @@ pub fn first_line(s: &str) -> String {
         }
         _ => line.chars().take(240).collect(),
     }
+}
+
+/// The code in the host's "failed account authentication with error",
+/// account, Error(Contract, #N) diagnostic.
+pub fn auth_error_code(message: &str) -> Option<u32> {
+    let line = message
+        .lines()
+        .find(|l| l.contains("failed account authentication with error"))?;
+    contract_error_code(line)
 }

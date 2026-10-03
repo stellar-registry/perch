@@ -42,7 +42,7 @@ struct Cli {
     #[arg(long, default_value = "deployments/testnet-exercise.json")]
     out: std::path::PathBuf,
     /// Run only these scenarios (comma-separated): zk-loss, combined,
-    /// zk-protected, guardian-loss.
+    /// zk-protected, guardian-loss, combined-loss, compromise.
     #[arg(long, value_delimiter = ',')]
     only: Vec<String>,
 }
@@ -78,11 +78,13 @@ fn main() -> Result<()> {
     let w = World::new(&chain, stack, run.clone());
     let started_ledger = chain.latest_ledger()?;
 
-    let all: [(&str, Scenario); 4] = [
+    let all: [(&str, Scenario); 6] = [
         ("zk-loss", scenarios::zk_lost_key),
         ("combined", scenarios::combined_protected),
         ("zk-protected", scenarios::zk_protected_changes),
         ("guardian-loss", scenarios::guardian_loss),
+        ("combined-loss", scenarios::combined_loss),
+        ("compromise", scenarios::guardian_protected_compromise),
     ];
     let mut failures = Vec::new();
     for (name, f) in all {

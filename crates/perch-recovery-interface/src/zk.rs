@@ -256,8 +256,8 @@ pub trait ZkAdapterInterface {
     ) -> Result<(), ZkAdapterError>;
 }
 
-/// The membership pool's read surface the adapter and the controller depend
-/// on. Insertion, rollover, and renewal are the pool's own interface
+/// The membership pool surface the adapter, the controller, and the account
+/// depend on. Renewal and indexer views are the pool's own
 /// (`docs/recovery/spec.md` §14).
 #[allow(unused)]
 #[contractclient(name = "MembershipPoolClient")]
@@ -270,6 +270,15 @@ pub trait MembershipPoolInterface {
 
     /// The pool's Merkle depth (a build constant).
     fn depth(e: &Env) -> u32;
+
+    /// Insert the leaf `Poseidon2(DOM_BIND, account, enrollment_id,
+    /// commitment)` into the active tree, sealing it and opening the next
+    /// one if it fills. Requires `account.require_auth()`; the account calls
+    /// this from `apply_doc` as the direct invoker (a reserved name). Returns
+    /// nothing: a refusal (non-canonical commitment, non-contract account,
+    /// an `(account, enrollment_id)` already inserted) fails the call, and
+    /// with it the whole `apply_doc`.
+    fn rcv_insert(e: &Env, account: Address, enrollment_id: BytesN<32>, commitment: BytesN<32>);
 }
 
 /// A backend verifier's refusals. Same names, order, and codes (1, 2, 3)

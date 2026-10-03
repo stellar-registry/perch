@@ -19,13 +19,21 @@
 //! - [`zk`]: the structured adapter boundary ([`zk::ZkAdapterInterface`]),
 //!   the evidence/binding types, the projection of a statement onto circuit
 //!   field elements, and the circuit domain tags.
+//! - [`config`]: the compiled recovery configuration the doc compiler
+//!   emits and the controller stores, with its `config_hash`.
+//! - [`controller`]: the invoker-only hooks the account calls on its
+//!   controller (`rcv_sync`, `rcv_cancel`, `rcv_upgrade`), their outcomes,
+//!   and `RecoveryError`.
 //! - [`account`]: account-side constants the spec fixes (the upgrade delay,
-//!   the invoker-only function names).
+//!   the invoker-only function names) and the account surface the
+//!   controller calls (views and the `rcv_gate` freeze mirror).
 #![no_std]
 
 mod encode;
 
 pub mod account;
+pub mod config;
+pub mod controller;
 pub mod credential;
 pub mod statement;
 pub mod zk;

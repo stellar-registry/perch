@@ -20,6 +20,9 @@
 //! - C7: a guardian authorizes exactly the statement digest it is asked for,
 //!   and a guardian that is itself a reserved-name-guarded account can only
 //!   do so through a non-reserved entry point.
+//! - C8: a contract already on the call stack cannot be re-entered, even for
+//!   a read, so an account's `__check_auth` must not call the controller
+//!   that is collecting its approval (why the freeze is a local mirror).
 //!
 //! The contracts here are minimal stand-ins (an OZ `do_check_auth` account, a
 //! recording delegate, a hook, a policy), so these tests pin the pinned
@@ -32,7 +35,7 @@ use soroban_sdk::auth::{Context, ContractContext, CustomAccountInterface};
 use soroban_sdk::crypto::Hash;
 use soroban_sdk::testutils::Ledger;
 use soroban_sdk::xdr::{
-    InvokeContractArgs, ScAddress, ScVal, SorobanAddressCredentials,
+    InvokeContractArgs, ScAddress, ScErrorCode, ScErrorType, ScVal, SorobanAddressCredentials,
     SorobanAddressCredentialsWithDelegates, SorobanAuthorizationEntry, SorobanAuthorizedFunction,
     SorobanAuthorizedInvocation, SorobanCredentials, SorobanDelegateSignature, StringM, VecM,
 };
@@ -570,6 +573,46 @@ impl ApproveController {
     pub fn rcv_sync(e: Env, guardian: Address, digest: BytesN<32>) {
         guardian.require_auth_for_args(vec![&e, digest.into_val(&e)]);
     }
+
+    /// A read-only view, like an `activity_gate` the account could consult.
+    pub fn activity_gate(_e: Env, _account: Address) -> bool {
+        false
+    }
+}
+
+const CONTROLLER: Symbol = symbol_short!("ctrl");
+
+/// A guardian whose `__check_auth` asks the controller whether it is frozen,
+/// the design the spec rejected.
+#[contract]
+struct ReentrantGuardian;
+
+#[contractimpl]
+impl CustomAccountInterface for ReentrantGuardian {
+    type Error = SmartAccountError;
+    type Signature = Val;
+
+    fn __check_auth(
+        e: Env,
+        _signature_payload: Hash<32>,
+        _signature: Val,
+        _auth_contexts: Vec<Context>,
+    ) -> Result<(), SmartAccountError> {
+        let controller: Address = e.storage().instance().get(&CONTROLLER).unwrap();
+        let frozen = ApproveControllerClient::new(&e, &controller)
+            .activity_gate(&e.current_contract_address());
+        if frozen {
+            return Err(SmartAccountError::UnvalidatedContext);
+        }
+        Ok(())
+    }
+}
+
+#[contractimpl]
+impl ReentrantGuardian {
+    pub fn set_controller(e: Env, controller: Address) {
+        e.storage().instance().set(&CONTROLLER, &controller);
+    }
 }
 
 /// A guardian that is itself a perch-style account: its `__check_auth`
@@ -671,4 +714,57 @@ fn c7_guarded_guardian_approves_only_outside_reserved_hooks() {
 
     env.set_auths(&[entry("submit_guardian", 2)]);
     client.submit_guardian(&guardian, &digest);
+}
+
+/// A guardian's `__check_auth` that reads the controller works when the
+/// controller is not on the stack, and is refused by the host when the
+/// controller is the contract collecting the approval. A perch account that
+/// is a guardian of another account at its own controller would hit exactly
+/// this, so the account mirrors its freeze locally (`rcv_gate`, spec §9).
+#[test]
+fn c8_auth_cannot_reenter_the_contract_collecting_it() {
+    let env = Env::default();
+    env.ledger().with_mut(|l| l.sequence_number = 10);
+    let guardian = env.register(ReentrantGuardian, ());
+    let controller = env.register(ApproveController, ());
+    let target = env.register(Target, ());
+    ReentrantGuardianClient::new(&env, &guardian).set_controller(&controller);
+    let digest = BytesN::from_array(&env, &[0xd4; 32]);
+    let entry = |contract: &Address, fn_name: &str, args: std::vec::Vec<ScVal>, nonce: i64| {
+        SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::Address(SorobanAddressCredentials {
+                address: guardian.clone().into(),
+                nonce,
+                signature_expiration_ledger: 100,
+                signature: ScVal::Void,
+            }),
+            root_invocation: invocation(contract, fn_name, args),
+        }
+    };
+
+    // The controller is not on the stack: the read succeeds.
+    env.set_auths(&[entry(
+        &target,
+        "protected",
+        std::vec![addr_arg(&guardian)],
+        1,
+    )]);
+    TargetClient::new(&env, &target).protected(&guardian);
+
+    // The controller is collecting the approval: the read re-enters it.
+    env.set_auths(&[entry(
+        &controller,
+        "submit_guardian",
+        std::vec![ScVal::Bytes(digest.to_array().to_vec().try_into().unwrap())],
+        2,
+    )]);
+    // The host's "Contract re-entry is not allowed" (`frame.rs`), not an
+    // authorization refusal.
+    assert_eq!(
+        ApproveControllerClient::new(&env, &controller).try_submit_guardian(&guardian, &digest),
+        Err(Ok(soroban_sdk::Error::from_type_and_code(
+            ScErrorType::Context,
+            ScErrorCode::InvalidAction
+        )))
+    );
 }

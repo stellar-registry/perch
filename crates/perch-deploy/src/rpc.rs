@@ -26,12 +26,23 @@ pub struct Simulation {
     /// Every simulateTransaction response carries the current ledger — reuse it
     /// for signature expirations instead of a separate getLatestLedger call.
     pub latest_ledger: u32,
+    /// The simulated invocation's CPU instructions and memory, when the RPC
+    /// reports them (`cost`).
+    pub cpu_insns: Option<u64>,
+    pub mem_bytes: Option<u64>,
 }
 
 pub enum TxStatus {
     NotFound,
-    Success { ledger: u32 },
-    Failed { result_xdr: String },
+    /// `result_xdr` is the `TransactionResult` (its `fee_charged` is what the
+    /// source account paid).
+    Success {
+        ledger: u32,
+        result_xdr: String,
+    },
+    Failed {
+        result_xdr: String,
+    },
 }
 
 impl Rpc {
@@ -121,7 +132,18 @@ impl Rpc {
                 .and_then(Value::as_u64)
                 .map(|s| s as u32)
                 .context("simulateTransaction: missing latestLedger")?,
+            cpu_insns: cost(&r, "cpuInsns"),
+            mem_bytes: cost(&r, "memBytes"),
         })
+    }
+
+    /// The latest closed ledger sequence.
+    pub fn latest_ledger(&self) -> Result<u32> {
+        let r = self.call("getLatestLedger", json!({}))?;
+        r.get("sequence")
+            .and_then(Value::as_u64)
+            .map(|s| s as u32)
+            .context("getLatestLedger: missing sequence")
     }
 
     /// Returns the tx hash on acceptance; bails on immediate rejection.
@@ -147,6 +169,11 @@ impl Rpc {
         match r.get("status").and_then(Value::as_str) {
             Some("SUCCESS") => Ok(TxStatus::Success {
                 ledger: r.get("ledger").and_then(Value::as_u64).unwrap_or(0) as u32,
+                result_xdr: r
+                    .get("resultXdr")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string(),
             }),
             Some("FAILED") => Ok(TxStatus::Failed {
                 result_xdr: r
@@ -158,4 +185,8 @@ impl Rpc {
             _ => Ok(TxStatus::NotFound),
         }
     }
+}
+
+fn cost(r: &Value, field: &str) -> Option<u64> {
+    r.get("cost")?.get(field)?.as_str()?.parse().ok()
 }

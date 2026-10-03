@@ -24,3 +24,7 @@ perch-spending-limit = { version = "0.1.1", path = "../perch-spending-limit" }
 # the infra at exactly the content addresses the account derives.
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }
 hex = "0.4"
+# The software passkey (`passkey`): WebAuthn assertions over secp256r1.
+p256 = { version = "0.13", features = ["ecdsa"] }
+sha2 = "0.10"
+base64 = "0.22"

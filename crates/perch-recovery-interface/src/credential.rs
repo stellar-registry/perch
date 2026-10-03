@@ -1,0 +1,306 @@
+//! Credential identity for revocation, and the replacement set a recovery
+//! attempt declares.
+//!
+//! A [`Credential`] mirrors OZ's `Signer` (without depending on
+//! `stellar-accounts`, so the ZK adapter and pool need not link it). Its
+//! [`Credential::fingerprint`] is what the account's permanent revoked set
+//! stores and what every applied document is checked against
+//! (`docs/recovery/spec.md`, "Revocation"). A [`ReplacementSet`] is what a
+//! `LostKey`/`Compromise` attempt declares; its [`ReplacementSet::hash`] is
+//! bound into the attempt's statement, so every guardian and prover approves
+//! the exact new credentials, not just a target hash.
+
+use crate::encode::tagged_address;
+use crate::statement::StatementError;
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env, String, Vec};
+
+/// Domain tag for [`Credential::fingerprint`].
+pub const CREDENTIAL_DOMAIN: &[u8; 25] = b"perch/recovery/credential";
+/// Domain tag for [`ReplacementSet::hash`].
+pub const REPLACEMENTS_DOMAIN: &[u8; 27] = b"perch/recovery/replacements";
+
+/// A signer credential, shaped like OZ `stellar_accounts::smart_account::Signer`.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Credential {
+    /// `Signer::Delegated(address)`: a `G...` or `C...` address that
+    /// authenticates through CAP-0071 delegated auth.
+    Delegated(Address),
+    /// `Signer::External(verifier, key)`: a key checked by a verifier
+    /// contract.
+    External(Address, Bytes),
+}
+
+impl Credential {
+    /// `kind (1) || tag (1) || payload (32)`, then for `External`
+    /// `key_len (4, BE) || key`. `kind` is 1 for delegated, 2 for external.
+    pub fn encode(&self, e: &Env) -> Result<Bytes, StatementError> {
+        let mut out = Bytes::new(e);
+        match self {
+            Credential::Delegated(addr) => {
+                out.push_back(1);
+                let a = tagged_address(e, addr).ok_or(StatementError::UnsupportedAddress)?;
+                out.extend_from_array(&a);
+            }
+            Credential::External(verifier, key) => {
+                out.push_back(2);
+                let v = tagged_address(e, verifier).ok_or(StatementError::UnsupportedAddress)?;
+                out.extend_from_array(&v);
+                out.extend_from_array(&key.len().to_be_bytes());
+                out.append(key);
+            }
+        }
+        Ok(out)
+    }
+
+    /// `sha256(CREDENTIAL_DOMAIN || encode())`.
+    ///
+    /// For revocation this must be computed over the verifier's canonical
+    /// key (OZ `Verifier::canonicalize_key`), not the bytes a document
+    /// happened to spell: two encodings of one physical key (compressed vs
+    /// uncompressed, say) must fingerprint identically or a revoked key
+    /// returns under its other spelling. Delegated addresses are already
+    /// canonical.
+    pub fn fingerprint(&self, e: &Env) -> Result<BytesN<32>, StatementError> {
+        let mut preimage = Bytes::from_slice(e, CREDENTIAL_DOMAIN);
+        preimage.append(&self.encode(e)?);
+        Ok(e.crypto().sha256(&preimage).to_bytes())
+    }
+}
+
+/// One designated signer slot and the credential that replaces whatever
+/// that slot holds in the source document.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Replacement {
+    /// A document signer id listed in the enrolled `recovery.replaceable`.
+    pub signer_id: String,
+    /// The credential the target document gives that signer id.
+    pub credential: Credential,
+}
+
+/// Everything a `LostKey`/`Compromise` attempt changes about the source
+/// document. See `docs/recovery/spec.md`, "Permitted document changes".
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReplacementSet {
+    /// Signer replacements in strictly ascending `signer_id` byte order
+    /// (sorted, no duplicates) — the one canonical order.
+    pub signers: Vec<Replacement>,
+    /// The new ZK enrollment id, required exactly when the enrolled mode
+    /// has a ZK factor (a ZK-evidenced completion consumes the enrolled
+    /// credential, so it must install a fresh one).
+    pub zk_enrollment: Option<BytesN<32>>,
+}
+
+impl ReplacementSet {
+    /// `count (4, BE)`, then per replacement `id_len (4, BE) || id ||
+    /// Credential::encode`, then `0x00` or `0x01 || enrollment_id (32)`.
+    /// Refuses a non-canonical order rather than sorting, so two different
+    /// lists can never encode the same.
+    pub fn encode(&self, e: &Env) -> Result<Bytes, StatementError> {
+        let mut out = Bytes::new(e);
+        out.extend_from_array(&self.signers.len().to_be_bytes());
+        let mut prev: Option<Bytes> = None;
+        for r in self.signers.iter() {
+            let id = r.signer_id.to_bytes();
+            if let Some(p) = &prev {
+                if !bytes_lt(p, &id) {
+                    return Err(StatementError::ReplacementsNotCanonical);
+                }
+            }
+            out.extend_from_array(&id.len().to_be_bytes());
+            out.append(&id);
+            out.append(&r.credential.encode(e)?);
+            prev = Some(id);
+        }
+        match &self.zk_enrollment {
+            None => out.push_back(0),
+            Some(id) => {
+                out.push_back(1);
+                out.extend_from_array(&id.to_array());
+            }
+        }
+        Ok(out)
+    }
+
+    /// `sha256(REPLACEMENTS_DOMAIN || encode())`: the
+    /// [`crate::statement::AttemptSubject::replacements_hash`].
+    pub fn hash(&self, e: &Env) -> Result<BytesN<32>, StatementError> {
+        let mut preimage = Bytes::from_slice(e, REPLACEMENTS_DOMAIN);
+        preimage.append(&self.encode(e)?);
+        Ok(e.crypto().sha256(&preimage).to_bytes())
+    }
+}
+
+/// Byte-lexicographic `a < b`, a proper prefix sorting first.
+fn bytes_lt(a: &Bytes, b: &Bytes) -> bool {
+    let n = a.len().min(b.len());
+    for i in 0..n {
+        let (x, y) = (a.get_unchecked(i), b.get_unchecked(i));
+        if x != y {
+            return x < y;
+        }
+    }
+    a.len() < b.len()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use soroban_sdk::{vec, Env};
+
+    const VERIFIER: &str = "CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE";
+    const DELEGATE: &str = "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ";
+
+    fn external(e: &Env, key: &[u8]) -> Credential {
+        Credential::External(Address::from_str(e, VERIFIER), Bytes::from_slice(e, key))
+    }
+
+    #[test]
+    fn external_encoding_layout() {
+        let e = Env::default();
+        let enc = external(&e, &[0xaa, 0xbb]).encode(&e).unwrap();
+        let mut buf = [0u8; 1 + 33 + 4 + 2];
+        enc.copy_into_slice(&mut buf);
+        assert_eq!(buf[0], 2);
+        assert_eq!(buf[1], 1, "verifier is a contract");
+        assert_eq!(
+            hex::encode(&buf[2..34]),
+            "363eaa3867841fbad0f4ed88c779e4fe66e56a2470dc98c0ec9c073d05c7b103"
+        );
+        assert_eq!(&buf[34..38], &[0, 0, 0, 2]);
+        assert_eq!(&buf[38..], &[0xaa, 0xbb]);
+    }
+
+    #[test]
+    fn fingerprints_separate_kind_verifier_and_key() {
+        let e = Env::default();
+        let a = external(&e, &[1, 2, 3]).fingerprint(&e).unwrap();
+        let b = external(&e, &[1, 2, 4]).fingerprint(&e).unwrap();
+        let other_verifier = Credential::External(
+            Address::from_str(
+                &e,
+                "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG",
+            ),
+            Bytes::from_slice(&e, &[1, 2, 3]),
+        )
+        .fingerprint(&e)
+        .unwrap();
+        let delegated = Credential::Delegated(Address::from_str(&e, DELEGATE))
+            .fingerprint(&e)
+            .unwrap();
+        assert_ne!(a, b);
+        assert_ne!(a, other_verifier);
+        assert_ne!(a, delegated);
+        // Deterministic.
+        assert_eq!(a, external(&e, &[1, 2, 3]).fingerprint(&e).unwrap());
+    }
+
+    #[test]
+    fn key_length_prefix_prevents_verifier_key_boundary_shifts() {
+        // Without the length prefix, (verifier, key) pairs could only shift
+        // bytes across the key boundary if the verifier were variable-width;
+        // it isn't, but the key's length is still bound so that a key and
+        // the same key with trailing bytes never collide.
+        let e = Env::default();
+        let short = external(&e, &[7]).encode(&e).unwrap();
+        let long = external(&e, &[7, 0]).encode(&e).unwrap();
+        assert_ne!(short, long);
+    }
+
+    fn rep(e: &Env, id: &str, key: u8) -> Replacement {
+        Replacement {
+            signer_id: String::from_str(e, id),
+            credential: external(e, &[key; 65]),
+        }
+    }
+
+    #[test]
+    fn replacement_sets_must_be_strictly_ascending() {
+        let e = Env::default();
+        let sorted = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1), rep(&e, "backup", 2)],
+            zk_enrollment: None,
+        };
+        assert!(sorted.hash(&e).is_ok());
+
+        let unsorted = ReplacementSet {
+            signers: vec![&e, rep(&e, "backup", 2), rep(&e, "admin", 1)],
+            zk_enrollment: None,
+        };
+        assert_eq!(
+            unsorted.hash(&e),
+            Err(StatementError::ReplacementsNotCanonical)
+        );
+
+        let duplicate = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1), rep(&e, "admin", 2)],
+            zk_enrollment: None,
+        };
+        assert_eq!(
+            duplicate.hash(&e),
+            Err(StatementError::ReplacementsNotCanonical)
+        );
+
+        // A proper prefix sorts first.
+        let prefix = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1), rep(&e, "admin2", 2)],
+            zk_enrollment: None,
+        };
+        assert!(prefix.hash(&e).is_ok());
+    }
+
+    #[test]
+    fn replacement_hash_binds_ids_credentials_and_zk_rotation() {
+        let e = Env::default();
+        let base = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1)],
+            zk_enrollment: None,
+        };
+        let h = base.hash(&e).unwrap();
+        let other_id = ReplacementSet {
+            signers: vec![&e, rep(&e, "owner", 1)],
+            zk_enrollment: None,
+        };
+        let other_key = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 9)],
+            zk_enrollment: None,
+        };
+        let with_zk = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1)],
+            zk_enrollment: Some(BytesN::from_array(&e, &[5; 32])),
+        };
+        let other_zk = ReplacementSet {
+            signers: vec![&e, rep(&e, "admin", 1)],
+            zk_enrollment: Some(BytesN::from_array(&e, &[6; 32])),
+        };
+        let empty = ReplacementSet {
+            signers: Vec::new(&e),
+            zk_enrollment: None,
+        };
+        for v in [other_id, other_key, with_zk.clone(), other_zk, empty] {
+            assert_ne!(h, v.hash(&e).unwrap());
+        }
+        assert_ne!(
+            with_zk.hash(&e).unwrap(),
+            ReplacementSet {
+                signers: vec![&e, rep(&e, "admin", 1)],
+                zk_enrollment: Some(BytesN::from_array(&e, &[6; 32])),
+            }
+            .hash(&e)
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn bytes_lt_is_lexicographic_with_prefix_first() {
+        let e = Env::default();
+        let b = |s: &[u8]| Bytes::from_slice(&e, s);
+        assert!(bytes_lt(&b(b"a"), &b(b"b")));
+        assert!(bytes_lt(&b(b"a"), &b(b"aa")));
+        assert!(!bytes_lt(&b(b"aa"), &b(b"a")));
+        assert!(!bytes_lt(&b(b"a"), &b(b"a")));
+        assert!(bytes_lt(&b(b"Z"), &b(b"a")), "byte order, not case-folded");
+    }
+}

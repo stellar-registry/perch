@@ -23,6 +23,7 @@ members = [
     "crates/perch-registry-resolve",
     "crates/perch-testkit",
     "crates/perch-recovery",
+    "crates/perch-recovery-interface",
 ]
 
 [workspace.package]

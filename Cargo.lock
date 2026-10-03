@@ -1558,6 +1558,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-recovery-interface"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde_json",
+ "soroban-sdk",
+ "soroban-sdk-tools",
+]
+
+[[package]]
 name = "perch-registry-resolve"
 version = "0.1.1"
 dependencies = [

@@ -263,7 +263,9 @@ jobs:
             perch-recovery) echo "perch-recovery perch-recovery-interface perch-doc-compiler perch-compile perch-ir perch-program";;
             perch-zk-pool) echo "perch-zk-pool perch-zk-primitives perch-recovery-interface";;
             # The verification key the adapter compiles in lives in its own
-            # crate (vk/), so a circuit change re-releases it.
+            # crate (vk/), so a circuit change re-releases it; so does a
+            # change to the vendored verifier it links (a path with a `/` is
+            # taken from the repository root).
             perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface vendor/ultrahonk-soroban-verifier";;
             # The factory pins the account wasm and the WebAuthn verifier, so
             # a change to either is a new factory.

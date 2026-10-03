@@ -13,7 +13,8 @@ circuit's `circuit_id` is
 depth 24. Reproduce with `just zk-bench`. The on-chain rows come from
 `crates/perch-zk-adapter/tests/costs.rs`, native proving from
 `perch-zk-fixtures bench`, and WASM proving from
-`packages/perch-zk/bench/prove.mjs`.
+`packages/perch-zk/bench/prove.mjs` (Node) and
+`packages/perch-zk/bench/browser` (headless Chromium).
 
 ## Network limits
 
@@ -104,6 +105,19 @@ uses the same circuit, so the cost is the same for every action.
 | 18 threads | 243 ms | 222 ms |
 | process peak RSS, Node and bb.js heap together | 545 MB | (same process) |
 
+| Real browser (headless Chromium 151 via Playwright, cross-origin isolated page, the package's `prove`), median of 5 | Depth 32 | Depth 24 |
+| --- | --- | --- |
+| 1 thread | 660 ms | 503 ms |
+| 18 threads | 227 ms | 197 ms |
+
+The browser rows come from `packages/perch-zk/bench/browser` (`npm run
+bench`). They agree with the Node rows: same WASM, same engine. One run
+during heavy load on the shared machine (load average 24) measured 3.1 s
+single-threaded at depth 32, so measure on an idle machine. Chrome's CPU
+throttling is no phone proxy here: it slows the page but not bb.js's
+worker, and 4× throttling moved single-threaded proving only from 660 ms to
+917 ms.
+
 | What a browser prover downloads | Bytes |
 | --- | --- |
 | Circuit artifact (`perch_zk_recovery.json`) | 5,933 |
@@ -133,7 +147,7 @@ the component alone.
 | Row (`budgets.md`) | Proposed budget | D = 32 | D = 24 |
 | --- | --- | --- | --- |
 | §1 proof generation, native `bb`, laptop | ≤ 5 s | 0.07 s (desktop) ✓ | 0.06 s ✓ |
-| §1 proof generation, bb.js, laptop | ≤ 10 s | 0.66 s (desktop, 1 thread) ✓ | 0.52 s ✓ |
+| §1 proof generation, bb.js, laptop | ≤ 10 s | 0.66 s (desktop Chromium, 1 thread) ✓ | 0.50 s ✓ |
 | §1 proof generation, bb.js, phone | ≤ 30 s, ≤ 1 GiB | not measured | not measured |
 | §1 witness generation | ≤ 2 s | 0.07 s (desktop, nargo) ✓ | 0.07 s ✓ |
 | §1 client artifacts | ≤ 50 MiB | 8.4 MB ✓ | 8.4 MB ✓ |

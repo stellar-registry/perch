@@ -61,7 +61,7 @@ and inclusion latency.
 | `begin_lost_key` (includes `derive_target`) | largest supported document | TBD | TBD | TBD | TBD | TBD | TBD |
 | `begin_compromise` (includes `derive_target` over the baseline) | largest supported document | TBD | TBD | TBD | TBD | TBD | TBD |
 | `publish_baseline` | largest supported document | TBD | TBD | TBD | TBD | TBD | TBD |
-| `submit_guardian` | promoting approval | TBD | TBD | TBD | TBD | TBD | TBD |
+| `submit_guardian` | promoting approval under `Protected` (includes `rcv_gate`) | TBD | TBD | TBD | TBD | TBD | TBD |
 | `submit_zk` (adapter, verifier, root check, nullifier) | promoting proof, `Combined` | TBD | TBD | TBD | TBD | TBD | TBD |
 | Completion `apply_doc` (recovery rule) | `Combined`, ZK rotation (pool insert), a pre-recovery document and a target both at the document caps (spec §7.5), every removed credential revoked | TBD | TBD | TBD | TBD | TBD | TBD |
 | Cancellation | `Combined` (both factors in the last transaction) | TBD | TBD | TBD | TBD | TBD | TBD |
@@ -71,7 +71,7 @@ and inclusion latency.
 | `Protected` `schedule_upgrade` | `Combined`, reading recorded approvals | TBD | TBD | TBD | TBD | TBD | TBD |
 | `execute_upgrade` (includes the `rcv_upgrade` epoch bump) | — | TBD | TBD | TBD | TBD | TBD | TBD |
 | `begin_*` after an attacker opened many collecting attempts | promotion with `invalidate_below` (must not grow with the number of siblings) | TBD | TBD | TBD | TBD | TBD | TBD |
-| Ordinary authorization overhead | `__check_auth` with the freeze gate versus without | TBD | TBD | — | — | TBD | — |
+| Ordinary authorization overhead | `__check_auth` reading the freeze mirror and checking reserved names, versus plain `do_check_auth` | TBD | TBD | — | — | TBD | — |
 
 **Proposed budget for every row:** at most 75% of the network's
 per-transaction limit for instructions, memory, read bytes, write bytes,

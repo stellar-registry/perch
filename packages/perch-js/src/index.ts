@@ -47,3 +47,19 @@ export {
   type RecoverySpec,
   type ZkFactorSpec,
 } from './builder.js';
+export {
+  addressPayload,
+  credentialFingerprint,
+  encodeCredential,
+  encodeReplacementSet,
+  encodeStatement,
+  replacementsHash,
+  statementDigest,
+  zkStatementFields,
+  type Credential,
+  type RecoveryAction,
+  type RecoveryStatement,
+  type Replacement,
+  type ReplacementSet,
+  type StatementSubject,
+} from './statement.js';

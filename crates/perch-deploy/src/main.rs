@@ -6,15 +6,7 @@
 //! else — and eventually all of this — is the stock `stellar` CLI. Key
 //! material comes ONLY from PERCH_ADMIN_KEY / PERCH_CI_KEY env variables.
 
-mod apply;
-mod auth;
-mod compose;
-mod keys;
-mod publish;
-mod rpc;
-mod scv;
-mod tx;
-mod verify;
+use perch_deploy::{apply, compose, publish, rpc, verify};
 
 use std::path::PathBuf;
 

@@ -33,8 +33,8 @@ can store a leaf bound to an account that did not sign.
 configuration names the enrollment id its ZK factor accepts. A second leaf
 under that id, with a secret someone else knows, would satisfy the ZK factor
 without the enrolled secret, and would give the credential a second
-nullifier. The account already refuses this (spec §3.4); the pool refuses it
-again as defense in depth. The record that enforces the rule,
+nullifier. The account refuses this (spec §3.4), and the pool refuses it
+again, as `MembershipPoolInterface::rcv_insert` specifies. The record that enforces the rule,
 `Enrollment(account, id)`, is also how a client finds its leaf.
 
 ## Capacity, rollover, and tree identification

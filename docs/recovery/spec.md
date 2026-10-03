@@ -200,10 +200,10 @@ the recovery configuration back to whatever the baseline carried.
 
 ### 3.6 Storage lifetime
 
-Per-account controller state (configuration, epoch, used enrollment ids,
-authorized attempt, cancellation count, attempt-id counter), the account's
-revoked set, nullifier records, and the pool's roots and frontier live in
-persistent storage. An archived persistent entry is unavailable, never
+Per-account controller state (configuration, epoch, authorized attempt,
+cancellation count, attempt-id counter), the account's revoked set and
+enrolled-id set, nullifier records, and the pool's roots and frontier live
+in persistent storage. An archived persistent entry is unavailable, never
 absent: a transaction touching it fails until someone restores it. A
 counter therefore cannot silently reset to zero through TTL expiry.
 Permissionless `renew` entry points extend these entries to the network
@@ -230,9 +230,9 @@ RecoveryStatement {
 AttemptSubject { attempt_id, source_doc_hash, target_doc_hash, replacements_hash }
 ```
 
-The encoding (`statement.md`) is fixed-width per action. Byte 26 is the
-action code (1 lost-key, 2 compromise, 3 cancel, 4 reconfigure, 5 upgrade),
-which also selects the subject layout. The digest is `sha256(encoding)`.
+The encoding (`statement.md`) is fixed-width per action. The byte at
+offset 25 is the action code (1 lost-key, 2 compromise, 3 cancel,
+4 reconfigure, 5 upgrade), which also selects the subject layout. The digest is `sha256(encoding)`.
 
 **Construction.** The controller builds every statement from its own state.
 A caller never supplies one. The caller supplies only:
@@ -249,21 +249,19 @@ binds the digest through the `statement_hash` public input (§13). In
 `Combined` mode both factors therefore approve the identical statement.
 
 **Freshness.** Evidence for statement `S` is accepted at ledger `L` only if
-`L ≤ S.valid_until_ledger` and
-`S.valid_until_ledger − L ≤ S.expiry_ledgers`
-(`RecoveryStatement::check_fresh`).
+`L ≤ S.valid_until_ledger` (`RecoveryStatement::check_fresh`). Who sets the
+bound depends on the action:
 
-- For `LostKey`/`Compromise`, the controller sets `valid_until_ledger` to the
-  attempt's evidence deadline (§6.2).
-- For `Cancel`, the controller sets it to the attempt's `cancel_until =
+- `LostKey`/`Compromise`: the controller, to the attempt's evidence
+  deadline (§6.2).
+- `Cancel`: the controller, to the attempt's `cancel_until =
   evidence_deadline + delay_ledgers + expiry_ledgers`, fixed at T1 and never
   earlier than the attempt's last live ledger. Approvals gathered over
-  several transactions therefore all sign one statement. The attempt's
-  liveness is the effective bound, so the second condition above does not
-  apply to `Cancel`.
-- For `Reconfigure`/`Upgrade`, the evidence provider chooses it, and the
-  second condition keeps a standing approval from outliving the account's
-  own recovery window.
+  several transactions therefore all sign one statement, and the attempt's
+  liveness is the effective bound.
+- `Reconfigure`/`Upgrade`: the evidence provider. For these, evidence is
+  also refused unless `S.valid_until_ledger − L ≤ S.expiry_ledgers`, so a
+  standing approval cannot outlive the account's own recovery window.
 
 Guardian clients should also set Soroban's `signature_expiration_ledger` no
 later than `valid_until_ledger`.
@@ -506,8 +504,8 @@ returns:
 
 - the target's canonical bytes and hash;
 - the target's configuration hash;
-- the fingerprints of the credentials the replacements remove;
-- the fingerprints of every credential in the target.
+- the fingerprints of every credential in the target (for T1's revocation
+  check, §7.3 rule 7).
 
 Completers obtain the canonical bytes by simulating the same call.
 
@@ -548,6 +546,12 @@ against the account's `revoked` view):
    material), the anti-brick check, and network binding.
 7. No credential in the target, and no replacement credential, is in the
    account's revoked set (compared by canonical fingerprint, §8).
+
+Rule 7 means an old baseline cannot restore a credential revoked after the
+baseline was approved: the compromise attempt must replace that slot, or it
+is refused. After any completed recovery, the wallet should have the
+baseline re-approved (a reconfiguration) so that compromise recovery stays
+usable without extra replacements.
 
 ### 7.4 What this does and does not establish
 

@@ -123,8 +123,9 @@ jobs:
       fail-fast: false
       matrix:
         # One leg per npm package (see packages/): perch-js is the PolicyDoc
-        # surface, perch-interpreter-js the interpreter contract bindings.
-        package: [perch-js, perch-interpreter-js]
+        # surface, perch-interpreter-js the interpreter contract bindings,
+        # perch-zk the ZK recovery proof helpers (proves with bb.js in-test).
+        package: [perch-js, perch-interpreter-js, perch-zk]
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
@@ -141,6 +142,40 @@ jobs:
       - run: npm run check
       - run: npm run build
       - run: npm test
+
+  # ZK recovery: the circuit's own tests, a byte-for-byte rebuild of every
+  # committed artifact (ACIR, VKs, proof fixtures, manifest) with the pinned
+  # toolchain, and the metered on-chain costs of the compiled pool/adapter.
+  zk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No toolchain action: rustup installs the channel and the wasm32v1-none
+      # target from rust-toolchain.toml on first use.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # scripts/zk-toolchain.sh installs the pinned nargo/bb under target/
+      # (checksummed) on first use and prints NARGO/BB; later calls are no-ops.
+      - name: Circuit tests
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cd circuits && "$NARGO" test --workspace
+      - name: Artifacts reproduce byte-for-byte
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- check
+      - name: Metered costs within the per-transaction limits
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- bench 1
+          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter
+          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter \
+            --features perch-zk-pool/tree-depth-24,perch-zk-adapter/tree-depth-24 \
+            --target-dir target/zk-d24
+          cargo test -q -p perch-zk-adapter --test costs -- --ignored --nocapture --test-threads 1
 
   zizmor:
     runs-on: ubuntu-latest

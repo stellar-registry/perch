@@ -32,6 +32,32 @@ bindings-interpreter-js:
     rm -rf "$out"
     echo "regenerated $dst"
 
+# Build the ZK recovery pool and adapter wasm, plus the depth-24 fallback build
+# of both under target/zk-d24/ (for the depth comparison in docs/zk/).
+zk-wasm:
+    cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter
+    cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter \
+      --features perch-zk-pool/tree-depth-24,perch-zk-adapter/tree-depth-24 \
+      --target-dir target/zk-d24
+
+# Regenerate (or `just zk-artifacts check`) the circuit artifacts, VKs, proof
+# fixtures, and circuits/manifest.json. Installs the pinned nargo/bb under
+# target/zk-toolchain/ first; never touches a global nargo or bb.
+zk-artifacts mode="generate":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval "$(scripts/zk-toolchain.sh)"
+    cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- {{mode}}
+
+# Measure proving (native bb, both depths) and on-chain costs (metered wasm,
+# both depths) for docs/zk/measurements.md.
+zk-bench runs="7": zk-wasm
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval "$(scripts/zk-toolchain.sh)"
+    cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- bench {{runs}}
+    cargo test -q -p perch-zk-adapter --test costs -- --ignored --nocapture --test-threads 1
+
 check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings

@@ -1,0 +1,9 @@
+[package]
+name = "perch_zk"
+type = "lib"
+compiler_version = ">=1.0.0"
+
+[dependencies]
+# Poseidon2 here must match soroban-poseidon's `poseidon2_hash::<4, Bn254Fr>`
+# on the Soroban host; crates/perch-zk-primitives pins both to shared vectors.
+poseidon = { path = "../vendor/poseidon" }

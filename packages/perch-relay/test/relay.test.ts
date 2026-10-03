@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { Address, Keypair, Networks, authorizeEntry, nativeToScVal, xdr } from '@stellar/stellar-sdk';
 import { ApprovalError, MemoryKv, handleRelay, parseApproval } from '../src/index.js';
 
-// A guardian's `submit_guardian` approval exactly as the testnet exercise
-// submitted it to the deployed controller (deployments/testnet.json) in tx
-// 7971f655…af7 (deployments/testnet-exercise.json).
+// A guardian's `submit_guardian` approval exactly as a perch-testnet run
+// submitted it to the deployed controller (deployments/testnet.json), in
+// testnet tx 7971f6551041db44a11bd0a05b6d8faae093685bad18d332ff2aa8d5bab3aaf7.
 const CONTROLLER = 'CASILLRFPUXM2TWCIAPMHLCQD7MCQV3Q52GXKSAXDPS2XRPDCQF4I7YE';
 const TESTNET_DIGEST = '17c58dcd1ea7a0c5534705221b4c3e60e68ab8274fcc708961e2853e603c78d2';
 const TESTNET_ENTRY =

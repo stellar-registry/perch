@@ -261,8 +261,10 @@ jobs:
             perch-recovery) echo "perch-recovery perch-recovery-interface perch-doc-compiler perch-compile perch-ir perch-program";;
             perch-zk-pool) echo "perch-zk-pool perch-zk-primitives perch-recovery-interface";;
             # The verification key the adapter compiles in lives in its own
-            # crate (vk/), so a circuit change re-releases it.
-            perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface";;
+            # crate (vk/), so a circuit change re-releases it; so does a
+            # change to the vendored verifier it links (a path with a `/` is
+            # taken from the repository root).
+            perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface vendor/ultrahonk-soroban-verifier";;
             # The factory pins the account wasm and the WebAuthn verifier, so
             # a change to either is a new factory.
             perch-account-factory) echo "perch-account-factory perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-webauthn-verifier";;
@@ -273,7 +275,12 @@ jobs:
           bumped=""
           for c in $CONTRACTS; do
             inc=()
-            for d in $(paths_for "$c"); do inc+=(--include-path "crates/$d/**"); done
+            for d in $(paths_for "$c"); do
+              case "$d" in
+                */*) inc+=(--include-path "$d/**") ;;
+                *) inc+=(--include-path "crates/$d/**") ;;
+              esac
+            done
             # feat -> minor, fix -> patch; pre-1.0 breaking stays minor (cliff.toml).
             # Returns the crate's current version when nothing is releasable.
             next_tag=$(git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" --bumped-version 2>/dev/null) || true

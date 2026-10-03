@@ -65,23 +65,27 @@ build() { # package tier pins-json
 
 hash_of() { jq -r --arg p "$1" '.[] | select(.package == $p) | .sha256' <<<"$artifacts"; }
 
+# Copy the pinned wasm into a consumer's cache and set `staged` to the pins.
+# Not in a command substitution, so a failed copy stops the build under
+# `set -e` instead of leaving the previous pin behind.
+staged='{}'
 stage() { # crate-dir packages...
-    local dir="$repo_root/crates/$1/wasm" pins='{}' p
+    local dir="$repo_root/crates/$1/wasm" p
     shift
     mkdir -p "$dir"
     printf '%s' "$registry" >"$dir/stateless.id"
+    staged='{}'
     for p in "$@"; do
         cp "$out/${p//-/_}.wasm" "$dir/$p.wasm"
-        pins=$(jq -c --arg p "$p" --arg h "$(hash_of "$p")" '. + {($p): $h}' <<<"$pins")
+        staged=$(jq -c --arg p "$p" --arg h "$(hash_of "$p")" '. + {($p): $h}' <<<"$staged")
     done
-    printf '%s' "$pins"
 }
 
 for pkg in "${TIER0[@]}"; do build "$pkg" 0 '{}'; done
-account_pins=$(stage perch-smart-account "${ACCOUNT_PINS[@]}")
-build perch-account 1 "$account_pins"
-factory_pins=$(stage perch-account-factory "${FACTORY_PINS[@]}")
-build perch-account-factory 2 "$factory_pins"
+stage perch-smart-account "${ACCOUNT_PINS[@]}"
+build perch-account 1 "$staged"
+stage perch-account-factory "${FACTORY_PINS[@]}"
+build perch-account-factory 2 "$staged"
 
 commit=$(git -C "$repo_root" rev-parse HEAD)
 dirty=$([ -z "$(git -C "$repo_root" status --porcelain -- crates Cargo.toml Cargo.lock)" ] && echo false || echo true)

@@ -121,6 +121,7 @@ fn main() -> Result<()> {
             "tx_max_instructions": 400_000_000u64,
             "tx_memory_limit": 41_943_040u64,
             "tx_max_disk_read_entries": 200,
+            "tx_max_footprint_entries": 400,
             "tx_max_disk_read_bytes": 200_000,
             "tx_max_write_ledger_entries": 200,
             "tx_max_write_bytes": 132_096,

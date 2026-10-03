@@ -62,7 +62,8 @@ const TX_MAX_INSTRUCTIONS: u64 = 400_000_000;
 const TX_MEMORY_LIMIT: u64 = 41_943_040;
 const TX_MAX_WRITE_BYTES: u64 = 132_096;
 const TX_MAX_WRITE_ENTRIES: u64 = 200;
-const TX_MAX_READ_ENTRIES: u64 = 200;
+/// `tx_max_footprint_entries`: every entry read or written.
+const TX_MAX_FOOTPRINT_ENTRIES: u64 = 400;
 const TX_MAX_EVENTS_BYTES: u64 = 16_384;
 /// `docs/recovery/budgets.md` §2: every row within 75% of each limit.
 const BUDGET_PCT: u64 = 75;
@@ -102,9 +103,9 @@ fn report(label: &str, e: &Env) {
     assert!(
         within(
             (r.memory_read_entries + r.disk_read_entries) as u64,
-            TX_MAX_READ_ENTRIES
+            TX_MAX_FOOTPRINT_ENTRIES
         ),
-        "{label}: read entries over budget"
+        "{label}: footprint entries over budget"
     );
     assert!(
         within(r.contract_events_size_bytes as u64, TX_MAX_EVENTS_BYTES),

@@ -139,9 +139,16 @@ fn a_passkey_account_lands_at_its_predicted_address_with_the_passkey_as_admin() 
             Signer::External(w.verifier.clone(), w.key_data(&key))
         ]
     );
-    // The deployed account resolves the same compiler this world registered:
-    // its wasm was built against the same pins.
-    assert_eq!(a.doc_compiler(), infra::perch_doc_compiler::address(&w.env));
+    // The deployed account resolves the infra this world registered: its
+    // wasm was built against the same pins.
+    assert_eq!(
+        a.infra(),
+        perch_account::InfraPins {
+            doc_compiler: infra::perch_doc_compiler::address(&w.env),
+            interpreter: infra::perch_interpreter::address(&w.env),
+            spending_limit: infra::perch_spending_limit::address(&w.env),
+        }
+    );
 }
 
 #[test]

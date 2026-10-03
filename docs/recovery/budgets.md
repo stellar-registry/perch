@@ -79,7 +79,9 @@ per-transaction limit for instructions, memory, read bytes, write bytes,
 and transaction size. The headroom covers authorization growth (more
 guardians) and network limit changes. The document caps (spec §7.5) are
 then set to the largest values for which the completion and reconfiguration
-rows stay within budget.
+rows stay within budget. Until then the compiler enforces provisional caps
+(`perch_doc_compiler::MAX_DOC_SIGNERS` = 16, `MAX_DOC_RULES` = 16,
+`MAX_DOC_CANONICAL_BYTES` = 8 192).
 
 ## 3. End-to-end latency
 

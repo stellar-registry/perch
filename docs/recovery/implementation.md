@@ -219,5 +219,6 @@ key and value, the canonical applied document, and its hash.
 
 - Real proofs, the release circuit, and resource measurements: workstream 2
   and the integration layer.
-- Registry publication, release pipeline, testnet deployment: workstream 4.
+- Registry publication, release pipeline, testnet deployment: workstream 4
+  ([`docs/deploy/`](../deploy/README.md)).
 - Wallet integration: Nido.

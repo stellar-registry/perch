@@ -64,10 +64,11 @@ repoint them post-deploy. Two consequences that are easy to miss:
   should split like `perch-doc-compiler` does: a `contract` feature
   (default-on) gating the actual `#[contract]` struct/impl, plus an
   always-available hand-written `#[contractclient]` trait outside that gate
-  for the entry points consumers actually call. `perch-recovery` follows this
-  split (`RecoveryControllerClient`, ungated, vs. the full `PerchRecovery`
-  contract, gated) so `perch-smart-account` links no controller storage or
-  `Policy`-lifecycle code into account wasm.
+  for the entry points consumers actually call. Recovery goes one step
+  further: the controller's hook client (`RecoveryHooksClient`), the
+  account views the controller reads, and the pool's insertion client live
+  in the plain library `perch-recovery-interface`, so `perch-smart-account`
+  depends on no deployable's crate for recovery at all.
 
 ## Soroban auth mocking never invokes a custom account's `__check_auth`
 
@@ -81,13 +82,14 @@ built on it (the whole `apply_doc*.rs`/`cap_matrix.rs` suite) proves
 *compiler-level* validation and rule-installation shape, never OZ's
 context-rule *selection*/`Policy::enforce` mechanics — those calls succeed
 regardless of which rule, if any, would actually have authorized them.
-To test real rule-selection/policy-enforcement behavior (as `matrix.rs` does,
-and `crates/integration-tests/tests/recovery.rs` following its pattern for
-the recovery controller), call
+To test real rule-selection/policy-enforcement behavior, either call
 `stellar_accounts::smart_account::do_check_auth` directly with a hand-built
-`AuthPayload`/`Context`, wrapped in `env.as_contract(&account, || {...})` —
-this bypasses host-level auth entirely rather than depending on it, so it
-works the same with or without mocking. Relatedly: OZ's
+`AuthPayload`/`Context`, wrapped in `env.as_contract(&account, || {...})`
+(as `matrix.rs` does) — this bypasses host-level auth entirely rather than
+depending on it — or install hand-built auth entries with `env.set_auths`,
+which runs the account's real `__check_auth` (as
+`crates/integration-tests/tests/{recovery,account_capabilities}.rs` do
+through `tests/support/mod.rs`). Relatedly: OZ's
 `remove_context_rule` calls a policy's `uninstall` via `try_uninstall` and
 discards the result even if it panics — a policy can never rely on
 `uninstall` as a security gate (see `docs/recovery/controller-governance.md`

@@ -103,11 +103,10 @@ describe('fluent builder', () => {
         delayLedgers: 17280,
         expiryLedgers: 120960,
         maxCancels: 3,
-        pendingActivity: 'freeze',
       })
       .build();
 
-    expect(docHash(doc)).toBe('dcd539d241eddba9537237f2958a639cd84ac9f1ed6111c18da4230b1b60b08d');
+    expect(docHash(doc)).toBe('d348912f20a15189922d12a06e00a68498bef4f16c8c7e2eeaa919dae9d060b0');
   });
 
   it('.recovery() with a combined mode reproduces the ci-publish-recovery-combined fixture', () => {
@@ -133,20 +132,21 @@ describe('fluent builder', () => {
             'GASP3KHU7JDP23WQINN5DDWC6BYMJ4MFBRLXBPGRAS3EX726YY67JISR',
           ],
           quorum: 1,
-          verifier: 'CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ',
+          adapter: 'CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ',
           circuitId: '21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb',
           pool: 'CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5',
+          enrollmentId: '6f0d1c2b3a49586776859483a2b1c0dfeefdfcfbfaf9f8f7f6f5f4f3f2f1f0e1',
+          commitment: '0a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0',
         },
         controller: 'CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF',
         replaceable: ['admin'],
         delayLedgers: 17280,
         expiryLedgers: 120960,
         maxCancels: 3,
-        pendingActivity: 'continue',
       })
       .build();
 
-    expect(docHash(doc)).toBe('9a6c29fdfd28746f8826a945611f31f43e6a51d131ff0bfd018b1ce2762e24bb');
+    expect(docHash(doc)).toBe('91ca693d888c0f77ad354e92a6a91cc316e202448b65637e2c59ecc3edf6f63c');
   });
 
   it('throws on build() when a rule has no scope', () => {

@@ -45,4 +45,5 @@ export {
   type CapSpec,
   type RecoveryModeSpec,
   type RecoverySpec,
+  type ZkFactorSpec,
 } from './builder.js';

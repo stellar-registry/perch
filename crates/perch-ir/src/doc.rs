@@ -336,100 +336,74 @@ pub struct U32EqPred {
 }
 
 /// Opt-in account-recovery enrollment. This is *reviewable configuration* —
-/// who may recover this account and how — never the recovery attempt itself;
-/// an attempt's target document and evidence are supplied when recovery
-/// starts, not predeclared here. Full design rationale lives in
-/// `docs/recovery/`.
+/// who may recover this account and how — never the recovery attempt itself.
+/// The authoritative semantics are `docs/recovery/spec.md`.
 ///
-/// The whole document's `doc_hash` already covers every field here (recovery
-/// configuration is authority-bearing data like any other field), so no
-/// separate top-level commitment is needed in the document itself. A deployed
-/// recovery controller separately commits to its own `config_hash` scoped to
-/// just the compiled form of this sub-object, for on-chain comparison without
-/// re-hashing the whole document.
+/// The whole document's `doc_hash` covers every field here. The recovery
+/// controller separately identifies the configuration by `config_hash`, the
+/// hash of this member's canonical text alone (spec §3.2), so rotating a
+/// signer's key elsewhere in the document is not a reconfiguration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoveryConfig {
-    /// Who may change this configuration going forward. A `Protected`
-    /// downgrade requires the currently enrolled recovery condition in
-    /// addition to ordinary admin authorization; `Loss` does not. See
-    /// `docs/recovery/controller-governance.md`.
+    /// Who may change this configuration, and what the account may do while
+    /// an attempt is authorized (spec D1, D4).
     pub profile: RecoveryProfile,
-    /// How a recovery attempt is authorized: guardians, ZK, or both against
-    /// the same proposal. Carries the mode-specific configuration directly,
-    /// so a `guardian-only` document has no ZK-shaped field anywhere to leave
-    /// unset — guardian-only recovery requires no ZK machinery to exist,
-    /// verify, or even compile in.
+    /// How a recovery attempt is evidenced: guardians, ZK, or both against
+    /// the same statement. A `guardian-only` document has no ZK-shaped field
+    /// anywhere to leave unset.
     pub mode: RecoveryMode,
     /// The recovery controller instance this account has adopted (a
     /// constructorless, immutable contract's address, C-address strkey).
-    /// "Upgrading" the controller means adopting a different, newly deployed
-    /// immutable instance here through a new applied document — never a code
-    /// change at this address. See `docs/recovery/vk-and-controller-immutability.md`.
+    /// Adopting a different instance is a reconfiguration.
     pub controller: String,
-    /// Commitment to the approved baseline document that suspected-compromise
-    /// recovery restores. Required to enroll suspected-compromise recovery;
-    /// `None` restricts enrollment to lost-key recovery only.
+    /// Commitment to the baseline document compromise recovery restores.
+    /// `None` restricts the account to lost-key recovery.
     pub baseline: Option<BaselineCommitment>,
     /// Which declared signer ids (`doc.signers[].id`) a recovery attempt may
-    /// replace. Must be non-empty and reference declared signers — recovery
-    /// enrolled with nothing to replace can never restore access.
+    /// replace. Must be non-empty and reference declared signers.
     pub replaceable: Vec<String>,
-    /// Minimum ledgers between an attempt becoming authorized (its evidence
-    /// satisfied) and it becoming completable — the timelock window a
-    /// legitimate owner has to notice and cancel. A ledger-sequence delta,
-    /// like [`Rule::not_after_ledger`], not a duration in seconds. Must be
-    /// non-zero.
+    /// Ledgers between an attempt becoming authorized and becoming
+    /// completable: the window to notice and cancel. Must be non-zero.
     pub delay_ledgers: u32,
-    /// Ledgers after an attempt becomes authorized at which it lapses back to
-    /// requiring a fresh attempt (see `docs/recovery/` for the full state
-    /// machine). Must be non-zero.
+    /// The evidence window of a collecting attempt, the completion window of
+    /// an authorized one, and the furthest a reconfiguration or upgrade
+    /// approval may reach (spec §4, §6.2). Must be non-zero.
     pub expiry_ledgers: u32,
-    /// Cap on cancellations across this account's lifetime, bounding a
-    /// cancel-then-reattempt griefing cycle. Must be non-zero — a cap of zero
-    /// would forbid cancellation entirely, contradicting the guarantee that
-    /// the enrolled condition can always cancel a live attempt.
+    /// Cap on evidence-based cancellations of authorized attempts, bounding a
+    /// cancel-then-reattempt war between holders of the cancelling factor.
+    /// A `Loss` owner's cancellation is never counted. Must be non-zero.
     pub max_cancels: u32,
-    /// What happens to ordinary account-authorized execution while a recovery
-    /// attempt is pending. Deliberately has **no default** and no third
-    /// "unspecified" variant — every enrollment must name one explicitly.
-    /// This remains a release-blocking, explicitly recorded open decision;
-    /// see `docs/recovery/section-7-gate.md`. The field exists so the choice
-    /// is reviewable, inspectable configuration — not a library default.
-    pub pending_activity: PendingActivityPolicy,
 }
 
 /// Routine recovery-configuration change authority for a [`RecoveryConfig`].
 /// Orthogonal to [`RecoveryMode`]: any mode may pair with either profile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RecoveryProfile {
-    /// Ordinary admin can change or disable recovery on its own. Recovers
-    /// from accidental key loss while enrollment remains valid; makes no
-    /// promise that a compromised admin cannot disable it.
+    /// The owner may reconfigure or remove recovery alone, may cancel any
+    /// attempt, and keeps ordinary activity while an attempt is authorized.
     Loss,
-    /// Ordinary admin plus the currently enrolled recovery condition are both
-    /// required to change or disable recovery. A stolen admin key alone
-    /// cannot downgrade or remove protection.
+    /// Reconfiguration, removal, and upgrades also need the currently
+    /// enrolled condition, and the account is frozen while an attempt is
+    /// authorized.
     Protected,
 }
 
 /// How a recovery attempt is authorized. Tagged with `"type"`:
 /// `"guardian-only"`, `"zk-only"`, or `"combined"`. Combined requires *both*
-/// factors against the same proposal, never either alone.
+/// factors against the same statement, never either alone.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecoveryMode {
     /// Guardian quorum only. No ZK secret, Merkle membership, or proof
     /// generation is involved anywhere in this mode.
     GuardianOnly(GuardianSet),
-    /// Zero-knowledge proof only. No independent guardian defense exists
-    /// against compromise of the ZK recovery factor in this mode.
-    ZkOnly(ZkVerifierConfig),
-    /// Both a valid proof and guardian quorum are required, checked against
-    /// the same proposal.
-    Combined(GuardianSet, ZkVerifierConfig),
+    /// Zero-knowledge proof only.
+    ZkOnly(ZkFactor),
+    /// Both a valid proof and guardian quorum, over the same statement.
+    Combined(GuardianSet, ZkFactor),
 }
 
 /// An M-of-N guardian quorum: independent principals (not document signers)
-/// that approve a recovery proposal by their own on-chain authorization.
+/// that approve a recovery statement by their own on-chain authorization.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuardianSet {
     /// Guardian addresses (G- or C-address strkey). Must be non-empty and
@@ -440,59 +414,39 @@ pub struct GuardianSet {
     pub quorum: u32,
 }
 
-/// The zero-knowledge factor of a [`RecoveryMode`]: which constructorless
-/// verifier instance checks proofs, and which circuit/proof-format identity
-/// that instance's immutable artifact commits to.
+/// The zero-knowledge factor of a [`RecoveryMode`] (spec §3.1). Every field
+/// is part of the reviewed configuration text, so `config_hash` binds the
+/// commitment as well as the contracts that check proofs against it.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ZkVerifierConfig {
-    /// The verifier contract's address (C-address strkey). Constructorless
-    /// and immutable: its code, and the verification key it embeds, never
-    /// change at this address. An "upgrade" is enrolling a different, newly
-    /// deployed verifier address here.
-    pub verifier: String,
-    /// Hex-encoded circuit/proof-format identity the verifier's immutable
-    /// artifact commits to. Defense-in-depth binding: a proof for a
-    /// different circuit cannot be substituted even if a verifier address
-    /// were ever confused with another.
+pub struct ZkFactor {
+    /// The ZK adapter the controller calls (C-address strkey). It pins its
+    /// proof verifier at build time.
+    pub adapter: String,
+    /// `sha256` of the verifier's verification key, as 64 lowercase hex
+    /// characters. The adapter refuses any other circuit.
     pub circuit_id: String,
-    /// A membership-pool contract's address (C-address strkey), for ZK
-    /// schemes that prove membership of a secret in a set rather than
-    /// knowledge of one fixed secret. `None` for schemes with no pool.
-    pub pool: Option<String>,
+    /// The membership pool (C-address strkey) whose roots proofs must use.
+    pub pool: String,
+    /// 32 random bytes naming the enrolled credential, as 64 lowercase hex
+    /// characters. Bound into the credential's leaf and nullifier; an
+    /// account never enrolls the same id twice.
+    pub enrollment_id: String,
+    /// The credential's inner commitment `Poseidon2(DOM_LEAF, secret)`, as 64
+    /// lowercase hex characters encoding a canonical BN254 field element.
+    pub commitment: String,
 }
 
-/// Commitment to a previously-approved policy document that suspected-
-/// compromise recovery restores (with designated credentials replaced).
+/// Commitment to a policy document that compromise recovery restores (with
+/// designated credentials replaced).
 ///
-/// Deliberately just a pointer to a *different* document's identity, never
-/// the enclosing document's own hash, so the commitment cannot recursively
-/// contain itself: the baseline this document points to was applied (and
-/// hashed) before this document existed, and can never be this document. See
-/// `docs/recovery/` (the "reviewable configuration without circular hashes"
-/// requirement).
+/// A pointer to a *different* document's identity, never the enclosing
+/// document's own hash, so the commitment cannot contain itself. The
+/// baseline's own `recovery` member is ignored when it is restored (spec
+/// §3.5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BaselineCommitment {
-    /// Canonical `doc_hash` (lowercase hex) of the previously-applied policy
-    /// document that suspected-compromise recovery restores. Declared,
-    /// reviewer-checked data — not verified against on-chain history by the
-    /// compiler, since accounts do not retain applied-document history (only
-    /// the current `applied_doc_hash`). Reviewing that this hash names a
-    /// real, previously-approved document is part of enrollment review.
+    /// Canonical `doc_hash` (lowercase hex) of the baseline document.
+    /// Declared, reviewer-checked data: the chain enforces only that the
+    /// approved configuration names it, not that it was ever applied.
     pub doc_hash: String,
-}
-
-/// Whether ordinary account-authorized execution continues, or is frozen,
-/// while a recovery attempt is pending. There is deliberately no `Default`
-/// impl and no third "unspecified" variant — every [`RecoveryConfig`] must
-/// name one explicitly (enforced by [`crate::parse::from_json`] requiring the
-/// field). See [`RecoveryConfig::pending_activity`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PendingActivityPolicy {
-    /// Ordinary account-authorized execution is blocked while an attempt is
-    /// pending (from authorized evidence through completion, cancellation,
-    /// or expiry).
-    Freeze,
-    /// Ordinary account-authorized execution continues unimpeded while an
-    /// attempt is pending.
-    Continue,
 }

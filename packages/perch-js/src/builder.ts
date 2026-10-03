@@ -134,6 +134,24 @@ export class RuleBuilder {
   }
 }
 
+/** The zero-knowledge factor of a {@link RecoveryModeSpec}, mirroring
+ *  perch-ir's `ZkFactor`. Every field is required. */
+export interface ZkFactorSpec {
+  /** The ZK adapter the controller calls (C-strkey). It pins its proof
+   *  verifier at build time. */
+  adapter: string;
+  /** `sha256` of the verifier's verification key, 64 lowercase hex chars. */
+  circuitId: string;
+  /** The membership pool (C-strkey) whose roots proofs must use. */
+  pool: string;
+  /** 32 random bytes naming the enrolled credential, 64 lowercase hex chars.
+   *  An account never enrolls the same id twice. */
+  enrollmentId: string;
+  /** The credential's inner commitment `Poseidon2(DOM_LEAF, secret)`, 64
+   *  lowercase hex chars encoding a canonical BN254 field element. */
+  commitment: string;
+}
+
 /** How a recovery attempt is authorized, camelCase like the other builder
  *  inputs; {@link PolicyBuilder.recovery} maps it onto the kebab-case,
  *  type-tagged wire shape. Guardian-only carries no ZK field to leave unset,
@@ -141,15 +159,8 @@ export class RuleBuilder {
  *  `RecoveryMode` enum, so guardian-only recovery needs no ZK machinery. */
 export type RecoveryModeSpec =
   | { kind: 'guardian-only'; guardians: string[]; quorum: number }
-  | { kind: 'zk-only'; verifier: string; circuitId: string; pool?: string }
-  | {
-      kind: 'combined';
-      guardians: string[];
-      quorum: number;
-      verifier: string;
-      circuitId: string;
-      pool?: string;
-    };
+  | ({ kind: 'zk-only' } & ZkFactorSpec)
+  | ({ kind: 'combined'; guardians: string[]; quorum: number } & ZkFactorSpec);
 
 /** Opt-in account-recovery enrollment, camelCase like the other builder
  *  inputs; {@link PolicyBuilder.recovery} maps it onto perch-ir's
@@ -170,9 +181,6 @@ export interface RecoverySpec {
   delayLedgers: number;
   expiryLedgers: number;
   maxCancels: number;
-  /** No default — every enrollment must name this explicitly (mirrors
-   *  perch-ir's `PendingActivityPolicy` having none). */
-  pendingActivity: 'freeze' | 'continue';
 }
 
 export function recoverySpecToWire(spec: RecoverySpec): Record<string, unknown> {
@@ -185,7 +193,6 @@ export function recoverySpecToWire(spec: RecoverySpec): Record<string, unknown> 
     'delay-ledgers': spec.delayLedgers,
     'expiry-ledgers': spec.expiryLedgers,
     'max-cancels': spec.maxCancels,
-    'pending-activity': spec.pendingActivity,
   };
 }
 
@@ -194,22 +201,25 @@ function recoveryModeToWire(mode: RecoveryModeSpec): Record<string, unknown> {
     case 'guardian-only':
       return { type: 'guardian-only', guardians: mode.guardians, quorum: mode.quorum };
     case 'zk-only':
-      return {
-        type: 'zk-only',
-        verifier: mode.verifier,
-        'circuit-id': mode.circuitId,
-        ...(mode.pool !== undefined ? { pool: mode.pool } : {}),
-      };
+      return { type: 'zk-only', ...zkFactorToWire(mode) };
     case 'combined':
       return {
         type: 'combined',
         guardians: mode.guardians,
         quorum: mode.quorum,
-        verifier: mode.verifier,
-        'circuit-id': mode.circuitId,
-        ...(mode.pool !== undefined ? { pool: mode.pool } : {}),
+        ...zkFactorToWire(mode),
       };
   }
+}
+
+function zkFactorToWire(zk: ZkFactorSpec): Record<string, unknown> {
+  return {
+    adapter: zk.adapter,
+    'circuit-id': zk.circuitId,
+    pool: zk.pool,
+    'enrollment-id': zk.enrollmentId,
+    commitment: zk.commitment,
+  };
 }
 
 export class PolicyBuilder {

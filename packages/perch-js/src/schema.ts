@@ -101,10 +101,16 @@ const rule = z
 // documents hash-identical to before this field existed.
 
 const guardianFields = { guardians: z.array(z.string()), quorum: u32 };
+// perch-ir's `ZkFactor`: every field required. The 64-lowercase-hex shape of
+// `circuit-id`/`enrollment-id`/`commitment` (and `commitment` being a
+// canonical BN254 field element) is Rust `validate()`, part of the tracked TS
+// `validate()` follow-up on #8 like `baseline`'s `doc-hash`.
 const zkFields = {
-  verifier: z.string(),
+  adapter: z.string(),
   'circuit-id': z.string(),
-  pool: z.string().optional(),
+  pool: z.string(),
+  'enrollment-id': z.string(),
+  commitment: z.string(),
 };
 
 const guardianOnlyMode = z.object({ type: z.literal('guardian-only'), ...guardianFields }).strict();
@@ -126,8 +132,6 @@ const recoveryConfig = z
     'delay-ledgers': u32,
     'expiry-ledgers': u32,
     'max-cancels': u32,
-    // No default — mirrors perch-ir's `PendingActivityPolicy` having none.
-    'pending-activity': z.enum(['freeze', 'continue']),
   })
   .strict();
 

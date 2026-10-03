@@ -32,6 +32,8 @@
       ]
     ],
     [],
+    [],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M",
@@ -57,6 +59,9 @@
         }
       ]
     ],
+    [],
+    [],
+    [],
     [
       [
         "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
@@ -81,7 +86,10 @@
           "sub_invocations": []
         }
       ]
-    ]
+    ],
+    [],
+    [],
+    []
   ],
   "ledger": {
     "protocol_version": 27,
@@ -662,65 +670,5 @@
       }
     ]
   },
-  "events": [
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "leaf_inserted"
-              },
-              {
-                "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
-              },
-              {
-                "u32": 0
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "enrollment_id"
-                  },
-                  "val": {
-                    "bytes": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0000000000000008"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "index"
-                  },
-                  "val": {
-                    "u64": "2"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "leaf"
-                  },
-                  "val": {
-                    "bytes": "0abdf1b8ef853c97f9be26830c8d06358b177509c6f3b4a038eff07f2ca96762"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "root"
-                  },
-                  "val": {
-                    "bytes": "10c6b654096129ff8eac1577757a33d15ce500068136e180eabb477c67d2e054"
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    }
-  ]
+  "events": []
 }

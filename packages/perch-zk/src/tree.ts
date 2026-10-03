@@ -1,5 +1,5 @@
 // A pool tree rebuilt from its leaves (the pool's `leaves` pages or its
-// `Enrolled` events), and witness paths into it. Mirrors
+// `LeafInserted` events), and witness paths into it. Mirrors
 // crates/perch-zk-pool's incremental tree: interior nodes are H(left, right)
 // and every slot not yet filled is the empty leaf 0.
 
@@ -52,7 +52,10 @@ export class Tree {
     const zeros = zeroHashes(this.depth);
     const out: Bytes32[] = [];
     for (let level = 0; level < this.depth; level++) {
-      const sibling = Math.floor(index / 2 ** level) ^ 1;
+      // Plain arithmetic, not `^ 1`: bitwise operators truncate to 32 bits,
+      // and a depth-32 tree's indices reach 2^32 - 1.
+      const pos = Math.floor(index / 2 ** level);
+      const sibling = pos % 2 === 0 ? pos + 1 : pos - 1;
       out.push(this.levels[level]![sibling] ?? zeros[level]!);
     }
     return out;

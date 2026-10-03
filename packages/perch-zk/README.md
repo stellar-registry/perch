@@ -12,13 +12,14 @@ import circuit from '@stellar-registry/perch-zk/artifacts/perch_zk_recovery.json
 
 await init(); // loads Barretenberg's WASM once
 
-// Enrollment: keep `secret` safe; submit `commitment(secret)` to the pool's
-// `enroll(account, enrollmentId, commitment)` from the account.
+// Enrollment: keep `secret` safe. The account's recovery document names a
+// fresh random `enrollmentId` and `commitment(secret)`; its `apply_doc`
+// inserts the leaf through the pool's invoker-only `rcv_insert`.
 const secret = randomSecret();
 const inner = commitment(secret);
 
 // Recovery: rebuild the tree from the pool's leaves (`leaves` pages or
-// `Enrolled` events), then prove over the controller's statement digest.
+// `LeafInserted` events), then prove over the controller's statement digest.
 const tree = new Tree(poolLeaves);
 const proof = await prove(circuit, {
   secret,

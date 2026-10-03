@@ -44,20 +44,20 @@ stroops per KB. Fees are in stroops (10^7 per XLM).
 
 | Depth 32 | Instructions (% of limit) | Memory | Writes | Write bytes | Resource fee | Rent |
 | --- | --- | --- | --- | --- | --- | --- |
-| `rcv_insert`, first leaf (opens the tree) | 41,114,027 (10.3%) | 2.1 MB | 5 | 2,068 | 52,485 | 121,525,887 |
-| `rcv_insert`, typical (201 leaves present) | 43,485,227 (10.9%) | 3.0 MB | 5 | 2,068 | 54,145 | 31,177,990 |
-| `rcv_insert`, last slot (seals the tree) | 43,851,366 (11.0%) | 3.2 MB | 6 | 2,164 | 58,546 | 37,024,974 |
-| `rcv_insert`, first leaf after rollover | 44,060,641 (11.0%) | 3.2 MB | 5 | 2,068 | 54,548 | 121,525,887 |
-| adapter `verify` (circuit id, projection, pool root check, statement hash, UltraHonk) | 96,940,201 (24.2%) | 5.1 MB | 0 | 0 | 67,859 | 0 |
+| `rcv_insert`, first leaf (opens the tree) | 41,103,756 (10.3%) | 2.1 MB | 5 | 2,068 | 52,478 | 121,525,887 |
+| `rcv_insert`, typical (201 leaves present) | 43,474,956 (10.9%) | 3.0 MB | 5 | 2,068 | 54,138 | 31,177,990 |
+| `rcv_insert`, last slot (seals the tree) | 43,841,095 (11.0%) | 3.2 MB | 6 | 2,164 | 58,539 | 37,024,974 |
+| `rcv_insert`, first leaf after rollover | 44,050,370 (11.0%) | 3.2 MB | 5 | 2,068 | 54,541 | 121,525,887 |
+| adapter `verify` (circuit id, projection, pool root check, statement hash, UltraHonk) | 96,940,079 (24.2%) | 5.1 MB | 0 | 0 | 67,859 | 0 |
 | adapter `verify_proof` (UltraHonk only) | 91,046,074 (22.8%) | 3.8 MB | 0 | 0 | 63,733 | 0 |
-| pool `is_known_root` | 510,243 (0.1%) | 1.2 MB | 0 | 0 | 358 | 0 |
+| pool `is_known_root` | 510,121 (0.1%) | 1.2 MB | 0 | 0 | 358 | 0 |
 
 | Depth 24 | Instructions (% of limit) | Memory | Writes | Write bytes | Resource fee | Rent |
 | --- | --- | --- | --- | --- | --- | --- |
-| `rcv_insert`, first leaf | 32,045,811 (8.0%) | 1.9 MB | 5 | 1,748 | 45,864 | 102,044,409 |
-| `rcv_insert`, typical | 34,466,987 (8.6%) | 2.9 MB | 5 | 1,748 | 47,558 | 31,177,990 |
-| `rcv_insert`, last slot | 34,857,440 (8.7%) | 3.0 MB | 6 | 1,844 | 51,977 | 37,024,974 |
-| adapter `verify` | 94,921,766 (23.7%) | 5.1 MB | 0 | 0 | 66,446 | 0 |
+| `rcv_insert`, first leaf | 32,035,956 (8.0%) | 1.9 MB | 5 | 1,748 | 45,857 | 102,044,409 |
+| `rcv_insert`, typical | 34,457,132 (8.6%) | 2.9 MB | 5 | 1,748 | 47,551 | 31,177,990 |
+| `rcv_insert`, last slot | 34,847,585 (8.7%) | 3.0 MB | 6 | 1,844 | 51,970 | 37,024,974 |
+| adapter `verify` | 94,921,644 (23.7%) | 5.1 MB | 0 | 0 | 66,446 | 0 |
 | adapter `verify_proof` | 89,029,403 (22.3%) | 3.7 MB | 0 | 0 | 62,321 | 0 |
 
 - **Verification is about a quarter of a transaction at either depth.** Both
@@ -84,7 +84,7 @@ stroops per KB. Fees are in stroops (10^7 per XLM).
   nullifier, `ZkEvidence` is about 14.7 KB against `tx_max_size_bytes` of
   132,096.
 - **Contract size.** The release-built wasm is 102,235 B for the adapter
-  (which carries the verifier and VK) and 67,281 B for the pool, against
+  (which carries the verifier and VK) and 66,971 B for the pool, against
   131,072 B allowed.
 
 ## Proving
@@ -139,7 +139,7 @@ the component alone.
 | §1 client artifacts | ≤ 50 MiB | 8.4 MB ✓ | 8.4 MB ✓ |
 | §1 proof size | within the tx-size budget | 14.6 KB of 99 KB ✓ | same ✓ |
 | §2 `submit_zk` / `submit_zk_change`, ZK part (adapter `verify`) | ≤ 300M instructions, ≤ 30 MiB | 96.9M, 5.1 MB ✓ | 94.9M, 5.1 MB ✓ |
-| §2 enrollment `apply_doc`, pool part (`rcv_insert`, sealing a tree) | ≤ 300M instructions, ≤ 99 KB written | 43.9M, 2.2 KB ✓ | 34.9M, 1.8 KB ✓ |
+| §2 enrollment `apply_doc`, pool part (`rcv_insert`, sealing a tree) | ≤ 300M instructions, ≤ 99 KB written | 43.8M, 2.2 KB ✓ | 34.8M, 1.8 KB ✓ |
 | §2 every other row | ≤ 75% of each limit | controller workstream | controller workstream |
 
 **Decision: depth 32**, provisional on the rows still open. Every row

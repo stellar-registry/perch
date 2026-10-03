@@ -1,5 +1,5 @@
 use crate::merkle;
-use crate::{Insertion, LeafPosition, PoolError, TreeInfo, TREE_DEPTH, VERSION};
+use crate::{LeafPosition, PoolError, TreeInfo, TREE_DEPTH, VERSION};
 use perch_zk_primitives::{contract_id, is_canonical, Hasher};
 use soroban_sdk::{contract, contractevent, contractimpl, Address, BytesN, Env, Vec};
 
@@ -38,13 +38,15 @@ impl PerchZkPool {
     /// is satisfiable only by the account's own code calling, because the
     /// account refuses to sign reserved `rcv_*` names (spec §15). The pool,
     /// not the caller, derives the stored leaf from the account and the id,
-    /// and refuses a second insertion under the same id.
+    /// and refuses a second insertion under the same id. Returns nothing:
+    /// the leaf's position is in the `LeafInserted` event and in
+    /// [`Self::enrollment`].
     pub fn rcv_insert(
         e: &Env,
         account: Address,
         enrollment_id: BytesN<32>,
         commitment: BytesN<32>,
-    ) -> Result<Insertion, PoolError> {
+    ) -> Result<(), PoolError> {
         account.require_auth();
         let account_id = contract_id(e, &account).ok_or(PoolError::AccountNotContract)?;
         if !is_canonical(&commitment) {
@@ -65,7 +67,7 @@ impl PerchZkPool {
             root: at.root.clone(),
         }
         .publish(e);
-        Ok(at)
+        Ok(())
     }
 
     /// Where `account`'s enrollment `enrollment_id` landed, if it exists.

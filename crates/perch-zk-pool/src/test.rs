@@ -12,6 +12,24 @@ use soroban_sdk::xdr::{ContractDataDurability, LedgerKey, ScVal};
 use soroban_sdk::{Address, BytesN, Env, Event, IntoVal, Vec};
 use std::vec::Vec as StdVec;
 
+/// `rcv_insert` returns nothing; read back where the leaf landed the way a
+/// client does, from `enrollment` and the tree views.
+fn insert(
+    client: &PerchZkPoolClient,
+    account: &Address,
+    n: &BytesN<32>,
+    c: &BytesN<32>,
+) -> Insertion {
+    client.rcv_insert(account, n, c);
+    let at = client.enrollment(account, n).expect("recorded");
+    Insertion {
+        tree_id: at.tree_id,
+        index: at.index,
+        leaf: client.leaves(&at.tree_id, &at.index, &1).get_unchecked(0),
+        root: client.tree(&at.tree_id).root,
+    }
+}
+
 fn setup() -> (Env, Address, PerchZkPoolClient<'static>) {
     let e = Env::default();
     let id = e.register(PerchZkPool, ());
@@ -109,15 +127,10 @@ fn leaf_binds_the_authorized_account_and_enrollment_id() {
     let c = commitment(&e, 7);
     let n = enr(&e, 7);
 
-    let got = client.rcv_insert(&account, &n, &c);
+    client.rcv_insert(&account, &n, &c);
 
     let want_leaf = Hasher::new(&e).leaf(&contract_id(&e, &account).unwrap(), &n, &c);
-    assert_eq!(got.leaf, want_leaf);
-    assert_eq!((got.tree_id, got.index), (0, 0));
-    assert_eq!(
-        got.root,
-        reference_root(&e, TREE_DEPTH, core::slice::from_ref(&want_leaf))
-    );
+    let want_root = reference_root(&e, TREE_DEPTH, core::slice::from_ref(&want_leaf));
     assert_eq!(
         e.events().all().filter_by_contract(&id),
         [LeafInserted {
@@ -125,11 +138,13 @@ fn leaf_binds_the_authorized_account_and_enrollment_id() {
             tree_id: 0,
             enrollment_id: n.clone(),
             index: 0,
-            leaf: want_leaf,
-            root: got.root.clone(),
+            leaf: want_leaf.clone(),
+            root: want_root.clone(),
         }
         .to_xdr(&e, &id)]
     );
+    assert_eq!(client.leaves(&0, &0, &1).get_unchecked(0), want_leaf);
+    assert_eq!(client.tree(&0).root, want_root);
     assert_eq!(
         client.enrollment(&account, &n),
         Some(LeafPosition {
@@ -141,8 +156,8 @@ fn leaf_binds_the_authorized_account_and_enrollment_id() {
     // The same commitment under another account, or under another
     // enrollment id of the same account, is a different leaf.
     let other = Address::generate(&e);
-    assert_ne!(client.rcv_insert(&other, &n, &c).leaf, got.leaf);
-    assert_ne!(client.rcv_insert(&account, &enr(&e, 8), &c).leaf, got.leaf);
+    assert_ne!(insert(&client, &other, &n, &c).leaf, want_leaf);
+    assert_ne!(insert(&client, &account, &enr(&e, 8), &c).leaf, want_leaf);
 }
 
 /// One leaf per `(account, enrollment_id)`: a second insertion under an id
@@ -171,7 +186,7 @@ fn roots_match_an_independent_recomputation() {
     let mut leaves = StdVec::new();
     for n in 0..9u64 {
         let account = Address::generate(&e);
-        let got = client.rcv_insert(&account, &enr(&e, n), &commitment(&e, n));
+        let got = insert(&client, &account, &enr(&e, n), &commitment(&e, n));
         assert_eq!(got.index, n);
         leaves.push(got.leaf.clone());
         assert_eq!(
@@ -308,7 +323,7 @@ fn depth_32_boundary_fills_the_last_slot_and_rolls_over() {
     });
 
     let account = Address::generate(&e);
-    let last = client.rcv_insert(&account, &enr(&e, 42), &commitment(&e, 42));
+    let last = insert(&client, &account, &enr(&e, 42), &commitment(&e, 42));
     assert_eq!((last.tree_id, last.index), (0, (1u64 << 32) - 1));
 
     let mut h = Hasher::new(&e);
@@ -323,7 +338,7 @@ fn depth_32_boundary_fills_the_last_slot_and_rolls_over() {
     assert!(info.sealed);
     assert_eq!(client.current_tree(), 1);
 
-    let next = client.rcv_insert(&account, &enr(&e, 43), &commitment(&e, 43));
+    let next = insert(&client, &account, &enr(&e, 43), &commitment(&e, 43));
     assert_eq!((next.tree_id, next.index), (1, 0));
     assert!(
         client.is_known_root(&0, &last.root),
@@ -364,8 +379,13 @@ fn renew_extends_every_entry_a_witness_needs() {
     let (e, id, client) = setup();
     e.mock_all_auths();
     let account = Address::generate(&e);
-    let first = client.rcv_insert(&account, &enr(&e, 1), &commitment(&e, 1));
-    let latest = client.rcv_insert(&Address::generate(&e), &enr(&e, 2), &commitment(&e, 2));
+    let first = insert(&client, &account, &enr(&e, 1), &commitment(&e, 1));
+    let latest = insert(
+        &client,
+        &Address::generate(&e),
+        &enr(&e, 2),
+        &commitment(&e, 2),
+    );
     let max = e.as_contract(&id, || e.storage().max_ttl());
     let keys = [
         PoolKey::Tree(0),
@@ -401,7 +421,12 @@ fn renew_extends_every_entry_a_witness_needs() {
 fn archived_tree_is_restored_not_reset() {
     let (e, id, client) = setup();
     e.mock_all_auths();
-    let first = client.rcv_insert(&Address::generate(&e), &enr(&e, 1), &commitment(&e, 1));
+    let first = insert(
+        &client,
+        &Address::generate(&e),
+        &enr(&e, 1),
+        &commitment(&e, 1),
+    );
     let max = e.as_contract(&id, || e.storage().max_ttl());
     e.ledger().with_mut(|l| l.sequence_number += max + 1);
     // Inspect the raw ledger rather than calling `get_ttl`, which would
@@ -423,7 +448,12 @@ fn archived_tree_is_restored_not_reset() {
         "tree state, root, leaf, and enrollment record all archived"
     );
 
-    let next = client.rcv_insert(&Address::generate(&e), &enr(&e, 2), &commitment(&e, 2));
+    let next = insert(
+        &client,
+        &Address::generate(&e),
+        &enr(&e, 2),
+        &commitment(&e, 2),
+    );
     assert_eq!((next.tree_id, next.index), (0, 1), "resumed, not reset");
     assert!(client.is_known_root(&0, &first.root));
     assert_eq!(client.leaves(&0, &0, &2).get_unchecked(0), first.leaf);

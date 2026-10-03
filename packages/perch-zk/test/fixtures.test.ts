@@ -37,3 +37,18 @@ describe('rebuilds every fixture from its enrollment history', () => {
     });
   }
 });
+
+describe('Tree', () => {
+  beforeAll(init);
+
+  // Every path must recompute its root; also pins the sibling arithmetic
+  // that a 32-bit bitwise shortcut would break past index 2^31.
+  it('every leaf path recomputes the root', async () => {
+    const { rootFromPath } = await import('../src/tree.js');
+    const leaves = Array.from({ length: 11 }, (_, i) => b('0x' + (i + 1).toString(16).padStart(64, '0')));
+    for (const depth of [4, 5, 32]) {
+      const t = new Tree(leaves, depth);
+      leaves.forEach((l, i) => expect(rootFromPath(l, BigInt(i), t.path(i))).toEqual(t.root()));
+    }
+  });
+});

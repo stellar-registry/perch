@@ -1,0 +1,29 @@
+[package]
+name = "perch-zk-pool"
+description = "Deployable ZK recovery membership pool: constructorless, admin-free, account-authorized enrollment into depth-32 Poseidon2 trees with automatic rollover"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+soroban-sdk-tools = { workspace = true }
+perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+
+[features]
+# Depth-24 build of the same pool. Not a release configuration: it exists so
+# the depth decision in docs/zk/README.md can be re-measured, and so the
+# documented depth-24 fallback stays buildable. Must be paired with the
+# verifier's `tree-depth-24` feature (the circuit depth is baked into the VK).
+tree-depth-24 = []

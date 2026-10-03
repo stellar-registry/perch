@@ -121,7 +121,8 @@ def main(path):
             code = s["error"]
             if s.get("auth_error_code") is not None:
                 code += f", `__check_auth` #{s['auth_error_code']}"
-            w(f"| {s['label']} | refused: `{code}` | | | |")
+            where = f" ({s['refused_in']} simulation)" if s.get("refused_in") else ""
+            w(f"| {s['label']} | refused{where}: `{code}` | | | |")
     w("")
     print("\n".join(out))
 

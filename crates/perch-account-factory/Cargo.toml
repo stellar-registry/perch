@@ -1,0 +1,34 @@
+[package]
+name = "perch-account-factory"
+description = "Constructorless, immutable factory that deploys perch accounts of one build-time-pinned wasm, at addresses bound to their admin signers"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# No cargo-manifest `publish = false`: release-plz's `release` command skips
+# manifest-unpublishable packages (no tag ever). crates.io publish is blocked
+# workspace-wide in release-plz.toml instead.
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+stellar-accounts = { workspace = true }
+# Build-time pins: the account wasm hash and the WebAuthn verifier's
+# content address, both from this crate's git-ignored `wasm/` cache.
+perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+perch-account = { version = "0.3.0", path = "../perch-account" }
+perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler" }
+perch-interpreter = { version = "0.1.1", path = "../perch-interpreter" }
+perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }
+perch-spending-limit = { version = "0.1.1", path = "../perch-spending-limit" }
+perch-testkit = { version = "0.1.1", path = "../perch-testkit" }
+perch-webauthn-verifier = { version = "0.1.0", path = "../perch-webauthn-verifier" }

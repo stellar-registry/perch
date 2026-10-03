@@ -1,0 +1,3 @@
+# Fetched artifacts (see README.md), not committed: the resolved stateless
+# registry id. The `.wasm` are already ignored by the repo-wide `*.wasm` rule.
+*.id

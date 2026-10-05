@@ -9,8 +9,8 @@ use common::{assert_accepts, assert_rejects, base_doc};
 use perch_ir::recovery::{derive_target, DeriveAction, DeriveError, Replacement, ZkRotation};
 use perch_ir::{
     canonical_json, doc_hash_hex, from_json, recovery_canonical_json, validate, BaselineCommitment,
-    GuardianSet, RecoveryConfig, RecoveryMode, RecoveryProfile, SignerMethod, ValidationError,
-    ZkFactor,
+    GuardianSet, PolicyDoc, RecoveryConfig, RecoveryMode, RecoveryProfile, SignerMethod,
+    ValidationError, ZkFactor,
 };
 use std::fs;
 use std::path::PathBuf;
@@ -69,6 +69,53 @@ fn combined_mode_fixture_parses_validates_and_matches_committed_files() {
     let hash = doc_hash_hex(&doc);
     assert_eq!(hash, read("ci-publish-recovery-combined.doc-hash").trim());
     assert_eq!(hash, RECOVERY_COMBINED_HASH_HEX);
+}
+
+// --- recovery-only canonical fixtures ----------------------------------------
+//
+// `recovery_canonical_json` (the `config_hash` text) of one valid document per
+// mode, committed under `testdata/recovery/` so the Lean model's verified
+// parser replays the Rust bytes (`lake exe drt ... --recovery ...`). Between
+// them they reach both profiles, both baseline shapes, and all three modes.
+// Regenerate with `PERCH_BLESS=1 cargo test -p perch-ir --test recovery`.
+
+fn recovery_fixture_docs() -> [(&'static str, PolicyDoc); 3] {
+    let guardian_only = from_json(&read("ci-publish-recovery.json")).unwrap();
+    let combined = from_json(&read("ci-publish-recovery-combined.json")).unwrap();
+    let RecoveryMode::Combined(_, zk) = &combined.recovery.as_ref().unwrap().mode else {
+        panic!("ci-publish-recovery-combined.json must use combined mode");
+    };
+    let mut zk_only = guardian_only.clone();
+    zk_only.recovery.as_mut().unwrap().mode = RecoveryMode::ZkOnly(zk.clone());
+    [
+        (
+            "recovery/config-guardian-only.canonical.json",
+            guardian_only,
+        ),
+        ("recovery/config-zk-only.canonical.json", zk_only),
+        ("recovery/config-combined.canonical.json", combined),
+    ]
+}
+
+#[test]
+fn recovery_only_fixtures_match_recovery_canonical_json() {
+    let write = std::env::var_os("PERCH_BLESS").is_some();
+    for (name, doc) in recovery_fixture_docs() {
+        validate(&doc).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let member = recovery_canonical_json(doc.recovery.as_ref().unwrap());
+        assert!(
+            canonical_json(&doc).contains(&format!("\"recovery\":{member},")),
+            "{name}: not the document's recovery member"
+        );
+        if write {
+            fs::write(testdata(name), &member).unwrap();
+        }
+        assert_eq!(
+            read(name).trim_end_matches('\n'),
+            member,
+            "{name} is stale; regenerate with PERCH_BLESS=1"
+        );
+    }
 }
 
 /// A minimal, valid guardian-only recovery config referencing `base_doc()`'s

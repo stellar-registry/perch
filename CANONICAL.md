@@ -183,5 +183,9 @@ and the hash matches:
 - Rust: `crates/perch-ir/tests/fixture.rs`
 - TypeScript: `packages/perch-js/test/parity.test.ts`
 
+The Lean model (`formal/`) parses and re-emits it, and the other
+`testdata/*.canonical.json` fixtures, byte-identically with a verified inverse
+of its own canonical emitter (`just drt`), and proves that emitter injective.
+
 A change to any byte of `ci-publish.canonical.json` or `ci-publish.doc-hash` is,
 by definition, a canonical-form break; see **Version** above.

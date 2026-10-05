@@ -79,8 +79,8 @@ vendor/               vendored audited UltraHonk verifier plus perch's ZK-flavor
                       (the delta is unaudited; see its README and NOTICE)
 formal/               Lean 4 model of the v1 semantics + machine-checked theorems
                       (fail-closed, validation soundness, lowering preservation, and CANON v1
-                      canonicalizer injectivity); replays the conformance + canonical vectors
-                      (`just drt`)
+                      canonicalizer injectivity, recovery documents and config_hash
+                      included); replays the conformance + canonical vectors (`just drt`)
 fuzz/                 cargo-fuzz targets: evaluator totality, parser/canonicalization round-trip
 komet/                Komet (K-framework) symbolic property tests — an independent wasm-level
                       second opinion (maintainer-gated on the K toolchain; see komet/README.md)

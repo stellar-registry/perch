@@ -23,6 +23,58 @@ formal model + machine-checked proofs + differential random testing against ever
 implementation, with each layer useful on its own. Trust is staged: source-level
 assurance runs continuously in CI; wasm-artifact-level proof runs happen per release.
 
+## Coverage today
+
+What an auditor can rely on, by kind of evidence. "Proved" means a sorry-free Lean theorem
+about the Lean model, checked by the `formal` job in `.github/workflows/assurance.yml`
+(weekly, on dispatch, and on PRs touching `formal/`, `fuzz/`, `komet/`, `crates/perch-ir/`,
+or the canonical fixtures). A proof about the model says nothing about the Rust code on its
+own; the second table is what ties the two together, and it is evidence, not proof.
+
+**Machine-proved (Lean, `formal/`):**
+
+| Property | Theorem |
+|---|---|
+| Verdict lattice laws; only `True` allows, `Unknown` never does | T1, T2 |
+| Evaluator totality; a validated program never trips a defensive guard | T3, T4 `validate_sound` |
+| INV-1: a lowered rule denies an invocation with zero signers | T5 `zero_signers_denied` |
+| Lowering preserves the rule's doc-level meaning | T6 `lowering_preserves` |
+| `doc_hash` names one document: the canonical form is injective over every `PolicyDoc` shape, the `recovery` member included | T7 `emitDoc_injective` |
+| `config_hash` names one recovery configuration: `recovery_canonical_json` and the `"perch/recovery/config"` preimage are injective, and no preimage is a document's canonical form | T8 `emitRecovery_injective`, `configPreimage_injective`, `configPreimage_ne_emitDoc` |
+
+All hash claims hold up to a SHA-256 collision.
+
+**Differential and empirical (model ↔ shipped code):**
+
+| Link | Evidence |
+|---|---|
+| Lean evaluator ↔ Rust `rpn::eval` | `testdata/eval/` vectors replayed by `perch-conformance` (every PR), the Lean model (`drt`), and the compiled wasm (`conformance-wasm`); the `eval_fail_closed` fuzz target |
+| Lean canonicalizer ↔ Rust `canon.rs` | `drt` parses and re-emits every `testdata/*.canonical.json` document (five, covering both signer kinds, `all`/`threshold` principals, a cap, `guardian-only` and `combined` recovery) and the three `testdata/recovery/config-*.canonical.json` recovery members, which `crates/perch-ir/tests/recovery.rs` regenerates from Rust |
+| Rust parse ↔ emit, recovery included | fuzz targets (`fuzz/fuzz_targets/`): `ir_parse_roundtrip` (arbitrary bytes, seeded with the fixtures) and `recovery_canonical_roundtrip` (arbitrary `RecoveryConfig`s: round-trip, determinism, member slice, one-field-change injectivity) |
+| Rust ↔ TypeScript canonical form | `packages/perch-js/test/parity.test.ts` on the document fixtures (perch-js has no recovery-only canonicalizer) |
+| `rpn::eval` wasm under K semantics | Komet, three properties, 50 fuzz examples each in CI; symbolic `komet prove` only locally (`komet/README.md`) |
+
+**Not modeled, tested only.** None of the following has a formal model or a proof. They are
+covered by enforcing-authorization integration tests (`crates/integration-tests/tests/`),
+real-proof tests, and the testnet exercise:
+
+- The recovery controller's state machine (`crates/perch-recovery`, spec §6): attempt
+  lifecycle, the `Protected` freeze across authorization paths, cancellation rules and the
+  cancel cap, evidence freshness and expiry, epochs, nullifier spending, baselines, and
+  upgrade approvals.
+- Account authorization paths (`crates/perch-smart-account`): `__check_auth`, OZ
+  context-rule selection, `execute`, `apply_doc`, the reserved-name guards, upgrades.
+- The ZK circuit (`circuits/`), the vendored UltraHonk verifier, the adapter
+  (`crates/perch-zk-adapter`), and the membership pool (`crates/perch-zk-pool`).
+- The document compiler beyond the canonical bytes: validation, `derive_target` (spec §7),
+  the compiled recovery configuration, and the `config_hash` computation itself. T8 proves
+  the preimage injective; that `perch-doc-compiler` hashes exactly that preimage is by
+  reading `to_compiled_recovery`, since the integration tests take `config_hash` from the
+  compiler rather than recomputing it.
+- The release pipeline and deployment verification (`docs/deploy/README.md`).
+- The trusted base: the pinned OpenZeppelin `stellar-accounts` fork, the Soroban host,
+  rustc/LLVM, and SHA-256.
+
 ## The model is the spec
 
 The core artifact of this plan is an executable Lean 4 model (`formal/`) of:
@@ -32,7 +84,9 @@ The core artifact of this plan is an executable Lean 4 model (`formal/`) of:
 3. the **program validator** (`rpn::validate` stack simulation),
 4. the **leaf predicate semantics** over an abstract invocation
    (contract / function / typed args / signer count / self address / ledger sequence),
-5. the **lowering** (`build_program`: `MinSigners` floor + `FnIn` + arg predicates + `All`).
+5. the **lowering** (`build_program`: `MinSigners` floor + `FnIn` + arg predicates + `All`),
+6. the **canonical form** (CANON v1) of a document and of its `recovery` member on its own,
+   each with a verified inverse parser.
 
 The model is deliberately host-agnostic: soroban `Val` decoding is abstracted to a typed
 `Value` domain where decode failure is an explicit `VOther`-style case, matching the leaf
@@ -63,9 +117,13 @@ land):
   Rust leaf implementations is the empirical link carried by the shared vectors and the Rust
   differential suite (whose reference never looks at `Op` or the compiler). Together they are
   target (b); T6 alone is its machine-checked half.
-- **T7 Monotonicity of attenuation** *(stretch)*: tightening a bound (subset `FnIn`, subset
-  `StrIn`, smaller `notAfter`) never admits a previously denied invocation; the model-level
-  justification of `attenuation::is_narrowing`.
+- **T7 Canonical-form injectivity**: `emitDoc_injective`, over every `PolicyDoc` shape
+  including the `recovery` member (proved; see `formal/README.md`).
+- **T8 Recovery-configuration identity**: `recovery_canonical_json` and the `config_hash`
+  preimage are injective (proved).
+- **T9 Monotonicity of attenuation** *(stretch, not proved)*: tightening a bound (subset
+  `FnIn`, subset `StrIn`, smaller `notAfter`) never admits a previously denied invocation;
+  the model-level justification of `attenuation::is_narrowing`.
 
 The Rust implementation is then tied to the model empirically but continuously via
 differential testing (below); tying it deductively (Aeneas extraction to Lean, or Verus
@@ -105,7 +163,10 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
       hash-injectivity sampling, builder ≡ wire form)
 - [x] Fuzz targets (`fuzz/`): `eval_fail_closed` (totality + determinism on arbitrary
       programs/invocations), `ir_parse_roundtrip` (parser never panics; canonicalization
-      idempotent), with weekly/dispatch runs in `assurance.yml`
+      idempotent; recovery text preserved), `recovery_canonical_roundtrip` (arbitrary
+      recovery configurations round-trip, deterministically, and differ when a field
+      does), with weekly/dispatch runs in `assurance.yml` and a short pass on PRs that
+      touch them
 - [x] `cargo-mutants` + `cargo-llvm-cov` recipes (justfile) + scheduled CI jobs
       (`assurance.yml`; mutants in burn-in)
 
@@ -116,12 +177,16 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 - [x] Graduate Flux job out of `continue-on-error`, so flux failures now fail CI
 
 ### Phase 2: deepening source-level assurance (follow-up PRs)
-- [ ] T6/T7 completed; model covers `attenuation`/`analysis` claims
+- [ ] T9 completed; model covers `attenuation`/`analysis` claims
 - [x] doc_hash injectivity: proved (`formal/PerchFormal/CanonProofs.lean`,
       `emitDoc_injective`). A verified inverse parser round-trips the canonical emitter, so
       two distinct documents can never share canonical bytes; the model emitter is pinned to
       the Rust emitter by round-tripping the frozen `*.canonical.json` fixtures in CI. To our
       knowledge the first machine-verified RFC 8785-subset implementation.
+- [x] Recovery canonicalization (#88): the model covers `threshold` principals and the
+      `recovery` member, so `emitDoc_injective` covers recovery documents, and
+      `configPreimage_injective` proves `config_hash` names one recovery configuration.
+      `drt` replays the recovery fixtures, including one recovery member per mode.
 - [ ] Choose one deductive tie between model and Rust: Verus (`eval == spec_fn`, ghost code
       erased from the shipped crate) or Aeneas extraction to Lean. Decision gate: model + DRT
       running for a few weeks first.

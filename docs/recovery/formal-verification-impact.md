@@ -33,58 +33,51 @@ lowering happens entirely inside `perch-doc-compiler`, mapping
 the eval-vectors conformance suite need no new cases and remain sound
 exactly as before.
 
-## Lean `Canon.lean` / `CanonProofs.lean` (T7): explicitly scoped out, with rationale
+## Lean `Canon.lean` / `CanonProofs.lean` (T7, T8): covered
 
-`Canon.lean` is a hand-maintained Lean *twin* of `perch-ir`'s canonical-form
-emitter (`crates/perch-ir/src/canon.rs`), and `CanonProofs.lean` proves
-`emitDoc_injective` (T7) against the Lean model's own `Doc` type — not
-against the Rust type directly. Extending Lean's `Doc` to add a `recovery`
-field (plus the `RecoveryMode`/`GuardianSet`/`ZkVerifierConfig`/
-`BaselineCommitment`/`PendingActivityPolicy` sub-types) and re-proving
-injectivity over the enlarged domain is real, non-mechanical proof
-engineering: a new sum-of-products shape enters the emitter and its
-verified inverse parser, and `emitDoc_injective`'s proof structure would
-need new cases throughout.
+When the `recovery` field first landed, the Lean model of the canonical form
+did not represent it, so `emitDoc_injective` (T7) covered only documents
+without recovery (#88). The model now covers the member exactly as
+`crates/perch-ir/src/canon.rs` emits it (`formal/PerchFormal/Canon.lean`):
+both profiles; the `guardian-only`, `zk-only`, and `combined` modes with the
+guardian fields (`guardians`, `quorum`) and every `ZkFactor` field
+(`adapter`, `circuit-id`, `pool`, `enrollment-id`, `commitment`); the
+controller; the optional baseline `doc-hash`; the replaceable signer ids;
+and the three ledger counts. It also covers `threshold` principals, which
+the model had lacked since they were added.
 
-**This change does not do that work**, for two reasons stated plainly rather
-than hidden:
+What is proved, sorry-free (`formal/PerchFormal/CanonProofs.lean`):
 
-1. **Correctness bar.** `formal/README.md` states every theorem here is
-   "sorry-free." Extending a non-trivial injectivity proof under time
-   pressure risks landing an admitted or subtly-wrong proof, which is worse
-   than an honest gap — a `sorry` (or a proof that typechecks but doesn't
-   actually establish what it claims) would silently narrow what T7 is
-   worth without anyone noticing on a green CI run.
-2. **No loss to the existing claim.** T7 continues to hold, exactly as
-   proved, for every document Lean's `Doc` type can represent — which is
-   every document *without* recovery. The Rust-side regression test
-   (`crates/perch-ir/tests/recovery.rs::recovery_absent_documents_hash_exactly_as_before_this_field_existed`,
-   backed by the unchanged `ci-publish{,-delegated,-threshold}` golden
-   vectors) is exactly the condition that keeps this true: nothing about
-   adding an *optional*, omitted-when-`None` field changes the canonical
-   bytes of any document that doesn't use it. T7's proof over that domain
-   is not weakened, invalidated, or cast into doubt by this change — it
-   simply does not yet extend to the new domain.
+- **T7** `emitDoc_injective`: two documents with the same canonical bytes are
+  the same document, with or without a `recovery` member. So `doc_hash`
+  names one document up to a SHA-256 collision.
+- **T8** `emitRecovery_injective` and `configPreimage_injective`: two
+  recovery configurations with the same `recovery_canonical_json`, or the
+  same `"perch/recovery/config" || recovery_canonical_json` preimage, are the
+  same configuration. So `config_hash` (spec §3.2) names one configuration
+  up to a SHA-256 collision. `configPreimage_ne_emitDoc`: no `config_hash`
+  preimage is a document's canonical form.
 
-**What this means concretely:** `just drt` (the differential Rust↔Lean
-replay) is unaffected and continues to pass, because it replays
-`testdata/eval/eval-vectors.json` and round-trips the existing
-(recovery-absent) `ci-publish*.canonical.json` fixtures — none of which
-gained a `recovery` field. The two new fixtures this change adds
-(`ci-publish-recovery.json`, `ci-publish-recovery-combined.json`) are
-**not** round-tripped through the Lean model, because Lean's `Doc` cannot
-represent them yet. Their canonical-form and hash agreement is instead
-verified the same way every other cross-language fixture in this repo is —
-by the Rust (`crates/perch-ir/tests/recovery.rs`) and TypeScript
-(`packages/perch-js/test/parity.test.ts`) suites agreeing on committed
-bytes — which is real cross-implementation conformance, just not
-machine-checked against the Lean model.
+How the model is tied to the Rust emitter, empirically: `lake exe drt`
+parses and re-emits byte-identically both recovery document fixtures
+(`ci-publish-recovery{,-combined}.canonical.json`) and one Rust-emitted
+recovery member per mode (`testdata/recovery/config-*.canonical.json`,
+regenerated and checked by `crates/perch-ir/tests/recovery.rs`). The fuzz
+targets `ir_parse_roundtrip` and `recovery_canonical_roundtrip` check, on
+the Rust side, that every recovery configuration round-trips through the
+parser, that `recovery_canonical_json` is the document's member, and that
+changing one field changes the text.
 
-## Tracked follow-up
+What this does not cover:
 
-Extending `Canon.lean`/`CanonProofs.lean` to cover `RecoveryConfig` and
-re-establishing `emitDoc_injective` over the enlarged domain is legitimate
-future work, tracked here rather than attempted as part of this change. It
-should be undertaken as its own reviewed change with room to get the
-injectivity argument right, not bundled into a schema-and-controller
-release. Tracked in [#88](https://github.com/stellar-registry/perch/issues/88).
+- That the Lean emitter and `canon.rs` agree on every input. That link is
+  the fixtures and the fuzzing above, not a proof.
+- What the fields mean: validation (`validate.rs`), `derive_target`, and
+  the compiled configuration. The proofs are about bytes.
+- That `perch-doc-compiler` computes `config_hash` over exactly this
+  preimage. That is by reading `to_compiled_recovery`; the integration tests
+  take `config_hash` from the compiler rather than recomputing it.
+- The recovery controller's state machine, account authorization, and the
+  ZK circuit, adapter, and pool. None has a formal model. See
+  `docs/verification/PLAN.md` ("Coverage today") for the full list and the
+  tests that cover them instead.

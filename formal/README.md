@@ -12,9 +12,9 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
 | `PerchFormal/Semantics.lean` | the op alphabet, leaf semantics (every fail-closed decode path), the guarded RPN machine (`rpn::eval` twin, every defensive guard mirrored), the validator (`rpn::validate` twin) |
 | `PerchFormal/Lowering.lean` | `build_program` twin + the doc-level meaning of a rule |
 | `PerchFormal/Theorems.lean` | the evaluator/lowering proofs (below) |
-| `PerchFormal/Canon.lean` | CANON v1 twin: the canonical JSON emitter + its verified inverse parser |
-| `PerchFormal/CanonProofs.lean` | round-trip + `emitDoc_injective`. doc_hash names exactly one document |
-| `Main.lean` | `lake exe drt`. Replays `testdata/eval/eval-vectors.json` through the model, and round-trips Rust-emitted `*.canonical.json` files through the verified canonicalizer |
+| `PerchFormal/Canon.lean` | CANON v1 twin: the canonical JSON emitter for every `PolicyDoc` shape (including `threshold` principals and the `recovery` member), `recovery_canonical_json`, the `config_hash` preimage, and verified inverse parsers |
+| `PerchFormal/CanonProofs.lean` | round-trips + `emitDoc_injective` (doc_hash names exactly one document) + `emitRecovery_injective`/`configPreimage_injective` (config_hash names exactly one recovery configuration) |
+| `Main.lean` | `lake exe drt`. Replays `testdata/eval/eval-vectors.json` through the model, and round-trips Rust-emitted canonical documents and (after `--recovery`) recovery members through the verified canonicalizer |
 
 ## Theorems (all sorry-free)
 
@@ -36,9 +36,22 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
   document domain, proved by exhibiting a verified inverse parser
   (`pDoc_rt : pDoc (emitDoc d ++ rest) = some (d, rest)`), covering the JCS
   escaping table, plain-decimal `u32`s, sorted keys, and omitted `None`s. So
-  `doc_hash` identifies exactly one document up to a SHA-256 collision. As of
-  our survey (2026-08), no other machine-verified implementation of an
-  RFC 8785 subset exists.
+  `doc_hash` identifies exactly one document up to a SHA-256 collision. The
+  domain is every shape `perch_ir::canonical_json` emits: `external` and
+  `delegated` signers, `all`/`threshold`/`self-authenticating` principals,
+  every arg predicate, caps, expiries, and the optional `recovery` member
+  (both profiles; `guardian-only`, `zk-only`, and `combined` modes with every
+  guardian and ZK field; controller; optional baseline; replaceable ids; the
+  three ledger counts). As of our survey (2026-08), no other
+  machine-verified implementation of an RFC 8785 subset exists.
+- **T8** `configPreimage_injective`: `recovery_canonical_json` is injective
+  (`emitRecovery_injective`, via `pRecovery_rt`), and so is the
+  `config_hash` preimage `"perch/recovery/config" || recovery_canonical_json`.
+  So `config_hash` identifies exactly one recovery configuration up to a
+  SHA-256 collision, and it ignores everything outside the `recovery`
+  member by construction (a key rotation is not a reconfiguration).
+  `configPreimage_ne_emitDoc` separates the two hash domains: no
+  `config_hash` preimage is a document's canonical form.
 - **T6** `lowering_preserves`: the machine over `build_program`'s postfix
   output computes exactly the rule's doc-level Kleene conjunction, where the
   doc side is stated over predicates directly and `leafEval_lowerPred` proves
@@ -50,17 +63,56 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
 
 The model is executable and replays the same frozen conformance vectors the
 Rust implementation is tested against (`crates/perch-conformance`,
-expectations hand-authored from `CANONICAL.md`):
+expectations hand-authored from `CANONICAL.md`), plus every Rust-emitted
+canonical fixture:
 
 ```sh
-just drt          # Rust side + Lean side over the same vectors
+just drt          # Rust side + Lean side over the same vectors and fixtures
 # or directly:
-cd formal && lake exe drt ../testdata/eval/eval-vectors.json
+cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
+  ../testdata/ci-publish*.canonical.json \
+  --recovery ../testdata/recovery/config-*.canonical.json
 ```
 
 Green means the hand-authored spec, the Rust evaluator, and this proved model
-agree on every case. The model↔Rust link is differential (empirical), not
-deductive. See PLAN.md phase 2 for the planned deepening (Verus or Aeneas).
+agree on every case, and that the model's canonicalizer parses and re-emits
+the Rust canonicalizer's bytes for every fixture: five documents (external
+and delegated signers, `all` and `threshold` principals, a cap,
+`guardian-only` and `combined` recovery) and one recovery member per mode. `crates/perch-ir/tests/recovery.rs` regenerates
+the recovery-member fixtures from Rust and fails when they are stale.
+
+The model↔Rust link is differential (empirical), not deductive: the
+theorems are about the Lean emitter, and the fixtures and the fuzz targets
+(`fuzz/fuzz_targets/ir_parse_roundtrip.rs`,
+`recovery_canonical_roundtrip.rs`) are the evidence that `canon.rs` emits
+the same bytes. See PLAN.md phase 2 for the planned deepening (Verus or
+Aeneas).
+
+## What is not modeled
+
+The model covers two things: the per-invocation evaluator and lowering
+(T1–T6), and the canonical form and its hashes (T7, T8). Nothing else in
+the recovery stack has a model or a proof:
+
+- **The recovery controller's state machine** (`crates/perch-recovery`):
+  attempts and their lifecycle, the `Protected` freeze, cancellation and
+  the cancel cap, evidence freshness and expiry, epochs, nullifier spending,
+  baselines, upgrade approvals. These are pinned by enforcing-auth
+  integration tests (`crates/integration-tests/tests/recovery.rs`), not
+  proofs.
+- **Account authorization paths** (`crates/perch-smart-account`:
+  `__check_auth`, OZ context-rule selection, `execute`, `apply_doc`,
+  upgrades). Tests only (`account_capabilities.rs`, `matrix.rs`).
+- **The ZK circuit, verifier, adapter, and pool** (`circuits/`,
+  `crates/perch-zk-adapter`, the membership pool): real-proof tests and
+  cross-implementation Poseidon2 vectors (`docs/zk/README.md`), no proofs.
+- **The document compiler** beyond the canonical bytes: validation,
+  `derive_target`, and the compiled recovery configuration. T8 is about the
+  preimage. That `perch-doc-compiler` hashes exactly that preimage is by
+  reading `to_compiled_recovery`: the integration tests take `config_hash`
+  from the compiler itself, so no test recomputes it independently.
+- **SHA-256** itself: every "names exactly one" claim above holds up to a
+  SHA-256 collision.
 
 ## Setup
 

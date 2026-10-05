@@ -80,14 +80,24 @@ bench: bench-build
 formal:
     cd formal && lake build
 
+# Keep the fixture list below in sync with .github/workflows/assurance.yml.
 # Differential conformance: run the frozen eval vectors through the real Rust
-# evaluator AND the proved Lean model. Green = spec, implementation, and model
-# agree on every case.
+# evaluator AND the proved Lean model, and round-trip the Rust-emitted
+# canonical fixtures (whole documents, then recovery members after
+# `--recovery`) through the model's verified parser. Green = spec,
+# implementation, and model agree on every case.
 drt: formal
     cargo test -p perch-conformance
     cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
       ../testdata/ci-publish.canonical.json \
-      ../testdata/ci-publish-delegated.canonical.json
+      ../testdata/ci-publish-delegated.canonical.json \
+      ../testdata/ci-publish-threshold.canonical.json \
+      ../testdata/ci-publish-recovery.canonical.json \
+      ../testdata/ci-publish-recovery-combined.canonical.json \
+      --recovery \
+      ../testdata/recovery/config-guardian-only.canonical.json \
+      ../testdata/recovery/config-zk-only.canonical.json \
+      ../testdata/recovery/config-combined.canonical.json
 
 # Per-policy SMT prover (needs z3, e.g. `brew install z3`): dead rules,
 # intent conformance, semantic attenuation. Example:
@@ -104,12 +114,14 @@ conformance-wasm:
 
 # Coverage-guided fuzzing of a target in fuzz/fuzz_targets/ (default: the
 # evaluator's fail-closed totality). Setup: `cargo install cargo-fuzz` and a
-# nightly toolchain (the flux pin below works: nightly-2026-02-05).
+# nightly toolchain (the flux pin below works: nightly-2026-02-05). A target's
+# fuzz/dicts/<target>.dict, if any, is passed with -dict.
 # `-s none`: ASan fails to link soroban-sdk's rlib ("initializer pointer has
 # no target"), and these targets are pure safe Rust — panic/divergence
 # detection is the point, not memory errors.
 fuzz target="eval_fail_closed" time="60":
-    cargo +nightly-2026-02-05 fuzz run -s none {{target}} -- -max_total_time={{time}}
+    cargo +nightly-2026-02-05 fuzz run -s none {{target}} -- -max_total_time={{time}} \
+      {{ if path_exists("fuzz/dicts/" + target + ".dict") == "true" { "-dict=fuzz/dicts/" + target + ".dict" } else { "" } }}
 
 # Mutation testing over the security core: seeds small semantic bugs and
 # checks the suite kills them — measures whether the golden vectors + property

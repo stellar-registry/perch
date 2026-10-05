@@ -592,6 +592,13 @@ theorem pRuleList_rt (l : List CRule) (tail : List Char) :
     pList pRule (emitList emitRule l ++ tail) = some (l, tail) :=
   pList_rt pRule emitRule pRule_rt (fun _ => ⟨'{', _, rfl, by decide⟩) l tail
 
+/-- The inlined profile tags are exactly the JSON strings Rust emits
+(`Cv::Str("loss")`, `Cv::Str("protected")`): escaping changes neither. -/
+theorem emitProfile_eq_emitStr :
+    emitProfile .loss = emitStr (lit "loss")
+      ∧ emitProfile .protected_ = emitStr (lit "protected") := by
+  decide
+
 set_option linter.unusedSimpArgs false in
 theorem pProfile_rt (p : CProfile) (tail : List Char) :
     pProfile (emitProfile p ++ tail) = some (p, tail) := by

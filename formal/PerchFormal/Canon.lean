@@ -239,7 +239,7 @@ def emitRule (r : CRule) : List Char :=
 
 /-- The profile tag. Rust emits it as a JSON string (`Cv::Str("loss")`);
 neither tag has a character `escChar` rewrites, so the quoted literal is
-that string's canonical form. -/
+that string's canonical form (`emitProfile_eq_emitStr`). -/
 def emitProfile : CProfile → List Char
   | .loss => lit "\"loss\""
   | .protected_ => lit "\"protected\""

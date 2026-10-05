@@ -4,14 +4,21 @@
 Model twin of `crates/perch-ir/src/canon.rs` (the normative spec is
 `CANONICAL.md`): the canonical JSON emitter for the exact document shapes a
 `PolicyDoc` can take — JCS string escaping, plain-decimal `u32`s, sorted fixed
-keys, `None` fields omitted, no whitespace, no nulls.
+keys, `None` fields omitted, no whitespace, no nulls. That includes the
+optional `recovery` member (`RecoveryConfig`: profile, the
+`guardian-only`/`zk-only`/`combined` mode with its guardian and ZK fields,
+controller, baseline, replaceable signer ids, ledger counts), and
+`emitRecovery` on its own is `recovery_canonical_json`, the text the recovery
+controller's `config_hash` commits to.
 
 The point of this file is **injectivity**: two distinct documents can never
 share canonical bytes, hence never share a `doc_hash` (modulo a SHA-256
-collision, which no theorem prover will refute). The proof is the classic
+collision, which no theorem prover will refute), and two distinct recovery
+configurations never share a `config_hash` preimage. The proof is the classic
 parser round-trip: `Parse.lean`-style combinators reconstruct the document
 from its own canonical output (`pDoc (emitDoc d ++ rest) = some (d, rest)`),
-and injectivity of `emitDoc` falls out.
+and injectivity of `emitDoc` falls out; likewise `pRecovery` for
+`emitRecovery`.
 
 The parser here is a *proof artifact*, not a security boundary: it only needs
 to invert what the emitter emits. It doubles as an empirical pin: `lake exe
@@ -41,6 +48,7 @@ deriving DecidableEq, Repr
 
 inductive CPrincipals where
   | all (signers : List Str)
+  | threshold (signers : List Str) (m : Nat)
   | selfAuth (policy installParamHex ack : Str)
 deriving DecidableEq, Repr
 
@@ -78,11 +86,55 @@ structure CRule where
   cap : Option CCap
 deriving DecidableEq, Repr
 
+/-! ## The recovery member (`perch_ir::RecoveryConfig`, canonical slice) -/
+
+/-- `RecoveryProfile`. -/
+inductive CProfile where
+  | loss
+  | protected_
+deriving DecidableEq, Repr
+
+/-- `GuardianSet`. -/
+structure CGuardians where
+  guardians : List Str
+  quorum : Nat
+deriving DecidableEq, Repr
+
+/-- `ZkFactor`. -/
+structure CZk where
+  adapter : Str
+  circuitId : Str
+  pool : Str
+  enrollmentId : Str
+  commitment : Str
+deriving DecidableEq, Repr
+
+/-- `RecoveryMode`. -/
+inductive CMode where
+  | guardianOnly (g : CGuardians)
+  | zkOnly (z : CZk)
+  | combined (g : CGuardians) (z : CZk)
+deriving DecidableEq, Repr
+
+/-- `RecoveryConfig`. `baseline` is `BaselineCommitment.doc_hash`, the
+baseline object's only field. -/
+structure CRecovery where
+  profile : CProfile
+  mode : CMode
+  controller : Str
+  baseline : Option Str
+  replaceable : List Str
+  delayLedgers : Nat
+  expiryLedgers : Nat
+  maxCancels : Nat
+deriving DecidableEq, Repr
+
 structure CDoc where
   version : Nat
   network : Option Str
   signers : List CSigner
   rules : List CRule
+  recovery : Option CRecovery
 deriving DecidableEq, Repr
 
 /-! ## Emitter -/
@@ -128,6 +180,10 @@ def emitScope : CScope → List Char
 def emitPrincipals : CPrincipals → List Char
   | .all signers =>
     lit "{\"signers\":" ++ emitList emitStr signers ++ lit ",\"type\":\"all\"}"
+  | .threshold signers m =>
+    lit "{\"m\":" ++ emitNat m
+      ++ lit ",\"signers\":" ++ emitList emitStr signers
+      ++ lit ",\"type\":\"threshold\"}"
   | .selfAuth policy installParamHex ack =>
     lit "{\"ack\":" ++ emitStr ack
       ++ lit ",\"install-param-hex\":" ++ emitStr installParamHex
@@ -181,12 +237,70 @@ def emitRule (r : CRule) : List Char :=
     ++ lit ",\"scope\":" ++ emitScope r.scope
     ++ lit "}"
 
+/-- The profile tag. Rust emits it as a JSON string (`Cv::Str("loss")`);
+neither tag has a character `escChar` rewrites, so the quoted literal is
+that string's canonical form. -/
+def emitProfile : CProfile → List Char
+  | .loss => lit "\"loss\""
+  | .protected_ => lit "\"protected\""
+
+/-- The mode object: the guardian fields, the ZK fields, or both, beside the
+`type` tag, with keys sorted across the whole object (`combined` interleaves
+`guardians` between `enrollment-id` and `pool`). -/
+def emitMode : CMode → List Char
+  | .guardianOnly g =>
+    lit "{\"guardians\":" ++ emitList emitStr g.guardians
+      ++ lit ",\"quorum\":" ++ emitNat g.quorum
+      ++ lit ",\"type\":\"guardian-only\"}"
+  | .zkOnly z =>
+    lit "{\"adapter\":" ++ emitStr z.adapter
+      ++ lit ",\"circuit-id\":" ++ emitStr z.circuitId
+      ++ lit ",\"commitment\":" ++ emitStr z.commitment
+      ++ lit ",\"enrollment-id\":" ++ emitStr z.enrollmentId
+      ++ lit ",\"pool\":" ++ emitStr z.pool
+      ++ lit ",\"type\":\"zk-only\"}"
+  | .combined g z =>
+    lit "{\"adapter\":" ++ emitStr z.adapter
+      ++ lit ",\"circuit-id\":" ++ emitStr z.circuitId
+      ++ lit ",\"commitment\":" ++ emitStr z.commitment
+      ++ lit ",\"enrollment-id\":" ++ emitStr z.enrollmentId
+      ++ lit ",\"guardians\":" ++ emitList emitStr g.guardians
+      ++ lit ",\"pool\":" ++ emitStr z.pool
+      ++ lit ",\"quorum\":" ++ emitNat g.quorum
+      ++ lit ",\"type\":\"combined\"}"
+
+/-- The canonical bytes of a `recovery` member: `recovery_canonical_json`. -/
+def emitRecovery (r : CRecovery) : List Char :=
+  lit "{"
+    ++ (match r.baseline with
+        | some h => lit "\"baseline\":{\"doc-hash\":" ++ emitStr h ++ lit "},"
+        | none => [])
+    ++ lit "\"controller\":" ++ emitStr r.controller
+    ++ lit ",\"delay-ledgers\":" ++ emitNat r.delayLedgers
+    ++ lit ",\"expiry-ledgers\":" ++ emitNat r.expiryLedgers
+    ++ lit ",\"max-cancels\":" ++ emitNat r.maxCancels
+    ++ lit ",\"mode\":" ++ emitMode r.mode
+    ++ lit ",\"profile\":" ++ emitProfile r.profile
+    ++ lit ",\"replaceable\":" ++ emitList emitStr r.replaceable
+    ++ lit "}"
+
+/-- `CONFIG_DOMAIN` in `perch-doc-compiler`. -/
+def configDomain : List Char := lit "perch/recovery/config"
+
+/-- The `config_hash` preimage: `config_hash = sha256(configPreimage r)`
+(`docs/recovery/spec.md` §3.2). -/
+def configPreimage (r : CRecovery) : List Char :=
+  configDomain ++ emitRecovery r
+
 /-- The canonical bytes of a document (as unicode scalars; the Rust side's
 UTF-8 encoding of them is itself injective). -/
 def emitDoc (d : CDoc) : List Char :=
   lit "{"
     ++ (match d.network with
         | some n => lit "\"network\":" ++ emitStr n ++ lit ","
+        | none => [])
+    ++ (match d.recovery with
+        | some r => lit "\"recovery\":" ++ emitRecovery r ++ lit ","
         | none => [])
     ++ lit "\"rules\":" ++ emitList emitRule d.rules
     ++ lit ",\"signers\":" ++ emitList emitSigner d.signers
@@ -326,11 +440,18 @@ def pPrincipals : P CPrincipals :=
       let (policy, r5) ← pStr r4
       let ((), r6) ← pExact (lit ",\"type\":\"self-authenticating\"}") r5
       some (.selfAuth policy iph ack, r6))
-    (fun input => do
-      let ((), r1) ← pExact (lit "{\"signers\":") input
-      let (signers, r2) ← pList pStr r1
-      let ((), r3) ← pExact (lit ",\"type\":\"all\"}") r2
-      some (.all signers, r3))
+    (pOpt (lit "{\"m\":")
+      (fun input => do
+        let (m, r1) ← pNat input
+        let ((), r2) ← pExact (lit ",\"signers\":") r1
+        let (signers, r3) ← pList pStr r2
+        let ((), r4) ← pExact (lit ",\"type\":\"threshold\"}") r3
+        some (.threshold signers m, r4))
+      (fun input => do
+        let ((), r1) ← pExact (lit "{\"signers\":") input
+        let (signers, r2) ← pList pStr r1
+        let ((), r3) ← pExact (lit ",\"type\":\"all\"}") r2
+        some (.all signers, r3)))
 
 def pPred : P CPred :=
   pOpt (lit "{\"address\":")
@@ -442,6 +563,74 @@ def pRule : P CRule
     let ((), r10) ← pExact (lit "}") r9
     some (⟨name, scope, principals, functions, args, nal, cap⟩, r10)
 
+def pProfile : P CProfile :=
+  pOpt (lit "\"loss\"")
+    (fun input => some (.loss, input))
+    (fun input => do
+      let ((), r1) ← pExact (lit "\"protected\"") input
+      some (.protected_, r1))
+
+def pMode : P CMode :=
+  pOpt (lit "{\"guardians\":")
+    (fun input => do
+      let (gs, r1) ← pList pStr input
+      let ((), r2) ← pExact (lit ",\"quorum\":") r1
+      let (q, r3) ← pNat r2
+      let ((), r4) ← pExact (lit ",\"type\":\"guardian-only\"}") r3
+      some (.guardianOnly ⟨gs, q⟩, r4))
+    (fun input => do
+      let ((), r1) ← pExact (lit "{\"adapter\":") input
+      let (adapter, r2) ← pStr r1
+      let ((), r3) ← pExact (lit ",\"circuit-id\":") r2
+      let (circuitId, r4) ← pStr r3
+      let ((), r5) ← pExact (lit ",\"commitment\":") r4
+      let (commitment, r6) ← pStr r5
+      let ((), r7) ← pExact (lit ",\"enrollment-id\":") r6
+      let (enrollmentId, r8) ← pStr r7
+      pOpt (lit ",\"guardians\":")
+        (fun i => do
+          let (gs, s1) ← pList pStr i
+          let ((), s2) ← pExact (lit ",\"pool\":") s1
+          let (pool, s3) ← pStr s2
+          let ((), s4) ← pExact (lit ",\"quorum\":") s3
+          let (q, s5) ← pNat s4
+          let ((), s6) ← pExact (lit ",\"type\":\"combined\"}") s5
+          some (.combined ⟨gs, q⟩ ⟨adapter, circuitId, pool, enrollmentId, commitment⟩, s6))
+        (fun i => do
+          let ((), s1) ← pExact (lit ",\"pool\":") i
+          let (pool, s2) ← pStr s1
+          let ((), s3) ← pExact (lit ",\"type\":\"zk-only\"}") s2
+          some (.zkOnly ⟨adapter, circuitId, pool, enrollmentId, commitment⟩, s3))
+        r8)
+
+def pRecovery : P CRecovery
+  | input => do
+    let ((), r0) ← pExact (lit "{") input
+    let (baseline, r1) ←
+      pOpt (lit "\"baseline\":{\"doc-hash\":")
+        (fun i => do
+          let (h, r) ← pStr i
+          let ((), r') ← pExact (lit "},") r
+          some (some h, r'))
+        (fun i => some ((none : Option Str), i))
+        r0
+    let ((), r2) ← pExact (lit "\"controller\":") r1
+    let (controller, r3) ← pStr r2
+    let ((), r4) ← pExact (lit ",\"delay-ledgers\":") r3
+    let (delay, r5) ← pNat r4
+    let ((), r6) ← pExact (lit ",\"expiry-ledgers\":") r5
+    let (expiry, r7) ← pNat r6
+    let ((), r8) ← pExact (lit ",\"max-cancels\":") r7
+    let (maxCancels, r9) ← pNat r8
+    let ((), r10) ← pExact (lit ",\"mode\":") r9
+    let (mode, r11) ← pMode r10
+    let ((), r12) ← pExact (lit ",\"profile\":") r11
+    let (profile, r13) ← pProfile r12
+    let ((), r14) ← pExact (lit ",\"replaceable\":") r13
+    let (replaceable, r15) ← pList pStr r14
+    let ((), r16) ← pExact (lit "}") r15
+    some (⟨profile, mode, controller, baseline, replaceable, delay, expiry, maxCancels⟩, r16)
+
 def pDoc : P CDoc
   | input => do
     let ((), r0) ← pExact (lit "{") input
@@ -453,14 +642,22 @@ def pDoc : P CDoc
           some (some n, r'))
         (fun i => some ((none : Option Str), i))
         r0
-    let ((), r2) ← pExact (lit "\"rules\":") r1
-    let (rules, r3) ← pList pRule r2
-    let ((), r4) ← pExact (lit ",\"signers\":") r3
-    let (signers, r5) ← pList pSigner r4
-    let ((), r6) ← pExact (lit ",\"version\":") r5
-    let (version, r7) ← pNat r6
-    let ((), r8) ← pExact (lit "}") r7
-    some (⟨version, network, signers, rules⟩, r8)
+    let (recovery, r2) ←
+      pOpt (lit "\"recovery\":")
+        (fun i => do
+          let (rc, r) ← pRecovery i
+          let ((), r') ← pExact (lit ",") r
+          some (some rc, r'))
+        (fun i => some ((none : Option CRecovery), i))
+        r1
+    let ((), r3) ← pExact (lit "\"rules\":") r2
+    let (rules, r4) ← pList pRule r3
+    let ((), r5) ← pExact (lit ",\"signers\":") r4
+    let (signers, r6) ← pList pSigner r5
+    let ((), r7) ← pExact (lit ",\"version\":") r6
+    let (version, r8) ← pNat r7
+    let ((), r9) ← pExact (lit "}") r8
+    some (⟨version, network, signers, rules, recovery⟩, r9)
 
 end Canon
 end PerchFormal

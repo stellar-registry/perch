@@ -5,7 +5,10 @@ import PerchFormal.Canon
 
 Bottom-up: exact-literal lemmas, digit/hex tables, the string-escape step,
 then each grammar production's round-trip, ending in `emitDoc_injective` —
-two documents with the same canonical form are the same document.
+two documents with the same canonical form are the same document — and
+`emitRecovery_injective`/`configPreimage_injective` — two recovery
+configurations with the same `recovery_canonical_json` (or the same
+`config_hash` preimage) are the same configuration.
 -/
 
 namespace PerchFormal
@@ -340,6 +343,16 @@ theorem miss_principals (t e : P α) (rest : List Char) :
       = e (lit "{\"signers\":" ++ rest) :=
   pOpt_miss _ _ _ _ (pExact_ne_after ['{', '"'] (by decide) _ _)
 
+theorem miss_principals_m (t e : P α) (rest : List Char) :
+    pOpt (lit "{\"ack\":") t e (lit "{\"m\":" ++ rest)
+      = e (lit "{\"m\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['{', '"'] (by decide) _ _)
+
+theorem miss_m_signers (t e : P α) (rest : List Char) :
+    pOpt (lit "{\"m\":") t e (lit "{\"signers\":" ++ rest)
+      = e (lit "{\"signers\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['{', '"'] (by decide) _ _)
+
 theorem miss_signer (t e : P α) (rest : List Char) :
     pOpt (lit "{\"address\":") t e (lit "{\"id\":" ++ rest)
       = e (lit "{\"id\":" ++ rest) :=
@@ -440,6 +453,36 @@ theorem miss_network_rules (t e : P α) (rest : List Char) :
       = e (lit "\"rules\":" ++ rest) :=
   pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
 
+theorem miss_network_recovery (t e : P α) (rest : List Char) :
+    pOpt (lit "\"network\":") t e (lit "\"recovery\":" ++ rest)
+      = e (lit "\"recovery\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
+
+theorem miss_recovery_rules (t e : P α) (rest : List Char) :
+    pOpt (lit "\"recovery\":") t e (lit "\"rules\":" ++ rest)
+      = e (lit "\"rules\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"', 'r'] (by decide) _ _)
+
+theorem miss_profile (t e : P α) (rest : List Char) :
+    pOpt (lit "\"loss\"") t e (lit "\"protected\"" ++ rest)
+      = e (lit "\"protected\"" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
+
+theorem miss_mode (t e : P α) (rest : List Char) :
+    pOpt (lit "{\"guardians\":") t e (lit "{\"adapter\":" ++ rest)
+      = e (lit "{\"adapter\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['{', '"'] (by decide) _ _)
+
+theorem miss_mode_zk (t e : P α) (rest : List Char) :
+    pOpt (lit ",\"guardians\":") t e (lit ",\"pool\":" ++ rest)
+      = e (lit ",\"pool\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after [',', '"'] (by decide) _ _)
+
+theorem miss_baseline (t e : P α) (rest : List Char) :
+    pOpt (lit "\"baseline\":{\"doc-hash\":") t e (lit "\"controller\":" ++ rest)
+      = e (lit "\"controller\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
+
 /-! Non-digit heads for every literal that follows a number. -/
 
 theorem hnd_pred (rest : List Char) : headNotDigit (lit ",\"pred\":" ++ rest) := rfl
@@ -447,6 +490,18 @@ theorem hnd_close (rest : List Char) : headNotDigit (lit "}" ++ rest) := rfl
 theorem hnd_token (rest : List Char) : headNotDigit (lit ",\"token\":" ++ rest) := rfl
 theorem hnd_principals (rest : List Char) :
     headNotDigit (lit ",\"principals\":" ++ rest) := rfl
+theorem hnd_signers (rest : List Char) :
+    headNotDigit (lit ",\"signers\":" ++ rest) := rfl
+theorem hnd_type_guardian (rest : List Char) :
+    headNotDigit (lit ",\"type\":\"guardian-only\"}" ++ rest) := rfl
+theorem hnd_type_combined (rest : List Char) :
+    headNotDigit (lit ",\"type\":\"combined\"}" ++ rest) := rfl
+theorem hnd_expiry (rest : List Char) :
+    headNotDigit (lit ",\"expiry-ledgers\":" ++ rest) := rfl
+theorem hnd_max_cancels (rest : List Char) :
+    headNotDigit (lit ",\"max-cancels\":" ++ rest) := rfl
+theorem hnd_mode (rest : List Char) :
+    headNotDigit (lit ",\"mode\":" ++ rest) := rfl
 
 /-! The productions. -/
 
@@ -465,8 +520,8 @@ theorem pPrincipals_rt (p : CPrincipals) (tail : List Char) :
   cases p
   all_goals
     unfold pPrincipals emitPrincipals
-    simp only [List.append_assoc, pOpt_hit, miss_principals, pStr_rt,
-      pStrList_rt, pExact_rt, obind_some]
+    simp only [List.append_assoc, pOpt_hit, miss_principals, miss_principals_m,
+      miss_m_signers, pStr_rt, pStrList_rt, pNat_rt, hnd_signers, pExact_rt, obind_some]
     try rfl
 
 set_option linter.unusedSimpArgs false in
@@ -538,15 +593,49 @@ theorem pRuleList_rt (l : List CRule) (tail : List Char) :
   pList_rt pRule emitRule pRule_rt (fun _ => ⟨'{', _, rfl, by decide⟩) l tail
 
 set_option linter.unusedSimpArgs false in
+theorem pProfile_rt (p : CProfile) (tail : List Char) :
+    pProfile (emitProfile p ++ tail) = some (p, tail) := by
+  cases p
+  all_goals
+    unfold pProfile emitProfile
+    simp only [pOpt_hit, miss_profile, pExact_rt, obind_some]
+    try rfl
+
+set_option linter.unusedSimpArgs false in
+theorem pMode_rt (m : CMode) (tail : List Char) :
+    pMode (emitMode m ++ tail) = some (m, tail) := by
+  rcases m with ⟨⟨gs, q⟩⟩ | ⟨⟨a, c, p, e, cm⟩⟩ | ⟨⟨gs, q⟩, ⟨a, c, p, e, cm⟩⟩
+  all_goals
+    unfold pMode emitMode
+    simp only [List.append_assoc, pOpt_hit, miss_mode, miss_mode_zk, pStr_rt,
+      pStrList_rt, pNat_rt, hnd_type_guardian, hnd_type_combined, pExact_rt,
+      obind_some]
+    try rfl
+
+set_option linter.unusedSimpArgs false in
+/-- The recovery member's parser inverts `recovery_canonical_json`. -/
+theorem pRecovery_rt (r : CRecovery) (tail : List Char) :
+    pRecovery (emitRecovery r ++ tail) = some (r, tail) := by
+  obtain ⟨profile, mode, controller, baseline, replaceable, delay, expiry, maxCancels⟩ := r
+  cases baseline
+  all_goals
+    unfold pRecovery emitRecovery
+    simp only [List.append_assoc, List.nil_append, pOpt_hit, miss_baseline,
+      pStr_rt, pNat_rt, hnd_expiry, hnd_max_cancels, hnd_mode, pMode_rt,
+      pProfile_rt, pStrList_rt, pExact_rt, obind_some]
+    try rfl
+
+set_option linter.unusedSimpArgs false in
 /-- **The round-trip**: the canonical parser inverts the canonical emitter. -/
 theorem pDoc_rt (d : CDoc) (tail : List Char) :
     pDoc (emitDoc d ++ tail) = some (d, tail) := by
-  obtain ⟨version, network, signers, rules⟩ := d
-  cases network
+  obtain ⟨version, network, signers, rules, recovery⟩ := d
+  cases network <;> cases recovery
   all_goals
     unfold pDoc emitDoc
     simp only [List.append_assoc, List.nil_append, pOpt_hit,
-      miss_network_rules, pStr_rt, pNat_rt, hnd_close, pRuleList_rt,
+      miss_network_rules, miss_network_recovery, miss_recovery_rules,
+      pStr_rt, pNat_rt, hnd_close, pRecovery_rt, pRuleList_rt,
       pSignerList_rt, pExact_rt, obind_some]
     try rfl
 
@@ -554,15 +643,45 @@ theorem pDoc_rt (d : CDoc) (tail : List Char) :
 
 /-- **doc_hash names one document**: two documents with the same canonical
 form are equal, so `doc_hash = SHA-256(canonical bytes)` identifies exactly
-one document up to a SHA-256 collision. (The UTF-8 encoding the Rust side
-applies to these scalars is itself injective, so injectivity at the scalar
-level is injectivity at the byte level.) -/
+one document up to a SHA-256 collision. The domain includes every
+`recovery` member. (The UTF-8 encoding the Rust side applies to these
+scalars is itself injective, so injectivity at the scalar level is
+injectivity at the byte level.) -/
 theorem emitDoc_injective : Function.Injective emitDoc := by
   intro d1 d2 h
   have h1 := pDoc_rt d1 []
   have h2 := pDoc_rt d2 []
   rw [h] at h1
   exact congrArg Prod.fst (Option.some.inj (h1.symm.trans h2))
+
+/-- `recovery_canonical_json` is injective: two recovery configurations with
+the same canonical text are equal. -/
+theorem emitRecovery_injective : Function.Injective emitRecovery := by
+  intro r1 r2 h
+  have h1 := pRecovery_rt r1 []
+  have h2 := pRecovery_rt r2 []
+  rw [h] at h1
+  exact congrArg Prod.fst (Option.some.inj (h1.symm.trans h2))
+
+/-- **config_hash names one recovery configuration**: two configurations
+with the same `config_hash` preimage are equal, so
+`config_hash = SHA-256("perch/recovery/config" || recovery_canonical_json)`
+identifies exactly one configuration up to a SHA-256 collision. -/
+theorem configPreimage_injective : Function.Injective configPreimage := by
+  intro r1 r2 h
+  exact emitRecovery_injective (List.append_cancel_left h)
+
+/-- The two hash domains are separated: no `config_hash` preimage is a
+document's canonical form (one starts with the domain tag's `p`, the other
+with `{`), so a `config_hash` is never also some document's `doc_hash`
+without a SHA-256 collision. -/
+theorem configPreimage_ne_emitDoc (r : CRecovery) (d : CDoc) :
+    configPreimage r ≠ emitDoc d := by
+  intro h
+  have hc : (configPreimage r).head? = some 'p' := rfl
+  have hd : (emitDoc d).head? = some '{' := rfl
+  rw [h, hd] at hc
+  exact absurd (Option.some.inj hc) (by decide)
 
 end Canon
 end PerchFormal

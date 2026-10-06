@@ -16,6 +16,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The release-stack step asks whether the deployment's source
+          # commit is in this branch's history.
+          fetch-depth: 0
       # Pinned to the v1 tag on master, whose history is never rewritten; the
       # `stable` branch is regenerated, which orphans any commit pinned on it.
       - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
@@ -42,15 +45,22 @@ jobs:
       # exercised accounts actually resolve.
       - run: scripts/verify-deployment.sh
       # Every recovery flow through the deployed bytes, with real proofs from
-      # the pinned nargo/bb under enforcing authorization. The worst cases at
-      # the document caps run in release-stack-source only until the next
-      # deployment: the deployed stack predates the 64 KiB wasm stack, and a
-      # completion at the caps exceeds its memory limit.
+      # the pinned nargo/bb under enforcing authorization, when they are this
+      # branch's: built from a commit in its history. A deployment from
+      # outside it (a rebased branch) runs other contract code, which this
+      # source's types and flows do not describe; release-stack-source runs
+      # the suite on this source, and verify-deployment.sh above still checks
+      # the chain against the manifest.
       - name: Release stack with real proofs
         run: |
+          deployed="$(jq -r .source.commit deployments/testnet.json)"
+          if ! git merge-base --is-ancestor "$deployed" HEAD 2>/dev/null; then
+            echo "::notice::deployments/testnet.json was built from $deployed, outside this branch's history: skipping the deployed-bytes release suite until the next deployment"
+            exit 0
+          fi
           eval "$(scripts/zk-toolchain.sh)"
           cargo test -p perch-integration-tests --test release_stack -- --ignored --test-threads 2 \
-            --skip worst_case_ --skip cap_sweep
+            --skip cap_sweep
       # Wasm leg of the conformance vectors: the compiled artifact must agree
       # with the vectors under the soroban host (rustc/LLVM/wasmi in the loop).
       - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release

@@ -49,6 +49,39 @@ jobs:
       - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release
       - run: cargo test -p perch-conformance --test wasm_leg -- --ignored
 
+  # The PR's own source as a deployment of it would run: every contract built
+  # in pin order by scripts/build-stack.sh (tier 0, then the account against
+  # tier 0's hashes, then the factory against the account's), then every
+  # recovery flow through those fresh bytes with real proofs. The rust job
+  # above checks the deployed bytes; this one catches a change that only a
+  # rebuilt stack would break.
+  release-stack-source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+        with:
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: ./.github/actions/setup-stellar
+      # Core `stellar contract build`: the deployed builds' code without
+      # scaffold's name/version metadata. The registry is the manifest's, so
+      # every address is where a deployment would put it.
+      - name: Build the stack from source in pin order
+        run: |
+          scripts/build-stack.sh --builder contract \
+            --registry "$(jq -r .registry.id deployments/testnet.json)" --out target/source-stack
+      - name: Release stack with real proofs, on the fresh wasm
+        env:
+          PERCH_STACK_DIR: target/source-stack
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo test -p perch-integration-tests --test release_stack -- --ignored --test-threads 2
+
   # Flux refinement verification of perch-program (nidohq/soroban-flux).
   # Runs under flux's pinned nightly; the deploy/test toolchain stays stable.
   # Graduated from burn-in: a flux failure now fails CI.

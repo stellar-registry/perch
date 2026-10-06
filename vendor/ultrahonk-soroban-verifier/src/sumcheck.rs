@@ -63,7 +63,7 @@ const BARY_BYTES: [[u8; 32]; BATCHED_RELATION_PARTIAL_LENGTH] = [
 ///
 /// BB: `sumcheck/sumcheck_round.hpp::SumcheckVerifierRound::check_sum`
 #[inline(always)]
-fn check_sum(round_univariate: &[Fr], round_target: Fr) -> bool {
+pub(crate) fn check_sum(round_univariate: &[Fr], round_target: Fr) -> bool {
     let total_sum = &round_univariate[0] + &round_univariate[1];
     total_sum == round_target
 }
@@ -136,7 +136,7 @@ fn compute_next_target_sum(
 ///
 /// BB: `polynomials/gate_separator.hpp::GateSeparatorPolynomial::partially_evaluate`
 #[inline(always)]
-fn partially_evaluate_pow(
+pub(crate) fn partially_evaluate_pow(
     one: &Fr,
     gate_challenge: Fr,
     pow_partial_evaluation: Fr,

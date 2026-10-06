@@ -135,7 +135,7 @@ pub(crate) fn try_g1_at(env: &Env, blob: &[u8], idx: usize) -> Result<G1Point, P
 ///
 /// Note (bb v0.87.0): G1 coordinates are encoded as two limbs per coordinate
 /// using the (lo136, hi<=118) split and stored in the order (x_lo, x_hi, y_lo, y_hi).
-fn point_err(e: PointError) -> &'static str {
+pub(crate) fn point_err(e: PointError) -> &'static str {
     match e {
         PointError::CoordinateOutOfRange => "g1 coordinate out of range",
         PointError::NotOnCurve => "g1 point not on curve",

@@ -1,5 +1,5 @@
-Vendored third-party dependency
-===============================
+Vendored third-party dependency, with a perch delta
+===================================================
 
   Library:  ultrahonk_soroban_verifier (Rust, no_std)
   Upstream: https://github.com/NethermindEth/rs-soroban-ultrahonk
@@ -10,15 +10,23 @@ Vendored third-party dependency
   License:  MIT (see LICENSE)
   Audits:   internal review 2026-05-28; OpenZeppelin external audit
             2026-08-10 to 2026-08-28, findings resolved upstream before this
-            commit (see VERIFIER_PROVENANCE.md)
-  Target:   Barretenberg v0.87.0 UltraKeccakFlavor proofs (non-ZK, keccak
-            transcript), i.e. `bb prove --scheme ultra_honk --oracle_hash
-            keccak` from bb 0.87.0 / nargo 1.0.0-beta.9.
+            commit (see VERIFIER_PROVENANCE.md). Both cover the upstream
+            non-ZK verifier only.
+  Upstream target: Barretenberg v0.87.0 UltraKeccakFlavor proofs (non-ZK,
+            keccak transcript), from bb 0.87.0 / nargo 1.0.0-beta.9.
+  Perch target: Barretenberg v0.87.0 UltraKeccakZKFlavor proofs
+            (`bb prove --scheme ultra_honk --oracle_hash keccak --zk`), through
+            the perch delta below. NOT AUDITED: a delta audit is an open
+            release criterion (docs/zk/README.md).
 
-Source (src/), LICENSE, README.md, and VERIFIER_PROVENANCE.md are copied
-verbatim from the commit above. Cargo.toml differs in two places only, both
-because the crate is built here as a path dependency outside its own
-workspace:
+Upstream files
+--------------
+LICENSE, VERIFIER_PROVENANCE.md, and src/ other than the files listed under
+"Perch delta" are upstream's bytes. UPSTREAM.sha256 lists the sha256 of every
+upstream file at the commit above (checked against GitHub when recorded).
+
+Cargo.toml differs from upstream in two places, both because the crate is
+built here as a path dependency outside its own workspace:
 
   - `soroban-sdk = { workspace = true }` became the version the upstream
     workspace pins at that commit, `{ version = "27.0.6", default-features =
@@ -26,14 +34,49 @@ workspace:
   - the `[dev-dependencies]` table (upstream's test-utils crate and fixtures,
     which are not vendored) was dropped.
 
-CHECKSUMS.sha256 pins every vendored file;
-crates/perch-zk-adapter/tests/vendor.rs fails on any drift.
+Perch delta
+-----------
+The zero-knowledge flavor, `UltraKeccakZKFlavor`. README.md's first section
+documents it function by function, with Barretenberg references. In summary:
+
+  - src/zk.rs           new: the whole ZK verifier (`UltraHonkZkVerifier`);
+  - src/lib.rs          +3 lines: `pub mod zk;` (with a comment) and
+                        `pub use zk::{UltraHonkZkVerifier, ZK_PROOF_BYTES,
+                        ZK_PROOF_FIELDS};`;
+  - src/transcript.rs   visibility only, `fn` -> `pub(crate) fn`: push_point,
+                        split_challenge, hash_to_fr,
+                        generate_relation_parameters_challenges,
+                        generate_alpha_challenges, generate_gate_challenges,
+                        generate_gemini_r_challenge,
+                        generate_shplonk_z_challenge (rustfmt wraps the last
+                        two signatures, one parameter per line, because
+                        `pub(crate)` pushes them past its width; the repo's
+                        `cargo fmt --all --check` covers path dependencies);
+  - src/sumcheck.rs     visibility only: check_sum, partially_evaluate_pow;
+  - src/utils.rs        visibility only: point_err;
+  - src/verifier.rs     visibility only:
+                        UltraHonkVerifier::compute_public_input_delta;
+  - README.md           the "Perch delta" section, prepended between
+                        `<!-- PERCH DELTA BEGIN` and `<!-- PERCH DELTA END -->`.
+
+Why visibility rather than copies: the ZK verifier then runs the audited code
+for every step the two flavors share, so the unaudited surface is src/zk.rs
+alone.
+
+crates/perch-zk-adapter/tests/vendor.rs enforces all of the above. It
+reverses exactly these edits and requires each result to hash to
+UPSTREAM.sha256, so no other byte of an upstream file can change unnoticed.
+CHECKSUMS.sha256 pins every file as vendored, so the delta itself cannot
+drift either.
 
 Updating
 --------
-Do not edit these files in place. Replace the directory wholesale from a new
-upstream commit, re-apply the two Cargo.toml changes above, update this
-NOTICE and CHECKSUMS.sha256, then regenerate the circuit artifacts
+Do not edit these files by hand outside the delta above. To move to a new
+upstream commit, replace the directory wholesale, re-apply the two Cargo.toml
+changes and the perch delta (and re-audit the delta if upstream changed the
+reused functions), then regenerate UPSTREAM.sha256 from the new commit and
+CHECKSUMS.sha256 from the result, and update this NOTICE and the
+reversal in tests/vendor.rs. Then regenerate the circuit artifacts
 (`just zk-artifacts`) and re-run the adapter's real-proof tests. If the new
 upstream targets a different Barretenberg version, the pinned toolchain in
 scripts/zk-toolchain.sh and crates/perch-zk-prover must move with it: proofs

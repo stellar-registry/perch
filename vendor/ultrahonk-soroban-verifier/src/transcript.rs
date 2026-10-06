@@ -41,7 +41,7 @@ fn push_coord_halves(buf: &mut Bytes, coord: &[u8]) {
 ///
 /// BB: `transcript/transcript.hpp` — `receive_from_prover<Commitment>` serialises
 ///      `curve::BN254::AffineElement` the same way.
-fn push_point(buf: &mut Bytes, pt: &G1Point) {
+pub(crate) fn push_point(buf: &mut Bytes, pt: &G1Point) {
     // 4 × 32-byte limbs per point
     let bytes = pt.0.to_array();
     push_coord_halves(buf, &bytes[..32]);
@@ -70,7 +70,7 @@ fn split_challenge_from_be32(env: &Env, challenge_bytes: &[u8; 32]) -> (Fr, Fr) 
 /// Convenience wrapper: split a `Fr` challenge by first serialising it.
 ///
 /// BB: `transcript/transcript.hpp::NativeTranscriptParams::split_challenge`
-fn split_challenge(challenge: &Fr) -> (Fr, Fr) {
+pub(crate) fn split_challenge(challenge: &Fr) -> (Fr, Fr) {
     let env = challenge.0.env();
     split_challenge_from_be32(env, &challenge.to_bytes())
 }
@@ -80,7 +80,7 @@ fn split_challenge(challenge: &Fr) -> (Fr, Fr) {
 ///
 /// BB: `transcript/transcript.hpp::keccak_hash_uint256`
 #[inline(always)]
-fn hash_to_fr(bytes: &Bytes) -> Fr {
+pub(crate) fn hash_to_fr(bytes: &Bytes) -> Fr {
     Fr(Bn254Fr::from_bytes(hash32(bytes)))
 }
 
@@ -168,7 +168,7 @@ fn generate_beta_and_gamma_challenges(
 /// the Oink verifier.
 ///
 /// BB: `oink_verifier.cpp::generate_alphas_round`
-fn generate_alpha_challenges(
+pub(crate) fn generate_alpha_challenges(
     env: &Env,
     previous_challenge: Fr,
     proof: &Proof,
@@ -210,7 +210,7 @@ fn generate_alpha_challenges(
 /// later by `verifier.rs::compute_public_input_delta`.
 ///
 /// BB: `oink_verifier.cpp::OinkVerifier::verify` (challenge rounds 0–4)
-fn generate_relation_parameters_challenges(
+pub(crate) fn generate_relation_parameters_challenges(
     env: &Env,
     proof: &Proof,
     public_inputs: &Bytes,
@@ -246,7 +246,7 @@ fn generate_relation_parameters_challenges(
 /// practice; the rest are padding to `CONST_PROOF_SIZE_LOG_N`.
 ///
 /// BB: `ultra_verifier.cpp::verify_proof` (gate-challenge loop)
-fn generate_gate_challenges(
+pub(crate) fn generate_gate_challenges(
     env: &Env,
     previous_challenge: Fr,
 ) -> ([Fr; CONST_PROOF_SIZE_LOG_N], Fr) {
@@ -307,7 +307,11 @@ fn generate_rho_challenge(env: &Env, proof: &Proof, previous_challenge: Fr) -> (
 /// Absorbs the 27 fold commitments (`gemini_fold_comms`) before hashing.
 ///
 /// BB: `commitment_schemes/shplonk/shplemini.hpp` (`get_challenge<Fr>("Gemini:r")`)
-fn generate_gemini_r_challenge(env: &Env, proof: &Proof, previous_challenge: Fr) -> (Fr, Fr) {
+pub(crate) fn generate_gemini_r_challenge(
+    env: &Env,
+    proof: &Proof,
+    previous_challenge: Fr,
+) -> (Fr, Fr) {
     let mut data = Bytes::new(env);
     data.extend_from_slice(&previous_challenge.to_bytes());
     for pt in proof.gemini_fold_comms.iter() {
@@ -339,7 +343,11 @@ fn generate_shplonk_nu_challenge(env: &Env, proof: &Proof, previous_challenge: F
 /// Absorbs the Shplonk quotient commitment `shplonk_q` before hashing.
 ///
 /// BB: `commitment_schemes/shplonk/shplemini.hpp` (`get_challenge<Fr>("Shplonk:z")`)
-fn generate_shplonk_z_challenge(env: &Env, proof: &Proof, previous_challenge: Fr) -> (Fr, Fr) {
+pub(crate) fn generate_shplonk_z_challenge(
+    env: &Env,
+    proof: &Proof,
+    previous_challenge: Fr,
+) -> (Fr, Fr) {
     let mut data = Bytes::new(env);
     data.extend_from_slice(&previous_challenge.to_bytes());
     push_point(&mut data, &proof.shplonk_q);

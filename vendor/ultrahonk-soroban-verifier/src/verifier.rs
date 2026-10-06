@@ -172,7 +172,7 @@ impl UltraHonkVerifier {
     /// The pairing-point object values are appended after the user-supplied public inputs.
     ///
     /// BB: `honk/library/grand_product_delta.hpp::compute_public_input_delta`
-    fn compute_public_input_delta(
+    pub(crate) fn compute_public_input_delta(
         env: &Env,
         public_inputs: &Bytes,
         pairing_point_object: &[Fr],

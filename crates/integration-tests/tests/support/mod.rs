@@ -22,6 +22,8 @@
 
 extern crate std;
 
+pub mod config_hash;
+
 use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_interpreter::PerchInterpreter;

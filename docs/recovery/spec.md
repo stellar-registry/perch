@@ -753,11 +753,25 @@ document's `rules` array:
   rule's `rule_hash` (§3.2). Equal `rule_hash` alone is not enough: rotating
   a signer's key leaves the rule text unchanged but changes its compiled
   signers.
-- A slot that differs is uninstalled and reinstalled.
+- A slot that differs is **edited in place** under its existing rule id:
+  - a changed name or `valid_until` is updated;
+  - signers and policies present in both are kept;
+  - new ones are added before old ones are removed, so the rule is never
+    empty;
+  - a policy whose install parameters change counts as removed and
+    re-added.
+- A slot is **replaced whole** (a new rule id) only in two cases:
+  - Nothing on it survives, and no order of additions and removals keeps
+    it non-empty within OZ's per-rule limits (`MAX_SIGNERS` 15,
+    `MAX_POLICIES` 5). Example: the recovery rule, which has no signers,
+    when its only policy's parameters change. Adding first is impossible
+    (one policy per address) and removing first would empty it.
+  - Its scope changes. OZ has no operation that changes a rule's context
+    type in place.
 - Slots beyond the shorter document are removed or added.
 
-The installed rule set that results is identical to a full replace, and the
-cost is never more than a full replace. The account tracks the installed
+The installed rule set that results authorizes exactly what a full replace
+would, and the cost is never more than a full replace. The account tracks the installed
 rule id of each slot in a list bounded by the rule cap (plus the recovery
 rule). It never scans historical rule ids, which grow without bound with
 every past apply (#102 review, P1).

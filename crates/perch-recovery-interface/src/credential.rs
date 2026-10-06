@@ -175,6 +175,11 @@ impl ReplacementSet {
 ///   from the same baseline would restore it.
 ///
 /// All three inputs must be fingerprints over verifier-canonical keys.
+///
+/// Precondition: [`replaced_credentials_leave`] held for this attempt at T1,
+/// so no replaced credential is in `target`. Without it, a swap or a no-op
+/// replacement would revoke a credential the target installs, and the
+/// completion would fail its own revocation check.
 pub fn revocations(
     e: &Env,
     replaced: &Vec<BytesN<32>>,
@@ -193,6 +198,20 @@ pub fn revocations(
         }
     }
     out
+}
+
+/// Spec §7.3 rule 8: whether every explicitly replaced source credential
+/// leaves the account, i.e. none appears anywhere in the target. Compared by
+/// fingerprint over verifier-canonical keys, so a replaced key cannot stay
+/// under another encoding.
+///
+/// This refuses a no-op replacement (a slot "replaced" by its own
+/// credential) and a swap between two slots. Both would leave a replaced
+/// credential authorizing, contrary to D7, and §8 would then revoke a
+/// credential the target installs. A credential a recovery replaces leaves
+/// the account and is revoked; it never authorizes again.
+pub fn replaced_credentials_leave(replaced: &Vec<BytesN<32>>, target: &Vec<BytesN<32>>) -> bool {
+    replaced.iter().all(|f| !target.contains(&f))
 }
 
 /// Byte-lexicographic `a < b`, a proper prefix sorting first.
@@ -393,6 +412,42 @@ mod test {
         let revoked = revocations(&e, &replaced, &current, &target);
         assert_eq!(revoked, vec![&e, a.clone(), b.clone()]);
         assert!(!revoked.contains(&c));
+    }
+
+    /// The Copilot finding on 1f92b33: swapping two slots' credentials, or
+    /// "replacing" a slot with its own credential, keeps a replaced
+    /// credential in the target. Rule 8 refuses both at T1, so `revocations`
+    /// never revokes a credential the target installs.
+    #[test]
+    fn swaps_and_no_op_replacements_are_refused() {
+        let e = Env::default();
+        let (a, b, c) = (fp(&e, 0xa), fp(&e, 0xb), fp(&e, 0xc));
+
+        // Swap: slot1 A→B, slot2 B→A. Replaced {A, B}; target {B, A}.
+        let replaced = vec![&e, a.clone(), b.clone()];
+        let swapped = vec![&e, b.clone(), a.clone()];
+        assert!(!replaced_credentials_leave(&replaced, &swapped));
+        // Without the rule, completion would revoke what it installs.
+        let revoked = revocations(&e, &replaced, &vec![&e, a.clone(), b.clone()], &swapped);
+        assert!(revoked.iter().any(|f| swapped.contains(&f)));
+
+        // No-op: slot A→A.
+        assert!(!replaced_credentials_leave(
+            &vec![&e, a.clone()],
+            &vec![&e, a.clone()]
+        ));
+
+        // A real replacement: A leaves, C arrives.
+        assert!(replaced_credentials_leave(
+            &vec![&e, a.clone()],
+            &vec![&e, c.clone(), b.clone()]
+        ));
+
+        // Replacing A while A survives in another slot is also refused.
+        assert!(!replaced_credentials_leave(
+            &vec![&e, a.clone()],
+            &vec![&e, c, a]
+        ));
     }
 
     #[test]

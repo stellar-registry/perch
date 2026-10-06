@@ -66,7 +66,9 @@ pub enum RecoveryError {
     InvalidReplacements,
     /// The target or a replacement contains a revoked credential.
     CredentialRevoked,
-    /// The ZK enrollment id was enrolled for this account before.
+    /// The ZK enrollment id was enrolled for this account before (the
+    /// controller checks the account's `is_enrolled_id` at T1; the pure
+    /// `derive_target` cannot see the account's history).
     EnrollmentIdReused,
     /// Compromise recovery with no baseline enrolled.
     NoBaseline,
@@ -88,6 +90,9 @@ pub enum RecoveryError {
     LedgerOverflow,
     /// The policy was attached to a context rule of the wrong shape.
     MalformedContextRule,
+    /// A credential the replacement set replaces still appears in the
+    /// target (a swap or a no-op replacement, spec §7.3 rule 8).
+    ReplacedCredentialRetained,
 }
 
 /// What `rcv_sync` did, so the account knows which of its own effects to
@@ -187,5 +192,6 @@ mod test {
         assert_eq!(RecoveryError::NotEnrolled as u32, 1);
         assert_eq!(RecoveryError::AttemptAuthorized as u32, 2);
         assert_eq!(RecoveryError::MalformedContextRule as u32, 30);
+        assert_eq!(RecoveryError::ReplacedCredentialRetained as u32, 31);
     }
 }

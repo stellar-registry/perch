@@ -85,7 +85,9 @@ every consumer reads.
 
 CI's `rust` job runs `fetch-infra-wasm.sh --stack`, the workspace tests
 (including `testnet_pins`), `verify-deployment.sh`, and the release-stack
-suite against the deployed bytes. The `release-stack-source` job builds the
+suite against the deployed bytes when the deployment was built from a commit
+in the branch's history (after a rebase it runs other contract code, and the
+step says so and skips until the next deployment). The `release-stack-source` job builds the
 PR's own source in pin order (`build-stack.sh --builder contract`, against
 the manifest's registry) and runs the release-stack suite on those fresh
 bytes, so a change that only a rebuilt stack would break fails the PR. The

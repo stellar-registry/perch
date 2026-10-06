@@ -51,7 +51,8 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
   SHA-256 collision, and it ignores everything outside the `recovery`
   member by construction (a key rotation is not a reconfiguration).
   `configPreimage_ne_emitDoc` separates the two hash domains: no
-  `config_hash` preimage is a document's canonical form.
+  `config_hash` preimage is a document's canonical form. That the doc
+  compiler hashes exactly this preimage is tested, not proved (below).
 - **T6** `lowering_preserves`: the machine over `build_program`'s postfix
   output computes exactly the rule's doc-level Kleene conjunction, where the
   doc side is stated over predicates directly and `leafEval_lowerPred` proves
@@ -85,8 +86,13 @@ The model↔Rust link is differential (empirical), not deductive: the
 theorems are about the Lean emitter, and the fixtures and the fuzz targets
 (`fuzz/fuzz_targets/ir_parse_roundtrip.rs`,
 `recovery_canonical_roundtrip.rs`) are the evidence that `canon.rs` emits
-the same bytes. See PLAN.md phase 2 for the planned deepening (Verus or
-Aeneas).
+the same bytes. `crates/integration-tests/tests/config_hash.rs` ties T8 to
+the doc compiler: for each recovery-member fixture, the compiler's
+`config_hash` must equal `sha256("perch/recovery/config" || fixture bytes)`
+recomputed with `sha2`, and every single-field change must move it to the
+recomputed hash of the changed text. It runs against the native compiler on
+every PR and, in `release_stack.rs`, against the deployed compiler wasm. See
+PLAN.md phase 2 for the planned deepening (Verus or Aeneas).
 
 ## What is not modeled
 
@@ -106,11 +112,9 @@ the recovery stack has a model or a proof:
 - **The ZK circuit, verifier, adapter, and pool** (`circuits/`,
   `crates/perch-zk-adapter`, the membership pool): real-proof tests and
   cross-implementation Poseidon2 vectors (`docs/zk/README.md`), no proofs.
-- **The document compiler** beyond the canonical bytes: validation,
-  `derive_target`, and the compiled recovery configuration. T8 is about the
-  preimage. That `perch-doc-compiler` hashes exactly that preimage is by
-  reading `to_compiled_recovery`: the integration tests take `config_hash`
-  from the compiler itself, so no test recomputes it independently.
+- **The document compiler** beyond the canonical bytes and `config_hash`:
+  validation, `derive_target`, and the rest of the compiled recovery
+  configuration.
 - **SHA-256** itself: every "names exactly one" claim above holds up to a
   SHA-256 collision.
 

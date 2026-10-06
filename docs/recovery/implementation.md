@@ -9,7 +9,7 @@ the one recovery controller and the shared account capabilities.
 
 | Spec | Code | Tests |
 | --- | --- | --- |
-| §3.1 schema, §3.2 `config_hash` | `perch-ir` (`doc.rs`, `parse.rs`, `canon.rs::recovery_canonical_json`, `validate.rs`); `perch-doc-compiler::to_compiled_recovery` | `crates/perch-ir/tests/recovery.rs`; Lean T7/T8 and `drt` (`formal/`); `fuzz/fuzz_targets/recovery_canonical_roundtrip.rs` |
+| §3.1 schema, §3.2 `config_hash` | `perch-ir` (`doc.rs`, `parse.rs`, `canon.rs::recovery_canonical_json`, `validate.rs`); `perch-doc-compiler::to_compiled_recovery` | `crates/perch-ir/tests/recovery.rs`; `crates/integration-tests/tests/config_hash.rs`; Lean T7/T8 and `drt` (`formal/`); `fuzz/fuzz_targets/recovery_canonical_roundtrip.rs` |
 | §3.3 epoch, §6 state machine, §10 `rcv_sync`, §11 nullifiers | `crates/perch-recovery/src/contract.rs` | `crates/integration-tests/tests/recovery.rs` |
 | §3.4 enrollment ids, §8 revocation, §9 freeze, §15 reserved names | `crates/perch-smart-account/src/lib.rs` (`apply_doc`, `check_auth`, `rcv_gate`) | `recovery.rs`, `account_capabilities.rs` |
 | §3.5 baselines | `PerchRecovery::publish_baseline` | `recovery.rs` (compromise tests) |

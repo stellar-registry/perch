@@ -3,6 +3,7 @@
 // anything, so a host runs `PoolIndexer.sync` on its own schedule.
 
 import { fromHex, hex } from '../field.js';
+import { MAX_LEAVES_PAGE } from './indexer.js';
 import type { PoolIndexer } from './indexer.js';
 
 const CORS = {
@@ -24,7 +25,8 @@ const HEX32 = /^(0x)?[0-9a-fA-F]{64}$/;
 /**
  * Routes:
  * - `GET /` — service name and the trees indexed.
- * - `GET /trees/:treeId/leaves?from=N` — leaves from index `N` (default 0).
+ * - `GET /trees/:treeId/leaves?from=N&count=M` — up to `M` (default and at
+ *   most `MAX_LEAVES_PAGE`) leaves from index `N` (default 0).
  * - `GET /witness/:account/:enrollmentId` — the enrollment's witness.
  */
 export async function handleRequest(request: Request, indexer: PoolIndexer): Promise<Response> {
@@ -39,10 +41,11 @@ export async function handleRequest(request: Request, indexer: PoolIndexer): Pro
   if (parts.length === 3 && parts[0] === 'trees' && parts[2] === 'leaves') {
     const treeId = Number(parts[1]);
     const fromRaw = url.searchParams.get('from') ?? '0';
-    if (!Number.isInteger(treeId) || treeId < 0 || !/^\d+$/.test(fromRaw)) {
-      return json({ error: 'bad tree id or cursor' }, 400);
+    const countRaw = url.searchParams.get('count') ?? String(MAX_LEAVES_PAGE);
+    if (!Number.isInteger(treeId) || treeId < 0 || !/^\d+$/.test(fromRaw) || !/^\d+$/.test(countRaw)) {
+      return json({ error: 'bad tree id, cursor, or count' }, 400);
     }
-    const leaves = await indexer.leaves(treeId, BigInt(fromRaw));
+    const leaves = await indexer.leaves(treeId, BigInt(fromRaw), Number(countRaw));
     return json({ treeId, from: fromRaw, leaves: leaves.map(hex) });
   }
   if (parts.length === 3 && parts[0] === 'witness') {

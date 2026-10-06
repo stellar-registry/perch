@@ -5,8 +5,8 @@
 
 export { MemoryStore } from './store.js';
 export type { LeafRecord, LeafStore, PutResult } from './store.js';
-export { PoolIndexer } from './indexer.js';
-export type { LeafSource, SyncResult, Witness } from './indexer.js';
+export { MAX_LEAVES_PAGE, PoolIndexer } from './indexer.js';
+export type { IndexSnapshot, LeafSource, PoolIndexerOptions, SyncResult, Witness } from './indexer.js';
 export { PoolReader, RpcLeafSource, decodeLeafInserted } from './rpc.js';
 export type { RpcLeafSourceOptions } from './rpc.js';
 export { handleRequest } from './http.js';

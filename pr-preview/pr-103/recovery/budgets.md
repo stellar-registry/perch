@@ -123,15 +123,15 @@ before §5 runs, and the confirmed values are recorded here.
 ## Results
 
 Workstream 2's measurements and the rule's application are in
-[`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-03, protocol
-29 limits; the measured circuits' `circuit_id`s are in its generated
-"Circuit identities" table). In summary:
+[`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-06, protocol
+29 limits, zero-knowledge proofs; the measured circuits' `circuit_id`s are
+in its generated "Circuit identities" table). In summary:
 
-- §1: native and single-threaded bb.js proving take 0.07 s and 0.66 s on a
-  desktop at D = 32. Client artifacts are 8.4 MB and the proof is 14.6 KB.
+- §1: native and single-threaded bb.js proving take 0.10 s and 0.82 s on a
+  desktop at D = 32. Client artifacts are 8.9 MB and the proof is 16.2 KB.
   The reference phone and laptop are not yet measured.
-- §2, ZK components only: adapter `verify` is 96.9M instructions and 5.1 MB
-  at D = 32 (94.9M at D = 24); `rcv_insert` sealing a tree is 43.8M
+- §2, ZK components only: adapter `verify` is 136.9M instructions and
+  6.7 MB at D = 32 (134.7M at D = 24); `rcv_insert` sealing a tree is 43.8M
   instructions and 2.2 KB written (34.8M at D = 24). The full-transaction
   rows are the controller workstream's.
 - §5: every measured row is within budget at D = 32, so **D = 32**,
@@ -139,8 +139,10 @@ Workstream 2's measurements and the rule's application are in
   fallback.
 
 Workstream 4 measured the §2 full-transaction rows on testnet, against the
-deployed depth-32 release wasm (`deployments/testnet.json`) under enforcing
-authorization with real proofs; see
+deployed depth-32 release wasm (`deployments/testnet.json`, built before the
+ZK-flavor verifier, WS3's completion fixes, the final caps, and the small
+wasm stacks; the redeploy re-measures them) under enforcing authorization
+with real proofs; see
 [`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md). Every
 row is within the 75% budget. The largest are `submit_zk` at 91.2M
 instructions (22.8%) and 16.5 KB of transaction (12.5%), `submit_zk_change`
@@ -155,6 +157,37 @@ deployed adapter's `circuit_id()` is
 `9e39c41f4f35aad43e64b255dfe3ba13f10e8c9d36d6f56fce23c2d97c0a0b4a`, the
 `vk_sha256` in `circuits/manifest.json`. The open §1 rows (reference phone
 and laptop) remain open.
+
+### Release stack, in process
+
+Workstream 4, 2026-10-06: the release-stack suite on this branch's stack
+(`build-stack.sh --builder contract`), with WS2's ZK-flavor verifier, the
+final caps, and the 64 KiB (adapter: 128 KiB) wasm stacks, real proofs, and
+enforcing authorization. The worst row of each §2 kind, as a share of the
+protocol-29 limits:
+
+| Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- |
+| Enroll `Combined` through `apply_doc`, at the caps | 191.4M (47.9%) | 11.5 MB | 130 | 53 | 31 756 | 7 668 |
+| `begin_lost_key` / `begin_compromise`, at the caps | 149.6M (37.4%) | 5.1 MB | 25 | 2 | 1 888 | 248 |
+| `publish_baseline`, at the caps | 108.3M (27.1%) | 2.2 MB | 11 | 1 | 7 464 | 0 |
+| `submit_guardian` (promoting, sets the freeze) | 1.8M | 0.7 MB | 19 | 6 | 2 056 | 368 |
+| `submit_zk` (promoting, `Combined`, sets the freeze) | 119.2M (29.8%) | 5.7 MB | 22 | 5 | 2 336 | 368 |
+| Completion, at the caps (compromise, `Combined`, ZK rotation, both key sets revoked) | 213.5M (53.4%) | 17.3 MB (41.3%) | 236 (59.0%) | 111 (55.5%) | 35 864 (27.1%) | 12 112 (73.9%) |
+| Cancellation (`Combined`, ZK last) | 118.6M (29.7%) | 5.4 MB | 21 | 5 | 2 184 | 332 |
+| `approve_change` | 0.9M | 0.3 MB | 10 | 2 | 392 | 192 |
+| `submit_zk_change` | 117.6M (29.4%) | 5.1 MB | 13 | 1 | 240 | 192 |
+| `Protected` reconfiguration `apply_doc`, at the caps | 210.2M (52.6%) | 16.4 MB | 189 | 82 | 31 748 | 10 300 |
+| `Protected` `schedule_upgrade` | 6.2M | 1.1 MB | 15 | 2 | 1 168 | 196 |
+| `execute_upgrade` | 6.3M | 1.2 MB | 17 | 5 | 1 284 | 696 |
+| Enrollment that seals a tree (small document) | 64.2M | 4.6 MB | 56 | 21 | 7 228 | 2 252 |
+
+Every row is within 75% of every limit. Native proving (`nargo execute` +
+`bb prove`, 15 proofs on an Apple M-series desktop): 69 ms median witness,
+97 ms median and 117 ms maximum proof. The deployable adapter is 67 982
+bytes (`stellar scaffold build`; 52% of the 131 072-byte contract limit) and
+the pool 45 663: `docs/zk/measurements.md`'s 116 776 and 75 264 are plain
+`cargo build` sizes, without the CLI's spec shaking.
 
 ### Document caps
 
@@ -173,12 +206,13 @@ the 41.9 MB limit. Each stack contract now links a 64 KiB stack
 (`build.rs`, `-zstack-size=65536`; 2 pages). The same flows take about a
 quarter of the memory (the largest existing row: 17 MB to 4.5 MB), and
 every flow passes with real proofs. The stack is laid out first, so an
-overflow wraps below address 0 and traps instead of corrupting data. At
-16 KiB the UltraHonk verifier traps (the controller reports
-`ZkEvidenceRejected`, failing closed); at 32 KiB everything passes. The
-verifier's stack use does not depend on its input, and the compiler's
-only input-driven recursion (JSON nesting) refuses cleanly at its depth
-limit on the small stack.
+overflow wraps below address 0 and traps instead of corrupting data. The
+UltraHonk verifier is the deepest code: the ZK-flavor verifier traps at
+32 KiB (the controller reports `ZkEvidenceRejected`, failing closed) and
+passes at 48 KiB, so the adapter links 128 KiB (3 pages), more than twice
+that, at one VM per ZK transaction. The verifier's stack use does not
+depend on its input, and the compiler's only input-driven recursion (JSON
+nesting) refuses cleanly at its depth limit on the 64 KiB stack.
 
 **The binding limit: contract events.** OZ emits a full event per rule
 added and removed, per signer registered, and per policy installed and

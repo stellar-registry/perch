@@ -65,14 +65,15 @@ fn apply_doc_installs_the_cap_beside_the_interpreter() {
 
     assert_eq!(client.get_context_rules_count(), 2);
 
-    // Rule 1: the policy-free admin survivor (INV-2).
-    let admin = client.get_context_rule(&1);
+    // Rule 0: the policy-free admin survivor (INV-2), the constructor's
+    // admin rule edited in place by the delta apply.
+    let admin = client.get_context_rule(&0);
     assert_eq!(admin.name, SString::from_str(&w.env, "admin"));
     assert_eq!(admin.policies.len(), 0);
 
-    // Rule 2: the capped rule carries BOTH policies — the interpreter (per-call
+    // Rule 1: the capped rule carries BOTH policies — the interpreter (per-call
     // program + INV-1 floor) AND spending_limit (the cumulative cap).
-    let capped = client.get_context_rule(&2);
+    let capped = client.get_context_rule(&1);
     assert_eq!(capped.name, SString::from_str(&w.env, "capped"));
     assert_eq!(capped.policies.len(), 2, "interpreter + spending_limit");
     assert!(capped.policies.contains(&w.interpreter));

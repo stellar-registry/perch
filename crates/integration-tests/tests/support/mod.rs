@@ -431,7 +431,11 @@ pub fn world_with(opts: Opts) -> World {
         (),
     );
     if opts.failing_spending_limit {
-        env.register_at(&infra::perch_spending_limit::address(&env), FailingPolicy, ());
+        env.register_at(
+            &infra::perch_spending_limit::address(&env),
+            FailingPolicy,
+            (),
+        );
     } else {
         env.register_at(
             &infra::perch_spending_limit::address(&env),

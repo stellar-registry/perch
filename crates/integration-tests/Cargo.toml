@@ -31,3 +31,4 @@ stellar-accounts = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 ed25519-dalek = "2"
 hex = "0.4"
+serde_json = "1"

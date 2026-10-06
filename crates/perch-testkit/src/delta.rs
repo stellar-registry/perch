@@ -632,6 +632,12 @@ pub fn changed(before: &BTreeMap<String, String>, after: &BTreeMap<String, Strin
     keys
 }
 
+/// One ledger snapshot entry: key, then entry and live-until ledger.
+type SnapshotEntry = (
+    Box<LedgerKey>,
+    (Box<soroban_sdk::xdr::LedgerEntry>, Option<u32>),
+);
+
 /// Rule, signer, and policy ids of one account, read from its own entries.
 struct Ids {
     rules: BTreeMap<u32, String>,
@@ -640,13 +646,7 @@ struct Ids {
 }
 
 impl Ids {
-    fn read(
-        entries: &[(
-            Box<LedgerKey>,
-            (Box<soroban_sdk::xdr::LedgerEntry>, Option<u32>),
-        )],
-        me: &ScAddress,
-    ) -> Ids {
+    fn read(entries: &[SnapshotEntry], me: &ScAddress) -> Ids {
         let mut ids = Ids {
             rules: BTreeMap::new(),
             signers: BTreeMap::new(),

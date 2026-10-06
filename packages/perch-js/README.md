@@ -21,7 +21,7 @@ ESM-only. Ships compiled JS + `.d.ts`; regular dependencies are `zod` and
 ## Usage
 
 ```ts
-import { policy, external, canonicalJson, docHash } from '@stellar-registry/perch';
+import { policy, external, canonicalJson, docHash, ruleHash, configHash } from '@stellar-registry/perch';
 
 const doc = policy()
   .network('Test SDF Network ; September 2015')
@@ -31,7 +31,14 @@ const doc = policy()
 
 canonicalJson(doc); // the canonical wire form (what gets applied on-chain)
 docHash(doc);       // sha256 of the canonical form, hex — the document identity
+ruleHash(doc.rules[0]); // sha256("perch/rule" || rule bytes): a program's provenance
+configHash(docWithRecovery); // sha256("perch/recovery/config" || recovery bytes)
 ```
+
+`ruleHash` and `configHash` hash one fragment of the canonical form under its
+own domain tag (`CANONICAL.md`, "Fragment hashes"), so callers never need to
+spell the tags themselves; the tags are exported as `RULE_HASH_DOMAIN` and
+`CONFIG_HASH_DOMAIN`.
 
 Parsing/validating an existing document:
 
@@ -43,8 +50,9 @@ const doc = parsePolicyDocJson(jsonText); // throws on any deviation — fail cl
 
 ## Guarantees
 
-- `canonicalJson` and `docHash` are byte-identical to the Rust `perch-ir`
-  implementation; both are pinned against committed golden vectors in CI.
+- `canonicalJson`, `docHash`, `ruleHash`, and `configHash` are byte-identical
+  to the Rust implementation; all are pinned against committed golden vectors
+  in CI.
 - The schema rejects unknown fields, out-of-range values, and non-canonical
   encodings rather than normalizing them.
 

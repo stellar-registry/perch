@@ -67,6 +67,16 @@ pub struct AttemptAuthorized {
     pub expires_at: u32,
 }
 
+/// T4: a lost-key attempt's condition was met, but the account's document
+/// is no longer its source; the attempt is dead and a fresh one is needed.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AttemptInvalidated {
+    #[topic]
+    pub account: Address,
+    pub attempt_id: u64,
+}
+
 /// T6/T7: an attempt was cancelled.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -771,7 +781,9 @@ fn after_evidence(
 }
 
 /// T4. Fixes the attempt's windows, invalidates every sibling in O(1), and
-/// under `Protected` freezes the account.
+/// under `Protected` freezes the account. A lost-key attempt whose source is
+/// no longer the applied document is recorded `Invalidated` instead, and the
+/// evidence call succeeds so the record stands.
 fn promote(
     e: &Env,
     account: &Address,
@@ -785,7 +797,13 @@ fn promote(
     if attempt.action == RecoveryAction::LostKey
         && view.applied_doc_hash() != Some(attempt.source_doc_hash.clone())
     {
-        return Err(RecoveryError::AttemptNotLive);
+        attempt.state = AttemptState::Invalidated;
+        AttemptInvalidated {
+            account: account.clone(),
+            attempt_id: attempt.id,
+        }
+        .publish(e);
+        return Ok(());
     }
     let now = e.ledger().sequence();
     attempt.state = AttemptState::Authorized;
@@ -1284,7 +1302,7 @@ fn is_live(e: &Env, account: &Address, a: &Attempt) -> bool {
         AttemptState::Authorized => {
             RecoveryStorage::get_authorized(e, account) == Some(a.id) && now < a.expires_at
         }
-        AttemptState::Completed | AttemptState::Cancelled => false,
+        AttemptState::Completed | AttemptState::Cancelled | AttemptState::Invalidated => false,
     }
 }
 

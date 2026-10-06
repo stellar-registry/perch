@@ -14,6 +14,11 @@ arbitrary = { version = "1", features = ["derive"] }
 perch-program = { path = "../crates/perch-program" }
 perch-ir = { path = "../crates/perch-ir" }
 soroban-sdk = { version = "27.0.2", features = ["testutils"] }
+# The delta-apply oracle harness (needs the fetched infra wasm cache, like any
+# build of the account: scripts/fetch-infra-wasm.sh). On macOS the instrumented
+# stellar-accounts dylib links only with
+# RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup".
+perch-testkit = { path = "../crates/perch-testkit" }
 
 # Its own workspace: fuzz builds want their own profile/instrumentation and
 # must not inherit the root release profile (panic = "abort" would stop
@@ -30,6 +35,13 @@ bench = false
 [[bin]]
 name = "ir_parse_roundtrip"
 path = "fuzz_targets/ir_parse_roundtrip.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "apply_doc_delta"
+path = "fuzz_targets/apply_doc_delta.rs"
 test = false
 doc = false
 bench = false

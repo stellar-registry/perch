@@ -25,7 +25,9 @@ use support::*;
 use EvidenceDomain::Initiate;
 
 fn fingerprint(w: &World, key: &Address) -> BytesN<32> {
-    Credential::Delegated(key.clone()).fingerprint(&w.env).unwrap()
+    Credential::Delegated(key.clone())
+        .fingerprint(&w.env)
+        .unwrap()
 }
 
 /// A document with `owner` (admin) and `device`, and extra rules
@@ -36,9 +38,10 @@ fn json(
     rules: &[(&str, &Address, &[&str], bool)],
     recovery: Option<&Recovery>,
 ) -> Bytes {
-    let mut out = std::vec![format!(
-        r#"{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}}"#
-    )];
+    let mut out = std::vec![
+        r#"{"name":"admin","scope":{"type":"self-admin"},"principals":{"type":"all","signers":["owner"]}}"#
+            .to_string(),
+    ];
     for (name, scope, signers, capped) in rules {
         let ids: std::vec::Vec<String> = signers.iter().map(|s| format!(r#""{s}""#)).collect();
         let cap = if *capped {
@@ -85,8 +88,16 @@ fn a_revoked_credential_cannot_return_through_an_in_place_edit() {
     let w = world();
     let r = w.recovery("loss", Mode::Guardian);
     let other = w.new_key();
-    w.apply_bytes(&json(&w, &w.owner, &[("r1", &other, &["device"], false)], Some(&r)), 0)
-        .unwrap();
+    w.apply_bytes(
+        &json(
+            &w,
+            &w.owner,
+            &[("r1", &other, &["device"], false)],
+            Some(&r),
+        ),
+        0,
+    )
+    .unwrap();
     let (_, new_owner, target) = authorize_lost_key(&w);
     w.advance(DELAY);
     w.complete(&target).unwrap();
@@ -107,10 +118,18 @@ fn a_revoked_credential_cannot_return_through_an_in_place_edit() {
         r.json(&w)
     );
     assert_eq!(
-        err(w.apply_as(&new_owner, &Bytes::from_slice(&w.env, with_old.as_bytes()), 0)),
+        err(w.apply_as(
+            &new_owner,
+            &Bytes::from_slice(&w.env, with_old.as_bytes()),
+            0
+        )),
         PerchAccountError::RevokedCredential
     );
-    assert_eq!(raw_entries(&w.env), before, "a refused delta changes nothing");
+    assert_eq!(
+        raw_entries(&w.env),
+        before,
+        "a refused delta changes nothing"
+    );
     assert_eq!(w.rule_id(&w.account, "r1"), r1_id);
 }
 
@@ -147,7 +166,12 @@ fn the_freeze_and_the_generation_behave_as_under_the_full_replace() {
         let r = w.recovery("protected", Mode::Guardian);
         let scope = w.target.clone();
         (
-            json(w, &w.owner, &[("r1", &scope, &["owner", "device"], false)], Some(&r)),
+            json(
+                w,
+                &w.owner,
+                &[("r1", &scope, &["owner", "device"], false)],
+                Some(&r),
+            ),
             json(w, &w.owner, &[("r1", &scope, &["device"], true)], Some(&r)),
         )
     };
@@ -191,11 +215,24 @@ fn reserved_names_hold_after_a_controller_scoped_rule_is_edited_in_place() {
     let w = world();
     let r = w.recovery("loss", Mode::Guardian);
     let controller = w.controller.clone();
-    w.apply_bytes(&json(&w, &w.owner, &[("ctl", &controller, &["owner"], false)], Some(&r)), 0)
-        .unwrap();
+    w.apply_bytes(
+        &json(
+            &w,
+            &w.owner,
+            &[("ctl", &controller, &["owner"], false)],
+            Some(&r),
+        ),
+        0,
+    )
+    .unwrap();
     let id = w.rule_id(&w.account, "ctl");
     w.apply_bytes(
-        &json(&w, &w.owner, &[("ctl", &controller, &["owner", "device"], false)], Some(&r)),
+        &json(
+            &w,
+            &w.owner,
+            &[("ctl", &controller, &["owner", "device"], false)],
+            Some(&r),
+        ),
         0,
     )
     .unwrap();
@@ -226,11 +263,19 @@ fn a_delta_inside_an_authorized_window_is_refused_and_changes_nothing() {
     let w = world();
     let r = w.recovery("loss", Mode::Guardian);
     let scope = w.target.clone();
-    w.apply_bytes(&json(&w, &w.owner, &[("r1", &scope, &["owner"], false)], Some(&r)), 0)
-        .unwrap();
+    w.apply_bytes(
+        &json(&w, &w.owner, &[("r1", &scope, &["owner"], false)], Some(&r)),
+        0,
+    )
+    .unwrap();
     authorize_lost_key(&w);
     let before = raw_entries(&w.env);
-    let edited = json(&w, &w.owner, &[("r1", &scope, &["owner", "device"], false)], Some(&r));
+    let edited = json(
+        &w,
+        &w.owner,
+        &[("r1", &scope, &["owner", "device"], false)],
+        Some(&r),
+    );
     assert_eq!(
         err(w.apply_bytes(&edited, 0)),
         PerchAccountError::Recovery(RecoveryError::AttemptAuthorized)
@@ -252,7 +297,12 @@ fn a_policy_install_failing_mid_delta_reverts_every_edit() {
     });
     let (a, b, c) = (w.new_key(), w.new_key(), w.new_key());
     w.apply_bytes(
-        &json(&w, &w.owner, &[("r1", &a, &["owner"], false), ("r2", &b, &["owner"], false)], None),
+        &json(
+            &w,
+            &w.owner,
+            &[("r1", &a, &["owner"], false), ("r2", &b, &["owner"], false)],
+            None,
+        ),
         0,
     )
     .unwrap();
@@ -265,7 +315,10 @@ fn a_policy_install_failing_mid_delta_reverts_every_edit() {
     let failing = json(
         &w,
         &w.owner,
-        &[("r1", &a, &["owner", "device"], false), ("r3", &c, &["owner"], true)],
+        &[
+            ("r1", &a, &["owner", "device"], false),
+            ("r3", &c, &["owner"], true),
+        ],
         None,
     );
     assert!(w.apply_bytes(&failing, 0).is_err());
@@ -278,7 +331,10 @@ fn a_policy_install_failing_mid_delta_reverts_every_edit() {
         &json(
             &w,
             &w.owner,
-            &[("r1", &a, &["owner", "device"], false), ("r3", &c, &["owner"], false)],
+            &[
+                ("r1", &a, &["owner", "device"], false),
+                ("r3", &c, &["owner"], false),
+            ],
             None,
         ),
         0,
@@ -296,11 +352,19 @@ fn budget_exhaustion_mid_delta_reverts_every_edit() {
     let docs = |w: &World, keys: &[Address; 3]| {
         let [a, b, c] = keys;
         (
-            json(w, &w.owner, &[("r1", a, &["owner"], false), ("r2", b, &["owner"], true)], None),
             json(
                 w,
                 &w.owner,
-                &[("r1", a, &["owner", "device"], false), ("r3", c, &["device"], true)],
+                &[("r1", a, &["owner"], false), ("r2", b, &["owner"], true)],
+                None,
+            ),
+            json(
+                w,
+                &w.owner,
+                &[
+                    ("r1", a, &["owner", "device"], false),
+                    ("r3", c, &["device"], true),
+                ],
                 None,
             ),
         )
@@ -343,7 +407,11 @@ fn budget_exhaustion_mid_delta_reverts_every_edit() {
             out.is_err() || out.as_ref().is_ok_and(|r| r.is_err()),
             "{percent}% of the budget"
         );
-        assert_eq!(raw_entries(&w.env), before, "{percent}%: every edit reverted");
+        assert_eq!(
+            raw_entries(&w.env),
+            before,
+            "{percent}%: every edit reverted"
+        );
         w.apply_bytes(&second, 0)
             .expect("the account still applies the delta with budget to spare");
     }

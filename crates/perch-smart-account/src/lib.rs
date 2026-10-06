@@ -110,6 +110,9 @@ pub enum PerchAccountError {
     TimingOverflow,
     /// A completion handed back a credential that cannot be fingerprinted.
     InvalidCredential,
+    /// The recovery generation moved since the upgrade was scheduled
+    /// (spec §12). The request stays pending but can never execute.
+    StaleUpgrade,
     #[from_contract_client]
     Compiler(DocCompilerError),
     #[from_contract_client]
@@ -420,14 +423,16 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// Execute the pending upgrade once its delay has elapsed. Owner
     /// authorization. If the recovery generation moved since scheduling
     /// (any enrollment, reconfiguration, removal, controller switch,
-    /// completed recovery, or executed upgrade), the request is stale: it is
-    /// cleared and `false` returned, without upgrading. A refusal could not
-    /// clear it, because a failed invocation keeps none of its writes.
-    /// Otherwise the controller, if one is adopted, checks its epoch and
-    /// bumps it (refusing during an authorized attempt), the generation
-    /// advances, the Wasm is replaced after this invocation, and `true` is
-    /// returned.
-    fn execute_upgrade(e: &Env, request_id: u64) -> Result<bool, PerchAccountError> {
+    /// completed recovery, or executed upgrade), the request is stale and
+    /// the call refuses with `StaleUpgrade`. The refusal leaves the request
+    /// in place, since a failed invocation keeps none of its writes; it can
+    /// never execute, because the generation never decreases, and stays
+    /// until `schedule_upgrade` replaces it, `cancel_upgrade` removes it, or
+    /// a completion clears it. Otherwise the controller, if one is adopted,
+    /// checks its epoch and bumps it (refusing during an authorized
+    /// attempt), the generation advances, and the Wasm is replaced after
+    /// this invocation.
+    fn execute_upgrade(e: &Env, request_id: u64) -> Result<(), PerchAccountError> {
         let me = e.current_contract_address();
         me.require_auth();
         let request =
@@ -436,10 +441,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
             return Err(PerchAccountError::UpgradeRequestMismatch);
         }
         match request.readiness(e.ledger().sequence(), generation(e)) {
-            UpgradeReadiness::Stale => {
-                drop_pending_upgrade(e);
-                return Ok(false);
-            }
+            UpgradeReadiness::Stale => return Err(PerchAccountError::StaleUpgrade),
             UpgradeReadiness::NotYet => return Err(PerchAccountError::UpgradeNotReady),
             UpgradeReadiness::Ready => {}
         }
@@ -448,17 +450,10 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
             // The generation matched, so the controller was adopted at
             // scheduling too and its epoch was recorded; the controller
             // checks that epoch as well.
-            let Some(epoch) = request.controller_epoch else {
-                return Ok(false);
-            };
-            match RecoveryHooksClient::new(e, c).try_rcv_upgrade(&me, &UpgradeStep::Execute(epoch))
-            {
-                Ok(Ok(_)) => {}
-                Err(Ok(RecoveryError::StaleUpgrade)) => return Ok(false),
-                other => {
-                    other??;
-                }
-            }
+            let epoch = request
+                .controller_epoch
+                .ok_or(PerchAccountError::StaleUpgrade)?;
+            RecoveryHooksClient::new(e, c).try_rcv_upgrade(&me, &UpgradeStep::Execute(epoch))??;
         }
         advance_generation(e);
         UpgradeExecuted {
@@ -467,7 +462,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         }
         .publish(e);
         e.deployer().update_current_contract_wasm(request.wasm_hash);
-        Ok(true)
+        Ok(())
     }
 
     /// Cancel the pending upgrade. Owner authorization.

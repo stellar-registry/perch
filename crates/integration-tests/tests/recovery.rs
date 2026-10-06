@@ -133,14 +133,27 @@ fn a_lost_key_attempt_whose_source_changed_needs_a_fresh_attempt() {
     w.guardian(0, stale, Initiate);
 
     // The owner rotates the device key: the agreed snapshot is gone.
-    let mut rotated = w.doc(Some(w.recovery("loss", Mode::Guardian)));
+    let original = w.doc(Some(w.recovery("loss", Mode::Guardian)));
+    let mut rotated = original.clone();
     rotated.signers[1].1 = w.new_key();
     w.enroll(&rotated);
+    // The evidence that meets the condition succeeds and records the
+    // invalidation (spec §6.3 T4): a refusal would roll it back.
+    assert_eq!(w.try_guardian(1, stale, Initiate), Ok(()));
+    assert_eq!(state(&w, stale), AttemptState::Invalidated);
+    assert!(!w.ctl().attempt_live(&w.account, &stale));
+
+    // Changing the document back does not revive it.
+    w.enroll(&original);
     assert_eq!(
-        w.try_guardian(1, stale, Initiate),
+        w.client().applied_doc_hash(),
+        Some(w.ctl().attempt(&w.account, &stale).unwrap().source_doc_hash)
+    );
+    assert!(!w.ctl().attempt_live(&w.account, &stale));
+    assert_eq!(
+        w.try_guardian(0, stale, Initiate),
         Err(Ok(RecoveryError::AttemptNotLive))
     );
-    assert_eq!(state(&w, stale), AttemptState::Collecting);
 
     let (fresh, _, target) = open_lost_key(&w, None);
     authorize(&w, fresh);

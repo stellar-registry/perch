@@ -37,12 +37,9 @@ pub use perch_recovery_interface::config::{
 #[cfg(feature = "contract")]
 use perch_compile::{compile, CompileConfig, LoweredRule, ScopeSpec, SignerSpec};
 #[cfg(feature = "contract")]
-use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
-
-/// Domain prefix of a recovery member's `config_hash`
-/// (`docs/recovery/spec.md` §3.2).
+use perch_recovery_interface::config;
 #[cfg(feature = "contract")]
-const CONFIG_DOMAIN: &[u8] = b"perch/recovery/config";
+use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 
 /// Document caps (`docs/recovery/spec.md` §7.5): the compiler refuses a
 /// document with more declared signers, more rules, or longer canonical
@@ -520,13 +517,9 @@ fn to_compiled_recovery(
     for id in &r.replaceable {
         replaceable.push_back(String::from_str(e, id));
     }
-    let mut preimage = Bytes::from_slice(e, CONFIG_DOMAIN);
-    preimage.append(&Bytes::from_slice(
-        e,
-        perch_ir::recovery_canonical_json(r).as_bytes(),
-    ));
+    let canonical = Bytes::from_slice(e, perch_ir::recovery_canonical_json(r).as_bytes());
     Ok(CompiledRecoveryConfig {
-        config_hash: e.crypto().sha256(&preimage).to_bytes(),
+        config_hash: config::config_hash(e, &canonical),
         profile,
         mode,
         controller: Address::from_str(e, &r.controller),

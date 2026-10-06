@@ -72,7 +72,7 @@ fn schedule(
 fn execute_upgrade(
     w: &World,
     request: u64,
-) -> Result<bool, Result<PerchAccountError, soroban_sdk::InvokeError>> {
+) -> Result<(), Result<PerchAccountError, soroban_sdk::InvokeError>> {
     let root = w.invocation(&w.account, "execute_upgrade", std::vec![w.sc(request)]);
     w.env.set_auths(&[w.owner_entry("admin", root)]);
     let out = w.client().try_execute_upgrade(&request);
@@ -180,7 +180,7 @@ fn an_upgrade_waits_out_the_delay_then_replaces_the_code() {
         err(execute_upgrade(&w, id + 1)),
         PerchAccountError::UpgradeRequestMismatch
     );
-    assert_eq!(execute_upgrade(&w, id), Ok(true));
+    assert_eq!(execute_upgrade(&w, id), Ok(()));
     // The account now runs the new code, which has no perch entry points.
     assert!(w.client().try_applied_doc_hash().is_err());
 }
@@ -228,22 +228,99 @@ fn any_recovery_transition_makes_a_queued_upgrade_stale() {
     quorum_one.quorum = 1;
     w.enroll(&w.doc(Some(quorum_one)));
     w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    let pending = w.client().pending_upgrade();
     assert_eq!(
-        execute_upgrade(&w, id),
-        Ok(false),
-        "stale: cleared, not run"
+        err(execute_upgrade(&w, id)),
+        PerchAccountError::StaleUpgrade
     );
-    assert_eq!(w.client().pending_upgrade(), None);
+    assert_eq!(
+        w.client().pending_upgrade(),
+        pending,
+        "refused, so nothing is cleared"
+    );
     assert!(
         w.client().try_applied_doc_hash().is_ok(),
         "the code is unchanged"
     );
 
-    // So does dropping a controller.
+    // So does dropping a controller. Scheduling replaces the inert request.
     let id = schedule(&w, &wasm, 0).unwrap();
+    assert_eq!(w.client().pending_upgrade().unwrap().request_id, id);
     w.enroll(&w.doc(None));
     w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
-    assert_eq!(execute_upgrade(&w, id), Ok(false));
+    assert_eq!(
+        err(execute_upgrade(&w, id)),
+        PerchAccountError::StaleUpgrade
+    );
+}
+
+/// Spec §12: a stale request is refused whether or not its delay has
+/// passed, and the refusal records nothing. The request stays, inert,
+/// until it is cancelled or replaced.
+#[test]
+fn a_stale_upgrade_is_refused_without_being_cleared() {
+    let w = world();
+    w.enroll(&w.doc(None));
+    let wasm = upload(&w);
+    let id = schedule(&w, &wasm, 0).unwrap();
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    let pending = w.client().pending_upgrade();
+
+    // Before the delay: stale wins over not-yet.
+    assert_eq!(
+        err(execute_upgrade(&w, id)),
+        PerchAccountError::StaleUpgrade
+    );
+    w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    assert_eq!(
+        err(execute_upgrade(&w, id)),
+        PerchAccountError::StaleUpgrade
+    );
+    assert!(
+        perch_testkit::delta::events(&w.env).is_empty(),
+        "a refused call publishes nothing"
+    );
+    assert_eq!(w.client().pending_upgrade(), pending);
+
+    // It never becomes executable: nothing lowers the generation.
+    w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    assert_eq!(
+        err(execute_upgrade(&w, id)),
+        PerchAccountError::StaleUpgrade
+    );
+
+    let root = w.invocation(&w.account, "cancel_upgrade", std::vec![]);
+    w.env.set_auths(&[w.owner_entry("admin", root)]);
+    w.client().cancel_upgrade();
+    w.env.set_auths(&[]);
+    assert_eq!(w.client().pending_upgrade(), None);
+}
+
+/// Spec §12: completion advances the generation and also clears the slot.
+#[test]
+fn a_completed_recovery_clears_the_pending_upgrade() {
+    let w = world();
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    let wasm = upload(&w);
+    schedule(&w, &wasm, 0).unwrap();
+    let generation = w.client().recovery_generation();
+
+    let replacements = w.replacements(&w.new_key(), None);
+    let source = w.client().applied_doc().unwrap();
+    let attempt = w.ctl().begin_lost_key(&w.account, &replacements);
+    let target = w.target_bytes(
+        perch_recovery_interface::RecoveryAction::LostKey,
+        &source,
+        &replacements,
+    );
+    w.guardian(0, attempt, EvidenceDomain::Initiate);
+    w.guardian(1, attempt, EvidenceDomain::Initiate);
+    let authorized = w.ctl().attempt(&w.account, &attempt).unwrap();
+    w.advance(authorized.executable_after - w.ledger());
+    w.complete(&target).expect("completes");
+
+    assert_eq!(w.client().pending_upgrade(), None);
+    assert_eq!(w.client().recovery_generation(), generation + 1);
 }
 
 /// The review's sequence: schedule while unenrolled, enroll, remove, wait
@@ -270,8 +347,11 @@ fn enrolling_and_removing_recovery_stales_an_unenrolled_upgrade() {
     assert_eq!(w.client().recovery_controller(), None);
 
     w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
-    assert_eq!(execute_upgrade(&w, id), Ok(false), "stale, not executed");
-    assert_eq!(w.client().pending_upgrade(), None);
+    assert_eq!(
+        err(execute_upgrade(&w, id)),
+        PerchAccountError::StaleUpgrade,
+        "stale, not executed"
+    );
     assert!(
         w.client().try_applied_doc_hash().is_ok(),
         "the code is unchanged"
@@ -280,7 +360,7 @@ fn enrolling_and_removing_recovery_stales_an_unenrolled_upgrade() {
     // A request scheduled after the cycle, with no transition since, runs.
     let id = schedule(&w, &wasm, 0).unwrap();
     w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
-    assert_eq!(execute_upgrade(&w, id), Ok(true));
+    assert_eq!(execute_upgrade(&w, id), Ok(()));
 }
 
 #[test]
@@ -303,7 +383,7 @@ fn a_controller_switch_and_an_executed_upgrade_advance_the_generation() {
     let wasm = upload(&w);
     let id = schedule(&w, &wasm, 0).unwrap();
     w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
-    assert_eq!(execute_upgrade(&w, id), Ok(true));
+    assert_eq!(execute_upgrade(&w, id), Ok(()));
 }
 
 #[test]
@@ -341,7 +421,7 @@ fn upgrades_are_blocked_while_an_attempt_is_authorized() {
     w.env.set_auths(&[w.owner_entry("admin", cancel)]);
     w.client().cancel_recovery(&attempt);
     w.env.set_auths(&[]);
-    assert_eq!(execute_upgrade(&w, id), Ok(true));
+    assert_eq!(execute_upgrade(&w, id), Ok(()));
 }
 
 #[test]

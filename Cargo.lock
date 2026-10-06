@@ -1586,6 +1586,7 @@ dependencies = [
  "perch-testkit",
  "perch-zk-pool",
  "proptest",
+ "serde_json",
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -1605,6 +1606,7 @@ version = "0.1.1"
 dependencies = [
  "hex",
  "hifijson",
+ "serde_json",
  "sha2",
 ]
 

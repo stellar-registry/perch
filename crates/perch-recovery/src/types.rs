@@ -31,10 +31,11 @@ pub struct ActivityGate {
     pub until: u32,
 }
 
-/// An attempt's stored state. `Expired` and `Invalidated` are not states:
-/// they are derived from the ledger, the account's epoch, and its
-/// `invalidate_below` (see `contract::is_live`), so no transition can leave
-/// them out of date.
+/// An attempt's stored state. `Expired` is not a state, and neither is
+/// invalidation by an epoch change or a sibling's authorization: those are
+/// derived from the ledger, the account's epoch, and its `invalidate_below`
+/// (see `contract::is_live`), so no transition can leave them out of date.
+/// Only a stale lost-key source is recorded ([`AttemptState::Invalidated`]).
 #[contracttype]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AttemptState {
@@ -46,6 +47,11 @@ pub enum AttemptState {
     Completed,
     /// Cancelled by evidence (T6) or, under `Loss`, by the owner (T7).
     Cancelled,
+    /// A lost-key attempt whose condition was met after the account's
+    /// document moved off its source (T4). Recorded by the evidence call
+    /// that found it, which succeeds: a refusal would roll the check back
+    /// and leave the attempt promotable once the document changed back.
+    Invalidated,
 }
 
 /// One lost-key or compromise recovery attempt (spec §6.3 T1).

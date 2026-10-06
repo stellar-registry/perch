@@ -88,10 +88,11 @@ pub fn recovery_canonical_json(r: &RecoveryConfig) -> String {
     out
 }
 
-/// Domain prefix of a rule's provenance hash. Distinct from the document
-/// hash (unprefixed) and from the recovery `config_hash`
-/// (`perch/recovery/config`), so none of the three can collide.
-pub const RULE_HASH_DOMAIN: &str = "perch/policy/rule";
+/// Domain tag of a rule's fragment hash (`CANONICAL.md`, "Fragment
+/// hashes"). Distinct from the document hash (untagged) and from the
+/// recovery `config_hash` (`perch/recovery/config`), so none of the three
+/// can collide. Must equal `perch_recovery_interface::fragment::RULE_DOMAIN`.
+pub const RULE_HASH_DOMAIN: &str = "perch/rule";
 
 /// The canonical JSON of one rule on its own: exactly the bytes that rule
 /// contributes to [`canonical_json`]'s `rules` array.

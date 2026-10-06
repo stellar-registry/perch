@@ -722,6 +722,56 @@ fn a_one_signer_rule_swaps_its_only_signer_in_place() {
     );
 }
 
+/// `n` declared signers using keys `first..first + n` of the pool.
+fn delegated_keys(n: usize, first: usize) -> std::vec::Vec<SignerModel> {
+    (0..n)
+        .map(|i| SignerModel {
+            id: SIGNER_IDS[i],
+            key: KeyModel::Delegated(first + i),
+        })
+        .collect()
+}
+
+/// Every key of an `old`-signer admin rule swapped for `new` fresh keys.
+/// Nothing on the rule survives, so the delta adds before it removes.
+fn full_swap(old: usize, new: usize) -> (u32, u32, std::vec::Vec<String>) {
+    let ids: std::vec::Vec<usize> = (0..old).collect();
+    let a = doc(delegated_keys(old, 0), std::vec![admin(&ids)]);
+    let ids: std::vec::Vec<usize> = (0..new).collect();
+    let b = doc(delegated_keys(new, old), std::vec![admin(&ids)]);
+    let (w, events, before, after) = case(&a, &b);
+    (
+        id_of(&before, "admin"),
+        id_of(&after, "admin"),
+        names(&events, &w.delta),
+    )
+}
+
+#[test]
+fn swapping_every_key_of_a_multi_signer_rule_keeps_its_id() {
+    // Four old keys and four new ones: adding first peaks at eight signers,
+    // within OZ's limit of fifteen.
+    let (before, after, events) = full_swap(4, 4);
+    assert_eq!(before, after);
+    assert!(!events.iter().any(|e| e.starts_with("context_rule")));
+    assert_eq!(events.iter().filter(|e| *e == "signer_added").count(), 4);
+    assert_eq!(events.iter().filter(|e| *e == "signer_removed").count(), 4);
+}
+
+#[test]
+fn a_full_swap_is_edited_in_place_up_to_the_signer_limit() {
+    // 8 + 7 = 15 signers at the peak: still in place.
+    let (before, after, events) = full_swap(8, 7);
+    assert_eq!(before, after);
+    assert!(!events.iter().any(|e| e.starts_with("context_rule")));
+
+    // 8 + 8 = 16 would pass the limit, so the rule is replaced whole.
+    let (before, after, events) = full_swap(8, 8);
+    assert_ne!(before, after);
+    assert!(events.contains(&"context_rule_removed".to_string()));
+    assert!(events.contains(&"context_rule_added".to_string()));
+}
+
 #[test]
 fn minimal_and_maximal_documents_round_trip() {
     let minimal = doc(delegated(1), std::vec![admin(&[0])]);

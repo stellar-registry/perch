@@ -1,7 +1,8 @@
-//! The testnet scenarios: the four flows of
+//! The testnet scenarios: the flows of
 //! `crates/integration-tests/tests/release_stack.rs`, on the deployed
-//! contracts, with real G-account guardians. A step that must fail is
-//! simulated under enforcing authorization and never submitted.
+//! contracts, with real G-account guardians, and a perch-account guardian's
+//! approval carried by the relay. A step that must fail is simulated under
+//! enforcing authorization and never submitted.
 
 use anyhow::{ensure, Result};
 use perch_account::PerchAccountError;
@@ -702,4 +703,180 @@ pub fn guardian_protected_compromise(w: &World<'_>) -> Result<()> {
         Some(PerchAccountError::RevokedCredential),
     )?;
     Ok(())
+}
+
+/// A guardian that is itself a perch account, approving through a CAP-0071
+/// delegated signer, its approval carried by the relay
+/// (`packages/perch-relay`) and submitted by someone else. The relay admits
+/// an entry only after simulating the whole `submit_guardian` under
+/// enforcing authorization, so forgeries posted first never take the
+/// guardian's slot.
+pub fn relayed_delegated_guardian(w: &World<'_>) -> Result<()> {
+    use stellar_xdr::{ScVal, SorobanAuthorizedFunction, SorobanCredentials};
+    let c = w.c;
+    c.begin_scenario("relay: a delegated perch guardian's approval, relayed");
+    let relay = crate::relay::Relay::start(&w.s.controller, &c.passphrase, &c.rpc_url)?;
+
+    // The guardian: a factory account whose `approve` rule lets a delegated
+    // G-account sign calls to the controller.
+    let approver = w.g_account("relay/approver")?;
+    let attacker = w.g_account("relay/attacker")?;
+    let guardian = w.new_account("relay-guardian", w.passkey("relay/guardian-owner"))?;
+    w.apply(
+        "guardian account: a delegated approver for the controller",
+        &guardian,
+        &guardian.owner,
+        &w.guardian_doc(&guardian.owner, &approver.account()),
+        0,
+    )?;
+    let approve_rule = w.rule_id(&guardian, "approve")?;
+    let admin_rule = w.rule_id(&guardian, "admin")?;
+
+    let g0 = w.g_account("relay/g0")?;
+    let a = w.new_account("relay-loss", w.passkey("relay/owner"))?;
+    let rec = Rec {
+        profile: "loss",
+        mode: Mode::Guardian,
+        zk: None,
+        guardians: vec![g0.account(), guardian.address.clone()],
+        delay: DELAY,
+        baseline: None,
+    };
+    w.apply(
+        "enroll GuardianOnly (a perch account among the guardians)",
+        &a,
+        &a.owner,
+        &w.doc(&a.owner, Some(&rec)),
+        0,
+    )?;
+    let new_owner = w.passkey("relay/new-owner");
+    let r = w.replacements(&new_owner, None);
+    let attempt = w.begin_lost_key("begin_lost_key", &a, &r)?;
+    w.guardian(
+        "submit_guardian (1 of 2)",
+        &g0,
+        &a,
+        attempt,
+        EvidenceDomain::Initiate,
+    )?;
+
+    // The guardian's wallet: the entry recording-mode simulation asks for,
+    // signed by the delegate.
+    let args = vec![
+        c.sc(c.address(&a.address)),
+        c.sc(attempt),
+        c.sc(EvidenceDomain::Initiate),
+        c.sc(c.address(&guardian.address)),
+    ];
+    let templates = c.templates(&w.s.controller, "submit_guardian", args.clone())?;
+    ensure!(
+        templates.len() == 1,
+        "submit_guardian asks for {} entries",
+        templates.len()
+    );
+    let template = &templates[0];
+    let SorobanAuthorizedFunction::ContractFn(call) = &template.root_invocation.function else {
+        anyhow::bail!("the template does not authorize a contract call");
+    };
+    let digest = match call.args.first() {
+        Some(ScVal::Bytes(b)) => hex::encode(b.as_slice()),
+        other => anyhow::bail!("the template's argument is not the digest: {other:?}"),
+    };
+    let statement = w.statement(&a, attempt, EvidenceDomain::Initiate)?;
+    let expected = statement
+        .digest(&c.env)
+        .map_err(|e| anyhow::anyhow!("{e:?}"))?;
+    ensure!(
+        digest == hex::encode(expected.to_array()),
+        "the guardian is asked to sign {digest}, not the statement's digest"
+    );
+    let genuine = c.delegated_entry(template, &approver, approve_rule)?;
+
+    // An attacker posts first, more forgeries than the old per-guardian cap
+    // of eight: another delegate, the approver under a rule it is not in,
+    // and the genuine entry with its delegate signature tampered with.
+    let tampered = {
+        let mut e = genuine.clone();
+        let SorobanCredentials::AddressWithDelegates(d) = &mut e.credentials else {
+            anyhow::bail!("the delegated entry is not AddressWithDelegates");
+        };
+        let mut delegates = d.delegates.to_vec();
+        delegates[0].signature = flip_last_byte(&delegates[0].signature)?;
+        d.delegates = delegates.try_into()?;
+        e
+    };
+    let forgeries = [
+        (
+            "another delegate",
+            c.delegated_entry(template, &attacker, approve_rule)?,
+        ),
+        (
+            "the approver under a rule it is not in",
+            c.delegated_entry(template, &approver, admin_rule)?,
+        ),
+        ("a tampered delegate signature", tampered),
+    ];
+    for round in 0..3 {
+        for (what, forged) in &forgeries {
+            let (status, body) = relay.put(&digest, forged, &args)?;
+            ensure!(
+                status == 403,
+                "relay admitted a forged approval ({what}): {status} {body}"
+            );
+            if round == 0 {
+                let error: serde_json::Value = serde_json::from_str(&body)?;
+                c.note_refusal(
+                    &format!("relay: forged approval, {what}"),
+                    &format!("{status} {}", error["error"].as_str().unwrap_or(&body)),
+                    "relay",
+                );
+            }
+        }
+    }
+    let (status, body) = relay.put(&digest, &genuine, &args)?;
+    ensure!(
+        status == 201,
+        "relay refused the genuine approval: {status} {body}"
+    );
+
+    // A collector fetches it and submits it as served.
+    let relayed = relay.get(&digest)?;
+    ensure!(
+        relayed.len() == 1,
+        "relay serves {} approvals, expected the genuine one",
+        relayed.len()
+    );
+    let got = &relayed[0];
+    ensure!(
+        got.guardian == guardian.address && got.entry == genuine && got.admitted_by == "simulation",
+        "relay served something other than the genuine approval, unchanged"
+    );
+    c.call_with(
+        "submit_guardian (2 of 2, promoting; a delegated perch guardian, relayed)",
+        &w.s.controller,
+        "submit_guardian",
+        got.args.clone(),
+        &[],
+        crate::chain::Entries::Given(vec![got.entry.clone()]),
+    )?;
+    let at = w.attempt(&a, attempt)?;
+    ensure!(
+        at.guardians.contains(c.address(&guardian.address)),
+        "the controller did not record the perch guardian's approval"
+    );
+    let target = w.target_bytes(&a, &r)?;
+    c.wait_for_ledger(at.executable_after)?;
+    w.complete("completion apply_doc (GuardianOnly)", &a, &target)?;
+    w.activity("the new passkey after recovery", &a, &new_owner)?;
+    Ok(())
+}
+
+/// `sig` with its final byte changed, wherever the bytes are nested.
+fn flip_last_byte(sig: &stellar_xdr::ScVal) -> Result<stellar_xdr::ScVal> {
+    use stellar_xdr::{Limits, ReadXdr, WriteXdr};
+    let mut bytes = sig.to_xdr(Limits::none())?;
+    // The XDR of the account signature ends with the 64 signature bytes.
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    Ok(stellar_xdr::ScVal::from_xdr(bytes, Limits::none())?)
 }

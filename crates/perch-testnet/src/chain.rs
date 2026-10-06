@@ -60,7 +60,9 @@ pub struct Step {
     pub refused_in: Option<String>,
     pub instructions: Option<u64>,
     pub mem_bytes: Option<u64>,
-    pub read_entries: Option<u32>,
+    /// Every entry in the transaction's footprint, read-only and read-write:
+    /// what `tx_max_footprint_entries` limits.
+    pub footprint_entries: Option<u32>,
     pub write_entries: Option<u32>,
     pub disk_read_bytes: Option<u32>,
     pub write_bytes: Option<u32>,
@@ -84,10 +86,13 @@ pub enum Entries {
     Recorded,
     /// One entry for this address over exactly the root call.
     Root(String),
+    /// These entries, exactly as given and never re-signed (a relay's).
+    Given(Vec<SorobanAuthorizationEntry>),
 }
 
 pub struct Chain {
     pub rpc: Rpc,
+    pub rpc_url: String,
     pub passphrase: String,
     /// Host-side encoding, hashing, and the statement digest.
     pub env: Env,
@@ -105,6 +110,7 @@ impl Chain {
         env.ledger().with_mut(|l| l.network_id = network_id);
         Self {
             rpc: Rpc::new(rpc_url),
+            rpc_url: rpc_url.to_string(),
             passphrase: passphrase.to_string(),
             env,
             payer,
@@ -195,27 +201,29 @@ impl Chain {
         };
         let seq = self.rpc.account_seq(&self.payer.public)?;
         let mut tx = build_tx(self.payer.public, seq + 1, &spec)?;
-        let templates = match entries {
-            Entries::Recorded => {
-                let sim1 = self.rpc.simulate(&envelope_b64(&tx)?)?;
-                if let Some(e) = sim1.error {
-                    return Ok(Err(format!("{RECORDING}{e}")));
+        let entries = match entries {
+            Entries::Given(entries) => entries,
+            entries => {
+                let templates = match entries {
+                    Entries::Root(address) => {
+                        std::vec![self.root_entry(&address, contract, func, args)?]
+                    }
+                    _ => match self.recorded(&tx)? {
+                        Ok(templates) => templates,
+                        Err(e) => return Ok(Err(e)),
+                    },
+                };
+                let expiration = self.latest_ledger()? + 100;
+                let mut entries = Vec::new();
+                for mut entry in templates {
+                    if matches!(entry.credentials, SorobanCredentials::Address(_)) {
+                        self.sign_entry(&mut entry, expiration, auths)?;
+                    }
+                    entries.push(entry);
                 }
-                sim1.auth
-                    .iter()
-                    .map(|b64| SorobanAuthorizationEntry::from_xdr_base64(b64, Limits::none()))
-                    .collect::<std::result::Result<Vec<_>, _>>()?
+                entries
             }
-            Entries::Root(address) => std::vec![self.root_entry(&address, contract, func, args)?],
         };
-        let expiration = self.latest_ledger()? + 100;
-        let mut entries = Vec::new();
-        for mut entry in templates {
-            if matches!(entry.credentials, SorobanCredentials::Address(_)) {
-                self.sign_entry(&mut entry, expiration, auths)?;
-            }
-            entries.push(entry);
-        }
         set_auth(&mut tx, entries)?;
         let sim2 = self.rpc.simulate(&envelope_b64(&tx)?)?;
         if let Some(e) = sim2.error {
@@ -230,6 +238,68 @@ impl Chain {
         tx.fee = u32::try_from(fee).context("fee overflows u32")?;
         tx.ext = TransactionExt::V1(data);
         Ok(Ok((tx, sim2)))
+    }
+
+    /// A recording-mode simulation's auth-entry templates, or its refusal.
+    fn recorded(
+        &self,
+        tx: &stellar_xdr::Transaction,
+    ) -> Result<std::result::Result<Vec<SorobanAuthorizationEntry>, String>> {
+        let sim = self.rpc.simulate(&envelope_b64(tx)?)?;
+        if let Some(e) = sim.error {
+            return Ok(Err(format!("{RECORDING}{e}")));
+        }
+        Ok(Ok(sim
+            .auth
+            .iter()
+            .map(|b64| SorobanAuthorizationEntry::from_xdr_base64(b64, Limits::none()))
+            .collect::<std::result::Result<Vec<_>, _>>()?))
+    }
+
+    /// The unsigned entries `contract.func(args)` needs, from a
+    /// recording-mode simulation: what a guardian's wallet signs.
+    pub fn templates(
+        &self,
+        contract: &str,
+        func: &str,
+        args: Vec<ScVal>,
+    ) -> Result<Vec<SorobanAuthorizationEntry>> {
+        let spec = InvokeSpec {
+            contract: contract.to_string(),
+            func: func.to_string(),
+            args,
+        };
+        let seq = self.rpc.account_seq(&self.payer.public)?;
+        let tx = build_tx(self.payer.public, seq + 1, &spec)?;
+        self.recorded(&tx)?
+            .map_err(|e| anyhow!("{func}: refused in simulation: {}", first_line(&e)))
+    }
+
+    /// `template` signed as a perch account's CAP-0071 delegated approval:
+    /// the account's `AuthPayload` names `Signer::Delegated(key)` and selects
+    /// `rule`, and `key`'s G-account signs the address-bound payload as the
+    /// entry's one delegate.
+    pub fn delegated_entry(
+        &self,
+        template: &SorobanAuthorizationEntry,
+        key: &SeedKey,
+        rule: u32,
+    ) -> Result<SorobanAuthorizationEntry> {
+        let mut entry = template.clone();
+        let expiration = self.latest_ledger()? + 100;
+        auth::sign_delegated_auth_entry(&mut entry, &self.passphrase, expiration, key, rule)?;
+        Ok(entry)
+    }
+
+    /// Record a refusal that happened off-chain (the relay's).
+    pub fn note_refusal(&self, label: &str, error: &str, refused_in: &str) {
+        self.record(Step {
+            label: label.to_string(),
+            outcome: "refused".into(),
+            error: Some(first_line(error)),
+            refused_in: Some(refused_in.to_string()),
+            ..Step::default()
+        });
     }
 
     /// `address`'s authorization of exactly the root call, with a fresh
@@ -495,7 +565,9 @@ fn resources(tx: &stellar_xdr::Transaction, sim: &perch_deploy::rpc::Simulation)
     Step {
         instructions: sim.cpu_insns.or(Some(u64::from(r.instructions))),
         mem_bytes: sim.mem_bytes,
-        read_entries: Some((r.footprint.read_only.len() + r.footprint.read_write.len()) as u32),
+        footprint_entries: Some(
+            (r.footprint.read_only.len() + r.footprint.read_write.len()) as u32,
+        ),
         write_entries: Some(r.footprint.read_write.len() as u32),
         disk_read_bytes: Some(r.disk_read_bytes),
         write_bytes: Some(r.write_bytes),

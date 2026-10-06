@@ -82,15 +82,16 @@ def main(path):
             w(f"| {row} | not on testnet | | | | | | | | |")
             continue
         s = max(matched, key=lambda s: s["instructions"] or 0)
+        footprint = s.get("footprint_entries", s.get("read_entries"))
         shares = [
             pct(s["instructions"], lim["tx_max_instructions"]),
-            pct(s["read_entries"], footprint_limit(lim)),
+            pct(footprint, footprint_limit(lim)),
             pct(s["write_entries"], lim["tx_max_write_ledger_entries"]),
             pct(s["write_bytes"], lim["tx_max_write_bytes"]),
             pct(s["tx_size_bytes"], lim["tx_max_size_bytes"]),
         ]
         within = "yes" if max(shares) <= BUDGET * 100 else "**no**"
-        w(f"| {row} | {s['label']} | {s['instructions']:,} ({shares[0]:.1f}%) | {s['read_entries']} ({shares[1]:.1f}%) "
+        w(f"| {row} | {s['label']} | {s['instructions']:,} ({shares[0]:.1f}%) | {footprint} ({shares[1]:.1f}%) "
           f"| {s['write_entries']} ({shares[2]:.1f}%) | {s['write_bytes']:,} ({shares[3]:.1f}%) | {s['tx_size_bytes']:,} ({shares[4]:.1f}%) "
           f"| {xlm(s['fee_charged_stroops'])} | {s['latency_ms'] / 1000:.1f} | {within} |")
     w("")
@@ -121,7 +122,8 @@ def main(path):
             code = s["error"]
             if s.get("auth_error_code") is not None:
                 code += f", `__check_auth` #{s['auth_error_code']}"
-            where = f" ({s['refused_in']} simulation)" if s.get("refused_in") else ""
+            where = {None: "", "relay": " (relay admission)"}.get(
+                s.get("refused_in"), f" ({s.get('refused_in')} simulation)")
             w(f"| {s['label']} | refused{where}: `{code}` | | | |")
     w("")
     print("\n".join(out))

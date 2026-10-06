@@ -3,6 +3,7 @@
 //!
 //! ```text
 //! eval "$(scripts/zk-toolchain.sh)"
+//! npm --prefix packages/perch-relay ci && npm --prefix packages/perch-relay run build
 //! cargo run -p perch-testnet -- --manifest deployments/testnet.json \
 //!     --out deployments/testnet-exercise.json
 //! ```
@@ -17,6 +18,7 @@
 //! simulation of the deployed wasm against live state.
 
 mod chain;
+mod relay;
 mod scenarios;
 mod world;
 
@@ -43,7 +45,7 @@ struct Cli {
     #[arg(long, default_value = "deployments/testnet-exercise.json")]
     out: std::path::PathBuf,
     /// Run only these scenarios (comma-separated): zk-loss, combined,
-    /// zk-protected, guardian-loss, combined-loss, compromise.
+    /// zk-protected, guardian-loss, combined-loss, compromise, relay.
     #[arg(long, value_delimiter = ',')]
     only: Vec<String>,
 }
@@ -83,13 +85,14 @@ fn main() -> Result<()> {
     let w = World::new(&chain, stack, run.clone(), secret);
     let started_ledger = chain.latest_ledger()?;
 
-    let all: [(&str, Scenario); 6] = [
+    let all: [(&str, Scenario); 7] = [
         ("zk-loss", scenarios::zk_lost_key),
         ("combined", scenarios::combined_protected),
         ("zk-protected", scenarios::zk_protected_changes),
         ("guardian-loss", scenarios::guardian_loss),
         ("combined-loss", scenarios::combined_loss),
         ("compromise", scenarios::guardian_protected_compromise),
+        ("relay", scenarios::relayed_delegated_guardian),
     ];
     let mut failures = Vec::new();
     for (name, f) in all {

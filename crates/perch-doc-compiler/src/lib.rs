@@ -45,14 +45,15 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 /// document with more declared signers, more rules, or longer canonical
 /// bytes than these, on every `compile_doc` and `derive_target`. They bound
 /// the worst-case recovery completion (every removed credential revoked,
-/// every rule replaced). Sized against the measured budget
+/// every rule replaced or edited by `apply_doc`'s diff). Sized against the
+/// measured budget
 /// (`docs/recovery/budgets.md`, "Document caps"): the costliest document
 /// they admit stays within 75% of every per-transaction limit through
 /// enrollment, a lost-key or compromise completion, and a reconfiguration.
 /// The binding limit is contract events.
-pub const MAX_DOC_SIGNERS: u32 = 6;
+pub const MAX_DOC_SIGNERS: u32 = 4;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_RULES: u32 = 8;
+pub const MAX_DOC_RULES: u32 = 9;
 /// See [`MAX_DOC_SIGNERS`].
 pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
 /// The longest rule name, in bytes: OZ's context-rule name limit. Checked

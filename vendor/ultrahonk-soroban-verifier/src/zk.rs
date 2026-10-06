@@ -11,8 +11,9 @@
 //!
 //! The ZK flavor shares the non-ZK flavor's circuit, verification key,
 //! relations, and Oink rounds. Where it differs, the code below is marked
-//! `ZK:`. Every unmarked step calls, or copies line for line, the audited
-//! non-ZK step of the same number:
+//! `ZK:`. Every unmarked step either calls the audited non-ZK code or
+//! restates the audited step of the same number, with the same operations
+//! in the same order (only names and array offsets differ):
 //!
 //! - Proof layout: 507 fields, not 456. A ZK proof adds three Libra
 //!   commitments, the Libra sum, the Libra claimed evaluation, and four

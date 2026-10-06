@@ -39,8 +39,11 @@ GitHub commit. It also pins the whole directory (`CHECKSUMS.sha256`).
 
 ## `src/zk.rs`, function by function
 
-Each function that mirrors an audited one is a copy of it with every
-difference marked `ZK:`, so the delta reviews as a diff of each pair.
+Each function that mirrors an audited one follows it step by step, with the
+same step numbers and the same operations in the same order, and marks every
+ZK difference `ZK:`. Only local names (`p`, `t` for the shared proof and
+transcript) and MSM offsets differ elsewhere, so the delta reviews
+side by side, pair by pair.
 
 | Function | Mirrors (audited) | ZK difference | BB v0.87.0 reference (`barretenberg/cpp/src/barretenberg/`) |
 | --- | --- | --- | --- |

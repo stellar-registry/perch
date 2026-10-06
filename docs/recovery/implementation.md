@@ -16,7 +16,7 @@ the one recovery controller and the shared account capabilities.
 | §7 permitted changes | `perch_ir::recovery::derive_target`; `PerchDocCompiler::derive_target` | `crates/perch-ir/tests/recovery.rs`, `recovery.rs` |
 | §3.2 per-rule hash | `perch_ir::{rule_canonical_json, rule_hash}`; `perch_compile::rule_hash_onchain`; `perch_recovery_interface::fragment::rule_hash`; perch-js `ruleHash`, `configHash` | `crates/perch-ir/tests/rule_hash.rs`, `fragment_hashes.rs`, `packages/perch-js/test/fragment.test.ts` |
 | §7.5 delta apply | `crates/perch-smart-account/src/rules.rs` (`desired`, `reconcile`) | `apply_delta.rs`, `delta_security.rs`, `fuzz/fuzz_targets/apply_doc_delta.rs` |
-| §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES}` | — (provisional values, see below) |
+| §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}` | `doc_caps.rs`; `release_stack.rs` `worst_case_*` (see below) |
 | §12 upgrades | `PerchSmartAccount::{schedule_upgrade, execute_upgrade, cancel_upgrade}`; `PerchRecovery::rcv_upgrade` | `account_capabilities.rs` |
 | §15 `execute`, `applied_doc` | `PerchSmartAccount::{execute, applied_doc}` | `account_capabilities.rs` |
 
@@ -172,9 +172,12 @@ against the release artifacts belong to the integration layer.
   pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
-- **Document caps.** Provisional: 16 declared signers, 16 rules, 8 192
-  canonical bytes. Workstream 2's measurements (`budgets.md`) set the final
-  values.
+- **Document caps.** 6 declared signers, 8 rules, 8 192 canonical bytes,
+  and rule names of at most OZ's 20 bytes, sized against the measured
+  worst-case completion (`budgets.md`, "Document caps"). The binding limit
+  is contract events. Every stack contract links a 64 KiB wasm stack
+  (`build.rs`): with rustc's 1 MiB default, every cross-contract call's VM
+  cost more than 1 MB of the transaction's memory.
 - **`execute`** returns the called function's value.
 - **`max-cancels` is a lifetime count per controller.** Nothing resets it;
   switching controllers starts a new one (T6).

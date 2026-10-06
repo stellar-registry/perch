@@ -168,7 +168,11 @@ the component alone.
 | §2 enrollment `apply_doc`, pool part (`rcv_insert`, sealing a tree) | ≤ 300M instructions, ≤ 99 KB written | 43.8M, 2.2 KB ✓ | 34.8M, 1.8 KB ✓ |
 | §2 every other row | ≤ 75% of each limit | controller workstream | controller workstream |
 
-**Decision: depth 32**, provisional on the rows still open. Every row
+**Decision: depth 32**, provisional on the rows still open. The open rows are
+release criteria, not formalities: desktop numbers do not complete the
+agreed client-performance budget. A change of proof flavor for witness
+hiding (see [`README.md`](README.md), "Open release criteria") also
+requires repeating every proving and verification row here. Every row
 measured so far is within budget at depth 32, by a wide margin. The open
 rows are the reference devices and the full controller and account
 transactions. The ZK components leave the full transactions more than 200M

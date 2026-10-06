@@ -51,9 +51,9 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 /// they admit stays within 75% of every per-transaction limit through
 /// enrollment, a lost-key or compromise completion, and a reconfiguration.
 /// The binding limit is contract events.
-pub const MAX_DOC_SIGNERS: u32 = 4;
+pub const MAX_DOC_SIGNERS: u32 = 6;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_RULES: u32 = 9;
+pub const MAX_DOC_RULES: u32 = 8;
 /// See [`MAX_DOC_SIGNERS`].
 pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
 /// The longest rule name, in bytes: OZ's context-rule name limit. Checked

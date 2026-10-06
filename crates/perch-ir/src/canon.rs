@@ -88,6 +88,36 @@ pub fn recovery_canonical_json(r: &RecoveryConfig) -> String {
     out
 }
 
+/// Domain prefix of a rule's provenance hash. Distinct from the document
+/// hash (unprefixed) and from the recovery `config_hash`
+/// (`perch/recovery/config`), so none of the three can collide.
+pub const RULE_HASH_DOMAIN: &str = "perch/policy/rule";
+
+/// The canonical JSON of one rule on its own: exactly the bytes that rule
+/// contributes to [`canonical_json`]'s `rules` array.
+///
+/// An interpreter program records `sha256(RULE_HASH_DOMAIN ||
+/// rule_canonical_json(rule))` ([`rule_hash`]) as its provenance, so an
+/// unchanged rule keeps an unchanged program across documents.
+#[must_use]
+pub fn rule_canonical_json(rule: &Rule) -> String {
+    let mut out = String::new();
+    write_value(&rule_to_cv(rule), &mut out);
+    out
+}
+
+/// `sha256(RULE_HASH_DOMAIN || rule_canonical_json(rule))`: the provenance an
+/// interpreter program carries. `std`-only (see [`doc_hash`]); on-chain,
+/// hash the same bytes with the host `sha256`.
+#[cfg(feature = "std")]
+#[must_use]
+pub fn rule_hash(rule: &Rule) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(RULE_HASH_DOMAIN.as_bytes());
+    h.update(rule_canonical_json(rule).as_bytes());
+    h.finalize().into()
+}
+
 /// SHA-256 of the canonical JSON bytes of `doc`. This is the document's
 /// identity: what reviewers approve and what on-chain state commits to.
 ///

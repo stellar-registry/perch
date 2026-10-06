@@ -1131,12 +1131,271 @@
               "ext": "v0",
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
               "key": {
+                "symbol": "InstalledRules"
+              },
+              "durability": "persistent",
+              "val": {
+                "vec": [
+                  {
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "context_type"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "symbol": "CallContract"
+                            },
+                            {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "id"
+                        },
+                        "val": {
+                          "u32": 0
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "name"
+                        },
+                        "val": {
+                          "string": "admin"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "policies"
+                        },
+                        "val": {
+                          "vec": []
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "recovery"
+                        },
+                        "val": {
+                          "bool": false
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "signers"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "vec": [
+                                {
+                                  "symbol": "Delegated"
+                                },
+                                {
+                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2ZMN"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "valid_until"
+                        },
+                        "val": "void"
+                      }
+                    ]
+                  },
+                  {
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "context_type"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "symbol": "CallContract"
+                            },
+                            {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "id"
+                        },
+                        "val": {
+                          "u32": 1
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "name"
+                        },
+                        "val": {
+                          "string": "target"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "policies"
+                        },
+                        "val": {
+                          "vec": []
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "recovery"
+                        },
+                        "val": {
+                          "bool": false
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "signers"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "vec": [
+                                {
+                                  "symbol": "Delegated"
+                                },
+                                {
+                                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2ZMN"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "valid_until"
+                        },
+                        "val": "void"
+                      }
+                    ]
+                  },
+                  {
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "context_type"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "symbol": "CallContract"
+                            },
+                            {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "id"
+                        },
+                        "val": {
+                          "u32": 2
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "name"
+                        },
+                        "val": {
+                          "string": "recovery"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "policies"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "map": [
+                                {
+                                  "key": {
+                                    "symbol": "params"
+                                  },
+                                  "val": {
+                                    "bytes": "a2e25daa6855a4af47fd73cd0279b01221e6edf784a700548f32327bcc3cbe91"
+                                  }
+                                },
+                                {
+                                  "key": {
+                                    "symbol": "policy"
+                                  },
+                                  "val": {
+                                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "recovery"
+                        },
+                        "val": {
+                          "bool": true
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "signers"
+                        },
+                        "val": {
+                          "vec": []
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "valid_until"
+                        },
+                        "val": "void"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 10001009
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+              "key": {
                 "vec": [
                   {
                     "symbol": "ContextRuleData"
                   },
                   {
-                    "u32": 7
+                    "u32": 0
                   }
                 ]
               },
@@ -1181,7 +1440,7 @@
                     "val": {
                       "vec": [
                         {
-                          "u32": 3
+                          "u32": 1
                         }
                       ]
                     }
@@ -1198,7 +1457,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1001009
+        "live_until": 1000999
       },
       {
         "entry": {
@@ -1213,7 +1472,7 @@
                     "symbol": "ContextRuleData"
                   },
                   {
-                    "u32": 8
+                    "u32": 1
                   }
                 ]
               },
@@ -1258,7 +1517,7 @@
                     "val": {
                       "vec": [
                         {
-                          "u32": 3
+                          "u32": 1
                         }
                       ]
                     }
@@ -1275,7 +1534,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1001009
+        "live_until": 1000999
       },
       {
         "entry": {
@@ -1290,7 +1549,7 @@
                     "symbol": "ContextRuleData"
                   },
                   {
-                    "u32": 9
+                    "u32": 2
                   }
                 ]
               },
@@ -1327,7 +1586,7 @@
                     "val": {
                       "vec": [
                         {
-                          "u32": 2
+                          "u32": 0
                         }
                       ]
                     }
@@ -1352,7 +1611,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1001009
+        "live_until": 1000999
       },
       {
         "entry": {
@@ -1367,7 +1626,7 @@
                     "symbol": "PolicyData"
                   },
                   {
-                    "u32": 2
+                    "u32": 0
                   }
                 ]
               },
@@ -1396,7 +1655,7 @@
           },
           "ext": "v0"
         },
-        "live_until": 1001009
+        "live_until": 1000999
       },
       {
         "entry": {
@@ -1417,13 +1676,13 @@
               },
               "durability": "persistent",
               "val": {
-                "u32": 2
+                "u32": 0
               }
             }
           },
           "ext": "v0"
         },
-        "live_until": 1001009
+        "live_until": 1000999
       },
       {
         "entry": {
@@ -1465,7 +1724,7 @@
                     "symbol": "SignerData"
                   },
                   {
-                    "u32": 3
+                    "u32": 1
                   }
                 ]
               },
@@ -1522,7 +1781,7 @@
               },
               "durability": "persistent",
               "val": {
-                "u32": 3
+                "u32": 1
               }
             }
           },
@@ -1574,25 +1833,7 @@
                         "symbol": "RecoveryRule"
                       },
                       "val": {
-                        "u32": 9
-                      }
-                    },
-                    {
-                      "key": {
-                        "symbol": "RuleIds"
-                      },
-                      "val": {
-                        "vec": [
-                          {
-                            "u32": 7
-                          },
-                          {
-                            "u32": 8
-                          },
-                          {
-                            "u32": 9
-                          }
-                        ]
+                        "u32": 2
                       }
                     },
                     {
@@ -1616,7 +1857,7 @@
                         ]
                       },
                       "val": {
-                        "u32": 10
+                        "u32": 3
                       }
                     },
                     {
@@ -1628,7 +1869,7 @@
                         ]
                       },
                       "val": {
-                        "u32": 3
+                        "u32": 1
                       }
                     },
                     {
@@ -1640,7 +1881,7 @@
                         ]
                       },
                       "val": {
-                        "u32": 4
+                        "u32": 2
                       }
                     }
                   ]
@@ -1956,125 +2197,10 @@
           "v0": {
             "topics": [
               {
-                "symbol": "context_rule_removed"
-              },
-              {
-                "u32": 4
-              }
-            ],
-            "data": {
-              "map": []
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "signer_deregistered"
-              },
-              {
-                "u32": 2
-              }
-            ],
-            "data": {
-              "map": []
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "context_rule_removed"
-              },
-              {
-                "u32": 5
-              }
-            ],
-            "data": {
-              "map": []
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "policy_deregistered"
-              },
-              {
-                "u32": 1
-              }
-            ],
-            "data": {
-              "map": []
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "context_rule_removed"
-              },
-              {
-                "u32": 6
-              }
-            ],
-            "data": {
-              "map": []
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
                 "symbol": "signer_registered"
               },
               {
-                "u32": 3
+                "u32": 1
               }
             ],
             "data": {
@@ -2110,166 +2236,20 @@
           "v0": {
             "topics": [
               {
-                "symbol": "context_rule_added"
+                "symbol": "signer_added"
               },
               {
-                "u32": 7
+                "u32": 0
               }
             ],
             "data": {
               "map": [
                 {
                   "key": {
-                    "symbol": "context_type"
+                    "symbol": "signer_id"
                   },
                   "val": {
-                    "vec": [
-                      {
-                        "symbol": "CallContract"
-                      },
-                      {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
-                      }
-                    ]
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "name"
-                  },
-                  "val": {
-                    "string": "admin"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "policy_ids"
-                  },
-                  "val": {
-                    "vec": []
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "signer_ids"
-                  },
-                  "val": {
-                    "vec": [
-                      {
-                        "u32": 3
-                      }
-                    ]
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "valid_until"
-                  },
-                  "val": "void"
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "context_rule_added"
-              },
-              {
-                "u32": 8
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "context_type"
-                  },
-                  "val": {
-                    "vec": [
-                      {
-                        "symbol": "CallContract"
-                      },
-                      {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAATYON"
-                      }
-                    ]
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "name"
-                  },
-                  "val": {
-                    "string": "target"
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "policy_ids"
-                  },
-                  "val": {
-                    "vec": []
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "signer_ids"
-                  },
-                  "val": {
-                    "vec": [
-                      {
-                        "u32": 3
-                      }
-                    ]
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "valid_until"
-                  },
-                  "val": "void"
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "policy_registered"
-              },
-              {
-                "u32": 2
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "policy"
-                  },
-                  "val": {
-                    "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                    "u32": 1
                   }
                 }
               ]
@@ -2288,62 +2268,108 @@
           "v0": {
             "topics": [
               {
-                "symbol": "context_rule_added"
+                "symbol": "signer_removed"
               },
               {
-                "u32": 9
+                "u32": 0
               }
             ],
             "data": {
               "map": [
                 {
                   "key": {
-                    "symbol": "context_type"
+                    "symbol": "signer_id"
                   },
                   "val": {
-                    "vec": [
-                      {
-                        "symbol": "CallContract"
-                      },
-                      {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5"
-                      }
-                    ]
+                    "u32": 0
                   }
-                },
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "signer_added"
+              },
+              {
+                "u32": 1
+              }
+            ],
+            "data": {
+              "map": [
                 {
                   "key": {
-                    "symbol": "name"
+                    "symbol": "signer_id"
                   },
                   "val": {
-                    "string": "recovery"
+                    "u32": 1
                   }
-                },
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "signer_deregistered"
+              },
+              {
+                "u32": 0
+              }
+            ],
+            "data": {
+              "map": []
+            }
+          }
+        }
+      },
+      "failed_call": false
+    },
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "signer_removed"
+              },
+              {
+                "u32": 1
+              }
+            ],
+            "data": {
+              "map": [
                 {
                   "key": {
-                    "symbol": "policy_ids"
+                    "symbol": "signer_id"
                   },
                   "val": {
-                    "vec": [
-                      {
-                        "u32": 2
-                      }
-                    ]
+                    "u32": 0
                   }
-                },
-                {
-                  "key": {
-                    "symbol": "signer_ids"
-                  },
-                  "val": {
-                    "vec": []
-                  }
-                },
-                {
-                  "key": {
-                    "symbol": "valid_until"
-                  },
-                  "val": "void"
                 }
               ]
             }

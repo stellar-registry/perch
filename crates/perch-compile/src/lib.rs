@@ -30,6 +30,19 @@ use perch_ir::{ArgPred, PolicyDoc, Principals, Rule, Scope};
 use perch_program::{rpn, InstallParams, Op, RpnProgram, ValidationError, PROGRAM_VERSION};
 use soroban_sdk::{Bytes, BytesN, Env, String as SString, Symbol, Vec as SVec};
 
+/// A rule's provenance hash computed with the host `sha256` — the same digest
+/// as the std-only `perch_ir::rule_hash`: `sha256(RULE_HASH_DOMAIN ||
+/// rule_canonical_json(rule))`. An interpreter program records it, so a rule
+/// whose text is unchanged keeps an identical program across documents.
+pub fn rule_hash_onchain(env: &Env, rule: &Rule) -> BytesN<32> {
+    let mut preimage = Bytes::from_slice(env, perch_ir::RULE_HASH_DOMAIN.as_bytes());
+    preimage.append(&Bytes::from_slice(
+        env,
+        perch_ir::rule_canonical_json(rule).as_bytes(),
+    ));
+    env.crypto().sha256(&preimage).to_bytes()
+}
+
 /// `doc_hash` computed with the host `sha256` over the canonical bytes — the
 /// same digest as the std-only `perch_ir::doc_hash`, but no_std and far cheaper
 /// on-chain than the `sha2` software impl.
@@ -136,12 +149,11 @@ pub enum LowerError {
 
 /// Lower a validated document. Precondition: `perch_ir::validate(doc).is_ok()`.
 pub fn compile(env: &Env, doc: &PolicyDoc, cfg: &CompileConfig) -> Result<Plan, LowerError> {
-    let doc_hash = doc_hash_onchain(env, doc);
     let mut rules = Vec::with_capacity(doc.rules.len());
     let mut any_interpreter = false;
 
     for rule in &doc.rules {
-        let lowered = lower_rule(env, doc, rule, &doc_hash)?;
+        let lowered = lower_rule(env, doc, rule)?;
         if lowered.install.is_some() {
             any_interpreter = true;
         }
@@ -154,12 +166,7 @@ pub fn compile(env: &Env, doc: &PolicyDoc, cfg: &CompileConfig) -> Result<Plan, 
     })
 }
 
-fn lower_rule(
-    env: &Env,
-    doc: &PolicyDoc,
-    rule: &Rule,
-    doc_hash: &BytesN<32>,
-) -> Result<LoweredRule, LowerError> {
+fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, LowerError> {
     let scope = match &rule.scope {
         Scope::Contract(c) => ScopeSpec::Contract(c.address.clone()),
         Scope::SelfAdmin(_) => ScopeSpec::SelfAdmin,
@@ -229,9 +236,11 @@ fn lower_rule(
         None
     } else {
         let program = build_program(env, rule, min_signers)?;
+        // Provenance is the rule's own canonical hash (its field keeps the
+        // `doc_hash` name; the interpreter's type is unchanged).
         Some(InstallParams {
             program,
-            doc_hash: doc_hash.clone(),
+            doc_hash: rule_hash_onchain(env, rule),
         })
     };
 

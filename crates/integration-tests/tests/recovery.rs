@@ -1120,8 +1120,10 @@ fn a_recovery_cannot_rotate_to_an_enrollment_id_the_account_used() {
     let current = w.client().applied_doc().unwrap();
     w.compiler()
         .derive_target(&current, &current, &RecoveryAction::LostKey, &replacements);
-    w.ctl()
-        .begin_lost_key(&w.account, &w.replacements(&w.new_key(), Some(enrollment(&w.env, 3))));
+    w.ctl().begin_lost_key(
+        &w.account,
+        &w.replacements(&w.new_key(), Some(enrollment(&w.env, 3))),
+    );
 }
 
 #[test]

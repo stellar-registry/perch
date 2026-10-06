@@ -31,10 +31,11 @@
 //! that fails structural `validate` ([`Error::InvalidProgram`]), refuses to
 //! overwrite an existing attachment ([`Error::AlreadyInstalled`], so the
 //! current policy stays in force), and requires the account's own auth. It
-//! stores each rule's `doc_hash` for provenance but cannot recompute it
-//! on-chain — the source document never reaches the interpreter — so a client
-//! verifies `doc_hash` against the reviewed document *before* attaching, via
-//! `perch_compile::verify_plan_matches_doc`. Together these are perch's
+//! stores each program's provenance (the `doc_hash` field, which holds the
+//! hash of the rule the program was compiled from, `perch_ir::rule_hash`) but
+//! cannot recompute it on-chain — the source document never reaches the
+//! interpreter — so a client verifies it against the reviewed document
+//! *before* attaching, via `perch_compile::verify_plan_matches_doc`. Together these are perch's
 //! OPA-style activation: an attachment is either hash-verified against a
 //! reviewed document or refused, never silently swapped.
 //!

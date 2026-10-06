@@ -82,10 +82,9 @@ impl fmt::Display for DeriveError {
                 f,
                 "replacement for `{id}` changes its credential kind or verifier"
             ),
-            DeriveError::ZkEnrollmentMismatch => write!(
-                f,
-                "the ZK rotation does not match the enrolled mode"
-            ),
+            DeriveError::ZkEnrollmentMismatch => {
+                write!(f, "the ZK rotation does not match the enrolled mode")
+            }
         }
     }
 }

@@ -655,9 +655,8 @@ fn apply(
     let me = e.current_contract_address();
     me.require_auth();
 
-    let compiled: CompiledDoc =
-        DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
-            .try_compile_doc(&doc_json)??;
+    let compiled: CompiledDoc = DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
+        .try_compile_doc(&doc_json)??;
     if !admin_survives(&compiled.rules) {
         return Err(PerchAccountError::AdminLockout);
     }

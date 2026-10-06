@@ -2,15 +2,19 @@
 //! compose output. The headline check is a single read — the account's
 //! `applied_doc_hash` must equal the compose `doc_hash` (installed ==
 //! reviewed). Then every composed rule must exist on chain, matched **by
-//! name** (rule ids are assigned at apply time and shift across re-applies),
-//! with the matching context type; every interpreter-attached rule's stored
-//! program must carry the doc_hash; and the on-chain rule count must equal
-//! the document's exactly — `apply_doc` replaces the whole set, so a leftover
-//! rule is a detected mismatch, not a mystery. Everything runs through
-//! simulation — no keys, no writes.
+//! name** (rule ids are assigned when a rule is added and kept while it is
+//! edited in place), with the matching context type. Every
+//! interpreter-attached rule's stored program must equal the composed one,
+//! whose provenance is the hash of that rule in the applied document
+//! (`perch_ir::rule_hash`), and every policy-free rule must have no program
+//! at all, so no program from an earlier document survives under a live
+//! rule. The on-chain rule count must equal the document's exactly —
+//! `apply_doc` brings the rule set to the document's, so a leftover rule is a
+//! detected mismatch, not a mystery. Everything runs through simulation — no
+//! keys, no writes.
 
 use anyhow::{bail, Context, Result};
-use stellar_xdr::{ScMap, ScVal};
+use stellar_xdr::{Limits, ReadXdr, ScMap, ScVal};
 
 use crate::compose::{parse_hash32, ComposeOutput, RuleEntry};
 use crate::rpc::Rpc;
@@ -80,11 +84,14 @@ fn check_applied_hash(rpc: &Rpc, account: &str, doc_hash_hex: &str) -> Result<Ro
     })
 }
 
+/// The program stored for `rule_id` must be exactly `expected` (the composed
+/// `InstallParams`: the program and its rule-hash provenance), or absent when
+/// the rule is policy-free.
 fn check_program(
     rpc: &Rpc,
     account: &str,
     interpreter: &str,
-    doc_hash_hex: &str,
+    expected: Option<&ScVal>,
     name: &str,
     rule_id: u32,
 ) -> Result<Row> {
@@ -99,15 +106,12 @@ fn check_program(
             Some(format!("get_program trapped: {message}"))
         }
         // Option<InstallParams>: None encodes as Void.
-        ReadOutcome::Value(ScVal::Void) => Some("no program installed".to_string()),
-        ReadOutcome::Value(ScVal::Map(Some(m))) => {
-            let want = scv::bytes(&parse_hash32(doc_hash_hex).context("compose doc_hash")?)?;
-            if scv::map_get(&m, "doc_hash") == Some(&want) {
-                None
-            } else {
-                Some("doc_hash mismatch".to_string())
-            }
-        }
+        ReadOutcome::Value(ScVal::Void) => expected.map(|_| "no program installed".to_string()),
+        ReadOutcome::Value(found @ ScVal::Map(Some(_))) => match expected {
+            None => Some("a program is installed for a policy-free rule".to_string()),
+            Some(want) if *want == found => None,
+            Some(_) => Some("program or rule-hash provenance differs".to_string()),
+        },
         ReadOutcome::Value(other) => Some(format!("unexpected shape: {other:?}")),
     };
     Ok(Row {
@@ -178,28 +182,29 @@ pub fn run(
     for expected in compose.genesis_rule.iter().chain(compose.apply.iter()) {
         let (row, rule_id) = check_rule(&onchain, expected)?;
         rows.push(row);
-        if expected.install.is_some() {
-            rows.push(match rule_id {
-                Some(id) => check_program(
-                    rpc,
-                    account,
-                    interpreter,
-                    &compose.doc_hash,
-                    &expected.name,
-                    id,
-                )?,
-                None => Row {
-                    rule_id: None,
-                    name: expected.name.clone(),
-                    check: "program hash",
-                    mismatch: Some("rule missing; program unchecked".to_string()),
-                },
-            });
-        }
+        let want = match &expected.install {
+            Some(install) => Some(
+                ScVal::from_xdr_base64(&install.scval_base64, Limits::none())
+                    .context("compose install params")?,
+            ),
+            None => None,
+        };
+        rows.push(match rule_id {
+            Some(id) => {
+                check_program(rpc, account, interpreter, want.as_ref(), &expected.name, id)?
+            }
+            None => Row {
+                rule_id: None,
+                name: expected.name.clone(),
+                check: "program hash",
+                mismatch: Some("rule missing; program unchecked".to_string()),
+            },
+        });
     }
 
-    // apply_doc replaces the whole set: the document's rules are exactly the
-    // account's rules. A count mismatch means a leftover or a missing rule.
+    // apply_doc brings the rule set to the document's: the document's rules
+    // are exactly the account's rules. A count mismatch means a leftover or a
+    // missing rule.
     let expected_rules = usize::from(compose.genesis_rule.is_some()) + compose.apply.len();
     rows.push(Row {
         rule_id: None,

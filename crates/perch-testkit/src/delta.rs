@@ -25,11 +25,9 @@ use perch_interpreter::PerchInterpreter;
 use perch_recovery::PerchRecovery;
 use perch_smart_account::{infra, InstalledRule};
 use perch_spending_limit::PerchSpendingLimit;
-use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _};
-use soroban_sdk::xdr::{
-    ContractEventBody, LedgerEntryData, LedgerKey, ScAddress, ScVal,
-};
 use soroban_sdk::testutils::EnvTestConfig;
+use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _};
+use soroban_sdk::xdr::{ContractEventBody, LedgerEntryData, LedgerKey, ScAddress, ScVal};
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env};
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -45,14 +43,12 @@ mod oracle {
     #![allow(unused_imports)]
     use perch_smart_account::testutils::apply_doc_full_replace;
     use perch_smart_account::{
-        check_auth, install_admin, FreezeGate, InstalledRule, PerchAccountError,
-        PerchSmartAccount, UpgradeRequest,
+        check_auth, install_admin, FreezeGate, InstalledRule, PerchAccountError, PerchSmartAccount,
+        UpgradeRequest,
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;
-    use soroban_sdk::{
-        contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec,
-    };
+    use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
     use stellar_accounts::smart_account::{AuthPayload, ContextRule, Signer, SmartAccount};
 
     /// The perch account with `apply_doc` swapped for the full replace.
@@ -226,7 +222,10 @@ impl DocModel {
                 None
             };
             let cap = if scope.is_some() && u.ratio(1, 4)? {
-                Some((u.int_in_range(1..=3u32)? * 1_000, u.int_in_range(1..=2u32)? * 100))
+                Some((
+                    u.int_in_range(1..=3u32)? * 1_000,
+                    u.int_in_range(1..=2u32)? * 100,
+                ))
             } else {
                 None
             };
@@ -432,6 +431,7 @@ impl DeltaWorld {
         // Documents near the caps are large; equivalence, not cost, is under
         // test here.
         env.cost_estimate().disable_resource_limits();
+        env.cost_estimate().budget().reset_unlimited();
         let compiler = infra::perch_doc_compiler::address(&env);
         env.register_at(&compiler, PerchDocCompiler, ());
         let interpreter = infra::perch_interpreter::address(&env);
@@ -464,6 +464,7 @@ impl DeltaWorld {
     /// rendered so two accounts' outcomes compare.
     pub fn apply(&self, account: &Address, doc: &DocModel) -> Result<BytesN<32>, String> {
         let bytes = doc.bytes(self);
+        self.env.cost_estimate().budget().reset_unlimited();
         let out = if *account == self.oracle {
             OracleAccountClient::new(&self.env, account)
                 .try_apply_doc(&bytes, &0)
@@ -621,10 +622,7 @@ pub fn raw_entries(env: &Env) -> BTreeMap<String, String> {
 
 /// The keys whose entry was added, removed, or changed between two
 /// [`raw_entries`] readings.
-pub fn changed(
-    before: &BTreeMap<String, String>,
-    after: &BTreeMap<String, String>,
-) -> Vec<String> {
+pub fn changed(before: &BTreeMap<String, String>, after: &BTreeMap<String, String>) -> Vec<String> {
     let mut keys: Vec<String> = before
         .iter()
         .filter(|(k, v)| after.get(*k) != Some(v))
@@ -643,7 +641,10 @@ struct Ids {
 
 impl Ids {
     fn read(
-        entries: &[(Box<LedgerKey>, (Box<soroban_sdk::xdr::LedgerEntry>, Option<u32>))],
+        entries: &[(
+            Box<LedgerKey>,
+            (Box<soroban_sdk::xdr::LedgerEntry>, Option<u32>),
+        )],
         me: &ScAddress,
     ) -> Ids {
         let mut ids = Ids {
@@ -730,11 +731,17 @@ impl Ids {
                     (format!("rule/{name}"), fields.join(";"))
                 }
                 "SignerData" => (
-                    format!("signer/{}", self.signers.get(&id).cloned().unwrap_or_default()),
+                    format!(
+                        "signer/{}",
+                        self.signers.get(&id).cloned().unwrap_or_default()
+                    ),
                     render(val, Some(me)),
                 ),
                 "PolicyData" => (
-                    format!("policy/{}", self.policies.get(&id).cloned().unwrap_or_default()),
+                    format!(
+                        "policy/{}",
+                        self.policies.get(&id).cloned().unwrap_or_default()
+                    ),
                     render(val, Some(me)),
                 ),
                 _ => (render(key, Some(me)), render(val, Some(me))),
@@ -759,7 +766,9 @@ impl Ids {
                                 .0
                                 .iter()
                                 .filter(|e| render(&e.key, None) != "id")
-                                .map(|e| format!("{}={}", render(&e.key, None), render(&e.val, Some(me))))
+                                .map(|e| {
+                                    format!("{}={}", render(&e.key, None), render(&e.val, Some(me)))
+                                })
                                 .collect();
                             format!("{{{}}}", fields.join(";"))
                         }
@@ -839,11 +848,10 @@ pub fn render(v: &ScVal, me: Option<&ScAddress>) -> String {
             format!("[{}]", parts.join(","))
         }
         ScVal::Map(Some(m)) => {
-            let parts: Vec<String> = m
-                .0
-                .iter()
-                .map(|e| format!("{}:{}", render(&e.key, me), render(&e.val, me)))
-                .collect();
+            let parts: Vec<String> =
+                m.0.iter()
+                    .map(|e| format!("{}:{}", render(&e.key, me), render(&e.val, me)))
+                    .collect();
             format!("{{{}}}", parts.join(","))
         }
         other => format!("{other:?}"),

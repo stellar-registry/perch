@@ -20,7 +20,7 @@ use arbitrary::Unstructured;
 use perch_smart_account::InstalledRule;
 use perch_testkit::delta::*;
 use proptest::prelude::*;
-use soroban_sdk::Address;
+use soroban_sdk::{Address, TryFromVal};
 use std::collections::{BTreeMap, BTreeSet};
 
 fn cases(default: u32) -> u32 {
@@ -59,7 +59,11 @@ fn same_state(a: &BTreeMap<String, String>, b: &BTreeMap<String, String>, what: 
 fn apply_both(w: &DeltaWorld, d: &DocModel) {
     let delta = w.apply(&w.delta, d);
     let oracle = w.apply(&w.oracle, d);
-    assert_eq!(delta.is_ok(), oracle.is_ok(), "delta {delta:?} vs oracle {oracle:?}");
+    assert_eq!(
+        delta.is_ok(),
+        oracle.is_ok(),
+        "delta {delta:?} vs oracle {oracle:?}"
+    );
     if let (Err(a), Err(b)) = (&delta, &oracle) {
         assert_eq!(a, b, "both refuse, for the same reason");
     }
@@ -110,7 +114,8 @@ proptest! {
         let events = w.events();
         let written = w.env.cost_estimate().resources().write_entries;
         prop_assert!(events.iter().all(|e| e.name == "doc_applied"), "{events:?}");
-        prop_assert_eq!(written, 0);
+        // The one entry an authorized call always writes: its auth nonce.
+        prop_assert_eq!(written, 1);
         prop_assert!(changed(&before, &raw_entries(&w.env)).is_empty());
     }
 
@@ -173,9 +178,7 @@ const RULE_EVENTS: [&str; 7] = [
 ];
 
 fn same_slot(a: &InstalledRule, b: &InstalledRule) -> bool {
-    a.recovery == b.recovery
-        && (a.recovery || a.name == b.name)
-        && a.context_type == b.context_type
+    a.recovery == b.recovery && (a.recovery || a.name == b.name) && a.context_type == b.context_type
 }
 
 fn signer_set(r: &InstalledRule) -> BTreeSet<String> {
@@ -206,7 +209,9 @@ fn check_accounting(
     let ours: std::vec::Vec<&Event> = events.iter().filter(|e| e.contract == me).collect();
     let count = |name: &str, id: u32| {
         ours.iter()
-            .filter(|e| e.name == name && e.topics.get(1).map(String::as_str) == Some(&id.to_string()))
+            .filter(|e| {
+                e.name == name && e.topics.get(1).map(String::as_str) == Some(&id.to_string())
+            })
             .count()
     };
     let mut expected_rule_events = 0usize;
@@ -232,15 +237,27 @@ fn check_accounting(
                     ("signer_removed", sb.difference(&sa).count()),
                     ("policy_added", pa.difference(&pb).count()),
                     ("policy_removed", pb.difference(&pa).count()),
-                    ("context_rule_meta_updated", usize::from(a.valid_until != b.valid_until)),
+                    (
+                        "context_rule_meta_updated",
+                        usize::from(a.valid_until != b.valid_until),
+                    ),
                     ("context_rule_added", 0),
                     ("context_rule_removed", 0),
                 ];
                 for (name, n) in expect {
-                    assert_eq!(count(name, b.id), n, "in-place edit of {:?}: {name}", b.name);
+                    assert_eq!(
+                        count(name, b.id),
+                        n,
+                        "in-place edit of {:?}: {name}",
+                        b.name
+                    );
                     expected_rule_events += n;
                 }
-                touched.extend(sb.symmetric_difference(&sa).cloned());
+                touched.extend(
+                    signer_renders(&b)
+                        .symmetric_difference(&signer_renders(&a))
+                        .cloned(),
+                );
                 touched.extend(policy_addresses(&b).into_iter().chain(policy_addresses(&a)));
             }
             Some(a) => {
@@ -260,13 +277,18 @@ fn check_accounting(
                 assert_eq!(count("context_rule_removed", b.id), 1);
                 assert_eq!(count("context_rule_added", a.id), 1);
                 expected_rule_events += 2;
-                touched.extend(signer_set(&b).into_iter().chain(signer_set(&a)));
+                touched.extend(signer_renders(&b).into_iter().chain(signer_renders(&a)));
                 touched.extend(policy_addresses(&b).into_iter().chain(policy_addresses(&a)));
             }
             None => {
-                assert_eq!(count("context_rule_removed", b.id), 1, "removed {:?}", b.name);
+                assert_eq!(
+                    count("context_rule_removed", b.id),
+                    1,
+                    "removed {:?}",
+                    b.name
+                );
                 expected_rule_events += 1;
-                touched.extend(signer_set(&b));
+                touched.extend(signer_renders(&b));
                 touched.extend(policy_addresses(&b));
             }
         }
@@ -275,7 +297,7 @@ fn check_accounting(
         if !before.iter().any(|b| same_slot(&b, &a)) {
             assert_eq!(count("context_rule_added", a.id), 1, "added {:?}", a.name);
             expected_rule_events += 1;
-            touched.extend(signer_set(&a));
+            touched.extend(signer_renders(&a));
             touched.extend(policy_addresses(&a));
         }
     }
@@ -283,13 +305,16 @@ fn check_accounting(
         .iter()
         .filter(|e| RULE_EVENTS.contains(&e.name.as_str()))
         .count();
-    assert_eq!(rule_events, expected_rule_events, "no event beyond the diff: {ours:?}");
+    assert_eq!(
+        rule_events, expected_rule_events,
+        "no event beyond the diff: {ours:?}"
+    );
 
     // Registrations only for signers and policies a changed rule names.
     for e in &ours {
         if e.name == "signer_registered" || e.name == "policy_registered" {
             assert!(
-                touched.iter().any(|t| e.data.contains(t.as_str()) || t.contains(&e.data)),
+                touched.iter().any(|t| e.data.contains(t.as_str())),
                 "registry event for an untouched signer or policy: {e:?}"
             );
         }
@@ -310,7 +335,22 @@ fn check_accounting(
 }
 
 fn policy_addresses(r: &InstalledRule) -> BTreeSet<String> {
-    r.policies.iter().map(|p| format!("{:?}", p.policy)).collect()
+    r.policies.iter().map(|p| contract_hex(&p.policy)).collect()
+}
+
+/// Signers rendered as events render them.
+fn signer_renders(r: &InstalledRule) -> BTreeSet<String> {
+    let env = r.signers.env();
+    r.signers
+        .iter()
+        .map(|s| {
+            let v: soroban_sdk::Val = soroban_sdk::IntoVal::into_val(&s, env);
+            render(
+                &soroban_sdk::xdr::ScVal::try_from_val(env, &v).unwrap(),
+                None,
+            )
+        })
+        .collect()
 }
 
 /// Apply `b` over `a` on both accounts; check the delta's accounting, and
@@ -451,13 +491,23 @@ fn id_of(rules: &soroban_sdk::Vec<InstalledRule>, name: &str) -> u32 {
         .id
 }
 
+/// The account's rule and registry event names, sorted: the delta's order
+/// of operations is its own business, the multiset is the contract.
 fn names(events: &[Event], account: &Address) -> std::vec::Vec<String> {
     let me = contract_hex(account);
-    events
+    let mut out: std::vec::Vec<String> = events
         .iter()
         .filter(|e| e.contract == me && e.name != "doc_applied")
         .map(|e| e.name.clone())
-        .collect()
+        .collect();
+    out.sort();
+    out
+}
+
+fn sorted(names: &[&str]) -> std::vec::Vec<String> {
+    let mut out: std::vec::Vec<String> = names.iter().map(|n| n.to_string()).collect();
+    out.sort();
+    out
 }
 
 #[test]
@@ -471,14 +521,30 @@ fn a_rule_keeping_its_name_with_new_functions_changes_only_its_program() {
         &doc(delegated(1), std::vec![admin(&[0]), b]),
     );
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
-    assert_eq!(names(&events, &w.delta), ["policy_removed", "policy_added"]);
+    // The interpreter is this rule's alone, so OZ deregisters it as the old
+    // program goes and registers it again as the new one comes.
+    assert_eq!(
+        names(&events, &w.delta),
+        sorted(&[
+            "policy_removed",
+            "policy_deregistered",
+            "policy_registered",
+            "policy_added"
+        ])
+    );
 }
 
 #[test]
 fn a_rule_keeping_its_name_with_a_new_scope_is_replaced() {
     let (w, events, before, after) = case(
-        &doc(delegated(1), std::vec![admin(&[0]), rule("r1", Some(0), &[0])]),
-        &doc(delegated(1), std::vec![admin(&[0]), rule("r1", Some(1), &[0])]),
+        &doc(
+            delegated(1),
+            std::vec![admin(&[0]), rule("r1", Some(0), &[0])],
+        ),
+        &doc(
+            delegated(1),
+            std::vec![admin(&[0]), rule("r1", Some(1), &[0])],
+        ),
     );
     assert_ne!(id_of(&before, "r1"), id_of(&after, "r1"));
     let n = names(&events, &w.delta);
@@ -486,7 +552,7 @@ fn a_rule_keeping_its_name_with_a_new_scope_is_replaced() {
 }
 
 #[test]
-fn new_cap_parameters_replace_only_the_spending_limit_policy() {
+fn new_cap_parameters_reinstall_only_that_rules_policies() {
     let mut a = rule("r1", Some(0), &[0]);
     a.cap = Some((1_000, 100));
     let mut b = a.clone();
@@ -496,19 +562,37 @@ fn new_cap_parameters_replace_only_the_spending_limit_policy() {
         &doc(delegated(1), std::vec![admin(&[0]), b]),
     );
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
-    assert_eq!(names(&events, &w.delta), ["policy_removed", "policy_added"]);
+    // The cap is part of the rule's text, so both of the rule's policies are
+    // reinstalled: the spending limit for its new parameters, the interpreter
+    // for its new rule-hash provenance. Each is this rule's alone.
+    let n = names(&events, &w.delta);
+    for (name, count) in [
+        ("policy_removed", 2),
+        ("policy_added", 2),
+        ("policy_deregistered", 2),
+        ("policy_registered", 2),
+    ] {
+        assert_eq!(n.iter().filter(|e| *e == name).count(), count, "{name}");
+    }
+    assert_eq!(n.len(), 8);
 }
 
 #[test]
 fn adding_a_signer_to_a_rule_emits_only_that_signer() {
     let (w, events, before, after) = case(
-        &doc(delegated(2), std::vec![admin(&[0]), rule("r1", Some(0), &[0])]),
-        &doc(delegated(2), std::vec![admin(&[0]), rule("r1", Some(0), &[0, 1])]),
+        &doc(
+            delegated(2),
+            std::vec![admin(&[0]), rule("r1", Some(0), &[0])],
+        ),
+        &doc(
+            delegated(2),
+            std::vec![admin(&[0]), rule("r1", Some(0), &[0, 1])],
+        ),
     );
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
     assert_eq!(
         names(&events, &w.delta),
-        ["signer_registered", "signer_added"]
+        sorted(&["signer_registered", "signer_added"])
     );
 }
 
@@ -516,11 +600,19 @@ fn adding_a_signer_to_a_rule_emits_only_that_signer() {
 fn a_signer_shared_by_several_rules_changes_in_one_and_stays_in_the_others() {
     let a = doc(
         delegated(2),
-        std::vec![admin(&[0, 1]), rule("r1", Some(0), &[1]), rule("r2", Some(1), &[1])],
+        std::vec![
+            admin(&[0, 1]),
+            rule("r1", Some(0), &[1]),
+            rule("r2", Some(1), &[1])
+        ],
     );
     let b = doc(
         delegated(2),
-        std::vec![admin(&[0, 1]), rule("r1", Some(0), &[0]), rule("r2", Some(1), &[1])],
+        std::vec![
+            admin(&[0, 1]),
+            rule("r1", Some(0), &[0]),
+            rule("r2", Some(1), &[1])
+        ],
     );
     let (w, events, before, after) = case(&a, &b);
     for name in ["admin", "r1", "r2"] {
@@ -528,7 +620,10 @@ fn a_signer_shared_by_several_rules_changes_in_one_and_stays_in_the_others() {
     }
     // s1 is still referenced (admin, r2), so it is neither deregistered nor
     // registered again; owner was already registered (admin).
-    assert_eq!(names(&events, &w.delta), ["signer_removed", "signer_added"]);
+    assert_eq!(
+        names(&events, &w.delta),
+        sorted(&["signer_removed", "signer_added"])
+    );
 }
 
 #[test]
@@ -545,7 +640,10 @@ fn a_policy_shared_by_several_rules_is_edited_in_one_only() {
     );
     // The interpreter stays registered (r2 still uses it): no registry
     // events, just r1's program swap.
-    assert_eq!(names(&events, &w.delta), ["policy_removed", "policy_added"]);
+    assert_eq!(
+        names(&events, &w.delta),
+        sorted(&["policy_removed", "policy_added"])
+    );
     let r2_id = id_of(&after, "r2");
     let interpreter = perch_interpreter::PerchInterpreterClient::new(&w.env, &w.interpreter);
     assert!(interpreter.get_program(&w.delta, &r2_id).is_some());
@@ -554,19 +652,28 @@ fn a_policy_shared_by_several_rules_is_edited_in_one_only() {
 #[test]
 fn a_renamed_rule_is_removed_and_added() {
     let (w, events, before, after) = case(
-        &doc(delegated(1), std::vec![admin(&[0]), rule("r1", Some(0), &[0])]),
-        &doc(delegated(1), std::vec![admin(&[0]), rule("r2", Some(0), &[0])]),
+        &doc(
+            delegated(1),
+            std::vec![admin(&[0]), rule("r1", Some(0), &[0])],
+        ),
+        &doc(
+            delegated(1),
+            std::vec![admin(&[0]), rule("r2", Some(0), &[0])],
+        ),
     );
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
     assert_eq!(
         names(&events, &w.delta),
-        ["context_rule_removed", "context_rule_added"]
+        sorted(&["context_rule_removed", "context_rule_added"])
     );
 }
 
 #[test]
 fn a_rule_removed_and_added_back_gets_a_new_id_and_the_same_grant() {
-    let with = doc(delegated(1), std::vec![admin(&[0]), rule("r1", Some(0), &[0])]);
+    let with = doc(
+        delegated(1),
+        std::vec![admin(&[0]), rule("r1", Some(0), &[0])],
+    );
     let without = doc(delegated(1), std::vec![admin(&[0])]);
     let (w, _, first, _) = case(&with, &without);
     let (_w, _, _, again) = transition_after(&w, &with, w.installed(&w.delta));
@@ -577,7 +684,11 @@ fn a_rule_removed_and_added_back_gets_a_new_id_and_the_same_grant() {
 fn a_signer_keeping_its_id_with_a_new_key_is_swapped_in_every_rule_that_names_it() {
     let a = doc(
         delegated(2),
-        std::vec![admin(&[0]), rule("r1", Some(0), &[1]), rule("r2", Some(1), &[0, 1])],
+        std::vec![
+            admin(&[0]),
+            rule("r1", Some(0), &[1]),
+            rule("r2", Some(1), &[0, 1])
+        ],
     );
     let mut b = a.clone();
     b.signers[1].key = KeyModel::Delegated(9);
@@ -602,7 +713,12 @@ fn a_one_signer_rule_swaps_its_only_signer_in_place() {
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
     assert_eq!(
         names(&events, &w.delta),
-        ["signer_registered", "signer_added", "signer_removed", "signer_deregistered"]
+        sorted(&[
+            "signer_registered",
+            "signer_added",
+            "signer_removed",
+            "signer_deregistered"
+        ])
     );
 }
 
@@ -611,7 +727,11 @@ fn minimal_and_maximal_documents_round_trip() {
     let minimal = doc(delegated(1), std::vec![admin(&[0])]);
     let mut rules = std::vec![admin(&[0, 1, 2])];
     for (i, name) in RULE_NAMES.iter().enumerate() {
-        let mut r = rule(name, Some(i % SCOPE_POOL), &[i % 16, (i + 1) % 16, (i + 2) % 16]);
+        let mut r = rule(
+            name,
+            Some(i % SCOPE_POOL),
+            &[i % 16, (i + 1) % 16, (i + 2) % 16],
+        );
         if i % 3 == 0 {
             r.functions = Some(std::vec!["transfer"]);
         }
@@ -638,7 +758,10 @@ fn minimal_and_maximal_documents_round_trip() {
 #[test]
 fn reformatting_the_same_document_is_a_no_op() {
     let w = DeltaWorld::new();
-    let d = doc(delegated(2), std::vec![admin(&[0]), rule("r1", Some(0), &[1])]);
+    let d = doc(
+        delegated(2),
+        std::vec![admin(&[0]), rule("r1", Some(0), &[1])],
+    );
     w.apply(&w.delta, &d).unwrap();
     let before = raw_entries(&w.env);
     // Insignificant whitespace and member order: the canonical form, and so
@@ -647,9 +770,14 @@ fn reformatting_the_same_document_is_a_no_op() {
     let reformatted = json
         .replacen(r#"{"version":1,"#, "{ \n  \"version\" : 1 ,", 1)
         .replace(r#"{"name":"r1","#, r#"{ "name" : "r1" , "#);
-    let out = perch_account::PerchAccountClient::new(&w.env, &w.delta)
-        .apply_doc(&soroban_sdk::Bytes::from_slice(&w.env, reformatted.as_bytes()), &0);
-    assert_eq!(Some(out), perch_account::PerchAccountClient::new(&w.env, &w.delta).applied_doc_hash());
+    let out = perch_account::PerchAccountClient::new(&w.env, &w.delta).apply_doc(
+        &soroban_sdk::Bytes::from_slice(&w.env, reformatted.as_bytes()),
+        &0,
+    );
+    assert_eq!(
+        Some(out),
+        perch_account::PerchAccountClient::new(&w.env, &w.delta).applied_doc_hash()
+    );
     assert!(names(&w.events(), &w.delta).is_empty());
     assert!(changed(&before, &raw_entries(&w.env)).is_empty());
 }
@@ -658,7 +786,11 @@ fn reformatting_the_same_document_is_a_no_op() {
 fn reordering_rules_changes_the_document_but_touches_no_rule() {
     let a = doc(
         delegated(2),
-        std::vec![admin(&[0]), rule("r1", Some(0), &[1]), rule("r2", Some(1), &[0])],
+        std::vec![
+            admin(&[0]),
+            rule("r1", Some(0), &[1]),
+            rule("r2", Some(1), &[0])
+        ],
     );
     let mut b = a.clone();
     b.rules.swap(1, 2);
@@ -666,7 +798,10 @@ fn reordering_rules_changes_the_document_but_touches_no_rule() {
     for name in ["admin", "r1", "r2"] {
         assert_eq!(id_of(&before, name), id_of(&after, name));
     }
-    assert!(names(&events, &w.delta).is_empty(), "only the record and the document change");
+    assert!(
+        names(&events, &w.delta).is_empty(),
+        "only the record and the document change"
+    );
 }
 
 #[test]
@@ -679,12 +814,18 @@ fn expiry_changes_are_metadata_updates() {
         &doc(delegated(1), std::vec![admin(&[0]), a]),
         &doc(delegated(1), std::vec![admin(&[0]), b]),
     );
-    assert_eq!(names(&events, &w.delta), ["context_rule_meta_updated"]);
+    assert_eq!(
+        names(&events, &w.delta),
+        sorted(&["context_rule_meta_updated"])
+    );
 }
 
 #[test]
 fn recovery_changes_edit_only_the_recovery_rule() {
-    let mut a = doc(delegated(1), std::vec![admin(&[0]), rule("r1", Some(0), &[0])]);
+    let mut a = doc(
+        delegated(1),
+        std::vec![admin(&[0]), rule("r1", Some(0), &[0])],
+    );
     a.recovery = Some(RecoveryModel {
         quorum: 1,
         delay: 10,
@@ -700,6 +841,11 @@ fn recovery_changes_edit_only_the_recovery_rule() {
     // edited in place without passing through an empty rule.
     assert_eq!(
         names(&events, &w.delta),
-        ["context_rule_removed", "context_rule_added"]
+        sorted(&[
+            "context_rule_removed",
+            "policy_deregistered",
+            "policy_registered",
+            "context_rule_added"
+        ])
     );
 }

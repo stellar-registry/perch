@@ -117,6 +117,41 @@ impl Target {
     }
 }
 
+/// A policy whose `install` always fails: stands in for a policy install
+/// that fails partway through an `apply_doc`.
+#[contract]
+pub struct FailingPolicy;
+
+#[contractimpl]
+impl stellar_accounts::policies::Policy for FailingPolicy {
+    type AccountParams = Val;
+
+    fn enforce(
+        _e: &Env,
+        _context: Context,
+        _authenticated_signers: Vec<Signer>,
+        _context_rule: stellar_accounts::smart_account::ContextRule,
+        _smart_account: Address,
+    ) {
+    }
+
+    fn install(
+        e: &Env,
+        _install_params: Val,
+        _context_rule: stellar_accounts::smart_account::ContextRule,
+        _smart_account: Address,
+    ) {
+        soroban_sdk::panic_with_error!(e, KeyError::Denied);
+    }
+
+    fn uninstall(
+        _e: &Env,
+        _context_rule: stellar_accounts::smart_account::ContextRule,
+        _smart_account: Address,
+    ) {
+    }
+}
+
 /// The mock adapter's circuit id.
 pub const CIRCUIT: [u8; 32] = [0xc1; 32];
 
@@ -360,7 +395,21 @@ pub struct World {
     nonce: Cell<i64>,
 }
 
+/// How [`world_with`] departs from the default world.
+#[derive(Clone, Copy, Default)]
+pub struct Opts {
+    /// The account is the full-replace oracle (`perch_testkit::delta`).
+    pub oracle: bool,
+    /// [`FailingPolicy`] sits at the spending-limit address: any capped
+    /// rule's install fails.
+    pub failing_spending_limit: bool,
+}
+
 pub fn world() -> World {
+    world_with(Opts::default())
+}
+
+pub fn world_with(opts: Opts) -> World {
     let env = Env::default();
     let network_id = env
         .crypto()
@@ -381,11 +430,15 @@ pub fn world() -> World {
         PerchInterpreter,
         (),
     );
-    env.register_at(
-        &infra::perch_spending_limit::address(&env),
-        PerchSpendingLimit,
-        (),
-    );
+    if opts.failing_spending_limit {
+        env.register_at(&infra::perch_spending_limit::address(&env), FailingPolicy, ());
+    } else {
+        env.register_at(
+            &infra::perch_spending_limit::address(&env),
+            PerchSpendingLimit,
+            (),
+        );
+    }
 
     let owner = env.register(Key, ());
     let device = env.register(Key, ());
@@ -394,10 +447,12 @@ pub fn world() -> World {
     let adapter = env.register(MockAdapter, ());
     let pool = env.register(PerchZkPool, ());
     let target = env.register(Target, ());
-    let account = env.register(
-        PerchAccount,
-        (vec![&env, Signer::Delegated(owner.clone())],),
-    );
+    let admin = vec![&env, Signer::Delegated(owner.clone())];
+    let account = if opts.oracle {
+        env.register(perch_testkit::delta::OracleAccount, (admin,))
+    } else {
+        env.register(PerchAccount, (admin,))
+    };
 
     // Enforcing authorization from here on: only explicit entries pass.
     env.set_auths(&[]);

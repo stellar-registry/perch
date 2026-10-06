@@ -51,6 +51,7 @@ All hash claims hold up to a SHA-256 collision.
 | Lean evaluator ↔ Rust `rpn::eval` | `testdata/eval/` vectors replayed by `perch-conformance` (every PR), the Lean model (`drt`), and the compiled wasm (`conformance-wasm`); the `eval_fail_closed` fuzz target |
 | Lean canonicalizer ↔ Rust `canon.rs` | `drt` parses and re-emits every `testdata/*.canonical.json` document (five, covering both signer kinds, `all`/`threshold` principals, a cap, `guardian-only` and `combined` recovery) and the three `testdata/recovery/config-*.canonical.json` recovery members, which `crates/perch-ir/tests/recovery.rs` regenerates from Rust |
 | Rust parse ↔ emit, recovery included | fuzz targets (`fuzz/fuzz_targets/`): `ir_parse_roundtrip` (arbitrary bytes, seeded with the fixtures) and `recovery_canonical_roundtrip` (arbitrary `RecoveryConfig`s: round-trip, determinism, member slice, one-field-change injectivity) |
+| T8's preimage ↔ the compiler's `config_hash` | `crates/integration-tests/tests/config_hash.rs` (native compiler, every PR) and `release_stack.rs` (the deployed compiler wasm, in CI): for each recovery-member fixture, `config_hash` equals `sha256("perch/recovery/config" \|\| fixture bytes)` recomputed with `sha2`; changing any one configuration field moves it to the recomputed hash of the changed text, and rotating a signer does not move it |
 | Rust ↔ TypeScript canonical form | `packages/perch-js/test/parity.test.ts` on the document fixtures (perch-js has no recovery-only canonicalizer) |
 | `rpn::eval` wasm under K semantics | Komet, three properties, 50 fuzz examples each in CI; symbolic `komet prove` only locally (`komet/README.md`) |
 
@@ -66,11 +67,8 @@ real-proof tests, and the testnet exercise:
   context-rule selection, `execute`, `apply_doc`, the reserved-name guards, upgrades.
 - The ZK circuit (`circuits/`), the vendored UltraHonk verifier, the adapter
   (`crates/perch-zk-adapter`), and the membership pool (`crates/perch-zk-pool`).
-- The document compiler beyond the canonical bytes: validation, `derive_target` (spec §7),
-  the compiled recovery configuration, and the `config_hash` computation itself. T8 proves
-  the preimage injective; that `perch-doc-compiler` hashes exactly that preimage is by
-  reading `to_compiled_recovery`, since the integration tests take `config_hash` from the
-  compiler rather than recomputing it.
+- The document compiler beyond the canonical bytes and `config_hash`: validation,
+  `derive_target` (spec §7), and the rest of the compiled recovery configuration.
 - The release pipeline and deployment verification (`docs/deploy/README.md`).
 - The trusted base: the pinned OpenZeppelin `stellar-accounts` fork, the Soroban host,
   rustc/LLVM, and SHA-256.

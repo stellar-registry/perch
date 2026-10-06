@@ -68,15 +68,24 @@ the Rust side, that every recovery configuration round-trips through the
 parser, that `recovery_canonical_json` is the document's member, and that
 changing one field changes the text.
 
+How T8 is tied to the doc compiler: `crates/integration-tests/tests/config_hash.rs`
+compiles a document around each recovery-member fixture and requires
+`config_hash = sha256("perch/recovery/config" || fixture bytes)`, recomputed
+with `sha2`. It then changes each configuration field in turn (profile,
+mode, every guardian and ZK field, controller, baseline, replaceable ids,
+the three ledger counts) and requires the hash to move to the recomputed
+hash of the changed text, and it requires a signer rotation to leave the
+hash alone. The same check runs against the deployed compiler wasm in
+`release_stack.rs`.
+
 What this does not cover:
 
 - That the Lean emitter and `canon.rs` agree on every input. That link is
   the fixtures and the fuzzing above, not a proof.
 - What the fields mean: validation (`validate.rs`), `derive_target`, and
   the compiled configuration. The proofs are about bytes.
-- That `perch-doc-compiler` computes `config_hash` over exactly this
-  preimage. That is by reading `to_compiled_recovery`; the integration tests
-  take `config_hash` from the compiler rather than recomputing it.
+- That the compiler hashes exactly this preimage on every input. The test
+  above covers the fixtures and their single-field changes, not a proof.
 - The recovery controller's state machine, account authorization, and the
   ZK circuit, adapter, and pool. None has a formal model. See
   `docs/verification/PLAN.md` ("Coverage today") for the full list and the

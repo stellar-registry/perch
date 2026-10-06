@@ -24,7 +24,10 @@ Companion material:
 
 Keywords: **must**, **must not**, **may** are requirements on the
 implementation (the controller, the account, the adapter, the pool, the doc
-compiler). "Refuse" means the call fails and changes no state.
+compiler). "Refuse" means the call fails and changes no state. Soroban
+rolls back every write of a failing invocation, so no transition in this
+spec both refuses and records something: a transition either succeeds and
+writes, or refuses and writes nothing.
 
 ## Decision summary
 
@@ -171,10 +174,11 @@ compiler, the account, and the controller share one definition. It carries
 
 ### 3.2 Configuration identity
 
-`config_hash = sha256("perch/recovery/config" || C)`, where `C` is the
-canonical JSON (`CANONICAL.md`) of the document's `recovery` member. The doc
-compiler computes it and returns it with the compiled configuration.
-Evidence providers compute it from the document they are shown.
+`config_hash = sha256("perch/recovery/config" || C)`
+(`config::config_hash`), where `C` is the canonical JSON (`CANONICAL.md`)
+of the document's `recovery` member. The doc compiler computes it and
+returns it with the compiled configuration. Evidence providers compute it
+from the document they are shown.
 
 Configuration identity is therefore the reviewed text: profile, mode,
 guardians, quorum, adapter, circuit id, pool, enrollment id, commitment,
@@ -509,8 +513,10 @@ Permissionless. Same refusals as T2 for the ZK factor. Then:
 is satisfied for a live collecting attempt `A`:
 
 - for lost-key, if the account's current applied-document hash differs from
-  `A.source_doc_hash`, `A` is invalidated: a fresh attempt is required, and
-  its evidence starts over;
+  `A.source_doc_hash`, `A` is invalidated. The evidence call that triggered
+  the check **succeeds** and records the invalidation; refusing instead
+  would roll it back, leaving `A` promotable if the document later changed
+  back. A fresh attempt is required, and its evidence starts over;
 - otherwise `A` becomes `Authorized` with `authorized_at = L` and its
   windows are fixed. `invalidate_below` is set to the attempt-id counter,
   which invalidates every other collecting attempt in O(1), however many an
@@ -954,8 +960,17 @@ Every account, enrolled or not, upgrades in two steps:
 2. **`execute_upgrade(request_id)`** — owner authorization. The checks run
    in this order (`UpgradeRequest::readiness`):
    - **Stale:** the request's `generation` differs from the current
-     recovery generation. The request is cleared and the call refused,
-     whether or not the delay has passed.
+     recovery generation. The call is refused (`StaleUpgrade`), whether or
+     not the delay has passed. It does **not** clear the request: a refused
+     invocation rolls back its writes. Nothing needs clearing anyway. The
+     generation never decreases, so a stale request can never execute; it
+     stays inert until `schedule_upgrade` replaces it, `cancel_upgrade`
+     removes it, or a completion clears the slot. Wallets read staleness
+     from the `pending_upgrade` and `recovery_generation` views.
+
+     The alternative, a successful "cleanup" outcome that removes the
+     request without upgrading, was rejected. It would make a call that
+     did not upgrade report success.
    - **Not yet:** `L < executable_at`. Refused.
    - Also refused if the request is not the pending one, or an attempt is
      authorized and live.

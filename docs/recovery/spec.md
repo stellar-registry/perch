@@ -800,8 +800,8 @@ Two rules bound that cost:
 
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps on signers, rules, and
-  canonical size (`perch_doc_compiler::MAX_DOC_SIGNERS` = 4,
-  `MAX_DOC_RULES` = 9, `MAX_DOC_CANONICAL_BYTES` = 8 192). The caps are
+  canonical size (`perch_doc_compiler::MAX_DOC_SIGNERS` = 6,
+  `MAX_DOC_RULES` = 8, `MAX_DOC_CANONICAL_BYTES` = 8 192). The caps are
   sized so that the worst-case completion fits the transaction budget: the
   measurements, the frontier, and the choice are in `budgets.md`, "Document
   caps", and `release_stack.rs`'s `worst_case_*` tests hold them in CI.

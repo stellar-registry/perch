@@ -24,7 +24,6 @@ use perch_testkit::delta::*;
 use proptest::prelude::*;
 use soroban_sdk::{Address, TryFromVal};
 use std::collections::{BTreeMap, BTreeSet};
-use stellar_accounts::smart_account::MAX_SIGNERS as OZ_MAX_SIGNERS;
 
 fn cases(default: u32) -> u32 {
     std::env::var("PERCH_DELTA_CASES")
@@ -891,15 +890,20 @@ fn an_edit_where_nothing_survives_re_adds_a_changed_policy_after_the_new_ones() 
 
 #[test]
 fn a_full_swap_can_be_edited_in_place_up_to_the_signer_limit() {
-    // Nothing survives, so an in-place edit adds before it removes.
-    // 8 + 7 = 15 signers at the peak: an in-place order exists.
-    let p = full_swap(8, 7);
-    assert!(p.editable);
-    assert_eq!(p.step, Step::InPlace);
-    // 8 + 8 = 16 would pass OZ's limit: only replacement is possible.
-    let p = full_swap(8, 8);
-    assert!(!p.editable);
-    assert_eq!(p.step, Step::Replace);
+    // Nothing survives, so an in-place edit adds before it removes: at the
+    // signer cap the peak is twice the cap, and an in-place order exists
+    // while that is within OZ's per-rule limit (15), as it is at the caps.
+    let n = MAX_DOC_SIGNERS as usize;
+    let p = full_swap(n, n);
+    assert_eq!(p.editable, 2 * n <= 15);
+    assert_eq!(
+        p.step,
+        if p.editable {
+            Step::InPlace
+        } else {
+            Step::Replace
+        }
+    );
 }
 
 /// The rule `name`'s planned step for `a`→`b` under the cheapest apply, and
@@ -968,19 +972,31 @@ fn rotating_a_capped_rules_keys_switches_to_replacement_where_it_is_cheaper() {
     // A rule with both policies: replacing it also reinstalls and
     // re-registers the interpreter and the spending limit, so in-place edits
     // stay cheaper for more rotated keys.
-    let mut capped = rule("r1", Some(0), &[1, 2, 3, 4, 5, 6, 7, 8]);
+    // The largest such rule the caps admit: every signer but the admin's.
+    let n = MAX_DOC_SIGNERS as usize - 1;
+    let keys: std::vec::Vec<usize> = (1..=n).collect();
+    let mut capped = rule("r1", Some(0), &keys);
     capped.functions = Some(std::vec!["transfer"]);
     capped.cap = Some((1_000, 100));
-    let a = doc(delegated(9), std::vec![admin(&[0]), capped]);
+    let a = doc(delegated(n + 1), std::vec![admin(&[0]), capped]);
     // Each rotated key costs 532 bytes in place (an addition and a removal,
     // and a registration and deregistration either path pays). Replacing
-    // costs 3 716 whatever the count: the removal and addition (484), the
+    // costs the same whatever the count: the removal and addition (484), the
     // policies' reinstallation and re-registration (928), and 288 to
-    // deregister and re-register each of the eight keys. So six keys rotate
-    // in place and seven or eight replace the rule.
-    let mut expected = std::vec![Step::InPlace; 6];
-    expected.extend([Step::Replace; 2]);
-    assert_eq!(sweep(&a, "r1", 1, 8), expected);
+    // deregister and re-register each of the rule's keys. With eight keys
+    // six rotate in place and seven or eight replace the rule; at the caps
+    // (five keys) every rotation stays in place.
+    let replace = 484 + 928 + 288 * n;
+    let expected: std::vec::Vec<Step> = (1..=n)
+        .map(|k| {
+            if 532 * k <= replace {
+                Step::InPlace
+            } else {
+                Step::Replace
+            }
+        })
+        .collect();
+    assert_eq!(sweep(&a, "r1", 1, n), expected);
 }
 
 #[test]

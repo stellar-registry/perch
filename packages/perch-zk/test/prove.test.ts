@@ -53,7 +53,7 @@ describe('bb.js proving', () => {
     // And bb.js accepts the CLI's proof of the same statement.
     expect(await verify(circuit, { proof: cli, publicInputs: one.publicInputs })).toBe(true);
 
-    if (process.env.PERCH_ZK_WRITE_VECTORS) writeFileSync(BBJS_PROOF, one.proof);
+    if (process.env.PERCH_ZK_WRITE_VECTORS === '1') writeFileSync(BBJS_PROOF, one.proof);
   }, 120_000);
 
   it('refuses a proof for other public inputs, and a non-ZK proof', async () => {

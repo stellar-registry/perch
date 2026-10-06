@@ -597,7 +597,7 @@ fn witness_index_replays_the_pool_storage() {
         .join("../../testdata/zk/witness-replay.json");
     let mut json = serde_json::to_vec_pretty(&serde_json::Value::Object(vector)).unwrap();
     json.push(b'\n');
-    if std::env::var_os("PERCH_ZK_WRITE_VECTORS").is_some() {
+    if std::env::var("PERCH_ZK_WRITE_VECTORS").as_deref() == Ok("1") {
         std::fs::write(&path, &json).unwrap();
     }
     assert_eq!(

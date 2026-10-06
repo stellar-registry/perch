@@ -20,7 +20,7 @@
 extern crate alloc;
 
 use perch_program::InstallParams;
-use perch_recovery_interface::credential::ReplacementSet;
+use perch_recovery_interface::credential::{Credential, ReplacementSet};
 use perch_recovery_interface::RecoveryAction;
 use soroban_sdk::{contractclient, contracttype, Address, Bytes, BytesN, Env, String, Vec};
 use soroban_sdk_tools::scerr;
@@ -36,8 +36,6 @@ pub use perch_recovery_interface::config::{
 
 #[cfg(feature = "contract")]
 use perch_compile::{compile, CompileConfig, LoweredRule, ScopeSpec, SignerSpec};
-#[cfg(feature = "contract")]
-use perch_recovery_interface::credential::Credential;
 #[cfg(feature = "contract")]
 use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 
@@ -191,6 +189,12 @@ pub struct DerivedTarget {
     pub config_hash: BytesN<32>,
     /// Fingerprints of every credential in the target (spec §7.3 rule 7).
     pub fingerprints: Vec<BytesN<32>>,
+    /// The credentials occupying the replaced signer slots in the source:
+    /// the applied document's for lost-key, the baseline's for compromise.
+    /// External keys are canonicalized by their verifier, so a credential's
+    /// `fingerprint` is the one revocation compares. The controller records
+    /// them at T1 and the completion revokes them (spec §8).
+    pub replaced: Vec<Credential>,
 }
 
 /// Whether a compiled rule set keeps a policy-free self-admin rule with at
@@ -305,6 +309,12 @@ impl PerchDocCompiler {
         if !admin_survives(&compiled.rules) {
             return Err(DocCompilerError::AdminLockout);
         }
+        let replaced_slots: alloc::vec::Vec<perch_ir::SignerDecl> = source
+            .signers
+            .iter()
+            .filter(|s| declared.iter().any(|r| r.signer_id == s.id))
+            .cloned()
+            .collect();
         let config_hash = compiled
             .recovery
             .first()
@@ -315,6 +325,7 @@ impl PerchDocCompiler {
             doc_hash: compiled.doc_hash,
             config_hash,
             fingerprints: compiled.fingerprints,
+            replaced: canonical_credentials(e, &replaced_slots)?,
         })
     }
 }
@@ -379,29 +390,33 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
     Ok(CompiledDoc {
         doc_hash,
         canonical,
-        fingerprints: fingerprints(e, doc)?,
+        fingerprints: fingerprints(e, &canonical_credentials(e, &doc.signers)?)?,
         rules,
         recovery,
     })
 }
 
-/// Fingerprint every declared signer (spec §8). External keys are first
-/// canonicalized by their verifier, one batch call per verifier, so a
-/// revoked key cannot return under another encoding of the same key.
+/// The credentials `signers` declare, with every external key canonicalized
+/// by its verifier (one batch call per verifier, the call OZ's duplicate
+/// signer check makes), so a revoked key cannot return under another
+/// encoding of the same key (spec §8).
 #[cfg(feature = "contract")]
-fn fingerprints(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<Vec<BytesN<32>>, DocCompilerError> {
+fn canonical_credentials(
+    e: &Env,
+    signers: &[perch_ir::SignerDecl],
+) -> Result<Vec<Credential>, DocCompilerError> {
     // Batch external keys by verifier, remembering each signer's slot.
     let mut batches: Map<Address, Vec<Val>> = Map::new(e);
-    let mut credentials: alloc::vec::Vec<(Address, Option<u32>)> = alloc::vec::Vec::new();
-    for s in &doc.signers {
+    let mut slots: alloc::vec::Vec<(Address, Option<u32>)> = alloc::vec::Vec::new();
+    for s in signers {
         match &s.method {
             perch_ir::SignerMethod::Delegated { address } => {
-                credentials.push((Address::from_str(e, address), None));
+                slots.push((Address::from_str(e, address), None));
             }
             perch_ir::SignerMethod::External { verifier, key } => {
                 let verifier = Address::from_str(e, verifier);
                 let mut batch = batches.get(verifier.clone()).unwrap_or(Vec::new(e));
-                credentials.push((verifier.clone(), Some(batch.len())));
+                slots.push((verifier.clone(), Some(batch.len())));
                 batch.push_back(hex_bytes(e, key)?.into_val(e));
                 batches.set(verifier, batch);
             }
@@ -419,8 +434,8 @@ fn fingerprints(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<Vec<BytesN<32>>, D
         canonical.set(verifier, keys);
     }
     let mut out = Vec::new(e);
-    for (address, slot) in credentials {
-        let credential = match slot {
+    for (address, slot) in slots {
+        out.push_back(match slot {
             None => Credential::Delegated(address),
             Some(i) => {
                 let key = canonical
@@ -429,12 +444,20 @@ fn fingerprints(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<Vec<BytesN<32>>, D
                     .ok_or(DocCompilerError::KeyNotCanonicalizable)?;
                 Credential::External(address, key)
             }
-        };
-        out.push_back(
-            credential
-                .fingerprint(e)
-                .map_err(|_| DocCompilerError::DocInvalid)?,
-        );
+        });
+    }
+    Ok(out)
+}
+
+/// The fingerprint of each credential (what revocation compares).
+#[cfg(feature = "contract")]
+fn fingerprints(
+    e: &Env,
+    credentials: &Vec<Credential>,
+) -> Result<Vec<BytesN<32>>, DocCompilerError> {
+    let mut out = Vec::new(e);
+    for c in credentials.iter() {
+        out.push_back(c.fingerprint(e).map_err(|_| DocCompilerError::DocInvalid)?);
     }
     Ok(out)
 }

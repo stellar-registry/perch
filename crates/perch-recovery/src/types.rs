@@ -1,5 +1,6 @@
 //! Controller state records (`docs/recovery/spec.md` §6).
 
+use perch_recovery_interface::credential::Credential;
 use perch_recovery_interface::RecoveryAction;
 use soroban_sdk::{contracttype, Address, BytesN, Env, Vec};
 
@@ -80,6 +81,10 @@ pub struct Attempt {
     pub target_config_hash: BytesN<32>,
     /// `ReplacementSet::hash` of the declared replacements.
     pub replacements_hash: BytesN<32>,
+    /// The credentials occupying the replaced signer slots in the source
+    /// (the baseline's, for compromise), keys canonicalized. The completion
+    /// returns them for the account to revoke (spec §8).
+    pub replaced: Vec<Credential>,
     pub state: AttemptState,
     /// Distinct enrolled guardians that approved the initiation statement.
     pub guardians: Vec<Address>,

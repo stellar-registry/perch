@@ -892,10 +892,36 @@
                     },
                     {
                       "key": {
+                        "symbol": "RecoveryGeneration"
+                      },
+                      "val": {
+                        "u64": "1"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "RecoveryRule"
                       },
                       "val": {
                         "u32": 3
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "RuleIds"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "u32": 1
+                          },
+                          {
+                            "u32": 2
+                          },
+                          {
+                            "u32": 3
+                          }
+                        ]
                       }
                     },
                     {

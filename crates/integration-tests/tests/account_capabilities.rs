@@ -163,7 +163,8 @@ fn an_upgrade_waits_out_the_delay_then_replaces_the_code() {
         pending.executable_at,
         w.ledger() + ACCOUNT_UPGRADE_DELAY_LEDGERS
     );
-    assert_eq!(pending.controller, None);
+    assert_eq!(pending.controller_epoch, None);
+    assert_eq!(pending.generation, w.client().recovery_generation());
 
     assert_eq!(
         err(execute_upgrade(&w, id)),
@@ -210,18 +211,19 @@ fn cancelling_or_rescheduling_drops_the_pending_upgrade() {
 }
 
 #[test]
-fn any_epoch_change_makes_a_queued_upgrade_stale() {
+fn any_recovery_transition_makes_a_queued_upgrade_stale() {
     let w = world();
     let doc = w.doc(Some(w.recovery("loss", Mode::Guardian)));
     w.enroll(&doc);
+    assert_eq!(w.client().recovery_generation(), 1, "enrollment");
     let wasm = upload(&w);
     let id = schedule(&w, &wasm, 0).unwrap();
     assert_eq!(
-        w.client().pending_upgrade().unwrap().epoch,
-        w.ctl().epoch(&w.account)
+        w.client().pending_upgrade().unwrap().controller_epoch,
+        Some(w.ctl().epoch(&w.account))
     );
 
-    // A reconfiguration bumps the epoch.
+    // A reconfiguration advances the generation.
     let mut quorum_one = w.recovery("loss", Mode::Guardian);
     quorum_one.quorum = 1;
     w.enroll(&w.doc(Some(quorum_one)));
@@ -237,11 +239,71 @@ fn any_epoch_change_makes_a_queued_upgrade_stale() {
         "the code is unchanged"
     );
 
-    // So does adopting or dropping a controller.
+    // So does dropping a controller.
     let id = schedule(&w, &wasm, 0).unwrap();
     w.enroll(&w.doc(None));
     w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
     assert_eq!(execute_upgrade(&w, id), Ok(false));
+}
+
+/// The review's sequence: schedule while unenrolled, enroll, remove, wait
+/// out the delay. The account ends with no controller, as at scheduling,
+/// but its recovery generation moved twice, so the request is dead. Only an
+/// account-owned counter catches this: no controller epoch spans the
+/// unenrolled periods.
+#[test]
+fn enrolling_and_removing_recovery_stales_an_unenrolled_upgrade() {
+    let w = world();
+    w.enroll(&w.doc(None));
+    assert_eq!(
+        w.client().recovery_generation(),
+        0,
+        "no recovery transition yet"
+    );
+    let wasm = upload(&w);
+    let id = schedule(&w, &wasm, 0).unwrap();
+    assert_eq!(w.client().pending_upgrade().unwrap().controller_epoch, None);
+
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    w.enroll(&w.doc(None));
+    assert_eq!(w.client().recovery_generation(), 2);
+    assert_eq!(w.client().recovery_controller(), None);
+
+    w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    assert_eq!(execute_upgrade(&w, id), Ok(false), "stale, not executed");
+    assert_eq!(w.client().pending_upgrade(), None);
+    assert!(
+        w.client().try_applied_doc_hash().is_ok(),
+        "the code is unchanged"
+    );
+
+    // A request scheduled after the cycle, with no transition since, runs.
+    let id = schedule(&w, &wasm, 0).unwrap();
+    w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    assert_eq!(execute_upgrade(&w, id), Ok(true));
+}
+
+#[test]
+fn a_controller_switch_and_an_executed_upgrade_advance_the_generation() {
+    let w = world();
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    assert_eq!(w.client().recovery_generation(), 1);
+    // Re-applying the same configuration is not a transition.
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    assert_eq!(w.client().recovery_generation(), 1);
+
+    // A switch removes at one controller and enrolls at the other.
+    let other = w.env.register(perch_recovery::PerchRecovery, ());
+    let mut switched = w.recovery("loss", Mode::Guardian);
+    switched.controller = other.clone();
+    w.enroll(&w.doc(Some(switched)));
+    assert_eq!(w.client().recovery_controller(), Some(other));
+    assert_eq!(w.client().recovery_generation(), 3);
+
+    let wasm = upload(&w);
+    let id = schedule(&w, &wasm, 0).unwrap();
+    w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    assert_eq!(execute_upgrade(&w, id), Ok(true));
 }
 
 #[test]

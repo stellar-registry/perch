@@ -1075,6 +1075,29 @@
                     },
                     {
                       "key": {
+                        "symbol": "RecoveryGeneration"
+                      },
+                      "val": {
+                        "u64": "3"
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "RuleIds"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "u32": 7
+                          },
+                          {
+                            "u32": 8
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
                         "vec": [
                           {
                             "symbol": "Count"

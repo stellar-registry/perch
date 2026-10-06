@@ -537,6 +537,21 @@
                     },
                     {
                       "key": {
+                        "symbol": "RuleIds"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "u32": 1
+                          },
+                          {
+                            "u32": 2
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "key": {
                         "vec": [
                           {
                             "symbol": "Count"

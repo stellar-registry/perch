@@ -287,7 +287,10 @@ pub enum ValidationError {
     /// depth behind the account's reserved-name guard
     /// (`docs/recovery/spec.md` §15). A rule scoped to the controller is
     /// allowed: a perch account approves, as a guardian, recoveries at the
-    /// controller it uses itself.
+    /// controller it uses itself. The reserved-name guard is what protects
+    /// the controller: every entry point acting on the account's own
+    /// recovery state is reserved, and every other one takes a guardian's
+    /// approval of another account's statement (spec §15, I1-I3).
     RuleScopedToRecoveryContract {
         /// The offending rule name.
         rule: String,

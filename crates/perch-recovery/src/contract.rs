@@ -30,7 +30,7 @@ use crate::types::{
 use perch_doc_compiler::{admin_survives, DocCompilerClient};
 use perch_recovery_interface::account::RecoveryAccountClient;
 use perch_recovery_interface::config::{CompiledRecoveryConfig, CompiledZkFactor, RecoveryProfile};
-use perch_recovery_interface::controller::{RecoveryError, SyncOutcome, UpgradeStep};
+use perch_recovery_interface::controller::{Completion, RecoveryError, SyncOutcome, UpgradeStep};
 use perch_recovery_interface::credential::ReplacementSet;
 use perch_recovery_interface::zk::{MembershipPoolClient, ZkAdapterClient, ZkEvidence};
 use perch_recovery_interface::{
@@ -680,6 +680,16 @@ fn begin(
             return Err(RecoveryError::CredentialRevoked);
         }
     }
+    // A completion revokes every replaced source credential (spec §8), so a
+    // target that keeps one would revoke part of itself.
+    for credential in derived.replaced.iter() {
+        let fingerprint = credential
+            .fingerprint(e)
+            .map_err(|_| RecoveryError::InvalidReplacements)?;
+        if derived.fingerprints.contains(&fingerprint) {
+            return Err(RecoveryError::InvalidReplacements);
+        }
+    }
     if let Some(z) = replacements.zk_enrollment.first() {
         if view.is_enrolled_id(&z.id) {
             return Err(RecoveryError::EnrollmentIdReused);
@@ -710,6 +720,7 @@ fn begin(
         target_doc_hash: derived.doc_hash.clone(),
         target_config_hash: derived.config_hash,
         replacements_hash,
+        replaced: derived.replaced,
         state: AttemptState::Collecting,
         guardians: Vec::new(e),
         zk_nullifier: None,
@@ -912,7 +923,10 @@ fn complete(
         target_doc_hash: attempt.target_doc_hash,
     }
     .publish(e);
-    Ok(SyncOutcome::Completed(attempt.id))
+    Ok(SyncOutcome::Completed(Completion {
+        attempt_id: attempt.id,
+        replaced: attempt.replaced,
+    }))
 }
 
 // --------------------------------------------------------------------------

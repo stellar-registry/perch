@@ -1134,6 +1134,93 @@ fn compromise_restores_the_baseline_and_revokes_everything_added_since() {
     assert!(!w.activity_as(&thief));
 }
 
+/// The review's sequence (spec §8): the baseline names owner A, the
+/// current document has moved to owner B, and a compromise recovery
+/// replaces A's slot with C. A must be revoked although the current
+/// document no longer had it, or a second compromise recovery from the same
+/// baseline would restore it.
+#[test]
+fn a_replaced_baseline_credential_never_returns() {
+    let w = world();
+    let baseline = w.doc(None);
+    let mut r = w.recovery("loss", Mode::Guardian);
+    r.baseline = Some(w.doc_hash(&baseline));
+    w.enroll(&w.doc(Some(r.clone())));
+    let (a, b, c) = (w.owner.clone(), w.new_key(), w.new_key());
+    let mut moved = w.doc(Some(r));
+    moved.signers[0].1 = b.clone();
+    w.enroll(&moved);
+    w.ctl().publish_baseline(&w.account, &baseline.bytes(&w));
+
+    let replacements = w.replacements(&c, None);
+    let id = w.ctl().begin_compromise(&w.account, &replacements);
+    let source = w.ctl().baseline(&w.account).unwrap();
+    let target = w.target_bytes(RecoveryAction::Compromise, &source, &replacements);
+    authorize(&w, id);
+    w.advance(DELAY);
+    w.complete(&target).unwrap();
+
+    assert!(
+        w.client().is_revoked(&fingerprint(&w, &a)),
+        "replaced in the baseline"
+    );
+    assert!(
+        w.client().is_revoked(&fingerprint(&w, &b)),
+        "dropped from the current document"
+    );
+    assert!(!w.client().is_revoked(&fingerprint(&w, &c)));
+
+    // A second compromise recovery from the same baseline cannot restore A.
+    let empty = perch_recovery_interface::credential::ReplacementSet {
+        signers: soroban_sdk::Vec::new(&w.env),
+        zk_enrollment: soroban_sdk::Vec::new(&w.env),
+    };
+    assert_eq!(
+        w.ctl().try_begin_compromise(&w.account, &empty),
+        Err(Ok(RecoveryError::CredentialRevoked))
+    );
+    assert!(!w.activity_as(&a));
+    assert!(w.activity_as(&c));
+}
+
+/// Names for the rules that bring a test document to the 16-rule cap.
+const CAP_RULES: [&str; 14] = [
+    "r00", "r01", "r02", "r03", "r04", "r05", "r06", "r07", "r08", "r09", "r10", "r11", "r12",
+    "r13",
+];
+
+/// Spec §7.5: a completion's cost is bounded by the document caps, not by
+/// the account's history. `apply_doc` once scanned every rule id ever
+/// assigned, so (the review's regression) 19 applications of a 16-rule
+/// document pushed a completion past the 400-entry footprint limit, and a
+/// twentieth ordinary application failed at 403. The test host enforces
+/// the mainnet limits, so every application and the completion here must
+/// fit, and the completion's footprint must not depend on the churn.
+#[test]
+fn completion_cost_does_not_grow_with_policy_churn() {
+    let completion_entries = |applications: u32| {
+        let w = world();
+        let mut doc = w.doc(Some(w.recovery("protected", Mode::Guardian)));
+        for name in CAP_RULES {
+            doc.rules.push((name, w.new_key()));
+        }
+        for _ in 0..applications {
+            w.enroll(&doc);
+        }
+        let (id, _, target) = open_lost_key(&w, None);
+        authorize(&w, id);
+        w.advance(DELAY);
+        w.complete(&target)
+            .expect("completion within the footprint limits");
+        let used = w.env.cost_estimate().resources();
+        used.disk_read_entries + used.memory_read_entries + used.write_entries
+    };
+    let once = completion_entries(1);
+    let churned = completion_entries(40);
+    assert_eq!(once, churned, "completion footprint grew with history");
+    assert!(once <= 400);
+}
+
 #[test]
 fn an_old_baseline_cannot_restore_a_revoked_credential() {
     let w = world();
@@ -1213,6 +1300,12 @@ fn replacement_sets_follow_the_permitted_change_rules() {
         zk_enrollment: soroban_sdk::Vec::new(&w.env),
     };
     assert_eq!(refused(&empty), Err(Ok(RecoveryError::InvalidReplacements)));
+    // Replacing a slot with the credential it already holds would leave a
+    // revoked credential in the target.
+    assert_eq!(
+        refused(&w.replacements(&w.owner, None)),
+        Err(Ok(RecoveryError::InvalidReplacements))
+    );
     // A replacement key equal to another signer's fails document validation.
     assert_eq!(
         refused(&w.replacements(&w.device, None)),

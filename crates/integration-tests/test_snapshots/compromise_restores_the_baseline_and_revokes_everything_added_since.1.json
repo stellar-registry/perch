@@ -469,6 +469,25 @@
                   },
                   {
                     "key": {
+                      "symbol": "replaced"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "vec": [
+                            {
+                              "symbol": "Delegated"
+                            },
+                            {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "replacements_hash"
                     },
                     "val": {
@@ -1397,10 +1416,36 @@
                     },
                     {
                       "key": {
+                        "symbol": "RecoveryGeneration"
+                      },
+                      "val": {
+                        "u64": "2"
+                      }
+                    },
+                    {
+                      "key": {
                         "symbol": "RecoveryRule"
                       },
                       "val": {
                         "u32": 9
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "RuleIds"
+                      },
+                      "val": {
+                        "vec": [
+                          {
+                            "u32": 7
+                          },
+                          {
+                            "u32": 8
+                          },
+                          {
+                            "u32": 9
+                          }
+                        ]
                       }
                     },
                     {

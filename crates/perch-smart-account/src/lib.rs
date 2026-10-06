@@ -24,13 +24,12 @@ use perch_doc_compiler::{
     admin_survives, CompiledDoc, CompiledRule, CompiledZkFactor, DocCompilerClient,
     DocCompilerError, RuleScope,
 };
-use perch_recovery_interface::account::{
-    is_frozen, is_reserved_invoker_only, ACCOUNT_UPGRADE_DELAY_LEDGERS,
-};
+use perch_recovery_interface::account::{is_frozen, is_reserved_invoker_only, UpgradeReadiness};
 use perch_recovery_interface::config::{leaf_to_insert, zk_factor_transition_ok};
 use perch_recovery_interface::controller::{
     RecoveryError, RecoveryHooksClient, SyncOutcome, UpgradeStep,
 };
+use perch_recovery_interface::credential::{revocations, Credential};
 use perch_recovery_interface::zk::MembershipPoolClient;
 use perch_recovery_interface::UpgradeSubject;
 use soroban_sdk::{
@@ -42,7 +41,7 @@ use soroban_sdk::{
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
 use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 use stellar_accounts::smart_account::{
-    self, AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccount, SmartAccountStorageKey,
+    self, AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccount,
 };
 
 // Re-exported so `impl_perch_smart_account!` can name them via `$crate::…`
@@ -108,6 +107,8 @@ pub enum PerchAccountError {
     UpgradeNotReady,
     /// A ledger computation overflowed `u32`.
     TimingOverflow,
+    /// A completion handed back a credential that cannot be fingerprinted.
+    InvalidCredential,
     #[from_contract_client]
     Compiler(DocCompilerError),
     #[from_contract_client]
@@ -141,20 +142,9 @@ pub struct FreezeGate {
     pub until: u32,
 }
 
-/// A scheduled account upgrade (spec §12).
-#[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UpgradeRequest {
-    pub request_id: u64,
-    pub wasm_hash: BytesN<32>,
-    /// The adopted controller's epoch at scheduling (`0` without one). Any
-    /// change makes the request stale.
-    pub epoch: u64,
-    /// The controller adopted at scheduling, if any.
-    pub controller: Option<Address>,
-    /// First ledger `execute_upgrade` may run.
-    pub executable_at: u32,
-}
+/// A scheduled account upgrade (spec §12), bound to the account's recovery
+/// generation.
+pub use perch_recovery_interface::account::UpgradeRequest;
 
 /// Emitted after a document is applied: the new canonical `doc_hash`.
 #[contractevent]
@@ -235,6 +225,14 @@ struct PerchStorage {
     enrolled_ids: PersistentMap<BytesN<32>, bool>,
     /// The scheduled upgrade, if any.
     pending_upgrade: InstanceItem<UpgradeRequest>,
+    /// The recovery generation (spec §12): advanced by every recovery
+    /// transition at any controller and by every executed upgrade. Never
+    /// reset; it continues through periods without recovery.
+    recovery_generation: InstanceItem<u64>,
+    /// The context-rule ids currently installed. `apply_doc` removes exactly
+    /// these, so its cost (and a completion's) is bounded by the document
+    /// caps rather than by how many rules the account ever had.
+    rule_ids: InstanceItem<Vec<u32>>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
 }
@@ -296,6 +294,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         // The recovery gate runs before any context rule is touched: OZ's
         // `remove_context_rule` swallows a policy's `uninstall` failure, so
         // only this call can refuse a change.
+        // Every outcome other than `Unchanged`, on either side of a
+        // controller switch, advances the recovery generation (spec §12).
         let old_controller = PerchStorage::get_recovery_controller(e);
         let mut outcome = SyncOutcome::Unchanged;
         if let Some(controller) = &old_controller {
@@ -305,15 +305,21 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
                 &compiled.recovery,
                 &approval_valid_until,
             )??;
+            if outcome.bumps_generation() {
+                advance_generation(e);
+            }
         }
         if let Some(next) = &new_recovery {
             if old_controller.as_ref() != Some(&next.controller) {
-                RecoveryHooksClient::new(e, &next.controller).try_rcv_sync(
+                let enrolled = RecoveryHooksClient::new(e, &next.controller).try_rcv_sync(
                     &me,
                     &compiled.doc_hash,
                     &compiled.recovery,
                     &approval_valid_until,
                 )??;
+                if enrolled.bumps_generation() {
+                    advance_generation(e);
+                }
             }
         }
 
@@ -335,8 +341,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
             None => PerchStorage::remove_current_zk(e),
         }
 
-        if let SyncOutcome::Completed(_) = outcome {
-            complete_recovery(e, &compiled.fingerprints);
+        if let SyncOutcome::Completed(completion) = outcome {
+            complete_recovery(e, &completion.replaced, &compiled.fingerprints)?;
         }
 
         PerchStorage::set_applied_doc(e, &compiled.doc_hash);
@@ -469,9 +475,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         me.require_auth();
         let request_id = PerchStorage::get_next_upgrade_id(e).unwrap_or(0);
         PerchStorage::set_next_upgrade_id(e, &(request_id + 1));
-        let controller = PerchStorage::get_recovery_controller(e);
-        let epoch = match &controller {
-            Some(c) => RecoveryHooksClient::new(e, c).try_rcv_upgrade(
+        let controller_epoch = match &PerchStorage::get_recovery_controller(e) {
+            Some(c) => Some(RecoveryHooksClient::new(e, c).try_rcv_upgrade(
                 &me,
                 &UpgradeStep::Schedule(
                     UpgradeSubject {
@@ -480,41 +485,38 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
                     },
                     approval_valid_until,
                 ),
-            )??,
-            None => 0,
+            )??),
+            None => None,
         };
-        let executable_at = e
-            .ledger()
-            .sequence()
-            .checked_add(ACCOUNT_UPGRADE_DELAY_LEDGERS)
-            .ok_or(PerchAccountError::TimingOverflow)?;
+        let request = UpgradeRequest::schedule(
+            request_id,
+            wasm_hash.clone(),
+            generation(e),
+            controller_epoch,
+            e.ledger().sequence(),
+        )
+        .ok_or(PerchAccountError::TimingOverflow)?;
         drop_pending_upgrade(e);
-        PerchStorage::set_pending_upgrade(
-            e,
-            &UpgradeRequest {
-                request_id,
-                wasm_hash: wasm_hash.clone(),
-                epoch,
-                controller,
-                executable_at,
-            },
-        );
+        PerchStorage::set_pending_upgrade(e, &request);
         UpgradeScheduled {
             request_id,
             wasm_hash,
-            executable_at,
+            executable_at: request.executable_at,
         }
         .publish(e);
         Ok(request_id)
     }
 
     /// Execute the pending upgrade once its delay has elapsed. Owner
-    /// authorization. If the adopted controller or its epoch changed since
-    /// scheduling (a reconfiguration, removal, completed recovery, or other
-    /// upgrade), the request is stale: it is cleared and `false` returned.
-    /// Otherwise the controller bumps the epoch (refusing during an
-    /// authorized attempt), the Wasm is replaced after this invocation, and
-    /// `true` is returned.
+    /// authorization. If the recovery generation moved since scheduling
+    /// (any enrollment, reconfiguration, removal, controller switch,
+    /// completed recovery, or executed upgrade), the request is stale: it is
+    /// cleared and `false` returned, without upgrading. A refusal could not
+    /// clear it, because a failed invocation keeps none of its writes.
+    /// Otherwise the controller, if one is adopted, checks its epoch and
+    /// bumps it (refusing during an authorized attempt), the generation
+    /// advances, the Wasm is replaced after this invocation, and `true` is
+    /// returned.
     fn execute_upgrade(e: &Env, request_id: u64) -> Result<bool, PerchAccountError> {
         let me = e.current_contract_address();
         me.require_auth();
@@ -523,17 +525,23 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         if request.request_id != request_id {
             return Err(PerchAccountError::UpgradeRequestMismatch);
         }
-        if e.ledger().sequence() < request.executable_at {
-            return Err(PerchAccountError::UpgradeNotReady);
+        match request.readiness(e.ledger().sequence(), generation(e)) {
+            UpgradeReadiness::Stale => {
+                drop_pending_upgrade(e);
+                return Ok(false);
+            }
+            UpgradeReadiness::NotYet => return Err(PerchAccountError::UpgradeNotReady),
+            UpgradeReadiness::Ready => {}
         }
-        let controller = PerchStorage::get_recovery_controller(e);
         drop_pending_upgrade(e);
-        if controller != request.controller {
-            return Ok(false);
-        }
-        if let Some(c) = &controller {
-            match RecoveryHooksClient::new(e, c)
-                .try_rcv_upgrade(&me, &UpgradeStep::Execute(request.epoch))
+        if let Some(c) = &PerchStorage::get_recovery_controller(e) {
+            // The generation matched, so the controller was adopted at
+            // scheduling too and its epoch was recorded; the controller
+            // checks that epoch as well.
+            let Some(epoch) = request.controller_epoch else {
+                return Ok(false);
+            };
+            match RecoveryHooksClient::new(e, c).try_rcv_upgrade(&me, &UpgradeStep::Execute(epoch))
             {
                 Ok(Ok(_)) => {}
                 Err(Ok(RecoveryError::StaleUpgrade)) => return Ok(false),
@@ -542,6 +550,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
                 }
             }
         }
+        advance_generation(e);
         UpgradeExecuted {
             request_id,
             wasm_hash: request.wasm_hash.clone(),
@@ -570,6 +579,11 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// approvers approve.
     fn next_upgrade_request_id(e: &Env) -> u64 {
         PerchStorage::get_next_upgrade_id(e).unwrap_or(0)
+    }
+
+    /// The account's recovery generation (spec §12).
+    fn recovery_generation(e: &Env) -> u64 {
+        generation(e)
     }
 
     /// Extend the account's instance, applied document, and the named
@@ -660,22 +674,43 @@ fn is_completion(e: &Env, signatures: &AuthPayload, contexts: &Vec<Context>) -> 
     )
 }
 
-/// A completed recovery revokes every credential the applied document had
-/// and the target drops (spec §8), lifts the freeze, and drops any pending
+/// A completed recovery revokes the union of the credentials it replaced in
+/// its source (the baseline's, for compromise) and every credential the
+/// applied document had that the target drops (spec §8,
+/// `credential::revocations`). It lifts the freeze and drops any pending
 /// upgrade (spec §12).
-fn complete_recovery(e: &Env, target_fingerprints: &Vec<BytesN<32>>) {
+fn complete_recovery(
+    e: &Env,
+    replaced: &Vec<Credential>,
+    target_fingerprints: &Vec<BytesN<32>>,
+) -> Result<(), PerchAccountError> {
+    let mut replaced_fingerprints = Vec::new(e);
+    for credential in replaced.iter() {
+        replaced_fingerprints.push_back(
+            credential
+                .fingerprint(e)
+                .map_err(|_| PerchAccountError::InvalidCredential)?,
+        );
+    }
     let before = PerchStorage::get_applied_fingerprints(e).unwrap_or(Vec::new(e));
-    for fingerprint in before.iter() {
-        if !target_fingerprints.contains(&fingerprint) {
-            PerchStorage::set_revoked(e, &fingerprint, &true);
-            extend_persistent(e, |ttl| {
-                PerchStorage::extend_revoked_ttl(e, &fingerprint, ttl, ttl)
-            });
-            CredentialRevoked { fingerprint }.publish(e);
-        }
+    for fingerprint in revocations(e, &replaced_fingerprints, &before, target_fingerprints).iter() {
+        PerchStorage::set_revoked(e, &fingerprint, &true);
+        extend_persistent(e, |ttl| {
+            PerchStorage::extend_revoked_ttl(e, &fingerprint, ttl, ttl)
+        });
+        CredentialRevoked { fingerprint }.publish(e);
     }
     PerchStorage::remove_gate(e);
     drop_pending_upgrade(e);
+    Ok(())
+}
+
+fn generation(e: &Env) -> u64 {
+    PerchStorage::get_recovery_generation(e).unwrap_or(0)
+}
+
+fn advance_generation(e: &Env) {
+    PerchStorage::set_recovery_generation(e, &(generation(e) + 1));
 }
 
 fn drop_pending_upgrade(e: &Env) {
@@ -698,21 +733,14 @@ fn extend_persistent(e: &Env, f: impl FnOnce(u32)) {
 /// installed for the compiled configuration's hash.
 fn replace_rules(e: &Env, compiled: &CompiledDoc) {
     let interpreter = infra::perch_interpreter::address(e);
-    let next_id: u32 = e
-        .storage()
-        .instance()
-        .get(&SmartAccountStorageKey::NextId)
-        .unwrap_or(0);
-    for id in 0..next_id {
-        if e.storage()
-            .persistent()
-            .has(&SmartAccountStorageKey::ContextRuleData(id))
-        {
-            smart_account::remove_context_rule(e, id);
-        }
+    // Only the rules installed now: deleted ids are never revisited, so the
+    // cost does not grow with the account's history (spec §7.5).
+    for id in PerchStorage::get_rule_ids(e).unwrap_or(Vec::new(e)).iter() {
+        smart_account::remove_context_rule(e, id);
     }
+    let mut installed: Vec<u32> = Vec::new(e);
     for rule in compiled.rules.iter() {
-        install_rule(e, &interpreter, &rule);
+        installed.push_back(install_rule(e, &interpreter, &rule).id);
     }
     match compiled.recovery.first() {
         Some(recovery) => {
@@ -729,6 +757,7 @@ fn replace_rules(e: &Env, compiled: &CompiledDoc) {
                 &Vec::new(e),
                 &policies,
             );
+            installed.push_back(rule.id);
             PerchStorage::set_recovery_rule(e, &rule.id);
             PerchStorage::set_recovery_controller(e, &recovery.controller);
         }
@@ -737,6 +766,7 @@ fn replace_rules(e: &Env, compiled: &CompiledDoc) {
             PerchStorage::remove_recovery_controller(e);
         }
     }
+    PerchStorage::set_rule_ids(e, &installed);
 }
 
 /// Constructor helper: install rule 0, "admin", scoped
@@ -744,7 +774,7 @@ fn replace_rules(e: &Env, compiled: &CompiledDoc) {
 /// call `apply_doc`) and nothing else. Every other capability arrives via an
 /// applied, doc-reviewed rule set.
 pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
-    smart_account::add_context_rule(
+    let rule = smart_account::add_context_rule(
         e,
         &ContextRuleType::CallContract(e.current_contract_address()),
         &String::from_str(e, "admin"),
@@ -752,11 +782,12 @@ pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
         admin_signers,
         &Map::new(e),
     );
+    PerchStorage::set_rule_ids(e, &Vec::from_array(e, [rule.id]));
 }
 
 /// Map one compiled rule onto OZ storage, via the same library call
 /// `__check_auth` evaluates against.
-fn install_rule(e: &Env, interpreter: &Address, rule: &CompiledRule) {
+fn install_rule(e: &Env, interpreter: &Address, rule: &CompiledRule) -> ContextRule {
     let scope = match &rule.scope {
         RuleScope::SelfAdmin => ContextRuleType::CallContract(e.current_contract_address()),
         RuleScope::Contract(addr) => ContextRuleType::CallContract(addr.clone()),
@@ -786,7 +817,7 @@ fn install_rule(e: &Env, interpreter: &Address, rule: &CompiledRule) {
         rule.valid_until,
         &rule.signers,
         &policies,
-    );
+    )
 }
 
 use soroban_sdk::IntoVal;

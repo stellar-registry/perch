@@ -24,7 +24,10 @@ Companion material:
 
 Keywords: **must**, **must not**, **may** are requirements on the
 implementation (the controller, the account, the adapter, the pool, the doc
-compiler). "Refuse" means the call fails and changes no state.
+compiler). "Refuse" means the call fails and changes no state. Soroban
+rolls back every write of a failing invocation, so no transition in this
+spec both refuses and records something: a transition either succeeds and
+writes, or refuses and writes nothing.
 
 ## Decision summary
 
@@ -36,7 +39,7 @@ compiler). "Refuse" means the call fails and changes no state.
 | D4 | Reconfiguration | `Loss`: owner authorization. `Protected`: owner authorization plus the enrolled condition's evidence over a `Reconfigure` statement (`Combined`: guardian quorum and a ZK proof). | §5, §10 |
 | D5 | Cancellation | The enrolled condition's evidence over a `Cancel` statement, in both profiles. Under `Loss`, owner authorization alone also cancels, and that veto is never capped. An evidence-based cancellation of an authorized attempt counts toward `max-cancels`. | §6 |
 | D6 | Permitted changes | The target document is derived on-chain from the source and a declared replacement set. For lost-key the source is the applied-document snapshot; for compromise it is the enrolled baseline's signers and rules, with the current recovery section. Nobody chooses a target hash. | §7 |
-| D7 | Revocation | A completion revokes the union of (a) the credentials it explicitly replaced in its source document, the baseline included, and (b) every credential it removed from the current document. Both go into the account's permanent revoked set. Every applied document is checked against that set, on every path. | §8 |
+| D7 | Revocation | A credential a recovery replaces leaves the account, so the target may not keep it in any slot (swaps and no-op replacements are refused at T1), and it never authorizes again. A completion revokes the union of (a) the credentials it explicitly replaced in its source document, the baseline included, and (b) every credential it removed from the current document. Both go into the account's permanent revoked set. Every applied document is checked against that set, on every path. | §7.3, §8 |
 | D8 | Completion vs. reconfiguration | A completion is recognised by the attempt consumed in the same invocation. It may change exactly what its replacement set declares. Configuration identity is the canonical text of the recovery section, so rotating a signer's key is not a reconfiguration. | §10 |
 | D9 | Nullifiers | One nullifier per enrolled ZK credential, owned by that `(account, enrollment)`. It is either unspent or spent. Only a completion of that account spends it; nothing ever un-spends it. Proofs for any action need it unspent. There are no reservations, so there is nothing to release (#91). | §11 |
 | D10 | Stale state | Leaves and nullifiers bind an enrollment id the configuration names, and the account refuses to re-enroll an id it used before. Every configuration change and every completion bumps the per-account epoch, and evidence or attempts from an older epoch are dead. | §3, §11 |
@@ -171,16 +174,34 @@ compiler, the account, and the controller share one definition. It carries
 
 ### 3.2 Configuration identity
 
-`config_hash = sha256("perch/recovery/config" || C)`, where `C` is the
-canonical JSON (`CANONICAL.md`) of the document's `recovery` member. The doc
-compiler computes it and returns it with the compiled configuration.
-Evidence providers compute it from the document they are shown.
+`config_hash = sha256("perch/recovery/config" || C)`
+(`config::config_hash`), where `C` is the canonical JSON (`CANONICAL.md`)
+of the document's `recovery` member. The doc compiler computes it and
+returns it with the compiled configuration. Evidence providers compute it
+from the document they are shown.
 
 Configuration identity is therefore the reviewed text: profile, mode,
 guardians, quorum, adapter, circuit id, pool, enrollment id, commitment,
 controller, baseline hash, replaceable signer ids, and timing. Rotating a signer's key
 elsewhere in the document does not change it (#92). Renaming a replaceable
 signer id does.
+
+**Per-rule hash.** Next to `config_hash`, each rule has a
+`rule_hash = sha256("perch/rule" || R)` (`fragment::rule_hash`), where `R`
+is exactly the bytes the rule contributes to the canonical document: one
+element of the `rules` array (`CANONICAL.md`, "Fragment hashes"; vectors in
+`testdata/rule-hashes.json`).
+
+- **Provenance.** An installed interpreter program carries its rule's
+  `rule_hash` as provenance, instead of the whole document's `doc_hash`.
+  Editing one rule, or any non-rule member, then leaves every other rule's
+  install parameters unchanged, which lets `apply_doc` reinstall only the
+  rules that changed.
+- **Scope.** A `rule_hash` covers the rule text and its signer ids, not the
+  signers' credentials. Only `doc_hash` identifies the whole document.
+- **Domain separation.** The `perch/rule` and `perch/recovery/config` tags
+  are prefix-free and cannot begin a canonical document (which starts with
+  `{`), so the three hashes never share a preimage.
 
 ### 3.3 Epoch
 
@@ -422,15 +443,27 @@ most one authorized attempt.
                        │                                           │
                        ├─ evidence deadline passes ─▶ Expired       ├─ cancel ─▶ Cancelled
                        ├─ cancel ─▶ Cancelled                       └─ L ≥ expires_at ─▶ Expired
-                       └─ epoch change / sibling authorized /
-                          stale lost-key source ─▶ Invalidated
+                       ├─ epoch change / sibling authorized ─▶ (dead; derived)
+                       └─ stale lost-key source at T4 ─▶ Invalidated (stored)
 ```
 
-`Expired` and `Invalidated` are derived, not stored. An attempt is **live**
-when all of the following hold:
+The stored states are `Collecting`, `Authorized`, `Completed`,
+`Cancelled`, and `Invalidated`.
+
+- **`Expired` is derived, never stored.** It is read from the ledger
+  against the attempt's windows.
+- **`Invalidated` is stored for exactly one cause:** T4 finding a lost-key
+  attempt's source changed. The evidence call that ran T4 succeeds, writes
+  `AttemptState::Invalidated`, and emits `AttemptInvalidated`.
+- **Every other invalidation is derived:** an epoch change, or a sibling's
+  authorization (`invalidate_below`). Nothing is written for these, because
+  the cause is already in storage and an attempt from an older epoch or
+  below `invalidate_below` reads as dead.
+
+An attempt is **live** when all of the following hold:
 
 - its recorded epoch equals the current epoch;
-- it is not terminal;
+- it is not terminal (`Completed`, `Cancelled`, or `Invalidated`);
 - it is the authorized attempt, or its id is at least the account's
   `invalidate_below` (so a sibling's authorization has not invalidated it);
 - `Collecting` and `L ≤ evidence_deadline`, or `Authorized` and
@@ -453,8 +486,20 @@ Refuses if any of the following hold:
 
 - the account is not enrolled;
 - an attempt is authorized and live;
-- the replacement set is invalid (§7);
+- `derive_target` refuses the replacement set (§7.3 rules 1–3, 5, 6, or
+  rule 4's commitment check);
+- the ZK enrollment id was enrolled by the account before, per the
+  account's `is_enrolled_id` (§7.3 rule 4; `EnrollmentIdReused`);
+- a credential in the target, or a replacement credential, is revoked, per
+  the account's `is_revoked` (rule 7; `CredentialRevoked`);
+- a replaced source credential still appears in the target (rule 8;
+  `ReplacedCredentialRetained`);
 - for compromise: no baseline is enrolled or its content is unpublished.
+
+The checks against the account's history (enrolled ids, revoked set) are
+the controller's. `derive_target` is pure and sees only the two documents
+and the replacement set. T1 is an external entry point, so the controller
+may read the account's views there (D16).
 
 Otherwise:
 
@@ -497,8 +542,11 @@ Permissionless. Same refusals as T2 for the ZK factor. Then:
 is satisfied for a live collecting attempt `A`:
 
 - for lost-key, if the account's current applied-document hash differs from
-  `A.source_doc_hash`, `A` is invalidated: a fresh attempt is required, and
-  its evidence starts over;
+  `A.source_doc_hash`, `A` is invalidated. The evidence call that triggered
+  the check **succeeds**, stores `AttemptState::Invalidated`, and emits
+  `AttemptInvalidated`. Refusing instead would roll the invalidation back,
+  leaving `A` promotable if the document later changed back. A fresh
+  attempt is required, and its evidence starts over;
 - otherwise `A` becomes `Authorized` with `authorized_at = L` and its
   windows are fixed. `invalidate_below` is set to the attempt-id counter,
   which invalidates every other collecting attempt in O(1), however many an
@@ -591,11 +639,14 @@ returns:
 
 - the target's canonical bytes and hash;
 - the target's configuration hash;
-- the fingerprints of every credential in the target (for T1's revocation
-  check, §7.3 rule 7);
-- the credentials occupying the replaced signer slots in the source, which
-  for compromise are the **baseline's** credentials (recorded at T1 and
-  revoked at completion, §8).
+- every signer credential in the target, as declared;
+- the credentials occupying the replaced signer slots in the source. For
+  compromise these are the **baseline's** credentials. They are recorded at
+  T1 and revoked at completion (§8).
+
+The compiler is pure and makes no verifier calls. The controller therefore
+canonicalizes the returned credentials (`Verifier::batch_canonicalize_key`)
+and fingerprints them (`Credential::fingerprint`) for rules 7 and 8.
 
 Completers obtain the canonical bytes by simulating the same call.
 
@@ -616,8 +667,14 @@ The replacement set (`credential::ReplacementSet`) lists
 `(signer_id, credential)` pairs in strictly ascending id order. When the mode
 has a ZK factor it also carries exactly one `ZkEnrollment { id,
 commitment }`; otherwise it carries none. T1 refuses unless every rule
-below holds (rules 1–6 checked by `derive_target`, rule 7 by the controller
-against the account's `is_revoked` view):
+below holds:
+
+- `derive_target` checks rules 1–3, 5, 6, and the commitment half of
+  rule 4.
+- The controller checks the enrollment-id half of rule 4 against the
+  account's `is_enrolled_id`.
+- The controller checks rule 7 against the account's `is_revoked`, and
+  rule 8 itself.
 
 1. Every `signer_id` is in the current configuration's `replaceable` and is
    declared in the source.
@@ -627,8 +684,9 @@ against the account's `is_revoked` view):
    verifier the account had not already adopted for that slot.
 3. Lost-key attempts replace at least one signer. Compromise attempts may
    replace none, which restores the baseline as is.
-4. A ZK enrollment's id is not in the account's set of enrolled ids
-   (§3.4), and its commitment is a canonical field element. The target's
+4. A ZK enrollment's commitment is a canonical field element (compiler),
+   and its id is not in the account's set of enrolled ids (§3.4;
+   controller, via `is_enrolled_id`). The target's
    `recovery.mode.enrollment-id` and `commitment` become the new values.
    Nothing else in the recovery section changes.
 5. Nothing else changes: rules, other signers, network, version.
@@ -636,6 +694,18 @@ against the account's `is_revoked` view):
    material), the anti-brick check, and network binding.
 7. No credential in the target, and no replacement credential, is in the
    account's revoked set (compared by canonical fingerprint, §8).
+8. **No explicitly replaced source credential appears anywhere in the
+   target** (compared by canonical fingerprint;
+   `credential::replaced_credentials_leave`). This refuses a no-op
+   replacement (a slot "replaced" by its own credential) and a swap of
+   credentials between slots.
+
+   The alternative, treating a retained credential as not replaced, would
+   let a swapped key keep authorizing from its new slot. That would break
+   D7's guarantee that a credential a recovery replaces never authorizes
+   again, and §8 would revoke a credential the target installs. With
+   rule 8, every replaced credential leaves the account at completion and
+   is revoked there.
 
 Rule 7 means an old baseline cannot restore a credential revoked after the
 baseline was approved: the compromise attempt must replace that slot, or it
@@ -648,7 +718,8 @@ usable without extra replacements.
 **Enforced on-chain:** the target equals the source with exactly the
 declared replacements. The replacements are what every guardian and prover
 approved, because `replacements_hash` and `target_doc_hash` are in the
-statement. Revoked credentials do not return. The recovery section is
+statement. Every replaced credential leaves the account and is revoked,
+and revoked credentials do not return. The recovery section is
 unchanged except for the declared ZK rotation.
 
 **Not enforced on-chain, and who owns it:**
@@ -670,14 +741,50 @@ unchanged except for the declared ZK rotation.
 
 Under `Protected`, a thief holding the owner key can change the document
 before an attempt is authorized. Completion cost must therefore not be
-theirs to choose. It removes every rule, revokes every removed credential,
-and compiles and installs the target. Two rules bound that cost:
+theirs to choose.
+
+**Apply is a delta.** Every `apply_doc`, completion included, matches the
+target's rules to the installed ones **by slot**, its position in the
+document's `rules` array:
+
+- A slot whose compiled rule is identical is left untouched. "Compiled
+  rule" means scope, signers as resolved credentials, `valid_until`, and
+  every attached policy with its install parameters, which carry the
+  rule's `rule_hash` (§3.2). Equal `rule_hash` alone is not enough: rotating
+  a signer's key leaves the rule text unchanged but changes its compiled
+  signers.
+- A slot that differs is **edited in place** under its existing rule id:
+  - a changed name or `valid_until` is updated;
+  - signers and policies present in both are kept;
+  - new ones are added before old ones are removed, so the rule is never
+    empty;
+  - a policy whose install parameters change counts as removed and
+    re-added.
+- A slot is **replaced whole** (a new rule id) only in two cases:
+  - Nothing on it survives, and no order of additions and removals keeps
+    it non-empty within OZ's per-rule limits (`MAX_SIGNERS` 15,
+    `MAX_POLICIES` 5). Example: the recovery rule, which has no signers,
+    when its only policy's parameters change. Adding first is impossible
+    (one policy per address) and removing first would empty it.
+  - Its scope changes. OZ has no operation that changes a rule's context
+    type in place.
+- Slots beyond the shorter document are removed or added.
+
+The installed rule set that results authorizes exactly what a full replace
+would, and the cost is never more than a full replace. The account tracks the installed
+rule id of each slot in a list bounded by the rule cap (plus the recovery
+rule). It never scans historical rule ids, which grow without bound with
+every past apply (#102 review, P1).
+
+A completion also revokes every removed credential and compiles the target.
+Two rules bound that cost:
 
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps on signers, rules, and
-  canonical size. Workstream 2 sizes the caps so that the worst-case
-  completion (a maximum-size pre-recovery document replaced by a
-  maximum-size target) fits the transaction budget (`budgets.md`).
+  canonical size. The caps are sized so that the worst-case completion
+  fits the transaction budget (`budgets.md`). The worst case is a
+  maximum-size pre-recovery document whose every slot differs from a
+  maximum-size target, after any amount of prior rule churn.
 - **Bounded revocation writes.** The revoked set is one persistent entry per
   fingerprint, so a completion writes at most one entry per removed
   credential, a number the caps bound.
@@ -700,7 +807,9 @@ and compiles and installs the target. Two rules bound that cost:
      this at completion; its applied document cannot change after
      authorization (§9).
 
-  For lost-key the two sets coincide.
+  For lost-key the two sets coincide. Rule 8 (§7.3) guarantees that
+  neither set contains a credential the target installs, so the completion
+  never revokes what it applies.
 
   For compromise they differ, and each matters on its own:
   - Set 2 covers everything added since the baseline. The recovery cannot
@@ -917,8 +1026,17 @@ Every account, enrolled or not, upgrades in two steps:
 2. **`execute_upgrade(request_id)`** — owner authorization. The checks run
    in this order (`UpgradeRequest::readiness`):
    - **Stale:** the request's `generation` differs from the current
-     recovery generation. The request is cleared and the call refused,
-     whether or not the delay has passed.
+     recovery generation. The call is refused (`StaleUpgrade`), whether or
+     not the delay has passed. It does **not** clear the request: a refused
+     invocation rolls back its writes. Nothing needs clearing anyway. The
+     generation never decreases, so a stale request can never execute; it
+     stays inert until `schedule_upgrade` replaces it, `cancel_upgrade`
+     removes it, or a completion clears the slot. Wallets read staleness
+     from the `pending_upgrade` and `recovery_generation` views.
+
+     The alternative, a successful "cleanup" outcome that removes the
+     request without upgrading, was rejected. It would make a call that
+     did not upgrade report success.
    - **Not yet:** `L < executable_at`. Refused.
    - Also refused if the request is not the pending one, or an attempt is
      authorized and live.

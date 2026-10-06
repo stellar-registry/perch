@@ -75,8 +75,9 @@ with `sha2`. It then changes each configuration field in turn (profile,
 mode, every guardian and ZK field, controller, baseline, replaceable ids,
 the three ledger counts) and requires the hash to move to the recomputed
 hash of the changed text, and it requires a signer rotation to leave the
-hash alone. The same check runs against the deployed compiler wasm in
-`release_stack.rs`.
+hash alone. `release_stack.rs` runs the same check against a release
+stack's compiler wasm: in CI the one built from the PR's source, and the
+deployed testnet one when its commit is in the branch's history.
 
 What this does not cover:
 

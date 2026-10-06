@@ -14,11 +14,11 @@ lives in the recovery controller.
 | Circuit | `circuits/` | Noir workspace: `perch_zk` (the relation), `perch_zk_recovery` (release, depth 32), `perch_zk_recovery_d24` (depth-24 fallback), vendored `poseidon` |
 | Primitives | `crates/perch-zk-primitives` | Host-side Poseidon2 for every formula the circuit proves |
 | Pool | `crates/perch-zk-pool` | Deployable membership pool: invoker-only insertion, depth-32 trees, rollover, every historical root acceptable |
-| Adapter | `crates/perch-zk-adapter` | Deployable `ZkAdapterInterface`: root check against the enrolled pool, statement binding, embedded audited UltraHonk verifier and VK |
-| Verifier library | `vendor/ultrahonk-soroban-verifier` | NethermindEth's audited UltraHonk verifier, vendored unmodified |
-| Native prover | `crates/perch-zk-prover` | Witness building from pool leaves, circuit inputs, nargo/bb driver, and the `perch-zk-fixtures` tool |
-| Browser/Node prover | `packages/perch-zk` | The same in TypeScript, proving with bb.js |
-| Fixtures | `testdata/zk/` | One real proof per scenario, with the enrollment history to rebuild its pool |
+| Adapter | `crates/perch-zk-adapter` | Deployable `ZkAdapterInterface`: root check against the enrolled pool, statement binding, embedded zero-knowledge UltraHonk verifier and VK |
+| Verifier library | `vendor/ultrahonk-soroban-verifier` | NethermindEth's audited (non-ZK) UltraHonk verifier, plus perch's `UltraKeccakZKFlavor` delta |
+| Native prover | `crates/perch-zk-prover` | Incremental witness index over pool leaves, circuit inputs, nargo/bb driver, and the `perch-zk-fixtures` tool |
+| Browser/Node prover | `packages/perch-zk` | The same in TypeScript (`PoolWitnessIndex` for indexers), proving with bb.js |
+| Fixtures | `testdata/zk/` | One real ZK proof per scenario, with the enrollment history to rebuild its pool; for `lost_key`, also a bb.js proof and a non-ZK proof the adapter must refuse |
 | Manifest | `circuits/manifest.json` | Hashes of every source, artifact, VK, and fixture proof, plus the toolchain |
 
 Further reading: [`circuit.md`](circuit.md) (the relation, its encodings, and
@@ -26,6 +26,26 @@ compatibility with Nido's circuits), [`pool.md`](pool.md) (storage, rollover,
 root retention, witnesses, renewal), and
 [`measurements.md`](measurements.md) (proving and on-chain costs, budgets, and
 the depth decision).
+
+## Open release criteria
+
+These must close before this stack is released. Each is tracked in the PR.
+
+1. **Delta audit of the ZK verifier.** Witness hiding is provided: proofs are
+   Barretenberg's zero-knowledge flavor, `UltraKeccakZKFlavor`, and the adapter
+   refuses any other (see "Which verifier" below). The audited upstream
+   verifier implements only the non-ZK flavor, so perch added the ZK flavor as
+   a delta: one new file, `vendor/ultrahonk-soroban-verifier/src/zk.rs`, plus
+   visibility-only changes to four audited files. The vendored README and
+   NOTICE list every change, and `crates/perch-zk-adapter/tests/vendor.rs`
+   enforces that nothing else changed. **That delta is not audited.** An
+   audit of it (ideally upstreamed to NethermindEth) must close before
+   release.
+2. **Client proving on reference devices.** `budgets.md` §1 sets budgets for
+   a mid-range phone and laptop. Only desktop numbers exist
+   ([`measurements.md`](measurements.md)).
+3. **Full-transaction measurements.** These belong to the controller and
+   account workstream (`budgets.md` §2).
 
 ## How a proof is checked
 
@@ -35,7 +55,7 @@ controller ──verify(statement, binding, evidence)──▶ adapter
    │ statement: its own RecoveryStatement             │ 2. project statement → account, enrollment, digest
    │ binding:   enrolled pool, enrollment id,         │ 3. root, nullifier < r
    │            circuit id                            │ 4. pool.is_known_root(tree_id, root) ──▶ enrolled pool
-   │ evidence:  tree id, root, nullifier, proof       │ 5. UltraHonk verify(root ‖ nullifier ‖ statement_hash)
+   │ evidence:  tree id, root, nullifier, proof       │ 5. ZK UltraHonk verify(root ‖ nullifier ‖ statement_hash)
    ▼                                                  ▼
 nullifier bookkeeping, freshness, attempts         Ok(()) or a ZkAdapterError; writes nothing
 ```
@@ -77,17 +97,47 @@ has audited. The upstream verifier,
 has since gone through an internal review and an OpenZeppelin audit. Its
 fixes include G1 point validation and canonical encodings at parse time,
 constrained Gemini padding, and public-input canonicality. The audited line
-targets bb 0.87.0 (`UltraKeccakFlavor`, non-ZK) and nargo 1.0.0-beta.9.
+targets bb 0.87.0 and nargo 1.0.0-beta.9, but only the *non-zero-knowledge*
+`UltraKeccakFlavor`. A non-ZK proof carries witness-dependent protocol
+messages, so it does not hide the enrolled secret. The same secret backs
+cancellation, reconfiguration, and upgrade proofs until a completion consumes
+it, so recovery needs witness hiding.
 
-Perch uses the audited verifier, vendored unmodified (see
-`vendor/ultrahonk-soroban-verifier/NOTICE`), and pins the toolchain it
-targets. The circuit itself needed no change for the older compiler. The
-consequences are measured in [`measurements.md`](measurements.md):
+Perch therefore vendors the audited verifier and adds Barretenberg's
+zero-knowledge flavor, `UltraKeccakZKFlavor`, as a delta on top of it.
+The delta adds Libra masking of the sumcheck, the Gemini masking polynomial,
+nine-evaluation round univariates, and the small-subgroup IPA consistency
+check:
 
-- Proofs are 14,592 bytes, 456 field elements. bb 0.87.0 pads to 28 sumcheck
-  rounds; Nido's bb 3 proofs were 6,976 bytes.
-- `verify_proof` costs about 91M instructions, where Nido's verifier cost
-  159M to 179M.
+- **All new verification logic is in one file**,
+  `vendor/ultrahonk-soroban-verifier/src/zk.rs` (`UltraHonkZkVerifier`). Every
+  step the two flavors share runs the audited code itself: the Oink rounds,
+  the relations, point and scalar decoding, the public-input delta, the MSM,
+  and the pairing. Four audited files change only in visibility (`fn` →
+  `pub(crate) fn`), and `lib.rs` gains three lines to register the module.
+  The vendored README lists every function with the Barretenberg v0.87.0
+  source it follows. `crates/perch-zk-adapter/tests/vendor.rs` reverses
+  exactly those edits and requires upstream's bytes, as recorded in
+  `UPSTREAM.sha256` and checked against the pinned GitHub commit.
+- **The circuit, verification key, `circuit_id`, fixtures layout, and
+  toolchain are unchanged.** The ZK and non-ZK flavors share one VK
+  (`bb write_vk` takes no `--zk`), so the circuit ids in
+  [`measurements.md`](measurements.md) did not move. Proofs come from
+  `bb prove --zk` natively and bb.js `{ keccakZK: true }` in browsers.
+- **The adapter accepts only ZK proofs.** A valid non-ZK proof of the same
+  statement is refused (`testdata/zk/lost_key/proof.non-zk`).
+
+The consequences are measured in [`measurements.md`](measurements.md):
+
+- Proofs are 16,224 bytes, 507 field elements. bb 0.87.0 pads to 28 sumcheck
+  rounds. Non-ZK proofs were 14,592 bytes, and Nido's bb 3 proofs 6,976.
+- `verify_proof` costs about 131M instructions, a third of a transaction.
+  The non-ZK verifier cost 91M, and Nido's 159M to 179M. Most of the increase
+  is the consistency check, about 2,000 field operations over a 256-element
+  subgroup.
+- Proofs are randomized: two proofs of one witness differ, and both verify.
+  Proof bytes are therefore no identifier (they never were, per the
+  upstream README); the nullifier is.
 - Proofs from any other bb version do not verify. They fail at the pairing
   check, not at parse time. `scripts/zk-toolchain.sh`, the prover crate, and
   the TS package all refuse other versions.
@@ -96,18 +146,36 @@ consequences are measured in [`measurements.md`](measurements.md):
 
 ```sh
 eval "$(scripts/zk-toolchain.sh)"      # pinned nargo/bb under target/, checksummed
-just zk-artifacts check                # rebuild ACIR, VKs, all fixture proofs, manifest; fail on any byte of drift
+just zk-artifacts check                # rebuild ACIR, VKs, all fixture proofs, manifest; fail on any drift
 just zk-artifacts                      # regenerate them after a circuit or statement change
 just zk-bench                          # proving and on-chain measurements, both depths
 ```
 
-The ACIR, the VKs, and the proofs are deterministic, so `check` compares
-bytes, not just hashes. The committed ACIR artifacts drop nargo's
-`debug_symbols` and `file_map`, which carry absolute source paths, so they are
-identical on every machine. CI's `zk` job runs the circuit tests, the
-byte-for-byte check, and the metered cost harness. The `node` job runs
-`packages/perch-zk`'s tests. Those tests prove the `lost_key` witness with
-bb.js and require the result to equal the committed CLI proof byte for byte.
+The ACIR and the VKs are deterministic, so `check` compares their bytes, not
+just hashes. ZK proofs are randomized, so `check` cannot compare a fresh proof
+with the committed one. Instead, it keeps a committed proof exactly as long as
+`bb verify --zk` accepts it against the freshly built VK and public inputs,
+and reports drift otherwise. It also proves every scenario afresh, and checks
+that bb's public inputs equal the host's and that the fresh proof verifies.
+The committed bb.js proof is checked the same way. The non-ZK proof of
+`lost_key` is deterministic and must reproduce exactly. The committed ACIR
+artifacts drop nargo's `debug_symbols` and `file_map`, which carry absolute
+source paths, so they are identical on every machine. CI's `zk` job runs the
+circuit tests, the check, and the metered cost harness.
+
+The `node` job runs `packages/perch-zk`'s tests. Those tests prove the
+`lost_key` witness with bb.js and require that each proof:
+
+- carries the committed public inputs;
+- verifies under bb.js;
+- differs from the next proof and from the CLI's.
+
+They also require bb.js to accept the CLI's proof and the committed bb.js
+proof, and bb.js's ZK verification key to equal the committed VK.
+`PERCH_ZK_WRITE_VECTORS=1 npm test` rewrites the committed bb.js proof
+(`testdata/zk/lost_key/proof.bbjs`). The adapter's tests verify that proof
+on-chain, so the browser prover's output is checked against the Soroban
+verifier on every CI run.
 
 The deployable wasm's hash depends on the Rust toolchain that builds it. The
 repository's `rust-toolchain.toml` tracks `stable`, so the wasm hash is
@@ -115,8 +183,9 @@ recorded per release build rather than in `circuits/manifest.json`.
 
 ## What is tested, and how
 
-All proofs in the tests are real proofs from the pinned toolchain, verified
-by the audited verifier against a real pool. No verifier or pool is mocked.
+All proofs in the tests are real zero-knowledge proofs from the pinned
+toolchain, verified by the adapter's ZK verifier against a real pool. No
+verifier or pool is mocked.
 Only `rcv_insert`'s account authorization is mocked, and only in the adapter's
 tests. The pool's own tests exercise real authorization rules.
 
@@ -145,6 +214,22 @@ tests. The pool's own tests exercise real authorization rules.
   (`later_root`). Nobody can race a victim's evidence out of the pool.
 - **Parity**: the Noir circuit, the Soroban host (`soroban-poseidon`), and
   bb.js agree on every formula. All three suites pin the same vectors.
+- **The ZK verifier delta** (`crates/perch-zk-adapter/tests/zk_verifier.rs`):
+  - every committed CLI and bb.js proof verifies, and the two `lost_key`
+    proofs differ;
+  - the parsed layout matches bb's;
+  - a valid non-ZK proof is refused, as is one re-encoded in the ZK layout;
+  - malformed ZK proofs are refused at parse time: lengths, non-canonical
+    scalars, non-canonical limbs and off-curve points in every ZK-only
+    commitment, and non-zero Gemini padding;
+  - every ZK-only field is bound: each scalar nudged, each commitment
+    replaced, and a padded round's evaluation changed are all rejected;
+  - each ZK check rejects on its own with the transcript held fixed: the
+    Libra-corrected sumcheck target and final value, the ninth evaluation,
+    the small-subgroup IPA identity (including a padded round's challenge and
+    a challenge inside the subgroup), the masking polynomial's opening, and
+    each Libra commitment's opening;
+  - the constants are bb's.
 
 ## Interface notes for the rest of the epic
 

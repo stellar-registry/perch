@@ -89,15 +89,31 @@ The keys are a `#[contracttype]` enum (`PoolKey`). The layout is public:
 
 ## Witnesses and indexers
 
-A proof needs the leaf's 32 siblings at the time of some retained root. Both
-provers rebuild a tree from its ordered leaves and read the path
-(`perch_zk_prover::Tree` and `packages/perch-zk`'s `Tree`, which use the same
-`ZERO_HASHES` for empty subtrees). The leaves come from either source:
+A proof needs the leaf's 32 siblings at the time of some root the pool
+accepts. Both provers build witnesses with an incremental index that never
+materializes a tree: `IncrementalTree` and `PoolWitnessIndex`, in
+`packages/perch-zk` (`src/tree.ts`) and `crates/perch-zk-prover`
+(`src/tree.rs`).
+
+- **Ingestion.** Leaves are appended in pool order, from `LeafInserted`
+  events or `leaves` pages, at amortized two hashes per leaf.
+  `PoolWitnessIndex` follows rollover and refuses any insertion out of pool
+  order.
+- **State.** The index keeps a 32-entry frontier, plus the roots of
+  completed subtrees at or above a chunk level (default 2^16 leaves) in a
+  pluggable node store. That is about 2^17 nodes for a full depth-32 tree,
+  and the state can be snapshotted and restored.
+- **Leaves.** Leaves stay wherever the indexer keeps them. A witness reads
+  only its leaf's 2^16-leaf chunk, plus the partly filled last chunk while
+  the tree is not full. The work per witness is constant, however large the
+  tree.
+
+Leaves come from either source:
 
 - **Contract storage.** `leaves(tree_id, start, count)` pages (64 at a time),
   or `Leaf(id, index)` entries read directly with `getLedgerEntries`. This
   does not depend on how long an RPC provider retains events. That is why the
-  pool pays for one `Leaf` entry per enrollment.
+  pool pays for one `Leaf` entry per insertion.
 - **Events.** `LeafInserted { account, tree_id, enrollment_id, index, leaf,
   root }` for every insertion, which the reusable indexer persists and
   replays (spec §14.3). RPC providers keep events only briefly.
@@ -106,6 +122,18 @@ provers rebuild a tree from its ordered leaves and read the path
 `tree(tree_id).root` and `is_known_root` let a client check its rebuilt tree
 before it proves. Because every historical root stays acceptable, a client
 can prove against any root its rebuilt tree has had.
+
+Tested:
+
+- the index matches a full rebuild at every size and chunk level;
+- it replays this pool's real storage (`witness_index_replays_the_pool_storage`,
+  with the same data pinned in `testdata/zk/witness-replay.json` for the TS
+  suite), giving the pool's roots and valid witnesses, including the last
+  leaf of each sealed tree and a depth-32 tree filled through `rcv_insert`;
+- it serves the last leaf of a sealed depth-32 tree after rollover through
+  the production witness code. That test uses a node store written in closed
+  form for 2^32 identical leaves, because ingesting 2^32 leaves is out of
+  reach.
 
 ## Renewal and restoration
 

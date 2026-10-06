@@ -16,8 +16,8 @@ lives in the recovery controller.
 | Pool | `crates/perch-zk-pool` | Deployable membership pool: invoker-only insertion, depth-32 trees, rollover, every historical root acceptable |
 | Adapter | `crates/perch-zk-adapter` | Deployable `ZkAdapterInterface`: root check against the enrolled pool, statement binding, embedded audited UltraHonk verifier and VK |
 | Verifier library | `vendor/ultrahonk-soroban-verifier` | NethermindEth's audited UltraHonk verifier, vendored unmodified |
-| Native prover | `crates/perch-zk-prover` | Witness building from pool leaves, circuit inputs, nargo/bb driver, and the `perch-zk-fixtures` tool |
-| Browser/Node prover | `packages/perch-zk` | The same in TypeScript, proving with bb.js |
+| Native prover | `crates/perch-zk-prover` | Incremental witness index over pool leaves, circuit inputs, nargo/bb driver, and the `perch-zk-fixtures` tool |
+| Browser/Node prover | `packages/perch-zk` | The same in TypeScript (`PoolWitnessIndex` for indexers), proving with bb.js |
 | Fixtures | `testdata/zk/` | One real proof per scenario, with the enrollment history to rebuild its pool |
 | Manifest | `circuits/manifest.json` | Hashes of every source, artifact, VK, and fixture proof, plus the toolchain |
 

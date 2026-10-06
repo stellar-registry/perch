@@ -80,7 +80,7 @@ does not reuse their artifacts, and nothing assumes they still verify.
 | Domain tags | `nido` v1 constants | `perch/recovery/zk/v2/*` (no v1 proof, leaf, or nullifier is valid here) |
 | Poseidon2 dependency | git tag | vendored by path, checksummed |
 | Proof / VK size | 6,976 B / 1,888 B | 14,592 B / 1,760 B |
-| Circuit size | n/a | 5,684 gates (depth 32), 4,425 (depth 24); both 2^13 |
+| Circuit size | n/a | about 5,700 gates (depth 32) and 4,400 (depth 24), both padded to 2^13; exact counts in [`measurements.md`](measurements.md) |
 
 What demonstrates compatibility, and not just similarity:
 

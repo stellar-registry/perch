@@ -71,13 +71,19 @@ const BUDGET_PCT: u64 = 75;
 fn report(label: &str, e: &Env) {
     let r = e.cost_estimate().resources();
     let fee = e.cost_estimate().fee();
+    let read_entries = r.memory_read_entries + r.disk_read_entries;
+    // Counted the way the host's own limit check counts it
+    // (`InvocationResources::verify_limits`): reads plus writes, so a
+    // read-write entry counts twice and this is an upper bound.
+    let footprint_entries = read_entries + r.write_entries;
     println!(
-        "\n{{\"case\":\"{label}\",\"instructions\":{},\"instructions_pct_of_tx_limit\":{:.1},\"mem_bytes\":{},\"read_entries\":{},\"write_entries\":{},\"write_bytes\":{},\"events_bytes\":{},\"fee_resource_stroops\":{},\"fee_rent_stroops\":{}}}",
+        "\n{{\"case\":\"{label}\",\"instructions\":{},\"instructions_pct_of_tx_limit\":{:.1},\"mem_bytes\":{},\"read_entries\":{},\"write_entries\":{},\"footprint_entries\":{},\"write_bytes\":{},\"events_bytes\":{},\"fee_resource_stroops\":{},\"fee_rent_stroops\":{}}}",
         r.instructions,
         r.instructions as f64 * 100.0 / TX_MAX_INSTRUCTIONS as f64,
         r.mem_bytes,
-        r.memory_read_entries + r.disk_read_entries,
+        read_entries,
         r.write_entries,
+        footprint_entries,
         r.write_bytes,
         r.contract_events_size_bytes,
         fee.total - fee.persistent_entry_rent - fee.temporary_entry_rent,
@@ -101,10 +107,7 @@ fn report(label: &str, e: &Env) {
         "{label}: write entries over budget"
     );
     assert!(
-        within(
-            (r.memory_read_entries + r.disk_read_entries) as u64,
-            TX_MAX_FOOTPRINT_ENTRIES
-        ),
+        within(footprint_entries as u64, TX_MAX_FOOTPRINT_ENTRIES),
         "{label}: footprint entries over budget"
     );
     assert!(

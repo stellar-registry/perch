@@ -17,6 +17,7 @@
 //! to run more.
 
 use arbitrary::Unstructured;
+use perch_smart_account::testutils::{Mode, PlannedRule, Step};
 use perch_smart_account::InstalledRule;
 use perch_testkit::delta::*;
 use proptest::prelude::*;
@@ -196,12 +197,25 @@ fn same_content(a: &InstalledRule, b: &InstalledRule) -> bool {
         && a.valid_until == b.valid_until
 }
 
-/// Check one transition's events and writes against what the diff of the
-/// account's rule records predicts.
+/// The plan's entry for `r`'s slot.
+fn planned<'a>(plan: &'a [PlannedRule], r: &InstalledRule) -> &'a PlannedRule {
+    plan.iter()
+        .find(|p| {
+            p.recovery == r.recovery
+                && (r.recovery || p.name == r.name)
+                && p.context_type == r.context_type
+        })
+        .unwrap_or_else(|| panic!("no plan for {:?}", r.name))
+}
+
+/// Check one transition's events and writes against the plan the cost model
+/// made for it: each rule took the step planned, a changed rule took the
+/// cheaper path, and its events are exactly that path's.
 fn check_accounting(
     w: &DeltaWorld,
     before: &soroban_sdk::Vec<InstalledRule>,
     after: &soroban_sdk::Vec<InstalledRule>,
+    plan: &[PlannedRule],
     events: &[Event],
     changed_keys: &[String],
 ) {
@@ -221,66 +235,78 @@ fn check_accounting(
     let mut untouched_ids: std::vec::Vec<u32> = std::vec::Vec::new();
 
     for b in before.iter() {
+        let step = planned(plan, &b).step;
         match after.iter().find(|a| same_slot(&b, a)) {
             Some(a) if same_content(&b, &a) => {
+                assert_eq!(step, Step::Keep, "{:?}", b.name);
                 assert_eq!(a.id, b.id, "unchanged rule {:?} keeps its id", b.name);
                 for name in RULE_EVENTS {
                     assert_eq!(count(name, b.id), 0, "unchanged rule {:?}: {name}", b.name);
                 }
                 untouched_ids.push(b.id);
             }
-            Some(a) if a.id == b.id => {
+            Some(a) => {
+                let p = planned(plan, &b);
+                // The cheaper path, the in-place edit on a tie; replacement
+                // also when no in-place order exists.
+                match step {
+                    Step::InPlace => {
+                        assert!(p.editable && p.in_place <= p.replace, "{p:?}");
+                        assert_eq!(p.cost, p.in_place);
+                        assert_eq!(a.id, b.id, "{:?} edited in place keeps its id", b.name);
+                    }
+                    Step::Replace => {
+                        assert!(!p.editable || p.in_place > p.replace, "{p:?}");
+                        assert_eq!(p.cost, p.replace);
+                        assert_ne!(a.id, b.id, "{:?} replaced gets a new id", b.name);
+                    }
+                    other => panic!("changed rule {:?} planned as {other:?}", b.name),
+                }
                 let (sb, sa) = (signer_set(&b), signer_set(&a));
                 let (pb, pa) = (policy_set(&b), policy_set(&a));
-                let expect = [
-                    ("signer_added", sa.difference(&sb).count()),
-                    ("signer_removed", sb.difference(&sa).count()),
-                    ("policy_added", pa.difference(&pb).count()),
-                    ("policy_removed", pb.difference(&pa).count()),
-                    (
-                        "context_rule_meta_updated",
-                        usize::from(a.valid_until != b.valid_until),
-                    ),
-                    ("context_rule_added", 0),
-                    ("context_rule_removed", 0),
-                ];
+                let expect = if step == Step::InPlace {
+                    [
+                        ("signer_added", sa.difference(&sb).count()),
+                        ("signer_removed", sb.difference(&sa).count()),
+                        ("policy_added", pa.difference(&pb).count()),
+                        ("policy_removed", pb.difference(&pa).count()),
+                        (
+                            "context_rule_meta_updated",
+                            usize::from(a.valid_until != b.valid_until),
+                        ),
+                        ("context_rule_added", 0),
+                        ("context_rule_removed", 0),
+                    ]
+                } else {
+                    [
+                        ("signer_added", 0),
+                        ("signer_removed", 0),
+                        ("policy_added", 0),
+                        ("policy_removed", 0),
+                        ("context_rule_meta_updated", 0),
+                        ("context_rule_added", 0),
+                        ("context_rule_removed", 1),
+                    ]
+                };
                 for (name, n) in expect {
-                    assert_eq!(
-                        count(name, b.id),
-                        n,
-                        "in-place edit of {:?}: {name}",
-                        b.name
-                    );
+                    assert_eq!(count(name, b.id), n, "{step:?} of {:?}: {name}", b.name);
                     expected_rule_events += n;
                 }
-                touched.extend(
-                    signer_renders(&b)
-                        .symmetric_difference(&signer_renders(&a))
-                        .cloned(),
-                );
-                touched.extend(policy_addresses(&b).into_iter().chain(policy_addresses(&a)));
-            }
-            Some(a) => {
-                // Replaced whole: only when nothing on the rule survives and
-                // no addition can come first (spec: never an empty rule).
-                let kept = signer_set(&b).intersection(&signer_set(&a)).count()
-                    + policy_set(&b).intersection(&policy_set(&a)).count();
-                let fresh = signer_set(&a).difference(&signer_set(&b)).count()
-                    + policy_addresses(&a)
-                        .difference(&policy_addresses(&b))
-                        .count();
-                assert!(
-                    kept == 0 && (fresh == 0 || b.signers.len() + a.signers.len() > 15),
-                    "rule {:?} was replaced although it could be edited in place",
-                    b.name
-                );
-                assert_eq!(count("context_rule_removed", b.id), 1);
-                assert_eq!(count("context_rule_added", a.id), 1);
-                expected_rule_events += 2;
-                touched.extend(signer_renders(&b).into_iter().chain(signer_renders(&a)));
+                if step == Step::Replace {
+                    assert_eq!(count("context_rule_added", a.id), 1);
+                    expected_rule_events += 1;
+                    touched.extend(signer_renders(&b).into_iter().chain(signer_renders(&a)));
+                } else {
+                    touched.extend(
+                        signer_renders(&b)
+                            .symmetric_difference(&signer_renders(&a))
+                            .cloned(),
+                    );
+                }
                 touched.extend(policy_addresses(&b).into_iter().chain(policy_addresses(&a)));
             }
             None => {
+                assert_eq!(step, Step::Remove, "{:?}", b.name);
                 assert_eq!(
                     count("context_rule_removed", b.id),
                     1,
@@ -295,6 +321,7 @@ fn check_accounting(
     }
     for a in after.iter() {
         if !before.iter().any(|b| same_slot(&b, &a)) {
+            assert_eq!(planned(plan, &a).step, Step::Add, "{:?}", a.name);
             assert_eq!(count("context_rule_added", a.id), 1, "added {:?}", a.name);
             expected_rule_events += 1;
             touched.extend(signer_renders(&a));
@@ -307,7 +334,7 @@ fn check_accounting(
         .count();
     assert_eq!(
         rule_events, expected_rule_events,
-        "no event beyond the diff: {ours:?}"
+        "no event beyond the plan: {ours:?}"
     );
 
     // Registrations only for signers and policies a changed rule names.
@@ -334,6 +361,20 @@ fn check_accounting(
     }
 }
 
+/// The event bytes a plan prices.
+fn priced(plan: &[PlannedRule]) -> u32 {
+    plan.iter().map(|p| p.cost.events).sum()
+}
+
+fn plan_of(
+    w: &DeltaWorld,
+    account: &Address,
+    doc: &DocModel,
+    mode: Mode,
+) -> std::vec::Vec<PlannedRule> {
+    w.plan(account, doc, mode).iter().collect()
+}
+
 fn policy_addresses(r: &InstalledRule) -> BTreeSet<String> {
     r.policies.iter().map(|p| contract_hex(&p.policy)).collect()
 }
@@ -353,20 +394,34 @@ fn signer_renders(r: &InstalledRule) -> BTreeSet<String> {
         .collect()
 }
 
-/// Apply `b` over `a` on both accounts; check the delta's accounting, and
-/// that it writes no more entries than the full replace.
+/// Apply `b` over `a` on both accounts; check the delta's accounting against
+/// its plan, that the cost model priced its events to the byte, and that it
+/// emits no more event bytes and writes no more entries than the full
+/// replace.
 fn transition(w: &DeltaWorld, a: &DocModel, b: &DocModel) {
     apply_both(w, a);
     let before = w.installed(&w.delta);
+    let plan = plan_of(w, &w.delta, b, Mode::Cheapest);
     let raw_before = raw_entries(&w.env);
     w.apply(&w.delta, b).unwrap();
     let events = w.events();
+    let (delta_priced, delta_bytes) = event_bytes(&w.env);
     let delta_writes = w.env.cost_estimate().resources().write_entries;
     let changed_keys = changed(&raw_before, &raw_entries(&w.env));
     let after = w.installed(&w.delta);
-    check_accounting(w, &before, &after, &events, &changed_keys);
+    check_accounting(w, &before, &after, &plan, &events, &changed_keys);
+    assert_eq!(
+        delta_priced,
+        priced(&plan),
+        "the model prices the events exactly"
+    );
     w.apply(&w.oracle, b).unwrap();
+    let (_, oracle_bytes) = event_bytes(&w.env);
     let oracle_writes = w.env.cost_estimate().resources().write_entries;
+    assert!(
+        delta_bytes <= oracle_bytes,
+        "delta emitted {delta_bytes} event bytes, full replace {oracle_bytes}"
+    );
     assert!(
         delta_writes <= oracle_writes,
         "delta wrote {delta_writes} entries, full replace {oracle_writes}"
@@ -378,16 +433,53 @@ fn transition(w: &DeltaWorld, a: &DocModel, b: &DocModel) {
     );
 }
 
+/// `b` over `a` with every changed rule forced down one path, on the oracle
+/// account (after `a` by full replace). Returns the plan for that path and
+/// the priced event bytes measured; checks the state is the full replace's.
+fn forced(a: &DocModel, b: &DocModel, in_place: bool) -> (std::vec::Vec<PlannedRule>, u32) {
+    let w = DeltaWorld::new();
+    w.apply(&w.oracle, a).unwrap();
+    let mode = if in_place {
+        Mode::InPlace
+    } else {
+        Mode::Replace
+    };
+    let plan = plan_of(&w, &w.oracle, b, mode);
+    w.apply_forced(b, in_place).unwrap();
+    let (measured, _) = event_bytes(&w.env);
+    w.apply(&w.delta, a).unwrap();
+    w.apply(&w.delta, b).unwrap();
+    same_state(
+        &storage_state(&w.env, &w.delta, History::Keep),
+        &storage_state(&w.env, &w.oracle, History::Keep),
+        "a forced path ends where the cheapest one does",
+    );
+    (plan, measured)
+}
+
 proptest! {
     #![proptest_config(config(48))]
 
-    /// Every transition emits exactly the events its rule diff predicts,
-    /// writes nothing keyed by an unchanged rule, and writes no more entries
-    /// than the full replace.
+    /// Every transition takes the cheaper path for each changed rule, emits
+    /// exactly that path's events (priced to the byte), writes nothing keyed
+    /// by an unchanged rule, and emits and writes no more than the full
+    /// replace.
     #[test]
     fn events_and_writes_are_exactly_the_diff(a in bytes(), b in bytes()) {
         let w = DeltaWorld::new();
         transition(&w, &gen_doc(&a), &gen_doc(&b));
+    }
+
+    /// Both paths the choice compares are priced exactly: forcing every
+    /// changed rule in place, or every one replaced, emits exactly the
+    /// bytes the model priced for that path, and reaches the same state.
+    #[test]
+    fn both_paths_are_priced_exactly(a in bytes(), b in bytes()) {
+        let (a, b) = (gen_doc(&a), gen_doc(&b));
+        for in_place in [true, false] {
+            let (plan, measured) = forced(&a, &b, in_place);
+            prop_assert_eq!(measured, priced(&plan), "in_place: {}", in_place);
+        }
     }
 }
 
@@ -455,12 +547,19 @@ fn transition_after(
     soroban_sdk::Vec<InstalledRule>,
     soroban_sdk::Vec<InstalledRule>,
 ) {
+    let plan = plan_of(w, &w.delta, b, Mode::Cheapest);
     let raw_before = raw_entries(&w.env);
     w.apply(&w.delta, b).unwrap();
     let events = w.events();
+    let (measured, _) = event_bytes(&w.env);
     let changed_keys = changed(&raw_before, &raw_entries(&w.env));
     let after = w.installed(&w.delta);
-    check_accounting(w, &before, &after, &events, &changed_keys);
+    check_accounting(w, &before, &after, &plan, &events, &changed_keys);
+    assert_eq!(
+        measured,
+        priced(&plan),
+        "the model prices the events exactly"
+    );
     w.apply(&w.oracle, b).unwrap();
     same_state(
         &storage_state(&w.env, &w.delta, History::Keep),
@@ -552,7 +651,7 @@ fn a_rule_keeping_its_name_with_a_new_scope_is_replaced() {
 }
 
 #[test]
-fn new_cap_parameters_reinstall_only_that_rules_policies() {
+fn new_cap_parameters_replace_only_that_rule() {
     let mut a = rule("r1", Some(0), &[0]);
     a.cap = Some((1_000, 100));
     let mut b = a.clone();
@@ -561,20 +660,25 @@ fn new_cap_parameters_reinstall_only_that_rules_policies() {
         &doc(delegated(1), std::vec![admin(&[0]), a]),
         &doc(delegated(1), std::vec![admin(&[0]), b]),
     );
-    assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
     // The cap is part of the rule's text, so both of the rule's policies are
-    // reinstalled: the spending limit for its new parameters, the interpreter
-    // for its new rule-hash provenance. Each is this rule's alone.
-    let n = names(&events, &w.delta);
-    for (name, count) in [
-        ("policy_removed", 2),
-        ("policy_added", 2),
-        ("policy_deregistered", 2),
-        ("policy_registered", 2),
-    ] {
-        assert_eq!(n.iter().filter(|e| *e == name).count(), count, "{name}");
-    }
-    assert_eq!(n.len(), 8);
+    // reinstalled either way: the spending limit for its new parameters, the
+    // interpreter for its new rule-hash provenance. Replacing the rule then
+    // costs less than four per-policy edits, and its one signer is shared
+    // with the admin rule, so it is not re-registered. The admin rule is not
+    // touched.
+    assert_ne!(id_of(&before, "r1"), id_of(&after, "r1"));
+    assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
+    assert_eq!(
+        names(&events, &w.delta),
+        sorted(&[
+            "context_rule_removed",
+            "context_rule_added",
+            "policy_deregistered",
+            "policy_deregistered",
+            "policy_registered",
+            "policy_registered",
+        ])
+    );
 }
 
 #[test]
@@ -732,44 +836,110 @@ fn delegated_keys(n: usize, first: usize) -> std::vec::Vec<SignerModel> {
         .collect()
 }
 
-/// Every key of an `old`-signer admin rule swapped for `new` fresh keys.
-/// Nothing on the rule survives, so the delta adds before it removes.
-fn full_swap(old: usize, new: usize) -> (u32, u32, std::vec::Vec<String>) {
+/// Every key of an `old`-signer admin rule swapped for `new` fresh keys:
+/// the documents, and the plan an in-place-only apply would make.
+fn full_swap(old: usize, new: usize) -> PlannedRule {
     let ids: std::vec::Vec<usize> = (0..old).collect();
     let a = doc(delegated_keys(old, 0), std::vec![admin(&ids)]);
     let ids: std::vec::Vec<usize> = (0..new).collect();
     let b = doc(delegated_keys(new, old), std::vec![admin(&ids)]);
-    let (w, events, before, after) = case(&a, &b);
-    (
-        id_of(&before, "admin"),
-        id_of(&after, "admin"),
-        names(&events, &w.delta),
-    )
+    let w = DeltaWorld::new();
+    w.apply(&w.delta, &a).unwrap();
+    plan_of(&w, &w.delta, &b, Mode::InPlace).remove(0)
 }
 
 #[test]
-fn swapping_every_key_of_a_multi_signer_rule_keeps_its_id() {
-    // Four old keys and four new ones: adding first peaks at eight signers,
-    // within OZ's limit of fifteen.
-    let (before, after, events) = full_swap(4, 4);
-    assert_eq!(before, after);
-    assert!(!events.iter().any(|e| e.starts_with("context_rule")));
-    assert_eq!(events.iter().filter(|e| *e == "signer_added").count(), 4);
-    assert_eq!(events.iter().filter(|e| *e == "signer_removed").count(), 4);
+fn a_full_swap_can_be_edited_in_place_up_to_the_signer_limit() {
+    // Nothing survives, so an in-place edit adds before it removes.
+    // 8 + 7 = 15 signers at the peak: an in-place order exists.
+    let p = full_swap(8, 7);
+    assert!(p.editable);
+    assert_eq!(p.step, Step::InPlace);
+    // 8 + 8 = 16 would pass OZ's limit: only replacement is possible.
+    let p = full_swap(8, 8);
+    assert!(!p.editable);
+    assert_eq!(p.step, Step::Replace);
+}
+
+/// The rule `name`'s planned step for `a`→`b` under the cheapest apply, and
+/// the priced event bytes measured for the cheapest apply, the in-place
+/// edit, and the replacement.
+fn crossover(a: &DocModel, b: &DocModel, name: &str) -> (Step, u32, u32, u32) {
+    let w = DeltaWorld::new();
+    w.apply(&w.delta, a).unwrap();
+    let plan = plan_of(&w, &w.delta, b, Mode::Cheapest);
+    w.apply(&w.delta, b).unwrap();
+    let (cheapest, _) = event_bytes(&w.env);
+    let step = plan
+        .iter()
+        .find(|p| p.name == soroban_sdk::String::from_str(&w.env, name))
+        .unwrap()
+        .step;
+    let (_, in_place) = forced(a, b, true);
+    let (_, replaced) = forced(a, b, false);
+    (step, cheapest, in_place, replaced)
+}
+
+/// Signers `from..from + k` of `a` with fresh keys, ids unchanged: a key
+/// rotation, which leaves every rule's text (and so its policies) as is.
+fn rotate(a: &DocModel, from: usize, k: usize) -> DocModel {
+    let mut b = a.clone();
+    for i in from..from + k {
+        b.signers[i].key = KeyModel::Delegated(10 + i);
+    }
+    b
+}
+
+/// Rotate 1..=n keys of a rule; at each count the apply emits exactly the
+/// cheaper path's bytes. Returns the steps taken.
+fn sweep(a: &DocModel, name: &str, from: usize, n: usize) -> std::vec::Vec<Step> {
+    let mut steps = std::vec::Vec::new();
+    for k in 1..=n {
+        let (step, cheapest, in_place, replaced) = crossover(a, &rotate(a, from, k), name);
+        assert_eq!(cheapest, in_place.min(replaced), "{k} of {n} keys");
+        assert_eq!(
+            step == Step::InPlace,
+            in_place <= replaced,
+            "{k} of {n} keys"
+        );
+        steps.push(step);
+    }
+    steps
 }
 
 #[test]
-fn a_full_swap_is_edited_in_place_up_to_the_signer_limit() {
-    // 8 + 7 = 15 signers at the peak: still in place.
-    let (before, after, events) = full_swap(8, 7);
-    assert_eq!(before, after);
-    assert!(!events.iter().any(|e| e.starts_with("context_rule")));
+fn rotating_the_admin_rules_keys_switches_to_replacement_where_it_is_cheaper() {
+    // A policy-free rule: replacing it costs a removal and an addition (100
+    // and 332 bytes) plus 288 to deregister and re-register each key it
+    // keeps; editing it costs 244 per rotated key. Registering the new keys
+    // and deregistering the old costs the same either way. One or two
+    // rotated keys: 244 or 488 in place against 1 008 or 720 to replace.
+    // All three: 732 against 432.
+    let a = doc(delegated(3), std::vec![admin(&[0, 1, 2])]);
+    assert_eq!(
+        sweep(&a, "admin", 0, 3),
+        [Step::InPlace, Step::InPlace, Step::Replace]
+    );
+}
 
-    // 8 + 8 = 16 would pass the limit, so the rule is replaced whole.
-    let (before, after, events) = full_swap(8, 8);
-    assert_ne!(before, after);
-    assert!(events.contains(&"context_rule_removed".to_string()));
-    assert!(events.contains(&"context_rule_added".to_string()));
+#[test]
+fn rotating_a_capped_rules_keys_switches_to_replacement_where_it_is_cheaper() {
+    // A rule with both policies: replacing it also reinstalls and
+    // re-registers the interpreter and the spending limit, so in-place edits
+    // stay cheaper for more rotated keys.
+    let mut capped = rule("r1", Some(0), &[1, 2, 3, 4, 5, 6, 7, 8]);
+    capped.functions = Some(std::vec!["transfer"]);
+    capped.cap = Some((1_000, 100));
+    let a = doc(delegated(9), std::vec![admin(&[0]), capped]);
+    // Each rotated key costs 532 bytes in place (an addition and a removal,
+    // and a registration and deregistration either path pays). Replacing
+    // costs 3 716 whatever the count: the removal and addition (484), the
+    // policies' reinstallation and re-registration (928), and 288 to
+    // deregister and re-register each of the eight keys. So six keys rotate
+    // in place and seven or eight replace the rule.
+    let mut expected = std::vec![Step::InPlace; 6];
+    expected.extend([Step::Replace; 2]);
+    assert_eq!(sweep(&a, "r1", 1, 8), expected);
 }
 
 #[test]

@@ -269,7 +269,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         doc_json: Bytes,
         approval_valid_until: u32,
     ) -> Result<BytesN<32>, PerchAccountError> {
-        apply(e, doc_json, approval_valid_until, false)
+        apply(e, doc_json, approval_valid_until, rules::Mode::Cheapest)
     }
 
     /// Call `target_fn` on `target` as this account (the account becomes
@@ -638,14 +638,13 @@ fn extend_persistent(e: &Env, f: impl FnOnce(u32)) {
     f(e.storage().max_ttl());
 }
 
-/// `apply_doc`'s body. `full_replace` selects the pre-delta behaviour,
-/// removing every installed rule and adding every document rule; only the
-/// test-only oracle ([`testutils::apply_doc_full_replace`]) sets it.
+/// `apply_doc`'s body. `mode` is [`rules::Mode::Cheapest`] except in tests
+/// ([`testutils`]), which force one reconciliation path or the full replace.
 fn apply(
     e: &Env,
     doc_json: Bytes,
     approval_valid_until: u32,
-    full_replace: bool,
+    mode: rules::Mode,
 ) -> Result<BytesN<32>, PerchAccountError> {
     let me = e.current_contract_address();
     me.require_auth();
@@ -706,7 +705,7 @@ fn apply(
         }
     }
 
-    apply_rules(e, &compiled, full_replace);
+    apply_rules(e, &compiled, mode);
 
     if let Some(leaf) = &insert {
         MembershipPoolClient::new(e, &leaf.pool).rcv_insert(
@@ -751,6 +750,7 @@ fn apply(
 #[cfg(feature = "testutils")]
 pub mod testutils {
     use super::*;
+    pub use crate::rules::{Cost, Mode, PlannedRule, Step};
 
     /// `apply_doc` with every rule removed and re-added, as before the delta
     /// apply: the oracle the delta is checked against. Everything else
@@ -761,7 +761,30 @@ pub mod testutils {
         doc_json: Bytes,
         approval_valid_until: u32,
     ) -> Result<BytesN<32>, PerchAccountError> {
-        apply(e, doc_json, approval_valid_until, true)
+        apply(e, doc_json, approval_valid_until, Mode::FullReplace)
+    }
+
+    /// `apply_doc` with every changed rule reconciled by `mode` rather than
+    /// by the cheaper path: prices each path on its own.
+    pub fn apply_doc_with(
+        e: &Env,
+        doc_json: Bytes,
+        approval_valid_until: u32,
+        mode: Mode,
+    ) -> Result<BytesN<32>, PerchAccountError> {
+        apply(e, doc_json, approval_valid_until, mode)
+    }
+
+    /// What applying `doc_json` would do to each rule slot, and what the cost
+    /// model prices it at, without applying it. Run as the account
+    /// (`env.as_contract`).
+    pub fn plan_doc(e: &Env, doc_json: Bytes, mode: Mode) -> Vec<PlannedRule> {
+        let compiled: CompiledDoc =
+            DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
+                .compile_doc(&doc_json);
+        let current = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
+        let (desired, params) = rules::desired(e, &compiled);
+        rules::plan(e, &current, &desired, &params, mode)
     }
 }
 
@@ -770,14 +793,10 @@ pub mod testutils {
 /// observable half-migrated state. The recovery rule is not one of
 /// `doc.rules`: it is a zero-signer self-scoped rule whose only policy is the
 /// adopted controller, installed for the compiled configuration's hash.
-fn apply_rules(e: &Env, compiled: &CompiledDoc, full_replace: bool) {
+fn apply_rules(e: &Env, compiled: &CompiledDoc, mode: rules::Mode) {
     let current = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
     let (desired, params) = rules::desired(e, compiled);
-    let next = match full_replace {
-        #[cfg(feature = "testutils")]
-        true => rules::replace_all(e, &current, &desired, &params),
-        _ => rules::reconcile(e, &current, &desired, &params),
-    };
+    let next = rules::reconcile(e, &current, &desired, &params, mode);
     if next != current {
         PerchStorage::set_installed_rules(e, &next);
         extend_persistent(e, |ttl| {

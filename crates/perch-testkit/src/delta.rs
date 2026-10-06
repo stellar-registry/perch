@@ -23,6 +23,7 @@ use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::PerchDocCompiler;
 use perch_interpreter::PerchInterpreter;
 use perch_recovery::PerchRecovery;
+use perch_smart_account::testutils::{plan_doc, Mode, PlannedRule};
 use perch_smart_account::{infra, InstalledRule};
 use perch_spending_limit::PerchSpendingLimit;
 use soroban_sdk::testutils::EnvTestConfig;
@@ -41,7 +42,7 @@ pub use oracle::{OracleAccount, OracleAccountClient};
 /// trait impls after the bare trait paths, which must be in scope.
 mod oracle {
     #![allow(unused_imports)]
-    use perch_smart_account::testutils::apply_doc_full_replace;
+    use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
     use perch_smart_account::{
         check_auth, install_admin, FreezeGate, InstalledRule, PerchAccountError, PerchSmartAccount,
         UpgradeRequest,
@@ -59,6 +60,23 @@ mod oracle {
     impl OracleAccount {
         pub fn __constructor(e: &Env, admin_signers: Vec<Signer>) {
             install_admin(e, &admin_signers);
+        }
+
+        /// `apply_doc` reconciling every changed rule in place where it can
+        /// (`in_place`) or replacing every changed rule whole: each path on
+        /// its own, so the cost model's price of each can be checked.
+        pub fn apply_doc_forced(
+            e: &Env,
+            doc_json: Bytes,
+            approval_valid_until: u32,
+            in_place: bool,
+        ) -> Result<BytesN<32>, PerchAccountError> {
+            let mode = if in_place {
+                Mode::InPlace
+            } else {
+                Mode::Replace
+            };
+            apply_doc_with(e, doc_json, approval_valid_until, mode)
         }
     }
 
@@ -479,6 +497,31 @@ impl DeltaWorld {
         out
     }
 
+    /// Apply `doc` to the oracle account with every changed rule forced down
+    /// one path (in place where possible, or replaced whole).
+    pub fn apply_forced(&self, doc: &DocModel, in_place: bool) -> Result<BytesN<32>, String> {
+        let bytes = doc.bytes(self);
+        self.env.cost_estimate().budget().reset_unlimited();
+        OracleAccountClient::new(&self.env, &self.oracle)
+            .try_apply_doc_forced(&bytes, &0, &in_place)
+            .map(|r| r.unwrap())
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    /// What applying `doc` to `account` in `mode` would do to each rule slot,
+    /// priced by the cost model, without applying it.
+    pub fn plan(
+        &self,
+        account: &Address,
+        doc: &DocModel,
+        mode: Mode,
+    ) -> soroban_sdk::Vec<PlannedRule> {
+        let bytes = doc.bytes(self);
+        self.env.cost_estimate().budget().reset_unlimited();
+        self.env
+            .as_contract(account, || plan_doc(&self.env, bytes, mode))
+    }
+
     /// The account's rule records.
     pub fn installed(&self, account: &Address) -> soroban_sdk::Vec<InstalledRule> {
         PerchAccountClient::new(&self.env, account).installed_rules()
@@ -489,6 +532,47 @@ impl DeltaWorld {
     pub fn events(&self) -> Vec<Event> {
         events(&self.env)
     }
+}
+
+/// The events the cost model prices: OZ's rule, signer, and policy events,
+/// their registry events, and the spending limit's install and uninstall.
+pub const PRICED_EVENTS: [&str; 15] = [
+    "context_rule_added",
+    "context_rule_removed",
+    "context_rule_meta_updated",
+    "signer_added",
+    "signer_removed",
+    "signer_registered",
+    "signer_deregistered",
+    "policy_added",
+    "policy_removed",
+    "policy_registered",
+    "policy_deregistered",
+    "spending_limit_installed",
+    "spending_limit_uninstalled",
+    // Never emitted by a reconciliation; listed so a stray one is priced
+    // (and so caught) rather than ignored.
+    "spending_limit_changed",
+    "spending_limit_enforced",
+];
+
+/// XDR bytes of the last invocation's events the cost model prices, and of
+/// all its contract events (the host's own figure).
+pub fn event_bytes(env: &Env) -> (u32, u32) {
+    use soroban_sdk::xdr::{Limits, WriteXdr};
+    let mut priced = 0;
+    for e in env.events().all().events().iter() {
+        let ContractEventBody::V0(body) = &e.body;
+        let name = match body.topics.first() {
+            Some(ScVal::Symbol(s)) => s.to_utf8_string_lossy(),
+            _ => String::new(),
+        };
+        if PRICED_EVENTS.contains(&name.as_str()) {
+            priced += e.to_xdr(Limits::none()).unwrap().len() as u32;
+        }
+    }
+    let total = env.cost_estimate().resources().contract_events_size_bytes;
+    (priced, total)
 }
 
 /// One contract event, rendered.

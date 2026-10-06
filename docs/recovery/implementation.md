@@ -101,15 +101,34 @@ against the release artifacts belong to the integration layer.
   the compiled document. Rules are matched by slot (the recovery flag,
   otherwise name and context type). Unmatched installed rules are removed
   first, so their signers and policies leave the registries before
-  anything is added. A matched rule with a new scope is replaced; otherwise
-  it is edited in place: its expiry is updated, and signers and policies
-  are removed then added (or, when none would survive, added first, so the
-  rule is never left with neither). An unchanged rule, signer, or policy
-  emits no event and writes nothing; re-applying the applied document
-  writes only the authorization nonce. It never scans the ids of rules
-  deleted earlier, so applying a document, and completing a recovery,
-  costs the same however many documents came before. `apply_doc` returns
-  an error or traps on any failure, so a partial delta never persists.
+  anything is added. A changed scope is a different slot, so the rule is
+  removed and added. Any other changed rule is reconciled whichever of two
+  ways costs less (`rules::Cost`, the in-place edit on a tie):
+  - **edited in place** under its id: its expiry is updated, and signers
+    and policies are removed then added (or, when none would survive, added
+    first, so the rule is never left with neither);
+  - **replaced whole** under a new id, the only way when no in-place order
+    keeps the rule valid.
+
+  The cost model prices the exact OZ operations each way runs. One
+  `Effects` sequence drives both a `Meter` and the real calls, so the
+  model and the execution cannot drift apart. Prices are contract-event
+  bytes first, then ledger writes as a tiebreak, against the signer and
+  policy registry counts derived from the records. Event sizes are
+  `ContractEvent` XDR, the measure the network's events limit counts,
+  including the spending limit's install and uninstall events. A full
+  replace replaces every rule and churns every registration, so taking the
+  cheaper way per rule never emits more than it does. A replaced rule's
+  policies are reinstalled, which resets a spending limit's window, as the
+  full replace always did. An in-place edit keeps the id and the kept
+  policies' state.
+
+  An unchanged rule, signer, or policy emits no event and writes nothing.
+  Re-applying the applied document writes only the authorization nonce. It
+  never scans the ids of rules deleted earlier, so applying a document, and
+  completing a recovery, costs the same however many documents came
+  before. `apply_doc` returns an error or traps on any failure, so a
+  partial delta never persists.
 - **Per-rule program provenance.** An interpreter program's
   `InstallParams.doc_hash` field carries its rule's `rule_hash`
   (`sha256("perch/rule" || rule bytes)`, `CANONICAL.md` "Fragment
@@ -163,11 +182,14 @@ key and value, the canonical applied document, and its hash.
 | Any document sequence leaves the delta account and the oracle in the same state (proptest, shrinking) | `apply_delta.rs::delta_apply_matches_full_replace` |
 | Re-applying the applied document emits no event and writes only the nonce | `reapplying_the_applied_document_is_a_no_op` |
 | A→B→C equals A→C; A→B→A restores A | `transitions_compose`, `a_transition_and_its_reverse_restore_the_state` |
-| Every event and storage write is one the diff predicts, and the delta writes no more than the full replace | `events_and_writes_are_exactly_the_diff` |
-| Named cases: functions, scope, cap parameters, added/shared signers and policies, rename, remove and re-add, key swap under one id, one-signer swap in place (the compromise shape), minimal and maximal documents, reformatting, reordering, expiry, recovery-only change | the remaining `apply_delta.rs` tests |
+| Each changed rule takes the cheaper path. Its events are exactly that path's and are priced to the byte against the host's figure. The delta emits no more event bytes, and writes no more entries, than the full replace | `events_and_writes_are_exactly_the_diff` |
+| Both prices the choice compares are exact: forcing every changed rule in place, or every one replaced, emits exactly the priced bytes and reaches the full-replace state | `both_paths_are_priced_exactly` |
+| Crossovers. A 3-key policy-free rule rotates 1–2 keys in place and 3 by replacement. An 8-key rule with both policies rotates up to 6 in place and 7–8 by replacement. Each count's measured bytes equal the cheaper forced path's | `rotating_the_admin_rules_keys_switches_to_replacement_where_it_is_cheaper`, `rotating_a_capped_rules_keys_switches_to_replacement_where_it_is_cheaper` |
+| An in-place order exists up to OZ's signer limit (8 + 7) and not past it (8 + 8) | `a_full_swap_can_be_edited_in_place_up_to_the_signer_limit` |
+| Named cases: functions, scope, cap parameters, added and shared signers and policies, rename, remove and re-add, a key swapped under one id, a one-signer swap in place (the compromise shape), minimal and maximal documents, reformatting, reordering, expiry, a recovery-only change | the remaining `apply_delta.rs` tests |
 | Revoked credentials stay refused after an in-place edit; the freeze and generation behave as under the full replace; reserved names stay closed; a delta in the authorized window changes nothing | `delta_security.rs` |
 | A failing policy install, and budget exhaustion at every point of a delta, revert everything under enforcing auth | `delta_security.rs` |
-| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_reinstall_only_that_rules_policies`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
+| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_replace_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
 | Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |
 
 `PERCH_DELTA_CASES` sets the proptest case count (CI defaults: 32 to 48 per property; a 400-case sweep also passes).

@@ -67,7 +67,7 @@ every consumer reads.
 
 | Command | Does |
 | --- | --- |
-| `scripts/build-stack.sh --registry <id>` | Builds tier 0, stages its wasm and `<id>` as the account's pins, builds the account, stages it and the WebAuthn verifier as the factory's pins, builds the factory. `target/stack/build.json` records every hash and the pins each consumer was built against. |
+| `scripts/build-stack.sh --registry <id>` | Builds tier 0, stages its wasm and `<id>` as the account's pins, builds the account, stages it and the WebAuthn verifier as the factory's pins, builds the factory. `target/stack/build.json` records every hash and the pins each consumer was built against. Deployments build with `stellar scaffold build`; `--builder contract` uses core `stellar contract build`, the same code without scaffold's metadata. It overwrites the account's and factory's pin caches: run `fetch-infra-wasm.sh` afterwards to pin the deployment again. |
 | `scripts/deploy-stack.sh --source <identity>` | Deploys a new instance of the registry wasm the network's perch registries already run, runs `build-stack.sh` against it, then publishes tier 0 and the factory (upload with hash check, `publish_hash`, `deploy_stateless`, derived-address and code-hash checks), installs the account, writes the manifest, and runs `verify-deployment.sh`. Idempotent. `--registry` publishes into an existing registry instead. |
 | `scripts/verify-deployment.sh` | Read-only, by hash and address only: the registry's code; each contract at its content address, running its recorded wasm, served by the registry for its name and version; the account installed; the manifest's recorded pins equal to the deployed hashes; and what consumers resolve on-chain, from the factory's `account_wasm_hash`/`webauthn_verifier`, the adapter's `circuit_id`/`tree_depth` against the pool's `depth`, to the code hash and `infra()` of every account the exercise report lists. A report from another stack commit is skipped with a notice. |
 | `scripts/fetch-infra-wasm.sh` | Fills the account and factory pin caches from the manifest. Each wasm is fetched by its recorded address (the account by its hash) and refused unless its sha256 and content address match. `--stack <dir>` fetches every deployed artifact with a `build.json`. |
@@ -79,8 +79,11 @@ every consumer reads.
 
 CI's `rust` job runs `fetch-infra-wasm.sh --stack`, the workspace tests
 (including `testnet_pins`), `verify-deployment.sh`, and the release-stack
-suite against the deployed bytes. The `packages` job runs
-`check-packages.sh`.
+suite against the deployed bytes. The `release-stack-source` job builds the
+PR's own source in pin order (`build-stack.sh --builder contract`, against
+the manifest's registry) and runs the release-stack suite on those fresh
+bytes, so a change that only a rebuilt stack would break fails the PR. The
+`packages` job runs `check-packages.sh`.
 
 ## What is verified, and where
 

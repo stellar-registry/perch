@@ -84,7 +84,9 @@ the one the caps hit first. That tightens the rule; it relaxes nothing. The
 document caps (spec §7.5) are then set to the largest values for which the
 completion and reconfiguration rows stay within budget: see "Document caps"
 under Results (`perch_doc_compiler::MAX_DOC_SIGNERS` = 6, `MAX_DOC_RULES` =
-8, `MAX_DOC_CANONICAL_BYTES` = 8 192).
+8, `MAX_DOC_CANONICAL_BYTES` = 8 192; on the quiet-events experiment branch,
+where OZ's per-item events are suppressed, 6, 12, and 8 192: see
+"Experiment: OZ's per-item events suppressed").
 
 ## 3. End-to-end latency
 
@@ -283,7 +285,8 @@ rules; instructions and memory at 8 and 12; written entries at 2 and 20;
 write bytes at 12 and 20. Events bind everywhere on the frontier, which
 runs from 10 signers and 5 rules to 3 signers and 10 rules.
 
-**The caps are 6 signers, 8 rules, and 8 192 canonical bytes** (events
+**With OZ's events, the caps are 6 signers, 8 rules, and 8 192 canonical
+bytes** (events
 72.9%, the compromise whose thief renamed every rule), the same 75% rule
 and the same frontier point as when `apply_doc` replaced every rule: the
 point that keeps the most rules (a scope per contract) without dropping
@@ -318,3 +321,79 @@ document cannot declare more than 6.
 Assumption: signer keys are at most a passkey's (81 bytes of key data). A
 custom verifier with keys up to the 256 bytes the IR admits would grow every
 signer's registration event and needs its own measurement.
+
+### Experiment: OZ's per-item events suppressed
+
+Quiet-events experiment, 2026-10-06. This branch only, not PR 103.
+`stellar-accounts` is pinned to theahaco/stellar-contracts-OZ PR #4
+(`fm/oz-quiet-events-x1`, 74f9f64). That PR adds `_no_events` variants of
+every context-rule, signer, and policy mutation, and of `spending_limit`'s
+install and uninstall. `apply_doc` makes every mutation through them, and
+then emits one `DocApplied`: `doc_hash` is its topic, and the delta's
+counts are its data (rules added, removed, and edited in place; signers and
+policies added and removed by the in-place edits). The controller's
+`CredentialRevoked`, one per revoked credential, is unchanged. Nothing is
+emitted, so the reconcile prices only ledger writes. Each changed rule
+takes whichever path writes fewer entries.
+
+Same method, budget, and five flows as above, on a stack built from this
+branch with the compiler's caps raised. Contract events drop from the
+binding limit (72.9% at 6 signers and 8 rules) to at most 31%, which is
+reached at 15 signers. The frontier moves out, and its binding limits
+become CPU instructions (from 6 to 12 signers) and the footprint (at the
+ends). For each signer count, the most rules within budget and the first
+row past it:
+
+| Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | 17 | 61.2% | 72.7% | 73.0% | 70.5% | 40.1% | 10.0% |
+| 2 | 18 | 62.8% | **76.8%** | **76.0%** | 73.5% | 41.1% | 10.0% |
+| 4 | 15 | 66.2% | 69.1% | 73.5% | 70.5% | 41.9% | 13.3% |
+| 4 | 16 | 68.2% | 73.4% | **76.5%** | 73.5% | 43.2% | 13.3% |
+| **6** | **12** | **72.5%** | **66.7%** | **71.0%** | **67.5%** | **41.3%** | **16.5%** |
+| 6 | 13 | **75.5%** | 71.5% | 74.0% | 70.5% | 42.8% | 16.5% |
+| 8 | 9 | 73.6% | 66.9% | 68.5% | 64.5% | 39.4% | 19.7% |
+| 8 | 10 | **77.8%** | 73.3% | 71.5% | 67.5% | 41.1% | 19.7% |
+| 10 | 7 | 73.2% | 65.6% | 69.0% | 64.5% | 37.9% | 22.9% |
+| 10 | 8 | **79.2%** | 73.8% | 72.0% | 67.5% | 39.9% | 22.9% |
+| 12 | 5 | 67.9% | 57.5% | 69.5% | 64.5% | 35.5% | 26.1% |
+| 12 | 6 | **75.3%** | 67.6% | 72.5% | 67.5% | 37.7% | 26.1% |
+| 13 | 5 | 71.2% | 61.8% | 72.8% | 67.5% | 36.3% | 27.8% |
+| 14 | 4 | 65.4% | 54.0% | 73.0% | 67.5% | 34.6% | 29.4% |
+| 14 | 5 | 74.6% | 66.0% | **76.0%** | 70.5% | 37.0% | 29.4% |
+| 15 | 3 | 57.8% | 44.5% | 73.2% | 67.5% | 32.7% | 31.0% |
+| 15 | 4 | 68.1% | 57.5% | **76.2%** | 70.5% | 35.3% | 31.0% |
+
+Every shape still fits the 8 192-byte canonical cap.
+
+**On this branch the caps are 6 signers, 12 rules, and 8 192 canonical
+bytes.** The worst share is instructions at 72.5%, in the compromise whose
+thief kept every rule's name. This is the same rule as above: keep 6
+signers and the most rules. Compared with OZ's events (6 and 8), the
+experiment gains 4 rules. The other frontier points are 2 and 17, 4 and
+15, 8 and 9, 10 and 7, 13 and 5, 14 and 4, and 15 and 3.
+
+At the caps, the worst rows are:
+
+| Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- |
+| Enroll `Combined` through `apply_doc` | 195.9M (49.0%) | 15.1 MB | 150 | 62 | 50 040 | 888 |
+| `begin_lost_key` / `begin_compromise` | 135.0M (33.7%) | 4.8 MB | 25 | 2 | 1 888 | 248 |
+| Thief's `apply_doc` (every key swapped, every rule kept) | 245.7M (61.4%) | 24.8 MB | 100 | 41 | 33 472 | 340 |
+| Thief's `apply_doc` (every key swapped, every rule renamed) | 197.7M (49.4%) | 20.8 MB | 220 | 100 | 46 320 | 340 |
+| Compromise completion, every rule kept by name | 290.2M (72.5%) | 28.0 MB (66.7%) | 162 (40.5%) | 74 (37.0%) | 41 532 (31.4%) | 2 700 (16.5%) |
+| Compromise completion, every rule renamed | 246.4M (61.6%) | 25.2 MB (60.2%) | 284 (71.0%) | 135 (67.5%) | 54 612 (41.3%) | 2 700 (16.5%) |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 287.4M (71.9%) | 27.3 MB | 150 | 68 | 40 696 | 1 908 |
+| `Protected` reconfiguration, every rule edited | 289.1M (72.3%) | 27.7 MB | 129 | 53 | 37 448 | 888 |
+| `Protected` reconfiguration, every rule replaced | 241.6M (60.4%) | 23.8 MB | 249 | 112 | 50 480 | 888 |
+
+The "Release stack, in process" table above is from PR 103, with OZ's
+events. On this branch, the `worst_case_*` tests hold the rows above at the
+compiled-in caps.
+
+A lead for the cost model: when a rule keeps its name, editing it in place
+writes fewer entries than replacing it, but costs more instructions. At the
+caps that is 290M against 246M, with a footprint of 162 against 284. With
+events gone, instructions now bind, so a model that also prices
+instructions could pick replacement for some rules and move the frontier
+further. That has not been measured.

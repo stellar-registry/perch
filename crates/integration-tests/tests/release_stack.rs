@@ -100,6 +100,24 @@ fn report(label: &str, e: &Env) {
         fee.total - fee.persistent_entry_rent - fee.temporary_entry_rent,
         fee.persistent_entry_rent + fee.temporary_entry_rent,
     );
+    if std::env::var_os("PERCH_EVENTS").is_some() {
+        use soroban_sdk::testutils::Events as _;
+        let mut by: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+        for ev in e.events().all().events() {
+            let soroban_sdk::xdr::ContractEventBody::V0(body) = &ev.body;
+            let topic = match body.topics.first() {
+                Some(ScVal::Symbol(s)) => s.to_string(),
+                other => format!("{other:?}"),
+            };
+            let size = soroban_sdk::xdr::WriteXdr::to_xdr(ev, soroban_sdk::xdr::Limits::none())
+                .map(|b| b.len())
+                .unwrap_or(0);
+            let slot = by.entry(topic).or_default();
+            slot.0 += 1;
+            slot.1 += size;
+        }
+        println!("\n{{\"events_of\":\"{label}\",\"by_topic\":\"{by:?}\"}}");
+    }
     if UNBUDGETED.with(Cell::get) {
         return;
     }
@@ -834,6 +852,9 @@ struct Shape {
     plain: u32,
     /// How many signers each rule with the interpreter names (1-of-N).
     fan: usize,
+    /// Prefixed to every rule name but `admin`'s: documents with different
+    /// tags share no rule, so `apply_doc`'s diff replaces every one.
+    tag: &'static str,
 }
 
 impl Shape {
@@ -922,10 +943,14 @@ impl World {
         };
         let mut rules = std::vec![
             r#"{"name":"admin","scope":{"type":"self-admin"},"principals":{"type":"all","signers":["owner"]}}"#.to_string(),
-            format!(r#"{{"name":"target",{scope},{}}}"#, interpreted(0)),
+            format!(
+                r#"{{"name":"{}target",{scope},{}}}"#,
+                shape.tag,
+                interpreted(0)
+            ),
         ];
         for j in 0..shape.both + shape.interp + shape.plain {
-            let name = name_of(format!("r{:02}", j + 2));
+            let name = name_of(format!("{}r{:02}", shape.tag, j + 2));
             let mut interpreted = interpreted(1 + j as usize);
             if j == 0 && values > 0 {
                 // Spare bytes as a second argument constraint: a larger
@@ -985,7 +1010,7 @@ impl World {
         };
         assert!(len(0, 0) <= bytes, "{shape:?} does not fit {bytes} bytes");
         // What the names after `target` can grow by, from three bytes each.
-        let room = (shape.rules() as usize - 2) * (MAX_NAME_SIZE as usize - 3);
+        let room = (shape.rules() as usize - 2) * (MAX_NAME_SIZE as usize - 3 - shape.tag.len());
         let values = if shape.rules() > 2 && len(0, 0) + room < bytes {
             (1..)
                 .take_while(|&v| len(v, 0) <= bytes)
@@ -1489,20 +1514,25 @@ fn protected_reconfiguration_and_upgrade_need_real_proofs() {
     assert!(schedule(&w));
     report("Protected schedule_upgrade", &w.env);
 
-    let execute = |w: &World| -> Option<bool> {
+    let execute = |w: &World| -> Result<(), Option<perch_account::PerchAccountError>> {
         let root = w.invocation(&a.address, "execute_upgrade", std::vec![w.sc(request_id)]);
         w.env
             .set_auths(&[w.passkey_entry(&a.address, &a.owner, "admin", root)]);
         let out = w.account(&a).try_execute_upgrade(&request_id);
         w.env.set_auths(&[]);
         match out {
-            Ok(Ok(done)) => Some(done),
-            _ => None,
+            Ok(Ok(())) => Ok(()),
+            Err(Ok(e)) => Err(Some(e)),
+            _ => Err(None),
         }
     };
-    assert_eq!(execute(&w), None, "the seven-day delay has not elapsed");
+    assert_eq!(
+        execute(&w),
+        Err(Some(perch_account::PerchAccountError::UpgradeNotReady)),
+        "the seven-day delay has not elapsed"
+    );
     w.advance(perch_recovery_interface::account::ACCOUNT_UPGRADE_DELAY_LEDGERS);
-    assert_eq!(execute(&w), Some(true));
+    assert_eq!(execute(&w), Ok(()));
     report("execute_upgrade (bumps the epoch)", &w.env);
     // The upgrade bumped the epoch: the reconfiguration approvals are dead.
     assert_eq!(w.ctl().epoch(&a.address), 3);
@@ -1701,6 +1731,7 @@ fn worst_shape() -> Shape {
         interp: 0,
         plain: 0,
         fan: (MAX_DOC_SIGNERS as usize).min(OZ_MAX_SIGNERS as usize),
+        tag: "",
     }
 }
 
@@ -1779,8 +1810,11 @@ fn worst_lost_key(w: &World, shape: Shape, bytes: usize, seed: u8) {
 /// revoking the most a completion can: a thief holding the owner key swaps
 /// every signer's key (no recovery text changes, so no condition), and the
 /// completion restores the baseline with new keys, revoking the replaced
-/// baseline credentials and every key the thief added.
-fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8) {
+/// baseline credentials and every key the thief added. The thief chooses
+/// how the completion's diff goes: keeping every rule's name (`thief_tag`
+/// empty) makes it edit every rule in place, signer by signer; renaming
+/// every rule makes it remove and add every rule. Both are measured.
+fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: &'static str) {
     let keys = passkeys(seed, shape.signers);
     let a = w.new_account(passkeys(seed, 1).swap_remove(0));
     let zk1 = Zk {
@@ -1805,16 +1839,26 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8) {
     ));
 
     let thief = passkeys(seed + 1, shape.signers);
+    let stolen = Shape {
+        tag: thief_tag,
+        ..shape
+    };
+    let thief_rule = format!("{thief_tag}target");
+    let how = if thief_tag.is_empty() {
+        "the thief kept every rule"
+    } else {
+        "the thief renamed every rule"
+    };
     assert!(w.try_apply(
         &a,
         &keys[0],
-        &w.shaped_doc(&thief, &rec, shape, bytes, true),
+        &w.shaped_doc(&thief, &rec, stolen, bytes, true),
         0
     ));
     report(
         &label(
             shape,
-            "Protected apply_doc (every key swapped, no condition)",
+            &format!("Protected apply_doc (every key swapped, no condition; {how})"),
         ),
         &w.env,
     );
@@ -1841,13 +1885,13 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8) {
         .submit_zk(&a.address, &attempt, &EvidenceDomain::Initiate, &evidence);
     w.guardian(0, &a, attempt, EvidenceDomain::Initiate);
     w.guardian(1, &a, attempt, EvidenceDomain::Initiate);
-    assert!(!w.activity(&a, &thief[0]), "frozen");
+    assert!(!w.activity_via(&a, &thief[0], &thief_rule), "frozen");
     w.advance(DELAY);
     assert!(w.try_complete(&a, &target));
     report(
         &label(
             shape,
-            "completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked)",
+            &format!("completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; {how})"),
         ),
         &w.env,
     );
@@ -1855,14 +1899,15 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8) {
     assert!(w.all_revoked(&a, &thief), "every key the thief added");
     assert!(w.activity(&a, &new_keys[0]));
     assert!(!w.activity(&a, &keys[0]));
-    assert!(!w.activity(&a, &thief[0]));
+    assert!(!w.activity_via(&a, &thief[0], &thief_rule));
 }
 
 /// A `Protected` `Combined` reconfiguration of a `shape` document: the
 /// recorded guardian quorum and proof are read, every signer's key changes
-/// (so every rule changes, however `apply_doc` diffs), and the new
+/// (so `apply_doc`'s diff keeps nothing) and, with `next_tag`, every rule's
+/// name too (so it replaces every rule instead of editing it), and the new
 /// configuration enrolls a new ZK credential (a pool insert).
-fn worst_reconfiguration(w: &World, shape: Shape, bytes: usize, seed: u8) {
+fn worst_reconfiguration(w: &World, shape: Shape, bytes: usize, seed: u8, next_tag: &'static str) {
     let keys = passkeys(seed, shape.signers);
     let a = w.new_account(passkeys(seed, 1).swap_remove(0));
     let zk1 = Zk {
@@ -1895,7 +1940,10 @@ fn worst_reconfiguration(w: &World, shape: Shape, bytes: usize, seed: u8) {
     let next_doc = w.shaped_doc(
         &passkeys(seed + 1, shape.signers),
         &next,
-        shape,
+        Shape {
+            tag: next_tag,
+            ..shape
+        },
         bytes,
         true,
     );
@@ -1912,7 +1960,10 @@ fn worst_reconfiguration(w: &World, shape: Shape, bytes: usize, seed: u8) {
     report(
         &label(
             shape,
-            "Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment)",
+            &format!(
+                "Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment; {})",
+                if next_tag.is_empty() { "every rule edited" } else { "every rule replaced" }
+            ),
         ),
         &w.env,
     );
@@ -1934,10 +1985,35 @@ fn worst_case_lost_key_recovery_at_the_document_caps() {
     );
 }
 
+fn worst_compromise_in_place(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, "")
+}
+
+fn worst_compromise_renamed(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, "t")
+}
+
+fn worst_reconfiguration_in_place(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_reconfiguration(w, shape, bytes, seed, "")
+}
+
+fn worst_reconfiguration_renamed(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_reconfiguration(w, shape, bytes, seed, "n")
+}
+
+/// Every worst-case flow, both ways a diff can go.
+const WORST_FLOWS: [fn(&World, Shape, usize, u8); 5] = [
+    worst_lost_key,
+    worst_compromise_in_place,
+    worst_compromise_renamed,
+    worst_reconfiguration_in_place,
+    worst_reconfiguration_renamed,
+];
+
 #[test]
 #[ignore = "needs the built stack and the pinned proving toolchain"]
-fn worst_case_compromise_at_the_document_caps_revokes_both_key_sets() {
-    worst_compromise(
+fn worst_case_compromise_at_the_document_caps_edits_every_rule() {
+    worst_compromise_in_place(
         &world(),
         worst_shape(),
         MAX_DOC_CANONICAL_BYTES as usize,
@@ -1947,12 +2023,34 @@ fn worst_case_compromise_at_the_document_caps_revokes_both_key_sets() {
 
 #[test]
 #[ignore = "needs the built stack and the pinned proving toolchain"]
-fn worst_case_protected_reconfiguration_at_the_document_caps() {
-    worst_reconfiguration(
+fn worst_case_compromise_at_the_document_caps_replaces_every_rule() {
+    worst_compromise_renamed(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        85,
+    );
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_protected_reconfiguration_at_the_document_caps_edits_every_rule() {
+    worst_reconfiguration_in_place(
         &world(),
         worst_shape(),
         MAX_DOC_CANONICAL_BYTES as usize,
         90,
+    );
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_protected_reconfiguration_at_the_document_caps_replaces_every_rule() {
+    worst_reconfiguration_renamed(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        95,
     );
 }
 
@@ -1976,6 +2074,7 @@ fn cap_sweep() {
             interp: v[2] as u32,
             plain: v[3] as u32,
             fan: v[4],
+            tag: "",
         };
         let seed = 100 + 10 * (n % 15) as u8;
         let w = world();
@@ -1989,8 +2088,16 @@ fn cap_sweep() {
             delay: DELAY,
             baseline: Some(BytesN::from_array(&w.env, &[0; 32])),
         };
-        let own =
-            canonical_len(&w.shaped_json(&passkeys(seed, shape.signers), &rec, shape, 0, 0, true));
+        // Sized with a one-byte tag, as the thief's and the reconfiguration's
+        // documents are.
+        let own = canonical_len(&w.shaped_json(
+            &passkeys(seed, shape.signers),
+            &rec,
+            Shape { tag: "t", ..shape },
+            0,
+            0,
+            true,
+        ));
         let bytes = match v.get(5).copied() {
             None => MAX_DOC_CANONICAL_BYTES as usize,
             Some(0) => own.div_ceil(1024).max(8) * 1024,
@@ -2014,7 +2121,7 @@ fn cap_sweep() {
             skip("does not fit the byte target");
             continue;
         }
-        for flow in [worst_lost_key, worst_compromise, worst_reconfiguration] {
+        for flow in WORST_FLOWS {
             let w = world();
             w.env.cost_estimate().disable_resource_limits();
             UNBUDGETED.with(|u| u.set(true));

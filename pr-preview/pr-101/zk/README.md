@@ -27,6 +27,25 @@ root retention, witnesses, renewal), and
 [`measurements.md`](measurements.md) (proving and on-chain costs, budgets, and
 the depth decision).
 
+## Open release criteria
+
+These must close before this stack is released. Each is tracked in the PR.
+
+1. **Witness hiding.** The audited verifier implements Barretenberg's
+   *non-zero-knowledge* `UltraKeccakFlavor`, and proofs are generated in that
+   flavor. A non-ZK proof carries witness-dependent protocol messages, so the
+   enrolled secret is not cryptographically hidden. That matters because the
+   same secret backs cancellation, reconfiguration, and upgrade proofs until a
+   completion consumes it. No audited Soroban verifier implements a
+   zero-knowledge flavor yet. The options and their measured costs are in the
+   PR (blocker `zk-flavor`). Do not rely on these proofs for secrecy until
+   this is resolved.
+2. **Client proving on reference devices.** `budgets.md` §1 sets budgets for
+   a mid-range phone and laptop. Only desktop numbers exist
+   ([`measurements.md`](measurements.md)).
+3. **Full-transaction measurements.** These belong to the controller and
+   account workstream (`budgets.md` §2).
+
 ## How a proof is checked
 
 ```text

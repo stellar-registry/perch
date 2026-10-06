@@ -160,6 +160,41 @@ impl ReplacementSet {
     }
 }
 
+/// The credential fingerprints a completion revokes (spec §8): the union of
+/// every **explicitly replaced source credential** and every credential in
+/// the account's **current** applied document that is absent from the
+/// target. Deduplicated, in first-seen order.
+///
+/// Both halves are needed:
+///
+/// - The first half alone misses credentials a compromise recovery drops
+///   from the current document, such as an attacker's additions.
+/// - The second half alone misses a baseline credential that a compromise
+///   recovery replaces but that was already absent from the current
+///   document. That credential would stay unrevoked, and a later recovery
+///   from the same baseline would restore it.
+///
+/// All three inputs must be fingerprints over verifier-canonical keys.
+pub fn revocations(
+    e: &Env,
+    replaced: &Vec<BytesN<32>>,
+    current: &Vec<BytesN<32>>,
+    target: &Vec<BytesN<32>>,
+) -> Vec<BytesN<32>> {
+    let mut out: Vec<BytesN<32>> = Vec::new(e);
+    for f in replaced.iter() {
+        if !out.contains(&f) {
+            out.push_back(f);
+        }
+    }
+    for f in current.iter() {
+        if !target.contains(&f) && !out.contains(&f) {
+            out.push_back(f);
+        }
+    }
+    out
+}
+
 /// Byte-lexicographic `a < b`, a proper prefix sorting first.
 fn bytes_lt(a: &Bytes, b: &Bytes) -> bool {
     let n = a.len().min(b.len());
@@ -336,6 +371,56 @@ mod test {
             zk_enrollment: vec![&e, zk(&e, 5, 7), zk(&e, 6, 7)],
         };
         assert_eq!(two.hash(&e), Err(StatementError::ReplacementsNotCanonical));
+    }
+
+    fn fp(e: &Env, byte: u8) -> BytesN<32> {
+        BytesN::from_array(e, &[byte; 32])
+    }
+
+    /// The sequence reproduced against the WS3 implementation: the baseline
+    /// names owner A; the current document has moved to owner B; a
+    /// compromise recovery restores the baseline with A's slot replaced by
+    /// C. A is replaced but already absent from the current document, so a
+    /// current-minus-target rule alone would leave it unrevoked, and a
+    /// second compromise recovery from the same baseline would restore A.
+    #[test]
+    fn compromise_revokes_the_replaced_baseline_credential() {
+        let e = Env::default();
+        let (a, b, c) = (fp(&e, 0xa), fp(&e, 0xb), fp(&e, 0xc));
+        let replaced = vec![&e, a.clone()];
+        let current = vec![&e, b.clone()];
+        let target = vec![&e, c.clone()];
+        let revoked = revocations(&e, &replaced, &current, &target);
+        assert_eq!(revoked, vec![&e, a.clone(), b.clone()]);
+        assert!(!revoked.contains(&c));
+    }
+
+    #[test]
+    fn lost_key_revokes_exactly_the_replaced_credential() {
+        let e = Env::default();
+        let (a, c, x) = (fp(&e, 0xa), fp(&e, 0xc), fp(&e, 0x1));
+        // Source = current = {A, X}; A's slot replaced by C.
+        let revoked = revocations(
+            &e,
+            &vec![&e, a.clone()],
+            &vec![&e, a.clone(), x.clone()],
+            &vec![&e, c.clone(), x.clone()],
+        );
+        assert_eq!(revoked, vec![&e, a]);
+    }
+
+    #[test]
+    fn compromise_also_revokes_everything_dropped_from_the_current_document() {
+        let e = Env::default();
+        let (a, b, c, z) = (fp(&e, 0xa), fp(&e, 0xb), fp(&e, 0xc), fp(&e, 0xe));
+        // Current {A, Z(attacker)}; baseline {A, B}; A replaced by C.
+        let revoked = revocations(
+            &e,
+            &vec![&e, a.clone()],
+            &vec![&e, a.clone(), z.clone()],
+            &vec![&e, c.clone(), b.clone()],
+        );
+        assert_eq!(revoked, vec![&e, a, z]);
     }
 
     #[test]

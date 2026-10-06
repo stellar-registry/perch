@@ -11,6 +11,7 @@
 //! `publish_baseline`) through [`crate::account::RecoveryAccountClient`].
 
 use crate::config::CompiledRecoveryConfig;
+use crate::credential::Credential;
 use crate::statement::UpgradeSubject;
 use soroban_sdk::{contractclient, contracttype, Address, BytesN, Env, Vec};
 use soroban_sdk_tools::scerr;
@@ -103,11 +104,37 @@ pub enum SyncOutcome {
     /// The configuration was removed from this controller (recovery
     /// removed, or the account switched to another controller).
     Removed,
-    /// The authorized attempt with this id completed in this invocation.
-    /// The account inserts the new leaf if the enrollment id changed,
-    /// records the enrollment id, appends revocations, clears its pending
-    /// upgrade, and clears its freeze mirror.
-    Completed(u64),
+    /// The authorized attempt completed in this invocation. The account
+    /// inserts the new leaf if the enrollment id changed, records the
+    /// enrollment id, revokes [`Completion::revocations`] (spec §8), clears
+    /// its pending upgrade, and clears its freeze mirror.
+    Completed(Completion),
+}
+
+impl SyncOutcome {
+    /// Whether the account's recovery generation must advance (spec §12):
+    /// every outcome except `Unchanged` is a recovery-configuration
+    /// transition that invalidates a queued upgrade.
+    pub fn bumps_generation(&self) -> bool {
+        !matches!(self, SyncOutcome::Unchanged)
+    }
+}
+
+/// What a completion hands back to the account.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Completion {
+    /// The attempt that completed.
+    pub attempt_id: u64,
+    /// The credentials that occupied the replaced signer slots **in the
+    /// attempt's source document**, as derived at T1: the applied document
+    /// for lost-key, the baseline for compromise. The account fingerprints
+    /// them over canonical keys and revokes them together with every
+    /// credential the completion removed from its current document. Without
+    /// these, a baseline credential replaced by a compromise recovery, and
+    /// already absent from the current document, would stay unrevoked and
+    /// could be restored by a later recovery from the same baseline.
+    pub replaced: Vec<Credential>,
 }
 
 /// Which phase of an account upgrade `rcv_upgrade` is checking (spec §12).

@@ -1,7 +1,7 @@
 //! Account-side constants `docs/recovery/spec.md` fixes, and the account
 //! surface the recovery controller calls.
 
-use soroban_sdk::{contractclient, Address, Bytes, BytesN, Env, Symbol};
+use soroban_sdk::{contractclient, contracttype, Address, Bytes, BytesN, Env, Symbol};
 
 /// Ledgers in one day at the nominal 5-second close time. Used only to
 /// *define* ledger-count constants below; nothing converts a duration a
@@ -13,6 +13,81 @@ pub const LEDGERS_PER_DAY_NOMINAL: u32 = 17_280;
 /// ledgers; it is seven days only while ledgers close every five seconds,
 /// and the delay is enforced in ledgers regardless.
 pub const ACCOUNT_UPGRADE_DELAY_LEDGERS: u32 = 7 * LEDGERS_PER_DAY_NOMINAL;
+
+/// One pending account upgrade (spec §12).
+///
+/// Staleness is judged against the account's own **recovery generation**, a
+/// `u64` the account keeps in its own storage. It starts at 0 and is never
+/// reset. It advances on every `rcv_sync` outcome other than `Unchanged`
+/// (`controller::SyncOutcome::bumps_generation`) and on every executed
+/// upgrade.
+///
+/// The controller's epoch cannot play this role. It belongs to one
+/// controller and does not exist while the account is unenrolled, so a
+/// request scheduled unenrolled would survive enrolling recovery and
+/// removing it again: the final state has no controller, just as at
+/// scheduling.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpgradeRequest {
+    /// Per-account, never reused.
+    pub request_id: u64,
+    /// The exact Wasm the account will run.
+    pub wasm_hash: BytesN<32>,
+    /// The account's recovery generation when the request was scheduled.
+    pub generation: u64,
+    /// The adopted controller's epoch when scheduled, if a controller was
+    /// adopted. Passed back as `UpgradeStep::Execute` so the controller can
+    /// check it too.
+    pub controller_epoch: Option<u64>,
+    /// The first ledger at which the request may execute.
+    pub executable_at: u32,
+}
+
+/// Whether a pending upgrade may execute now.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpgradeReadiness {
+    /// The delay has passed and nothing invalidated the request.
+    Ready,
+    /// The delay has not passed yet.
+    NotYet,
+    /// The recovery generation moved since scheduling. The request is dead
+    /// and is cleared.
+    Stale,
+}
+
+impl UpgradeRequest {
+    /// A request scheduled at ledger `now`, executable
+    /// [`ACCOUNT_UPGRADE_DELAY_LEDGERS`] later. `None` if that overflows
+    /// `u32`.
+    pub fn schedule(
+        request_id: u64,
+        wasm_hash: BytesN<32>,
+        generation: u64,
+        controller_epoch: Option<u64>,
+        now: u32,
+    ) -> Option<Self> {
+        Some(UpgradeRequest {
+            request_id,
+            wasm_hash,
+            generation,
+            controller_epoch,
+            executable_at: now.checked_add(ACCOUNT_UPGRADE_DELAY_LEDGERS)?,
+        })
+    }
+
+    /// Staleness first: a request from an older generation is dead whether
+    /// or not its delay has passed.
+    pub fn readiness(&self, now: u32, generation: u64) -> UpgradeReadiness {
+        if generation != self.generation {
+            UpgradeReadiness::Stale
+        } else if now < self.executable_at {
+            UpgradeReadiness::NotYet
+        } else {
+            UpgradeReadiness::Ready
+        }
+    }
+}
 
 /// Functions the account must only ever authorize as the **direct invoker**
 /// (Soroban invoker-contract authorization), never through `__check_auth`,
@@ -99,6 +174,74 @@ mod test {
     #[test]
     fn upgrade_delay_is_seven_nominal_days_in_ledgers() {
         assert_eq!(ACCOUNT_UPGRADE_DELAY_LEDGERS, 120_960);
+    }
+
+    /// The sequence reproduced against the WS3 implementation: schedule
+    /// while unenrolled, enroll `Loss` recovery, remove it, wait out the
+    /// delay, execute. The final state has no controller, as at scheduling,
+    /// but the account's generation moved twice, so the request is stale.
+    #[test]
+    fn enroll_then_remove_stales_an_unenrolled_upgrade() {
+        use crate::controller::SyncOutcome;
+        let e = Env::default();
+        let mut generation = 0u64;
+        let req = UpgradeRequest::schedule(
+            0,
+            BytesN::from_array(&e, &[0x77; 32]),
+            generation,
+            None,
+            100,
+        )
+        .unwrap();
+        assert_eq!(req.executable_at, 100 + ACCOUNT_UPGRADE_DELAY_LEDGERS);
+
+        for outcome in [SyncOutcome::Enrolled, SyncOutcome::Removed] {
+            if outcome.bumps_generation() {
+                generation += 1;
+            }
+        }
+        assert_eq!(generation, 2);
+        assert_eq!(
+            req.readiness(req.executable_at, generation),
+            UpgradeReadiness::Stale
+        );
+    }
+
+    #[test]
+    fn unchanged_syncs_leave_a_request_executable() {
+        use crate::controller::SyncOutcome;
+        let e = Env::default();
+        let req =
+            UpgradeRequest::schedule(3, BytesN::from_array(&e, &[1; 32]), 5, Some(9), 10).unwrap();
+        assert!(!SyncOutcome::Unchanged.bumps_generation());
+        assert_eq!(req.readiness(10, 5), UpgradeReadiness::NotYet);
+        assert_eq!(
+            req.readiness(req.executable_at - 1, 5),
+            UpgradeReadiness::NotYet
+        );
+        assert_eq!(req.readiness(req.executable_at, 5), UpgradeReadiness::Ready);
+        assert_eq!(req.readiness(10, 6), UpgradeReadiness::Stale);
+        assert!(
+            UpgradeRequest::schedule(0, BytesN::from_array(&e, &[1; 32]), 0, None, u32::MAX)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn every_transition_outcome_bumps_the_generation() {
+        use crate::controller::{Completion, SyncOutcome};
+        let e = Env::default();
+        for outcome in [
+            SyncOutcome::Enrolled,
+            SyncOutcome::Reconfigured,
+            SyncOutcome::Removed,
+            SyncOutcome::Completed(Completion {
+                attempt_id: 1,
+                replaced: soroban_sdk::Vec::new(&e),
+            }),
+        ] {
+            assert!(outcome.bumps_generation());
+        }
     }
 
     #[test]

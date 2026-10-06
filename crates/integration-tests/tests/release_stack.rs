@@ -1718,7 +1718,7 @@ fn label(shape: Shape, what: &str) -> String {
 /// signer replaced: enrollment, `begin_lost_key`, and the completion that
 /// compiles the target, replaces every rule with its policies, revokes
 /// every replaced credential, and rotates the ZK credential.
-fn worst_lost_key(w: &World, shape: Shape, seed: u8) {
+fn worst_lost_key(w: &World, shape: Shape, bytes: usize, seed: u8) {
     let keys = passkeys(seed, shape.signers);
     let a = w.new_account(passkeys(seed, 1).swap_remove(0));
     let zk1 = Zk {
@@ -1732,7 +1732,7 @@ fn worst_lost_key(w: &World, shape: Shape, seed: u8) {
         delay: DELAY,
         baseline: None,
     };
-    let doc = w.shaped_doc(&keys, &rec, shape, MAX_DOC_CANONICAL_BYTES as usize, true);
+    let doc = w.shaped_doc(&keys, &rec, shape, bytes, true);
     assert!(w.try_apply(&a, &keys[0], &doc, 0));
     report(&label(shape, "enroll Combined through apply_doc"), &w.env);
 
@@ -1780,7 +1780,7 @@ fn worst_lost_key(w: &World, shape: Shape, seed: u8) {
 /// every signer's key (no recovery text changes, so no condition), and the
 /// completion restores the baseline with new keys, revoking the replaced
 /// baseline credentials and every key the thief added.
-fn worst_compromise(w: &World, shape: Shape, seed: u8) {
+fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8) {
     let keys = passkeys(seed, shape.signers);
     let a = w.new_account(passkeys(seed, 1).swap_remove(0));
     let zk1 = Zk {
@@ -1795,7 +1795,6 @@ fn worst_compromise(w: &World, shape: Shape, seed: u8) {
         // Sized with a baseline hash of the real one's length.
         baseline: Some(BytesN::from_array(&w.env, &[0; 32])),
     };
-    let bytes = MAX_DOC_CANONICAL_BYTES as usize;
     let baseline = w.shaped_doc(&keys, &rec, shape, bytes, false);
     rec.baseline = Some(w.doc_hash(&baseline));
     assert!(w.try_apply(
@@ -1860,9 +1859,10 @@ fn worst_compromise(w: &World, shape: Shape, seed: u8) {
 }
 
 /// A `Protected` `Combined` reconfiguration of a `shape` document: the
-/// recorded guardian quorum and proof are read, every rule is replaced,
-/// and the new configuration enrolls a new ZK credential (a pool insert).
-fn worst_reconfiguration(w: &World, shape: Shape, seed: u8) {
+/// recorded guardian quorum and proof are read, every signer's key changes
+/// (so every rule changes, however `apply_doc` diffs), and the new
+/// configuration enrolls a new ZK credential (a pool insert).
+fn worst_reconfiguration(w: &World, shape: Shape, bytes: usize, seed: u8) {
     let keys = passkeys(seed, shape.signers);
     let a = w.new_account(passkeys(seed, 1).swap_remove(0));
     let zk1 = Zk {
@@ -1876,7 +1876,6 @@ fn worst_reconfiguration(w: &World, shape: Shape, seed: u8) {
         delay: DELAY,
         baseline: None,
     };
-    let bytes = MAX_DOC_CANONICAL_BYTES as usize;
     assert!(w.try_apply(
         &a,
         &keys[0],
@@ -1893,7 +1892,13 @@ fn worst_reconfiguration(w: &World, shape: Shape, seed: u8) {
         delay: DELAY * 2,
         ..rec.clone()
     };
-    let next_doc = w.shaped_doc(&keys, &next, shape, bytes, true);
+    let next_doc = w.shaped_doc(
+        &passkeys(seed + 1, shape.signers),
+        &next,
+        shape,
+        bytes,
+        true,
+    );
     let valid_until = w.ledger() + EXPIRY;
     assert!(!w.try_apply(&a, &keys[0], &next_doc, valid_until));
     let subject = StatementSubject::Reconfigure(ConfigChange::Set(w.config_hash(&next_doc)));
@@ -1921,24 +1926,43 @@ fn worst_reconfiguration(w: &World, shape: Shape, seed: u8) {
 #[test]
 #[ignore = "needs the built stack and the pinned proving toolchain"]
 fn worst_case_lost_key_recovery_at_the_document_caps() {
-    worst_lost_key(&world(), worst_shape(), 70);
+    worst_lost_key(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        70,
+    );
 }
 
 #[test]
 #[ignore = "needs the built stack and the pinned proving toolchain"]
 fn worst_case_compromise_at_the_document_caps_revokes_both_key_sets() {
-    worst_compromise(&world(), worst_shape(), 80);
+    worst_compromise(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        80,
+    );
 }
 
 #[test]
 #[ignore = "needs the built stack and the pinned proving toolchain"]
 fn worst_case_protected_reconfiguration_at_the_document_caps() {
-    worst_reconfiguration(&world(), worst_shape(), 90);
+    worst_reconfiguration(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        90,
+    );
 }
 
 /// Sizing the caps: every worst-case flow over the shapes in
-/// `PERCH_CAP_SWEEP` (`signers,both,interp,plain,fan;...`), with the budget
-/// and the network limits lifted so a row past them still prints.
+/// `PERCH_CAP_SWEEP` (`signers,both,interp,plain,fan[,bytes];...`, bytes
+/// defaulting to the byte cap), with the budget and the network limits
+/// lifted so a row past them still prints. A shape past this build's caps
+/// or its byte target is reported and skipped: measure larger shapes on a
+/// stack built with the compiler's caps raised. `scripts/cap-sweep.py`
+/// runs it and tabulates the frontier.
 #[test]
 #[ignore = "sizing tool: PERCH_CAP_SWEEP=..."]
 fn cap_sweep() {
@@ -1952,12 +1976,46 @@ fn cap_sweep() {
             plain: v[3] as u32,
             fan: v[4],
         };
-        let seed = 100 + 10 * n as u8;
+        let bytes = v
+            .get(5)
+            .copied()
+            .unwrap_or(MAX_DOC_CANONICAL_BYTES as usize);
+        let skip = |why: &str| {
+            println!(
+                "\n{{\"case\":\"skipped\",\"signers\":{},\"rules\":{},\"bytes\":{bytes},\"why\":\"{why}\"}}",
+                shape.signers,
+                shape.rules()
+            )
+        };
+        if shape.signers > MAX_DOC_SIGNERS as usize
+            || shape.rules() > MAX_DOC_RULES
+            || bytes > MAX_DOC_CANONICAL_BYTES as usize
+        {
+            skip("past this build's caps");
+            continue;
+        }
+        let seed = 100 + 10 * (n % 15) as u8;
+        let w = world();
+        let rec = Rec {
+            profile: "protected",
+            mode: Mode::Combined,
+            zk: Some(Zk {
+                secret: field("fit"),
+                id: field("fit id"),
+            }),
+            delay: DELAY,
+            baseline: Some(BytesN::from_array(&w.env, &[0; 32])),
+        };
+        let keys = passkeys(seed, shape.signers);
+        if canonical_len(&w.shaped_json(&keys, &rec, shape, 0, 0, true)) > bytes {
+            skip("does not fit the byte target");
+            continue;
+        }
         for flow in [worst_lost_key, worst_compromise, worst_reconfiguration] {
             let w = world();
             w.env.cost_estimate().disable_resource_limits();
             UNBUDGETED.with(|u| u.set(true));
-            flow(&w, shape, seed);
+            flow(&w, shape, bytes, seed);
         }
     }
 }

@@ -36,7 +36,7 @@ compiler). "Refuse" means the call fails and changes no state.
 | D4 | Reconfiguration | `Loss`: owner authorization. `Protected`: owner authorization plus the enrolled condition's evidence over a `Reconfigure` statement (`Combined`: guardian quorum and a ZK proof). | §5, §10 |
 | D5 | Cancellation | The enrolled condition's evidence over a `Cancel` statement, in both profiles. Under `Loss`, owner authorization alone also cancels, and that veto is never capped. An evidence-based cancellation of an authorized attempt counts toward `max-cancels`. | §6 |
 | D6 | Permitted changes | The target document is derived on-chain from the source and a declared replacement set. For lost-key the source is the applied-document snapshot; for compromise it is the enrolled baseline's signers and rules, with the current recovery section. Nobody chooses a target hash. | §7 |
-| D7 | Revocation | A completion revokes the union of (a) the credentials it explicitly replaced in its source document, the baseline included, and (b) every credential it removed from the current document. Both go into the account's permanent revoked set. Every applied document is checked against that set, on every path. | §8 |
+| D7 | Revocation | A credential a recovery replaces leaves the account, so the target may not keep it in any slot (swaps and no-op replacements are refused at T1), and it never authorizes again. A completion revokes the union of (a) the credentials it explicitly replaced in its source document, the baseline included, and (b) every credential it removed from the current document. Both go into the account's permanent revoked set. Every applied document is checked against that set, on every path. | §7.3, §8 |
 | D8 | Completion vs. reconfiguration | A completion is recognised by the attempt consumed in the same invocation. It may change exactly what its replacement set declares. Configuration identity is the canonical text of the recovery section, so rotating a signer's key is not a reconfiguration. | §10 |
 | D9 | Nullifiers | One nullifier per enrolled ZK credential, owned by that `(account, enrollment)`. It is either unspent or spent. Only a completion of that account spends it; nothing ever un-spends it. Proofs for any action need it unspent. There are no reservations, so there is nothing to release (#91). | §11 |
 | D10 | Stale state | Leaves and nullifiers bind an enrollment id the configuration names, and the account refuses to re-enroll an id it used before. Every configuration change and every completion bumps the per-account epoch, and evidence or attempts from an older epoch are dead. | §3, §11 |
@@ -453,8 +453,20 @@ Refuses if any of the following hold:
 
 - the account is not enrolled;
 - an attempt is authorized and live;
-- the replacement set is invalid (§7);
+- `derive_target` refuses the replacement set (§7.3 rules 1–3, 5, 6, or
+  rule 4's commitment check);
+- the ZK enrollment id was enrolled by the account before, per the
+  account's `is_enrolled_id` (§7.3 rule 4; `EnrollmentIdReused`);
+- a credential in the target, or a replacement credential, is revoked, per
+  the account's `is_revoked` (rule 7; `CredentialRevoked`);
+- a replaced source credential still appears in the target (rule 8;
+  `ReplacedCredentialRetained`);
 - for compromise: no baseline is enrolled or its content is unpublished.
+
+The checks against the account's history (enrolled ids, revoked set) are
+the controller's. `derive_target` is pure and sees only the two documents
+and the replacement set. T1 is an external entry point, so the controller
+may read the account's views there (D16).
 
 Otherwise:
 
@@ -591,11 +603,14 @@ returns:
 
 - the target's canonical bytes and hash;
 - the target's configuration hash;
-- the fingerprints of every credential in the target (for T1's revocation
-  check, §7.3 rule 7);
-- the credentials occupying the replaced signer slots in the source, which
-  for compromise are the **baseline's** credentials (recorded at T1 and
-  revoked at completion, §8).
+- every signer credential in the target, as declared;
+- the credentials occupying the replaced signer slots in the source. For
+  compromise these are the **baseline's** credentials. They are recorded at
+  T1 and revoked at completion (§8).
+
+The compiler is pure and makes no verifier calls. The controller therefore
+canonicalizes the returned credentials (`Verifier::batch_canonicalize_key`)
+and fingerprints them (`Credential::fingerprint`) for rules 7 and 8.
 
 Completers obtain the canonical bytes by simulating the same call.
 
@@ -616,8 +631,14 @@ The replacement set (`credential::ReplacementSet`) lists
 `(signer_id, credential)` pairs in strictly ascending id order. When the mode
 has a ZK factor it also carries exactly one `ZkEnrollment { id,
 commitment }`; otherwise it carries none. T1 refuses unless every rule
-below holds (rules 1–6 checked by `derive_target`, rule 7 by the controller
-against the account's `is_revoked` view):
+below holds:
+
+- `derive_target` checks rules 1–3, 5, 6, and the commitment half of
+  rule 4.
+- The controller checks the enrollment-id half of rule 4 against the
+  account's `is_enrolled_id`.
+- The controller checks rule 7 against the account's `is_revoked`, and
+  rule 8 itself.
 
 1. Every `signer_id` is in the current configuration's `replaceable` and is
    declared in the source.
@@ -627,8 +648,9 @@ against the account's `is_revoked` view):
    verifier the account had not already adopted for that slot.
 3. Lost-key attempts replace at least one signer. Compromise attempts may
    replace none, which restores the baseline as is.
-4. A ZK enrollment's id is not in the account's set of enrolled ids
-   (§3.4), and its commitment is a canonical field element. The target's
+4. A ZK enrollment's commitment is a canonical field element (compiler),
+   and its id is not in the account's set of enrolled ids (§3.4;
+   controller, via `is_enrolled_id`). The target's
    `recovery.mode.enrollment-id` and `commitment` become the new values.
    Nothing else in the recovery section changes.
 5. Nothing else changes: rules, other signers, network, version.
@@ -636,6 +658,18 @@ against the account's `is_revoked` view):
    material), the anti-brick check, and network binding.
 7. No credential in the target, and no replacement credential, is in the
    account's revoked set (compared by canonical fingerprint, §8).
+8. **No explicitly replaced source credential appears anywhere in the
+   target** (compared by canonical fingerprint;
+   `credential::replaced_credentials_leave`). This refuses a no-op
+   replacement (a slot "replaced" by its own credential) and a swap of
+   credentials between slots.
+
+   The alternative, treating a retained credential as not replaced, would
+   let a swapped key keep authorizing from its new slot. That would break
+   D7's guarantee that a credential a recovery replaces never authorizes
+   again, and §8 would revoke a credential the target installs. With
+   rule 8, every replaced credential leaves the account at completion and
+   is revoked there.
 
 Rule 7 means an old baseline cannot restore a credential revoked after the
 baseline was approved: the compromise attempt must replace that slot, or it
@@ -648,7 +682,8 @@ usable without extra replacements.
 **Enforced on-chain:** the target equals the source with exactly the
 declared replacements. The replacements are what every guardian and prover
 approved, because `replacements_hash` and `target_doc_hash` are in the
-statement. Revoked credentials do not return. The recovery section is
+statement. Every replaced credential leaves the account and is revoked,
+and revoked credentials do not return. The recovery section is
 unchanged except for the declared ZK rotation.
 
 **Not enforced on-chain, and who owns it:**
@@ -700,7 +735,9 @@ and compiles and installs the target. Two rules bound that cost:
      this at completion; its applied document cannot change after
      authorization (§9).
 
-  For lost-key the two sets coincide.
+  For lost-key the two sets coincide. Rule 8 (§7.3) guarantees that
+  neither set contains a credential the target installs, so the completion
+  never revokes what it applies.
 
   For compromise they differ, and each matters on its own:
   - Set 2 covers everything added since the baseline. The recovery cannot

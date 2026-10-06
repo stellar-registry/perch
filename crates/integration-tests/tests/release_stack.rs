@@ -21,13 +21,17 @@
 //! Each transaction-shaped call prints one `{"case": ...}` JSON line with its
 //! metered resources (the in-process estimate of the on-chain cost), and is
 //! asserted to fit within the budget rule's 75% of the per-transaction limits
-//! (`docs/recovery/budgets.md` §2).
+//! (`docs/recovery/budgets.md` §2). The `worst_case_*` tests do the same for
+//! the costliest document the compiler's caps admit, and `cap_sweep` measures
+//! any other shape (`budgets.md`, "Document caps").
 
 mod support;
 
 use perch_account::PerchAccountClient;
 use perch_account_factory::PerchAccountFactoryClient;
-use perch_doc_compiler::PerchDocCompilerClient;
+use perch_doc_compiler::{
+    PerchDocCompilerClient, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS,
+};
 use perch_recovery::{EvidenceDomain, PerchRecoveryClient, RecoveryError};
 use perch_recovery_interface::credential::{Credential, Replacement, ReplacementSet, ZkEnrollment};
 use perch_recovery_interface::zk::{ZkAdapterClient, ZkEvidence};
@@ -49,7 +53,9 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use stellar_accounts::smart_account::{AuthPayload, SmartAccountStorageKey};
+use stellar_accounts::smart_account::{
+    AuthPayload, SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
+};
 use support::{strkey, Key, TargetClient};
 
 // ---------------------------------------------------------------------------
@@ -67,6 +73,11 @@ const TX_MAX_FOOTPRINT_ENTRIES: u64 = 400;
 const TX_MAX_EVENTS_BYTES: u64 = 16_384;
 /// `docs/recovery/budgets.md` §2: every row within 75% of each limit.
 const BUDGET_PCT: u64 = 75;
+
+thread_local! {
+    /// Set by [`cap_sweep`] only: report rows without asserting the budget.
+    static UNBUDGETED: Cell<bool> = const { Cell::new(false) };
+}
 
 fn report(label: &str, e: &Env) {
     let r = e.cost_estimate().resources();
@@ -89,6 +100,9 @@ fn report(label: &str, e: &Env) {
         fee.total - fee.persistent_entry_rent - fee.temporary_entry_rent,
         fee.persistent_entry_rent + fee.temporary_entry_rent,
     );
+    if UNBUDGETED.with(Cell::get) {
+        return;
+    }
     let within = |used: u64, limit: u64| used * 100 <= limit * BUDGET_PCT;
     assert!(
         within(r.instructions as u64, TX_MAX_INSTRUCTIONS),
@@ -248,9 +262,12 @@ fn world() -> World {
     let env = Env::new_with_config(EnvTestConfig {
         capture_snapshot_at_drop: false,
     });
-    env.cost_estimate()
-        .budget()
-        .reset_limits(TX_MAX_INSTRUCTIONS, TX_MEMORY_LIMIT);
+    // The network's per-transaction limits are the SDK's default invocation
+    // resource limits (mainnet's, checked after every call), and the budget
+    // rule is `report`'s. A budget limit would also cap the test host's own
+    // shadow bookkeeping (diagnostic events and auth observation, over 8 KiB
+    // documents at the caps), which no network charges.
+    env.cost_estimate().budget().reset_unlimited();
     let network_id = env
         .crypto()
         .sha256(&Bytes::from_slice(&env, FIXTURE_NETWORK.as_bytes()))
@@ -469,6 +486,10 @@ impl World {
     }
 
     fn recovery_json(&self, r: &Rec) -> String {
+        self.recovery_json_replacing(r, &["owner"])
+    }
+
+    fn recovery_json_replacing(&self, r: &Rec, replaceable: &[&str]) -> String {
         let guardians: std::vec::Vec<String> = self
             .guardians
             .iter()
@@ -498,10 +519,13 @@ impl World {
             .as_ref()
             .map(|b| format!(r#","baseline":{{"doc-hash":"{}"}}"#, hex(&b.to_array())))
             .unwrap_or_default();
+        let replaceable: std::vec::Vec<String> =
+            replaceable.iter().map(|id| format!(r#""{id}""#)).collect();
         format!(
-            r#"{{"profile":"{}","mode":{mode},"controller":"{}"{baseline},"replaceable":["owner"],"delay-ledgers":{},"expiry-ledgers":{EXPIRY},"max-cancels":3}}"#,
+            r#"{{"profile":"{}","mode":{mode},"controller":"{}"{baseline},"replaceable":[{}],"delay-ledgers":{},"expiry-ledgers":{EXPIRY},"max-cancels":3}}"#,
             r.profile,
             strkey(&self.controller),
+            replaceable.join(","),
             r.delay,
         )
     }
@@ -790,6 +814,248 @@ impl World {
             nullifier: BytesN::from_array(&self.env, &inputs.nullifier),
             proof: Bytes::from_slice(&self.env, &proof),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Documents at the caps
+// ---------------------------------------------------------------------------
+
+/// A document's shape: `signers` passkey signers (the owner first), then
+/// the rules: `admin`, `target` (the owner's activity rule, with the
+/// interpreter), `both` rules with both policies (the interpreter, from a
+/// 1-of-1 threshold and an argument constraint, and a spending cap),
+/// `interp` with the interpreter alone, and `plain` with none.
+#[derive(Clone, Copy, Debug)]
+struct Shape {
+    signers: usize,
+    both: u32,
+    interp: u32,
+    plain: u32,
+    /// How many signers each rule with the interpreter names (1-of-N).
+    fan: usize,
+}
+
+impl Shape {
+    fn rules(&self) -> u32 {
+        2 + self.both + self.interp + self.plain
+    }
+}
+
+/// The ids of `n` signers: the owner, then `s01`, ..., in canonical order.
+fn signer_ids(n: usize) -> std::vec::Vec<String> {
+    let mut ids = std::vec!["owner".to_string()];
+    ids.extend((1..n).map(|i| format!("s{i:02}")));
+    ids
+}
+
+/// `n` fresh passkeys, the owner's first.
+fn passkeys(seed: u8, n: usize) -> std::vec::Vec<SoftPasskey> {
+    (0..n as u8)
+        .map(|i| {
+            let mut s = [seed; 32];
+            s[1] = i;
+            SoftPasskey::from_seed(s)
+        })
+        .collect()
+}
+
+fn canonical_len(json: &str) -> usize {
+    perch_ir::canonical_json(&perch_ir::from_json(json).expect("a valid document")).len()
+}
+
+impl World {
+    /// The document of `shape` over `keys`, recovery replacing every
+    /// signer, with `values` strings in a second argument constraint of the
+    /// first rule after `target`, and `pad` bytes spread over the names of
+    /// the rules after `target` (each at most OZ's `MAX_NAME_SIZE`). With `with_recovery`
+    /// false: the same document
+    /// without its recovery member (a compromise baseline, to which the
+    /// target adds the member back).
+    fn shaped_json(
+        &self,
+        keys: &[SoftPasskey],
+        recovery: &Rec,
+        shape: Shape,
+        values: usize,
+        pad: usize,
+        with_recovery: bool,
+    ) -> String {
+        let ids = signer_ids(shape.signers);
+        let id_refs: std::vec::Vec<&str> = ids.iter().map(String::as_str).collect();
+        let scope = format!(
+            r#""scope":{{"type":"contract","address":"{}"}}"#,
+            strkey(&self.target)
+        );
+        // Rule `k` (0 is `target`) names `fan` signers starting at
+        // `k * fan`, wrapping, so every signer is some rule's, and
+        // `target` starts with the owner.
+        let interpreted = |k: usize| {
+            let mut named: std::vec::Vec<&String> = (0..shape.fan)
+                .map(|i| &ids[(k * shape.fan + i) % shape.signers])
+                .collect();
+            named.sort();
+            named.dedup();
+            let named: std::vec::Vec<String> =
+                named.iter().map(|id| format!(r#""{id}""#)).collect();
+            format!(
+                r#""principals":{{"type":"threshold","m":1,"signers":[{}]}},"functions":["protected"],"args":[{{"index":0,"pred":{{"type":"is-self"}}}}]"#,
+                named.join(",")
+            )
+        };
+        let signers: std::vec::Vec<String> = ids
+            .iter()
+            .zip(keys)
+            .map(|(id, key)| {
+                format!(
+                    r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                    strkey(&self.webauthn),
+                    hex(&key.key_data())
+                )
+            })
+            .collect();
+        let mut pad = pad;
+        let mut name_of = |base: String| {
+            let grow = pad.min(MAX_NAME_SIZE as usize - base.len());
+            pad -= grow;
+            format!("{base}{}", "x".repeat(grow))
+        };
+        let mut rules = std::vec![
+            r#"{"name":"admin","scope":{"type":"self-admin"},"principals":{"type":"all","signers":["owner"]}}"#.to_string(),
+            format!(r#"{{"name":"target",{scope},{}}}"#, interpreted(0)),
+        ];
+        for j in 0..shape.both + shape.interp + shape.plain {
+            let name = name_of(format!("r{:02}", j + 2));
+            let mut interpreted = interpreted(1 + j as usize);
+            if j == 0 && values > 0 {
+                // Spare bytes as a second argument constraint: a larger
+                // interpreter program to compile, store, and install.
+                let values: std::vec::Vec<String> =
+                    (0..values).map(|v| format!(r#""v{v:04}""#)).collect();
+                interpreted = interpreted.replacen(
+                    r#"}}]"#,
+                    &format!(
+                        r#"}}}},{{"index":1,"pred":{{"type":"string-in","values":[{}]}}}}]"#,
+                        values.join(",")
+                    ),
+                    1,
+                );
+            }
+            rules.push(if j < shape.both {
+                format!(
+                    r#"{{"name":"{name}",{scope},{interpreted},"cap":{{"limit":"10","period-ledgers":1000}}}}"#
+                )
+            } else if j < shape.both + shape.interp {
+                format!(r#"{{"name":"{name}",{scope},{interpreted}}}"#)
+            } else {
+                format!(
+                    r#"{{"name":"{name}",{scope},"principals":{{"type":"all","signers":["owner"]}}}}"#
+                )
+            });
+        }
+        assert_eq!(pad, 0, "the rule names cannot absorb the padding");
+        let recovery = if with_recovery {
+            format!(
+                r#","recovery":{}"#,
+                self.recovery_json_replacing(recovery, &id_refs)
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{}]{recovery}}}"#,
+            signers.join(","),
+            rules.join(","),
+        )
+    }
+
+    /// The document of `shape`, padded to exactly `bytes` (with its
+    /// recovery member): first a second argument constraint with as many
+    /// strings as fit, then the rule names.
+    fn shaped_doc(
+        &self,
+        keys: &[SoftPasskey],
+        recovery: &Rec,
+        shape: Shape,
+        bytes: usize,
+        with_recovery: bool,
+    ) -> Bytes {
+        let len = |values: usize, pad: usize| {
+            canonical_len(&self.shaped_json(keys, recovery, shape, values, pad, true))
+        };
+        assert!(len(0, 0) <= bytes, "{shape:?} does not fit {bytes} bytes");
+        // What the names after `target` can grow by, from three bytes each.
+        let room = (shape.rules() as usize - 2) * (MAX_NAME_SIZE as usize - 3);
+        let values = if shape.rules() > 2 && len(0, 0) + room < bytes {
+            (1..)
+                .take_while(|&v| len(v, 0) <= bytes)
+                .last()
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let pad = (bytes - len(values, 0)).min(room);
+        let size = len(values, pad);
+        assert_eq!(
+            size, bytes,
+            "{shape:?}: the padding cannot reach {bytes} bytes"
+        );
+        println!(
+            "\n{{\"case\":\"document\",\"signers\":{},\"rules\":{},\"both_policies\":{},\"signers_per_rule\":{},\"string_values\":{values},\"canonical_bytes\":{size}}}",
+            shape.signers,
+            shape.rules(),
+            shape.both,
+            shape.fan,
+        );
+        Bytes::from_slice(
+            &self.env,
+            self.shaped_json(keys, recovery, shape, values, pad, with_recovery)
+                .as_bytes(),
+        )
+    }
+
+    /// A derived target has `shape`'s signers and rules, within the byte
+    /// cap.
+    fn assert_shape(&self, doc: &Bytes, shape: Shape) {
+        let compiled = PerchDocCompilerClient::new(&self.env, &self.compiler).compile_doc(doc);
+        assert_eq!(compiled.fingerprints.len() as usize, shape.signers);
+        assert_eq!(compiled.rules.len(), shape.rules());
+        assert!(compiled.canonical.len() <= MAX_DOC_CANONICAL_BYTES);
+    }
+
+    /// Every signer replaced with `keys` (in [`signer_ids`] order), and
+    /// with `zk` a new ZK enrollment.
+    fn replacing_all(&self, keys: &[SoftPasskey], zk: Option<&Zk>) -> ReplacementSet {
+        let mut r = self.replacements(&keys[0], zk);
+        r.signers = Vec::new(&self.env);
+        for (id, key) in signer_ids(keys.len()).iter().zip(keys) {
+            r.signers.push_back(Replacement {
+                signer_id: soroban_sdk::String::from_str(&self.env, id),
+                credential: self.passkey_credential(key),
+            });
+        }
+        r
+    }
+
+    fn passkey_credential(&self, key: &SoftPasskey) -> Credential {
+        Credential::External(
+            self.webauthn.clone(),
+            Bytes::from_slice(&self.env, &key.key_data()),
+        )
+    }
+
+    /// Whether `a` has revoked every one of `keys`. A fingerprint is over
+    /// the verifier's canonical key: the WebAuthn verifier drops the
+    /// credential id, leaving the public key.
+    fn all_revoked(&self, a: &Acct, keys: &[SoftPasskey]) -> bool {
+        keys.iter().all(|k| {
+            let canonical = Credential::External(
+                self.webauthn.clone(),
+                Bytes::from_slice(&self.env, &k.public_key()),
+            );
+            self.account(a)
+                .is_revoked(&canonical.fingerprint(&self.env).unwrap())
+        })
     }
 }
 
@@ -1417,4 +1683,281 @@ fn guardian_protected_compromise_restores_the_baseline_and_revokes_the_thief() {
         0
     ));
     assert!(!w.try_apply(&a, &new_owner, &w.doc(&a.owner, Some(&rec)), 0));
+}
+
+// ---------------------------------------------------------------------------
+// Worst cases at the document caps (docs/recovery/budgets.md §2)
+// ---------------------------------------------------------------------------
+
+/// The costliest document the caps admit: every signer a passkey some rule
+/// names (as many per rule as OZ allows), and every rule but `admin` and
+/// `target` carrying both policies. Each named signer is an OZ registry
+/// entry and a registration event, each policy an install and an
+/// uninstall: what a completion's footprint, events, and memory grow with.
+fn worst_shape() -> Shape {
+    Shape {
+        signers: MAX_DOC_SIGNERS as usize,
+        both: MAX_DOC_RULES - 2,
+        interp: 0,
+        plain: 0,
+        fan: (MAX_DOC_SIGNERS as usize).min(OZ_MAX_SIGNERS as usize),
+    }
+}
+
+fn label(shape: Shape, what: &str) -> String {
+    format!(
+        "{what} [{} signers, {} rules, {} with both policies, {} per rule]",
+        shape.signers,
+        shape.rules(),
+        shape.both,
+        shape.fan
+    )
+}
+
+/// `Combined` lost-key recovery of a `shape` document under `Loss`, every
+/// signer replaced: enrollment, `begin_lost_key`, and the completion that
+/// compiles the target, replaces every rule with its policies, revokes
+/// every replaced credential, and rotates the ZK credential.
+fn worst_lost_key(w: &World, shape: Shape, seed: u8) {
+    let keys = passkeys(seed, shape.signers);
+    let a = w.new_account(passkeys(seed, 1).swap_remove(0));
+    let zk1 = Zk {
+        secret: field(&format!("worst lost-key {seed} 1")),
+        id: field(&format!("worst lost-key id {seed} 1")),
+    };
+    let rec = Rec {
+        profile: "loss",
+        mode: Mode::Combined,
+        zk: Some(zk1.clone()),
+        delay: DELAY,
+        baseline: None,
+    };
+    let doc = w.shaped_doc(&keys, &rec, shape, MAX_DOC_CANONICAL_BYTES as usize, true);
+    assert!(w.try_apply(&a, &keys[0], &doc, 0));
+    report(&label(shape, "enroll Combined through apply_doc"), &w.env);
+
+    let new_keys = passkeys(seed + 1, shape.signers);
+    let zk2 = Zk {
+        secret: field(&format!("worst lost-key {seed} 2")),
+        id: field(&format!("worst lost-key id {seed} 2")),
+    };
+    let replacements = w.replacing_all(&new_keys, Some(&zk2));
+    let attempt = w.ctl().begin_lost_key(&a.address, &replacements);
+    report(&label(shape, "begin_lost_key"), &w.env);
+    let target = w.target_bytes(&a, &replacements);
+    w.assert_shape(&target, shape);
+
+    let evidence = w.prove(
+        &a,
+        &zk1,
+        &w.statement(&a, attempt, EvidenceDomain::Initiate),
+    );
+    w.ctl()
+        .submit_zk(&a.address, &attempt, &EvidenceDomain::Initiate, &evidence);
+    w.guardian(0, &a, attempt, EvidenceDomain::Initiate);
+    w.guardian(1, &a, attempt, EvidenceDomain::Initiate);
+    w.advance(DELAY);
+    assert!(w.try_complete(&a, &target));
+    report(
+        &label(
+            shape,
+            "completion apply_doc (Combined, ZK rotation, every signer revoked)",
+        ),
+        &w.env,
+    );
+    assert!(w.all_revoked(&a, &keys));
+    assert!(w.ctl().nullifier_spent(&a.address, &evidence.nullifier));
+    assert!(w
+        .pool()
+        .enrollment(&a.address, &BytesN::from_array(&w.env, &zk2.id))
+        .is_some());
+    assert!(w.activity(&a, &new_keys[0]));
+    assert!(!w.activity(&a, &keys[0]));
+}
+
+/// `Combined` compromise recovery of a `shape` document under `Protected`,
+/// revoking the most a completion can: a thief holding the owner key swaps
+/// every signer's key (no recovery text changes, so no condition), and the
+/// completion restores the baseline with new keys, revoking the replaced
+/// baseline credentials and every key the thief added.
+fn worst_compromise(w: &World, shape: Shape, seed: u8) {
+    let keys = passkeys(seed, shape.signers);
+    let a = w.new_account(passkeys(seed, 1).swap_remove(0));
+    let zk1 = Zk {
+        secret: field(&format!("worst compromise {seed} 1")),
+        id: field(&format!("worst compromise id {seed} 1")),
+    };
+    let mut rec = Rec {
+        profile: "protected",
+        mode: Mode::Combined,
+        zk: Some(zk1.clone()),
+        delay: DELAY,
+        // Sized with a baseline hash of the real one's length.
+        baseline: Some(BytesN::from_array(&w.env, &[0; 32])),
+    };
+    let bytes = MAX_DOC_CANONICAL_BYTES as usize;
+    let baseline = w.shaped_doc(&keys, &rec, shape, bytes, false);
+    rec.baseline = Some(w.doc_hash(&baseline));
+    assert!(w.try_apply(
+        &a,
+        &keys[0],
+        &w.shaped_doc(&keys, &rec, shape, bytes, true),
+        0
+    ));
+
+    let thief = passkeys(seed + 1, shape.signers);
+    assert!(w.try_apply(
+        &a,
+        &keys[0],
+        &w.shaped_doc(&thief, &rec, shape, bytes, true),
+        0
+    ));
+    report(
+        &label(
+            shape,
+            "Protected apply_doc (every key swapped, no condition)",
+        ),
+        &w.env,
+    );
+    w.ctl().publish_baseline(&a.address, &baseline);
+    report(&label(shape, "publish_baseline"), &w.env);
+
+    let new_keys = passkeys(seed + 2, shape.signers);
+    let zk2 = Zk {
+        secret: field(&format!("worst compromise {seed} 2")),
+        id: field(&format!("worst compromise id {seed} 2")),
+    };
+    let replacements = w.replacing_all(&new_keys, Some(&zk2));
+    let attempt = w.ctl().begin_compromise(&a.address, &replacements);
+    report(&label(shape, "begin_compromise"), &w.env);
+    let target = w.compromise_target(&a, &replacements);
+    w.assert_shape(&target, shape);
+
+    let evidence = w.prove(
+        &a,
+        &zk1,
+        &w.statement(&a, attempt, EvidenceDomain::Initiate),
+    );
+    w.ctl()
+        .submit_zk(&a.address, &attempt, &EvidenceDomain::Initiate, &evidence);
+    w.guardian(0, &a, attempt, EvidenceDomain::Initiate);
+    w.guardian(1, &a, attempt, EvidenceDomain::Initiate);
+    assert!(!w.activity(&a, &thief[0]), "frozen");
+    w.advance(DELAY);
+    assert!(w.try_complete(&a, &target));
+    report(
+        &label(
+            shape,
+            "completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked)",
+        ),
+        &w.env,
+    );
+    assert!(w.all_revoked(&a, &keys), "every replaced baseline key");
+    assert!(w.all_revoked(&a, &thief), "every key the thief added");
+    assert!(w.activity(&a, &new_keys[0]));
+    assert!(!w.activity(&a, &keys[0]));
+    assert!(!w.activity(&a, &thief[0]));
+}
+
+/// A `Protected` `Combined` reconfiguration of a `shape` document: the
+/// recorded guardian quorum and proof are read, every rule is replaced,
+/// and the new configuration enrolls a new ZK credential (a pool insert).
+fn worst_reconfiguration(w: &World, shape: Shape, seed: u8) {
+    let keys = passkeys(seed, shape.signers);
+    let a = w.new_account(passkeys(seed, 1).swap_remove(0));
+    let zk1 = Zk {
+        secret: field(&format!("worst reconfiguration {seed} 1")),
+        id: field(&format!("worst reconfiguration id {seed} 1")),
+    };
+    let rec = Rec {
+        profile: "protected",
+        mode: Mode::Combined,
+        zk: Some(zk1.clone()),
+        delay: DELAY,
+        baseline: None,
+    };
+    let bytes = MAX_DOC_CANONICAL_BYTES as usize;
+    assert!(w.try_apply(
+        &a,
+        &keys[0],
+        &w.shaped_doc(&keys, &rec, shape, bytes, true),
+        0
+    ));
+
+    let zk2 = Zk {
+        secret: field(&format!("worst reconfiguration {seed} 2")),
+        id: field(&format!("worst reconfiguration id {seed} 2")),
+    };
+    let next = Rec {
+        zk: Some(zk2.clone()),
+        delay: DELAY * 2,
+        ..rec.clone()
+    };
+    let next_doc = w.shaped_doc(&keys, &next, shape, bytes, true);
+    let valid_until = w.ledger() + EXPIRY;
+    assert!(!w.try_apply(&a, &keys[0], &next_doc, valid_until));
+    let subject = StatementSubject::Reconfigure(ConfigChange::Set(w.config_hash(&next_doc)));
+    w.approve_change(0, &a, &subject, valid_until);
+    w.approve_change(1, &a, &subject, valid_until);
+    let statement = w.ctl().change_statement(&a.address, &subject, &valid_until);
+    let proof = w.prove(&a, &zk1, &statement);
+    w.ctl()
+        .submit_zk_change(&a.address, &subject, &valid_until, &proof);
+    assert!(w.try_apply(&a, &keys[0], &next_doc, valid_until));
+    report(
+        &label(
+            shape,
+            "Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment)",
+        ),
+        &w.env,
+    );
+    assert_eq!(w.ctl().config(&a.address).unwrap().delay_ledgers, DELAY * 2);
+    assert!(w
+        .pool()
+        .enrollment(&a.address, &BytesN::from_array(&w.env, &zk2.id))
+        .is_some());
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_lost_key_recovery_at_the_document_caps() {
+    worst_lost_key(&world(), worst_shape(), 70);
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_compromise_at_the_document_caps_revokes_both_key_sets() {
+    worst_compromise(&world(), worst_shape(), 80);
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_protected_reconfiguration_at_the_document_caps() {
+    worst_reconfiguration(&world(), worst_shape(), 90);
+}
+
+/// Sizing the caps: every worst-case flow over the shapes in
+/// `PERCH_CAP_SWEEP` (`signers,both,interp,plain,fan;...`), with the budget
+/// and the network limits lifted so a row past them still prints.
+#[test]
+#[ignore = "sizing tool: PERCH_CAP_SWEEP=..."]
+fn cap_sweep() {
+    let spec = std::env::var("PERCH_CAP_SWEEP").unwrap_or_default();
+    for (n, item) in spec.split(';').filter(|s| !s.is_empty()).enumerate() {
+        let v: std::vec::Vec<usize> = item.split(',').map(|x| x.trim().parse().unwrap()).collect();
+        let shape = Shape {
+            signers: v[0],
+            both: v[1] as u32,
+            interp: v[2] as u32,
+            plain: v[3] as u32,
+            fan: v[4],
+        };
+        let seed = 100 + 10 * n as u8;
+        for flow in [worst_lost_key, worst_compromise, worst_reconfiguration] {
+            let w = world();
+            w.env.cost_estimate().disable_resource_limits();
+            UNBUDGETED.with(|u| u.set(true));
+            flow(&w, shape, seed);
+        }
+    }
 }

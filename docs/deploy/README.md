@@ -75,7 +75,7 @@ every consumer reads.
 | `cargo test -p perch-integration-tests --test release_stack -- --ignored` | Every recovery flow through the stack's wasm, with real proofs (`PERCH_STACK_DIR`, default `target/stack`). |
 | `cargo run -p perch-testnet` | The same flows on the deployed contracts (see [`testnet-exercise.md`](testnet-exercise.md)). |
 | `scripts/bindings-contracts.sh` | Regenerates `packages/perch-contracts` from the deployed wasm and the manifest. |
-| `scripts/check-packages.sh` | Packs every npm package, installs the tarballs into an empty project, and imports every entry point. Publishes nothing. |
+| `scripts/check-packages.sh` | Packs every npm package, installs the tarballs into an empty project, imports every entry point, and runs every command they install. Publishes nothing. |
 
 CI's `rust` job runs `fetch-infra-wasm.sh --stack`, the workspace tests
 (including `testnet_pins`), `verify-deployment.sh`, and the release-stack
@@ -160,7 +160,7 @@ does.
 | `@stellar-registry/perch` (`packages/perch-js`) | PolicyDoc schemas, builder, canonical JSON, `doc_hash` |
 | `@stellar-registry/perch-interpreter` | interpreter bindings |
 | `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer |
-| `@stellar-registry/perch-relay` | the guardian-approval relay |
+| `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
 | `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
 
 The last three are built, tested, and pack-checked in CI, but are not in

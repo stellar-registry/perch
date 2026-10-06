@@ -334,6 +334,20 @@ impl<'a> World<'a> {
         Bytes::from_slice(&self.c.env, json.as_bytes())
     }
 
+    /// A guardian account's document: the owner passkey as admin, and an
+    /// `approve` rule through which `approver`, a delegated G-account, can
+    /// authorize calls to the controller (guardian approvals) and nothing
+    /// else.
+    pub fn guardian_doc(&self, owner: &SoftPasskey, approver: &str) -> Bytes {
+        let json = format!(
+            r#"{{"version":1,"network":"{NETWORK}","signers":[{{"id":"owner","verifier":"{}","key":"{}"}},{{"id":"approver","address":"{approver}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"approve","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["approver"]}}}}]}}"#,
+            self.s.webauthn,
+            hexs(&owner.key_data()),
+            self.s.controller,
+        );
+        Bytes::from_slice(&self.c.env, json.as_bytes())
+    }
+
     pub fn doc_hash(&self, doc: &Bytes) -> Result<BytesN<32>> {
         let compiled: perch_doc_compiler::CompiledDoc = self.c.read_as(
             &self.s.compiler,

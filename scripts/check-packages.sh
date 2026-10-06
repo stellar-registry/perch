@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Pack every npm package the way `npm publish` would, install the tarballs
-# into an empty project, and import every entry point from them. Nothing is
-# published. Catches what a source checkout hides: files missing from the
-# tarball, exports pointing nowhere, and dependencies only devDependencies
-# satisfied.
+# into an empty project, import every entry point from them, and run every
+# command they install. Nothing is published. Catches what a source checkout
+# hides: files missing from the tarball, exports pointing nowhere, and
+# dependencies only devDependencies satisfied.
 #
 # Usage: scripts/check-packages.sh [package ...]   (default: all of packages/)
 set -euo pipefail
@@ -40,4 +40,11 @@ for e in "${entries[@]}"; do
         || { echo "FAIL import $e" >&2; exit 1; }
     echo "  ok  import $e" >&2
 done
-echo "all packages pack, install, and import" >&2
+# Every command a package installs, run from the installed tarball.
+for p in "${packages[@]}"; do
+    for bin in $(jq -r '(.bin // {}) | keys[]' "$repo_root/packages/$p/package.json"); do
+        "./node_modules/.bin/$bin" --help >/dev/null || { echo "FAIL run $bin --help" >&2; exit 1; }
+        echo "  ok  run $bin --help" >&2
+    done
+done
+echo "all packages pack, install, import, and run" >&2

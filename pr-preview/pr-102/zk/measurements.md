@@ -6,15 +6,27 @@ its rule produces from them.
 
 Measured 2026-10-03 on an Apple M5 Max (18 cores, 128 GB, macOS 26). The
 toolchain was nargo 1.0.0-beta.9, bb 0.87.0, bb.js 0.87.0, noir_js
-1.0.0-beta.9, soroban-sdk 27.0.6, rustc 1.97.1, and Node 24.18. The release
-circuit's `circuit_id` is
-`2af21cd9ff84cc56e42e8086c72b6e7ac14c11e830e1fd35f60b3174b46c94c5` at depth
-32 and `53e6e14e98b07f3e9073287b0008762126c1fca0b89a5941d5518bafe4702327` at
-depth 24. Reproduce with `just zk-bench`. The on-chain rows come from
+1.0.0-beta.9, soroban-sdk 27.0.6, rustc 1.97.1, and Node 24.18. Reproduce
+with `just zk-bench`. The on-chain rows come from
 `crates/perch-zk-adapter/tests/costs.rs`, native proving from
 `perch-zk-fixtures bench`, and WASM proving from
 `packages/perch-zk/bench/prove.mjs` (Node) and
 `packages/perch-zk/bench/browser` (headless Chromium).
+
+## Circuit identities
+
+A ZK factor's configuration names the adapter's `circuit_id`. Copy it from
+this table, which `perch-zk-fixtures generate` writes from
+`circuits/manifest.json`. `perch-zk-fixtures check` and
+`crates/perch-zk-prover/tests/docs.rs` fail if it drifts from the committed
+VKs, as does any other 64-hex value in these docs that is not one of them.
+
+<!-- BEGIN GENERATED from circuits/manifest.json by `perch-zk-fixtures generate`; do not edit -->
+| Circuit | Depth | `circuit_id` (`sha256` of the VK) | Gates |
+| --- | --- | --- | --- |
+| `perch_zk_recovery` | 32 | `9e39c41f4f35aad43e64b255dfe3ba13f10e8c9d36d6f56fce23c2d97c0a0b4a` | 5685 |
+| `perch_zk_recovery_d24` | 24 | `ecf0731f6e1b009da198278649b1e66926fbcf9bdd3cb04a32903eedf2f8ec66` | 4426 |
+<!-- END GENERATED -->
 
 ## Network limits
 
@@ -156,7 +168,11 @@ the component alone.
 | §2 enrollment `apply_doc`, pool part (`rcv_insert`, sealing a tree) | ≤ 300M instructions, ≤ 99 KB written | 43.8M, 2.2 KB ✓ | 34.8M, 1.8 KB ✓ |
 | §2 every other row | ≤ 75% of each limit | controller workstream | controller workstream |
 
-**Decision: depth 32**, provisional on the rows still open. Every row
+**Decision: depth 32**, provisional on the rows still open. The open rows are
+release criteria, not formalities: desktop numbers do not complete the
+agreed client-performance budget. A change of proof flavor for witness
+hiding (see [`README.md`](README.md), "Open release criteria") also
+requires repeating every proving and verification row here. Every row
 measured so far is within budget at depth 32, by a wide margin. The open
 rows are the reference devices and the full controller and account
 transactions. The ZK components leave the full transactions more than 200M

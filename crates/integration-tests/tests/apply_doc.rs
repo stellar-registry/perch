@@ -36,12 +36,18 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     assert_eq!(hash, expected);
     assert_eq!(client.applied_doc_hash(), Some(expected));
 
-    // Constructor rule 0 is gone; the document's two rules are installed.
+    // The document's two rules are installed. The constructor's admin rule
+    // (id 0) is the document's `admin` slot, so it is edited in place: its
+    // signer becomes the document's admin key and it keeps its id.
     assert_eq!(client.get_context_rules_count(), 2);
-    let admin = client.get_context_rule(&1);
+    let installed = client.installed_rules();
+    assert_eq!(installed.len(), 2);
+    assert_eq!(installed.get_unchecked(0).id, 0);
+    let admin = client.get_context_rule(&0);
     assert_eq!(admin.name, SString::from_str(&w.env, "admin"));
     assert_eq!(admin.policies.len(), 0); // policy-free admin path (INV-2)
-    let ci = client.get_context_rule(&2);
+    assert_ne!(admin.signers, w.admin_signers);
+    let ci = client.get_context_rule(&installed.get_unchecked(1).id);
     assert_eq!(ci.name, SString::from_str(&w.env, "ci-publish"));
     assert_eq!(ci.policies.len(), 1); // the interpreter program is attached
     assert_eq!(ci.policies.get_unchecked(0), w.interpreter);
@@ -51,7 +57,7 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
 }
 
 #[test]
-fn reapply_replaces_the_whole_rule_set() {
+fn reapply_installs_exactly_the_new_rule_set() {
     let w = setup();
     let client = w.account_client();
     let first = apply_fixture(&w);
@@ -76,13 +82,13 @@ fn reapply_replaces_the_whole_rule_set() {
     assert_ne!(first, second);
     assert_eq!(client.applied_doc_hash(), Some(second));
     assert_eq!(client.get_context_rules_count(), 1);
-    // The old rules (ids 1 and 2) no longer exist.
+    // The ci grant (id 1) is gone; the admin slot is edited in place.
     assert!(client.try_get_context_rule(&1).is_err());
-    assert!(client.try_get_context_rule(&2).is_err());
-    assert_eq!(
-        client.get_context_rule(&3).name,
-        SString::from_str(&w.env, "admin")
-    );
+    let installed = client.installed_rules();
+    assert_eq!(installed.len(), 1);
+    let admin = client.get_context_rule(&installed.get_unchecked(0).id);
+    assert_eq!(admin.name, SString::from_str(&w.env, "admin"));
+    assert_eq!(admin.signers.len(), 1);
 }
 
 #[test]

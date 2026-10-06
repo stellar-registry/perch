@@ -21,8 +21,7 @@
 #![no_std]
 
 use perch_doc_compiler::{
-    admin_survives, CompiledDoc, CompiledRule, CompiledZkFactor, DocCompilerClient,
-    DocCompilerError, RuleScope,
+    admin_survives, CompiledDoc, CompiledZkFactor, DocCompilerClient, DocCompilerError,
 };
 use perch_recovery_interface::account::{is_frozen, is_reserved_invoker_only, UpgradeReadiness};
 use perch_recovery_interface::config::{leaf_to_insert, zk_factor_transition_ok};
@@ -39,10 +38,12 @@ use soroban_sdk::{
     Address, Bytes, BytesN, Env, Map, String, Symbol, Val, Vec,
 };
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
-use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 use stellar_accounts::smart_account::{
     self, AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccount,
 };
+
+mod rules;
+pub use rules::{InstalledPolicy, InstalledRule};
 
 // Re-exported so `impl_perch_smart_account!` can name them via `$crate::…`
 // regardless of the caller's dependency graph.
@@ -229,10 +230,12 @@ struct PerchStorage {
     /// transition at any controller and by every executed upgrade. Never
     /// reset; it continues through periods without recovery.
     recovery_generation: InstanceItem<u64>,
-    /// The context-rule ids currently installed. `apply_doc` removes exactly
-    /// these, so its cost (and a completion's) is bounded by the document
-    /// caps rather than by how many rules the account ever had.
-    rule_ids: InstanceItem<Vec<u32>>,
+    /// Every context rule currently installed, as installed. `apply_doc`
+    /// reconciles the compiled document against these records alone, so its
+    /// cost (and a completion's) is bounded by the document caps rather than
+    /// by how many rules the account ever had, and an unchanged rule is not
+    /// touched at all (`rules`).
+    installed_rules: PersistentItem<Vec<InstalledRule>>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
 }
@@ -263,100 +266,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         doc_json: Bytes,
         approval_valid_until: u32,
     ) -> Result<BytesN<32>, PerchAccountError> {
-        let me = e.current_contract_address();
-        me.require_auth();
-
-        let compiled: CompiledDoc =
-            DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
-                .try_compile_doc(&doc_json)??;
-        if !admin_survives(&compiled.rules) {
-            return Err(PerchAccountError::AdminLockout);
-        }
-        for fingerprint in compiled.fingerprints.iter() {
-            if PerchStorage::has_revoked(e, &fingerprint) {
-                return Err(PerchAccountError::RevokedCredential);
-            }
-        }
-
-        let new_recovery = compiled.recovery.first();
-        let new_zk = new_recovery.as_ref().and_then(|r| r.zk().cloned());
-        let current_zk = PerchStorage::get_current_zk(e);
-        if !zk_factor_transition_ok(current_zk.as_ref(), new_zk.as_ref()) {
-            return Err(PerchAccountError::ZkFactorChangedInPlace);
-        }
-        let insert = leaf_to_insert(current_zk.as_ref(), new_zk.as_ref()).cloned();
-        if let Some(leaf) = &insert {
-            if PerchStorage::has_enrolled_ids(e, &leaf.enrollment_id) {
-                return Err(PerchAccountError::EnrollmentReused);
-            }
-        }
-
-        // The recovery gate runs before any context rule is touched: OZ's
-        // `remove_context_rule` swallows a policy's `uninstall` failure, so
-        // only this call can refuse a change.
-        // Every outcome other than `Unchanged`, on either side of a
-        // controller switch, advances the recovery generation (spec §12).
-        let old_controller = PerchStorage::get_recovery_controller(e);
-        let mut outcome = SyncOutcome::Unchanged;
-        if let Some(controller) = &old_controller {
-            outcome = RecoveryHooksClient::new(e, controller).try_rcv_sync(
-                &me,
-                &compiled.doc_hash,
-                &compiled.recovery,
-                &approval_valid_until,
-            )??;
-            if outcome.bumps_generation() {
-                advance_generation(e);
-            }
-        }
-        if let Some(next) = &new_recovery {
-            if old_controller.as_ref() != Some(&next.controller) {
-                let enrolled = RecoveryHooksClient::new(e, &next.controller).try_rcv_sync(
-                    &me,
-                    &compiled.doc_hash,
-                    &compiled.recovery,
-                    &approval_valid_until,
-                )??;
-                if enrolled.bumps_generation() {
-                    advance_generation(e);
-                }
-            }
-        }
-
-        replace_rules(e, &compiled);
-
-        if let Some(leaf) = &insert {
-            MembershipPoolClient::new(e, &leaf.pool).rcv_insert(
-                &me,
-                &leaf.enrollment_id,
-                &leaf.commitment,
-            );
-            PerchStorage::set_enrolled_ids(e, &leaf.enrollment_id, &true);
-            extend_persistent(e, |ttl| {
-                PerchStorage::extend_enrolled_ids_ttl(e, &leaf.enrollment_id, ttl, ttl)
-            });
-        }
-        match &new_zk {
-            Some(next) => PerchStorage::set_current_zk(e, next),
-            None => PerchStorage::remove_current_zk(e),
-        }
-
-        if let SyncOutcome::Completed(completion) = outcome {
-            complete_recovery(e, &completion.replaced, &compiled.fingerprints)?;
-        }
-
-        PerchStorage::set_applied_doc(e, &compiled.doc_hash);
-        PerchStorage::set_applied_doc_bytes(e, &compiled.canonical);
-        PerchStorage::set_applied_fingerprints(e, &compiled.fingerprints);
-        extend_persistent(e, |ttl| {
-            PerchStorage::extend_applied_doc_bytes_ttl(e, ttl, ttl);
-            PerchStorage::extend_applied_fingerprints_ttl(e, ttl, ttl);
-        });
-        DocApplied {
-            doc_hash: compiled.doc_hash.clone(),
-        }
-        .publish(e);
-        Ok(compiled.doc_hash)
+        apply(e, doc_json, approval_valid_until, false)
     }
 
     /// Call `target_fn` on `target` as this account (the account becomes
@@ -611,6 +521,12 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         });
     }
 
+    /// Every context rule the account has installed, with its OZ id. The
+    /// document's rules are matched against these by `apply_doc`.
+    fn installed_rules(e: &Env) -> Vec<InstalledRule> {
+        PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e))
+    }
+
     /// Read-only rule surface, re-exposed here because `SmartAccount` itself
     /// is deliberately not exported by doc-only accounts.
     fn get_context_rules_count(e: &Env) -> u32 {
@@ -727,46 +643,167 @@ fn extend_persistent(e: &Env, f: impl FnOnce(u32)) {
     f(e.storage().max_ttl());
 }
 
-/// Replace the entire rule set in one invocation: there is no observable
-/// half-migrated state. The recovery rule is not one of `doc.rules`: it is a
-/// zero-signer self-scoped rule whose only policy is the adopted controller,
-/// installed for the compiled configuration's hash.
-fn replace_rules(e: &Env, compiled: &CompiledDoc) {
-    let interpreter = infra::perch_interpreter::address(e);
-    // Only the rules installed now: deleted ids are never revisited, so the
-    // cost does not grow with the account's history (spec §7.5).
-    for id in PerchStorage::get_rule_ids(e).unwrap_or(Vec::new(e)).iter() {
-        smart_account::remove_context_rule(e, id);
+/// `apply_doc`'s body. `full_replace` selects the pre-delta behaviour,
+/// removing every installed rule and adding every document rule; only the
+/// test-only oracle ([`testutils::apply_doc_full_replace`]) sets it.
+fn apply(
+    e: &Env,
+    doc_json: Bytes,
+    approval_valid_until: u32,
+    full_replace: bool,
+) -> Result<BytesN<32>, PerchAccountError> {
+    let me = e.current_contract_address();
+    me.require_auth();
+
+    let compiled: CompiledDoc =
+        DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
+            .try_compile_doc(&doc_json)??;
+    if !admin_survives(&compiled.rules) {
+        return Err(PerchAccountError::AdminLockout);
     }
-    let mut installed: Vec<u32> = Vec::new(e);
-    for rule in compiled.rules.iter() {
-        installed.push_back(install_rule(e, &interpreter, &rule).id);
-    }
-    match compiled.recovery.first() {
-        Some(recovery) => {
-            let mut policies: Map<Address, Val> = Map::new(e);
-            policies.set(
-                recovery.controller.clone(),
-                recovery.config_hash.into_val(e),
-            );
-            let rule = smart_account::add_context_rule(
-                e,
-                &ContextRuleType::CallContract(e.current_contract_address()),
-                &String::from_str(e, "recovery"),
-                None,
-                &Vec::new(e),
-                &policies,
-            );
-            installed.push_back(rule.id);
-            PerchStorage::set_recovery_rule(e, &rule.id);
-            PerchStorage::set_recovery_controller(e, &recovery.controller);
-        }
-        None => {
-            PerchStorage::remove_recovery_rule(e);
-            PerchStorage::remove_recovery_controller(e);
+    for fingerprint in compiled.fingerprints.iter() {
+        if PerchStorage::has_revoked(e, &fingerprint) {
+            return Err(PerchAccountError::RevokedCredential);
         }
     }
-    PerchStorage::set_rule_ids(e, &installed);
+
+    let new_recovery = compiled.recovery.first();
+    let new_zk = new_recovery.as_ref().and_then(|r| r.zk().cloned());
+    let current_zk = PerchStorage::get_current_zk(e);
+    if !zk_factor_transition_ok(current_zk.as_ref(), new_zk.as_ref()) {
+        return Err(PerchAccountError::ZkFactorChangedInPlace);
+    }
+    let insert = leaf_to_insert(current_zk.as_ref(), new_zk.as_ref()).cloned();
+    if let Some(leaf) = &insert {
+        if PerchStorage::has_enrolled_ids(e, &leaf.enrollment_id) {
+            return Err(PerchAccountError::EnrollmentReused);
+        }
+    }
+
+    // The recovery gate runs before any context rule is touched: OZ's
+    // `remove_context_rule` swallows a policy's `uninstall` failure, so
+    // only this call can refuse a change.
+    // Every outcome other than `Unchanged`, on either side of a
+    // controller switch, advances the recovery generation (spec §12).
+    let old_controller = PerchStorage::get_recovery_controller(e);
+    let mut outcome = SyncOutcome::Unchanged;
+    if let Some(controller) = &old_controller {
+        outcome = RecoveryHooksClient::new(e, controller).try_rcv_sync(
+            &me,
+            &compiled.doc_hash,
+            &compiled.recovery,
+            &approval_valid_until,
+        )??;
+        if outcome.bumps_generation() {
+            advance_generation(e);
+        }
+    }
+    if let Some(next) = &new_recovery {
+        if old_controller.as_ref() != Some(&next.controller) {
+            let enrolled = RecoveryHooksClient::new(e, &next.controller).try_rcv_sync(
+                &me,
+                &compiled.doc_hash,
+                &compiled.recovery,
+                &approval_valid_until,
+            )??;
+            if enrolled.bumps_generation() {
+                advance_generation(e);
+            }
+        }
+    }
+
+    apply_rules(e, &compiled, full_replace);
+
+    if let Some(leaf) = &insert {
+        MembershipPoolClient::new(e, &leaf.pool).rcv_insert(
+            &me,
+            &leaf.enrollment_id,
+            &leaf.commitment,
+        );
+        PerchStorage::set_enrolled_ids(e, &leaf.enrollment_id, &true);
+        extend_persistent(e, |ttl| {
+            PerchStorage::extend_enrolled_ids_ttl(e, &leaf.enrollment_id, ttl, ttl)
+        });
+    }
+    if PerchStorage::get_current_zk(e) != new_zk {
+        match &new_zk {
+            Some(next) => PerchStorage::set_current_zk(e, next),
+            None => PerchStorage::remove_current_zk(e),
+        }
+    }
+
+    if let SyncOutcome::Completed(completion) = outcome {
+        complete_recovery(e, &completion.replaced, &compiled.fingerprints)?;
+    }
+
+    if PerchStorage::get_applied_doc(e).as_ref() != Some(&compiled.doc_hash) {
+        PerchStorage::set_applied_doc(e, &compiled.doc_hash);
+        PerchStorage::set_applied_doc_bytes(e, &compiled.canonical);
+        PerchStorage::set_applied_fingerprints(e, &compiled.fingerprints);
+        extend_persistent(e, |ttl| {
+            PerchStorage::extend_applied_doc_bytes_ttl(e, ttl, ttl);
+            PerchStorage::extend_applied_fingerprints_ttl(e, ttl, ttl);
+        });
+    }
+    DocApplied {
+        doc_hash: compiled.doc_hash.clone(),
+    }
+    .publish(e);
+    Ok(compiled.doc_hash)
+}
+
+/// Test-only reference implementations, compiled only with the `testutils`
+/// feature (never into a deployable).
+#[cfg(feature = "testutils")]
+pub mod testutils {
+    use super::*;
+
+    /// `apply_doc` with every rule removed and re-added, as before the delta
+    /// apply: the oracle the delta is checked against. Everything else
+    /// (compile, revocation, recovery sync, completion effects) is shared
+    /// with `apply_doc`.
+    pub fn apply_doc_full_replace(
+        e: &Env,
+        doc_json: Bytes,
+        approval_valid_until: u32,
+    ) -> Result<BytesN<32>, PerchAccountError> {
+        apply(e, doc_json, approval_valid_until, true)
+    }
+}
+
+/// Bring the installed rules to the compiled document's in one invocation,
+/// touching only rules that differ (`rules::reconcile`); there is no
+/// observable half-migrated state. The recovery rule is not one of
+/// `doc.rules`: it is a zero-signer self-scoped rule whose only policy is the
+/// adopted controller, installed for the compiled configuration's hash.
+fn apply_rules(e: &Env, compiled: &CompiledDoc, full_replace: bool) {
+    let current = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
+    let (desired, params) = rules::desired(e, compiled);
+    let next = match full_replace {
+        #[cfg(feature = "testutils")]
+        true => rules::replace_all(e, &current, &desired, &params),
+        _ => rules::reconcile(e, &current, &desired, &params),
+    };
+    if next != current {
+        PerchStorage::set_installed_rules(e, &next);
+        extend_persistent(e, |ttl| {
+            PerchStorage::extend_installed_rules_ttl(e, ttl, ttl)
+        });
+    }
+    let recovery_rule = next.iter().find(|r| r.recovery).map(|r| r.id);
+    if PerchStorage::get_recovery_rule(e) != recovery_rule {
+        match recovery_rule {
+            Some(id) => PerchStorage::set_recovery_rule(e, &id),
+            None => PerchStorage::remove_recovery_rule(e),
+        }
+    }
+    let controller = compiled.recovery.first().map(|r| r.controller);
+    if PerchStorage::get_recovery_controller(e) != controller {
+        match &controller {
+            Some(c) => PerchStorage::set_recovery_controller(e, c),
+            None => PerchStorage::remove_recovery_controller(e),
+        }
+    }
 }
 
 /// Constructor helper: install rule 0, "admin", scoped
@@ -782,45 +819,14 @@ pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
         admin_signers,
         &Map::new(e),
     );
-    PerchStorage::set_rule_ids(e, &Vec::from_array(e, [rule.id]));
-}
-
-/// Map one compiled rule onto OZ storage, via the same library call
-/// `__check_auth` evaluates against.
-fn install_rule(e: &Env, interpreter: &Address, rule: &CompiledRule) -> ContextRule {
-    let scope = match &rule.scope {
-        RuleScope::SelfAdmin => ContextRuleType::CallContract(e.current_contract_address()),
-        RuleScope::Contract(addr) => ContextRuleType::CallContract(addr.clone()),
-    };
-    let mut policies: Map<Address, Val> = Map::new(e);
-    if let Some(install) = rule.install.first() {
-        policies.set(interpreter.clone(), install.into_val(e));
-    }
-    // A capped rule also attaches OZ `spending_limit` (the stateful cumulative
-    // cap the interpreter cannot express), keyed by its content-addressed
-    // address — resolved offline like the interpreter, never admin-supplied. OZ
-    // enforces every attached policy (AND): the interpreter's per-call program
-    // AND the rolling cap must pass. The metered token is this rule's
-    // `CallContract` scope (validation pins `token == scope`).
-    if let Some(cap) = rule.cap.first() {
-        let spending_limit = infra::perch_spending_limit::address(e);
-        let params = SpendingLimitAccountParams {
-            spending_limit: cap.spending_limit,
-            period_ledgers: cap.period_ledgers,
-        };
-        policies.set(spending_limit, params.into_val(e));
-    }
-    smart_account::add_context_rule(
+    PerchStorage::set_installed_rules(
         e,
-        &scope,
-        &rule.name,
-        rule.valid_until,
-        &rule.signers,
-        &policies,
-    )
+        &Vec::from_array(e, [rules::admin_rule(e, rule.id, admin_signers)]),
+    );
+    extend_persistent(e, |ttl| {
+        PerchStorage::extend_installed_rules_ttl(e, ttl, ttl)
+    });
 }
-
-use soroban_sdk::IntoVal;
 
 /// Expand the full deployable surface for `$ty`: the `CustomAccountInterface`
 /// impl (`__check_auth` → [`check_auth`] → OZ `do_check_auth`), a **non-exported**

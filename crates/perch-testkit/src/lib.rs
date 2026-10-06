@@ -35,6 +35,7 @@
 //!
 //! [`Env`]: soroban_sdk::Env
 
+pub mod delta;
 pub mod faithful;
 pub mod fixture;
 pub mod manifest;

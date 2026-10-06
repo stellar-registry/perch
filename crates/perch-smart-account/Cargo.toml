@@ -25,3 +25,8 @@ perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interf
 # The pure `registry_id + wasm_hash → address` derivation `apply_doc` uses to
 # resolve the compiler + interpreter from the pinned stateless-registry id.
 perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }
+
+[features]
+# Test-only: the full-replace `apply_doc` oracle (`testutils` module). Never
+# enabled by a deployable.
+testutils = []

@@ -37,6 +37,7 @@
     [],
     [],
     [],
+    [],
     []
   ],
   "ledger": {
@@ -127,12 +128,214 @@
               "ext": "v0",
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
               "key": {
+                "symbol": "InstalledRules"
+              },
+              "durability": "persistent",
+              "val": {
+                "vec": [
+                  {
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "context_type"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "symbol": "CallContract"
+                            },
+                            {
+                              "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "id"
+                        },
+                        "val": {
+                          "u32": 0
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "name"
+                        },
+                        "val": {
+                          "string": "admin"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "policies"
+                        },
+                        "val": {
+                          "vec": []
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "recovery"
+                        },
+                        "val": {
+                          "bool": false
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "signers"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "vec": [
+                                {
+                                  "symbol": "External"
+                                },
+                                {
+                                  "address": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN"
+                                },
+                                {
+                                  "bytes": "045e2a7589b73c19d5341cf12ac0c5f6c45c298d4c20002c794daadafdb83f35f5be23963648d7aaccf5e273803f2fec7a8f0eb4d4845c9b89a972b4a09298b17e"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "valid_until"
+                        },
+                        "val": "void"
+                      }
+                    ]
+                  },
+                  {
+                    "map": [
+                      {
+                        "key": {
+                          "symbol": "context_type"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "symbol": "CallContract"
+                            },
+                            {
+                              "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL"
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "id"
+                        },
+                        "val": {
+                          "u32": 1
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "name"
+                        },
+                        "val": {
+                          "string": "ci-publish"
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "policies"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "map": [
+                                {
+                                  "key": {
+                                    "symbol": "params"
+                                  },
+                                  "val": {
+                                    "bytes": "87e1f73f4ac1b708945054de1ee522f93a89c83219b74e20fb43587e78de6f3f"
+                                  }
+                                },
+                                {
+                                  "key": {
+                                    "symbol": "policy"
+                                  },
+                                  "val": {
+                                    "address": "CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM"
+                                  }
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "recovery"
+                        },
+                        "val": {
+                          "bool": false
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "signers"
+                        },
+                        "val": {
+                          "vec": [
+                            {
+                              "vec": [
+                                {
+                                  "symbol": "External"
+                                },
+                                {
+                                  "address": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG"
+                                },
+                                {
+                                  "bytes": "1ce6040b0d03232ac6c911b0c375f1a52ebdefff56fd361d13680e23ca578a17"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "key": {
+                          "symbol": "valid_until"
+                        },
+                        "val": {
+                          "u32": 54999999
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 6311999
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+              "key": {
                 "vec": [
                   {
                     "symbol": "ContextRuleData"
                   },
                   {
-                    "u32": 1
+                    "u32": 0
                   }
                 ]
               },
@@ -209,7 +412,7 @@
                     "symbol": "ContextRuleData"
                   },
                   {
-                    "u32": 2
+                    "u32": 1
                   }
                 ]
               },
@@ -537,21 +740,6 @@
                     },
                     {
                       "key": {
-                        "symbol": "RuleIds"
-                      },
-                      "val": {
-                        "vec": [
-                          {
-                            "u32": 1
-                          },
-                          {
-                            "u32": 2
-                          }
-                        ]
-                      }
-                    },
-                    {
-                      "key": {
                         "vec": [
                           {
                             "symbol": "Count"
@@ -571,7 +759,7 @@
                         ]
                       },
                       "val": {
-                        "u32": 3
+                        "u32": 2
                       }
                     },
                     {
@@ -643,7 +831,7 @@
                     "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                   },
                   {
-                    "u32": 2
+                    "u32": 1
                   }
                 ]
               },

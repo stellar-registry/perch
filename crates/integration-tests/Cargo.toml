@@ -25,6 +25,8 @@ perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve"
 perch-recovery = { version = "0.1.0", path = "../perch-recovery" }
 perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
 perch-zk-pool = { version = "0.1.0", path = "../perch-zk-pool" }
+arbitrary = "1"
+proptest = "1"
 stellar-accounts = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 ed25519-dalek = "2"

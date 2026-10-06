@@ -168,7 +168,7 @@ does.
 | --- | --- |
 | `@stellar-registry/perch` (`packages/perch-js`) | PolicyDoc schemas, builder, canonical JSON, `doc_hash` |
 | `@stellar-registry/perch-interpreter` | interpreter bindings |
-| `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer |
+| `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer, serving witnesses from `PoolWitnessIndex` (one chunk of leaves per witness; node stores and a snapshot to resume) |
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
 | `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
 

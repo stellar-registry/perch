@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { StrKey, xdr } from '@stellar/stellar-sdk';
-import { init, leaf } from '../src/hash.js';
+import { init, leaf, node } from '../src/hash.js';
 import { fromHex, hex } from '../src/field.js';
-import { Tree } from '../src/tree.js';
+import type { Bytes32 } from '../src/field.js';
+import { CHUNK_LEVEL, MemoryNodeStore, rootFromPath, zeroHashes } from '../src/tree.js';
 import {
   MemoryStore,
   PoolIndexer,
@@ -13,7 +14,7 @@ import {
   handleRequest,
 } from '../src/indexer/index.js';
 import type { LeafRecord, LeafSource } from '../src/indexer/index.js';
-import { b, fixture, repo } from './helpers.js';
+import { b, fixture, pathFor, repo } from './helpers.js';
 
 // A `LeafInserted` event the deployed testnet pool emitted
 // (deployments/testnet.json), as `getEvents` returned it.
@@ -94,7 +95,8 @@ describe('pool indexer', () => {
       const target = records[f.leaf_index]!;
       const w = await indexer.witness(target.account, target.enrollmentId);
       expect(w.index).toBe(BigInt(f.leaf_index));
-      expect(w.siblings).toEqual(new Tree(records.map((r) => r.leaf)).path(f.leaf_index));
+      expect(w.siblings.map(hex)).toEqual((await pathFor(records.map((r) => r.leaf), f.leaf_index)).map(hex));
+      expect(hex(rootFromPath(target.leaf, w.index, w.siblings))).toBe(f.root);
       // `later_root` proves against the root after later insertions, which
       // is exactly what the indexer serves once it has them.
       expect(hex(w.root)).toBe(f.root);
@@ -124,9 +126,103 @@ describe('pool indexer', () => {
     };
     expect(w.index).toBe('1');
     expect(w.siblings).toHaveLength(32);
+    const page = (await (await get('/trees/0/leaves?from=1&count=2')).json()) as { leaves: string[] };
+    expect(page.leaves).toEqual(records.slice(1, 3).map((r) => hex(r.leaf)));
     expect((await get('/witness/nope/00')).status).toBe(400);
     expect((await get('/elsewhere')).status).toBe(404);
   });
+});
+
+/** A record at `(treeId, index)` for leaf `l`. */
+function at(treeId: number, index: bigint, l: Bytes32, n: number): LeafRecord {
+  return {
+    treeId,
+    index,
+    leaf: l,
+    root: new Uint8Array(32),
+    account: StrKey.encodeContract(Buffer.alloc(32, n)),
+    enrollmentId: new Uint8Array(32).fill(n),
+  };
+}
+
+const leafN = (n: number): Bytes32 => {
+  const l = new Uint8Array(32);
+  l[31] = n;
+  return l;
+};
+
+/** The root of `leaves` in a depth-`depth` tree, the slow way. */
+function naiveRoot(leaves: Bytes32[], depth: number): Bytes32 {
+  const zeros = zeroHashes(depth);
+  let level = leaves.slice();
+  for (let d = 0; d < depth; d++) {
+    const next: Bytes32[] = [];
+    for (let i = 0; i < Math.max(level.length, 1); i += 2) next.push(node(level[i] ?? zeros[d]!, level[i + 1] ?? zeros[d]!));
+    level = next;
+  }
+  return level[0]!;
+}
+
+describe('pool indexer at scale', () => {
+  beforeAll(init);
+
+  it('serves the last leaf of a sealed tree, and earlier trees after rollover', async () => {
+    // Depth 3, chunks of two leaves: tree 0 seals at its eighth insertion and
+    // insertions roll over into tree 1, as the pool's do.
+    const tree0 = Array.from({ length: 8 }, (_, i) => at(0, BigInt(i), leafN(i + 1), i + 1));
+    const tree1 = Array.from({ length: 3 }, (_, i) => at(1, BigInt(i), leafN(i + 20), i + 20));
+    const all = [...tree0, ...tree1];
+    const pages = [all.slice(5).reverse(), all.slice(0, 5), []];
+    const indexer = new PoolIndexer(new MemoryStore(), new PagedSource(pages), { depth: 3, chunkLevel: 1 });
+    expect((await indexer.sync()).inserted).toBe(all.length);
+
+    const root0 = naiveRoot(tree0.map((r) => r.leaf), 3);
+    for (const r of [tree0[7]!, tree0[0]!, tree0[4]!]) {
+      const w = await indexer.witness(r.account, r.enrollmentId);
+      expect(hex(w.root)).toBe(hex(root0));
+      expect(hex(rootFromPath(r.leaf, w.index, w.siblings))).toBe(hex(root0));
+    }
+    const root1 = naiveRoot(tree1.map((r) => r.leaf), 3);
+    const w1 = await indexer.witness(tree1[2]!.account, tree1[2]!.enrollmentId);
+    expect(hex(rootFromPath(tree1[2]!.leaf, 2n, w1.siblings))).toBe(hex(root1));
+    expect(hex(await indexer.root(1))).toBe(hex(root1));
+  });
+
+  it('serves the last leaf of a sealed depth-32 tree from a snapshot', async () => {
+    // Tree 0 holds 2^32 copies of one leaf: every subtree at a level is the
+    // same node, so the node store and frontier can be written directly,
+    // and the store answers every position of tree 0 without holding it.
+    const x = leafN(7);
+    const chain = [x];
+    for (let l = 0; l < 32; l++) chain.push(node(chain[l]!, chain[l]!));
+    const nodes0 = new MemoryNodeStore();
+    for (let level = CHUNK_LEVEL; level <= 32; level++) {
+      for (let k = 0n; k < 1n << BigInt(32 - level); k++) nodes0.set(level, k, chain[level]!);
+    }
+    const last = (1n << 32n) - 1n;
+    const enrolled = at(0, last, x, 9);
+    class SealedTree0 extends MemoryStore {
+      override async get(treeId: number, index: bigint) {
+        if (treeId === 0 && index <= last) return { ...enrolled, index };
+        return super.get(treeId, index);
+      }
+    }
+    const store = new SealedTree0();
+    await store.put(enrolled);
+    const tree1 = [at(1, 0n, leafN(1), 1), at(1, 1n, leafN(2), 2)];
+    const indexer = new PoolIndexer(store, new PagedSource([tree1]), {
+      nodes: (treeId) => (treeId === 0 ? nodes0 : new MemoryNodeStore()),
+      restore: { current: 1, trees: new Map([[0, { size: 1n << 32n, frontier: chain.slice(0, 32) }]]) },
+    });
+    await indexer.sync();
+
+    const w = await indexer.witness(enrolled.account, enrolled.enrollmentId);
+    expect(w.index).toBe(last);
+    expect(hex(w.root)).toBe(hex(chain[32]!));
+    expect(w.siblings.map(hex)).toEqual(chain.slice(0, 32).map(hex));
+    expect(hex(await indexer.root(1))).toBe(hex(naiveRoot(tree1.map((r) => r.leaf), 32)));
+    expect(indexer.snapshot().current).toBe(1);
+  }, 120_000);
 });
 
 // Against the deployed testnet pool: PERCH_LIVE=1 npm test.
@@ -150,7 +246,7 @@ describe.runIf(process.env.PERCH_LIVE)('the deployed testnet pool', () => {
     for (const treeId of await indexer.store.trees()) {
       const onChain = await reader.tree(treeId);
       expect(await indexer.store.size(treeId)).toBe(onChain.size);
-      expect(hex((await indexer.tree(treeId)).root())).toBe(hex(onChain.root));
+      expect(hex(await indexer.root(treeId))).toBe(hex(onChain.root));
       // The pool's own pages agree with the events.
       const page = await reader.leaves(treeId, 0n, 4);
       expect(page.map(hex)).toEqual((await indexer.leaves(treeId)).slice(0, 4).map(hex));

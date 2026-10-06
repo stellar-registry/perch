@@ -17,12 +17,14 @@
 //! to run more.
 
 use arbitrary::Unstructured;
+use perch_doc_compiler::{MAX_DOC_RULES, MAX_DOC_SIGNERS};
 use perch_smart_account::testutils::{Mode, PlannedRule, Step};
 use perch_smart_account::InstalledRule;
 use perch_testkit::delta::*;
 use proptest::prelude::*;
 use soroban_sdk::{Address, TryFromVal};
 use std::collections::{BTreeMap, BTreeSet};
+use stellar_accounts::smart_account::MAX_SIGNERS as OZ_MAX_SIGNERS;
 
 fn cases(default: u32) -> u32 {
     std::env::var("PERCH_DELTA_CASES")
@@ -984,12 +986,14 @@ fn rotating_a_capped_rules_keys_switches_to_replacement_where_it_is_cheaper() {
 #[test]
 fn minimal_and_maximal_documents_round_trip() {
     let minimal = doc(delegated(1), std::vec![admin(&[0])]);
-    let mut rules = std::vec![admin(&[0, 1, 2])];
-    for (i, name) in RULE_NAMES.iter().enumerate() {
+    // At the document caps.
+    let (n_signers, n_rules) = (MAX_DOC_SIGNERS as usize, MAX_DOC_RULES as usize);
+    let mut rules = std::vec![admin(&[0, 1 % n_signers, 2 % n_signers])];
+    for (i, name) in RULE_NAMES.iter().take(n_rules - 1).enumerate() {
         let mut r = rule(
             name,
             Some(i % SCOPE_POOL),
-            &[i % 16, (i + 1) % 16, (i + 2) % 16],
+            &[i % n_signers, (i + 1) % n_signers, (i + 2) % n_signers],
         );
         if i % 3 == 0 {
             r.functions = Some(std::vec!["transfer"]);
@@ -999,7 +1003,7 @@ fn minimal_and_maximal_documents_round_trip() {
         }
         rules.push(r);
     }
-    let mut maximal = doc(delegated(16), rules);
+    let mut maximal = doc(delegated(n_signers), rules);
     maximal.recovery = Some(RecoveryModel {
         quorum: 2,
         delay: 10,
@@ -1007,11 +1011,15 @@ fn minimal_and_maximal_documents_round_trip() {
         max_cancels: 3,
     });
     let (w, _, _, after) = case(&minimal, &maximal);
-    assert_eq!(after.len(), 17, "16 document rules and the recovery rule");
+    assert_eq!(
+        after.len() as usize,
+        n_rules + 1,
+        "the document's rules and the recovery rule"
+    );
     let (w, _, _, back) = transition_after(&w, &minimal, w.installed(&w.delta));
     assert_eq!(back.len(), 1);
     let (_w, _, _, again) = transition_after(&w, &maximal, w.installed(&w.delta));
-    assert_eq!(again.len(), 17);
+    assert_eq!(again.len() as usize, n_rules + 1);
 }
 
 #[test]

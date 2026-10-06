@@ -800,10 +800,14 @@ Two rules bound that cost:
 
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps on signers, rules, and
-  canonical size. The caps are sized so that the worst-case completion
-  fits the transaction budget (`budgets.md`). The worst case is a
-  maximum-size pre-recovery document whose every slot differs from a
-  maximum-size target, after any amount of prior rule churn.
+  canonical size (`perch_doc_compiler::MAX_DOC_SIGNERS` = 4,
+  `MAX_DOC_RULES` = 9, `MAX_DOC_CANONICAL_BYTES` = 8 192). The caps are
+  sized so that the worst-case completion fits the transaction budget: the
+  measurements, the frontier, and the choice are in `budgets.md`, "Document
+  caps", and `release_stack.rs`'s `worst_case_*` tests hold them in CI.
+  The worst case is a maximum-size pre-recovery document whose every slot
+  differs from a maximum-size target, after any amount of prior rule
+  churn.
 - **Bounded revocation writes.** The revoked set is one persistent entry per
   fingerprint, so a completion writes at most one entry per removed
   credential, a number the caps bound.

@@ -153,7 +153,7 @@ against the release artifacts belong to the integration layer.
   pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
-- **Document caps.** 6 declared signers, 8 rules, 8 192 canonical bytes,
+- **Document caps.** 4 declared signers, 9 rules, 8 192 canonical bytes,
   and rule names of at most OZ's 20 bytes, sized against the measured
   worst-case completion (`budgets.md`, "Document caps"). The binding limit
   is contract events. Every stack contract links a 64 KiB wasm stack

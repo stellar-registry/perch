@@ -31,7 +31,7 @@ use perch_doc_compiler::{admin_survives, DocCompilerClient};
 use perch_recovery_interface::account::RecoveryAccountClient;
 use perch_recovery_interface::config::{CompiledRecoveryConfig, CompiledZkFactor, RecoveryProfile};
 use perch_recovery_interface::controller::{Completion, RecoveryError, SyncOutcome, UpgradeStep};
-use perch_recovery_interface::credential::ReplacementSet;
+use perch_recovery_interface::credential::{replaced_credentials_leave, ReplacementSet};
 use perch_recovery_interface::zk::{MembershipPoolClient, ZkAdapterClient, ZkEvidence};
 use perch_recovery_interface::{
     AttemptSubject, CancelSubject, ConfigBinding, ConfigChange, RecoveryAction, RecoveryStatement,
@@ -675,25 +675,32 @@ fn begin(
         .try_derive_target(&source, &current, &action, &replacements)
         .map_err(|_| RecoveryError::InvalidReplacements)?
         .map_err(|_| RecoveryError::InvalidReplacements)?;
+    // The checks against the account's history are the controller's:
+    // `derive_target` is pure and sees only the documents (spec §7.3).
+    // Rule 4, the enrollment-id half.
+    if let Some(z) = replacements.zk_enrollment.first() {
+        if view.is_enrolled_id(&z.id) {
+            return Err(RecoveryError::EnrollmentIdReused);
+        }
+    }
+    // Rule 7.
     for fingerprint in derived.fingerprints.iter() {
         if view.is_revoked(&fingerprint) {
             return Err(RecoveryError::CredentialRevoked);
         }
     }
-    // A completion revokes every replaced source credential (spec §8), so a
-    // target that keeps one would revoke part of itself.
+    // Rule 8: every replaced source credential leaves the account, so a swap
+    // or a no-op replacement is refused.
+    let mut replaced = Vec::new(e);
     for credential in derived.replaced.iter() {
-        let fingerprint = credential
-            .fingerprint(e)
-            .map_err(|_| RecoveryError::InvalidReplacements)?;
-        if derived.fingerprints.contains(&fingerprint) {
-            return Err(RecoveryError::InvalidReplacements);
-        }
+        replaced.push_back(
+            credential
+                .fingerprint(e)
+                .map_err(|_| RecoveryError::InvalidReplacements)?,
+        );
     }
-    if let Some(z) = replacements.zk_enrollment.first() {
-        if view.is_enrolled_id(&z.id) {
-            return Err(RecoveryError::EnrollmentIdReused);
-        }
+    if !replaced_credentials_leave(&replaced, &derived.fingerprints) {
+        return Err(RecoveryError::ReplacedCredentialRetained);
     }
 
     let id = RecoveryStorage::get_next_attempt(e, &account).unwrap_or(0);

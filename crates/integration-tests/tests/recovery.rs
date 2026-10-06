@@ -1048,6 +1048,82 @@ fn protected_zk_reconfiguration_is_its_own_proven_action() {
         .nullifier_spent(&w.account, &nullifier(&w.env, &credential)));
 }
 
+/// Spec §7.3 rule 8: a replaced credential leaves the account. Swapping two
+/// replaceable slots' credentials would keep both replaced credentials
+/// authorizing, and the completion would revoke credentials it installs.
+#[test]
+fn swapping_credentials_between_slots_is_refused() {
+    let w = world();
+    let mut r = w.recovery("loss", Mode::Guardian);
+    r.replaceable = std::vec!["device", "owner"];
+    w.enroll(&w.doc(Some(r)));
+    let swap = perch_recovery_interface::credential::ReplacementSet {
+        signers: vec![
+            &w.env,
+            perch_recovery_interface::credential::Replacement {
+                signer_id: soroban_sdk::String::from_str(&w.env, "device"),
+                credential: Credential::Delegated(w.owner.clone()),
+            },
+            perch_recovery_interface::credential::Replacement {
+                signer_id: soroban_sdk::String::from_str(&w.env, "owner"),
+                credential: Credential::Delegated(w.device.clone()),
+            },
+        ],
+        zk_enrollment: soroban_sdk::Vec::new(&w.env),
+    };
+    assert_eq!(
+        w.ctl().try_begin_lost_key(&w.account, &swap),
+        Err(Ok(RecoveryError::ReplacedCredentialRetained))
+    );
+    // Moving one slot's credential into another while the first gets a
+    // fresh key also keeps a replaced credential.
+    let shuffle = perch_recovery_interface::credential::ReplacementSet {
+        signers: vec![
+            &w.env,
+            perch_recovery_interface::credential::Replacement {
+                signer_id: soroban_sdk::String::from_str(&w.env, "device"),
+                credential: Credential::Delegated(w.owner.clone()),
+            },
+            perch_recovery_interface::credential::Replacement {
+                signer_id: soroban_sdk::String::from_str(&w.env, "owner"),
+                credential: Credential::Delegated(w.new_key()),
+            },
+        ],
+        zk_enrollment: soroban_sdk::Vec::new(&w.env),
+    };
+    assert_eq!(
+        w.ctl().try_begin_lost_key(&w.account, &shuffle),
+        Err(Ok(RecoveryError::ReplacedCredentialRetained))
+    );
+}
+
+/// Spec §7.3 rule 4: the enrollment-id freshness check is the controller's,
+/// against the account's `is_enrolled_id`; the pure derivation cannot see
+/// the account's history.
+#[test]
+fn a_recovery_cannot_rotate_to_an_enrollment_id_the_account_used() {
+    let w = world();
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Zk))));
+    let mut rotated = w.recovery("loss", Mode::Zk);
+    rotated.enrollment = Some(enrollment(&w.env, 2));
+    w.enroll(&w.doc(Some(rotated)));
+    for used in [1u8, 2] {
+        let replacements = w.replacements(&w.new_key(), Some(enrollment(&w.env, used)));
+        assert_eq!(
+            w.ctl().try_begin_lost_key(&w.account, &replacements),
+            Err(Ok(RecoveryError::EnrollmentIdReused)),
+            "enrollment {used}"
+        );
+    }
+    // The pure derivation accepts the same rotation: freshness is history.
+    let replacements = w.replacements(&w.new_key(), Some(enrollment(&w.env, 1)));
+    let current = w.client().applied_doc().unwrap();
+    w.compiler()
+        .derive_target(&current, &current, &RecoveryAction::LostKey, &replacements);
+    w.ctl()
+        .begin_lost_key(&w.account, &w.replacements(&w.new_key(), Some(enrollment(&w.env, 3))));
+}
+
 #[test]
 fn zk_enrollments_are_fresh_wired_and_never_changed_in_place() {
     let w = world();
@@ -1300,11 +1376,11 @@ fn replacement_sets_follow_the_permitted_change_rules() {
         zk_enrollment: soroban_sdk::Vec::new(&w.env),
     };
     assert_eq!(refused(&empty), Err(Ok(RecoveryError::InvalidReplacements)));
-    // Replacing a slot with the credential it already holds would leave a
-    // revoked credential in the target.
+    // Spec §7.3 rule 8: "replacing" a slot with the credential it already
+    // holds keeps a replaced credential in the target.
     assert_eq!(
         refused(&w.replacements(&w.owner, None)),
-        Err(Ok(RecoveryError::InvalidReplacements))
+        Err(Ok(RecoveryError::ReplacedCredentialRetained))
     );
     // A replacement key equal to another signer's fails document validation.
     assert_eq!(

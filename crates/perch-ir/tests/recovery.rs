@@ -515,7 +515,7 @@ fn compromise_keeps_the_current_recovery_member_not_the_baselines() {
 }
 
 #[test]
-fn zk_rotation_is_required_exactly_for_zk_modes_and_must_be_fresh() {
+fn zk_rotation_is_required_exactly_for_zk_modes() {
     let guardian = recovery_doc();
     let rotation = ZkRotation {
         enrollment_id: "11".repeat(32),
@@ -550,11 +550,13 @@ fn zk_rotation_is_required_exactly_for_zk_modes_and_must_be_fresh() {
         )
     };
     assert_eq!(derive(None), Err(DeriveError::ZkEnrollmentMismatch));
+    // Freshness is the controller's check (it needs the account's enrolled
+    // ids); the pure derivation accepts the current id.
     let reuse = ZkRotation {
         enrollment_id: ENROLLMENT.into(),
         commitment: "0b".repeat(32),
     };
-    assert_eq!(derive(Some(&reuse)), Err(DeriveError::ZkEnrollmentMismatch));
+    assert!(derive(Some(&reuse)).is_ok());
 
     let target = derive(Some(&rotation)).unwrap();
     validate(&target).unwrap();

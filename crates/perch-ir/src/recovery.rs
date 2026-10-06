@@ -60,8 +60,9 @@ pub enum DeriveError {
     /// The replacement is a different kind of credential, or an external
     /// credential with a different verifier, than the one it replaces.
     KindMismatch { id: String },
-    /// A ZK rotation was given for a mode without a ZK factor, omitted for a
-    /// mode with one, or names the currently enrolled id.
+    /// A ZK rotation was given for a mode without a ZK factor, or omitted
+    /// for a mode with one. (Whether the id is fresh depends on the
+    /// account's history, which the recovery controller checks.)
     ZkEnrollmentMismatch,
 }
 
@@ -83,7 +84,7 @@ impl fmt::Display for DeriveError {
             ),
             DeriveError::ZkEnrollmentMismatch => write!(
                 f,
-                "the ZK rotation does not match the enrolled mode or reuses the enrolled id"
+                "the ZK rotation does not match the enrolled mode"
             ),
         }
     }
@@ -94,8 +95,11 @@ impl fmt::Display for DeriveError {
 /// document, whose `recovery` member the target keeps).
 ///
 /// `replacements` must be in strictly ascending signer-id byte order. `zk`
-/// must be present exactly when the current mode has a ZK factor, and its
-/// enrollment id must differ from the enrolled one.
+/// must be present exactly when the current mode has a ZK factor. Whether its
+/// enrollment id is fresh, whether any credential is revoked, and whether
+/// every replaced credential leaves the target depend on the account's
+/// history or on canonical keys, so the recovery controller checks them
+/// (spec §7.3 rules 4, 7, 8).
 pub fn derive_target(
     source: &PolicyDoc,
     current: &PolicyDoc,
@@ -159,9 +163,6 @@ pub fn derive_target(
     match (factor, zk) {
         (None, None) => {}
         (Some(f), Some(rot)) => {
-            if f.enrollment_id == rot.enrollment_id {
-                return Err(DeriveError::ZkEnrollmentMismatch);
-            }
             f.enrollment_id = rot.enrollment_id.clone();
             f.commitment = rot.commitment.clone();
         }

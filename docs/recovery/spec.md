@@ -744,8 +744,8 @@ before an attempt is authorized. Completion cost must therefore not be
 theirs to choose.
 
 **Apply is a delta.** Every `apply_doc`, completion included, matches the
-target's rules to the installed ones **by slot**, its position in the
-document's `rules` array:
+target's rules to the installed ones **by slot: the recovery rule by its
+role; a document rule by its name and compiled scope (context type)**:
 
 - A slot whose compiled rule is identical is left untouched. "Compiled
   rule" means scope, signers as resolved credentials, `valid_until`, and
@@ -754,10 +754,11 @@ document's `rules` array:
   a signer's key leaves the rule text unchanged but changes its compiled
   signers.
 - A slot that differs is **edited in place** under its existing rule id:
-  - a changed name or `valid_until` is updated;
+  - a changed `valid_until` is updated;
   - signers and policies present in both are kept;
-  - new ones are added before old ones are removed, so the rule is never
-    empty;
+  - when something on the rule survives, removals run first, so its counts
+    never exceed OZ's per-rule limits mid-edit; when nothing survives,
+    additions run first, so it is never empty;
   - a policy whose install parameters change counts as removed and
     re-added.
 - A slot is **replaced whole** (a new rule id) only in two cases:
@@ -768,12 +769,14 @@ document's `rules` array:
     (one policy per address) and removing first would empty it.
   - Its scope changes. OZ has no operation that changes a rule's context
     type in place.
-- Slots beyond the shorter document are removed or added.
+- An installed rule whose slot the target lacks is removed, before
+  anything is added; a target rule whose slot is not installed is added.
 
 The installed rule set that results authorizes exactly what a full replace
-would, and the cost is never more than a full replace. The account tracks the installed
-rule id of each slot in a list bounded by the rule cap (plus the recovery
-rule). It never scans historical rule ids, which grow without bound with
+would, and the cost is never more than a full replace. The account keeps one record per
+installed rule (id, slot, valid_until, signers, and each policy with a
+digest of its install parameters) bounded by the rule cap (plus the
+recovery rule). It never scans historical rule ids, which grow without bound with
 every past apply (#102 review, P1).
 
 A completion also revokes every removed credential and compiles the target.

@@ -91,7 +91,9 @@ the doc compiler: for each recovery-member fixture, the compiler's
 `config_hash` must equal `sha256("perch/recovery/config" || fixture bytes)`
 recomputed with `sha2`, and every single-field change must move it to the
 recomputed hash of the changed text. It runs against the native compiler on
-every PR and, in `release_stack.rs`, against the deployed compiler wasm. See
+every PR and, in `release_stack.rs`, against a release stack's compiler wasm
+(in CI, the one built from the PR's source; locally, also the deployed
+testnet one, fetched with `scripts/fetch-infra-wasm.sh --stack`). See
 PLAN.md phase 2 for the planned deepening (Verus or Aeneas).
 
 ## What is not modeled

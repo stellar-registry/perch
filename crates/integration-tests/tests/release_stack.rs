@@ -1648,12 +1648,13 @@ fn protected_reconfiguration_and_upgrade_need_real_proofs() {
 
 /// `GuardianOnly` under `Loss`: no ZK enrollment, proof, or pool access
 /// anywhere on the path, and the owner can always veto.
-/// The deployed compiler's `config_hash` is `sha256("perch/recovery/config" ||
-/// recovery_canonical_json)`, recomputed here from the committed fixtures,
-/// and it changes with every configuration field (`support/config_hash.rs`).
+/// The stack's compiler wasm computes `config_hash` as
+/// `sha256("perch/recovery/config" || recovery_canonical_json)`, recomputed
+/// here from the committed fixtures, and it changes with every configuration
+/// field (`support/config_hash.rs`).
 #[test]
 #[ignore = "needs the built stack"]
-fn the_deployed_compiler_hashes_the_canonical_recovery_text() {
+fn the_stack_compiler_hashes_the_canonical_recovery_text() {
     let stack = load_stack();
     let env = Env::new_with_config(EnvTestConfig {
         capture_snapshot_at_drop: false,

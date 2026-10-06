@@ -2,7 +2,7 @@
 //! recovery_canonical_json)`, computed independently from the committed
 //! recovery-member fixtures, and changes with every configuration field
 //! (`support/config_hash.rs`). `release_stack.rs` runs the same check against
-//! the deployed compiler wasm.
+//! a release stack's compiler wasm.
 
 mod support;
 

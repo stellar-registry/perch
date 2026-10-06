@@ -2,12 +2,15 @@
 
 Proof helpers for Perch ZK recovery, in the browser or Node. The package
 computes commitments, rebuilds a pool tree from its leaves to get a witness
-path, and proves with bb.js against the release circuit. The proofs it
-produces are byte-identical to the pinned `bb` CLI's, and the on-chain adapter
-verifies them (see [`docs/zk/`](../../docs/zk/README.md)).
+path, and proves with bb.js against the release circuit. Proofs are
+zero-knowledge (`UltraKeccakZKFlavor`): they reveal nothing about the secret
+or the leaf's position beyond the public root, nullifier, and statement hash.
+They are randomized, so two proofs of one statement differ, and the on-chain
+adapter verifies them (see [`docs/zk/`](../../docs/zk/README.md)). `verify`
+checks a proof locally with bb.js before you submit it.
 
 ```ts
-import { init, commitment, PoolWitnessIndex, prove, evidence, randomSecret } from '@stellar-registry/perch-zk';
+import { init, commitment, PoolWitnessIndex, prove, verify, evidence, randomSecret } from '@stellar-registry/perch-zk';
 import circuit from '@stellar-registry/perch-zk/artifacts/perch_zk_recovery.json' with { type: 'json' };
 
 await init(); // loads Barretenberg's WASM once
@@ -33,17 +36,28 @@ const proof = await prove(circuit, {
   leafIndex,
   siblings,
 });
+if (!(await verify(circuit, proof))) throw new Error('proof does not verify'); // optional local check
 const zk = evidence(treeId, proof); // { treeId, root, nullifier, proof } → ZkEvidence
 ```
 
 Pinned toolchain: `@noir-lang/noir_js` 1.0.0-beta.9 and `@aztec/bb.js`
-0.87.0. These are the versions NethermindEth's audited verifier targets. A
-proof from any other bb version does not verify on-chain.
+0.87.0, the versions the adapter's verifier targets. A proof from any other bb
+version does not verify on-chain, and neither does a non-ZK proof
+(`{ keccak: true }`).
 
 `npm test` checks Poseidon2 parity with the circuit and the Soroban host,
-recomputes every committed fixture's public inputs, checks the shipped
-artifacts against `circuits/manifest.json`, and proves one fixture with bb.js,
-which must match the committed CLI proof byte for byte. `npm run bench`
+recomputes every committed fixture's public inputs, and checks the shipped
+artifacts against `circuits/manifest.json`. It also proves one fixture with
+bb.js and requires the proof to:
+
+- carry the committed public inputs;
+- verify under bb.js;
+- differ from a second proof.
+
+It also checks that bb.js accepts the committed CLI and bb.js proofs, and
+that its verification key is the one the adapter compiles in.
+`PERCH_ZK_WRITE_VECTORS=1 npm test` rewrites the committed bb.js proof, which
+the adapter's tests verify on-chain. `npm run bench`
 measures WASM proving time at both packaged depths under Node, and
 `bench/browser` (`npm install && npm run bench` there) measures it in
 headless Chromium.

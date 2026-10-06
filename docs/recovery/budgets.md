@@ -119,15 +119,15 @@ before §5 runs, and the confirmed values are recorded here.
 ## Results
 
 Workstream 2's measurements and the rule's application are in
-[`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-03, protocol
-29 limits; the measured circuits' `circuit_id`s are in its generated
-"Circuit identities" table). In summary:
+[`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-06, protocol
+29 limits, zero-knowledge proofs; the measured circuits' `circuit_id`s are
+in its generated "Circuit identities" table). In summary:
 
-- §1: native and single-threaded bb.js proving take 0.07 s and 0.66 s on a
-  desktop at D = 32. Client artifacts are 8.4 MB and the proof is 14.6 KB.
+- §1: native and single-threaded bb.js proving take 0.10 s and 0.82 s on a
+  desktop at D = 32. Client artifacts are 8.9 MB and the proof is 16.2 KB.
   The reference phone and laptop are not yet measured.
-- §2, ZK components only: adapter `verify` is 96.9M instructions and 5.1 MB
-  at D = 32 (94.9M at D = 24); `rcv_insert` sealing a tree is 43.8M
+- §2, ZK components only: adapter `verify` is 136.9M instructions and
+  6.7 MB at D = 32 (134.7M at D = 24); `rcv_insert` sealing a tree is 43.8M
   instructions and 2.2 KB written (34.8M at D = 24). The full-transaction
   rows are the controller workstream's.
 - §5: every measured row is within budget at D = 32, so **D = 32**,

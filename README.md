@@ -45,7 +45,7 @@ crates/
   perch-zk-pool/      deployable ZK recovery membership pool: account-authorized enrollment,
                       depth-32 Poseidon2 trees with rollover — see docs/zk/
   perch-zk-adapter/   deployable ZK recovery adapter: root check + statement binding + the
-                      audited UltraHonk verifier with the circuit's VK compiled in
+                      zero-knowledge UltraHonk verifier with the circuit's VK compiled in
   perch-zk-primitives/  host-side Poseidon2 for the circuit's formulas (no_std)
   perch-zk-prover/    native witnesses/proving + `perch-zk-fixtures` (artifacts, fixtures, bench)
   perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
@@ -62,7 +62,8 @@ packages/
   perch-zk/           ZK recovery proof helpers: commitments, witnesses, bb.js proving
 circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
                       artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
-vendor/               vendored audited UltraHonk verifier (unmodified; see its NOTICE)
+vendor/               vendored audited UltraHonk verifier plus perch's ZK-flavor delta
+                      (the delta is unaudited; see its README and NOTICE)
 formal/               Lean 4 model of the v1 semantics + machine-checked theorems
                       (fail-closed, validation soundness, lowering preservation, and CANON v1
                       canonicalizer injectivity); replays the conformance + canonical vectors

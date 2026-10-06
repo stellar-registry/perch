@@ -71,7 +71,8 @@ does not reuse their artifacts, and nothing assumes they still verify.
 | | Nido `zk_recovery_doc` | Perch `perch_zk_recovery` |
 | --- | --- | --- |
 | Toolchain | nargo 1.0.0-beta.18, bb 3.0.0-nightly.20260102 | nargo 1.0.0-beta.9, bb 0.87.0 (the audited verifier's target) |
-| Verifier | unaudited bb 3 fork | NethermindEth, OpenZeppelin-audited, vendored unmodified |
+| Verifier | unaudited bb 3 fork, non-ZK | NethermindEth, OpenZeppelin-audited (non-ZK), plus perch's `UltraKeccakZKFlavor` delta (not yet audited; [`README.md`](README.md)) |
+| Proof flavor | non-ZK (no witness hiding) | zero-knowledge (`bb prove --zk`, bb.js `keccakZK`) |
 | Depth | 24 | 32 (24 as a buildable fallback) |
 | Leaf binding | `H(DOM_BIND, acct, inner)` | `H(DOM_BIND, acct, enrollment_id, inner)` |
 | Nullifier | `H(DOM_NULL, acct, secret)` | `H(DOM_NULLIFIER, acct, enrollment_id, secret)` |
@@ -79,17 +80,19 @@ does not reuse their artifacts, and nothing assumes they still verify.
 | Timing | seconds (`timelock_secs`) | none in-circuit; ledger counts live in the statement |
 | Domain tags | `nido` v1 constants | `perch/recovery/zk/v2/*` (no v1 proof, leaf, or nullifier is valid here) |
 | Poseidon2 dependency | git tag | vendored by path, checksummed |
-| Proof / VK size | 6,976 B / 1,888 B | 14,592 B / 1,760 B |
-| Circuit size | n/a | about 5,700 gates (depth 32) and 4,400 (depth 24), both padded to 2^13; exact counts in [`measurements.md`](measurements.md) |
+| Proof / VK size | 6,976 B / 1,888 B | 16,224 B / 1,760 B |
+| Circuit size | n/a | about 5,700 gates at depth 32 and 4,400 at depth 24, which bb pads to 2^14 and 2^13 (the VK's `log_circuit_size`); exact counts in [`measurements.md`](measurements.md) |
 
 What demonstrates compatibility, and not just similarity:
 
 - **Poseidon2.** The parity vectors above, plus Nido's own
   `hash2(1, 2)` vector, which this circuit reproduces unchanged
   (`0x038682aa…d7383`).
-- **Proving.** bb.js 0.87.0 in Node and the bb 0.87.0 CLI produce
-  byte-identical proofs for the same witness, so a browser prover and the
-  committed fixtures agree (`packages/perch-zk/test/prove.test.ts`).
+- **Proving.** bb.js 0.87.0 in Node and the bb 0.87.0 CLI prove the same
+  statement in the same flavor, with the same verification key. Each accepts
+  the other's proofs, and the adapter verifies a committed bb.js proof
+  (`packages/perch-zk/test/prove.test.ts`, `testdata/zk/lost_key/proof.bbjs`).
+  ZK proofs are randomized, so the two never match byte for byte.
 - **Verification.** Every fixture verifies on-chain through the compiled
   adapter (`crates/perch-zk-adapter`), and the depth-32 boundary proof
   verifies against a pool that reached index 2^32 − 1 and rolled over.
@@ -111,6 +114,10 @@ What demonstrates compatibility, and not just similarity:
 
 Each `fixture.json` carries the structured statement, the enrollment history
 to replay into a pool at `pool_id`, the secret, and the expected public
-values. When the statement encoding changes (`perch-recovery-interface`),
-regenerate with `just zk-artifacts`. The circuit and VK stay the same, and
-only the digests and proofs change.
+values. Next to it are `proof` (ZK, from the bb CLI) and `public_inputs`.
+`lost_key` also has `proof.bbjs`, a ZK proof from bb.js, and `proof.non-zk`,
+a valid non-ZK proof the adapter must refuse. When the statement encoding
+changes (`perch-recovery-interface`), regenerate with `just zk-artifacts`,
+then `PERCH_ZK_WRITE_VECTORS=1 npm test` in `packages/perch-zk` for
+`proof.bbjs`. The circuit and VK stay the same, and only the digests and
+proofs change.

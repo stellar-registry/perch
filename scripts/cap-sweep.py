@@ -5,14 +5,15 @@ per-transaction limit (docs/recovery/budgets.md, "Document caps").
 
 Usage:
   eval "$(scripts/zk-toolchain.sh)"
-  scripts/cap-sweep.py [--stack target/stack] [--bytes N] [--budget 75] S,R [S,R ...]
+  scripts/cap-sweep.py [--stack target/stack] [--bytes N|0] [--budget 75] S,R [S,R ...]
   scripts/cap-sweep.py --log sweep.log      # tabulate an earlier run's output
 
 Each S,R is the worst shape with S signers and R rules: every signer a
 passkey some rule names (up to OZ's 15 per rule), every rule but `admin` and
 `target` with both policies, padded to --bytes (default: the build's byte
-cap). The stack's compiler must admit the shapes: to measure past the
-current caps, build a stack with them raised. Standard library only.
+cap; 0: the larger of 8 192 and the shape's own size rounded up to 1 KiB).
+The stack's compiler must admit the shapes: to measure past the current
+caps, build a stack with them raised. Standard library only.
 """
 
 import argparse
@@ -45,7 +46,7 @@ def run(args) -> str:
     for sr in args.shapes:
         s, r = (int(x) for x in sr.split(","))
         shape = f"{s},{r - 2},0,0,{min(s, 15)}"
-        if args.bytes:
+        if args.bytes is not None:
             shape += f",{args.bytes}"
         shapes.append(shape)
     env = dict(os.environ, PERCH_STACK_DIR=args.stack, PERCH_CAP_SWEEP=";".join(shapes))
@@ -108,7 +109,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("shapes", nargs="*", help="S,R pairs")
     p.add_argument("--stack", default="target/stack")
-    p.add_argument("--bytes", type=int, default=0)
+    p.add_argument("--bytes", type=int, default=None)
     p.add_argument("--budget", type=float, default=75.0)
     p.add_argument("--log", help="tabulate this cap_sweep output instead of running")
     args = p.parse_args()

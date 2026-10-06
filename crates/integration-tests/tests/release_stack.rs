@@ -1958,7 +1958,8 @@ fn worst_case_protected_reconfiguration_at_the_document_caps() {
 
 /// Sizing the caps: every worst-case flow over the shapes in
 /// `PERCH_CAP_SWEEP` (`signers,both,interp,plain,fan[,bytes];...`, bytes
-/// defaulting to the byte cap), with the budget and the network limits
+/// defaulting to the byte cap; `0` is the larger of 8 192 and the shape's
+/// own size rounded up to 1 KiB), with the budget and the network limits
 /// lifted so a row past them still prints. A shape past this build's caps
 /// or its byte target is reported and skipped: measure larger shapes on a
 /// stack built with the compiler's caps raised. `scripts/cap-sweep.py`
@@ -1976,10 +1977,25 @@ fn cap_sweep() {
             plain: v[3] as u32,
             fan: v[4],
         };
-        let bytes = v
-            .get(5)
-            .copied()
-            .unwrap_or(MAX_DOC_CANONICAL_BYTES as usize);
+        let seed = 100 + 10 * (n % 15) as u8;
+        let w = world();
+        let rec = Rec {
+            profile: "protected",
+            mode: Mode::Combined,
+            zk: Some(Zk {
+                secret: field("fit"),
+                id: field("fit id"),
+            }),
+            delay: DELAY,
+            baseline: Some(BytesN::from_array(&w.env, &[0; 32])),
+        };
+        let own =
+            canonical_len(&w.shaped_json(&passkeys(seed, shape.signers), &rec, shape, 0, 0, true));
+        let bytes = match v.get(5).copied() {
+            None => MAX_DOC_CANONICAL_BYTES as usize,
+            Some(0) => own.div_ceil(1024).max(8) * 1024,
+            Some(b) => b,
+        };
         let skip = |why: &str| {
             println!(
                 "\n{{\"case\":\"skipped\",\"signers\":{},\"rules\":{},\"bytes\":{bytes},\"why\":\"{why}\"}}",
@@ -1994,20 +2010,7 @@ fn cap_sweep() {
             skip("past this build's caps");
             continue;
         }
-        let seed = 100 + 10 * (n % 15) as u8;
-        let w = world();
-        let rec = Rec {
-            profile: "protected",
-            mode: Mode::Combined,
-            zk: Some(Zk {
-                secret: field("fit"),
-                id: field("fit id"),
-            }),
-            delay: DELAY,
-            baseline: Some(BytesN::from_array(&w.env, &[0; 32])),
-        };
-        let keys = passkeys(seed, shape.signers);
-        if canonical_len(&w.shaped_json(&keys, &rec, shape, 0, 0, true)) > bytes {
+        if own > bytes {
             skip("does not fit the byte target");
             continue;
         }

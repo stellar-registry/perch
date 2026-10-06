@@ -240,6 +240,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "payload"
+                      },
+                      "val": {
+                        "bytes": "19a51d2718f44a378e2f57459dc2c16f7df6e2b4f498f25875f285f8704d9521"
+                      }
+                    },
+                    {
+                      "key": {
                         "vec": [
                           {
                             "symbol": "Count"

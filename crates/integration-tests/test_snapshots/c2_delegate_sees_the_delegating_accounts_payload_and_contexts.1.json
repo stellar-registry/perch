@@ -29,6 +29,7 @@
       ]
     ],
     [],
+    [],
     []
   ],
   "ledger": {
@@ -211,6 +212,14 @@
                     "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
                   },
                   "storage": [
+                    {
+                      "key": {
+                        "symbol": "payload"
+                      },
+                      "val": {
+                        "bytes": "6b75257d56ab10af7e5cd4b7df2bbf60dbfb847d96c4345a4965576d18a990fe"
+                      }
+                    },
                     {
                       "key": {
                         "vec": [

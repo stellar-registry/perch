@@ -51,8 +51,13 @@ pub enum UpgradeReadiness {
     Ready,
     /// The delay has not passed yet.
     NotYet,
-    /// The recovery generation moved since scheduling. The request is dead
-    /// and is cleared.
+    /// The recovery generation moved since scheduling. The request can
+    /// never execute again, because the generation never decreases.
+    /// `execute_upgrade` refuses it and does **not** clear it: a refused
+    /// Soroban invocation rolls back its writes, so clearing in the same
+    /// call is impossible. The inert request stays until `schedule_upgrade`
+    /// replaces it, `cancel_upgrade` removes it, or a completion clears the
+    /// slot (spec §12).
     Stale,
 }
 

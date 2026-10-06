@@ -71,6 +71,10 @@ impl CustomAccountInterface for TestAccount {
         signatures: AuthPayload,
         auth_contexts: Vec<Context>,
     ) -> Result<(), SmartAccountError> {
+        // Recorded so C2 can compare it with what a delegate receives.
+        e.storage()
+            .instance()
+            .set(&PAYLOAD, &signature_payload.to_bytes());
         if e.storage().instance().has(&GUARD) {
             for c in auth_contexts.iter() {
                 if let Context::Contract(ContractContext { fn_name, .. }) = c {
@@ -411,10 +415,18 @@ fn c2_delegate_sees_the_delegating_accounts_payload_and_contexts() {
     assert_eq!(fn_name, Symbol::new(&w.env, "protected"));
     let arg: Address = args.get_unchecked(0).into_val(&w.env);
     assert_eq!(arg, w.account);
-    let recorded: Option<BytesN<32>> = w
+    // The delegate received exactly the signature payload the delegating
+    // account's own `__check_auth` received: forwarded, not a payload of
+    // its own.
+    let delegate_payload: BytesN<32> = w
         .env
-        .as_contract(&w.delegate, || w.env.storage().instance().get(&PAYLOAD));
-    assert!(recorded.is_some());
+        .as_contract(&w.delegate, || w.env.storage().instance().get(&PAYLOAD))
+        .unwrap();
+    let account_payload: BytesN<32> = w
+        .env
+        .as_contract(&w.account, || w.env.storage().instance().get(&PAYLOAD))
+        .unwrap();
+    assert_eq!(delegate_payload, account_payload);
 }
 
 #[test]

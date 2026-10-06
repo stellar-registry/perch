@@ -85,14 +85,16 @@ pub enum StatementError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConfigBinding {
     /// The controller's per-account configuration epoch. It increments on
-    /// every enrollment, reconfiguration, removal, and completed recovery, so
-    /// evidence produced under one epoch is dead under every later one.
+    /// every enrollment, reconfiguration, removal, completed recovery, and
+    /// executed account upgrade, so evidence produced under one epoch is
+    /// dead under every later one.
     pub epoch: u64,
-    /// `sha256` of the canonical JSON of the enrolled document's `recovery`
-    /// section (`docs/recovery/spec.md` §3.2). Binds
-    /// the whole configuration: profile, mode, guardians, quorum, ZK
-    /// adapter/pool/enrollment, controller, baseline, replaceable signer
-    /// ids, and timing.
+    /// `sha256("perch/recovery/config" || canonical JSON of the enrolled
+    /// document's recovery member)`, as [`crate::config::config_hash`]
+    /// computes it (`docs/recovery/spec.md` §3.2). Binds the whole
+    /// configuration: profile, mode, guardians, quorum, ZK adapter, circuit
+    /// id, pool, enrollment id and commitment, controller, baseline,
+    /// replaceable signer ids, and timing.
     pub config_hash: BytesN<32>,
 }
 

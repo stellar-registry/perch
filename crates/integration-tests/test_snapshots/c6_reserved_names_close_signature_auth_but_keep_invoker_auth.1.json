@@ -304,6 +304,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "payload"
+                      },
+                      "val": {
+                        "bytes": "7b0ebf9d091c50fd5d93109d5d7d9a67fc1d17e9f9be9a472ef1ff0c98a5a8c8"
+                      }
+                    },
+                    {
+                      "key": {
                         "vec": [
                           {
                             "symbol": "Count"
@@ -356,7 +364,7 @@
               "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
               "key": {
                 "ledger_key_nonce": {
-                  "nonce": "7"
+                  "nonce": "1"
                 }
               },
               "durability": "temporary",
@@ -435,7 +443,7 @@
                         "symbol": "payload"
                       },
                       "val": {
-                        "bytes": "ec29d40144e65236f6bb753826eee892334901634c70d8cd35dddeebbba0d663"
+                        "bytes": "7b0ebf9d091c50fd5d93109d5d7d9a67fc1d17e9f9be9a472ef1ff0c98a5a8c8"
                       }
                     }
                   ]

@@ -9,7 +9,22 @@
 
 use crate::statement::{ConfigBinding, StatementTiming};
 use crate::zk::ZkBinding;
-use soroban_sdk::{contracttype, Address, BytesN, String, Vec};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env, String, Vec};
+
+/// Domain tag for [`config_hash`].
+pub const CONFIG_DOMAIN: &[u8; 21] = b"perch/recovery/config";
+
+/// `sha256(CONFIG_DOMAIN || canonical_recovery_json)`: configuration
+/// identity (spec §3.2). `canonical_recovery_json` is the `CANONICAL.md`
+/// form of the document's `recovery` member. The doc compiler computes this
+/// into [`CompiledRecoveryConfig::config_hash`]; evidence providers compute
+/// it from the document they are shown. The domain tag keeps it from ever
+/// equalling a document hash or any other perch digest.
+pub fn config_hash(e: &Env, canonical_recovery_json: &Bytes) -> BytesN<32> {
+    let mut preimage = Bytes::from_slice(e, CONFIG_DOMAIN);
+    preimage.append(canonical_recovery_json);
+    e.crypto().sha256(&preimage).to_bytes()
+}
 
 /// Who may change the recovery configuration, and whether an authorized
 /// attempt freezes ordinary activity (spec §2, §9).
@@ -76,8 +91,8 @@ pub enum CompiledRecoveryMode {
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompiledRecoveryConfig {
-    /// `sha256("perch/recovery/config" || canonical JSON of the recovery
-    /// member)`, computed by the doc compiler (spec §3.2). Configuration
+    /// [`config_hash`] of the canonical JSON of the recovery member, computed
+    /// by the doc compiler (spec §3.2). Configuration
     /// identity: two compiled configurations with the same `config_hash` are
     /// the same configuration.
     pub config_hash: BytesN<32>,
@@ -173,6 +188,17 @@ mod test {
             enrollment_id: BytesN::from_array(e, &[id; 32]),
             commitment: BytesN::from_array(e, &[commitment; 32]),
         }
+    }
+
+    #[test]
+    fn config_hash_is_domain_separated() {
+        let e = Env::default();
+        let json = Bytes::from_slice(&e, br#"{"profile":"loss"}"#);
+        let mut preimage = Bytes::from_slice(&e, b"perch/recovery/config");
+        preimage.append(&json);
+        let h = config_hash(&e, &json);
+        assert_eq!(h, e.crypto().sha256(&preimage).to_bytes());
+        assert_ne!(h, e.crypto().sha256(&json).to_bytes());
     }
 
     #[test]

@@ -212,6 +212,14 @@
                   "storage": [
                     {
                       "key": {
+                        "symbol": "payload"
+                      },
+                      "val": {
+                        "bytes": "6b75257d56ab10af7e5cd4b7df2bbf60dbfb847d96c4345a4965576d18a990fe"
+                      }
+                    },
+                    {
+                      "key": {
                         "vec": [
                           {
                             "symbol": "Count"

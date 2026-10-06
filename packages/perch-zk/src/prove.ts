@@ -1,11 +1,14 @@
 // UltraHonk proving with the pinned toolchain: noir_js 1.0.0-beta.9 solves the
-// witness, bb.js 0.87.0 proves with the keccak transcript (UltraKeccakFlavor,
-// non-ZK) — the flavor the on-chain verifier implements. Proofs are
-// byte-identical to `bb prove --scheme ultra_honk --oracle_hash keccak`.
+// witness, and bb.js 0.87.0 proves with the keccak transcript in its
+// zero-knowledge flavor (UltraKeccakZKFlavor, `bb prove --zk`), the flavor the
+// on-chain verifier implements. A proof reveals nothing about the witness
+// (the secret, the leaf's position, its Merkle path) beyond the public
+// inputs. Proofs are randomized: two proofs of one witness differ, and both
+// verify.
 
 import { Noir } from '@noir-lang/noir_js';
 import { UltraHonkBackend } from '@aztec/bb.js';
-import { fromHex, toBytes32 } from './field.js';
+import { fromHex, hex, toBytes32 } from './field.js';
 import { noirInputs, publicInputBytes, publicInputs } from './inputs.js';
 import type { PublicInputs, Witness } from './inputs.js';
 import type { Bytes32 } from './field.js';
@@ -18,8 +21,9 @@ export interface CompiledCircuit {
   bytecode: string;
 }
 
-/** Bytes of an UltraHonk proof for this verifier (456 field elements). */
-export const PROOF_BYTES = 456 * 32;
+/** Bytes of a zero-knowledge UltraHonk proof for this verifier (507 field
+ * elements). */
+export const PROOF_BYTES = 507 * 32;
 
 export interface Proof {
   proof: Uint8Array;
@@ -48,7 +52,7 @@ export async function prove(
   const { witness: solved } = await noir.execute(noirInputs(witness));
   const backend = new UltraHonkBackend(circuit.bytecode, { threads: options.threads ?? 1 });
   try {
-    const out = await backend.generateProof(solved, { keccak: true });
+    const out = await backend.generateProof(solved, { keccakZK: true });
     const got = out.publicInputs.map((v) => toBytes32(BigInt(v)));
     const want = [expected.root, expected.nullifier, expected.statementHash];
     if (got.length !== 3 || got.some((g, i) => !equal(g, want[i]!))) {
@@ -58,6 +62,26 @@ export async function prove(
       throw new Error(`unexpected proof length ${out.proof.length}`);
     }
     return { proof: out.proof, publicInputs: expected };
+  } finally {
+    await backend.destroy();
+  }
+}
+
+/** Check `p` against `circuit` with bb.js's own verifier, as the adapter
+ * would check it (same flavor, same verification key). For a client's
+ * self-check before submitting; the chain does not depend on it. */
+export async function verify(
+  circuit: CompiledCircuit,
+  p: Proof,
+  options: ProveOptions = {},
+): Promise<boolean> {
+  const backend = new UltraHonkBackend(circuit.bytecode, { threads: options.threads ?? 1 });
+  try {
+    const { root, nullifier, statementHash } = p.publicInputs;
+    return await backend.verifyProof(
+      { proof: p.proof, publicInputs: [root, nullifier, statementHash].map(hex) },
+      { keccakZK: true },
+    );
   } finally {
     await backend.destroy();
   }

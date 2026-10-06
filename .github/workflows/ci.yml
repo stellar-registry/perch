@@ -163,7 +163,7 @@ jobs:
         run: |
           eval "$(scripts/zk-toolchain.sh)"
           cd circuits && "$NARGO" test --workspace
-      - name: Artifacts reproduce byte-for-byte
+      - name: Artifacts reproduce, and committed ZK proofs verify
         run: |
           eval "$(scripts/zk-toolchain.sh)"
           cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- check

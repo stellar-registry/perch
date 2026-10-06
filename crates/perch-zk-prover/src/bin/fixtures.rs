@@ -12,6 +12,16 @@
 //!                              the on-chain cost harness
 //! ```
 //!
+//! Proofs are zero-knowledge (`bb prove --zk`) and therefore randomized, so a
+//! fresh proof never equals the committed one. Instead, a committed proof is
+//! kept, byte for byte, while `bb verify --zk` still accepts it against the
+//! freshly built verification key and public inputs. Otherwise the fresh
+//! proof replaces it, which `check` reports as drift. Everything else must
+//! reproduce exactly. The bb.js proof `packages/perch-zk`'s tests commit
+//! (`testdata/zk/lost_key/proof.bbjs`) is checked the same way, so the
+//! browser prover's output stays accepted by the CLI verifier as well as by
+//! the adapter's tests.
+//!
 //! Both need the pinned toolchain via `NARGO`/`BB` (`scripts/zk-toolchain.sh`
 //! installs it without touching a global nargo/bb). Run from the repo root.
 
@@ -19,8 +29,8 @@ use perch_zk_prover::fixture::{
     field_tag, sha256, tag, Enrollment, Fixture, Statement, Subject, NETWORK_PASSPHRASE,
 };
 use perch_zk_prover::{
-    commitment, doc_block, hex, host, prove, splice_doc_block, write_vk, Inputs, Toolchain, Tree,
-    BB_VERSION, NARGO_VERSION,
+    commitment, doc_block, hex, host, prove, prove_with, splice_doc_block, verify, write_vk,
+    Inputs, Toolchain, Tree, BB_VERSION, NARGO_VERSION,
 };
 use serde_json::{json, Value};
 use soroban_sdk::Env;
@@ -40,9 +50,16 @@ const TS_ARTIFACTS: &str = "packages/perch-zk/artifacts";
 /// `(package, depth)`. Fixtures are proved against the release circuit only.
 const PACKAGES: [(&str, u32); 2] = [("perch_zk_recovery", 32), ("perch_zk_recovery_d24", 24)];
 const RELEASE: &str = "perch_zk_recovery";
-/// The audited verifier this toolchain targets (see vendor/*/NOTICE).
+/// The verifier this toolchain targets: the audited upstream plus perch's
+/// `UltraKeccakZKFlavor` delta (see vendor/ultrahonk-soroban-verifier/NOTICE).
 const VERIFIER_SOURCE: &str =
-    "NethermindEth/rs-soroban-ultrahonk@c2160987260284c656ffbdad8344210fc162b177";
+    "NethermindEth/rs-soroban-ultrahonk@c2160987260284c656ffbdad8344210fc162b177 + perch UltraKeccakZKFlavor delta (src/zk.rs)";
+/// A proof of the `lost_key` statement from bb.js (`packages/perch-zk`'s
+/// `prove`), written by that package's tests under `PERCH_ZK_WRITE_VECTORS=1`.
+const BBJS_PROOF: &str = "testdata/zk/lost_key/proof.bbjs";
+/// A valid non-ZK (`UltraKeccakFlavor`) proof of the `lost_key` statement,
+/// which the adapter must refuse. Deterministic, so it reproduces exactly.
+const NON_ZK_PROOF: &str = "testdata/zk/lost_key/proof.non-zk";
 
 /// Recovery terms every fixture's account enrolled with.
 const EPOCH: u64 = 3;
@@ -288,12 +305,29 @@ fn noirc_version(tc: &Toolchain) -> String {
         .to_string()
 }
 
-/// Everything `generate` writes, as `path -> bytes`, built in `work`.
-fn build_all(tc: &Toolchain, work: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+/// `committed` if `bb verify --zk` accepts it for `public_inputs` under `vk`.
+fn still_verifies(
+    tc: &Toolchain,
+    vk: &[u8],
+    committed: &Path,
+    public_inputs: &[u8],
+    work: &Path,
+) -> Option<Vec<u8>> {
+    let proof = std::fs::read(committed).ok()?;
+    verify(tc, vk, &proof, public_inputs, work)
+        .expect("bb verify")
+        .then_some(proof)
+}
+
+/// Everything `generate` writes, as `path -> bytes`, built in `work`, and
+/// the committed files that must be refreshed by another tool.
+fn build_all(tc: &Toolchain, work: &Path) -> (BTreeMap<PathBuf, Vec<u8>>, Vec<String>) {
     let e = host();
     compile(tc);
     let mut files = BTreeMap::new();
+    let mut stale = Vec::new();
     let mut circuits = serde_json::Map::new();
+    let mut release_vk = Vec::new();
     for (package, depth) in PACKAGES {
         let artifact = stripped_artifact(package);
         let vk =
@@ -320,6 +354,9 @@ fn build_all(tc: &Toolchain, work: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
             PathBuf::from(format!("{ARTIFACTS}/{package}.json")),
             artifact,
         );
+        if package == RELEASE {
+            release_vk = vk.clone();
+        }
         files.insert(PathBuf::from(format!("{VK_DIR}/{package}.vk")), vk);
     }
 
@@ -335,19 +372,61 @@ fn build_all(tc: &Toolchain, work: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
             inputs.public_inputs(&e),
             "{name}: bb's public inputs differ from the host's"
         );
+        let checks = work.join(format!("{name}-verify"));
+        assert!(
+            verify(tc, &release_vk, &proof.proof, &proof.public_inputs, &checks)
+                .expect("bb verify"),
+            "{name}: bb verify --zk rejects bb's own fresh proof"
+        );
         let dir = PathBuf::from(format!("{FIXTURES}/{name}"));
+        let proof_bytes = still_verifies(
+            tc,
+            &release_vk,
+            &dir.join("proof"),
+            &proof.public_inputs,
+            &checks,
+        )
+        .unwrap_or(proof.proof);
+        if name == "lost_key" {
+            let non_zk = prove_with(
+                tc,
+                Path::new(CIRCUITS),
+                RELEASE,
+                &inputs,
+                &work.join("non-zk"),
+                false,
+            )
+            .expect("non-ZK proof");
+            assert_eq!(non_zk.public_inputs, proof.public_inputs);
+            files.insert(PathBuf::from(NON_ZK_PROOF), non_zk.proof);
+            match still_verifies(
+                tc,
+                &release_vk,
+                Path::new(BBJS_PROOF),
+                &proof.public_inputs,
+                &checks,
+            ) {
+                Some(bbjs) => {
+                    files.insert(PathBuf::from(BBJS_PROOF), bbjs);
+                }
+                None => stale.push(format!(
+                    "{BBJS_PROOF} is missing or no longer verifies: run \
+                     `PERCH_ZK_WRITE_VECTORS=1 npm test` in packages/perch-zk"
+                )),
+            }
+        }
         let mut fixture_json = serde_json::to_vec_pretty(&f).unwrap();
         fixture_json.push(b'\n');
         fixtures.insert(
             name.into(),
             json!({
                 "action": format!("{:?}", f.statement.to_statement(&e).action()),
-                "proof_sha256": hex(&sha256(&proof.proof)),
+                "proof_sha256": hex(&sha256(&proof_bytes)),
                 "public_inputs_sha256": hex(&sha256(&proof.public_inputs)),
             }),
         );
         files.insert(dir.join("fixture.json"), fixture_json);
-        files.insert(dir.join("proof"), proof.proof);
+        files.insert(dir.join("proof"), proof_bytes);
         files.insert(dir.join("public_inputs"), proof.public_inputs);
     }
 
@@ -356,7 +435,7 @@ fn build_all(tc: &Toolchain, work: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
             "nargo": NARGO_VERSION,
             "noirc": noirc_version(tc),
             "bb": BB_VERSION,
-            "bb_scheme": "ultra_honk --oracle_hash keccak (UltraKeccakFlavor, non-ZK)",
+            "bb_scheme": "ultra_honk --oracle_hash keccak --zk (UltraKeccakZKFlavor)",
             "verifier": VERIFIER_SOURCE,
         },
         "sources": source_hashes(),
@@ -374,7 +453,7 @@ fn build_all(tc: &Toolchain, work: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
         manifest.clone(),
     );
     files.insert(PathBuf::from(MANIFEST), manifest);
-    files
+    (files, stale)
 }
 
 /// Proving cost at each packaged depth, for the same credential and
@@ -493,7 +572,7 @@ fn main() -> ExitCode {
         println!("{}", serde_json::to_string_pretty(&report).unwrap());
         return ExitCode::SUCCESS;
     }
-    let files = build_all(&tc, &work);
+    let (files, stale) = build_all(&tc, &work);
     let _ = std::fs::remove_dir_all(&work);
 
     if mode == "generate" {
@@ -501,6 +580,9 @@ fn main() -> ExitCode {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, bytes).unwrap();
             println!("wrote {}", path.display());
+        }
+        for s in &stale {
+            eprintln!("STALE {s}");
         }
         return ExitCode::SUCCESS;
     }
@@ -519,10 +601,14 @@ fn main() -> ExitCode {
             }
         }
     }
+    for s in &stale {
+        drift += 1;
+        println!("STALE {s}");
+    }
     if drift > 0 {
         eprintln!("{drift} artifact(s) differ from a fresh build");
         return ExitCode::FAILURE;
     }
-    println!("all artifacts reproduce byte-for-byte");
+    println!("all artifacts reproduce byte-for-byte, and every committed proof verifies");
     ExitCode::SUCCESS
 }

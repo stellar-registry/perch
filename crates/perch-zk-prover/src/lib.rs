@@ -7,9 +7,10 @@
 //! - [`Inputs`]: the full circuit input set for one proof, with the public
 //!   values (`root`, `nullifier`, `statement_hash`) derived exactly as the
 //!   contracts derive them.
-//! - [`Toolchain`]/[`prove`]: drives the pinned `nargo` and `bb` binaries to
-//!   produce a real UltraHonk proof, for fixtures and native tooling. Browser
-//!   and Node proving live in `packages/perch-zk`.
+//! - [`Toolchain`]/[`prove`]/[`verify`]: drives the pinned `nargo` and `bb`
+//!   binaries to produce and check a real zero-knowledge UltraHonk proof, for
+//!   fixtures and native tooling. Browser and Node proving live in
+//!   `packages/perch-zk`.
 //!
 //! Hashing runs the Soroban host's own Poseidon2 permutation through an
 //! in-process [`Env`], so a witness is computed by the same code the pool runs
@@ -218,7 +219,7 @@ pub fn leaf_of_commitment(
 
 /// The pinned proving toolchain. Proofs and verification keys must come
 /// from these exact versions: the on-chain verifier parses bb 0.87.0's
-/// `UltraKeccakFlavor` layout, and a proof from another bb version fails at
+/// `UltraKeccakZKFlavor` layout, and a proof from another bb version fails at
 /// the pairing check rather than at parse time.
 pub const NARGO_VERSION: &str = "1.0.0-beta.9";
 pub const BB_VERSION: &str = "0.87.0";
@@ -320,15 +321,36 @@ fn run_measured(cmd: &mut Command) -> io::Result<Option<u64>> {
     }))
 }
 
+/// The bb flags of the proving system the adapter verifies: UltraHonk with
+/// the keccak transcript, zero-knowledge (`UltraKeccakZKFlavor`). The
+/// verification key is the same with or without `--zk`, and `bb write_vk`
+/// takes no `--zk`.
+const BB_SCHEME: [&str; 4] = ["--scheme", "ultra_honk", "--oracle_hash", "keccak"];
+
 /// Prove `inputs` against the compiled `package` of the Noir workspace at
 /// `circuits` (`nargo compile --workspace` must have run). `work` receives
-/// the witness and bb's outputs.
+/// the witness and bb's outputs. Proofs are zero-knowledge and so randomized:
+/// two proofs of the same witness differ.
 pub fn prove(
     tc: &Toolchain,
     circuits: &Path,
     package: &str,
     inputs: &Inputs,
     work: &Path,
+) -> io::Result<Proof> {
+    prove_with(tc, circuits, package, inputs, work, true)
+}
+
+/// [`prove`], or with `zk = false` a deterministic non-ZK
+/// (`UltraKeccakFlavor`) proof, which the adapter must refuse. Fixtures use
+/// one to show that it does.
+pub fn prove_with(
+    tc: &Toolchain,
+    circuits: &Path,
+    package: &str,
+    inputs: &Inputs,
+    work: &Path,
+    zk: bool,
 ) -> io::Result<Proof> {
     std::fs::create_dir_all(work)?;
     let work = work.canonicalize()?;
@@ -349,14 +371,10 @@ pub fn prove(
     let started = std::time::Instant::now();
     let prove_peak_rss_bytes = run_measured(
         Command::new(&tc.bb)
-            .args([
-                "prove",
-                "--scheme",
-                "ultra_honk",
-                "--oracle_hash",
-                "keccak",
-                "-b",
-            ])
+            .arg("prove")
+            .args(BB_SCHEME)
+            .args(zk.then_some("--zk"))
+            .arg("-b")
             .arg(target.join(format!("{package}.json")))
             .arg("-w")
             .arg(&moved)
@@ -382,18 +400,45 @@ pub fn write_vk(
 ) -> io::Result<Vec<u8>> {
     std::fs::create_dir_all(out_dir)?;
     run(Command::new(&tc.bb)
-        .args([
-            "write_vk",
-            "--scheme",
-            "ultra_honk",
-            "--oracle_hash",
-            "keccak",
-            "-b",
-        ])
+        .arg("write_vk")
+        .args(BB_SCHEME)
+        .arg("-b")
         .arg(circuits.join("target").join(format!("{package}.json")))
         .arg("-o")
         .arg(out_dir))?;
     std::fs::read(out_dir.join("vk"))
+}
+
+/// Whether `bb verify --zk` accepts `proof` for `public_inputs` under `vk`.
+/// `work` receives the three files.
+pub fn verify(
+    tc: &Toolchain,
+    vk: &[u8],
+    proof: &[u8],
+    public_inputs: &[u8],
+    work: &Path,
+) -> io::Result<bool> {
+    std::fs::create_dir_all(work)?;
+    let (vk_path, proof_path, inputs_path) = (
+        work.join("vk"),
+        work.join("proof"),
+        work.join("public_inputs"),
+    );
+    std::fs::write(&vk_path, vk)?;
+    std::fs::write(&proof_path, proof)?;
+    std::fs::write(&inputs_path, public_inputs)?;
+    let out = Command::new(&tc.bb)
+        .arg("verify")
+        .args(BB_SCHEME)
+        .arg("--zk")
+        .arg("-k")
+        .arg(&vk_path)
+        .arg("-p")
+        .arg(&proof_path)
+        .arg("-i")
+        .arg(&inputs_path)
+        .output()?;
+    Ok(out.status.success())
 }
 
 pub mod fixture;

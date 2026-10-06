@@ -32,42 +32,42 @@
   "fixtures": {
     "cancel": {
       "action": "Cancel",
-      "proof_sha256": "0xdc6be367220ab0b1ee91ade35d92d3367cc70a4c1cc24300d8c0203ee36ce555",
+      "proof_sha256": "0x414f0e257be9663ce3ce30d14fa4bc6cf87123173523e3131f30b91b75c7fc20",
       "public_inputs_sha256": "0xc7a5df3a3fdf052714d9897957918f49127c63d76e553f9f36fae18a8ab43afd"
     },
     "compromise": {
       "action": "Compromise",
-      "proof_sha256": "0x4061e8e78d01a45ee8e5494af6447b6793d96ef96dcdf78c348e19f858b6af22",
+      "proof_sha256": "0x9e3919d6547a9bd5441ae325d7e298272ab060137998119f51d677837f4bf904",
       "public_inputs_sha256": "0x9233e1c7c531b12c95e5360e4879d4c46e4aafc95384f2f922ef6e003d0e9624"
     },
     "earlier_tree": {
       "action": "LostKey",
-      "proof_sha256": "0x6fc013daba65579e03ccdf4b8b5900d6837a2245d618f420e9cb8d954c2391fc",
+      "proof_sha256": "0x6d08fc8688c98455d8eea963462b7aa6266a8389afec1964fa051a3dd8948647",
       "public_inputs_sha256": "0x78865a0146a8550ac1288692b24cb289b2cdcdde55b12c0763938b9a77b13f41"
     },
     "later_root": {
       "action": "LostKey",
-      "proof_sha256": "0x6ef8fcaf87d14c56cf68fdc062db2e0bf82098d5b8c86b12997e30f23a938c46",
+      "proof_sha256": "0x6ff939dcd6d387bed901aca2577f1947bf195dadc7e21a071f4c2fe43671aeb8",
       "public_inputs_sha256": "0xbd415a231bdf4361a000c0418ff3d754ae17390e27fab50ea0b66143ae0ee072"
     },
     "lost_key": {
       "action": "LostKey",
-      "proof_sha256": "0xfe37751411d20e8b2e5d9380fc487c4997f0a21f077e463a0ef17e735ce1e19d",
+      "proof_sha256": "0xe79e5c701abdb3e3ea13a8ec515e749646202fb221ff554a3bfec8a1429f48c9",
       "public_inputs_sha256": "0x0253ef94bc7e5b0149af846c72a7b2490080c512c1478d79b7655ae41087dc6b"
     },
     "reconfigure": {
       "action": "Reconfigure",
-      "proof_sha256": "0xa886e0e53f962e6c17f4a1a0944f14a95f80472d9208026428460c2acab4555f",
+      "proof_sha256": "0x36ae43f85293c5fc50bf0c1848aab8e36bc1946846fba68c7e81f0108b2fc062",
       "public_inputs_sha256": "0x54f7c0177c93971091d9327b084aa962042b6aa1982c33fd4696c4181b27afbc"
     },
     "reconfigure_remove": {
       "action": "Reconfigure",
-      "proof_sha256": "0xe493208032382c5e726899eb319e2072f14e80ac47d2fd5e9a26f5863cf85977",
+      "proof_sha256": "0xbb55c46d0d1241aea1bdcb59aab04bc03d0f07c1eed6640eba259f87af9badb7",
       "public_inputs_sha256": "0xcc0b6b4ac8e5fc8bcd06a82e35aa0b8bc01dbe5d7f7bc7e7800609ae9b719a32"
     },
     "upgrade": {
       "action": "Upgrade",
-      "proof_sha256": "0x7fe280832cc9e98766360e96a0f58885f6d925ccf81795712592017b76f5d5c6",
+      "proof_sha256": "0x8b85c9066b30fb2cf8fe0784d6c353cc491410e71e016b82fd32584777a1d623",
       "public_inputs_sha256": "0xe1d2e44a2a2e3a93ddd60e7953e2f8bd804b3f698f6af5dd248e68921b729f35"
     }
   },
@@ -93,9 +93,9 @@
   },
   "toolchain": {
     "bb": "0.87.0",
-    "bb_scheme": "ultra_honk --oracle_hash keccak (UltraKeccakFlavor, non-ZK)",
+    "bb_scheme": "ultra_honk --oracle_hash keccak --zk (UltraKeccakZKFlavor)",
     "nargo": "1.0.0-beta.9",
     "noirc": "noirc version = 1.0.0-beta.9+6abff2f16e1c1314ba30708d1cf032a536de3d19",
-    "verifier": "NethermindEth/rs-soroban-ultrahonk@c2160987260284c656ffbdad8344210fc162b177"
+    "verifier": "NethermindEth/rs-soroban-ultrahonk@c2160987260284c656ffbdad8344210fc162b177 + perch UltraKeccakZKFlavor delta (src/zk.rs)"
   }
 }

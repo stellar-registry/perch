@@ -10,10 +10,12 @@
 //!    digest fields (`zk_statement_fields`);
 //! 3. refuses a non-canonical root or nullifier;
 //! 4. asks the enrolled pool whether it retains `(tree_id, root)`;
-//! 5. checks the proof against `root || nullifier || statement_hash` with
-//!    NethermindEth's audited UltraHonk verifier
-//!    (`vendor/ultrahonk-soroban-verifier`) and this circuit's verification
-//!    key, both compiled in.
+//! 5. checks the zero-knowledge proof against
+//!    `root || nullifier || statement_hash` with this circuit's verification
+//!    key and the `UltraKeccakZKFlavor` verifier in
+//!    `vendor/ultrahonk-soroban-verifier`: NethermindEth's audited UltraHonk
+//!    verifier plus perch's ZK delta (its `src/zk.rs`; see its NOTICE). Both
+//!    are compiled in.
 //!
 //! The verifier is part of this wasm rather than a second contract the
 //! adapter calls: the public-input layout is specific to the VK, so a new
@@ -41,8 +43,9 @@ pub const CIRCUIT_DEPTH: u32 = 32;
 #[cfg(feature = "tree-depth-24")]
 pub const CIRCUIT_DEPTH: u32 = 24;
 
-/// Size of an UltraHonk proof (bb 0.87.0, keccak oracle: 456 fields).
-pub const PROOF_BYTES: u32 = ultrahonk_soroban_verifier::PROOF_BYTES as u32;
+/// Size of a zero-knowledge UltraHonk proof (bb 0.87.0 `--zk`, keccak oracle:
+/// 507 fields). A non-ZK proof (456 fields) is refused by length.
+pub const PROOF_BYTES: u32 = ultrahonk_soroban_verifier::ZK_PROOF_BYTES as u32;
 
 mod contract;
 

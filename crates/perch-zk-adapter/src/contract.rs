@@ -6,11 +6,11 @@ use perch_recovery_interface::zk::{
 use perch_recovery_interface::RecoveryStatement;
 use perch_zk_primitives::Hasher;
 use soroban_sdk::{contract, contractimpl, Bytes, BytesN, Env};
-use ultrahonk_soroban_verifier::UltraHonkVerifier;
+use ultrahonk_soroban_verifier::UltraHonkZkVerifier;
 
 /// The verification key of `circuits/perch_zk_recovery` (or its depth-24
 /// variant): `bb write_vk --scheme ultra_honk --oracle_hash keccak` output,
-/// pinned by `circuits/manifest.json`.
+/// pinned by `circuits/manifest.json`. The ZK and non-ZK flavors share it.
 #[cfg(not(feature = "tree-depth-24"))]
 const VK: &[u8] = include_bytes!("../vk/perch_zk_recovery.vk");
 #[cfg(feature = "tree-depth-24")]
@@ -19,8 +19,8 @@ const VK: &[u8] = include_bytes!("../vk/perch_zk_recovery_d24.vk");
 #[contract]
 pub struct PerchZkAdapter;
 
-fn verifier(e: &Env) -> Option<UltraHonkVerifier> {
-    UltraHonkVerifier::new(e, &Bytes::from_slice(e, VK)).ok()
+fn verifier(e: &Env) -> Option<UltraHonkZkVerifier> {
+    UltraHonkZkVerifier::new(e, &Bytes::from_slice(e, VK)).ok()
 }
 
 #[contractimpl]

@@ -1,6 +1,6 @@
 [package]
 name = "perch-zk-adapter"
-description = "Deployable ZK recovery adapter: the controller-facing check of a membership proof against the enrolled pool and statement, with the audited UltraHonk verifier and its verification key compiled in; constructorless and immutable"
+description = "Deployable ZK recovery adapter: the controller-facing check of a zero-knowledge membership proof against the enrolled pool and statement, with the UltraHonk ZK verifier and its verification key compiled in; constructorless and immutable"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
@@ -19,7 +19,8 @@ doctest = false
 soroban-sdk = { workspace = true, features = ["alloc"] }
 perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
 perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
-# NethermindEth/rs-soroban-ultrahonk, vendored unmodified (see its NOTICE).
+# NethermindEth/rs-soroban-ultrahonk (audited, non-ZK) plus perch's
+# UltraKeccakZKFlavor delta; see its NOTICE for exactly what changed.
 ultrahonk_soroban_verifier = { path = "../../vendor/ultrahonk-soroban-verifier" }
 
 [dev-dependencies]

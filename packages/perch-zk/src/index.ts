@@ -21,5 +21,5 @@ export type {
 } from './tree.js';
 export { publicInputs, publicInputBytes, noirInputs } from './inputs.js';
 export type { Witness, PublicInputs } from './inputs.js';
-export { prove, evidence, bytes32, PROOF_BYTES } from './prove.js';
+export { prove, verify, evidence, bytes32, PROOF_BYTES } from './prove.js';
 export type { CompiledCircuit, Proof, ProveOptions, ZkEvidence } from './prove.js';

@@ -20,7 +20,7 @@
 use crate::fixture::AnyKeyVerifier;
 use arbitrary::Unstructured;
 use perch_account::{PerchAccount, PerchAccountClient};
-use perch_doc_compiler::PerchDocCompiler;
+use perch_doc_compiler::{PerchDocCompiler, MAX_DOC_RULES, MAX_DOC_SIGNERS};
 use perch_interpreter::PerchInterpreter;
 use perch_recovery::PerchRecovery;
 use perch_smart_account::testutils::{plan_doc, Mode, PlannedRule};
@@ -44,8 +44,8 @@ mod oracle {
     #![allow(unused_imports)]
     use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
     use perch_smart_account::{
-        check_auth, install_admin, FreezeGate, InstalledRule, PerchAccountError, PerchSmartAccount,
-        UpgradeRequest,
+        check_auth, install_admin, FreezeGate, InfraPins, InstalledRule, PerchAccountError,
+        PerchSmartAccount, UpgradeRequest,
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;
@@ -191,7 +191,8 @@ impl DocModel {
     /// out of bytes yields the smallest choices: proptest shrinks toward
     /// one-signer, admin-only documents.
     pub fn generate(u: &mut Unstructured) -> arbitrary::Result<DocModel> {
-        let n_signers = u.int_in_range(1..=6usize)?;
+        // Within the compiler's document caps, so every draw compiles.
+        let n_signers = u.int_in_range(1..=6usize.min(MAX_DOC_SIGNERS as usize))?;
         let mut keys: Vec<usize> = (0..KEY_POOL).collect();
         let mut signers = Vec::new();
         for id in SIGNER_IDS.iter().take(n_signers) {
@@ -213,7 +214,7 @@ impl DocModel {
             not_after: None,
             cap: None,
         }];
-        let n_rules = u.int_in_range(0..=6usize)?;
+        let n_rules = u.int_in_range(0..=6usize.min(MAX_DOC_RULES as usize - 1))?;
         let mut names: Vec<&'static str> = RULE_NAMES.to_vec();
         for _ in 0..n_rules {
             let name = names.remove(u.choose_index(names.len())?);

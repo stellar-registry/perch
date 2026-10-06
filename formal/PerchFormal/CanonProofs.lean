@@ -5,10 +5,11 @@ import PerchFormal.Canon
 
 Bottom-up: exact-literal lemmas, digit/hex tables, the string-escape step,
 then each grammar production's round-trip, ending in `emitDoc_injective` —
-two documents with the same canonical form are the same document — and
-`emitRecovery_injective`/`configPreimage_injective` — two recovery
-configurations with the same `recovery_canonical_json` (or the same
-`config_hash` preimage) are the same configuration.
+two documents with the same canonical form are the same document — and the
+fragment hashes: `configPreimage_injective` and `rulePreimage_injective`
+(two recovery configurations, or two rules, with the same preimage are the
+same), the separation of every preimage kind from every other, and that each
+fragment is cut out of the document's canonical form unchanged.
 -/
 
 namespace PerchFormal
@@ -689,6 +690,94 @@ theorem configPreimage_ne_emitDoc (r : CRecovery) (d : CDoc) :
   have hd : (emitDoc d).head? = some '{' := rfl
   rw [h, hd] at hc
   exact absurd (Option.some.inj hc) (by decide)
+
+/-! ## Rule hashes -/
+
+/-- `rule_canonical_json` is injective: two rules with the same canonical
+text are equal. -/
+theorem emitRule_injective : Function.Injective emitRule := by
+  intro r1 r2 h
+  have h1 := pRule_rt r1 []
+  have h2 := pRule_rt r2 []
+  rw [h] at h1
+  exact congrArg Prod.fst (Option.some.inj (h1.symm.trans h2))
+
+/-- **rule_hash names one rule**: two rules with the same `rule_hash`
+preimage are equal, so `rule_hash = SHA-256("perch/rule" ||
+rule_canonical_json)` identifies exactly one rule text up to a SHA-256
+collision. -/
+theorem rulePreimage_injective : Function.Injective rulePreimage := by
+  intro r1 r2 h
+  exact emitRule_injective (List.append_cancel_left h)
+
+/-- Two texts that diverge after a shared prefix differ, whatever follows. -/
+theorem ne_of_diverge (common : List Char) {p c : Char} (h : p ≠ c) (ps cs x y : List Char) :
+    common ++ p :: ps ++ x ≠ common ++ c :: cs ++ y := by
+  intro heq
+  simp only [List.append_assoc, List.append_cancel_left_eq, List.cons_append,
+    List.cons.injEq] at heq
+  exact h heq.1
+
+/-- No `rule_hash` preimage is a `config_hash` preimage: the tags share
+`perch/r` and then differ (`u` against `e`), so neither is a prefix of the
+other. -/
+theorem rulePreimage_ne_configPreimage (r : CRule) (c : CRecovery) :
+    rulePreimage r ≠ configPreimage c :=
+  ne_of_diverge ['p', 'e', 'r', 'c', 'h', '/', 'r'] (by decide) _ _ _ _
+
+/-- No `rule_hash` preimage is a document's canonical form. -/
+theorem rulePreimage_ne_emitDoc (r : CRule) (d : CDoc) : rulePreimage r ≠ emitDoc d := by
+  intro h
+  have hr : (rulePreimage r).head? = some 'p' := rfl
+  have hd : (emitDoc d).head? = some '{' := rfl
+  rw [h, hd] at hr
+  exact absurd (Option.some.inj hr) (by decide)
+
+/-! ## Fragments are cut out of the document unchanged -/
+
+theorem flatMap_comma_infix (f : α → List Char) {x : α} :
+    ∀ {l : List α}, x ∈ l → f x <:+: l.flatMap (fun z => ',' :: f z)
+  | z :: zs, hx => by
+    rw [List.flatMap_cons]
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact ⟨[','], _, rfl⟩
+    · exact (flatMap_comma_infix f hx).trans (List.suffix_append _ _).isInfix
+
+theorem emitList_infix (f : α → List Char) {x : α} {l : List α} (hx : x ∈ l) :
+    f x <:+: emitList f l := by
+  cases l with
+  | nil => cases hx
+  | cons y ys =>
+    simp only [emitList]
+    rcases List.mem_cons.mp hx with rfl | hx
+    · exact ⟨['['], ys.flatMap (fun z => ',' :: f z) ++ [']'], by simp⟩
+    · obtain ⟨s, t, hst⟩ := flatMap_comma_infix f hx
+      exact ⟨'[' :: f y ++ s, t ++ [']'], by rw [← hst]; simp⟩
+
+/-- Peel appends off the right of the target until the fragment is its
+prefix. Reducible unification keeps a failed match from unfolding the
+emitters. -/
+local macro "infix_peel" : tactic =>
+  `(tactic| (simp only [List.append_assoc]
+             repeat (first
+               | with_reducible exact (List.prefix_append _ _).isInfix
+               | with_reducible refine List.IsInfix.trans ?_ (List.suffix_append _ _).isInfix)))
+
+/-- A rule's `rule_hash` fragment is a substring of its document's canonical
+form. -/
+theorem emitRule_infix_emitDoc {r : CRule} {d : CDoc} (h : r ∈ d.rules) :
+    emitRule r <:+: emitDoc d := by
+  refine (emitList_infix emitRule h).trans ?_
+  unfold emitDoc
+  infix_peel
+
+/-- The `config_hash` fragment is a substring of its document's canonical
+form. -/
+theorem emitRecovery_infix_emitDoc {c : CRecovery} {d : CDoc} (h : d.recovery = some c) :
+    emitRecovery c <:+: emitDoc d := by
+  unfold emitDoc
+  rw [h]
+  infix_peel
 
 end Canon
 end PerchFormal

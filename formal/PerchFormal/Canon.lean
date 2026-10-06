@@ -14,7 +14,8 @@ controller's `config_hash` commits to.
 The point of this file is **injectivity**: two distinct documents can never
 share canonical bytes, hence never share a `doc_hash` (modulo a SHA-256
 collision, which no theorem prover will refute), and two distinct recovery
-configurations never share a `config_hash` preimage. The proof is the classic
+configurations never share a `config_hash` preimage, nor two distinct rules a
+`rule_hash` preimage. The proof is the classic
 parser round-trip: `Parse.lean`-style combinators reconstruct the document
 from its own canonical output (`pDoc (emitDoc d ++ rest) = some (d, rest)`),
 and injectivity of `emitDoc` falls out; likewise `pRecovery` for
@@ -291,6 +292,15 @@ def configDomain : List Char := lit "perch/recovery/config"
 (`docs/recovery/spec.md` §3.2). -/
 def configPreimage (r : CRecovery) : List Char :=
   configDomain ++ emitRecovery r
+
+/-- `RULE_HASH_DOMAIN` in `perch-ir`. -/
+def ruleDomain : List Char := lit "perch/rule"
+
+/-- The `rule_hash` preimage: `rule_hash = sha256(rulePreimage r)`
+(`CANONICAL.md`, "Fragment hashes"). `emitRule r` is `rule_canonical_json`,
+the bytes the rule contributes to the document's `rules` array. -/
+def rulePreimage (r : CRule) : List Char :=
+  ruleDomain ++ emitRule r
 
 /-- The canonical bytes of a document (as unicode scalars; the Rust side's
 UTF-8 encoding of them is itself injective). -/

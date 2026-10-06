@@ -45,6 +45,12 @@ account's applied document names them (`recovery.controller`, `adapter`,
 `pool`), and the controller checks the adapter's circuit and depth against
 the pool when a ZK factor is enrolled.
 
+Every stack contract links a 64 KiB wasm stack instead of rustc's 1 MiB
+default (its `build.rs`): the host charges each cross-contract call's VM its
+whole initial memory, and with the default a recovery completion at the
+document caps exceeded the network's memory limit
+([`budgets.md`](../recovery/budgets.md), "Document caps").
+
 The resolve macro's pins are build inputs cargo tracks: replacing a cached
 wasm rebuilds the consumer (`perch-registry-resolve-macro`, `pin_file`).
 Before, the macro read the file itself, and cargo kept the stale pin until

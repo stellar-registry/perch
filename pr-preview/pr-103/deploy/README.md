@@ -45,6 +45,12 @@ account's applied document names them (`recovery.controller`, `adapter`,
 `pool`), and the controller checks the adapter's circuit and depth against
 the pool when a ZK factor is enrolled.
 
+Every stack contract links a 64 KiB wasm stack instead of rustc's 1 MiB
+default (its `build.rs`): the host charges each cross-contract call's VM its
+whole initial memory, and with the default a recovery completion at the
+document caps exceeded the network's memory limit
+([`budgets.md`](../recovery/budgets.md), "Document caps").
+
 The resolve macro's pins are build inputs cargo tracks: replacing a cached
 wasm rebuilds the consumer (`perch-registry-resolve-macro`, `pin_file`).
 Before, the macro read the file itself, and cargo kept the stale pin until
@@ -162,7 +168,7 @@ does.
 | --- | --- |
 | `@stellar-registry/perch` (`packages/perch-js`) | PolicyDoc schemas, builder, canonical JSON, `doc_hash` |
 | `@stellar-registry/perch-interpreter` | interpreter bindings |
-| `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer |
+| `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer, serving witnesses from `PoolWitnessIndex` (one chunk of leaves per witness; node stores and a snapshot to resume) |
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
 | `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
 

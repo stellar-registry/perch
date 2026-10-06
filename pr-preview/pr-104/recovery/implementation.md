@@ -14,6 +14,8 @@ the one recovery controller and the shared account capabilities.
 | §3.4 enrollment ids, §8 revocation, §9 freeze, §15 reserved names | `crates/perch-smart-account/src/lib.rs` (`apply_doc`, `check_auth`, `rcv_gate`) | `recovery.rs`, `account_capabilities.rs` |
 | §3.5 baselines | `PerchRecovery::publish_baseline` | `recovery.rs` (compromise tests) |
 | §7 permitted changes | `perch_ir::recovery::derive_target`; `PerchDocCompiler::derive_target` | `crates/perch-ir/tests/recovery.rs`, `recovery.rs` |
+| §3.2 per-rule hash | `perch_ir::{rule_canonical_json, rule_hash}`; `perch_compile::rule_hash_onchain`; `perch_recovery_interface::fragment::rule_hash`; perch-js `ruleHash`, `configHash` | `crates/perch-ir/tests/rule_hash.rs`, `fragment_hashes.rs`, `packages/perch-js/test/fragment.test.ts` |
+| §7.5 delta apply | `crates/perch-smart-account/src/rules.rs` (`desired`, `reconcile`) | `apply_delta.rs`, `delta_security.rs`, `fuzz/fuzz_targets/apply_doc_delta.rs` |
 | §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}` | `doc_caps.rs`; `release_stack.rs` `worst_case_*` (see below) |
 | §12 upgrades | `PerchSmartAccount::{schedule_upgrade, execute_upgrade, cancel_upgrade}`; `PerchRecovery::rcv_upgrade` | `account_capabilities.rs` |
 | §15 `execute`, `applied_doc` | `PerchSmartAccount::{execute, applied_doc}` | `account_capabilities.rs` |
@@ -39,7 +41,7 @@ against the release artifacts belong to the integration layer.
 | #92 key rotation vs. reconfiguration | `config_hash` over the recovery text; completion recognized by its marker | `rotating_a_key_is_not_a_reconfiguration`, the ZK completion test |
 | #93 stale configuration and attempts | Per-account epoch; removal clears the controller's state | `every_configuration_change_kills_earlier_attempts_and_evidence` |
 | #86 real authorization tests (account paths) | Enforcing-auth harness | both suites |
-| Review of #102: unbounded completion, replaced baseline credential, unenrolled upgrade | Tracked rule ids; revocation union; recovery generation | `completion_cost_does_not_grow_with_policy_churn`, `a_replaced_baseline_credential_never_returns`, `enrolling_and_removing_recovery_stales_an_unenrolled_upgrade` |
+| Review of #102: unbounded completion, replaced baseline credential, unenrolled upgrade | Installed-rule records; revocation union; recovery generation | `completion_cost_does_not_grow_with_policy_churn`, `a_replaced_baseline_credential_never_returns`, `enrolling_and_removing_recovery_stales_an_unenrolled_upgrade` |
 
 ## Choices within the spec
 
@@ -66,18 +68,24 @@ against the release artifacts belong to the integration layer.
 - **Attempt storage.** Collecting attempts live in temporary storage for
   their evidence window; an attempt that is authorized, or whose evidence
   window is longer than the network's maximum entry TTL, is persistent.
-- **Stale lost-key source (T4).** The promoting submission is refused with
-  `AttemptNotLive` and changes nothing; the attempt can never promote, so a
-  fresh attempt is required.
+- **Stale lost-key source (T4).** The submission that meets the condition
+  succeeds and records the attempt as `Invalidated` (a stored state, with an
+  `AttemptInvalidated` event). Refusing would roll the check back and leave
+  the attempt promotable if the document later changed back.
+  `a_lost_key_attempt_whose_source_changed_needs_a_fresh_attempt` pins both
+  halves.
 - **Upgrade staleness and the recovery generation (§12).** The account keeps
   its recovery generation, the pending request, and its rule-id list in
   instance storage, which is persistent and is read on every call anyway.
   The generation advances on every `rcv_sync` outcome other than
   `Unchanged` (twice for a controller switch, once per side) and on every
-  executed upgrade. A stale request is cleared and `execute_upgrade`
-  returns `Ok(false)` without upgrading: the spec's "refused" cannot also
-  clear it, because a failed invocation keeps none of its writes.
-  `Ok(true)` means it upgraded.
+  executed upgrade. `execute_upgrade` refuses a stale request with
+  `StaleUpgrade` (also when the controller's own epoch check finds it
+  stale) and leaves it in place: a failed invocation keeps none of its
+  writes, and the request can never execute because the generation never
+  decreases. Scheduling replaces it, cancelling removes it, and a
+  completion clears it. `a_stale_upgrade_is_refused_without_being_cleared`
+  and `a_completed_recovery_clears_the_pending_upgrade` pin this.
 - **Fingerprints.** The doc compiler fingerprints every declared signer,
   canonicalizing external keys through the verifier's
   `batch_canonicalize_key` (the call OZ uses for duplicate signers).
@@ -87,10 +95,30 @@ against the release artifacts belong to the integration layer.
   `credential::revocations` of them, the applied document, and the target
   (§8). T1 refuses a replacement set whose target would keep one of the
   credentials it replaces.
-- **Bounded rule replacement (§7.5).** The account records the ids of the
-  rules it installs and removes exactly those on the next `apply_doc`. It
-  never scans the ids of rules deleted earlier, so applying a document, and
-  completing a recovery, costs the same however many documents came before.
+- **Delta apply (§7.5).** The account keeps an `InstalledRule` record per
+  rule it installed (id, slot, expiry, signers, and each policy with a
+  digest of its install parameters) and reconciles those records against
+  the compiled document. Rules are matched by slot (the recovery flag,
+  otherwise name and context type). Unmatched installed rules are removed
+  first, so their signers and policies leave the registries before
+  anything is added. A matched rule with a new scope is replaced; otherwise
+  it is edited in place: its expiry is updated, and signers and policies
+  are removed then added (or, when none would survive, added first, so the
+  rule is never left with neither). An unchanged rule, signer, or policy
+  emits no event and writes nothing; re-applying the applied document
+  writes only the authorization nonce. It never scans the ids of rules
+  deleted earlier, so applying a document, and completing a recovery,
+  costs the same however many documents came before. `apply_doc` returns
+  an error or traps on any failure, so a partial delta never persists.
+- **Per-rule program provenance.** An interpreter program's
+  `InstallParams.doc_hash` field carries its rule's `rule_hash`
+  (`sha256("perch/rule" || rule bytes)`, `CANONICAL.md` "Fragment
+  hashes"), not the whole document's hash, so a rule whose text is
+  unchanged keeps byte-identical install parameters and is not
+  reinstalled. The interpreter's Wasm and types are unchanged.
+  `perch-compile::verify_plan_matches_doc` and `perch-deploy verify` check
+  each installed program against its own rule's hash, and that no program
+  is left over.
 - **§15 compile-time scope rule, narrowed.** The compiler refuses rules
   scoped to the document's own ZK adapter or pool, but not its controller: a
   perch account must be able to approve, as a guardian, recoveries at the
@@ -104,7 +132,7 @@ against the release artifacts belong to the integration layer.
   pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
-- **Document caps.** 6 declared signers, 8 rules, 8 192 canonical bytes,
+- **Document caps.** 4 declared signers, 9 rules, 8 192 canonical bytes,
   and rule names of at most OZ's 20 bytes, sized against the measured
   worst-case completion (`budgets.md`, "Document caps"). The binding limit
   is contract events. Every stack contract links a 64 KiB wasm stack
@@ -114,11 +142,38 @@ against the release artifacts belong to the integration layer.
 - **`max-cancels` is a lifetime count per controller.** Nothing resets it;
   switching controllers starts a new one (T6).
 - **A lost-key source is compared at promotion.** If the applied document
-  changes and then changes back before promotion, the attempt promotes over
-  the same snapshot it was opened for.
+  changes and then changes back before any evidence meets the condition,
+  the attempt promotes over the same snapshot it was opened for. Once a
+  submission has met the condition against a changed document, the attempt
+  is invalidated for good (above).
 - **Account renewal.** Revoked-set and enrolled-id entries are one
   persistent entry each, so the account's `renew` takes the fingerprints and
   enrollment ids to extend.
+
+## Delta apply tests
+
+The oracle is a second account contract, identical except that its
+`apply_doc` removes every installed rule and adds every document rule (the
+pre-delta behaviour, `perch_smart_account::testutils::apply_doc_full_replace`).
+`perch_testkit::delta` generates documents from bytes (signers drawn from a
+fixed key pool, rules over a fixed set of names and scopes, caps, expiries,
+recovery on or off) and compares complete state: the installed rules,
+signers, and policies (ids normalized to names and values), every storage
+key and value, the canonical applied document, and its hash.
+
+| Property | Test |
+| --- | --- |
+| Any document sequence leaves the delta account and the oracle in the same state (proptest, shrinking) | `apply_delta.rs::delta_apply_matches_full_replace` |
+| Re-applying the applied document emits no event and writes only the nonce | `reapplying_the_applied_document_is_a_no_op` |
+| A→B→C equals A→C; A→B→A restores A | `transitions_compose`, `a_transition_and_its_reverse_restore_the_state` |
+| Every event and storage write is one the diff predicts, and the delta writes no more than the full replace | `events_and_writes_are_exactly_the_diff` |
+| Named cases: functions, scope, cap parameters, added/shared signers and policies, rename, remove and re-add, key swap under one id, one-signer swap in place (the compromise shape), minimal and maximal documents, reformatting, reordering, expiry, recovery-only change | the remaining `apply_delta.rs` tests |
+| Revoked credentials stay refused after an in-place edit; the freeze and generation behave as under the full replace; reserved names stay closed; a delta in the authorized window changes nothing | `delta_security.rs` |
+| A failing policy install, and budget exhaustion at every point of a delta, revert everything under enforcing auth | `delta_security.rs` |
+| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_reinstall_only_that_rules_policies`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
+| Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |
+
+`PERCH_DELTA_CASES` sets the proptest case count (CI defaults: 32 to 48 per property; a 400-case sweep also passes).
 
 ## Not covered here
 

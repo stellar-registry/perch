@@ -63,7 +63,8 @@ and inclusion latency.
 | `publish_baseline` | largest supported document | TBD | TBD | TBD | TBD | TBD | TBD |
 | `submit_guardian` | promoting approval under `Protected` (includes `rcv_gate`) | TBD | TBD | TBD | TBD | TBD | TBD |
 | `submit_zk` (adapter, verifier, root check, nullifier) | promoting proof, `Combined` | TBD | TBD | TBD | TBD | TBD | TBD |
-| Completion `apply_doc` (recovery rule) | `Combined`, ZK rotation (pool insert), a pre-recovery document and a target both at the document caps (spec §7.5), every removed credential revoked | TBD | TBD | TBD | TBD | TBD | TBD |
+| Completion `apply_doc` (recovery rule) | `Combined`, ZK rotation (pool insert), a pre-recovery document and a target both at the document caps with every slot differing (spec §7.5), every removed credential revoked | TBD | TBD | TBD | TBD | TBD | TBD |
+| Completion after rule churn | the row above, after many prior ordinary applies of a maximum-size document; must not grow with the number of past applies (#102 review, P1) | TBD | TBD | TBD | TBD | TBD | TBD |
 | Cancellation | `Combined` (both factors in the last transaction) | TBD | TBD | TBD | TBD | TBD | TBD |
 | `approve_change` | one guardian, `Reconfigure` or `Upgrade` | TBD | TBD | TBD | TBD | TBD | TBD |
 | `submit_zk_change` (adapter, verifier, root check) | `Reconfigure` or `Upgrade` | TBD | TBD | TBD | TBD | TBD | TBD |
@@ -82,8 +83,8 @@ each is a hard per-transaction limit, and contract events turned out to be
 the one the caps hit first. That tightens the rule; it relaxes nothing. The
 document caps (spec §7.5) are then set to the largest values for which the
 completion and reconfiguration rows stay within budget: see "Document caps"
-under Results (`perch_doc_compiler::MAX_DOC_SIGNERS` = 6, `MAX_DOC_RULES` =
-8, `MAX_DOC_CANONICAL_BYTES` = 8 192).
+under Results (`perch_doc_compiler::MAX_DOC_SIGNERS` = 4, `MAX_DOC_RULES` =
+9, `MAX_DOC_CANONICAL_BYTES` = 8 192).
 
 ## 3. End-to-end latency
 
@@ -161,26 +162,28 @@ and laptop) remain open.
 ### Release stack, in process
 
 Workstream 4, 2026-10-06: the release-stack suite on this branch's stack
-(`build-stack.sh --builder contract`), with WS2's ZK-flavor verifier, the
-final caps, and the 64 KiB (adapter: 128 KiB) wasm stacks, real proofs, and
-enforcing authorization. The worst row of each §2 kind, as a share of the
-protocol-29 limits:
+(`build-stack.sh --builder contract`), with WS2's ZK-flavor verifier, WS3's
+delta `apply_doc`, the final caps, and the 64 KiB (adapter: 128 KiB) wasm
+stacks, real proofs, and enforcing authorization. The worst row of each §2
+kind, as a share of the protocol-29 limits:
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
-| Enroll `Combined` through `apply_doc`, at the caps | 191.4M (47.9%) | 11.5 MB | 130 | 53 | 31 756 | 7 668 |
-| `begin_lost_key` / `begin_compromise`, at the caps | 149.6M (37.4%) | 5.1 MB | 25 | 2 | 1 888 | 248 |
-| `publish_baseline`, at the caps | 108.3M (27.1%) | 2.2 MB | 11 | 1 | 7 464 | 0 |
-| `submit_guardian` (promoting, sets the freeze) | 1.8M | 0.7 MB | 19 | 6 | 2 056 | 368 |
-| `submit_zk` (promoting, `Combined`, sets the freeze) | 119.2M (29.8%) | 5.7 MB | 22 | 5 | 2 336 | 368 |
-| Completion, at the caps (compromise, `Combined`, ZK rotation, both key sets revoked) | 213.5M (53.4%) | 17.3 MB (41.3%) | 236 (59.0%) | 111 (55.5%) | 35 864 (27.1%) | 12 112 (73.9%) |
-| Cancellation (`Combined`, ZK last) | 118.6M (29.7%) | 5.4 MB | 21 | 5 | 2 184 | 332 |
+| Enroll `Combined` through `apply_doc`, at the caps | 185.5M (46.4%) | 12.7 MB | 122 | 49 | 41 696 | 6 808 |
+| `begin_lost_key` / `begin_compromise`, at the caps | 140.9M (35.2%) | 4.6 MB | 23 | 2 | 1 600 | 248 |
+| `publish_baseline`, at the caps | 105.0M (26.3%) | 2.4 MB | 11 | 1 | 7 476 | 0 |
+| `submit_guardian` (promoting, sets the freeze) | 1.8M | 0.7 MB | 19 | 6 | 1 996 | 368 |
+| `submit_zk` (promoting, `Combined`, sets the freeze) | 119.1M (29.8%) | 5.7 MB | 22 | 5 | 2 284 | 368 |
+| Completion, at the caps (compromise, both key sets revoked, every rule edited) | 212.1M (53.0%) | 16.6 MB (39.5%) | 130 | 59 | 31 516 | 12 184 (74.4%) |
+| Completion, at the caps (compromise, both key sets revoked, every rule replaced) | 209.1M (52.3%) | 18.9 MB (45.0%) | 222 (55.5%) | 105 (52.5%) | 45 452 (34.4%) | 11 416 (69.7%) |
+| Completion, at the caps (lost-key, every signer revoked) | 211.4M (52.8%) | 16.3 MB | 122 | 55 | 30 944 | 11 656 (71.1%) |
+| Cancellation (`Combined`, ZK last) | 118.6M (29.7%) | 5.4 MB | 21 | 5 | 2 132 | 332 |
 | `approve_change` | 0.9M | 0.3 MB | 10 | 2 | 392 | 192 |
 | `submit_zk_change` | 117.6M (29.4%) | 5.1 MB | 13 | 1 | 240 | 192 |
-| `Protected` reconfiguration `apply_doc`, at the caps | 210.2M (52.6%) | 16.4 MB | 189 | 82 | 31 748 | 10 300 |
-| `Protected` `schedule_upgrade` | 6.2M | 1.1 MB | 15 | 2 | 1 168 | 196 |
-| `execute_upgrade` | 6.3M | 1.2 MB | 17 | 5 | 1 284 | 696 |
-| Enrollment that seals a tree (small document) | 64.2M | 4.6 MB | 56 | 21 | 7 228 | 2 252 |
+| `Protected` reconfiguration `apply_doc`, at the caps | 213.2M (53.3%) | 18.5 MB (44.2%) | 195 | 86 | 42 144 | 10 900 |
+| `Protected` `schedule_upgrade` | 6.2M | 1.2 MB | 15 | 2 | 1 116 | 196 |
+| `execute_upgrade` | 6.3M | 1.2 MB | 17 | 5 | 1 232 | 696 |
+| Enrollment that seals a tree (small document) | 58.5M | 4.4 MB | 52 | 18 | 8 016 | 1 460 |
 
 Every row is within 75% of every limit. Native proving (`nargo execute` +
 `bb prove`, 15 proofs on an Apple M-series desktop): 69 ms median witness,
@@ -214,69 +217,107 @@ that, at one VM per ZK transaction. The verifier's stack use does not
 depend on its input, and the compiler's only input-driven recursion (JSON
 nesting) refuses cleanly at its depth limit on the 64 KiB stack.
 
-**The binding limit: contract events.** OZ emits a full event per rule
-added and removed, per signer registered, and per policy installed and
-uninstalled, and the controller emits one per revoked credential. The
-worst completion is a compromise: a thief holding the owner key swaps every
-signer's key under `Protected` (no recovery text changes, so no condition),
-and the completion revokes both key sets. At 16 signers and 16 rules it
-would emit more than the 16 384-byte limit.
+**The binding limit: contract events.** OZ emits an event for every rule
+added, removed, or edited, every signer registered, added to a rule, or
+removed from one, and every policy installed and uninstalled; the
+controller emits one per revoked credential. `apply_doc` applies only the
+delta between documents (spec §7.5): rules are matched by name and scope,
+a matched rule is edited in place signer by signer, and an unmatched one
+removed or added. So a completion's cost depends on how the source and the
+target differ, and the worst cases are the ones with the largest
+difference, both ways the diff can go:
 
-**Method.** `cap_sweep` (in `release_stack.rs`) runs three worst-case flows
-over a document shape: `Combined` lost-key recovery under `Loss`
-(enrollment, `begin_lost_key`, and a completion replacing every signer
-with ZK rotation); `Combined` compromise recovery under `Protected` as
-above; and a `Protected` `Combined` reconfiguration with recorded quorum
-and proof and a new ZK enrollment. The shape is the costliest the caps
-admit. Every signer is a passkey (the longest key the stack's verifiers
-take), named by some rule, as many per rule as OZ allows. Every rule but
-`admin` and the owner's activity rule carries both policies (the
-interpreter and a spending cap). The document is padded to the byte cap
-with a `string-in` argument constraint and rule names at OZ's 20-byte
-limit. The worst share of any limit, over every row of all three flows:
+- **Compromise recovery after a thief replaced every key.** A thief holding
+  the owner key under `Protected` changes every signer's key without a
+  condition (no recovery text changes), and the completion revokes both key
+  sets. The thief also chooses the diff: **keeping every rule's name**
+  makes the completion edit every rule in place, one `signer_removed` and
+  one `signer_added` event (about 120 bytes each) per rule and signer;
+  renaming every rule makes it remove and add every rule instead. In place
+  is the dearer of the two once a rule names enough signers (about 240
+  bytes of events per signer swapped, against about 880 to replace a rule
+  with both policies), and **it is the binding row from 4 signers on**: at 6 signers and 8 rules its
+  in-place edits alone emit 86 events and 10.5 KB, where replacing those
+  rules whole would emit about 6 KB. Below 4 signers the renamed variant
+  binds.
+- **Lost-key recovery replacing every signer**: every rule edited in place,
+  every signer revoked.
+- **A `Protected` reconfiguration replacing every key**, with recorded
+  quorum and proof and a new ZK enrollment, both with every rule edited
+  and with every rule renamed.
+
+**Method.** `cap_sweep` (in `release_stack.rs`) runs those five flows over
+a document shape, and `scripts/cap-sweep.py` runs it over S,R shapes and
+tabulates the worst share of every limit. The shape is the costliest the
+caps admit. Every signer is a passkey (the longest key the stack's
+verifiers take), named by some rule, as many per rule as OZ allows. Every
+rule but `admin` and the owner's activity rule carries both policies (the
+interpreter and a spending cap). The document is padded to the larger of
+8 192 bytes and its own size with a `string-in` argument constraint and
+rule names at OZ's 20-byte limit. The sweep ran on a stack built from this
+branch with the compiler's caps raised (15 signers, OZ's per-rule maximum;
+32 rules; 32 768 bytes), from 2 to 15 signers and 4 to 32 rules, until every
+limit passed the budget, then around the frontier with all five flows. The
+frontier rows (the worst share over every row of every flow):
 
 | Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 4 | 8 | 51.5% | 39.3% | 52.5% | 49.5% | 26.6% | 65.5% |
-| 4 | 10 | 53.7% | 46.7% | 58.5% | 55.5% | 27.4% | **76.0%** |
-| 5 | 9 | 53.7% | 44.1% | 58.8% | 55.5% | 27.3% | 75.0% |
-| 6 | 6 | 50.6% | 33.6% | 53.0% | 49.5% | 26.4% | 63.2% |
-| **6** | **8** | **53.4%** | **41.3%** | **59.0%** | **55.5%** | **27.1%** | **73.9%** |
-| 6 | 9 | 54.8% | 45.4% | 62.0% | 58.5% | 27.5% | **79.3%** |
-| 7 | 7 | 52.8% | 38.4% | 59.2% | 55.5% | 27.0% | 72.7% |
-| 7 | 8 | 54.4% | 42.5% | 62.2% | 58.5% | 27.4% | **78.2%** |
-| 8 | 6 | 51.9% | 35.2% | 59.5% | 55.5% | 26.9% | 71.4% |
-| 8 | 8 | 55.5% | 43.8% | 65.5% | 61.5% | 27.7% | **82.4%** |
-| 10 | 10 | 62.4% | 56.4% | 78.0% | 73.5% | 29.0% | **102.1%** |
-| 12 | 12 | 71.1% | 71.8% | 90.5% | 85.5% | 30.2% | **123.1%** |
+| 2 | 11 | 52.9% | 50.0% | 55.0% | 52.5% | 34.0% | 71.5% |
+| 2 | 12 | 54.0% | 53.6% | 58.0% | 55.5% | 35.0% | **76.7%** |
+| 3 | 10 | 52.7% | 47.6% | 55.2% | 52.5% | 34.3% | 70.6% |
+| 3 | 11 | 53.9% | 51.3% | 58.2% | 55.5% | 35.4% | **75.9%** |
+| **4** | **9** | **53.3%** | **45.0%** | **55.5%** | **52.5%** | **34.4%** | **74.4%** |
+| 4 | 10 | 54.8% | 48.7% | 58.5% | 55.5% | 35.7% | **80.3%** |
+| 5 | 6 | 51.5% | 35.9% | 49.8% | 46.5% | 31.5% | 67.8% |
+| 5 | 7 | 53.1% | 39.3% | 52.8% | 49.5% | 32.9% | **75.3%** |
+| 6 | 5 | 50.9% | 35.4% | 50.0% | 46.5% | 30.9% | 70.3% |
+| 6 | 6 | 53.2% | 39.5% | 53.0% | 49.5% | 32.4% | **79.2%** |
+| 7 | 4 | 49.8% | 33.4% | 50.2% | 46.5% | 30.1% | 69.7% |
+| 7 | 5 | 52.4% | 38.3% | 53.2% | 49.5% | 31.7% | **80.1%** |
+| 8 | 4 | 50.9% | 35.8% | 53.5% | 49.5% | 30.7% | **78.1%** |
 
-Every row's binding limit is the compromise completion's events. The
-frontier within budget runs from 8 signers and 6 rules to 5 signers and 9
-rules. **The caps are 6 signers, 8 rules, and 8 192 canonical bytes:**
-documents grow in rules (a scope per contract) more than in signers, and
-the byte cap is already in every measurement. At the caps, the worst rows
-are:
+Past the frontier, where every other limit first passes 75% (the first
+sweep, without the in-place compromise variant, which binds only events):
+footprint at 15 signers and 4 rules; instructions and memory at 8 and 12;
+written entries at 2 and 20; write bytes at 12 and 20. Events bind
+everywhere on the frontier, which runs from 7 signers and 4 rules to 2
+signers and 11 rules.
+
+**The caps are 4 signers, 9 rules, and 8 192 canonical bytes** (events
+74.4%, the compromise with every rule edited), the same 75% rule as before
+and, as before, the frontier point that keeps the most rules (a scope per
+contract) without dropping signers below 4. 5 signers and 6 rules, or 6
+and 5, are the alternatives with more signers. When `apply_doc` replaced
+every rule, 6 signers and 8 rules were within budget; the replace-every-rule
+rows have not changed since, only the in-place edits grew. A diff that
+replaces a rule whole whenever that emits fewer events than editing it
+would bring the frontier back to about there. Rerun `scripts/cap-sweep.py`
+after any such change, after a change to OZ's events, the controller's, or
+the policies, and after a network limit change.
+
+At the caps, the worst rows are:
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
-| Enroll `Combined` through `apply_doc` | 191.4M | 11.4 MB | 130 | 53 | 31 756 | 7 668 |
-| `begin_lost_key` / `begin_compromise` | 149.6M | 5.1 MB | 25 | 2 | 1 888 | 248 |
-| `publish_baseline` | 108.3M | 2.2 MB | 11 | 1 | 7 464 | 0 |
-| Lost-key completion (`Combined`, ZK rotation, 6 revoked) | 209.4M | 16.2 MB | 224 | 105 | 35 220 | 11 320 |
-| Compromise completion (`Combined`, ZK rotation, 12 revoked) | 213.5M (53.4%) | 17.3 MB (41.3%) | 236 (59.0%) | 111 (55.5%) | 35 864 (27.1%) | 12 112 (73.9%) |
-| `Protected` reconfiguration (`Combined`, new enrollment) | 210.1M | 16.3 MB | 189 | 82 | 31 748 | 10 300 |
+| Enroll `Combined` through `apply_doc` | 185.5M | 12.7 MB | 122 | 49 | 41 696 | 6 808 |
+| `begin_lost_key` / `begin_compromise` | 140.9M | 4.6 MB | 23 | 2 | 1 600 | 248 |
+| `publish_baseline` | 105.0M | 2.4 MB | 11 | 1 | 7 476 | 0 |
+| Thief's `apply_doc` (every key swapped, every rule kept) | 171.8M | 14.0 MB | 76 | 30 | 24 296 | 9 680 |
+| Compromise completion, every rule edited (8 revoked) | 212.1M (53.0%) | 16.6 MB (39.5%) | 130 (32.5%) | 59 (29.5%) | 31 516 (23.9%) | 12 184 (74.4%) |
+| Compromise completion, every rule replaced (8 revoked) | 209.1M (52.3%) | 18.9 MB (45.0%) | 222 (55.5%) | 105 (52.5%) | 45 452 (34.4%) | 11 416 (69.7%) |
+| Lost-key completion (`Combined`, ZK rotation, 4 revoked) | 211.4M | 16.3 MB | 122 | 55 | 30 944 | 11 656 |
+| `Protected` reconfiguration, every rule edited | 213.2M (53.3%) | 16.9 MB | 105 | 42 | 28 256 | 10 900 |
+| `Protected` reconfiguration, every rule replaced | 208.8M | 18.5 MB (44.2%) | 195 | 86 | 42 144 | 10 136 |
 
 The `worst_case_*` tests in `release_stack.rs` assert these flows stay
 within budget at the compiled-in caps, so lowering a limit or growing an
-event fails CI's `release-stack-source` job. Rerun `cap_sweep` (it
-documents its `PERCH_CAP_SWEEP` shape list) after any change to OZ's
-events, the controller's, the policies, or the network's limits.
+event fails CI's `release-stack-source` job.
 
 The compiler also refuses a rule name longer than OZ's 20-byte context-rule
 limit (`MAX_RULE_NAME_BYTES`). Before, such a document compiled and failed
 only at install, so a published compromise baseline with one could never be
 restored. A rule cannot name more signers than OZ's per-rule 15 because the
-document cannot declare more than 6.
+document cannot declare more than 4.
 
 Assumption: signer keys are at most a passkey's (81 bytes of key data). A
 custom verifier with keys up to the 256 bytes the IR admits would grow every

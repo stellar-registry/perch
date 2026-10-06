@@ -40,7 +40,7 @@ own; the second table is what ties the two together, and it is evidence, not pro
 | INV-1: a lowered rule denies an invocation with zero signers | T5 `zero_signers_denied` |
 | Lowering preserves the rule's doc-level meaning | T6 `lowering_preserves` |
 | `doc_hash` names one document: the canonical form is injective over every `PolicyDoc` shape, the `recovery` member included | T7 `emitDoc_injective` |
-| `config_hash` names one recovery configuration: `recovery_canonical_json` and the `"perch/recovery/config"` preimage are injective, and no preimage is a document's canonical form | T8 `emitRecovery_injective`, `configPreimage_injective`, `configPreimage_ne_emitDoc` |
+| The fragment hashes name one fragment each: `config_hash` one recovery configuration and `rule_hash` one rule text. Both preimages are injective, no two of the three preimage kinds (document, config, rule) coincide, and each fragment is a substring of its document's canonical form | T8 `configPreimage_injective`, `rulePreimage_injective`, `configPreimage_ne_emitDoc`, `rulePreimage_ne_emitDoc`, `rulePreimage_ne_configPreimage`, `emitRecovery_infix_emitDoc`, `emitRule_infix_emitDoc` |
 
 All hash claims hold up to a SHA-256 collision.
 
@@ -52,7 +52,8 @@ All hash claims hold up to a SHA-256 collision.
 | Lean canonicalizer ↔ Rust `canon.rs` | `drt` parses and re-emits every `testdata/*.canonical.json` document (five, covering both signer kinds, `all`/`threshold` principals, a cap, `guardian-only` and `combined` recovery) and the three `testdata/recovery/config-*.canonical.json` recovery members, which `crates/perch-ir/tests/recovery.rs` regenerates from Rust |
 | Rust parse ↔ emit, recovery included | fuzz targets (`fuzz/fuzz_targets/`): `ir_parse_roundtrip` (arbitrary bytes, seeded with the fixtures) and `recovery_canonical_roundtrip` (arbitrary `RecoveryConfig`s: round-trip, determinism, member slice, one-field-change injectivity) |
 | T8's preimage ↔ the compiler's `config_hash` | `crates/integration-tests/tests/config_hash.rs` (native compiler, every PR) and `release_stack.rs` (a release stack's compiler wasm: in CI the stack built from the PR's source, and the deployed testnet stack when its commit is in the branch's history): for each recovery-member fixture, `config_hash` equals `sha256("perch/recovery/config" \|\| fixture bytes)` recomputed with `sha2`; changing any one configuration field moves it to the recomputed hash of the changed text, and rotating a signer does not move it |
-| Rust ↔ TypeScript canonical form | `packages/perch-js/test/parity.test.ts` on the document fixtures (perch-js has no recovery-only canonicalizer) |
+| T8's rule preimage ↔ the deployed code's `rule_hash` | `testdata/rule-hashes.json`, cut out of the canonical fixtures by an independent script (`scripts/rule-hash-vectors.py`), against `perch_recovery_interface::fragment::rule_hash` (`crates/perch-recovery-interface/tests/vectors.rs`) and the provenance `perch-compile` stamps into every program (`crates/integration-tests/tests/fragment_hashes.rs`) |
+| Rust ↔ TypeScript canonical form | `packages/perch-js/test/parity.test.ts` on the document fixtures; `test/fragment.test.ts` pins `ruleHash` and `configHash` to the same values as Rust |
 | `rpn::eval` wasm under K semantics | Komet, three properties, 50 fuzz examples each in CI; symbolic `komet prove` only locally (`komet/README.md`) |
 
 **Not modeled, tested only.** None of the following has a formal model or a proof. They are
@@ -64,7 +65,8 @@ real-proof tests, and the testnet exercise:
   cancel cap, evidence freshness and expiry, epochs, nullifier spending, baselines, and
   upgrade approvals.
 - Account authorization paths (`crates/perch-smart-account`): `__check_auth`, OZ
-  context-rule selection, `execute`, `apply_doc`, the reserved-name guards, upgrades.
+  context-rule selection, `execute`, `apply_doc` and its delta (which rules it touches),
+  the reserved-name guards, upgrades.
 - The ZK circuit (`circuits/`), the vendored UltraHonk verifier, the adapter
   (`crates/perch-zk-adapter`), and the membership pool (`crates/perch-zk-pool`).
 - The document compiler beyond the canonical bytes and `config_hash`: validation,
@@ -117,8 +119,9 @@ land):
   target (b); T6 alone is its machine-checked half.
 - **T7 Canonical-form injectivity**: `emitDoc_injective`, over every `PolicyDoc` shape
   including the `recovery` member (proved; see `formal/README.md`).
-- **T8 Recovery-configuration identity**: `recovery_canonical_json` and the `config_hash`
-  preimage are injective (proved).
+- **T8 Fragment-hash identity**: the `config_hash` and `rule_hash` preimages are injective,
+  separated from each other and from document bytes, and cut out of the document unchanged
+  (proved).
 - **T9 Monotonicity of attenuation** *(stretch, not proved)*: tightening a bound (subset
   `FnIn`, subset `StrIn`, smaller `notAfter`) never admits a previously denied invocation;
   the model-level justification of `attenuation::is_narrowing`.
@@ -184,6 +187,8 @@ the Lean side, making the three-way diff `Lean model == Rust == (later) wasm`.
 - [x] Recovery canonicalization (#88): the model covers `threshold` principals and the
       `recovery` member, so `emitDoc_injective` covers recovery documents, and
       `configPreimage_injective` proves `config_hash` names one recovery configuration.
+      `rulePreimage_injective` does the same for #102's per-rule `rule_hash`, with the
+      separation lemmas between document, config, and rule preimages.
       `drt` replays the recovery fixtures, including one recovery member per mode.
 - [ ] Choose one deductive tie between model and Rust: Verus (`eval == spec_fn`, ghost code
       erased from the shipped crate) or Aeneas extraction to Lean. Decision gate: model + DRT

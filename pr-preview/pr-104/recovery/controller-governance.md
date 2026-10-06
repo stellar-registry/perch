@@ -177,10 +177,10 @@ attempt the guardian saw.
 `stellar_accounts::smart_account::storage::remove_context_rule` calls a
 policy's `uninstall` via `try_uninstall` and **discards the result even if
 it panics** (confirmed by reading the pinned dependency directly). Since
-`apply_doc` wipes and reinstalls the *entire* rule set on every call, a
-policy that tried to block a `Protected` account's reconfiguration from
-inside `uninstall` would simply be ignored, and the rule would be removed
-anyway.
+`apply_doc` removes every rule (or policy) the new document drops or
+changes, a policy that tried to block a `Protected` account's
+reconfiguration from inside `uninstall` would simply be ignored, and the
+rule would be removed anyway.
 
 The actual gate is `perch-smart-account`'s `apply_doc`, which — whenever
 `PerchStorage::recovery_controller` names a currently-adopted instance —

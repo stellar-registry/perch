@@ -443,15 +443,27 @@ most one authorized attempt.
                        │                                           │
                        ├─ evidence deadline passes ─▶ Expired       ├─ cancel ─▶ Cancelled
                        ├─ cancel ─▶ Cancelled                       └─ L ≥ expires_at ─▶ Expired
-                       └─ epoch change / sibling authorized /
-                          stale lost-key source ─▶ Invalidated
+                       ├─ epoch change / sibling authorized ─▶ (dead; derived)
+                       └─ stale lost-key source at T4 ─▶ Invalidated (stored)
 ```
 
-`Expired` and `Invalidated` are derived, not stored. An attempt is **live**
-when all of the following hold:
+The stored states are `Collecting`, `Authorized`, `Completed`,
+`Cancelled`, and `Invalidated`.
+
+- **`Expired` is derived, never stored.** It is read from the ledger
+  against the attempt's windows.
+- **`Invalidated` is stored for exactly one cause:** T4 finding a lost-key
+  attempt's source changed. The evidence call that ran T4 succeeds, writes
+  `AttemptState::Invalidated`, and emits `AttemptInvalidated`.
+- **Every other invalidation is derived:** an epoch change, or a sibling's
+  authorization (`invalidate_below`). Nothing is written for these, because
+  the cause is already in storage and an attempt from an older epoch or
+  below `invalidate_below` reads as dead.
+
+An attempt is **live** when all of the following hold:
 
 - its recorded epoch equals the current epoch;
-- it is not terminal;
+- it is not terminal (`Completed`, `Cancelled`, or `Invalidated`);
 - it is the authorized attempt, or its id is at least the account's
   `invalidate_below` (so a sibling's authorization has not invalidated it);
 - `Collecting` and `L ≤ evidence_deadline`, or `Authorized` and
@@ -531,9 +543,10 @@ is satisfied for a live collecting attempt `A`:
 
 - for lost-key, if the account's current applied-document hash differs from
   `A.source_doc_hash`, `A` is invalidated. The evidence call that triggered
-  the check **succeeds** and records the invalidation; refusing instead
-  would roll it back, leaving `A` promotable if the document later changed
-  back. A fresh attempt is required, and its evidence starts over;
+  the check **succeeds**, stores `AttemptState::Invalidated`, and emits
+  `AttemptInvalidated`. Refusing instead would roll the invalidation back,
+  leaving `A` promotable if the document later changed back. A fresh
+  attempt is required, and its evidence starts over;
 - otherwise `A` becomes `Authorized` with `authorized_at = L` and its
   windows are fixed. `invalidate_below` is set to the attempt-id counter,
   which invalidates every other collecting attempt in O(1), however many an
@@ -728,14 +741,36 @@ unchanged except for the declared ZK rotation.
 
 Under `Protected`, a thief holding the owner key can change the document
 before an attempt is authorized. Completion cost must therefore not be
-theirs to choose. It removes every rule, revokes every removed credential,
-and compiles and installs the target. Two rules bound that cost:
+theirs to choose.
+
+**Apply is a delta.** Every `apply_doc`, completion included, matches the
+target's rules to the installed ones **by slot**, its position in the
+document's `rules` array:
+
+- A slot whose compiled rule is identical is left untouched. "Compiled
+  rule" means scope, signers as resolved credentials, `valid_until`, and
+  every attached policy with its install parameters, which carry the
+  rule's `rule_hash` (§3.2). Equal `rule_hash` alone is not enough: rotating
+  a signer's key leaves the rule text unchanged but changes its compiled
+  signers.
+- A slot that differs is uninstalled and reinstalled.
+- Slots beyond the shorter document are removed or added.
+
+The installed rule set that results is identical to a full replace, and the
+cost is never more than a full replace. The account tracks the installed
+rule id of each slot in a list bounded by the rule cap (plus the recovery
+rule). It never scans historical rule ids, which grow without bound with
+every past apply (#102 review, P1).
+
+A completion also revokes every removed credential and compiles the target.
+Two rules bound that cost:
 
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps on signers, rules, and
-  canonical size. Workstream 2 sizes the caps so that the worst-case
-  completion (a maximum-size pre-recovery document replaced by a
-  maximum-size target) fits the transaction budget (`budgets.md`).
+  canonical size. The caps are sized so that the worst-case completion
+  fits the transaction budget (`budgets.md`). The worst case is a
+  maximum-size pre-recovery document whose every slot differs from a
+  maximum-size target, after any amount of prior rule churn.
 - **Bounded revocation writes.** The revoked set is one persistent entry per
   fingerprint, so a completion writes at most one entry per removed
   credential, a number the caps bound.

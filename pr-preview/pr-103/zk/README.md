@@ -259,10 +259,13 @@ the spec or differ from its prose:
 - **Genesis insertion.** `rcv_insert` is invoker-only, so a factory cannot
   insert for a new account. Enrollment happens in the account's own
   `apply_doc`, as spec §14.2 describes.
-- **Release pipeline.** `perch-zk-pool` and `perch-zk-adapter` are new
-  deployables, and `packages/perch-zk` is a new npm package. None of them is
-  registered in `release.yml` yet: the `CONTRACTS` lists, `paths_for()`, and
-  `NPM_PACKAGES` need entries (`AGENTS.md`).
+- **Release pipeline.** `perch-zk-pool` and `perch-zk-adapter` are in both
+  `release.yml` `CONTRACTS` lists with `paths_for()` scopes. The adapter's
+  scope includes `vendor/ultrahonk-soroban-verifier`. Both are therefore
+  tagged and version-tracked, but they stay out of `publish-plan`'s `ALLOW`
+  list until on-chain publishing is enabled deliberately (`AGENTS.md`).
+  `packages/perch-zk` is a new npm package without an `NPM_PACKAGES` entry
+  yet.
 - **Not here.** The controller (nullifier reservation and spending, evidence
   freshness, attempts) and the account (`apply_doc` wiring of `rcv_insert`,
   the `tree_depth`/`depth` check, refusing reserved names) are the controller

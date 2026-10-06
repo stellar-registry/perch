@@ -121,9 +121,8 @@ before §5 runs, and the confirmed values are recorded here.
 
 Workstream 2's measurements and the rule's application are in
 [`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-03, protocol
-29 limits, `circuit_id`
-`2af21cd9ff84cc56e42e8086c72b6e7ac14c11e830e1fd35f60b3174b46c94c5`). In
-summary:
+29 limits; the measured circuits' `circuit_id`s are in its generated
+"Circuit identities" table). In summary:
 
 - §1: native and single-threaded bb.js proving take 0.07 s and 0.66 s on a
   desktop at D = 32. Client artifacts are 8.4 MB and the proof is 14.6 KB.

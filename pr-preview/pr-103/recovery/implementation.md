@@ -39,6 +39,7 @@ against the release artifacts belong to the integration layer.
 | #92 key rotation vs. reconfiguration | `config_hash` over the recovery text; completion recognized by its marker | `rotating_a_key_is_not_a_reconfiguration`, the ZK completion test |
 | #93 stale configuration and attempts | Per-account epoch; removal clears the controller's state | `every_configuration_change_kills_earlier_attempts_and_evidence` |
 | #86 real authorization tests (account paths) | Enforcing-auth harness | both suites |
+| Review of #102: unbounded completion, replaced baseline credential, unenrolled upgrade | Tracked rule ids; revocation union; recovery generation | `completion_cost_does_not_grow_with_policy_churn`, `a_replaced_baseline_credential_never_returns`, `enrolling_and_removing_recovery_stales_an_unenrolled_upgrade` |
 
 ## Choices within the spec
 
@@ -68,19 +69,39 @@ against the release artifacts belong to the integration layer.
 - **Stale lost-key source (T4).** The promoting submission is refused with
   `AttemptNotLive` and changes nothing; the attempt can never promote, so a
   fresh attempt is required.
-- **Stale upgrade.** A refusal cannot clear state, so `execute_upgrade`
-  returns `Ok(false)` after clearing a stale request (controller or epoch
-  changed), and `Ok(true)` when it upgrades.
+- **Upgrade staleness and the recovery generation (§12).** The account keeps
+  its recovery generation, the pending request, and its rule-id list in
+  instance storage, which is persistent and is read on every call anyway.
+  The generation advances on every `rcv_sync` outcome other than
+  `Unchanged` (twice for a controller switch, once per side) and on every
+  executed upgrade. A stale request is cleared and `execute_upgrade`
+  returns `Ok(false)` without upgrading: the spec's "refused" cannot also
+  clear it, because a failed invocation keeps none of its writes.
+  `Ok(true)` means it upgraded.
 - **Fingerprints.** The doc compiler fingerprints every declared signer,
   canonicalizing external keys through the verifier's
-  `batch_canonicalize_key` (the call OZ uses for duplicate signers). A
-  completion revokes every credential the applied document declared that
-  the target does not.
+  `batch_canonicalize_key` (the call OZ uses for duplicate signers).
+  `derive_target` also returns the source credentials in the replaced
+  slots, with keys canonicalized the same way. The controller records them
+  at T1 and returns them in `Completion`, and the account revokes
+  `credential::revocations` of them, the applied document, and the target
+  (§8). T1 refuses a replacement set whose target would keep one of the
+  credentials it replaces.
+- **Bounded rule replacement (§7.5).** The account records the ids of the
+  rules it installs and removes exactly those on the next `apply_doc`. It
+  never scans the ids of rules deleted earlier, so applying a document, and
+  completing a recovery, costs the same however many documents came before.
 - **§15 compile-time scope rule, narrowed.** The compiler refuses rules
   scoped to the document's own ZK adapter or pool, but not its controller: a
   perch account must be able to approve, as a guardian, recoveries at the
   controller it uses itself (D16), which needs a rule scoped to it. The
-  reserved-name guard protects the controller's hooks.
+  reserved-name guard protects the controller's hooks: every entry point
+  that acts on an account's own recovery state under its authorization is
+  reserved (§15 I1), every other one takes a guardian's approval of another
+  account's statement (I2), so a rule scoped to the controller reaches only
+  guardian approvals (I3).
+  `a_controller_scoped_rule_reaches_no_reserved_controller_entry_point`
+  pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
 - **Document caps.** Provisional: 16 declared signers, 16 rules, 8 192

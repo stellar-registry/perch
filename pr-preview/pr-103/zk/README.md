@@ -16,8 +16,8 @@ lives in the recovery controller.
 | Pool | `crates/perch-zk-pool` | Deployable membership pool: invoker-only insertion, depth-32 trees, rollover, every historical root acceptable |
 | Adapter | `crates/perch-zk-adapter` | Deployable `ZkAdapterInterface`: root check against the enrolled pool, statement binding, embedded audited UltraHonk verifier and VK |
 | Verifier library | `vendor/ultrahonk-soroban-verifier` | NethermindEth's audited UltraHonk verifier, vendored unmodified |
-| Native prover | `crates/perch-zk-prover` | Witness building from pool leaves, circuit inputs, nargo/bb driver, and the `perch-zk-fixtures` tool |
-| Browser/Node prover | `packages/perch-zk` | The same in TypeScript, proving with bb.js |
+| Native prover | `crates/perch-zk-prover` | Incremental witness index over pool leaves, circuit inputs, nargo/bb driver, and the `perch-zk-fixtures` tool |
+| Browser/Node prover | `packages/perch-zk` | The same in TypeScript (`PoolWitnessIndex` for indexers), proving with bb.js |
 | Fixtures | `testdata/zk/` | One real proof per scenario, with the enrollment history to rebuild its pool |
 | Manifest | `circuits/manifest.json` | Hashes of every source, artifact, VK, and fixture proof, plus the toolchain |
 
@@ -26,6 +26,25 @@ compatibility with Nido's circuits), [`pool.md`](pool.md) (storage, rollover,
 root retention, witnesses, renewal), and
 [`measurements.md`](measurements.md) (proving and on-chain costs, budgets, and
 the depth decision).
+
+## Open release criteria
+
+These must close before this stack is released. Each is tracked in the PR.
+
+1. **Witness hiding.** The audited verifier implements Barretenberg's
+   *non-zero-knowledge* `UltraKeccakFlavor`, and proofs are generated in that
+   flavor. A non-ZK proof carries witness-dependent protocol messages, so the
+   enrolled secret is not cryptographically hidden. That matters because the
+   same secret backs cancellation, reconfiguration, and upgrade proofs until a
+   completion consumes it. No audited Soroban verifier implements a
+   zero-knowledge flavor yet. The options and their measured costs are in the
+   PR (blocker `zk-flavor`). Do not rely on these proofs for secrecy until
+   this is resolved.
+2. **Client proving on reference devices.** `budgets.md` §1 sets budgets for
+   a mid-range phone and laptop. Only desktop numbers exist
+   ([`measurements.md`](measurements.md)).
+3. **Full-transaction measurements.** These belong to the controller and
+   account workstream (`budgets.md` §2).
 
 ## How a proof is checked
 

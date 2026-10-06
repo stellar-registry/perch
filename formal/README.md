@@ -12,8 +12,8 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
 | `PerchFormal/Semantics.lean` | the op alphabet, leaf semantics (every fail-closed decode path), the guarded RPN machine (`rpn::eval` twin, every defensive guard mirrored), the validator (`rpn::validate` twin) |
 | `PerchFormal/Lowering.lean` | `build_program` twin + the doc-level meaning of a rule |
 | `PerchFormal/Theorems.lean` | the evaluator/lowering proofs (below) |
-| `PerchFormal/Canon.lean` | CANON v1 twin: the canonical JSON emitter for every `PolicyDoc` shape (including `threshold` principals and the `recovery` member), `recovery_canonical_json`, the `config_hash` preimage, and verified inverse parsers |
-| `PerchFormal/CanonProofs.lean` | round-trips + `emitDoc_injective` (doc_hash names exactly one document) + `emitRecovery_injective`/`configPreimage_injective` (config_hash names exactly one recovery configuration) |
+| `PerchFormal/Canon.lean` | CANON v1 twin: the canonical JSON emitter for every `PolicyDoc` shape (including `threshold` principals and the `recovery` member), the `config_hash` and `rule_hash` preimages, and verified inverse parsers |
+| `PerchFormal/CanonProofs.lean` | round-trips + `emitDoc_injective` (doc_hash names exactly one document) + the fragment-hash theorems (config_hash names one recovery configuration, rule_hash one rule) |
 | `Main.lean` | `lake exe drt`. Replays `testdata/eval/eval-vectors.json` through the model, and round-trips Rust-emitted canonical documents and (after `--recovery`) recovery members through the verified canonicalizer |
 
 ## Theorems (all sorry-free)
@@ -44,15 +44,20 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
   guardian and ZK field; controller; optional baseline; replaceable ids; the
   three ledger counts). As of our survey (2026-08), no other
   machine-verified implementation of an RFC 8785 subset exists.
-- **T8** `configPreimage_injective`: `recovery_canonical_json` is injective
-  (`emitRecovery_injective`, via `pRecovery_rt`), and so is the
-  `config_hash` preimage `"perch/recovery/config" || recovery_canonical_json`.
-  So `config_hash` identifies exactly one recovery configuration up to a
-  SHA-256 collision, and it ignores everything outside the `recovery`
-  member by construction (a key rotation is not a reconfiguration).
-  `configPreimage_ne_emitDoc` separates the two hash domains: no
-  `config_hash` preimage is a document's canonical form. That the doc
-  compiler hashes exactly this preimage is tested, not proved (below).
+- **T8** fragment hashes (`CANONICAL.md`, "Fragment hashes"):
+  `configPreimage_injective` and `rulePreimage_injective`. The preimages
+  `"perch/recovery/config" || recovery_canonical_json` and
+  `"perch/rule" || rule_canonical_json` are injective (via `pRecovery_rt`
+  and `pRule_rt`), so `config_hash` identifies exactly one recovery
+  configuration and `rule_hash` exactly one rule text, up to a SHA-256
+  collision. `configPreimage_ne_emitDoc`, `rulePreimage_ne_emitDoc`, and
+  `rulePreimage_ne_configPreimage` separate the three hash domains: no two
+  kinds of preimage coincide (the two tags share `perch/r` and then differ).
+  `emitRecovery_infix_emitDoc` and `emitRule_infix_emitDoc`: each fragment
+  is a substring of its document's canonical form, so `config_hash` ignores
+  everything outside the `recovery` member (a key rotation is not a
+  reconfiguration). That the code hashes exactly these preimages is tested,
+  not proved (below).
 - **T6** `lowering_preserves`: the machine over `build_program`'s postfix
   output computes exactly the rule's doc-level Kleene conjunction, where the
   doc side is stated over predicates directly and `leafEval_lowerPred` proves
@@ -79,22 +84,31 @@ Green means the hand-authored spec, the Rust evaluator, and this proved model
 agree on every case, and that the model's canonicalizer parses and re-emits
 the Rust canonicalizer's bytes for every fixture: five documents (external
 and delegated signers, `all` and `threshold` principals, a cap,
-`guardian-only` and `combined` recovery) and one recovery member per mode. `crates/perch-ir/tests/recovery.rs` regenerates
-the recovery-member fixtures from Rust and fails when they are stale.
+`guardian-only` and `combined` recovery) and one recovery member per mode.
+`crates/perch-ir/tests/recovery.rs` regenerates the recovery-member fixtures
+from Rust and fails when they are stale.
 
-The model↔Rust link is differential (empirical), not deductive: the
-theorems are about the Lean emitter, and the fixtures and the fuzz targets
+The model↔Rust link is differential (empirical), not deductive. The
+theorems are about the Lean emitter; the fixtures and the fuzz targets
 (`fuzz/fuzz_targets/ir_parse_roundtrip.rs`,
 `recovery_canonical_roundtrip.rs`) are the evidence that `canon.rs` emits
-the same bytes. `crates/integration-tests/tests/config_hash.rs` ties T8 to
-the doc compiler: for each recovery-member fixture, the compiler's
-`config_hash` must equal `sha256("perch/recovery/config" || fixture bytes)`
-recomputed with `sha2`, and every single-field change must move it to the
-recomputed hash of the changed text. It runs against the native compiler on
-every PR and, in `release_stack.rs`, against a release stack's compiler wasm
-(in CI, the one built from the PR's source; locally, also the deployed
-testnet one, fetched with `scripts/fetch-infra-wasm.sh --stack`). See
-PLAN.md phase 2 for the planned deepening (Verus or Aeneas).
+the same bytes. Two tests tie T8 to the code that computes the hashes:
+
+- `config_hash`: `crates/integration-tests/tests/config_hash.rs` requires,
+  for each recovery-member fixture, that the doc compiler's `config_hash`
+  equal `sha256("perch/recovery/config" || fixture bytes)` recomputed with
+  `sha2`, and that every single-field change move it to the recomputed hash
+  of the changed text. It runs against the native compiler on every PR and,
+  in `release_stack.rs`, against a release stack's compiler wasm (in CI, the
+  one built from the PR's source; locally, also the deployed testnet one,
+  fetched with `scripts/fetch-infra-wasm.sh --stack`).
+- `rule_hash`: `testdata/rule-hashes.json` is cut out of the canonical
+  fixtures by an independent script (`scripts/rule-hash-vectors.py`) and
+  checked against the Rust `rule_hash` and the provenance `perch-compile`
+  stamps into every program (`perch-recovery-interface/tests/vectors.rs`,
+  `integration-tests/tests/fragment_hashes.rs`).
+
+See PLAN.md phase 2 for the planned deepening (Verus or Aeneas).
 
 ## What is not modeled
 
@@ -110,13 +124,20 @@ the recovery stack has a model or a proof:
   proofs.
 - **Account authorization paths** (`crates/perch-smart-account`:
   `__check_auth`, OZ context-rule selection, `execute`, `apply_doc`,
-  upgrades). Tests only (`account_capabilities.rs`, `matrix.rs`).
+  upgrades). Tests only (`account_capabilities.rs`, `matrix.rs`). That
+  includes the delta `apply_doc`: T8 shows equal `rule_hash` preimages
+  mean equal rule text, but that the account then touches exactly the
+  changed rules is tested (the delta tests, the `apply_doc_delta` fuzz
+  target), not proved.
 - **The ZK circuit, verifier, adapter, and pool** (`circuits/`,
   `crates/perch-zk-adapter`, the membership pool): real-proof tests and
   cross-implementation Poseidon2 vectors (`docs/zk/README.md`), no proofs.
 - **The document compiler** beyond the canonical bytes and `config_hash`:
   validation, `derive_target`, and the rest of the compiled recovery
   configuration.
+- **The recovery statement's encoding** (`docs/recovery/statement.md`), so
+  CANONICAL.md's claim that the fragment tags are separated from the
+  statement tags is not proved.
 - **SHA-256** itself: every "names exactly one" claim above holds up to a
   SHA-256 collision.
 

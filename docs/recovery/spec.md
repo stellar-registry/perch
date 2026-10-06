@@ -186,6 +186,23 @@ controller, baseline hash, replaceable signer ids, and timing. Rotating a signer
 elsewhere in the document does not change it (#92). Renaming a replaceable
 signer id does.
 
+**Per-rule hash.** Next to `config_hash`, each rule has a
+`rule_hash = sha256("perch/rule" || R)` (`fragment::rule_hash`), where `R`
+is exactly the bytes the rule contributes to the canonical document: one
+element of the `rules` array (`CANONICAL.md`, "Fragment hashes"; vectors in
+`testdata/rule-hashes.json`).
+
+- **Provenance.** An installed interpreter program carries its rule's
+  `rule_hash` as provenance, instead of the whole document's `doc_hash`.
+  Editing one rule, or any non-rule member, then leaves every other rule's
+  install parameters unchanged, which lets `apply_doc` reinstall only the
+  rules that changed.
+- **Scope.** A `rule_hash` covers the rule text and its signer ids, not the
+  signers' credentials. Only `doc_hash` identifies the whole document.
+- **Domain separation.** The `perch/rule` and `perch/recovery/config` tags
+  are prefix-free and cannot begin a canonical document (which starts with
+  `{`), so the three hashes never share a preimage.
+
 ### 3.3 Epoch
 
 The controller keeps a per-account `epoch: u64`. It starts at 0 and

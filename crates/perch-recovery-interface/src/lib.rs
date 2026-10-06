@@ -16,6 +16,8 @@
 //!   same digest.
 //! - [`credential`]: canonical credential fingerprints (what revocation
 //!   compares) and the replacement set a recovery attempt declares.
+//! - [`fragment`]: hashes over fragments of a canonical document, such as
+//!   the per-rule hash interpreter programs carry as provenance.
 //! - [`zk`]: the structured adapter boundary ([`zk::ZkAdapterInterface`]),
 //!   the evidence/binding types, the projection of a statement onto circuit
 //!   field elements, and the circuit domain tags.
@@ -35,6 +37,7 @@ pub mod account;
 pub mod config;
 pub mod controller;
 pub mod credential;
+pub mod fragment;
 pub mod statement;
 pub mod zk;
 

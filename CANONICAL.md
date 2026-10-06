@@ -115,6 +115,50 @@ current model. **`null` never appears.** An absent optional field is omitted
 from its object entirely, not serialized as `null`. Encountering `null` while
 canonicalizing is malformed input and fails closed.
 
+## Fragment hashes
+
+`doc_hash` identifies a whole document. Two other hashes identify one
+**fragment** of it: the exact bytes that member contributes to the
+document's canonical serialization above, cut out unchanged and hashed
+under a domain tag of its own.
+
+| Hash | Fragment `F` | Preimage | Used by |
+| --- | --- | --- | --- |
+| `rule_hash` | one element of the top-level `rules` array, without the separating commas | `"perch/rule" ‖ F` | interpreter program provenance: the hash an installed program carries in place of the whole document's `doc_hash`. Also how a delta `apply_doc` tells which rules changed. |
+| `config_hash` | the value of the top-level `recovery` member | `"perch/recovery/config" ‖ F` | recovery configuration identity (`docs/recovery/spec.md` §3.2) |
+
+Both are `SHA-256` of the preimage. The tags are ASCII and are part of the
+preimage. `doc_hash` is unchanged: still untagged `SHA-256` of the whole
+canonical document.
+
+**Domain separation.**
+
+- A canonical document starts with `{`, and every tag starts with `perch/`,
+  so no fragment preimage equals a document preimage.
+- Neither tag is a prefix of the other, and neither is a prefix of the
+  recovery statement's tags (`perch/recovery/statement`, …;
+  `docs/recovery/statement.md`). Different fragment kinds therefore never
+  share a preimage.
+
+**What a rule hash covers.** A `rule_hash` covers the rule's own text,
+signer *ids* included. It does not cover the signers' credentials, which
+live in the document's `signers` member. The same rule text in two
+documents therefore has the same `rule_hash` (see the `admin` rule across
+the vectors below). A program's `rule_hash` says which rule text it was
+compiled from; it does not identify the document. Only `doc_hash` does.
+
+Fragment hashes are definitions over the bytes above, not new
+canonicalization rules, so they do not change `CANON_VERSION`. Changing a
+tag or the fragment boundaries is a breaking change to every recorded
+value, and must be treated like one.
+
+Code:
+
+- Rust: `perch_recovery_interface::fragment::rule_hash` and
+  `perch_recovery_interface::config::config_hash`.
+- The doc compiler computes both from the canonical bytes it already
+  emits.
+
 ## Conformance
 
 The shared vector lives in `testdata/`:
@@ -122,6 +166,16 @@ The shared vector lives in `testdata/`:
 - `ci-publish.json`: a real policy document (the CI-publish policy).
 - `ci-publish.canonical.json`: its canonical bytes, exactly as defined above.
 - `ci-publish.doc-hash`: `27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98`.
+
+Fragment hashes have their own vector, `testdata/rule-hashes.json`. An
+independent script (`scripts/rule-hash-vectors.py`) generates it by cutting
+each rule's bytes out of the committed `ci-publish{,-delegated,-threshold}`
+canonical files. `crates/perch-recovery-interface/tests/vectors.rs` asserts
+that those bytes are exactly each fixture's `rules` array and that every
+`rule_hash` matches. For `ci-publish`:
+
+- `admin` rule: `a23e499eb6906e76a489ae7b901d11245b18119bf9f7299c42932016a02e4ecf`
+- `ci-publish` rule: `fbd758674683fdbafa01f927b76cef5f79c86448b440177296709b3073f7751e`
 
 Both suites assert, against these files, that canonicalization is byte-identical
 and the hash matches:

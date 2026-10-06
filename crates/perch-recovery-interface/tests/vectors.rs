@@ -5,6 +5,7 @@
 //! (perch-js, the Noir witness generator, Nido's SDK) assert the same file.
 
 use perch_recovery_interface::credential::{Credential, Replacement, ReplacementSet, ZkEnrollment};
+use perch_recovery_interface::fragment::rule_hash;
 use perch_recovery_interface::zk::{
     zk_statement_fields, DOM_AUTH, DOM_BIND, DOM_LEAF, DOM_NULLIFIER,
 };
@@ -225,5 +226,67 @@ fn zk_domain_tags_match() {
             d[name]["value"].as_str().unwrap(),
             "{name}"
         );
+    }
+}
+
+const RULE_HASHES: &str = include_str!("../../../testdata/rule-hashes.json");
+
+fn canonical_fixture(path: &str) -> &'static str {
+    match path {
+        "testdata/ci-publish.canonical.json" => {
+            include_str!("../../../testdata/ci-publish.canonical.json")
+        }
+        "testdata/ci-publish-delegated.canonical.json" => {
+            include_str!("../../../testdata/ci-publish-delegated.canonical.json")
+        }
+        "testdata/ci-publish-threshold.canonical.json" => {
+            include_str!("../../../testdata/ci-publish-threshold.canonical.json")
+        }
+        p => panic!("no fixture {p}"),
+    }
+}
+
+/// `testdata/rule-hashes.json` (written by `scripts/rule-hash-vectors.py`)
+/// cuts each rule's bytes out of a committed canonical fixture. This checks
+/// that the recorded bytes are exactly that fixture's `rules` array, that
+/// the fixture still hashes to its `doc_hash`, and that `rule_hash` agrees.
+#[test]
+fn rule_hash_vectors_match_the_canonical_fixtures() {
+    let e = Env::default();
+    let v: Value = serde_json::from_str(RULE_HASHES).unwrap();
+    assert_eq!(v["domain"].as_str().unwrap(), "perch/rule");
+    for f in v["fixtures"].as_array().unwrap() {
+        let path = f["fixture"].as_str().unwrap();
+        let text = canonical_fixture(path);
+        assert_eq!(
+            hex::encode(
+                e.crypto()
+                    .sha256(&Bytes::from_slice(&e, text.as_bytes()))
+                    .to_bytes()
+                    .to_array()
+            ),
+            f["doc_hash"].as_str().unwrap(),
+            "{path}: doc_hash"
+        );
+        let rules: std::vec::Vec<&str> = f["rules"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["canonical"].as_str().unwrap())
+            .collect();
+        let array = std::format!("\"rules\":[{}]", rules.join(","));
+        assert!(
+            text.contains(&array),
+            "{path}: rule bytes are not the rules array"
+        );
+        for r in f["rules"].as_array().unwrap() {
+            let bytes = Bytes::from_slice(&e, r["canonical"].as_str().unwrap().as_bytes());
+            assert_eq!(
+                hex::encode(rule_hash(&e, &bytes).to_array()),
+                r["rule_hash"].as_str().unwrap(),
+                "{path}: rule {}",
+                r["name"]
+            );
+        }
     }
 }

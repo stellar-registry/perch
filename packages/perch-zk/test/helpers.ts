@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fromHex } from '../src/field.js';
+import type { Bytes32 } from '../src/field.js';
+import { IncrementalTree, LeafChunks } from '../src/tree.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const repo = (...p: string[]) => resolve(here, '../../..', ...p);
@@ -49,3 +51,16 @@ export const FIXTURES = [
   'earlier_tree',
   'later_root',
 ];
+
+
+/** The witness for `leaves[index]` in a depth-`depth` tree of `leaves`, built
+ * the way an indexer builds it: appended in order over chunked storage. */
+export async function pathFor(leaves: Bytes32[], index: number, depth = 32): Promise<Bytes32[]> {
+  const store = new LeafChunks();
+  const tree = new IncrementalTree({ depth });
+  for (const l of leaves) {
+    store.push(l);
+    tree.append(l);
+  }
+  return (await tree.witness(BigInt(index), store.read)).siblings;
+}

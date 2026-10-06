@@ -1650,6 +1650,8 @@ version = "0.1.0"
 dependencies = [
  "perch-recovery-interface",
  "perch-zk-primitives",
+ "perch-zk-prover",
+ "serde_json",
  "soroban-sdk",
  "soroban-sdk-tools",
 ]

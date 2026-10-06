@@ -1,11 +1,10 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { init, leaf } from '../src/hash.js';
-import { Tree } from '../src/tree.js';
 import { prove } from '../src/prove.js';
 import type { CompiledCircuit } from '../src/prove.js';
 import { publicInputBytes } from '../src/inputs.js';
-import { b, fixture, repo } from './helpers.js';
+import { b, fixture, pathFor, repo } from './helpers.js';
 
 // A real proof generated in-process with bb.js (the browser prover's code
 // path, here under Node's WASM) for the lost_key fixture's witness. bb.js and
@@ -29,7 +28,7 @@ describe('bb.js proving', () => {
       enrollmentId: b(f.enrollment_id),
       digest: b(f.digest),
       leafIndex: BigInt(f.leaf_index),
-      siblings: new Tree(leaves).path(f.leaf_index),
+      siblings: await pathFor(leaves, f.leaf_index),
     });
     expect(publicInputBytes(out.publicInputs)).toEqual(publicInputs);
     expect(out.proof).toEqual(proof);

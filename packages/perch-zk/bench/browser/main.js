@@ -1,12 +1,22 @@
 // The lost_key witness proved in the page, at both packaged depths, single-
 // and multi-threaded, with the package's own `prove`.
-import { Tree, fromHex, init, leaf, prove } from '../../dist/index.js';
+import { IncrementalTree, LeafChunks, fromHex, init, leaf, prove } from '../../dist/index.js';
 import fixture from '../../../../testdata/zk/lost_key/fixture.json';
 import d32 from '../../artifacts/perch_zk_recovery.json';
 import d24 from '../../artifacts/perch_zk_recovery_d24.json';
 
 const runs = Number(new URLSearchParams(location.search).get('runs') ?? 5);
 const b = (s) => fromHex(s);
+
+async function path(leaves, index, depth) {
+  const store = new LeafChunks();
+  const tree = new IncrementalTree({ depth });
+  for (const l of leaves) {
+    store.push(l);
+    tree.append(l);
+  }
+  return (await tree.witness(BigInt(index), store.read)).siblings;
+}
 
 async function main() {
   await init();
@@ -21,7 +31,7 @@ async function main() {
       enrollmentId: b(fixture.enrollment_id),
       digest: b(fixture.digest),
       leafIndex: BigInt(fixture.leaf_index),
-      siblings: new Tree(leaves, depth).path(fixture.leaf_index),
+      siblings: await path(leaves, fixture.leaf_index, depth),
     };
     for (const threads of [1, navigator.hardwareConcurrency]) {
       await prove(circuit, witness, { threads }); // warm-up

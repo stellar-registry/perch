@@ -19,7 +19,8 @@ use perch_zk_prover::fixture::{
     field_tag, sha256, tag, Enrollment, Fixture, Statement, Subject, NETWORK_PASSPHRASE,
 };
 use perch_zk_prover::{
-    commitment, hex, host, prove, write_vk, Inputs, Toolchain, Tree, BB_VERSION, NARGO_VERSION,
+    commitment, doc_block, hex, host, prove, splice_doc_block, write_vk, Inputs, Toolchain, Tree,
+    BB_VERSION, NARGO_VERSION,
 };
 use serde_json::{json, Value};
 use soroban_sdk::Env;
@@ -30,6 +31,8 @@ use std::process::{Command, ExitCode};
 const CIRCUITS: &str = "circuits";
 const ARTIFACTS: &str = "circuits/artifacts";
 const MANIFEST: &str = "circuits/manifest.json";
+/// Carries a block generated from the manifest (`doc_block`).
+const MEASUREMENTS_DOC: &str = "docs/zk/measurements.md";
 const VK_DIR: &str = "crates/perch-zk-adapter/vk";
 const FIXTURES: &str = "testdata/zk";
 /// The npm package ships copies of the artifacts and manifest.
@@ -360,6 +363,10 @@ fn build_all(tc: &Toolchain, work: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
         "circuits": circuits,
         "fixtures": fixtures,
     });
+    let doc = std::fs::read_to_string(MEASUREMENTS_DOC).expect("measurements doc");
+    let doc = splice_doc_block(&doc, &doc_block(&manifest))
+        .unwrap_or_else(|| panic!("{MEASUREMENTS_DOC} lost its generated-block markers"));
+    files.insert(PathBuf::from(MEASUREMENTS_DOC), doc.into_bytes());
     let mut manifest = serde_json::to_vec_pretty(&manifest).unwrap();
     manifest.push(b'\n');
     files.insert(

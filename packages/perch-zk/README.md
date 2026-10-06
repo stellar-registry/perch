@@ -7,7 +7,7 @@ produces are byte-identical to the pinned `bb` CLI's, and the on-chain adapter
 verifies them (see [`docs/zk/`](../../docs/zk/README.md)).
 
 ```ts
-import { init, commitment, leaf, Tree, prove, evidence, randomSecret } from '@stellar-registry/perch-zk';
+import { init, commitment, PoolWitnessIndex, prove, evidence, randomSecret } from '@stellar-registry/perch-zk';
 import circuit from '@stellar-registry/perch-zk/artifacts/perch_zk_recovery.json' with { type: 'json' };
 
 await init(); // loads Barretenberg's WASM once
@@ -18,16 +18,20 @@ await init(); // loads Barretenberg's WASM once
 const secret = randomSecret();
 const inner = commitment(secret);
 
-// Recovery: rebuild the tree from the pool's leaves (`leaves` pages or
-// `LeafInserted` events), then prove over the controller's statement digest.
-const tree = new Tree(poolLeaves);
+// Recovery: an index fed the pool's insertions (`LeafInserted` events or
+// `leaves` pages) in order, reading leaves back from wherever you keep them.
+// It stores only a frontier and completed subtree roots, never a whole tree.
+const index = new PoolWitnessIndex((treeId, start, count) => myLeafStore.read(treeId, start, count));
+for (const ins of insertions) index.ingest(ins); // { treeId, index, leaf }
+const { root, siblings } = await index.witness(treeId, leafIndex);
+// check `pool.is_known_root(treeId, root)` before proving
 const proof = await prove(circuit, {
   secret,
   accountId,      // the account's 32-byte contract id
   enrollmentId,   // the id the account's recovery configuration names
   digest,         // RecoveryStatement::digest of the statement being authorized
-  leafIndex: BigInt(index),
-  siblings: tree.path(index),
+  leafIndex,
+  siblings,
 });
 const zk = evidence(treeId, proof); // { treeId, root, nullifier, proof } → ZkEvidence
 ```

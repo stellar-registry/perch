@@ -1,8 +1,9 @@
 //! Native proof helpers for Perch ZK recovery.
 //!
-//! - [`Tree`]: rebuilds a pool tree from its leaves (read from the pool's
-//!   `leaves` pages or replayed from its `LeafInserted` events) and produces any
-//!   leaf's witness path.
+//! - [`IncrementalTree`] / [`PoolWitnessIndex`]: witnesses for a pool's
+//!   trees, appended leaf by leaf (from the pool's `leaves` pages or its
+//!   `LeafInserted` events) without materializing a tree; [`Tree`] is the
+//!   in-memory convenience over a slice of leaves.
 //! - [`Inputs`]: the full circuit input set for one proof, with the public
 //!   values (`root`, `nullifier`, `statement_hash`) derived exactly as the
 //!   contracts derive them.
@@ -15,7 +16,7 @@
 //! on-chain rather than by a second Poseidon2 implementation.
 
 use perch_recovery_interface::zk::{public_inputs, split_hi_lo, ZkStatementFields};
-use perch_zk_primitives::{Hasher, ZERO_HASHES};
+use perch_zk_primitives::Hasher;
 use soroban_sdk::{BytesN, Env};
 use std::fmt::Write as _;
 use std::io;
@@ -31,7 +32,7 @@ pub fn host() -> Env {
     e
 }
 
-fn bn(e: &Env, b: &Bytes32) -> BytesN<32> {
+pub(crate) fn bn(e: &Env, b: &Bytes32) -> BytesN<32> {
     BytesN::from_array(e, b)
 }
 
@@ -55,67 +56,6 @@ pub fn parse32(s: &str) -> Option<Bytes32> {
         *b = u8::from_str_radix(&s[2 * i..2 * i + 2], 16).ok()?;
     }
     Some(out)
-}
-
-/// A pool tree rebuilt from its leaves. Only nodes with at least one leaf
-/// under them are materialized; every other node is a [`ZERO_HASHES`] entry.
-pub struct Tree {
-    depth: u32,
-    /// `levels[0]` are the leaves, `levels[depth]` is `[root]`.
-    levels: Vec<Vec<Bytes32>>,
-}
-
-impl Tree {
-    pub fn new(e: &Env, depth: u32, leaves: &[Bytes32]) -> Self {
-        assert!(depth <= perch_zk_primitives::MAX_TREE_DEPTH);
-        assert!(
-            (leaves.len() as u64) <= 1u64 << depth,
-            "more leaves than slots"
-        );
-        let mut h = Hasher::new(e);
-        let mut levels = vec![leaves.to_vec()];
-        for level in 0..depth as usize {
-            let zero = ZERO_HASHES[level];
-            let next: Vec<Bytes32> = levels[level]
-                .chunks(2)
-                .map(|pair| {
-                    let right = pair.get(1).copied().unwrap_or(zero);
-                    h.node(&bn(e, &pair[0]), &bn(e, &right)).to_array()
-                })
-                .collect();
-            levels.push(next);
-        }
-        Self { depth, levels }
-    }
-
-    pub fn depth(&self) -> u32 {
-        self.depth
-    }
-
-    pub fn size(&self) -> u64 {
-        self.levels[0].len() as u64
-    }
-
-    pub fn root(&self) -> Bytes32 {
-        self.levels[self.depth as usize]
-            .first()
-            .copied()
-            .unwrap_or(ZERO_HASHES[self.depth as usize])
-    }
-
-    /// Sibling hashes from the leaf level up, for the leaf at `index`.
-    pub fn path(&self, index: u64) -> Vec<Bytes32> {
-        assert!(index < self.size(), "no leaf at index {index}");
-        (0..self.depth as usize)
-            .map(|level| {
-                let sibling = ((index >> level) ^ 1) as usize;
-                self.levels[level]
-                    .get(sibling)
-                    .copied()
-                    .unwrap_or(ZERO_HASHES[level])
-            })
-            .collect()
-    }
 }
 
 /// Recompute a root from a leaf, its index, and its sibling path — the
@@ -457,6 +397,50 @@ pub fn write_vk(
 }
 
 pub mod fixture;
+
+/// Markers around the block of `docs/zk/measurements.md` generated from
+/// `circuits/manifest.json`.
+pub const DOC_BLOCK_BEGIN: &str =
+    "<!-- BEGIN GENERATED from circuits/manifest.json by `perch-zk-fixtures generate`; do not edit -->";
+pub const DOC_BLOCK_END: &str = "<!-- END GENERATED -->";
+
+/// The circuit-identity table, generated from the manifest so documented
+/// `circuit_id`s can never drift from the VKs the adapter compiles in.
+pub fn doc_block(manifest: &serde_json::Value) -> String {
+    let mut s = String::new();
+    let _ = writeln!(s, "{DOC_BLOCK_BEGIN}");
+    let _ = writeln!(
+        s,
+        "| Circuit | Depth | `circuit_id` (`sha256` of the VK) | Gates |"
+    );
+    let _ = writeln!(s, "| --- | --- | --- | --- |");
+    let circuits = manifest["circuits"].as_object().expect("manifest circuits");
+    for (name, c) in circuits {
+        let vk = c["vk_sha256"].as_str().expect("vk_sha256");
+        let _ = writeln!(
+            s,
+            "| `{name}` | {} | `{}` | {} |",
+            c["depth"],
+            vk.trim_start_matches("0x"),
+            c["circuit_size"]
+        );
+    }
+    let _ = write!(s, "{DOC_BLOCK_END}");
+    s
+}
+
+/// `doc` with its generated block replaced by `block`.
+pub fn splice_doc_block(doc: &str, block: &str) -> Option<String> {
+    let begin = doc.find(DOC_BLOCK_BEGIN)?;
+    let end = doc[begin..].find(DOC_BLOCK_END)? + begin + DOC_BLOCK_END.len();
+    Some(format!("{}{block}{}", &doc[..begin], &doc[end..]))
+}
+pub mod tree;
+
+pub use tree::{
+    IncrementalTree, Insertion, MemoryNodeStore, MerklePath, NodeStore, PoolWitnessIndex, Tree,
+    TreeState, CHUNK_LEVEL,
+};
 
 #[cfg(test)]
 mod test;

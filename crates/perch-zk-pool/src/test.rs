@@ -478,3 +478,131 @@ fn implements_the_membership_pool_interface() {
         .try_rcv_insert(&account, &enr(&e, 1), &commitment(&e, 2))
         .is_err());
 }
+
+/// Reads every leaf of `tree_id` through the pool's own `leaves` pages, as an
+/// indexer working from contract storage does.
+fn pages(client: &PerchZkPoolClient, tree_id: u32) -> StdVec<[u8; 32]> {
+    let size = client.tree(&tree_id).size;
+    let mut out = StdVec::new();
+    let mut start = 0u64;
+    while start < size {
+        for l in client.leaves(&tree_id, &start, &MAX_PAGE).iter() {
+            out.push(l.to_array());
+        }
+        start += u64::from(MAX_PAGE);
+    }
+    out
+}
+
+fn hex(b: &[u8; 32]) -> std::string::String {
+    perch_zk_prover::hex(b)
+}
+
+/// The witness index (`perch_zk_prover::PoolWitnessIndex`, the structure
+/// `packages/perch-zk` mirrors) replays this pool's storage and serves
+/// witnesses for every leaf — the last leaf of each sealed tree included —
+/// against roots the pool itself accepts. Sealed trees use the merkle code at
+/// depth 3; the depth-32 tree goes through `rcv_insert`. The same data is
+/// pinned in `testdata/zk/witness-replay.json` for the TypeScript suite
+/// (rewrite it with `PERCH_ZK_WRITE_VECTORS=1`).
+#[test]
+fn witness_index_replays_the_pool_storage() {
+    use perch_zk_prover::{host, root_from_path, Insertion, PoolWitnessIndex};
+    let (e, id, client) = setup();
+    e.mock_all_auths();
+    let he = host();
+    let mut vector = serde_json::Map::new();
+
+    // Depth 3: two sealed trees and a partly filled third.
+    for n in 0..19u64 {
+        append_at(&e, &id, 3, &bytes(&e, n + 1));
+    }
+    assert_eq!(client.current_tree(), 2);
+    let mut idx = PoolWitnessIndex::new(3, 1);
+    let mut trees = StdVec::new();
+    for t in 0..=2u32 {
+        let leaves = pages(&client, t);
+        for (i, l) in leaves.iter().enumerate() {
+            idx.ingest(
+                &he,
+                &Insertion {
+                    tree_id: t,
+                    index: i as u64,
+                    leaf: *l,
+                },
+            )
+            .unwrap();
+        }
+        let tree = idx.tree(t).unwrap();
+        let read = |s: u64, c: usize| leaves[s as usize..s as usize + c].to_vec();
+        let root = tree.root(&he, read);
+        assert_eq!(root, client.tree(&t).root.to_array(), "tree {t}");
+        assert!(client.is_known_root(&t, &BytesN::from_array(&e, &root)));
+        for (i, l) in leaves.iter().enumerate() {
+            let w = tree.witness(&he, i as u64, read);
+            assert_eq!(w.root, root);
+            assert_eq!(root_from_path(&he, l, i as u64, &w.siblings), root);
+        }
+        trees.push(serde_json::json!({
+            "tree_id": t,
+            "sealed": tree.sealed(),
+            "leaves": leaves.iter().map(hex).collect::<StdVec<_>>(),
+            "root": hex(&root),
+        }));
+    }
+    assert!(idx.tree(0).unwrap().sealed() && idx.tree(1).unwrap().sealed());
+    vector.insert(
+        "depth_3".into(),
+        serde_json::json!({ "depth": 3, "trees": trees }),
+    );
+
+    // Depth 32, through the real entry point, across several chunk boundaries
+    // at chunk level 3.
+    let (e2, _id2, client2) = setup();
+    e2.mock_all_auths();
+    for n in 0..41u64 {
+        client2.rcv_insert(&Address::generate(&e2), &enr(&e2, n), &commitment(&e2, n));
+    }
+    let leaves = pages(&client2, 0);
+    let mut idx32 = PoolWitnessIndex::new(32, 3);
+    for (i, l) in leaves.iter().enumerate() {
+        idx32
+            .ingest(
+                &he,
+                &Insertion {
+                    tree_id: 0,
+                    index: i as u64,
+                    leaf: *l,
+                },
+            )
+            .unwrap();
+    }
+    let tree = idx32.tree(0).unwrap();
+    let read = |s: u64, c: usize| leaves[s as usize..s as usize + c].to_vec();
+    let root = tree.root(&he, read);
+    assert_eq!(root, client2.tree(&0).root.to_array());
+    for (i, l) in leaves.iter().enumerate() {
+        let w = tree.witness(&he, i as u64, read);
+        assert_eq!(root_from_path(&he, l, i as u64, &w.siblings), root);
+    }
+    vector.insert(
+        "depth_32".into(),
+        serde_json::json!({
+            "depth": 32,
+            "trees": [{ "tree_id": 0, "sealed": false, "leaves": leaves.iter().map(hex).collect::<StdVec<_>>(), "root": hex(&root) }],
+        }),
+    );
+
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/zk/witness-replay.json");
+    let mut json = serde_json::to_vec_pretty(&serde_json::Value::Object(vector)).unwrap();
+    json.push(b'\n');
+    if std::env::var_os("PERCH_ZK_WRITE_VECTORS").is_some() {
+        std::fs::write(&path, &json).unwrap();
+    }
+    assert_eq!(
+        std::fs::read(&path).expect("run with PERCH_ZK_WRITE_VECTORS=1 to create it"),
+        json,
+        "testdata/zk/witness-replay.json is stale"
+    );
+}

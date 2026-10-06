@@ -5,11 +5,21 @@
 
 import { readFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
-import { Tree, fromHex, init, leaf, prove } from '../dist/index.js';
+import { IncrementalTree, LeafChunks, fromHex, init, leaf, prove } from '../dist/index.js';
 
 const repo = new URL('../../../', import.meta.url);
 const b = (s) => fromHex(s);
 const runs = Number(process.argv[2] ?? 5);
+
+async function path(leaves, index, depth) {
+  const store = new LeafChunks();
+  const tree = new IncrementalTree({ depth });
+  for (const l of leaves) {
+    store.push(l);
+    tree.append(l);
+  }
+  return (await tree.witness(BigInt(index), store.read)).siblings;
+}
 
 await init();
 const f = JSON.parse(readFileSync(new URL('testdata/zk/lost_key/fixture.json', repo), 'utf8'));
@@ -31,7 +41,7 @@ for (const [name, depth] of [
     enrollmentId: b(f.enrollment_id),
     digest: b(f.digest),
     leafIndex: BigInt(f.leaf_index),
-    siblings: new Tree(leaves, depth).path(f.leaf_index),
+    siblings: await path(leaves, f.leaf_index, depth),
   };
   for (const threads of [1, availableParallelism()]) {
     await prove(circuit, witness, { threads }); // warm-up: WASM compile + SRS

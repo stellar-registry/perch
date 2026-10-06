@@ -174,12 +174,13 @@ the 41.9 MB limit. Each stack contract now links a 64 KiB stack
 (`build.rs`, `-zstack-size=65536`; 2 pages). The same flows take about a
 quarter of the memory (the largest existing row: 17 MB to 4.5 MB), and
 every flow passes with real proofs. The stack is laid out first, so an
-overflow wraps below address 0 and traps instead of corrupting data. At
-16 KiB the UltraHonk verifier traps (the controller reports
-`ZkEvidenceRejected`, failing closed); at 32 KiB everything passes. The
-verifier's stack use does not depend on its input, and the compiler's
-only input-driven recursion (JSON nesting) refuses cleanly at its depth
-limit on the small stack.
+overflow wraps below address 0 and traps instead of corrupting data. The
+UltraHonk verifier is the deepest code: the ZK-flavor verifier traps at
+32 KiB (the controller reports `ZkEvidenceRejected`, failing closed) and
+passes at 48 KiB, so the adapter links 128 KiB (3 pages), more than twice
+that, at one VM per ZK transaction. The verifier's stack use does not
+depend on its input, and the compiler's only input-driven recursion (JSON
+nesting) refuses cleanly at its depth limit on the 64 KiB stack.
 
 **The binding limit: contract events.** OZ emits a full event per rule
 added and removed, per signer registered, and per policy installed and

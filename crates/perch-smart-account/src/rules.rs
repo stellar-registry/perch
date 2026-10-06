@@ -196,9 +196,17 @@ pub enum Mode {
 }
 
 /// The cost model's price of reconciling one rule: bytes of contract events
-/// (the account's and its policies'), then ledger entries written, compared
-/// in that order. Events come first because they are what grows fastest per
+/// (the account's and its policies'), then ledger-entry writes, compared in
+/// that order. Events come first because they are what grows fastest per
 /// changed signer and what the network caps per transaction.
+///
+/// `writes` counts the entries each OZ operation writes, an entry two
+/// operations write counting twice: the rule's own entry, the registry
+/// entry of each signer or policy it adds or removes (and the lookup entry
+/// when the first reference registers it or the last deregisters it), and a
+/// policy's own state when its `install` or `uninstall` writes some. The
+/// account's instance entry is not counted: every apply that changes a rule
+/// writes it.
 #[contracttype]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, PartialOrd, Ord)]
 pub struct Cost {
@@ -459,9 +467,6 @@ struct Meter<'a> {
     hooks: &'a Hooks,
     refs: Refs,
     cost: Cost,
-    /// An in-place edit rewrites the rule's own entry once, however many
-    /// operations it takes.
-    rule_written: bool,
 }
 
 impl<'a> Meter<'a> {
@@ -471,14 +476,6 @@ impl<'a> Meter<'a> {
             hooks,
             refs: refs.clone(),
             cost: Cost::default(),
-            rule_written: false,
-        }
-    }
-
-    fn touch_rule(&mut self) {
-        if !self.rule_written {
-            self.rule_written = true;
-            self.cost.writes += 1;
         }
     }
 
@@ -545,33 +542,33 @@ impl<'a> Meter<'a> {
 
 impl Effects for Meter<'_> {
     fn add_signer(&mut self, _: &InstalledRule, signer: &Signer) {
-        self.touch_rule();
+        self.cost.writes += 1;
         self.register_signer(signer);
         self.cost.events += SIGNER_ADDED;
     }
 
     fn remove_signer(&mut self, _: &InstalledRule, signer: &Signer) {
-        self.touch_rule();
+        self.cost.writes += 1;
         self.deregister_signer(signer);
         self.cost.events += SIGNER_REMOVED;
     }
 
     fn add_policy(&mut self, _: &InstalledRule, policy: &Address, _: &Val) {
-        self.touch_rule();
+        self.cost.writes += 1;
         self.register_policy(policy);
         self.hook(policy, true);
         self.cost.events += POLICY_ADDED;
     }
 
     fn remove_policy(&mut self, _: &InstalledRule, policy: &Address) {
-        self.touch_rule();
+        self.cost.writes += 1;
         self.hook(policy, false);
         self.deregister_policy(policy);
         self.cost.events += POLICY_REMOVED;
     }
 
     fn set_valid_until(&mut self, rule: &InstalledRule, valid_until: Option<u32>) {
-        self.touch_rule();
+        self.cost.writes += 1;
         self.cost.events +=
             RULE_META_UPDATED + rule.name.clone().to_xdr(self.e).len() + expiry(valid_until);
     }
@@ -801,4 +798,201 @@ fn missing(e: &Env, from: &Vec<Signer>, other: &Vec<Signer>) -> Vec<Signer> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod test {
+    extern crate std;
+
+    use super::*;
+    use soroban_sdk::testutils::Address as _;
+
+    struct World {
+        e: Env,
+        hooks: Hooks,
+        controller: Address,
+    }
+
+    fn world() -> World {
+        let e = Env::default();
+        let hooks = Hooks {
+            interpreter: Address::generate(&e),
+            spending_limit: Address::generate(&e),
+        };
+        let controller = Address::generate(&e);
+        World {
+            e,
+            hooks,
+            controller,
+        }
+    }
+
+    /// A delegated signer: 72 bytes of XDR (a contract address).
+    fn signer(e: &Env) -> Signer {
+        Signer::Delegated(Address::generate(e))
+    }
+
+    fn rule(w: &World, signers: &[Signer], policies: &[&Address]) -> InstalledRule {
+        let mut ps = Vec::new(&w.e);
+        for p in policies {
+            ps.push_back(InstalledPolicy {
+                policy: (*p).clone(),
+                params: BytesN::from_array(&w.e, &[0; 32]),
+            });
+        }
+        InstalledRule {
+            id: 7,
+            recovery: false,
+            // 12 bytes of XDR.
+            name: String::from_str(&w.e, "r1"),
+            // 72 bytes of XDR.
+            context_type: ContextRuleType::CallContract(Address::generate(&w.e)),
+            valid_until: Some(1_000),
+            signers: Vec::from_slice(&w.e, signers),
+            policies: ps,
+        }
+    }
+
+    fn fresh(w: &World) -> Meter<'_> {
+        Meter::new(&w.e, &w.hooks, &Refs::of(&w.e, &Vec::new(&w.e)))
+    }
+
+    fn cost(m: &Meter) -> (u32, u32) {
+        (m.cost.events, m.cost.writes)
+    }
+
+    #[test]
+    fn signers_are_priced_by_their_registry_reference_count() {
+        let w = world();
+        let r = rule(&w, &[], &[]);
+        let s = signer(&w.e);
+        let mut m = fresh(&w);
+        // First reference: the addition, the registration with the signer,
+        // and the rule, registry, and lookup entries.
+        m.add_signer(&r, &s);
+        assert_eq!(cost(&m), (120 + 116 + 72, 3));
+        assert_eq!(m.refs.signers.get(s.clone()), Some(1));
+        // A second reference: the addition and the count.
+        m.add_signer(&r, &s);
+        assert_eq!(cost(&m), (308 + 120, 5));
+        assert_eq!(m.refs.signers.get(s.clone()), Some(2));
+        // Dropping to one reference: the removal and the count.
+        m.remove_signer(&r, &s);
+        assert_eq!(cost(&m), (428 + 124, 7));
+        assert_eq!(m.refs.signers.get(s.clone()), Some(1));
+        // The last reference: the removal, the deregistration, and the
+        // registry and lookup entries.
+        m.remove_signer(&r, &s);
+        assert_eq!(cost(&m), (552 + 124 + 100, 10));
+        assert_eq!(m.refs.signers.get(s), None);
+    }
+
+    #[test]
+    fn policies_are_priced_with_their_own_hooks() {
+        let w = world();
+        let r = rule(&w, &[], &[]);
+        let param: Val = ().into_val(&w.e);
+
+        // The interpreter writes its program and emits nothing.
+        let mut m = fresh(&w);
+        m.add_policy(&r, &w.hooks.interpreter, &param);
+        assert_eq!(cost(&m), (120 + 156, 4));
+        m.remove_policy(&r, &w.hooks.interpreter);
+        assert_eq!(cost(&m), (276 + 124 + 100, 8));
+
+        // The spending limit writes its window and emits its own events.
+        let mut m = fresh(&w);
+        m.add_policy(&r, &w.hooks.spending_limit, &param);
+        assert_eq!(cost(&m), (120 + 156 + 244, 4));
+        m.remove_policy(&r, &w.hooks.spending_limit);
+        assert_eq!(cost(&m), (520 + 124 + 172 + 100, 8));
+
+        // The controller's hooks write and emit nothing.
+        let mut m = fresh(&w);
+        m.add_policy(&r, &w.controller, &param);
+        assert_eq!(cost(&m), (120 + 156, 3));
+        // A policy another rule still names is not deregistered.
+        m.add_policy(&r, &w.controller, &param);
+        m.remove_policy(&r, &w.controller);
+        assert_eq!(cost(&m), (276 + 120 + 124, 7));
+        assert_eq!(m.refs.policies.get(w.controller.clone()), Some(1));
+    }
+
+    #[test]
+    fn whole_rules_and_expiries_are_priced_from_their_contents() {
+        let w = world();
+        let (a, b) = (signer(&w.e), signer(&w.e));
+        let r = rule(&w, &[a, b], &[&w.hooks.spending_limit]);
+        let mut m = Meter::new(&w.e, &w.hooks, &Refs::of(&w.e, &Vec::new(&w.e)));
+        m.add_rule(&r, &Vec::new(&w.e));
+        // The addition carries the context type, name, three ids, and the
+        // expiry; then two signer and one policy registrations and the
+        // spending limit's install.
+        let added = 216 + 72 + 12 + 8 * 3 + 8;
+        let registered = 2 * (116 + 72) + 156 + 244;
+        // The rule entry, two signers' and one policy's registry and lookup
+        // entries, and the window.
+        assert_eq!(cost(&m), (added + registered, 1 + 2 * 2 + 2 + 1));
+
+        // Removing it drops every last reference.
+        let mut m = Meter::new(
+            &w.e,
+            &w.hooks,
+            &Refs::of(&w.e, &Vec::from_array(&w.e, [r.clone()])),
+        );
+        m.remove_rule(&r);
+        assert_eq!(cost(&m), (100 + 2 * 100 + 172 + 100, 1 + 2 * 2 + 1 + 2));
+        assert!(m.refs.signers.is_empty() && m.refs.policies.is_empty());
+
+        // An expiry update carries the name and the new expiry.
+        let mut m = Meter::new(&w.e, &w.hooks, &Refs::of(&w.e, &Vec::new(&w.e)));
+        m.set_valid_until(&r, None);
+        assert_eq!(cost(&m), (140 + 12 + 4, 1));
+        m.set_valid_until(&r, Some(5));
+        assert_eq!(cost(&m), (156 + 140 + 12 + 8, 2));
+    }
+
+    /// Beyond what a compiled document attaches (at most the interpreter
+    /// and the spending limit): when nothing survives, adding first must stay
+    /// within OZ's five policies per rule.
+    #[test]
+    fn an_in_place_order_exists_up_to_the_policy_limit() {
+        let w = world();
+        let policies = |n: usize| -> std::vec::Vec<Address> {
+            (0..n).map(|_| Address::generate(&w.e)).collect()
+        };
+        let editable = |from: usize, to: usize| {
+            let (old, new) = (policies(from), policies(to));
+            let c = rule(&w, &[], &old.iter().collect::<std::vec::Vec<_>>());
+            let d = rule(&w, &[], &new.iter().collect::<std::vec::Vec<_>>());
+            let mut params = Vec::new(&w.e);
+            for _ in 0..to {
+                params.push_back(().into_val(&w.e));
+            }
+            edit(&w.e, &mut fresh(&w), &c, &d, &params)
+        };
+        // 2 + 3 = 5 policies at the peak.
+        assert!(editable(2, 3));
+        // 3 + 3 = 6 would pass the limit.
+        assert!(!editable(3, 3));
+    }
+
+    #[test]
+    fn events_outrank_writes() {
+        let cheaper_events = Cost {
+            events: 10,
+            writes: 9,
+        };
+        let fewer_writes = Cost {
+            events: 11,
+            writes: 0,
+        };
+        assert!(cheaper_events < fewer_writes);
+        assert!(
+            Cost {
+                events: 10,
+                writes: 1
+            } < cheaper_events
+        );
+    }
 }

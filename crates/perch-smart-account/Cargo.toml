@@ -30,3 +30,6 @@ perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve"
 # Test-only: the full-replace `apply_doc` oracle (`testutils` module). Never
 # enabled by a deployable.
 testutils = []
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

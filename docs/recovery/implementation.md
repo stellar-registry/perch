@@ -158,6 +158,15 @@ against the release artifacts belong to the integration layer.
   worst-case completion (`budgets.md`, "Experiment: OZ's per-item events
   suppressed"). The binding limit is the footprint; with OZ's events
   (PR 103) it is contract events, at 6 signers and 8 rules.
+- **`reconcile_signers`** (reconcile experiment, stacked on quiet events).
+  An in-place edit changes a rule's signers in one OZ
+  `reconcile_signers_no_events` call (theahaco/stellar-contracts-OZ PR #5).
+  The call checks the final set whole, keeps retained signers' ids, and
+  writes the rule once. When the target has signers the swap goes first;
+  when it has none, the policies change first and the signers go last.
+  `budgets.md`, "Experiment: in-place signer changes through
+  `reconcile_signers`", has the release-wasm transitions against PR 103 and
+  PR 106.
 - **`DocApplied`** (quiet-events experiment). `apply_doc` performs every
   rule, signer, and policy mutation through OZ's `_no_events` variants
   (theahaco/stellar-contracts-OZ PR #4) and emits one `DocApplied` per

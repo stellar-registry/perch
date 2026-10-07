@@ -403,3 +403,142 @@ footprint (instructions 63.7%), 6 and 14 is still over (77.0%), and 8 and 11
 The "Release stack, in process" table above is from PR 103, with OZ's
 events. On this branch, the `worst_case_*` tests hold the rows above at the
 compiled-in caps.
+
+### Experiment: in-place signer changes through `reconcile_signers`
+
+Reconcile experiment, 2026-10-07. This branch only, stacked on the
+quiet-events experiment (PR 106); not PR 103. `stellar-accounts` is pinned
+to theahaco/stellar-contracts-OZ PR #5 (`fm/oz-quiet-events-x1-reconcile`,
+3372676), which adds `reconcile_signers[_no_events]` on top of PR #4. An
+in-place edit changes a rule's signers in one
+`reconcile_signers_no_events` call instead of a `remove_signer` per leaving
+signer and one `batch_add_signer`. That call checks the final set as a
+whole (size, key sizes, canonical duplicates), releases the leaving
+signers, registers the joining ones, keeps the retained signers' registry
+ids, and writes the rule once. The edit no longer needs room for old and
+new keys side by side. The cost model prices it as one rule write plus each
+leaving and joining signer's registry and lookup entries.
+
+**Signer transitions, in release wasm.** `signer_transitions`
+(`release_stack.rs`) applies one document change per row. Each change is
+to `pay`, a 1-of-n rule (the interpreter policy), and to the spending cap
+in the capped row. All three branches are measured at WS3's 4d11470
+(batched signer additions), on stacks built with the compiler's caps
+raised so the 15-signer rows run. The caps gate documents, not costs. In
+"full six-key rotation" every declared key changes, the owner's (and so
+`admin`'s) too: at the 6-signer cap no seventh key can hold `admin`. Each
+row's cost is the whole `apply_doc`, compiling the document included.
+
+**CPU instructions**
+
+| Transition | #103 (OZ events) | #106 (quiet) | This branch (quiet + reconcile) |
+| --- | ---: | ---: | ---: |
+| single addition | 22.51M | 22.36M | 23.08M |
+| several additions | 25.01M | 24.77M | 25.75M |
+| full six-key rotation | 30.81M | 30.36M | 30.40M |
+| one swap at the signer cap | 28.21M | 28.03M | 28.93M |
+| five swaps at the signer cap | 28.74M | 28.38M | 31.19M |
+| shared signers | 27.10M | 27.76M | 28.44M |
+| full rotation with an active spending cap | 32.54M | 32.07M | 34.02M |
+| one swap at OZ's 15 | 52.61M | 52.26M | 54.87M |
+| seven swaps at OZ's 15 | 57.04M | 56.24M | 58.84M |
+
+**Memory**
+
+| Transition | #103 (OZ events) | #106 (quiet) | This branch (quiet + reconcile) |
+| --- | ---: | ---: | ---: |
+| single addition | 2.42 MB | 2.40 MB | 2.41 MB |
+| several additions | 2.50 MB | 2.46 MB | 2.48 MB |
+| full six-key rotation | 3.11 MB | 3.03 MB | 3.02 MB |
+| one swap at the signer cap | 2.54 MB | 2.50 MB | 2.50 MB |
+| five swaps at the signer cap | 2.75 MB | 2.70 MB | 2.75 MB |
+| shared signers | 2.49 MB | 2.48 MB | 2.48 MB |
+| full rotation with an active spending cap | 3.68 MB | 3.61 MB | 3.13 MB |
+| one swap at OZ's 15 | 2.88 MB | 2.81 MB | 2.82 MB |
+| seven swaps at OZ's 15 | 3.45 MB | 3.34 MB | 3.30 MB |
+
+**Footprint entries**
+
+| Transition | #103 (OZ events) | #106 (quiet) | This branch (quiet + reconcile) |
+| --- | ---: | ---: | ---: |
+| single addition | 39 | 39 | 39 |
+| several additions | 47 | 47 | 47 |
+| full six-key rotation | 87 | 87 | 87 |
+| one swap at the signer cap | 47 | 47 | 47 |
+| five swaps at the signer cap | 81 | 81 | 75 |
+| shared signers | 49 | 41 | 41 |
+| full rotation with an active spending cap | 99 | 99 | 84 |
+| one swap at OZ's 15 | 65 | 65 | 65 |
+| seven swaps at OZ's 15 | 107 | 107 | 107 |
+
+**Event bytes**
+
+| Transition | #103 (OZ events) | #106 (quiet) | This branch (quiet + reconcile) |
+| --- | ---: | ---: | ---: |
+| single addition | 1,020 | 340 | 340 |
+| several additions | 1,812 | 340 | 340 |
+| full six-key rotation | 3,340 | 340 | 340 |
+| one swap at the signer cap | 1,244 | 340 | 340 |
+| five swaps at the signer cap | 2,720 | 340 | 340 |
+| shared signers | 844 | 340 | 340 |
+| full rotation with an active spending cap | 4,020 | 340 | 340 |
+| one swap at OZ's 15 | 1,244 | 340 | 340 |
+| seven swaps at OZ's 15 | 4,964 | 340 | 340 |
+
+**Path and what it preserved** (rule id, spending window)
+
+| Transition | #103 (OZ events) | #106 (quiet) | This branch (quiet + reconcile) |
+| --- | --- | --- | --- |
+| single addition | in place, id kept | in place, id kept | in place, id kept |
+| several additions | in place, id kept | in place, id kept | in place, id kept |
+| full six-key rotation | replaced, new id | replaced, new id | replaced, new id |
+| one swap at the signer cap | in place, id kept | in place, id kept | in place, id kept |
+| five swaps at the signer cap | replaced, new id | replaced, new id | in place, id kept |
+| shared signers | replaced, new id | in place, id kept | in place, id kept |
+| full rotation with an active spending cap | replaced, new id, window reset | replaced, new id, window reset | in place, id kept, window kept |
+| one swap at OZ's 15 | in place, id kept | in place, id kept | in place, id kept |
+| seven swaps at OZ's 15 | in place, id kept | in place, id kept | in place, id kept |
+
+Every row's rule ends up with exactly the target signers: a joining key
+acts and a leaving key cannot. Retained signers keep their registry ids on
+all three branches. `a_rejected_signer_transition_changes_nothing` passes
+on all three. In it, a duplicate key (one passkey under a second credential
+id) and a budget running out at 25, 50, 75, and 95% of a full rotation
+leave every ledger entry unchanged.
+
+What `reconcile_signers` changes:
+
+- **Two more transitions stay in place**: five swaps at the signer cap, and
+  the full rotation under an active spending cap. The second now keeps the
+  rule id and the spending window. Before, its replacement reset the
+  window, so a key rotation also reset what the cap had already counted.
+  Both write fewer entries (footprint 81 to 75, and 99 to 84).
+- **It costs more CPU.** Where both branches edit in place, an apply takes
+  0.7 to 2.6M more instructions: single addition 22.36M to 23.08M, one swap
+  at OZ's 15 52.26M to 54.87M. The two rows that moved in place cost 2.8M
+  (five swaps) and 2.0M (the capped rotation) more than the replacements
+  they displace. OZ's `reconcile_signers` reads the rule's current signers
+  back from the registry and checks canonical duplicates over the whole
+  final set on every call. Memory is the same or lower: 3.61 to 3.13 MB for
+  the capped rotation.
+- **The uncapped full rotation is still replaced**: the write-count model
+  prices its replacement below the in-place edit.
+
+**Caps.** The sweep over the same shapes as PR 106 gives the same frontier
+to within 0.1 point of footprint, and every row binds on the footprint:
+2 and 17, 4 and 15, 6 and 13 (74.0%), 8 and 11, 10 and 9 (75.0%, on the
+line), 12 and 6, 13 and 5, 14 and 4, 15 and 3. The binding row is the
+compromise whose thief renamed every rule. That completion replaces every
+rule whole, and `reconcile_signers` never runs in it. **The caps stay 6
+signers, 13 rules, 8 192 bytes**, as on PR 106.
+
+At the caps, the flows that edit every rule in place come out cheaper than
+on PR 106. There, an edit removes each leaving signer with its own call;
+here a rule's whole swap is one call:
+
+| Row | PR 106 | This branch |
+| --- | --- | --- |
+| Compromise completion, every rule kept by name | 254.3M, 14.7 MB, 175 entries | 249.8M, 12.9 MB, 162 entries |
+| Lost-key completion, every signer revoked | 252.1M, 14.1 MB, 163 entries | 248.1M, 12.4 MB, 150 entries |
+| `Protected` reconfiguration, every rule edited | 253.2M, 14.5 MB, 141 entries | 249.4M, 12.9 MB, 129 entries |
+| Compromise completion, every rule renamed (binding) | 254.7M, 27.1 MB, 296 entries (74.0%) | 254.7M, 27.1 MB, 296 entries (74.0%) |

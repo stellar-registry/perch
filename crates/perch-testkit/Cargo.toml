@@ -28,3 +28,7 @@ perch-recovery = { version = "0.1.0", path = "../perch-recovery" }
 # Shared document generator for proptest and cargo-fuzz (`delta`).
 arbitrary = "1"
 hex = "0.4"
+# The software passkey (`passkey`): WebAuthn assertions over secp256r1.
+p256 = { version = "0.13", features = ["ecdsa"] }
+sha2 = "0.10"
+base64 = "0.22"

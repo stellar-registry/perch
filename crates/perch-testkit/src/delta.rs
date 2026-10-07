@@ -44,8 +44,8 @@ mod oracle {
     #![allow(unused_imports)]
     use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
     use perch_smart_account::{
-        check_auth, install_admin, FreezeGate, InstalledRule, PerchAccountError, PerchSmartAccount,
-        UpgradeRequest,
+        check_auth, install_admin, FreezeGate, InfraPins, InstalledRule, PerchAccountError,
+        PerchSmartAccount, UpgradeRequest,
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;

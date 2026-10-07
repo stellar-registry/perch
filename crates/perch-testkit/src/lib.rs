@@ -40,6 +40,7 @@ pub mod faithful;
 pub mod fixture;
 pub mod manifest;
 pub mod native;
+pub mod passkey;
 
 pub use fixture::{
     auth_digest, ci_publish_doc_hash, fixture, AnyKeyVerifier, CI_PUBLISH_DOC_HASH,

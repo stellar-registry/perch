@@ -675,8 +675,9 @@ fn adding_several_signers_is_one_batch() {
     assert_eq!(plan[0].cost.writes, 1 + added as u32 * 2);
     let (w, events, before, after) = case(&a, &b);
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
-    let mut expected = std::vec!["signer_registered"; added];
-    expected.extend(std::vec!["signer_added"; added]);
+    // The summary counts the additions; registrations are not reported.
+    let mut expected = std::vec!["signer_added"; added];
+    expected.push("rule_edited");
     assert_eq!(names(&events, &w.delta), sorted(&expected));
 }
 

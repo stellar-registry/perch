@@ -80,6 +80,9 @@ const BUDGET_PCT: u64 = 75;
 thread_local! {
     /// Set by [`cap_sweep`] only: report rows without asserting the budget.
     static UNBUDGETED: Cell<bool> = const { Cell::new(false) };
+    /// LAB (W2): documents built while set change every policy's install
+    /// parameters (the cap's limit and the program's function list).
+    static REPARAM: Cell<bool> = const { Cell::new(false) };
 }
 
 fn report(label: &str, e: &Env) {
@@ -700,7 +703,18 @@ impl World {
         );
         self.env
             .set_auths(&[self.recovery_rule_entry(&a.address, root)]);
+        let before = std::env::var_os("PERCH_KEYS").map(|_| raw_entries(&self.env));
         let ok = matches!(self.account(a).try_apply_doc(target, &0), Ok(Ok(_)));
+        if let Some(before) = before {
+            let after = raw_entries(&self.env);
+            let mut by: std::collections::BTreeMap<String, usize> = Default::default();
+            for k in perch_testkit::delta::changed(&before, &after) {
+                let (contract, key) = k.split_once('/').unwrap();
+                let kind: String = key.trim_start_matches('[').chars().take_while(|c| *c != ',' && *c != ']' && *c != '(').collect();
+                *by.entry(format!("{}..{}", &contract[..6], kind)).or_default() += 1;
+            }
+            println!("\n{{\"keys_of\":\"completion\",\"by\":\"{by:?}\"}}");
+        }
         self.env.set_auths(&[]);
         ok
     }
@@ -925,8 +939,9 @@ impl World {
             let named: std::vec::Vec<String> =
                 named.iter().map(|id| format!(r#""{id}""#)).collect();
             format!(
-                r#""principals":{{"type":"threshold","m":1,"signers":[{}]}},"functions":["protected"],"args":[{{"index":0,"pred":{{"type":"is-self"}}}}]"#,
-                named.join(",")
+                r#""principals":{{"type":"threshold","m":1,"signers":[{}]}},"functions":["{}"],"args":[{{"index":0,"pred":{{"type":"is-self"}}}}]"#,
+                named.join(","),
+                if REPARAM.with(Cell::get) { "protectee" } else { "protected" }
             )
         };
         let signers: std::vec::Vec<String> = ids
@@ -973,7 +988,8 @@ impl World {
             }
             rules.push(if j < shape.both {
                 format!(
-                    r#"{{"name":"{name}",{scope},{interpreted},"cap":{{"limit":"10","period-ledgers":1000}}}}"#
+                    r#"{{"name":"{name}",{scope},{interpreted},"cap":{{"limit":"{}","period-ledgers":1000}}}}"#,
+                    if REPARAM.with(Cell::get) { "11" } else { "10" }
                 )
             } else if j < shape.both + shape.interp {
                 format!(r#"{{"name":"{name}",{scope},{interpreted}}}"#)
@@ -1844,6 +1860,8 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: 
     ));
 
     let thief = passkeys(seed + 1, shape.signers);
+    let reparam = thief_tag == "p";
+    let thief_tag = if reparam { "" } else { thief_tag };
     let stolen = Shape {
         tag: thief_tag,
         ..shape
@@ -1854,12 +1872,11 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: 
     } else {
         "the thief renamed every rule"
     };
-    assert!(w.try_apply(
-        &a,
-        &keys[0],
-        &w.shaped_doc(&thief, &rec, stolen, bytes, true),
-        0
-    ));
+    REPARAM.with(|r| r.set(reparam));
+    let stolen_doc = w.shaped_doc(&thief, &rec, stolen, bytes, true);
+    REPARAM.with(|r| r.set(false));
+    let how = if reparam { "the thief kept every name but changed every policy" } else { how };
+    assert!(w.try_apply(&a, &keys[0], &stolen_doc, 0));
     report(
         &label(
             shape,
@@ -1998,6 +2015,10 @@ fn worst_compromise_renamed(w: &World, shape: Shape, bytes: usize, seed: u8) {
     worst_compromise(w, shape, bytes, seed, "t")
 }
 
+fn worst_compromise_reparam(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, "p")
+}
+
 fn worst_reconfiguration_in_place(w: &World, shape: Shape, bytes: usize, seed: u8) {
     worst_reconfiguration(w, shape, bytes, seed, "")
 }
@@ -2007,12 +2028,13 @@ fn worst_reconfiguration_renamed(w: &World, shape: Shape, bytes: usize, seed: u8
 }
 
 /// Every worst-case flow, both ways a diff can go.
-const WORST_FLOWS: [fn(&World, Shape, usize, u8); 5] = [
+const WORST_FLOWS: [fn(&World, Shape, usize, u8); 6] = [
     worst_lost_key,
     worst_compromise_in_place,
     worst_compromise_renamed,
     worst_reconfiguration_in_place,
     worst_reconfiguration_renamed,
+    worst_compromise_reparam,
 ];
 
 #[test]
@@ -2561,7 +2583,13 @@ fn cap_sweep() {
             skip("does not fit the byte target");
             continue;
         }
-        for flow in WORST_FLOWS {
+        let only = std::env::var("PERCH_FLOWS").ok();
+        for (i, flow) in WORST_FLOWS.iter().enumerate() {
+            if let Some(only) = &only {
+                if !only.split(',').any(|f| f.parse::<usize>().ok() == Some(i)) {
+                    continue;
+                }
+            }
             let w = world();
             w.env.cost_estimate().disable_resource_limits();
             UNBUDGETED.with(|u| u.set(true));

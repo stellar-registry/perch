@@ -372,7 +372,11 @@ fn run(
         replace(&mut replaced, &c, &d, &p);
         let in_place = editable
             && match mode {
-                Mode::Cheapest => edited.cost <= replaced.cost,
+                // LAB (W2): a build with PERCH_LAB_INPLACE edits every
+                // editable rule in place (the pairing design's worst case).
+                Mode::Cheapest => {
+                    option_env!("PERCH_LAB_INPLACE").is_some() || edited.cost <= replaced.cost
+                }
                 #[cfg(feature = "testutils")]
                 Mode::InPlace => true,
                 #[cfg(feature = "testutils")]

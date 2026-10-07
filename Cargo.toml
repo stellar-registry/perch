@@ -49,11 +49,12 @@ soroban-sdk-tools = "0.1.3"
 # single AddressWithDelegates auth entry) instead of a separate
 # require_auth_for_args entry per delegate. Fork main == upstream fbfde38.
 # Re-pin to upstream OpenZeppelin/stellar-contracts once the patch lands there.
-# Pinned to theahaco/stellar-contracts-OZ PR #4 (head 74f9f64, on
-# cap-71-delegate-auth): `*_no_events` variants of every rule, signer, and
-# policy mutation (apply_doc emits one DocApplied instead). Re-pin when it
-# merges into the fork.
-stellar-accounts = { version = "0.7.1", git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "74f9f644589d2edec0881443ede6bea0f63a1cd5", package = "stellar-accounts" }
+# Pinned to theahaco/stellar-contracts-OZ PR #5 (head 3372676, stacked on
+# PR #4, both on cap-71-delegate-auth): PR #4 adds `*_no_events` variants of
+# every rule, signer, and policy mutation (apply_doc emits one DocApplied
+# instead), and PR #5 adds `reconcile_signers[_no_events]` (one call per
+# in-place signer change). Re-pin when they merge into the fork.
+stellar-accounts = { version = "0.7.1", git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9", package = "stellar-accounts" }
 
 perch-ir = { version = "0.1.1", path = "crates/perch-ir" }
 perch-program = { version = "0.1.1", path = "crates/perch-program" }

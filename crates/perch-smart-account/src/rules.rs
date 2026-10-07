@@ -34,7 +34,7 @@ use perch_doc_compiler::{CompiledDoc, CompiledRule, RuleScope};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, Map, String, Val, Vec};
 use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
-use stellar_accounts::smart_account::{self, ContextRuleType, Signer, MAX_POLICIES, MAX_SIGNERS};
+use stellar_accounts::smart_account::{self, ContextRuleType, Signer, MAX_POLICIES};
 
 /// One policy attached to an installed rule.
 #[contracttype]
@@ -215,9 +215,9 @@ pub enum Mode {
 
 /// The cost model's price of reconciling one rule: bytes of contract events
 /// (the account's and its policies'), then ledger-entry writes, compared in
-/// that order. On this branch (the quiet-events experiment) every OZ
-/// mutation and policy hook runs through its `_no_events` variant, so
-/// `events` is always 0 and the choice is by writes.
+/// that order. Every OZ mutation and policy hook runs through its
+/// `_no_events` variant, so `events` is always 0 and the choice is by
+/// writes.
 ///
 /// `writes` counts the entries each OZ operation writes, an entry two
 /// operations write counting twice: the rule's own entry, the registry
@@ -442,10 +442,10 @@ impl Refs {
 /// [`Meter`] prices them; [`edit`] and [`replace`] drive both through the
 /// same sequence, so the model prices exactly what runs.
 trait Effects {
-    /// One OZ `batch_add_signer`: one rule read, one duplicate check across
-    /// the old and new signers, one rule write. Never called empty.
-    fn add_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>);
-    fn remove_signer(&mut self, rule: &InstalledRule, signer: &Signer);
+    /// Replace the rule's signers with `signers` in one write (OZ's
+    /// `reconcile_signers`): the leaving ones are released, the joining ones
+    /// registered, and the rest keep their registry ids.
+    fn reconcile_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>);
     fn add_policy(&mut self, rule: &InstalledRule, policy: &Address, param: &Val);
     fn remove_policy(&mut self, rule: &InstalledRule, policy: &Address);
     fn set_valid_until(&mut self, rule: &InstalledRule, valid_until: Option<u32>);
@@ -456,14 +456,16 @@ trait Effects {
 
 /// Prices operations against simulated registry counts.
 struct Meter<'a> {
+    e: &'a Env,
     hooks: &'a Hooks,
     refs: Refs,
     cost: Cost,
 }
 
 impl<'a> Meter<'a> {
-    fn new(_: &'a Env, hooks: &'a Hooks, refs: &Refs) -> Meter<'a> {
+    fn new(e: &'a Env, hooks: &'a Hooks, refs: &Refs) -> Meter<'a> {
         Meter {
+            e,
             hooks,
             refs: refs.clone(),
             cost: Cost::default(),
@@ -522,16 +524,14 @@ impl<'a> Meter<'a> {
 }
 
 impl Effects for Meter<'_> {
-    fn add_signers(&mut self, _: &InstalledRule, signers: &Vec<Signer>) {
+    fn reconcile_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
         self.cost.writes += 1;
-        for s in signers.iter() {
+        for s in missing(self.e, &rule.signers, signers).iter() {
+            self.deregister_signer(&s);
+        }
+        for s in missing(self.e, signers, &rule.signers).iter() {
             self.register_signer(&s);
         }
-    }
-
-    fn remove_signer(&mut self, _: &InstalledRule, signer: &Signer) {
-        self.cost.writes += 1;
-        self.deregister_signer(signer);
     }
 
     fn add_policy(&mut self, _: &InstalledRule, policy: &Address, _: &Val) {
@@ -593,18 +593,10 @@ impl Apply<'_> {
 }
 
 impl Effects for Apply<'_> {
-    fn add_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
-        smart_account::batch_add_signer_no_events(self.e, rule.id, signers);
-        self.sum.signers_added += signers.len();
-    }
-
-    fn remove_signer(&mut self, rule: &InstalledRule, signer: &Signer) {
-        let oz = self.oz(rule.id);
-        let id = oz
-            .signer_ids
-            .get_unchecked(oz.signers.first_index_of(signer).unwrap());
-        smart_account::remove_signer_no_events(self.e, rule.id, id);
-        self.sum.signers_removed += 1;
+    fn reconcile_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
+        self.sum.signers_added += missing(self.e, signers, &rule.signers).len();
+        self.sum.signers_removed += missing(self.e, &rule.signers, signers).len();
+        smart_account::reconcile_signers_no_events(self.e, rule.id, signers);
     }
 
     fn add_policy(&mut self, rule: &InstalledRule, policy: &Address, param: &Val) {
@@ -693,35 +685,40 @@ fn edit(
     }
     let kept =
         (c.signers.len() - remove_signers.len()) + (c.policies.len() - remove_policies.len());
-    if kept > 0 {
-        // Something survives, so removing first never empties the rule, and
-        // the counts only shrink before they grow to the target.
-        for s in remove_signers.iter() {
-            fx.remove_signer(c, &s);
+    let signers_change = !add_signers.is_empty() || !remove_signers.is_empty();
+    if !d.signers.is_empty() {
+        // The target signers are never empty, so after one atomic swap
+        // (OZ's `reconcile_signers`, which checks the final set as a whole)
+        // the rule never is: then its policies, removals first, so their
+        // count never exceeds OZ's per-rule limit.
+        if signers_change {
+            fx.reconcile_signers(c, &d.signers);
         }
         for p in remove_policies.iter() {
             fx.remove_policy(c, &p);
         }
-        if !add_signers.is_empty() {
-            fx.add_signers(c, &add_signers);
+        for (p, val) in add_policies.iter() {
+            fx.add_policy(c, &p, &val);
+        }
+    } else if !c.signers.is_empty() || kept > 0 {
+        // No target signers: the current ones (or a surviving policy) keep
+        // the rule non-empty while its policies change, and the signers go
+        // last, once the target's policies are installed.
+        for p in remove_policies.iter() {
+            fx.remove_policy(c, &p);
         }
         for (p, val) in add_policies.iter() {
             fx.add_policy(c, &p, &val);
         }
-    } else if (!add_signers.is_empty() || !fresh.is_empty())
-        && c.signers.len() + add_signers.len() <= MAX_SIGNERS
-        && c.policies.len() + fresh.len() <= MAX_POLICIES
-    {
-        // Nothing survives: add first so the rule is never empty, then remove
-        // the old, then re-add changed policies.
-        if !add_signers.is_empty() {
-            fx.add_signers(c, &add_signers);
+        if signers_change {
+            fx.reconcile_signers(c, &d.signers);
         }
+    } else if !fresh.is_empty() && c.policies.len() + fresh.len() <= MAX_POLICIES {
+        // Policies only, and none survives: add the new addresses first so
+        // the rule is never empty, then remove the old, then re-add changed
+        // policies.
         for (p, val) in fresh.iter() {
             fx.add_policy(c, &p, &val);
-        }
-        for s in remove_signers.iter() {
-            fx.remove_signer(c, &s);
         }
         for p in remove_policies.iter() {
             fx.remove_policy(c, &p);
@@ -849,39 +846,44 @@ mod test {
     #[test]
     fn signers_are_priced_by_their_registry_reference_count() {
         let w = world();
-        let r = rule(&w, &[], &[]);
         let s = signer(&w.e);
-        let one = Vec::from_array(&w.e, [s.clone()]);
+        let (none, one) = (Vec::new(&w.e), Vec::from_array(&w.e, [s.clone()]));
+        let (empty, with) = (rule(&w, &[], &[]), rule(&w, core::slice::from_ref(&s), &[]));
         let mut m = fresh(&w);
         // First reference: the rule, registry, and lookup entries.
-        m.add_signers(&r, &one);
+        m.reconcile_signers(&empty, &one);
         assert_eq!(cost(&m), 3);
         assert_eq!(m.refs.signers.get(s.clone()), Some(1));
         // A second reference: the rule and the count.
-        m.add_signers(&r, &one);
+        m.reconcile_signers(&empty, &one);
         assert_eq!(cost(&m), 5);
         assert_eq!(m.refs.signers.get(s.clone()), Some(2));
         // Dropping to one reference: the rule and the count.
-        m.remove_signer(&r, &s);
+        m.reconcile_signers(&with, &none);
         assert_eq!(cost(&m), 7);
         assert_eq!(m.refs.signers.get(s.clone()), Some(1));
         // The last reference: the rule, registry, and lookup entries.
-        m.remove_signer(&r, &s);
+        m.reconcile_signers(&with, &none);
         assert_eq!(cost(&m), 10);
         assert_eq!(m.refs.signers.get(s), None);
     }
 
+    /// A swap writes the rule's entry once, however many signers change.
     #[test]
-    fn a_batch_of_signers_writes_the_rule_once() {
+    fn a_signer_swap_writes_the_rule_once() {
         let w = world();
-        let r = rule(&w, &[], &[]);
-        let (a, b) = (signer(&w.e), signer(&w.e));
-        let mut m = fresh(&w);
-        m.add_signers(&r, &Vec::from_array(&w.e, [a.clone(), b.clone()]));
-        // One rule write, then each signer's registry and lookup entries.
-        assert_eq!(cost(&m), 1 + 2 * 2);
-        assert_eq!(m.refs.signers.get(a), Some(1));
-        assert_eq!(m.refs.signers.get(b), Some(1));
+        let old: std::vec::Vec<Signer> = (0..3).map(|_| signer(&w.e)).collect();
+        let new: std::vec::Vec<Signer> = (0..3).map(|_| signer(&w.e)).collect();
+        let c = rule(&w, &old, &[]);
+        let mut m = Meter::new(
+            &w.e,
+            &w.hooks,
+            &Refs::of(&w.e, &Vec::from_array(&w.e, [c.clone()])),
+        );
+        m.reconcile_signers(&c, &Vec::from_slice(&w.e, &new));
+        // The rule, then each leaving and each joining signer's registry and
+        // lookup entries.
+        assert_eq!(cost(&m), 1 + 3 * 2 + 3 * 2);
     }
 
     #[test]

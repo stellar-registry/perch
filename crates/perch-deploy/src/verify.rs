@@ -39,7 +39,7 @@ fn fmt_id(id: Option<u32>) -> String {
 /// The account's configuration snapshot (`configuration()`): its revision
 /// and every installed rule with its OZ id, read at one ledger. Rules are
 /// found by name in it, never by probing ids.
-fn read_configuration(rpc: &Rpc, account: &str) -> Result<(u64, Vec<(u32, ScMap)>)> {
+pub(crate) fn read_configuration(rpc: &Rpc, account: &str) -> Result<(u64, Vec<(u32, ScMap)>)> {
     let m = match simulate_read(rpc, account, "configuration", vec![])? {
         ReadOutcome::Value(ScVal::Map(Some(m))) => m,
         ReadOutcome::Value(other) => bail!("configuration returned {other:?}"),

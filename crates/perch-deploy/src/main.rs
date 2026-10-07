@@ -46,7 +46,8 @@ enum Cmd {
     },
     /// Apply a policy document whole: submit its JSON bytes to the account's
     /// `apply_doc` in one transaction, signed by PERCH_ADMIN_KEY selecting
-    /// rule 0. The account verifies and swaps the entire rule set atomically.
+    /// the `admin` rule, at the revision it was read at. The account
+    /// verifies and swaps the entire rule set atomically.
     Apply {
         #[arg(long)]
         account: String,

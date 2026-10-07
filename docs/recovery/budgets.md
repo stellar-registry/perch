@@ -494,19 +494,33 @@ row's cost is the whole `apply_doc`, compiling the document included.
 | one swap at OZ's 15 | 2.88 MB | 2.81 MB | 2.82 MB |
 | seven swaps at OZ's 15 | 3.45 MB | 3.34 MB | 3.30 MB |
 
-**Footprint entries**
+**Footprint entries (distinct keys)**
 
 | Transition | #103 (OZ events) | #106 (quiet) | This branch (quiet + reconcile) |
 | --- | ---: | ---: | ---: |
-| single addition | 39 | 39 | 39 |
-| several additions | 47 | 47 | 47 |
-| full six-key rotation | 87 | 87 | 87 |
-| one swap at the signer cap | 47 | 47 | 47 |
-| five swaps at the signer cap | 81 | 81 | 75 |
-| shared signers | 49 | 41 | 41 |
-| full rotation with an active spending cap | 99 | 99 | 84 |
-| one swap at OZ's 15 | 65 | 65 | 65 |
-| seven swaps at OZ's 15 | 107 | 107 | 107 |
+| single addition | 27 | 27 | 27 |
+| several additions | 31 | 31 | 31 |
+| full six-key rotation | 50 | 50 | 50 |
+| one swap at the signer cap | 33 | 33 | 33 |
+| five swaps at the signer cap | 48 | 48 | 45 |
+| shared signers | 33 | 29 | 29 |
+| full rotation with an active spending cap | 57 | 57 | 49 |
+| one swap at OZ's 15 | 51 | 51 | 51 |
+| seven swaps at OZ's 15 | 69 | 69 | 69 |
+
+**Written entries**
+
+| Transition | #103 (OZ events) | #106 (quiet) | This branch (quiet + reconcile) |
+| --- | ---: | ---: | ---: |
+| single addition | 12 | 12 | 12 |
+| several additions | 16 | 16 | 16 |
+| full six-key rotation | 37 | 37 | 37 |
+| one swap at the signer cap | 14 | 14 | 14 |
+| five swaps at the signer cap | 33 | 33 | 30 |
+| shared signers | 16 | 12 | 12 |
+| full rotation with an active spending cap | 42 | 42 | 35 |
+| one swap at OZ's 15 | 14 | 14 | 14 |
+| seven swaps at OZ's 15 | 38 | 38 | 38 |
 
 **Event bytes**
 
@@ -549,7 +563,8 @@ What `reconcile_signers` changes:
   the full rotation under an active spending cap. The second now keeps the
   rule id and the spending window. Before, its replacement reset the
   window, so a key rotation also reset what the cap had already counted.
-  Both write fewer entries (footprint 81 to 75, and 99 to 84).
+  Both touch fewer entries: footprint 48 to 45 and 57 to 49 distinct keys,
+  written entries 33 to 30 and 42 to 35.
 - **It costs more CPU.** Where both branches edit in place, an apply takes
   0.7 to 2.6M more instructions: single addition 22.36M to 23.08M, one swap
   at OZ's 15 52.26M to 54.87M. The two rows that moved in place cost 2.8M
@@ -561,21 +576,82 @@ What `reconcile_signers` changes:
 - **The uncapped full rotation is still replaced**: the write-count model
   prices its replacement below the in-place edit.
 
-**Caps.** The sweep over the same shapes as PR 106 gives the same frontier
-to within 0.1 point of footprint, and every row binds on the footprint:
-2 and 17, 4 and 15, 6 and 13 (74.0%), 8 and 11, 10 and 9 (75.0%, on the
-line), 12 and 6, 13 and 5, 14 and 4, 15 and 3. The binding row is the
-compromise whose thief renamed every rule. That completion replaces every
-rule whole, and `reconcile_signers` never runs in it. **The caps stay 6
-signers, 13 rules, 8 192 bytes**, as on PR 106.
+**Caps.** Same method, budget, eight flows, shapes, and padding as PR 103
+and PR 106, with the footprint counted as distinct keys, on a stack built
+from this branch with the compiler's caps raised. For each signer count,
+the most rules within budget and the first row past it:
+
+| Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | 17 | 62.8% | 73.2% | 37.8% | 70.5% | 40.1% | 10.0% |
+| 2 | 18 | 64.3% | **77.3%** | 39.2% | 73.5% | 41.1% | 10.0% |
+| 4 | 16 | 69.6% | 74.3% | 39.8% | 73.5% | 43.2% | 13.3% |
+| 4 | 17 | 71.6% | **78.8%** | 41.2% | **76.5%** | 44.4% | 13.3% |
+| 6 | 13 | 71.8% | 65.6% | 38.8% | 70.5% | 42.8% | 16.5% |
+| **6** | **14** | **74.5%** | **70.4%** | **40.2%** | **73.5%** | **44.3%** | **16.5%** |
+| 6 | 15 | **77.3%** | **75.2%** | 41.8% | **76.5%** | 45.8% | 16.5% |
+| 8 | 11 | 73.6% | 60.5% | 39.2% | 70.5% | 42.8% | 19.7% |
+| 8 | 12 | **77.1%** | 65.5% | 40.8% | 73.5% | 44.5% | 19.7% |
+| 10 | 9 | 72.6% | 54.4% | 39.8% | 70.5% | 41.8% | 22.9% |
+| 10 | 10 | **76.8%** | 59.6% | 41.2% | 73.5% | 43.8% | 22.9% |
+| 12 | 8 | 73.6% | 52.6% | 41.8% | 73.5% | 42.1% | 26.1% |
+| 12 | 9 | **79.0%** | 58.3% | 43.2% | **76.5%** | 44.3% | 26.1% |
+| 15 | 5 | 62.2% | 40.0% | 42.5% | 73.5% | 37.8% | 31.0% |
+| 15 | 6 | 69.0% | 45.9% | 44.0% | **76.5%** | 40.3% | 31.0% |
+
+**What binds.**
+- **Instructions bind from 6 to 12 signers**, in the thief who keeps every
+  name and changes every program (reprogram).
+- **Memory binds at 2 and 4 signers.**
+- **Written entries bind at 15 signers.** They are also close behind
+  everywhere: the renamed thief's completion is at 70.5% at 6 and 13 and
+  73.5% at 6 and 14.
+- **The footprint is never above 44.0%.** The double-counted figures this
+  section reported before showed it binding everywhere.
+
+8 and 11 and 10 and 9 survive the reprogram thief (73.6% and 72.6%). 8 and
+12 and 10 and 10 do not (77.1% and 76.8%). PR 106 holds both of those
+(70.3% and 69.3%).
+
+**Why reprogram costs more here.** The cost model prices only ledger
+writes. For a rule whose name is kept and whose program changed, the
+in-place edit writes fewer entries than a replacement: one
+`reconcile_signers` plus a reinstall of the interpreter policy, against a
+removal and an addition. So the reconcile edits the rule in place. Each
+of those OZ calls re-reads the rule and its signers, and the in-place path
+costs more instructions. At 6 and 13 it is 287.2M (71.8%), 106 footprint
+entries, and 91 written entries, against PR 106's replacement at 269.4M
+(67.4%), 153, and 137. On PR 106 the in-place edit writes more (a
+`remove_signer` per leaving signer), so the same thief is replaced, and
+instructions never bind there.
+
+**A cost-model change would not move the caps.** A model that also priced
+instructions would take the replacement for these rules. A replacement
+then costs what this branch's reparam rows cost, since they replace every
+rule with every policy reinstalled:
+- 68.7% of instructions and 137 written entries at 6 and 13;
+- 72.2% and 143 at 8 and 12;
+- 71.1% and 143 at 10 and 10.
+That would make 8 and 12 and 10 and 10 fit, as they do on PR 106, bound by
+the renamed thief's written entries (73.5%). It is not needed at the
+selected caps, where every flow is within budget. It is not implemented
+here: it would be a separate change to the reviewed cost model, measured on
+its own.
+
+**The caps stay 6 signers, 13 rules, 8 192 bytes**, as on PR 106. They are
+provisional until the captain's decision. The worst share is instructions
+at 71.8% (reprogram); written entries are 70.5% (renamed). 6 and 14 also
+fits, by 0.5 points of instructions (74.5%).
 
 At the caps, the flows that edit every rule in place come out cheaper than
 on PR 106. There, an edit removes each leaving signer with its own call;
-here a rule's whole swap is one call:
+here a rule's whole swap is one call. The reprogram thief, edited in place
+here and replaced there, is the exception:
 
-| Row | PR 106 | This branch |
+| Row | PR 106: instructions, memory, footprint / written | This branch |
 | --- | --- | --- |
-| Compromise completion, every rule kept by name | 254.3M, 14.7 MB, 175 entries | 249.8M, 12.9 MB, 162 entries |
-| Lost-key completion, every signer revoked | 252.1M, 14.1 MB, 163 entries | 248.1M, 12.4 MB, 150 entries |
-| `Protected` reconfiguration, every rule edited | 253.2M, 14.5 MB, 141 entries | 249.4M, 12.9 MB, 129 entries |
-| Compromise completion, every rule renamed (binding) | 254.7M, 27.1 MB, 296 entries (74.0%) | 254.7M, 27.1 MB, 296 entries (74.0%) |
+| Compromise completion, every rule kept by name | 254.5M, 14.7 MB, 95 / 80 | 249.9M, 12.9 MB, 87 / 75 |
+| Lost-key completion, every signer revoked | 252.1M, 14.1 MB, 89 / 74 | 248.2M, 12.4 MB, 81 / 69 |
+| `Protected` reconfiguration, every rule edited | 253.2M, 14.5 MB, 83 / 58 | 249.6M, 12.9 MB, 75 / 54 |
+| Compromise completion, every rule renamed | 254.9M, 27.1 MB, 155 / 141 (70.5%) | 254.7M, 27.1 MB, 155 / 141 (70.5%) |
+| Compromise completion, names kept, every program changed | 269.4M (67.4%), 27.5 MB, 153 / 137 (replaced) | 287.2M (71.8%), 20.5 MB, 106 / 91 (in place) |

@@ -640,6 +640,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "f8cf65f69164f7bc48c3f0ed69286be51a73d517583e7c68ac6bc0646f550efb"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {

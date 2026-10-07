@@ -524,6 +524,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "3047c34ae97423d2c8b9b5776edf4dc170a2c50f395b80d033212aebbd0f5c1e"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {

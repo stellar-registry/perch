@@ -704,19 +704,23 @@ fn adding_a_signer_to_a_rule_emits_only_that_signer() {
 
 #[test]
 fn adding_several_signers_is_one_batch() {
+    // Up to the signer cap.
+    let n = MAX_DOC_SIGNERS as usize;
+    let added = n - 3;
+    let all: std::vec::Vec<usize> = (0..n).collect();
     let a = doc(delegated(3), std::vec![admin(&[0, 1, 2])]);
-    let b = doc(delegated(7), std::vec![admin(&[0, 1, 2, 3, 4, 5, 6])]);
+    let b = doc(delegated(n), std::vec![admin(&all)]);
     let w = DeltaWorld::new();
     w.apply(&w.delta, &a).unwrap();
     let plan = plan_of(&w, &w.delta, &b, Mode::Cheapest);
     // One `batch_add_signer`: one rule write, then each new signer's registry
     // and lookup entries.
     assert_eq!(plan[0].step, Step::InPlace);
-    assert_eq!(plan[0].cost.writes, 1 + 4 * 2);
+    assert_eq!(plan[0].cost.writes, 1 + added as u32 * 2);
     let (w, events, before, after) = case(&a, &b);
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
-    let mut expected = std::vec!["signer_registered"; 4];
-    expected.extend(["signer_added"; 4]);
+    let mut expected = std::vec!["signer_registered"; added];
+    expected.extend(std::vec!["signer_added"; added]);
     assert_eq!(names(&events, &w.delta), sorted(&expected));
 }
 

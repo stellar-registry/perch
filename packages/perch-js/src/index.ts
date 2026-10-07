@@ -67,6 +67,7 @@ export {
   encodeReplacementSet,
   encodeStatement,
   replacementsHash,
+  sortReplacements,
   statementDigest,
   zkStatementFields,
   type Credential,

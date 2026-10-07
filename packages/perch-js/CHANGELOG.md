@@ -8,7 +8,7 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 
 ### 🚀 Features
 
-- Consumer interface (#108): `readSnapshot` and `assertRevision` (reads at one configuration revision), `selectRules` by name and scope, `signingDigest` and `buildAuthPayload` (pinned against the account's own encodings), `checkLimits` and the compiler's `limits()`, typed errors (`StaleRevision`, `StaleSelection`, `OverLimits`, `AccountFrozen`, ...), `applyDocument` with `oneTransactionBackend`, and `accountReader` over the generated bindings
+- Consumer interface (#108): `readSnapshot` and `assertRevision` (reads at one configuration revision), `selectRules` by name and scope, `signingDigest` and `buildAuthPayload` (pinned against the account's own encodings), `checkLimits` and the compiler's `limits()`, typed errors (`StaleRevision`, `StaleSelection`, `OverLimits`, `AccountFrozen`, ...), `applyDocument` with `oneTransactionBackend`, `accountReader` over the generated bindings, and `sortReplacements`
 
 ## [0.3.1] - 2026-09-29
 

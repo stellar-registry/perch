@@ -379,16 +379,17 @@ At the caps, the worst rows are:
 **The configuration revision (#108)** adds one instance field, written by
 every `apply_doc` and executed upgrade, and 28 bytes to `DocApplied`
 (its `revision` field). The release-stack suite on stacks built from
-`7e1061c` and from the change (`build-stack.sh --builder contract`, real
-proofs, the same toolchain), all eighteen measured rows:
+`704aa23` (with the controller's target binding) and from the change
+(`build-stack.sh --builder contract`, real proofs, the same toolchain), all
+eighteen measured rows:
 
 | Change per row | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
-| Every `apply_doc` (thieves, completions, enrollment, reconfigurations) | -0.32M to +0.11M | +5 to +7 KB | 0 | 0 | +28 | +28 bytes |
-| `begin_*`, `publish_baseline`, factory `create_passkey` | +0.01M to +0.12M | +3 to +26 KB | 0 | 0 | 0 | 0 |
+| Every `apply_doc` (thieves, completions, enrollment, reconfigurations) | -0.29M to +0.21M | +5 to +8 KB | 0 | 0 | +28 | +28 bytes |
+| `begin_*`, `publish_baseline`, factory `create_passkey` | +0.02M to +0.15M | +4 to +89 KB | 0 | 0 | 0 | 0 |
 
 Every apply already writes the instance, so no row gains a footprint or
-written entry. Instructions move by at most 0.08% of the limit, in both
+written entry. Instructions move by at most 0.07% of the limit, in both
 directions. The binding rows are unchanged: the reprogram thief's
 completion at 294.4M (73.6%), and written entries at 141 (70.5%, the
 renamed thief).

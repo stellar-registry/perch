@@ -44,8 +44,8 @@ mod oracle {
     #![allow(unused_imports)]
     use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
     use perch_smart_account::{
-        check_auth, install_admin, FreezeGate, InfraPins, InstalledRule, PerchAccountError,
-        PerchSmartAccount, UpgradeRequest,
+        check_auth, install_admin, AccountCapabilities, AccountConfiguration, FreezeGate,
+        InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, UpgradeRequest,
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;
@@ -103,8 +103,9 @@ mod oracle {
             e: &Env,
             doc_json: Bytes,
             approval_valid_until: u32,
+            expected_revision: Option<u64>,
         ) -> Result<BytesN<32>, PerchAccountError> {
-            apply_doc_full_replace(e, doc_json, approval_valid_until)
+            apply_doc_full_replace(e, doc_json, approval_valid_until, expected_revision)
         }
     }
 }
@@ -486,12 +487,12 @@ impl DeltaWorld {
         self.env.cost_estimate().budget().reset_unlimited();
         let out = if *account == self.oracle {
             OracleAccountClient::new(&self.env, account)
-                .try_apply_doc(&bytes, &0)
+                .try_apply_doc(&bytes, &0, &None)
                 .map(|r| r.unwrap())
                 .map_err(|e| format!("{e:?}"))
         } else {
             PerchAccountClient::new(&self.env, account)
-                .try_apply_doc(&bytes, &0)
+                .try_apply_doc(&bytes, &0, &None)
                 .map(|r| r.unwrap())
                 .map_err(|e| format!("{e:?}"))
         };
@@ -618,8 +619,8 @@ pub enum History {
     /// Everything, for accounts that went through the same sequence.
     Keep,
     /// Drop counters a different path legitimately leaves different: the
-    /// account's recovery generation and the controller's epoch. Used to
-    /// compare `A -> B -> C` with `A -> C`.
+    /// account's recovery generation and configuration revision, and the
+    /// controller's epoch. Used to compare `A -> B -> C` with `A -> C`.
     Ignore,
 }
 
@@ -644,7 +645,8 @@ pub fn storage_state(env: &Env, account: &Address, history: History) -> BTreeMap
                     for e in instance.storage.iter().flat_map(|m| m.0.iter()) {
                         let name = render(&e.key, Some(&me));
                         if ["[NextId]", "[NextSignerId]", "[NextPolicyId]"].contains(&name.as_str())
-                            || (history == History::Ignore && name == "RecoveryGeneration")
+                            || (history == History::Ignore
+                                && ["RecoveryGeneration", "Revision"].contains(&name.as_str()))
                         {
                             continue;
                         }
@@ -703,6 +705,15 @@ pub fn raw_entries(env: &Env) -> BTreeMap<String, String> {
         );
     }
     out
+}
+
+/// The [`raw_entries`] key of `contract`'s instance.
+pub fn instance_key(contract: &Address) -> String {
+    format!(
+        "{}/{}",
+        address_hex(&contract.clone().into()),
+        render(&ScVal::LedgerKeyContractInstance, None)
+    )
 }
 
 /// The keys whose entry was added, removed, or changed between two

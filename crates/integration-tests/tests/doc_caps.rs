@@ -123,7 +123,7 @@ fn rule_names_are_capped_where_oz_caps_them() {
     let w = setup();
     let longest = "n".repeat(MAX_RULE_NAME_BYTES as usize);
     let installs = doc(&w, 1, 2, &longest, 0);
-    w.account_client().apply_doc(&installs, &0);
+    w.account_client().apply_doc(&installs, &0, &None);
     assert!(too_large(
         &w,
         &doc(&w, 1, 2, &"n".repeat(MAX_RULE_NAME_BYTES as usize + 1), 0)

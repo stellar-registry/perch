@@ -763,13 +763,48 @@ impl World {
         approval_valid_until: u32,
     ) -> Result<BytesN<32>, Result<perch_account::PerchAccountError, soroban_sdk::InvokeError>>
     {
+        self.submit_apply(self.apply_entry(key, bytes, approval_valid_until, None))
+    }
+
+    /// The admin rule's authorization, signed by `key`, of `apply_doc(bytes,
+    /// approval_valid_until, expected_revision)`: built now, submittable
+    /// later with [`World::submit_apply`].
+    pub fn apply_entry(
+        &self,
+        key: &Address,
+        bytes: &Bytes,
+        approval_valid_until: u32,
+        expected_revision: Option<u64>,
+    ) -> SignedApply {
         let root = self.invocation(
             &self.account,
             "apply_doc",
-            std::vec![self.sc(bytes.clone()), self.sc(approval_valid_until)],
+            std::vec![
+                self.sc(bytes.clone()),
+                self.sc(approval_valid_until),
+                self.sc(expected_revision)
+            ],
         );
-        self.env.set_auths(&[self.entry_as(key, "admin", root)]);
-        let out = self.client().try_apply_doc(bytes, &approval_valid_until);
+        SignedApply {
+            entry: self.entry_as(key, "admin", root),
+            bytes: bytes.clone(),
+            approval_valid_until,
+            expected_revision,
+        }
+    }
+
+    /// Submit an `apply_doc` signed earlier.
+    pub fn submit_apply(
+        &self,
+        signed: SignedApply,
+    ) -> Result<BytesN<32>, Result<perch_account::PerchAccountError, soroban_sdk::InvokeError>>
+    {
+        self.env.set_auths(&[signed.entry]);
+        let out = self.client().try_apply_doc(
+            &signed.bytes,
+            &signed.approval_valid_until,
+            &signed.expected_revision,
+        );
         self.env.set_auths(&[]);
         out.map(|r| r.unwrap())
     }
@@ -805,13 +840,27 @@ impl World {
         target: &Bytes,
     ) -> Result<BytesN<32>, Result<perch_account::PerchAccountError, soroban_sdk::InvokeError>>
     {
+        self.complete_at(target, None)
+    }
+
+    /// [`World::complete`] with an `expected_revision`.
+    pub fn complete_at(
+        &self,
+        target: &Bytes,
+        expected_revision: Option<u64>,
+    ) -> Result<BytesN<32>, Result<perch_account::PerchAccountError, soroban_sdk::InvokeError>>
+    {
         let root = self.invocation(
             &self.account,
             "apply_doc",
-            std::vec![self.sc(target.clone()), self.sc(0u32)],
+            std::vec![
+                self.sc(target.clone()),
+                self.sc(0u32),
+                self.sc(expected_revision)
+            ],
         );
         self.env.set_auths(&[self.recovery_rule_entry(root)]);
-        let out = self.client().try_apply_doc(target, &0);
+        let out = self.client().try_apply_doc(target, &0, &expected_revision);
         self.env.set_auths(&[]);
         out.map(|r| r.unwrap())
     }
@@ -940,6 +989,14 @@ impl World {
     pub fn new_key(&self) -> Address {
         self.env.register(Key, ())
     }
+}
+
+/// An `apply_doc` authorization built at one revision, submitted later.
+pub struct SignedApply {
+    pub entry: SorobanAuthorizationEntry,
+    pub bytes: Bytes,
+    pub approval_valid_until: u32,
+    pub expected_revision: Option<u64>,
 }
 
 /// Unwrap the inner contract error of a failed `try_` call.

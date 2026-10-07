@@ -2,16 +2,18 @@
 //! compose output. The headline check is a single read — the account's
 //! `applied_doc_hash` must equal the compose `doc_hash` (installed ==
 //! reviewed). Then every composed rule must exist on chain, matched **by
-//! name** (rule ids are assigned when a rule is added and kept while it is
-//! edited in place), with the matching context type. Every
+//! name** in the account's `configuration()` snapshot (rule ids are
+//! assigned when a rule is added and kept while it is edited in place), with
+//! the matching context type. Every
 //! interpreter-attached rule's stored program must equal the composed one,
 //! whose provenance is the hash of that rule in the applied document
 //! (`perch_ir::rule_hash`), and every policy-free rule must have no program
 //! at all, so no program from an earlier document survives under a live
 //! rule. The on-chain rule count must equal the document's exactly —
 //! `apply_doc` brings the rule set to the document's, so a leftover rule is a
-//! detected mismatch, not a mystery. Everything runs through simulation — no
-//! keys, no writes.
+//! detected mismatch, not a mystery. Every read must belong to the
+//! snapshot's configuration revision, which is read again at the end.
+//! Everything runs through simulation — no keys, no writes.
 
 use anyhow::{bail, Context, Result};
 use stellar_xdr::{Limits, ReadXdr, ScMap, ScVal};
@@ -34,34 +36,41 @@ fn fmt_id(id: Option<u32>) -> String {
     id.map_or_else(|| "—".to_string(), |i| i.to_string())
 }
 
-/// Probe rule ids upward until all `count` live rules are found. Ids are
-/// sparse after `apply_doc` replaces the set; the ceiling bounds the scan.
-fn scan_rules(rpc: &Rpc, account: &str) -> Result<Vec<(u32, ScMap)>> {
-    let count = match simulate_read(rpc, account, "get_context_rules_count", vec![])? {
-        ReadOutcome::Value(ScVal::U32(n)) => n,
-        ReadOutcome::Value(other) => bail!("get_context_rules_count returned {other:?}"),
-        ReadOutcome::ContractError { message, .. } => {
-            bail!("get_context_rules_count trapped: {message}")
-        }
+/// The account's configuration snapshot (`configuration()`): its revision
+/// and every installed rule with its OZ id, read at one ledger. Rules are
+/// found by name in it, never by probing ids.
+fn read_configuration(rpc: &Rpc, account: &str) -> Result<(u64, Vec<(u32, ScMap)>)> {
+    let m = match simulate_read(rpc, account, "configuration", vec![])? {
+        ReadOutcome::Value(ScVal::Map(Some(m))) => m,
+        ReadOutcome::Value(other) => bail!("configuration returned {other:?}"),
+        ReadOutcome::ContractError { message, .. } => bail!("configuration trapped: {message}"),
     };
-    let ceiling = count.saturating_mul(8).saturating_add(64);
+    let Some(ScVal::U64(revision)) = scv::map_get(&m, "revision") else {
+        bail!("configuration has no revision");
+    };
+    let Some(ScVal::Vec(Some(rules))) = scv::map_get(&m, "rules") else {
+        bail!("configuration has no rules");
+    };
     let mut found = Vec::new();
-    let mut id = 0u32;
-    while (found.len() as u32) < count && id < ceiling {
-        if let ReadOutcome::Value(ScVal::Map(Some(m))) =
-            simulate_read(rpc, account, "get_context_rule", vec![ScVal::U32(id)])?
-        {
-            found.push((id, m));
-        }
-        id += 1;
+    for rule in rules.iter() {
+        let ScVal::Map(Some(r)) = rule else {
+            bail!("configuration rule is not a map: {rule:?}");
+        };
+        let Some(ScVal::U32(id)) = scv::map_get(r, "id") else {
+            bail!("configuration rule has no id");
+        };
+        found.push((*id, r.clone()));
     }
-    if (found.len() as u32) < count {
-        bail!(
-            "found only {} of {count} rules within the id probe ceiling {ceiling}",
-            found.len()
-        );
+    Ok((*revision, found))
+}
+
+/// The account's configuration revision (`revision()`).
+fn read_revision(rpc: &Rpc, account: &str) -> Result<u64> {
+    match simulate_read(rpc, account, "revision", vec![])? {
+        ReadOutcome::Value(ScVal::U64(r)) => Ok(r),
+        ReadOutcome::Value(other) => bail!("revision returned {other:?}"),
+        ReadOutcome::ContractError { message, .. } => bail!("revision trapped: {message}"),
     }
-    Ok(found)
 }
 
 /// The applied document hash stored by `apply_doc` (`Option<BytesN<32>>`:
@@ -176,9 +185,11 @@ pub fn run(
         );
     }
 
+    // Every read below must belong to the snapshot's revision: it is
+    // checked again once they are done.
+    let (revision, onchain) = read_configuration(rpc, account)?;
     let mut rows = vec![check_applied_hash(rpc, account, &compose.doc_hash)?];
 
-    let onchain = scan_rules(rpc, account)?;
     for expected in compose.genesis_rule.iter().chain(compose.apply.iter()) {
         let (row, rule_id) = check_rule(&onchain, expected)?;
         rows.push(row);
@@ -214,6 +225,12 @@ pub fn run(
             .then(|| format!("on-chain {} != document {}", onchain.len(), expected_rules)),
     });
 
+    let after = read_revision(rpc, account)?;
+    if after != revision {
+        bail!("the account changed while it was read (revision {revision} -> {after}); rerun");
+    }
+
+    println!("revision {revision}");
     println!("{:<6} {:<24} {:<14} status", "rule", "name", "check");
     for row in &rows {
         println!(

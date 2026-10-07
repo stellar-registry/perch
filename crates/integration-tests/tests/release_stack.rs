@@ -644,7 +644,11 @@ impl World {
         let root = self.invocation(
             &a.address,
             "apply_doc",
-            std::vec![self.sc(doc.clone()), self.sc(approval_valid_until)],
+            std::vec![
+                self.sc(doc.clone()),
+                self.sc(approval_valid_until),
+                self.sc(None::<u64>)
+            ],
         );
         let entry = self.passkey_entry(&a.address, key, "admin", root.clone());
         let simulated = SIMULATE
@@ -652,7 +656,8 @@ impl World {
             .then(|| self.simulated_footprint(&root, &entry));
         self.env.set_auths(&[entry]);
         let ok = matches!(
-            self.account(a).try_apply_doc(doc, &approval_valid_until),
+            self.account(a)
+                .try_apply_doc(doc, &approval_valid_until, &None),
             Ok(Ok(_))
         );
         self.env.set_auths(&[]);
@@ -780,14 +785,14 @@ impl World {
         let root = self.invocation(
             &a.address,
             "apply_doc",
-            std::vec![self.sc(target.clone()), self.sc(0u32)],
+            std::vec![self.sc(target.clone()), self.sc(0u32), self.sc(None::<u64>)],
         );
         let entry = self.recovery_rule_entry(&a.address, root.clone());
         let simulated = SIMULATE
             .with(Cell::get)
             .then(|| self.simulated_footprint(&root, &entry));
         self.env.set_auths(&[entry]);
-        let ok = matches!(self.account(a).try_apply_doc(target, &0), Ok(Ok(_)));
+        let ok = matches!(self.account(a).try_apply_doc(target, &0, &None), Ok(Ok(_)));
         self.env.set_auths(&[]);
         if let (true, Some(simulated)) = (ok, simulated) {
             self.check_footprint(simulated);
@@ -2690,7 +2695,7 @@ fn a_rejected_signer_transition_changes_nothing() {
         let root = w.invocation(
             &a.address,
             "apply_doc",
-            std::vec![w.sc(doc.clone()), w.sc(0u32)],
+            std::vec![w.sc(doc.clone()), w.sc(0u32), w.sc(None::<u64>)],
         );
         w.env
             .set_auths(&[w.passkey_entry(&a.address, &tkey(0), "admin", root)]);
@@ -2700,7 +2705,7 @@ fn a_rejected_signer_transition_changes_nothing() {
             .reset_limits(cost * percent / 100, 1 << 30);
         let client = w.account(&a);
         let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            client.try_apply_doc(&doc, &0)
+            client.try_apply_doc(&doc, &0, &None)
         }));
         w.env.cost_estimate().budget().reset_unlimited();
         w.env.set_auths(&[]);

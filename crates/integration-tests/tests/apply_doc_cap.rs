@@ -60,7 +60,7 @@ fn apply_doc_installs_the_cap_beside_the_interpreter() {
 
     // Previously `CapUnsupported`; now it compiles and applies.
     let doc = Bytes::from_slice(&w.env, capped_doc("").as_bytes());
-    let hash: BytesN<32> = client.apply_doc(&doc, &0);
+    let hash: BytesN<32> = client.apply_doc(&doc, &0, &None);
     assert_eq!(client.applied_doc_hash(), Some(hash));
 
     assert_eq!(client.get_context_rules_count(), 2);
@@ -87,7 +87,7 @@ fn apply_doc_rejects_a_cap_token_that_is_not_the_scope() {
     // validation (it would silently meter a different contract).
     let mismatched = format!(r#""token": "{CI_VERIFIER}", "#); // any C-addr != TOKEN
     let doc = Bytes::from_slice(&w.env, capped_doc(&mismatched).as_bytes());
-    assert!(w.account_client().try_apply_doc(&doc, &0).is_err());
+    assert!(w.account_client().try_apply_doc(&doc, &0, &None).is_err());
     // Nothing was installed: the account still has only its constructor admin.
     assert_eq!(w.account_client().get_context_rules_count(), 1);
 }

@@ -1,0 +1,112 @@
+{
+  "registry": "CDOTZIJUS2CZ62GCVQAI2VMZQC7QZJQ35REFAKJLVTZOJXCJ3VMYEJX2",
+  "source": {
+    "commit": "23a7c0d167db2dc67c640b68b75712c467c29aae",
+    "dirty": false
+  },
+  "toolchain": {
+    "builder": "contract",
+    "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+    "stellar": "stellar 27.0.0 (5a7c5fe76530bf4248477ac812fc757146b98cc4)",
+    "scaffold": "scaffold 0.0.27 (stellar-scaffold-cli-v0.0.27-0-g6f1f06c3e8d2cf82573ec214b20d1550e9ce326b)"
+  },
+  "artifacts": [
+    {
+      "package": "perch-doc-compiler",
+      "version": "0.3.0",
+      "wasm": "perch_doc_compiler.wasm",
+      "sha256": "b24a3a78d2a43622944d87f3f24d84a49e6b4214d33f0270877245ec2ea507fa",
+      "bytes": 105881,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-interpreter",
+      "version": "0.1.2",
+      "wasm": "perch_interpreter.wasm",
+      "sha256": "4bb320d7fc70cf7a2f164097b4b0e3295ad5a08338348d6f2d5268c83f678df7",
+      "bytes": 16785,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-spending-limit",
+      "version": "0.1.1",
+      "wasm": "perch_spending_limit.wasm",
+      "sha256": "7020643586f95b262986235ad54522dbeae23735505f476ae78bddc436b9a819",
+      "bytes": 13155,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-ed25519-verifier",
+      "version": "0.1.1",
+      "wasm": "perch_ed25519_verifier.wasm",
+      "sha256": "8e5f4285e30b7b47b167171ca12f781dcb1d9eba7cfe3d63a9184e92c8beea27",
+      "bytes": 1238,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-webauthn-verifier",
+      "version": "0.1.0",
+      "wasm": "perch_webauthn_verifier.wasm",
+      "sha256": "ef1d4ebefef76a40931c225b51890c2fc8bc7b1123c31d4847add19d6d02dd92",
+      "bytes": 11610,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-zk-pool",
+      "version": "0.1.0",
+      "wasm": "perch_zk_pool.wasm",
+      "sha256": "31a52a1f534688e18f3848a90acaad5761eca89e5cf86ae345d778ee99d5d741",
+      "bytes": 45890,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-zk-adapter",
+      "version": "0.1.0",
+      "wasm": "perch_zk_adapter.wasm",
+      "sha256": "68848bf16af2095be414c05f4db5d4d0925b5908bec6a9880d38d62d15abe5ae",
+      "bytes": 68209,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-recovery",
+      "version": "0.1.0",
+      "wasm": "perch_recovery.wasm",
+      "sha256": "cfcdf76ab846a393be96f9e4cc323d1d062e922f87c4ddd19868dffcf07336e9",
+      "bytes": 66137,
+      "tier": 0,
+      "pins": {}
+    },
+    {
+      "package": "perch-account",
+      "version": "0.3.0",
+      "wasm": "perch_account.wasm",
+      "sha256": "d37a8b078a77f63b65ddea94adcd7dfd7f8e0774d6008d7c0c5fbe7e01cb548d",
+      "bytes": 66446,
+      "tier": 1,
+      "pins": {
+        "perch-doc-compiler": "b24a3a78d2a43622944d87f3f24d84a49e6b4214d33f0270877245ec2ea507fa",
+        "perch-interpreter": "4bb320d7fc70cf7a2f164097b4b0e3295ad5a08338348d6f2d5268c83f678df7",
+        "perch-spending-limit": "7020643586f95b262986235ad54522dbeae23735505f476ae78bddc436b9a819"
+      }
+    },
+    {
+      "package": "perch-account-factory",
+      "version": "0.1.0",
+      "wasm": "perch_account_factory.wasm",
+      "sha256": "4dc54fb90e81617234c3d0f019398b394c635aed2e5899b3c2744f8b45eb48fd",
+      "bytes": 4523,
+      "tier": 2,
+      "pins": {
+        "perch-account": "d37a8b078a77f63b65ddea94adcd7dfd7f8e0774d6008d7c0c5fbe7e01cb548d",
+        "perch-webauthn-verifier": "ef1d4ebefef76a40931c225b51890c2fc8bc7b1123c31d4847add19d6d02dd92"
+      }
+    }
+  ]
+}

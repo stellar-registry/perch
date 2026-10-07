@@ -55,6 +55,25 @@ against the release artifacts belong to the integration layer.
   target, in that ledger, while that attempt is still the authorized one.
   `enforce` also runs for an authorization tree's sub-invocations that
   never execute, so a stale marker is dropped rather than trusted.
+- **Two-digest target binding (RFC #109 §1, option A).** An attempt
+  records two digests from its one `derive_target` call. `target_doc_hash`
+  is the compiler's identity of the target. `target_bytes_hash` is the
+  controller's `sha256` of the canonical bytes returned. `enforce` compares
+  `sha256` of the completing `apply_doc` argument with the bytes digest.
+  `rcv_sync` then requires the account's compiled identity to equal
+  `target_doc_hash`. The source identity is read rather than hashed: the
+  account's `applied_doc_hash` (lost-key) or the enrolled baseline
+  (compromise). The controller therefore never assumes that an identity is
+  a bytes digest, and a different identity scheme needs a new compiler and
+  account, not a new controller. `target_binding.rs` checks this under the
+  real compiler and under a test-only compiler whose identity is another
+  function of the document (`perch_doc_compiler::testutils`, behind the
+  `testutils` feature). Setting `PERCH_TEST_COMPILER=stand-in` runs any
+  suite that way: `recovery.rs` passes all 29 tests, and in
+  `account_capabilities.rs` only the test asserting that the stored bytes
+  hash to the identity fails, as a structured identity would make it.
+  Setting `PERCH_TEST_COMPILER=inconsistent-pair` makes every completion fail
+  closed (`AttemptAuthorized`) and applies nothing.
 - **Spent nullifiers are recorded per account** (spec §11's `Spent{X}`).
   Any contract can enroll itself at the shared controller with an adapter
   of its choosing, so a controller-wide record would let it mark a victim's

@@ -39,9 +39,9 @@ fn applied_revision(w: &World) -> Option<u64> {
         .find(|e| e.name == "doc_applied")
         .map(|e| {
             e.data
-                .strip_prefix("{revision:")
-                .and_then(|d| d.strip_suffix('}'))
-                .and_then(|d| d.parse().ok())
+                .split(['{', ',', '}'])
+                .find_map(|f| f.strip_prefix("revision:"))
+                .and_then(|r| r.parse().ok())
                 .unwrap_or_else(|| panic!("DocApplied data {}", e.data))
         })
 }

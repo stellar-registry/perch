@@ -753,27 +753,43 @@ role; a document rule by its name and compiled scope (context type)**:
   rule's `rule_hash` (§3.2). Equal `rule_hash` alone is not enough: rotating
   a signer's key leaves the rule text unchanged but changes its compiled
   signers.
-- A slot that differs is **edited in place** under its existing rule id:
-  - a changed `valid_until` is updated;
-  - signers and policies present in both are kept;
-  - when something on the rule survives, removals run first, so its counts
-    never exceed OZ's per-rule limits mid-edit; when nothing survives,
-    additions run first, so it is never empty;
-  - a policy whose install parameters change counts as removed and
-    re-added.
-- A slot is **replaced whole** (a new rule id) only in two cases:
-  - Nothing on it survives, and no order of additions and removals keeps
-    it non-empty within OZ's per-rule limits (`MAX_SIGNERS` 15,
-    `MAX_POLICIES` 5). Example: the recovery rule, which has no signers,
-    when its only policy's parameters change. Adding first is impossible
-    (one policy per address) and removing first would empty it.
-  - Its scope changes. OZ has no operation that changes a rule's context
-    type in place.
+- A slot that differs is reconciled whichever of two ways a deterministic
+  cost model prices lower, the in-place edit on a tie:
+  - (a) **edited in place** under its existing rule id:
+    - a changed `valid_until` is updated;
+    - signers and policies present in both are kept;
+    - when something on the rule survives, removals run first, so its
+      counts never exceed OZ's per-rule limits mid-edit; when nothing
+      survives, additions run first, so it is never empty;
+    - a policy whose install parameters change counts as removed and
+      re-added.
+  - or (b) **replaced whole** under a new rule id: the rule is removed and
+    the target rule added.
+
+  The model prices the exact OZ operation sequence each way would run, from
+  the diff and the signer and policy registry reference counts at that point
+  (registrations and deregistrations are events of their own): contract-event
+  bytes first (the ContractEvent XDR the per-transaction events limit counts,
+  including the spending-limit policy's install and uninstall events), then
+  ledger entries written as the tiebreak. An in-place edit costs per changed
+  signer and policy; a replacement costs a rule removal and addition plus
+  deregistering, re-registering, and reinstalling everything the rule keeps.
+- Replacement is the only way when nothing on the slot survives and no order
+  of additions and removals keeps it non-empty within OZ's per-rule limits
+  (`MAX_SIGNERS` 15, `MAX_POLICIES` 5). Example: the recovery rule, which has
+  no signers, when its only policy's parameters change. Adding first is
+  impossible (one policy per address) and removing first would empty it. A
+  changed scope is a different slot (removed and added).
 - An installed rule whose slot the target lacks is removed, before
   anything is added; a target rule whose slot is not installed is added.
 
 The installed rule set that results authorizes exactly what a full replace
-would, and the cost is never more than a full replace. The account keeps one record per
+would. A full replace takes replacement for every rule and deregisters and
+re-registers every signer and policy, so taking the cheaper way per rule
+means no apply emits more event bytes than a full replace. A replaced rule
+gets a new id and its policies are reinstalled, resetting their state (a
+spending limit's window), as a full replace always did; an in-place edit
+keeps the id and the kept policies' state. The account keeps one record per
 installed rule (id, slot, valid_until, signers, and each policy with a
 digest of its install parameters) bounded by the rule cap (plus the
 recovery rule). It never scans historical rule ids, which grow without bound with

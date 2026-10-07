@@ -307,6 +307,10 @@ RecoveryStatement {
 AttemptSubject { attempt_id, source_doc_hash, target_doc_hash, replacements_hash }
 ```
 
+`source_doc_hash` and `target_doc_hash` are document identities. The
+attempt's `target_bytes_hash` (T1) is not in the statement: evidence approves
+the identity, and application proves the applied document has it (T5).
+
 The encoding (`statement.md`) is fixed-width per action. The byte at
 offset 25 is the action code (1 lost-key, 2 compromise, 3 cancel,
 4 reconfigure, 5 upgrade), which also selects the subject layout. The digest is `sha256(encoding)`.
@@ -505,10 +509,20 @@ Otherwise:
 
 1. Assigns `attempt_id` from the per-account counter (never reused).
 2. Records `epoch`, `created_at = L`, `evidence_deadline`, `cancel_until`,
-   the source hash, the derived target hash, the target configuration hash
-   (§10), the replacement-set hash, the ZK enrollment the completion
-   installs, and the credentials occupying the replaced signer slots in the
-   source (the completion revokes them, §8).
+   the source identity, the derived target's two digests, the target
+   configuration hash (§10), the replacement-set hash, the ZK enrollment the
+   completion installs, and the credentials occupying the replaced signer
+   slots in the source (the completion revokes them, §8). The target
+   digests both come from the one `derive_target` call:
+   - `target_doc_hash`: the target's document identity, as the compiler
+     computed it;
+   - `target_bytes_hash`: `sha256` of the canonical bytes `derive_target`
+     returned, computed by the controller from those bytes.
+
+   Under CANON v1 the two are equal. They are kept apart so that a different
+   identity scheme needs a new compiler and account, not a new controller.
+   The source identity is read, never computed from bytes: the account's
+   `applied_doc_hash` (lost-key) or the enrolled baseline (compromise, §7.2).
 3. Emits `AttemptBegun`.
 
 Opening an attempt grants nothing and blocks nothing (D2). Opening many
@@ -562,12 +576,19 @@ recovery rule (Variant A). The controller's `enforce` requires all of:
 - the context is `apply_doc` on this account;
 - an authorized live attempt `A` exists;
 - `executable_after ≤ L < expires_at`;
-- `sha256(target_bytes) = A.target_doc_hash`.
+- `sha256(target_bytes) = A.target_bytes_hash`.
 
-Then `enforce` marks `A` completing, bound to `(attempt_id,
-target_doc_hash)`. The account's `apply_doc` body runs `rcv_sync` with
-the compiled document's hash, which consumes that marker and returns
-`SyncOutcome::Completed`. The account then applies its own completion
+Authorization therefore binds the exact bytes. A different document is
+refused here, and so is a non-canonical spelling of the target (same
+identity, other bytes). Then `enforce` marks `A` completing, bound to
+`(attempt_id, A.target_doc_hash)`. The account's `apply_doc` body runs
+`rcv_sync` with the identity of the document it compiled from those bytes.
+`rcv_sync` consumes the marker and returns `SyncOutcome::Completed` only if
+that identity equals `A.target_doc_hash`, so application binds the identity.
+If the two digests ever disagreed (a faulty compiler), the only bytes
+`enforce` accepts would compile to another identity. Then `rcv_sync` would
+refuse the apply as an ordinary change during the authorized window, nothing
+would be applied, and the attempt could only be cancelled or expire. The account then applies its own completion
 effects (§10), including clearing its freeze mirror. Every write
 belongs to the same invocation, so a failure anywhere (compile, revocation
 check, anti-brick, pool insertion) reverts all of it, including the
@@ -753,27 +774,50 @@ role; a document rule by its name and compiled scope (context type)**:
   rule's `rule_hash` (§3.2). Equal `rule_hash` alone is not enough: rotating
   a signer's key leaves the rule text unchanged but changes its compiled
   signers.
-- A slot that differs is **edited in place** under its existing rule id:
-  - a changed `valid_until` is updated;
-  - signers and policies present in both are kept;
-  - when something on the rule survives, removals run first, so its counts
-    never exceed OZ's per-rule limits mid-edit; when nothing survives,
-    additions run first, so it is never empty;
-  - a policy whose install parameters change counts as removed and
-    re-added.
-- A slot is **replaced whole** (a new rule id) only in two cases:
-  - Nothing on it survives, and no order of additions and removals keeps
-    it non-empty within OZ's per-rule limits (`MAX_SIGNERS` 15,
-    `MAX_POLICIES` 5). Example: the recovery rule, which has no signers,
-    when its only policy's parameters change. Adding first is impossible
-    (one policy per address) and removing first would empty it.
-  - Its scope changes. OZ has no operation that changes a rule's context
-    type in place.
+- A slot that differs is reconciled whichever of two ways a deterministic
+  cost model prices lower, the in-place edit on a tie:
+  - (a) **edited in place** under its existing rule id:
+    - a changed `valid_until` is updated;
+    - signers and policies present in both are kept;
+    - the signer set changes in one `reconcile_signers` call, which checks
+      the final set as a whole and keeps retained signers' registry ids;
+    - when the target has signers, the swap runs first and then the
+      policies, removals first, so their count never exceeds OZ's
+      per-rule limit; when it has none, the policies change first and the
+      signers go last, so the rule is never empty;
+    - a policy whose install parameters change counts as removed and
+      re-added.
+  - or (b) **replaced whole** under a new rule id: the rule is removed and
+    the target rule added.
+
+  The model prices the exact OZ operation sequence each way would run, from
+  the diff and the signer and policy registry reference counts at that point.
+  Every OZ mutation runs through its `_no_events` variant (the account emits
+  one `DocApplied` per apply instead), so the price is the ledger entries
+  each operation writes. An in-place edit costs one rule write for the
+  signer swap plus each changed signer's and policy's entries; a
+  replacement costs a rule removal and addition plus deregistering,
+  re-registering, and reinstalling everything the rule keeps.
+- Replacement is the only way when no in-place order keeps the rule
+  non-empty within OZ's per-rule limits (`MAX_SIGNERS` 15, `MAX_POLICIES`
+  5): neither side has signers, nothing survives, and the new policies
+  cannot be added first. Example: the recovery rule, which has no signers,
+  when its only policy's parameters change. Adding first is impossible (one
+  policy per address) and removing first would empty it. A changed scope
+  is a different slot (removed and added).
 - An installed rule whose slot the target lacks is removed, before
   anything is added; a target rule whose slot is not installed is added.
 
 The installed rule set that results authorizes exactly what a full replace
-would, and the cost is never more than a full replace. The account keeps one record per
+would. A full replace takes replacement for every rule and deregisters and
+re-registers every signer and policy, so taking the cheaper way per rule
+means no apply writes more ledger entries than a full replace. Writes are
+not the only limit: the in-place path can cost more instructions than a
+replacement, so the document caps are sized with flows that force each
+path (`budgets.md`, "Document caps"). A replaced rule
+gets a new id and its policies are reinstalled, resetting their state (a
+spending limit's window), as a full replace always did; an in-place edit
+keeps the id and the kept policies' state. The account keeps one record per
 installed rule (id, slot, valid_until, signers, and each policy with a
 digest of its install parameters) bounded by the rule cap (plus the
 recovery rule). It never scans historical rule ids, which grow without bound with
@@ -784,8 +828,8 @@ Two rules bound that cost:
 
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps on signers, rules, and
-  canonical size (`perch_doc_compiler::MAX_DOC_SIGNERS` = 4,
-  `MAX_DOC_RULES` = 9, `MAX_DOC_CANONICAL_BYTES` = 8 192). The caps are
+  canonical size (`perch_doc_compiler::MAX_DOC_SIGNERS` = 8,
+  `MAX_DOC_RULES` = 11, `MAX_DOC_CANONICAL_BYTES` = 8 192). The caps are
   sized so that the worst-case completion fits the transaction budget: the
   measurements, the frontier, and the choice are in `budgets.md`, "Document
   caps", and `release_stack.rs`'s `worst_case_*` tests hold them in CI.
@@ -929,7 +973,7 @@ failures.
 
 | Case | Recognised by | Authorization | Effects |
 | --- | --- | --- | --- |
-| Completion | A completing marker from this invocation's `enforce` (T5) whose target hash equals the `doc_hash` argument | Already established by the attempt | The compiled configuration hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared). Consumes the marker, marks the attempt `Completed`, spends its nullifier, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), clears any pending upgrade, and clears its freeze mirror. |
+| Completion | A completing marker from this invocation's `enforce` (T5) whose target identity equals the `doc_hash` argument (the identity of the document the account compiled) | Already established by the attempt | The compiled configuration hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared). Consumes the marker, marks the attempt `Completed`, spends its nullifier, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), clears any pending upgrade, and clears its freeze mirror. |
 | No change | `config_hash` and controller unchanged, and not a completion | Owner authorization (already required by `apply_doc`) | Refuses if an attempt is authorized and live (§9); otherwise nothing. |
 | Enroll | No configuration stored | Owner authorization | Stores the configuration and bumps the epoch. The account records the enrollment id as used. |
 | Reconfigure | `config_hash` differs, controller unchanged | `Loss`: owner. `Protected`: owner plus the stored configuration's condition over `Reconfigure(Set(new))`, from recorded approvals (§5) | Refuses during an authorized window. Stores the new configuration, bumps the epoch, and invalidates every attempt. |

@@ -55,6 +55,25 @@ against the release artifacts belong to the integration layer.
   target, in that ledger, while that attempt is still the authorized one.
   `enforce` also runs for an authorization tree's sub-invocations that
   never execute, so a stale marker is dropped rather than trusted.
+- **Two-digest target binding (RFC #109 §1, option A).** An attempt
+  records two digests from its one `derive_target` call. `target_doc_hash`
+  is the compiler's identity of the target. `target_bytes_hash` is the
+  controller's `sha256` of the canonical bytes returned. `enforce` compares
+  `sha256` of the completing `apply_doc` argument with the bytes digest.
+  `rcv_sync` then requires the account's compiled identity to equal
+  `target_doc_hash`. The source identity is read rather than hashed: the
+  account's `applied_doc_hash` (lost-key) or the enrolled baseline
+  (compromise). The controller therefore never assumes that an identity is
+  a bytes digest, and a different identity scheme needs a new compiler and
+  account, not a new controller. `target_binding.rs` checks this under the
+  real compiler and under a test-only compiler whose identity is another
+  function of the document (`perch_doc_compiler::testutils`, behind the
+  `testutils` feature). Setting `PERCH_TEST_COMPILER=stand-in` runs any
+  suite that way: `recovery.rs` passes all 29 tests, and in
+  `account_capabilities.rs` only the test asserting that the stored bytes
+  hash to the identity fails, as a structured identity would make it.
+  Setting `PERCH_TEST_COMPILER=inconsistent-pair` makes every completion fail
+  closed (`AttemptAuthorized`) and applies nothing.
 - **Spent nullifiers are recorded per account** (spec §11's `Spent{X}`).
   Any contract can enroll itself at the shared controller with an adapter
   of its choosing, so a controller-wide record would let it mark a victim's
@@ -101,15 +120,36 @@ against the release artifacts belong to the integration layer.
   the compiled document. Rules are matched by slot (the recovery flag,
   otherwise name and context type). Unmatched installed rules are removed
   first, so their signers and policies leave the registries before
-  anything is added. A matched rule with a new scope is replaced; otherwise
-  it is edited in place: its expiry is updated, and signers and policies
-  are removed then added (or, when none would survive, added first, so the
-  rule is never left with neither). An unchanged rule, signer, or policy
-  emits no event and writes nothing; re-applying the applied document
-  writes only the authorization nonce. It never scans the ids of rules
-  deleted earlier, so applying a document, and completing a recovery,
-  costs the same however many documents came before. `apply_doc` returns
-  an error or traps on any failure, so a partial delta never persists.
+  anything is added. A changed scope is a different slot, so the rule is
+  removed and added. Any other changed rule is reconciled whichever of two
+  ways costs less (`rules::Cost`, the in-place edit on a tie):
+  - **edited in place** under its id: its expiry is updated, and signers
+    and policies are removed then added (or, when none would survive, added
+    first, so the rule is never left with neither). New signers go in one
+    OZ `batch_add_signer` call, with one duplicate check and one rule
+    write; a change with no new signers makes no such call;
+  - **replaced whole** under a new id, the only way when no in-place order
+    keeps the rule valid.
+
+  The cost model prices the exact OZ operations each way runs. One
+  `Effects` sequence drives both a `Meter` and the real calls, so the
+  model and the execution cannot drift apart. Prices are contract-event
+  bytes first, then ledger writes as a tiebreak, against the signer and
+  policy registry counts derived from the records. Event sizes are
+  `ContractEvent` XDR, the measure the network's events limit counts,
+  including the spending limit's install and uninstall events. A full
+  replace replaces every rule and churns every registration, so taking the
+  cheaper way per rule never emits more than it does. A replaced rule's
+  policies are reinstalled, which resets a spending limit's window, as the
+  full replace always did. An in-place edit keeps the id and the kept
+  policies' state.
+
+  An unchanged rule, signer, or policy emits no event and writes nothing.
+  Re-applying the applied document writes only the authorization nonce. It
+  never scans the ids of rules deleted earlier, so applying a document, and
+  completing a recovery, costs the same however many documents came
+  before. `apply_doc` returns an error or traps on any failure, so a
+  partial delta never persists.
 - **Per-rule program provenance.** An interpreter program's
   `InstallParams.doc_hash` field carries its rule's `rule_hash`
   (`sha256("perch/rule" || rule bytes)`, `CANONICAL.md` "Fragment
@@ -132,12 +172,31 @@ against the release artifacts belong to the integration layer.
   pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
-- **Document caps.** 4 declared signers, 9 rules, 8 192 canonical bytes,
+- **Document caps.** 8 declared signers, 11 rules, 8 192 canonical bytes,
   and rule names of at most OZ's 20 bytes, sized against the measured
   worst-case completion (`budgets.md`, "Document caps"). The binding limit
-  is contract events. Every stack contract links a 64 KiB wasm stack
-  (`build.rs`): with rustc's 1 MiB default, every cross-contract call's VM
-  cost more than 1 MB of the transaction's memory.
+  is instructions: the thief who keeps every name and changes every
+  program is edited in place, at 73.6% at the caps. Written entries are
+  next (70.5%, the renamed thief). Every stack contract links a 64 KiB wasm
+  stack (`build.rs`): with rustc's 1 MiB default, every cross-contract
+  call's VM cost more than 1 MB of the transaction's memory.
+- **Quiet OZ mutations and `DocApplied`.** `apply_doc` performs every
+  rule, signer, and policy mutation through OZ's `_no_events` variants
+  (theahaco/stellar-contracts-OZ PR #4, pinned), and the spending-limit
+  policy installs and uninstalls quietly. It emits one `DocApplied` per
+  application: `doc_hash` as its topic, and the delta's counts (rules
+  added, removed, and edited in place; signers and policies added and
+  removed by the in-place edits). `apply_delta.rs` checks the counts
+  against the plan and the diff of the installed rules, and that the
+  account emits nothing else. An indexer reads the installed rules from
+  the account (`applied_doc`, OZ's rule views); it cannot replay OZ's
+  per-item events, which no longer exist.
+- **`reconcile_signers`.** An in-place edit changes a rule's signers in
+  one OZ `reconcile_signers_no_events` call (theahaco/stellar-contracts-OZ
+  PR #5, pinned). The call checks the final set whole, keeps retained
+  signers' ids, and writes the rule once. When the target has signers the
+  swap goes first; when it has none, the policies change first and the
+  signers go last.
 - **`execute`** returns the called function's value.
 - **`max-cancels` is a lifetime count per controller.** Nothing resets it;
   switching controllers starts a new one (T6).
@@ -166,11 +225,14 @@ key and value, the canonical applied document, and its hash.
 | Any document sequence leaves the delta account and the oracle in the same state (proptest, shrinking) | `apply_delta.rs::delta_apply_matches_full_replace` |
 | Re-applying the applied document emits no event and writes only the nonce | `reapplying_the_applied_document_is_a_no_op` |
 | A→B→C equals A→C; A→B→A restores A | `transitions_compose`, `a_transition_and_its_reverse_restore_the_state` |
-| Every event and storage write is one the diff predicts, and the delta writes no more than the full replace | `events_and_writes_are_exactly_the_diff` |
-| Named cases: functions, scope, cap parameters, added/shared signers and policies, rename, remove and re-add, key swap under one id, one-signer swap in place (the compromise shape), minimal and maximal documents, reformatting, reordering, expiry, recovery-only change | the remaining `apply_delta.rs` tests |
+| Each changed rule takes the cheaper path. Its events are exactly that path's and are priced to the byte against the host's figure. The delta emits no more event bytes, and writes no more entries, than the full replace | `events_and_writes_are_exactly_the_diff` |
+| Both prices the choice compares are exact: forcing every changed rule in place, or every one replaced, emits exactly the priced bytes and reaches the full-replace state | `both_paths_are_priced_exactly` |
+| Crossovers. A 3-key policy-free rule rotates 1–2 keys in place and 3 by replacement. An 8-key rule with both policies rotates up to 6 in place and 7–8 by replacement. Each count's measured bytes equal the cheaper forced path's | `rotating_the_admin_rules_keys_switches_to_replacement_where_it_is_cheaper`, `rotating_a_capped_rules_keys_switches_to_replacement_where_it_is_cheaper` |
+| An in-place order exists up to OZ's signer limit (8 + 7) and not past it (8 + 8) | `a_full_swap_can_be_edited_in_place_up_to_the_signer_limit` |
+| Named cases: functions, scope, cap parameters, added and shared signers and policies, rename, remove and re-add, a key swapped under one id, a one-signer swap in place (the compromise shape), minimal and maximal documents, reformatting, reordering, expiry, a recovery-only change | the remaining `apply_delta.rs` tests |
 | Revoked credentials stay refused after an in-place edit; the freeze and generation behave as under the full replace; reserved names stay closed; a delta in the authorized window changes nothing | `delta_security.rs` |
 | A failing policy install, and budget exhaustion at every point of a delta, revert everything under enforcing auth | `delta_security.rs` |
-| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_reinstall_only_that_rules_policies`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
+| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_replace_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
 | Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |
 
 `PERCH_DELTA_CASES` sets the proptest case count (CI defaults: 32 to 48 per property; a 400-case sweep also passes).

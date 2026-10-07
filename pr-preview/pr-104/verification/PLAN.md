@@ -39,7 +39,8 @@ own; the second table is what ties the two together, and it is evidence, not pro
 | Evaluator totality; a validated program never trips a defensive guard | T3, T4 `validate_sound` |
 | INV-1: a lowered rule denies an invocation with zero signers | T5 `zero_signers_denied` |
 | Lowering preserves the rule's doc-level meaning | T6 `lowering_preserves` |
-| `doc_hash` names one document: the canonical form is injective over every `PolicyDoc` shape, the `recovery` member included | T7 `emitDoc_injective` |
+| `doc_hash` names one document: the canonical form is injective over every `PolicyDoc` shape, the `recovery` member included, at any size (the compiler's caps only narrow the domain) | T7 `emitDoc_injective` |
+| Canonical bytes parse back to the document they encode, so their identity preimage is themselves: a recovery target's `target_bytes_hash` and `target_doc_hash` agree under CANON v1 | `canonical_bytes_identity` (from `pDoc_rt`) |
 | The fragment hashes name one fragment each: `config_hash` one recovery configuration and `rule_hash` one rule text. Both preimages are injective, no two of the three preimage kinds (document, config, rule) coincide, and each fragment is a substring of its document's canonical form | T8 `configPreimage_injective`, `rulePreimage_injective`, `configPreimage_ne_emitDoc`, `rulePreimage_ne_emitDoc`, `rulePreimage_ne_configPreimage`, `emitRecovery_infix_emitDoc`, `emitRule_infix_emitDoc` |
 
 All hash claims hold up to a SHA-256 collision.
@@ -62,8 +63,10 @@ real-proof tests, and the testnet exercise:
 
 - The recovery controller's state machine (`crates/perch-recovery`, spec §6): attempt
   lifecycle, the `Protected` freeze across authorization paths, cancellation rules and the
-  cancel cap, evidence freshness and expiry, epochs, nullifier spending, baselines, and
-  upgrade approvals.
+  cancel cap, evidence freshness and expiry, epochs, nullifier spending, baselines,
+  upgrade approvals, and the two-digest target binding (spec §6.3 T1, T5; tested in
+  `target_binding.rs`). The model supplies only the CANON facts that binding relies on
+  (`canonical_bytes_identity`, T7).
 - Account authorization paths (`crates/perch-smart-account`): `__check_auth`, OZ
   context-rule selection, `execute`, `apply_doc` and its delta (which rules it touches),
   the reserved-name guards, upgrades.

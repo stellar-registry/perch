@@ -86,8 +86,11 @@ every consumer reads.
 CI's `rust` job runs `fetch-infra-wasm.sh --stack`, the workspace tests
 (including `testnet_pins`), `verify-deployment.sh`, and the release-stack
 suite against the deployed bytes when the deployment was built from a commit
-in the branch's history (after a rebase it runs other contract code, and the
-step says so and skips until the next deployment). The `release-stack-source` job builds the
+in the branch's history. Otherwise (a pull request below the deployment
+record, or a rebase), the deployed bytes run other contract code. Then the
+job pins this source's own build (`build-stack.sh --builder contract`), the
+workspace tests run against it without `testnet_pins`, and the deployed-bytes
+suite skips with a notice until the next deployment. The `release-stack-source` job builds the
 PR's own source in pin order (`build-stack.sh --builder contract`, against
 the manifest's registry) and runs the release-stack suite on those fresh
 bytes, so a change that only a rebuilt stack would break fails the PR. The
@@ -151,7 +154,8 @@ were a policy change during the window.
 So a client building a completion must put the recovery-rule entry in the
 transaction itself: address credentials for the account, a fresh nonce, an
 `AuthPayload` with no signers selecting the recovery rule, and a root
-invocation of exactly `apply_doc(target, 0)`. Then it simulates, in
+invocation of exactly `apply_doc(target, 0, expected_revision)` (`None`,
+or the revision the target was derived at). Then it simulates, in
 enforcing mode. `perch-testnet` does this (`Entries::Root`). The same goes
 for any check that should observe the `Protected` freeze rather than the
 controller's own refusal.

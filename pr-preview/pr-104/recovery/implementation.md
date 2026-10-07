@@ -19,6 +19,7 @@ the one recovery controller and the shared account capabilities.
 | §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}` | `doc_caps.rs`; `release_stack.rs` `worst_case_*` (see below) |
 | §12 upgrades | `PerchSmartAccount::{schedule_upgrade, execute_upgrade, cancel_upgrade}`; `PerchRecovery::rcv_upgrade` | `account_capabilities.rs` |
 | §15 `execute`, `applied_doc` | `PerchSmartAccount::{execute, applied_doc}` | `account_capabilities.rs` |
+| Consumer interface (#108): configuration revision, `revision`/`configuration`/`document`/`capabilities` views, `apply_doc`'s `expected_revision` (RFC #109 §3c); the compiler's `limits`/`capabilities` | `PerchSmartAccount::{apply_doc, revision, configuration, document, capabilities}`, `apply` and `execute_upgrade` (`advance_revision`); `PerchDocCompiler::{limits, capabilities}` | `revision.rs`; `auth_vectors.rs` (signing digest and `AuthPayload` vectors for perch-js) |
 
 Every test in `recovery.rs` and `account_capabilities.rs` runs under
 enforcing authorization (`set_auths` with hand-built entries, see
@@ -145,7 +146,8 @@ against the release artifacts belong to the integration layer.
   policies' state.
 
   An unchanged rule, signer, or policy emits no event and writes nothing.
-  Re-applying the applied document writes only the authorization nonce. It
+  Re-applying the applied document writes only the authorization nonce and
+  the instance (the configuration revision). It
   never scans the ids of rules deleted earlier, so applying a document, and
   completing a recovery, costs the same however many documents came
   before. `apply_doc` returns an error or traps on any failure, so a
@@ -197,6 +199,28 @@ against the release artifacts belong to the integration layer.
   signers' ids, and writes the rule once. When the target has signers the
   swap goes first; when it has none, the policies change first and the
   signers go last.
+- **Configuration revision (#108).** A `u64` in instance storage: 0
+  after the constructor, advanced by one at the end of every successful
+  `apply` (owner apply, enrollment, reconfiguration, removal, controller
+  switch, completion, and a re-apply of the same document alike) and in
+  every executed upgrade, and by nothing else. It is not `doc_hash`, which
+  A -> B -> A restores while OZ gives every re-added rule a new id, and not
+  the recovery generation, which ordinary document changes leave alone.
+  Advancing on every apply keeps "did anything change" logic out of the
+  account; a re-apply costs consumers a spurious stale-revision result,
+  which is safe. `DocApplied` carries it as data, and `configuration()`
+  returns it with everything rule selection needs, read at one ledger.
+  `apply_doc`'s optional `expected_revision` refuses with `StaleRevision`
+  (the account error enum's last code, so earlier codes keep their values)
+  unless the account is at that revision, so a document prepared against
+  one configuration never silently overwrites another device's change.
+  `None` applies over the current revision. A completion may carry it too:
+  the controller's `enforce` reads only argument 0. Ordinary transactions
+  are not bound to a revision: OZ signs the invocation and the selected
+  rule ids, so a selected rule removed or replaced since signing fails
+  closed (`ContextRuleNotFound`), and one edited in place runs under its
+  new content (`revision.rs` pins both). Re-applying the applied document
+  now writes the instance as well as the nonce.
 - **`execute`** returns the called function's value.
 - **`max-cancels` is a lifetime count per controller.** Nothing resets it;
   switching controllers starts a new one (T6).
@@ -223,8 +247,8 @@ key and value, the canonical applied document, and its hash.
 | Property | Test |
 | --- | --- |
 | Any document sequence leaves the delta account and the oracle in the same state (proptest, shrinking) | `apply_delta.rs::delta_apply_matches_full_replace` |
-| Re-applying the applied document emits no event and writes only the nonce | `reapplying_the_applied_document_is_a_no_op` |
-| A→B→C equals A→C; A→B→A restores A | `transitions_compose`, `a_transition_and_its_reverse_restore_the_state` |
+| Re-applying the applied document emits only `DocApplied` and writes only the nonce and the instance (the revision) | `reapplying_the_applied_document_is_a_no_op` |
+| A→B→C equals A→C; A→B→A restores A (history counters aside: the recovery generation, the configuration revision, and the controller epoch) | `transitions_compose`, `a_transition_and_its_reverse_restore_the_state` |
 | Each changed rule takes the cheaper path. Its events are exactly that path's and are priced to the byte against the host's figure. The delta emits no more event bytes, and writes no more entries, than the full replace | `events_and_writes_are_exactly_the_diff` |
 | Both prices the choice compares are exact: forcing every changed rule in place, or every one replaced, emits exactly the priced bytes and reaches the full-replace state | `both_paths_are_priced_exactly` |
 | Crossovers. A 3-key policy-free rule rotates 1–2 keys in place and 3 by replacement. An 8-key rule with both policies rotates up to 6 in place and 7–8 by replacement. Each count's measured bytes equal the cheaper forced path's | `rotating_the_admin_rules_keys_switches_to_replacement_where_it_is_cheaper`, `rotating_a_capped_rules_keys_switches_to_replacement_where_it_is_cheaper` |

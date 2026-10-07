@@ -69,7 +69,10 @@ real-proof tests, and the testnet exercise:
   (`canonical_bytes_identity`, T7).
 - Account authorization paths (`crates/perch-smart-account`): `__check_auth`, OZ
   context-rule selection, `execute`, `apply_doc` and its delta (which rules it touches),
-  the reserved-name guards, upgrades.
+  the reserved-name guards, upgrades, and the configuration revision with `apply_doc`'s
+  `expected_revision` (`revision.rs`). The revision is account state outside the
+  document, so no proved hash covers it: after A→B→A the same `doc_hash` returns at a
+  later revision.
 - The ZK circuit (`circuits/`), the vendored UltraHonk verifier, the adapter
   (`crates/perch-zk-adapter`), and the membership pool (`crates/perch-zk-pool`).
 - The document compiler beyond the canonical bytes and `config_hash`: validation,

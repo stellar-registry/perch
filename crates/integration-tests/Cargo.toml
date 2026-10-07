@@ -36,3 +36,4 @@ soroban-sdk = { workspace = true, features = ["testutils"] }
 ed25519-dalek = "2"
 hex = "0.4"
 serde_json = "1"
+perch-vspike = { version = "0.0.0", path = "../perch-vspike" }

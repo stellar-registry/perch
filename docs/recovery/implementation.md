@@ -156,8 +156,9 @@ against the release artifacts belong to the integration layer.
 - **Document caps.** 6 declared signers, 13 rules, 8 192 canonical bytes,
   and rule names of at most OZ's 20 bytes, sized against the measured
   worst-case completion (`budgets.md`, "Experiment: OZ's per-item events
-  suppressed"). The binding limit is the footprint; with OZ's events
-  (PR 103) it is contract events, at 6 signers and 8 rules.
+  suppressed"). The binding limit is written entries (the renamed
+  thief's completion replaces every rule); with OZ's events (PR 103) it is
+  contract events, at 6 signers and 8 rules.
 - **`DocApplied`** (quiet-events experiment). `apply_doc` performs every
   rule, signer, and policy mutation through OZ's `_no_events` variants
   (theahaco/stellar-contracts-OZ PR #4) and emits one `DocApplied` per

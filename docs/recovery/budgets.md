@@ -369,68 +369,73 @@ emitted, so the reconcile prices only ledger writes, counted per operation
 as WS3's model counts them. Each changed rule takes whichever path writes
 fewer entries.
 
-Same method, budget, and five flows as above, on a stack built from this
-branch with the compiler's caps raised. Contract events drop from the
-binding limit (72.9% at 6 signers and 8 rules) to at most 31%, which is
-reached at 15 signers. The frontier moves out, and the footprint binds
-along all of it. For each signer count, the most rules within budget and
-the first row past it:
+Same method, budget, eight flows, shapes, and padding as above, with the
+footprint counted as distinct keys, on a stack built from this branch with
+the compiler's caps raised. Contract events drop from the binding limit
+(72.9% at 6 signers and 8 rules) to at most 31%, which is reached at 15
+signers. The frontier moves out. For each signer count, the most rules
+within budget and the first row past it, each the worst share over every
+row of every flow:
 
 | Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2 | 17 | 61.2% | 72.7% | 73.0% | 70.5% | 40.1% | 10.0% |
-| 2 | 18 | 62.8% | **76.8%** | **76.0%** | 73.5% | 41.1% | 10.0% |
-| 4 | 15 | 65.9% | 69.1% | 73.5% | 70.5% | 41.9% | 13.3% |
-| 4 | 16 | 67.7% | 73.4% | **76.5%** | 73.5% | 43.2% | 13.3% |
-| **6** | **13** | **67.3%** | **65.5%** | **74.0%** | **70.5%** | **42.8%** | **16.5%** |
-| 6 | 14 | 69.7% | 70.2% | **77.0%** | 73.5% | 44.3% | 16.5% |
-| 8 | 11 | 67.4% | 60.3% | 74.5% | 70.5% | 42.8% | 19.7% |
-| 8 | 12 | 70.3% | 65.3% | **77.5%** | 73.5% | 44.5% | 19.7% |
-| 10 | 9 | 65.7% | 54.2% | 75.0% | 70.5% | 41.8% | 22.9% |
-| 12 | 6 | 57.8% | 41.7% | 72.5% | 67.5% | 37.7% | 26.1% |
-| 12 | 7 | 61.9% | 47.0% | **75.5%** | 70.5% | 39.9% | 26.1% |
-| 13 | 5 | 54.8% | 37.6% | 72.8% | 67.5% | 36.3% | 27.8% |
-| 14 | 4 | 51.2% | 33.1% | 73.0% | 67.5% | 34.6% | 29.4% |
-| 14 | 5 | 55.8% | 38.6% | **76.0%** | 70.5% | 37.0% | 29.4% |
-| 15 | 3 | 47.1% | 28.7% | 73.2% | 67.5% | 32.7% | 31.0% |
-| 15 | 4 | 51.8% | 34.1% | **76.2%** | 70.5% | 35.3% | 31.0% |
+| 2 | 17 | 62.4% | 73.1% | 37.8% | 70.5% | 40.1% | 10.0% |
+| 2 | 18 | 63.8% | **77.3%** | 39.2% | 73.5% | 41.1% | 10.0% |
+| 4 | 16 | 67.6% | 74.2% | 39.8% | 73.5% | 43.2% | 13.3% |
+| 4 | 17 | 69.6% | **78.7%** | 41.2% | **76.5%** | 44.4% | 13.3% |
+| 6 | 13 | 67.5% | 65.5% | 38.8% | 70.5% | 42.8% | 16.5% |
+| **6** | **14** | **70.0%** | **70.2%** | **40.2%** | **73.5%** | **44.3%** | **16.5%** |
+| 6 | 15 | 72.5% | **75.1%** | 41.8% | **76.5%** | 45.8% | 16.5% |
+| 8 | 12 | 70.3% | 65.3% | 40.8% | 73.5% | 44.5% | 19.7% |
+| 8 | 13 | 73.3% | 70.4% | 42.2% | **76.5%** | 46.2% | 19.7% |
+| 10 | 10 | 69.3% | 59.4% | 41.2% | 73.5% | 43.8% | 22.9% |
+| 10 | 11 | 72.9% | 64.7% | 42.8% | **76.5%** | 45.7% | 22.9% |
+| 12 | 8 | 66.0% | 52.5% | 41.8% | 73.5% | 42.1% | 26.1% |
+| 12 | 9 | 70.1% | 58.1% | 43.2% | **76.5%** | 44.3% | 26.1% |
+| 15 | 5 | 56.8% | 39.8% | 42.5% | 73.5% | 37.8% | 31.0% |
+| 15 | 6 | 61.8% | 45.8% | 44.0% | **76.5%** | 40.3% | 31.0% |
 
-At 10 signers and 9 rules the footprint is exactly 300 of 400 entries,
-which is on the budget line; 10 and 10 was not measured. Every shape still
-fits the 8 192-byte canonical cap. Before writes were counted per operation
-(each rule's entry once), the reconcile edited a rule in place whenever its
-name was kept. That costs more instructions than a replacement, and
-instructions bound at 72.5% at 6 signers and 12 rules, against 64.9% now.
+**What binds.** From 6 signers up, written entries bind, in the compromise
+whose thief renamed every rule. That completion replaces every rule whole,
+and each capped rule it replaces writes 6 entries (old and new rule, old
+and new program, old and new spending window), against a 200-entry limit.
+At 2 and 4 signers memory binds, in the keep-names thieves. The footprint
+is never above 44.0%. The double-counted figures this section reported
+before showed it binding everywhere (74.0% at 6 and 13); the real count
+there is 155 of 400 (38.8%).
 
-**On this branch the caps are 6 signers, 13 rules, and 8 192 canonical
-bytes.** The worst share is the footprint at 74.0%, in the compromise whose
-thief renamed every rule. This is the same rule as above: keep 6 signers
-and take the most rules. Compared with OZ's events (6 and 8), the
-experiment gains 5 rules. The other frontier points are 2 and 17, 4 and 15,
-8 and 11, 10 and 9, 12 and 6, 13 and 5, 14 and 4, and 15 and 3.
+**The keep-names thieves.** Reparam, reprogram, and recap all replace
+every rule here, because the in-place edit (a `remove_signer` per leaving
+signer, one batch addition, and the policy reinstall) writes more. They
+cost 67.4 to 67.5% of instructions and 137 written entries at 6 and 13,
+which is within budget but the highest instruction rows. 8 and 11, and 10
+and 9, the points the double-counted sweep ended at, are well inside:
+70.5% written entries, and 67.3% and 65.7% instructions, at worst.
 
-At the caps, on WS3's batched signer additions (4d11470: one
-`batch_add_signer` per edited rule), the worst rows are:
+**On this branch the caps stay 6 signers, 13 rules, and 8 192 canonical
+bytes.** The worst shares are written entries at 70.5% (the renamed thief)
+and instructions at 67.5% (reparam). They are provisional, like PR 107's,
+until the captain's decision. 6 and 14 also fits (written entries 73.5%,
+instructions 70.0%), as do 2 and 17, 4 and 16, 8 and 12, 10 and 10, 12 and
+8, and 15 and 5. Compared with OZ's events (6 and 8), the experiment gains
+5 rules at the current caps.
+
+At the caps (on WS3's batched signer additions, 4d11470), the worst rows
+are:
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
-| Enroll `Combined` through `apply_doc` | 199.1M (49.8%) | 15.9 MB | 156 | 65 | 52 000 | 888 |
-| `begin_lost_key` / `begin_compromise` | 134.0M (33.5%) | 4.7 MB | 25 | 2 | 1 888 | 248 |
-| Thief's `apply_doc` (every key swapped, every rule kept) | 211.1M (52.8%) | 11.6 MB | 112 | 46 | 35 948 | 340 |
-| Thief's `apply_doc` (every key swapped, every rule renamed) | 205.5M (51.4%) | 22.4 MB | 232 | 106 | 48 280 | 340 |
-| Compromise completion, every rule kept by name | 254.3M (63.6%) | 14.7 MB (35.1%) | 175 (43.8%) | 80 (40.0%) | 44 112 (33.4%) | 2 700 (16.5%) |
-| Compromise completion, every rule renamed | 254.7M (63.7%) | 27.1 MB (64.7%) | 296 (74.0%) | 141 (70.5%) | 56 572 (42.8%) | 2 700 (16.5%) |
-| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 252.1M (63.0%) | 14.1 MB | 163 | 74 | 43 276 | 1 908 |
-| `Protected` reconfiguration, every rule edited | 253.2M (63.3%) | 14.5 MB | 141 | 58 | 39 932 | 888 |
-| `Protected` reconfiguration, every rule replaced | 248.5M (62.1%) | 25.5 MB | 261 | 118 | 52 440 | 888 |
-
-Batching makes an in-place edit cheap enough that the reconcile keeps
-kept-name rules in place again (the kept-name completion's footprint falls
-from 290 to 175). The binding row is now the one whose thief renamed every
-rule, which forces every rule to be replaced. The frontier above was
-measured before batching; at 6 and 13 it re-measures at the same 74.0%
-footprint (instructions 63.7%), 6 and 14 is still over (77.0%), and 8 and 11
-(74.5%) and 10 and 9 (75.0%) are unchanged.
+| Enroll `Combined` through `apply_doc` | 199.2M (49.8%) | 15.9 MB | 91 | 65 | 52 000 | 888 |
+| `begin_lost_key` / `begin_compromise` | 134.0M (33.5%) | 4.7 MB | 23 | 2 | 1 888 | 248 |
+| Thief's `apply_doc` (every key swapped, every rule renamed) | 205.3M (51.3%) | 22.4 MB | 126 | 106 | 48 280 | 340 |
+| Compromise completion, every rule kept by name | 254.5M (63.6%) | 14.7 MB (35.1%) | 95 | 80 (40.0%) | 44 112 | 2 700 (16.5%) |
+| Compromise completion, every rule renamed | 254.9M (63.7%) | 27.1 MB (64.7%) | 155 (38.8%) | 141 (70.5%) | 56 572 (42.8%) | 2 700 (16.5%) |
+| Compromise completion, names kept, every program and cap changed | 270.2M (67.5%) | 27.5 MB (65.5%) | 153 | 137 (68.5%) | 56 300 | 2 700 |
+| Compromise completion, names kept, every program changed | 269.4M (67.4%) | 27.5 MB | 153 | 137 | 56 300 | 2 700 |
+| Compromise completion, names kept, every cap changed | 270.1M (67.5%) | 27.5 MB | 153 | 137 | 56 300 | 2 700 |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 252.1M (63.0%) | 14.1 MB | 89 | 74 | 43 276 | 1 908 |
+| `Protected` reconfiguration, every rule edited | 253.2M (63.3%) | 14.5 MB | 83 | 58 | 39 932 | 888 |
+| `Protected` reconfiguration, every rule replaced | 248.7M (62.2%) | 25.5 MB | 143 | 118 | 52 440 | 888 |
 
 The "Release stack, in process" table above is from PR 103, with OZ's
 events. On this branch, the `worst_case_*` tests hold the rows above at the

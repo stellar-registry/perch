@@ -50,7 +50,7 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 /// (`docs/recovery/budgets.md`, "Document caps"): the costliest document
 /// they admit stays within 75% of every per-transaction limit through
 /// enrollment, a lost-key or compromise completion, and a reconfiguration.
-/// The binding limit is the footprint: with OZ's per-item events
+/// The binding limit is written entries: with OZ's per-item events
 /// suppressed (the quiet-events experiment), events no longer bind.
 pub const MAX_DOC_SIGNERS: u32 = 6;
 /// See [`MAX_DOC_SIGNERS`].

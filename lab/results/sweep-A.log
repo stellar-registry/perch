@@ -1,0 +1,73 @@
+
+running 1 test
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3302,"canonical_bytes":32768}
+
+{"case":"enroll Combined through apply_doc [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":683640003,"instructions_pct_of_tx_limit":170.9,"mem_bytes":64457288,"read_entries":91,"write_entries":65,"footprint_entries":156,"write_bytes":125728,"events_bytes":888,"fee_resource_stroops":854414,"fee_rent_stroops":5915323462}
+
+{"case":"begin_lost_key [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":676540848,"instructions_pct_of_tx_limit":169.1,"mem_bytes":49691412,"read_entries":22,"write_entries":2,"footprint_entries":24,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":484530,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":83,"prove_ms":97,"peak_rss_bytes":48726016}
+
+{"case":"completion apply_doc (Combined, ZK rotation, every signer revoked) [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":724603643,"instructions_pct_of_tx_limit":181.2,"mem_bytes":60729400,"read_entries":81,"write_entries":69,"footprint_entries":150,"write_bytes":67112,"events_bytes":1908,"fee_resource_stroops":860668,"fee_rent_stroops":192154396}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3290,"canonical_bytes":32768}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3290,"canonical_bytes":32768}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3290,"canonical_bytes":32768}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief kept every rule) [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":689703965,"instructions_pct_of_tx_limit":172.4,"mem_bytes":58002879,"read_entries":58,"write_entries":42,"footprint_entries":100,"write_bytes":59888,"events_bytes":340,"fee_resource_stroops":706274,"fee_rent_stroops":26074677}
+
+{"case":"publish_baseline [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":570921244,"instructions_pct_of_tx_limit":142.7,"mem_bytes":46245010,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":32040,"events_bytes":0,"fee_resource_stroops":431086,"fee_rent_stroops":3090280011}
+
+{"case":"begin_compromise [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":685477128,"instructions_pct_of_tx_limit":171.4,"mem_bytes":49441758,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":490785,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":75,"prove_ms":103,"peak_rss_bytes":49856512}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief kept every rule) [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":725728147,"instructions_pct_of_tx_limit":181.4,"mem_bytes":60923816,"read_entries":87,"write_entries":75,"footprint_entries":162,"write_bytes":67948,"events_bytes":2700,"fee_resource_stroops":890415,"fee_rent_stroops":268558527}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3290,"canonical_bytes":32768}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3290,"canonical_bytes":32768}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3289,"canonical_bytes":32768}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief renamed every rule) [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":684210033,"instructions_pct_of_tx_limit":171.1,"mem_bytes":70609192,"read_entries":126,"write_entries":106,"footprint_entries":232,"write_bytes":122008,"events_bytes":340,"fee_resource_stroops":1015542,"fee_rent_stroops":666715893}
+
+{"case":"publish_baseline [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":570952235,"instructions_pct_of_tx_limit":142.7,"mem_bytes":46262622,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":32040,"events_bytes":0,"fee_resource_stroops":431108,"fee_rent_stroops":3090280011}
+
+{"case":"begin_compromise [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":682840022,"instructions_pct_of_tx_limit":170.7,"mem_bytes":49507174,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":488940,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":97,"prove_ms":166,"peak_rss_bytes":55656448}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief renamed every rule) [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":732344842,"instructions_pct_of_tx_limit":183.1,"mem_bytes":75347303,"read_entries":155,"write_entries":141,"footprint_entries":296,"write_bytes":130300,"events_bytes":2700,"fee_resource_stroops":1219701,"fee_rent_stroops":911794808}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3301,"canonical_bytes":32768}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3301,"canonical_bytes":32768}
+
+{"case":"native prove","execute_ms":68,"prove_ms":98,"peak_rss_bytes":49823744}
+
+{"case":"Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment; every rule edited) [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":724436455,"instructions_pct_of_tx_limit":181.1,"mem_bytes":61177703,"read_entries":75,"write_entries":54,"footprint_entries":129,"write_bytes":63872,"events_bytes":888,"fee_resource_stroops":785423,"fee_rent_stroops":93566764}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3301,"canonical_bytes":32768}
+
+{"case":"document","signers":6,"rules":13,"both_policies":11,"signers_per_rule":6,"string_values":3300,"canonical_bytes":32768}
+
+{"case":"native prove","execute_ms":69,"prove_ms":103,"peak_rss_bytes":51380224}
+
+{"case":"Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment; every rule replaced) [6 signers, 13 rules, 11 with both policies, 6 per rule]","instructions":730612521,"instructions_pct_of_tx_limit":182.7,"mem_bytes":73975706,"read_entries":143,"write_entries":118,"footprint_entries":261,"write_bytes":126168,"events_bytes":888,"fee_resource_stroops":1103009,"fee_rent_stroops":735944089}
+.
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 116.72s
+

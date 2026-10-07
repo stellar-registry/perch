@@ -1,0 +1,17 @@
+diff --git a/packages/accounts/src/smart_account/storage.rs b/packages/accounts/src/smart_account/storage.rs
+index 0d4fc34..9c2f26d 100644
+--- a/packages/accounts/src/smart_account/storage.rs
++++ b/packages/accounts/src/smart_account/storage.rs
+@@ -545,6 +545,12 @@ pub fn do_check_auth(
+ /// * [`SmartAccountError::DuplicateSigner`] - When two signers share the same
+ ///   canonical key identity.
+ pub fn validate_no_canonical_duplicates(e: &Env, signers: &Vec<Signer>) {
++    // LAB what-if (W1): the caller pre-validated canonical uniqueness; skip
++    // the per-call verifier round trip. Measurement only.
++    if option_env!("OZ_LAB_SKIP_CANON").is_some() {
++        let _ = (e, signers);
++        return;
++    }
+     // Group external signer keys by verifier address.
+     let mut verifier_groups: Map<Address, Vec<Val>> = Map::new(e);
+ 

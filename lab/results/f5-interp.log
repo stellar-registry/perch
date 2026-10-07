@@ -1,0 +1,205 @@
+
+running 1 test
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":277,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":277,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":276,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief renamed every rule) [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":192410108,"instructions_pct_of_tx_limit":48.1,"mem_bytes":16051718,"read_entries":99,"write_entries":81,"footprint_entries":180,"write_bytes":44024,"events_bytes":340,"fee_resource_stroops":503071,"fee_rent_stroops":165991457}
+
+{"case":"publish_baseline [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":100337625,"instructions_pct_of_tx_limit":25.1,"mem_bytes":1881902,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":80678,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":136604328,"instructions_pct_of_tx_limit":34.2,"mem_bytes":4807370,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":106575,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":69,"prove_ms":98,"peak_rss_bytes":49266688}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 24, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "d00b15..AppliedDocBytes": 1, "d00b15..AppliedFingerprints": 1, "d00b15..ContextRuleData": 27, "d00b15..EnrolledIds": 1, "d00b15..InstalledRules": 1, "d00b15..LedgerKeyContractInstance": 1, "d00b15..PolicyData": 4, "d00b15..PolicyLookup": 2, "d00b15..Revoked": 12, "d00b15..SignerData": 12, "d00b15..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief renamed every rule) [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":239111049,"instructions_pct_of_tx_limit":59.8,"mem_bytes":19948079,"read_entries":128,"write_entries":115,"footprint_entries":243,"write_bytes":52204,"events_bytes":2700,"fee_resource_stroops":700457,"fee_rent_stroops":409635308}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":289,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":287,"canonical_bytes":8192}
+
+{"case":"native prove","execute_ms":66,"prove_ms":95,"peak_rss_bytes":48496640}
+
+{"case":"Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment; every rule replaced) [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":235585036,"instructions_pct_of_tx_limit":58.9,"mem_bytes":19060410,"read_entries":116,"write_entries":93,"footprint_entries":209,"write_bytes":48176,"events_bytes":888,"fee_resource_stroops":588272,"fee_rent_stroops":235569417}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":277,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":277,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":13,"both_policies":0,"signers_per_rule":6,"string_values":277,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief kept every name but changed every policy) [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":212541278,"instructions_pct_of_tx_limit":53.1,"mem_bytes":16522768,"read_entries":98,"write_entries":79,"footprint_entries":177,"write_bytes":43904,"events_bytes":340,"fee_resource_stroops":508933,"fee_rent_stroops":164329967}
+
+{"case":"publish_baseline [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":100334585,"instructions_pct_of_tx_limit":25.1,"mem_bytes":1881426,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":80676,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":135899382,"instructions_pct_of_tx_limit":34.0,"mem_bytes":4805602,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":106081,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":64,"prove_ms":96,"peak_rss_bytes":48562176}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 24, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "d00b15..AppliedDocBytes": 1, "d00b15..AppliedFingerprints": 1, "d00b15..ContextRuleData": 27, "d00b15..EnrolledIds": 1, "d00b15..InstalledRules": 1, "d00b15..LedgerKeyContractInstance": 1, "d00b15..PolicyData": 2, "d00b15..PolicyLookup": 1, "d00b15..Revoked": 12, "d00b15..SignerData": 12, "d00b15..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief kept every name but changed every policy) [6 signers, 13 rules, 0 with both policies, 6 per rule]","instructions":258362539,"instructions_pct_of_tx_limit":64.6,"mem_bytes":20374534,"read_entries":127,"write_entries":113,"footprint_entries":240,"write_bytes":52068,"events_bytes":2700,"fee_resource_stroops":705691,"fee_rent_stroops":407816943}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":174,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":174,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":172,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief renamed every rule) [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":211558709,"instructions_pct_of_tx_limit":52.9,"mem_bytes":19136386,"read_entries":111,"write_entries":93,"footprint_entries":204,"write_bytes":48836,"events_bytes":340,"fee_resource_stroops":569342,"fee_rent_stroops":174111089}
+
+{"case":"publish_baseline [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":98956405,"instructions_pct_of_tx_limit":24.7,"mem_bytes":1707135,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":79711,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":134275629,"instructions_pct_of_tx_limit":33.6,"mem_bytes":4648107,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":104944,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":66,"prove_ms":94,"peak_rss_bytes":49332224}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 30, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "cc5562..AppliedDocBytes": 1, "cc5562..AppliedFingerprints": 1, "cc5562..ContextRuleData": 33, "cc5562..EnrolledIds": 1, "cc5562..InstalledRules": 1, "cc5562..LedgerKeyContractInstance": 1, "cc5562..PolicyData": 4, "cc5562..PolicyLookup": 2, "cc5562..Revoked": 12, "cc5562..SignerData": 12, "cc5562..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief renamed every rule) [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":260606128,"instructions_pct_of_tx_limit":65.2,"mem_bytes":23533440,"read_entries":140,"write_entries":127,"footprint_entries":267,"write_bytes":57024,"events_bytes":2700,"fee_resource_stroops":768379,"fee_rent_stroops":417482723}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":185,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":184,"canonical_bytes":8192}
+
+{"case":"native prove","execute_ms":66,"prove_ms":95,"peak_rss_bytes":48398336}
+
+{"case":"Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment; every rule replaced) [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":254896112,"instructions_pct_of_tx_limit":63.7,"mem_bytes":22195241,"read_entries":128,"write_entries":105,"footprint_entries":233,"write_bytes":52988,"events_bytes":888,"fee_resource_stroops":654657,"fee_rent_stroops":242989521}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":174,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":174,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":16,"both_policies":0,"signers_per_rule":6,"string_values":174,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief kept every name but changed every policy) [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":236135793,"instructions_pct_of_tx_limit":59.0,"mem_bytes":19755731,"read_entries":110,"write_entries":91,"footprint_entries":201,"write_bytes":48724,"events_bytes":340,"fee_resource_stroops":578325,"fee_rent_stroops":172176996}
+
+{"case":"publish_baseline [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":98955669,"instructions_pct_of_tx_limit":24.7,"mem_bytes":1706659,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":79710,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":133849480,"instructions_pct_of_tx_limit":33.5,"mem_bytes":4646339,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":104646,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":67,"prove_ms":95,"peak_rss_bytes":49119232}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 30, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "cc5562..AppliedDocBytes": 1, "cc5562..AppliedFingerprints": 1, "cc5562..ContextRuleData": 33, "cc5562..EnrolledIds": 1, "cc5562..InstalledRules": 1, "cc5562..LedgerKeyContractInstance": 1, "cc5562..PolicyData": 2, "cc5562..PolicyLookup": 1, "cc5562..Revoked": 12, "cc5562..SignerData": 12, "cc5562..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief kept every name but changed every policy) [6 signers, 16 rules, 0 with both policies, 6 per rule]","instructions":283906218,"instructions_pct_of_tx_limit":71.0,"mem_bytes":24100433,"read_entries":139,"write_entries":125,"footprint_entries":264,"write_bytes":56888,"events_bytes":2700,"fee_resource_stroops":776447,"fee_rent_stroops":415664358}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":105,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":105,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":103,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief renamed every rule) [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":225473809,"instructions_pct_of_tx_limit":56.4,"mem_bytes":21289295,"read_entries":119,"write_entries":101,"footprint_entries":220,"write_bytes":52044,"events_bytes":340,"fee_resource_stroops":614328,"fee_rent_stroops":178902657}
+
+{"case":"publish_baseline [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":98005195,"instructions_pct_of_tx_limit":24.5,"mem_bytes":1637454,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":79045,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":133117988,"instructions_pct_of_tx_limit":33.3,"mem_bytes":4588762,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":104134,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":71,"prove_ms":101,"peak_rss_bytes":48676864}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 34, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "b6c0e4..AppliedDocBytes": 1, "b6c0e4..AppliedFingerprints": 1, "b6c0e4..ContextRuleData": 37, "b6c0e4..EnrolledIds": 1, "b6c0e4..InstalledRules": 1, "b6c0e4..LedgerKeyContractInstance": 1, "b6c0e4..PolicyData": 4, "b6c0e4..PolicyLookup": 2, "b6c0e4..Revoked": 12, "b6c0e4..SignerData": 12, "b6c0e4..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief renamed every rule) [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":275489802,"instructions_pct_of_tx_limit":68.9,"mem_bytes":26048993,"read_entries":148,"write_entries":135,"footprint_entries":283,"write_bytes":60240,"events_bytes":2700,"fee_resource_stroops":814049,"fee_rent_stroops":422701473}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":117,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":115,"canonical_bytes":8192}
+
+{"case":"native prove","execute_ms":69,"prove_ms":100,"peak_rss_bytes":50446336}
+
+{"case":"Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment; every rule replaced) [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":268670059,"instructions_pct_of_tx_limit":67.2,"mem_bytes":24379110,"read_entries":136,"write_entries":113,"footprint_entries":249,"write_bytes":56196,"events_bytes":888,"fee_resource_stroops":699545,"fee_rent_stroops":248169433}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":105,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":105,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":18,"both_policies":0,"signers_per_rule":6,"string_values":105,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief kept every name but changed every policy) [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":252211652,"instructions_pct_of_tx_limit":63.1,"mem_bytes":22010208,"read_entries":118,"write_entries":99,"footprint_entries":217,"write_bytes":51940,"events_bytes":340,"fee_resource_stroops":624830,"fee_rent_stroops":177395488}
+
+{"case":"publish_baseline [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":98004459,"instructions_pct_of_tx_limit":24.5,"mem_bytes":1636978,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":79045,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":132867407,"instructions_pct_of_tx_limit":33.2,"mem_bytes":4586994,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":103959,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":67,"prove_ms":96,"peak_rss_bytes":49627136}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 34, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "b6c0e4..AppliedDocBytes": 1, "b6c0e4..AppliedFingerprints": 1, "b6c0e4..ContextRuleData": 37, "b6c0e4..EnrolledIds": 1, "b6c0e4..InstalledRules": 1, "b6c0e4..LedgerKeyContractInstance": 1, "b6c0e4..PolicyData": 2, "b6c0e4..PolicyLookup": 1, "b6c0e4..Revoked": 12, "b6c0e4..SignerData": 12, "b6c0e4..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief kept every name but changed every policy) [6 signers, 18 rules, 0 with both policies, 6 per rule]","instructions":301767988,"instructions_pct_of_tx_limit":75.4,"mem_bytes":26714814,"read_entries":147,"write_entries":133,"footprint_entries":280,"write_bytes":60104,"events_bytes":2700,"fee_resource_stroops":824202,"fee_rent_stroops":420883108}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":37,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":37,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":34,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief renamed every rule) [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":239968404,"instructions_pct_of_tx_limit":60.0,"mem_bytes":23518380,"read_entries":127,"write_entries":109,"footprint_entries":236,"write_bytes":55252,"events_bytes":340,"fee_resource_stroops":659719,"fee_rent_stroops":184856715}
+
+{"case":"publish_baseline [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":97789835,"instructions_pct_of_tx_limit":24.4,"mem_bytes":1606426,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":78894,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":132272339,"instructions_pct_of_tx_limit":33.1,"mem_bytes":4568070,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":103542,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":69,"prove_ms":96,"peak_rss_bytes":48562176}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 38, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "cf9807..AppliedDocBytes": 1, "cf9807..AppliedFingerprints": 1, "cf9807..ContextRuleData": 41, "cf9807..EnrolledIds": 1, "cf9807..InstalledRules": 1, "cf9807..LedgerKeyContractInstance": 1, "cf9807..PolicyData": 4, "cf9807..PolicyLookup": 2, "cf9807..Revoked": 12, "cf9807..SignerData": 12, "cf9807..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief renamed every rule) [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":291401091,"instructions_pct_of_tx_limit":72.9,"mem_bytes":28667473,"read_entries":156,"write_entries":143,"footprint_entries":299,"write_bytes":63448,"events_bytes":2700,"fee_resource_stroops":860432,"fee_rent_stroops":427958802}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":48,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":46,"canonical_bytes":8192}
+
+{"case":"native prove","execute_ms":69,"prove_ms":96,"peak_rss_bytes":49266688}
+
+{"case":"Protected reconfiguration apply_doc (Combined: recorded quorum and proof, a new enrollment; every rule replaced) [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":283532101,"instructions_pct_of_tx_limit":70.9,"mem_bytes":26639203,"read_entries":144,"write_entries":121,"footprint_entries":265,"write_bytes":59404,"events_bytes":888,"fee_resource_stroops":745193,"fee_rent_stroops":253349345}
+
+{"case":"factory create_passkey","instructions":2059125,"instructions_pct_of_tx_limit":0.5,"mem_bytes":1089143,"read_entries":10,"write_entries":5,"footprint_entries":15,"write_bytes":1500,"events_bytes":968,"fee_resource_stroops":27766,"fee_rent_stroops":58577507}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":37,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":37,"canonical_bytes":8192}
+
+{"case":"document","signers":6,"rules":20,"both_policies":0,"signers_per_rule":6,"string_values":37,"canonical_bytes":8192}
+
+{"case":"Protected apply_doc (every key swapped, no condition; the thief kept every name but changed every policy) [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":269303447,"instructions_pct_of_tx_limit":67.3,"mem_bytes":24346660,"read_entries":126,"write_entries":107,"footprint_entries":233,"write_bytes":55148,"events_bytes":340,"fee_resource_stroops":672039,"fee_rent_stroops":182652560}
+
+{"case":"publish_baseline [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":97789099,"instructions_pct_of_tx_limit":24.4,"mem_bytes":1605950,"read_entries":10,"write_entries":1,"footprint_entries":11,"write_bytes":7464,"events_bytes":0,"fee_resource_stroops":78894,"fee_rent_stroops":719909878}
+
+{"case":"begin_compromise [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":132200142,"instructions_pct_of_tx_limit":33.1,"mem_bytes":4566302,"read_entries":23,"write_entries":2,"footprint_entries":25,"write_bytes":1888,"events_bytes":248,"fee_resource_stroops":103492,"fee_rent_stroops":21937946}
+
+{"case":"native prove","execute_ms":67,"prove_ms":97,"peak_rss_bytes":48889856}
+
+{"keys_of":"completion","by":"{"16a7bd..Enrollment": 1, "16a7bd..Leaf": 1, "16a7bd..Root": 1, "16a7bd..Tree": 1, "48f830..Program": 38, "9a56b9..Attempt": 1, "9a56b9..Authorized": 1, "9a56b9..Config": 1, "9a56b9..Epoch": 1, "9a56b9..Nullifier": 1, "cf9807..AppliedDocBytes": 1, "cf9807..AppliedFingerprints": 1, "cf9807..ContextRuleData": 41, "cf9807..EnrolledIds": 1, "cf9807..InstalledRules": 1, "cf9807..LedgerKeyContractInstance": 1, "cf9807..PolicyData": 2, "cf9807..PolicyLookup": 1, "cf9807..Revoked": 12, "cf9807..SignerData": 12, "cf9807..SignerLookup": 12}"}
+
+{"case":"completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; the thief kept every name but changed every policy) [6 signers, 20 rules, 0 with both policies, 6 per rule]","instructions":320124270,"instructions_pct_of_tx_limit":80.0,"mem_bytes":29436194,"read_entries":155,"write_entries":141,"footprint_entries":296,"write_bytes":63312,"events_bytes":2700,"fee_resource_stroops":872296,"fee_rent_stroops":426140437}
+.
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 13 filtered out; finished in 42.17s
+

@@ -34,7 +34,7 @@ members = [
 ]
 # Vendored third-party source, built only as a path dependency: not linted,
 # tested, or released with the workspace. See vendor/*/NOTICE.
-exclude = ["vendor", "target/oz-lab"]
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.1"
@@ -85,8 +85,3 @@ debug-assertions = false
 panic = "abort"
 codegen-units = 1
 lto = true
-
-# LAB (W1): measurement-only OZ copy with the per-call canonical-duplicate
-# verifier round trip compiled out when OZ_LAB_SKIP_CANON is set at build.
-[patch."https://github.com/theahaco/stellar-contracts-OZ.git"]
-stellar-accounts = { path = "target/oz-lab/oz/packages/accounts" }

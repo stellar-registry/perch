@@ -710,8 +710,13 @@ impl World {
             let mut by: std::collections::BTreeMap<String, usize> = Default::default();
             for k in perch_testkit::delta::changed(&before, &after) {
                 let (contract, key) = k.split_once('/').unwrap();
-                let kind: String = key.trim_start_matches('[').chars().take_while(|c| *c != ',' && *c != ']' && *c != '(').collect();
-                *by.entry(format!("{}..{}", &contract[..6], kind)).or_default() += 1;
+                let kind: String = key
+                    .trim_start_matches('[')
+                    .chars()
+                    .take_while(|c| *c != ',' && *c != ']' && *c != '(')
+                    .collect();
+                *by.entry(format!("{}..{}", &contract[..6], kind))
+                    .or_default() += 1;
             }
             println!("\n{{\"keys_of\":\"completion\",\"by\":\"{by:?}\"}}");
         }
@@ -941,7 +946,11 @@ impl World {
             format!(
                 r#""principals":{{"type":"threshold","m":1,"signers":[{}]}},"functions":["{}"],"args":[{{"index":0,"pred":{{"type":"is-self"}}}}]"#,
                 named.join(","),
-                if matches!(REPARAM.with(Cell::get), 1 | 2) { "protectee" } else { "protected" }
+                if matches!(REPARAM.with(Cell::get), 1 | 2) {
+                    "protectee"
+                } else {
+                    "protected"
+                }
             )
         };
         let signers: std::vec::Vec<String> = ids
@@ -1860,7 +1869,12 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: 
     ));
 
     let thief = passkeys(seed + 1, shape.signers);
-    let mode: u8 = match thief_tag { "p" => 1, "q" => 2, "c" => 3, _ => 0 };
+    let mode: u8 = match thief_tag {
+        "p" => 1,
+        "q" => 2,
+        "c" => 3,
+        _ => 0,
+    };
     let reparam = mode != 0;
     let thief_tag = if reparam { "" } else { thief_tag };
     let stolen = Shape {

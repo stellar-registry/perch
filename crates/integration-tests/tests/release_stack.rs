@@ -38,12 +38,14 @@ use perch_recovery_interface::zk::{ZkAdapterClient, ZkEvidence};
 use perch_recovery_interface::{
     ConfigChange, RecoveryAction, RecoveryStatement, StatementSubject, UpgradeSubject,
 };
+use perch_testkit::delta::raw_entries;
 use perch_testkit::passkey::{auth_entry, SoftPasskey};
 use perch_testkit::FIXTURE_NETWORK;
 use perch_zk_pool::{PerchZkPoolClient, PoolKey, TreeState};
 use perch_zk_primitives::{contract_id, ZERO_HASHES};
 use perch_zk_prover::{Inputs, Toolchain, Tree};
 use soroban_sdk::testutils::{EnvTestConfig, Ledger as _};
+use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::xdr::{
     InvokeContractArgs, ScVal, SorobanAddressCredentials, SorobanAuthorizationEntry,
     SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials, StringM, VecM,
@@ -53,8 +55,9 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use stellar_accounts::policies::spending_limit::{SpendingLimitData, SpendingLimitStorageKey};
 use stellar_accounts::smart_account::{
-    AuthPayload, SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
+    AuthPayload, Signer, SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
 };
 use support::{strkey, Key, TargetClient};
 
@@ -241,6 +244,7 @@ struct World {
     adapter: Address,
     pool: Address,
     target: Address,
+    spending_limit: Address,
     guardians: std::vec::Vec<Address>,
     circuit_id: BytesN<32>,
     nonce: Cell<i64>,
@@ -315,7 +319,7 @@ fn world() -> World {
     };
     let compiler = content("perch-doc-compiler");
     content("perch-interpreter");
-    content("perch-spending-limit");
+    let spending_limit = content("perch-spending-limit");
     let webauthn = content("perch-webauthn-verifier");
     let pool = content("perch-zk-pool");
     let adapter = content("perch-zk-adapter");
@@ -338,6 +342,7 @@ fn world() -> World {
         adapter,
         pool,
         target,
+        spending_limit,
         guardians,
         circuit_id,
         nonce: Cell::new(0),
@@ -2052,6 +2057,441 @@ fn worst_case_protected_reconfiguration_at_the_document_caps_replaces_every_rule
         MAX_DOC_CANONICAL_BYTES as usize,
         95,
     );
+}
+
+// ---------------------------------------------------------------------------
+// Signer transitions: one `apply_doc` that changes a rule's signers
+// ---------------------------------------------------------------------------
+
+/// One `apply_doc` that changes `pay`'s signers (passkeys by index), with
+/// `admin` naming `owner` and, when given, a second rule `work` that keeps
+/// its signers throughout.
+struct Transition {
+    name: &'static str,
+    owner: (usize, usize),
+    pay: (&'static [usize], &'static [usize]),
+    work: Option<&'static [usize]>,
+    /// `pay` is scoped to a token with a spending cap, part of which is spent
+    /// before the transition.
+    capped: bool,
+}
+
+const TRANSITIONS: &[Transition] = &[
+    Transition {
+        name: "single addition",
+        owner: (0, 0),
+        pay: (&[0, 1, 2], &[0, 1, 2, 3]),
+        work: None,
+        capped: false,
+    },
+    Transition {
+        name: "several additions",
+        owner: (0, 0),
+        pay: (&[0, 1], &[0, 1, 2, 3, 4]),
+        work: None,
+        capped: false,
+    },
+    Transition {
+        name: "full six-key rotation",
+        owner: (0, 6),
+        pay: (&[0, 1, 2, 3, 4, 5], &[6, 7, 8, 9, 10, 11]),
+        work: None,
+        capped: false,
+    },
+    Transition {
+        name: "one swap at the signer cap",
+        owner: (0, 0),
+        pay: (&[0, 1, 2, 3, 4, 5], &[0, 1, 2, 3, 4, 6]),
+        work: None,
+        capped: false,
+    },
+    Transition {
+        name: "five swaps at the signer cap",
+        owner: (0, 0),
+        pay: (&[0, 1, 2, 3, 4, 5], &[0, 6, 7, 8, 9, 10]),
+        work: None,
+        capped: false,
+    },
+    Transition {
+        name: "shared signers",
+        owner: (0, 0),
+        pay: (&[0, 1, 2], &[0, 1, 3, 4]),
+        work: Some(&[1, 2, 3]),
+        capped: false,
+    },
+    Transition {
+        name: "full rotation with an active spending cap",
+        owner: (0, 6),
+        pay: (&[0, 1, 2, 3, 4, 5], &[6, 7, 8, 9, 10, 11]),
+        work: None,
+        capped: true,
+    },
+    Transition {
+        name: "one swap at OZ's 15",
+        owner: (0, 0),
+        pay: (
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15],
+        ),
+        work: None,
+        capped: false,
+    },
+    Transition {
+        name: "seven swaps at OZ's 15",
+        owner: (0, 0),
+        pay: (
+            &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+            &[0, 1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 18, 19, 20, 21],
+        ),
+        work: None,
+        capped: false,
+    },
+];
+
+fn tkey(i: usize) -> SoftPasskey {
+    let mut s = [0x61; 32];
+    s[1] = i as u8;
+    SoftPasskey::from_seed(s)
+}
+
+impl Transition {
+    /// Every key the document declares before (`false`) or after (`true`).
+    fn declared(&self, after: bool) -> std::vec::Vec<usize> {
+        let (owner, pay) = if after {
+            (self.owner.1, self.pay.1)
+        } else {
+            (self.owner.0, self.pay.0)
+        };
+        let mut ids: std::vec::Vec<usize> = std::iter::once(owner)
+            .chain(pay.iter().copied())
+            .chain(self.work.into_iter().flatten().copied())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    fn doc(&self, w: &World, token: &Address, after: bool) -> Bytes {
+        let (owner, pay) = if after {
+            (self.owner.1, self.pay.1)
+        } else {
+            (self.owner.0, self.pay.0)
+        };
+        let signers: std::vec::Vec<(String, std::vec::Vec<u8>)> = self
+            .declared(after)
+            .into_iter()
+            .map(|i| (format!("k{i}"), tkey(i).key_data()))
+            .collect();
+        let ids = |set: &[usize]| -> std::vec::Vec<String> {
+            set.iter().map(|i| format!("k{i}")).collect()
+        };
+        w.transition_doc(
+            token,
+            &signers,
+            &format!("k{owner}"),
+            &ids(pay),
+            self.work.map(ids).as_deref(),
+            self.capped,
+        )
+    }
+}
+
+/// The signer `key` is as the account installs it.
+fn passkey_signer(w: &World, key: &[u8]) -> Signer {
+    Signer::External(w.webauthn.clone(), Bytes::from_slice(&w.env, key))
+}
+
+impl World {
+    /// A document declaring `signers` (id, passkey key data), with `admin`
+    /// naming `owner` and 1-of-n rules `pay` (scoped to `token` with a
+    /// spending cap when `capped`, else to the target) and `work` (the
+    /// target).
+    fn transition_doc(
+        &self,
+        token: &Address,
+        signers: &[(String, std::vec::Vec<u8>)],
+        owner: &str,
+        pay: &[String],
+        work: Option<&[String]>,
+        capped: bool,
+    ) -> Bytes {
+        let declared: std::vec::Vec<String> = signers
+            .iter()
+            .map(|(id, key)| {
+                format!(
+                    r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                    strkey(&self.webauthn),
+                    hex(key)
+                )
+            })
+            .collect();
+        let named = |set: &[String]| -> String {
+            set.iter()
+                .map(|id| format!(r#""{id}""#))
+                .collect::<std::vec::Vec<_>>()
+                .join(",")
+        };
+        let scope =
+            |a: &Address| format!(r#""scope":{{"type":"contract","address":"{}"}}"#, strkey(a));
+        let mut rules = std::vec![format!(
+            r#"{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["{owner}"]}}}}"#
+        )];
+        let (pay_scope, cap) = if capped {
+            (
+                scope(token),
+                r#","cap":{"limit":"100","period-ledgers":1000}"#,
+            )
+        } else {
+            (scope(&self.target), "")
+        };
+        rules.push(format!(
+            r#"{{"name":"pay",{pay_scope},"principals":{{"type":"threshold","m":1,"signers":[{}]}}{cap}}}"#,
+            named(pay)
+        ));
+        if let Some(work) = work {
+            rules.push(format!(
+                r#"{{"name":"work",{},"principals":{{"type":"threshold","m":1,"signers":[{}]}}}}"#,
+                scope(&self.target),
+                named(work)
+            ));
+        }
+        let json = format!(
+            r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{}]}}"#,
+            declared.join(","),
+            rules.join(","),
+        );
+        Bytes::from_slice(&self.env, json.as_bytes())
+    }
+
+    /// A token the account holds 1 000 of.
+    fn funded_token(&self, a: &Acct) -> Address {
+        let token = self
+            .env
+            .register_stellar_asset_contract_v2(self.guardians[0].clone())
+            .address();
+        self.env.mock_all_auths();
+        StellarAssetClient::new(&self.env, &token).mint(&a.address, &1_000);
+        self.env.set_auths(&[]);
+        token
+    }
+
+    /// `key` authorizes a transfer of `amount` of `token` through `pay`.
+    fn spend(&self, a: &Acct, key: &SoftPasskey, token: &Address, amount: i128) -> bool {
+        let to = self.guardians[1].clone();
+        let root = self.invocation(
+            token,
+            "transfer",
+            std::vec![
+                self.sc(a.address.clone()),
+                self.sc(to.clone()),
+                self.sc(amount)
+            ],
+        );
+        self.env
+            .set_auths(&[self.passkey_entry(&a.address, key, "pay", root)]);
+        let ok = TokenClient::new(&self.env, token)
+            .try_transfer(&a.address, &to, &amount)
+            .is_ok();
+        self.env.set_auths(&[]);
+        ok
+    }
+
+    /// The spending-limit policy's window for rule `id`, if it has one.
+    fn window(&self, a: &Acct, id: u32) -> Option<SpendingLimitData> {
+        self.env.as_contract(&self.spending_limit, || {
+            self.env
+                .storage()
+                .persistent()
+                .get(&SpendingLimitStorageKey::AccountContext(
+                    a.address.clone(),
+                    id,
+                ))
+        })
+    }
+
+    /// `pay`'s id and its signers with their registry ids.
+    fn pay_rule(&self, a: &Acct) -> (u32, std::vec::Vec<(Signer, u32)>) {
+        let id = self.rule_id(&a.address, "pay");
+        let rule = self.account(a).get_context_rule(&id);
+        let signers = rule.signers.iter().zip(rule.signer_ids.iter()).collect();
+        (id, signers)
+    }
+}
+
+/// Run `t` on a fresh world: enroll its first document, spend part of the
+/// cap when it has one, apply its second, and report the second's cost and
+/// what it preserved.
+fn run_transition(t: &Transition) {
+    if t.declared(false).len().max(t.declared(true).len()) > MAX_DOC_SIGNERS as usize {
+        println!(
+            "\n{{\"transition\":\"{}\",\"skipped\":\"more than the build's {} signers\"}}",
+            t.name, MAX_DOC_SIGNERS
+        );
+        return;
+    }
+    let w = world();
+    let a = w.new_account(tkey(t.owner.0));
+    let token = w.funded_token(&a);
+    assert!(w.try_apply(&a, &tkey(t.owner.0), &t.doc(&w, &token, false), 0));
+    if t.capped {
+        assert!(w.spend(&a, &tkey(t.pay.0[0]), &token, 40));
+    }
+    let (id, before) = w.pay_rule(&a);
+    let window = w.window(&a, id);
+
+    assert!(w.try_apply(&a, &tkey(t.owner.0), &t.doc(&w, &token, true), 0));
+    report(&format!("signer transition: {}", t.name), &w.env);
+
+    // What the rule now authorizes is exactly the target set, however the
+    // account got there.
+    let (new_id, after) = w.pay_rule(&a);
+    let mut got: std::vec::Vec<Signer> = after.iter().map(|(s, _)| s.clone()).collect();
+    let mut want: std::vec::Vec<Signer> = t
+        .pay
+        .1
+        .iter()
+        .map(|&i| passkey_signer(&w, &tkey(i).key_data()))
+        .collect();
+    got.sort();
+    want.sort();
+    assert_eq!(got, want, "{}: pay's signers", t.name);
+    // What the transition preserved.
+    let retained: std::vec::Vec<&(Signer, u32)> = before
+        .iter()
+        .filter(|(s, _)| after.iter().any(|(t, _)| t == s))
+        .collect();
+    let ids_kept = retained
+        .iter()
+        .all(|(s, i)| after.iter().any(|(t, j)| t == s && j == i));
+    let window_kept = match &window {
+        Some(before) => w.window(&a, new_id).as_ref() == Some(before),
+        None => true,
+    };
+    let joined = *t.pay.1.iter().rev().find(|i| !t.pay.0.contains(i)).unwrap();
+    let left = t.pay.0.iter().find(|i| !t.pay.1.contains(i));
+    if t.capped {
+        assert!(
+            w.spend(&a, &tkey(joined), &token, 1),
+            "{}: a new key spends",
+            t.name
+        );
+        if let Some(&left) = left {
+            assert!(
+                !w.spend(&a, &tkey(left), &token, 1),
+                "{}: a removed key cannot",
+                t.name
+            );
+        }
+    } else {
+        assert!(
+            w.activity_via(&a, &tkey(joined), "pay"),
+            "{}: a new key acts",
+            t.name
+        );
+        if let Some(&left) = left {
+            assert!(
+                !w.activity_via(&a, &tkey(left), "pay"),
+                "{}: a removed key cannot",
+                t.name
+            );
+        }
+    }
+
+    println!(
+        "\n{{\"transition\":\"{}\",\"path\":\"{}\",\"rule_id_kept\":{},\"retained_signers\":{},\"retained_signer_ids_kept\":{},\"spending_window\":\"{}\"}}",
+        t.name,
+        if new_id == id { "in place" } else { "replaced" },
+        new_id == id,
+        retained.len(),
+        ids_kept,
+        match (&window, window_kept) {
+            (None, _) => "none",
+            (Some(_), true) => "kept",
+            (Some(_), false) => "reset",
+        },
+    );
+}
+
+/// Every [`TRANSITIONS`] entry the build's caps admit (the OZ-limit ones
+/// need a stack built with `MAX_DOC_SIGNERS` raised to 15).
+#[test]
+#[ignore = "needs the built stack"]
+fn signer_transitions() {
+    for t in TRANSITIONS {
+        run_transition(t);
+    }
+}
+
+/// A transition the account refuses leaves every ledger entry as it was:
+/// a duplicate key (one passkey under a second credential id), and the
+/// budget running out part-way through a full rotation.
+#[test]
+#[ignore = "needs the built stack"]
+fn a_rejected_signer_transition_changes_nothing() {
+    let rotation = &TRANSITIONS[2];
+    let setup = || {
+        let w = world();
+        let a = w.new_account(tkey(rotation.owner.0));
+        let token = w.funded_token(&a);
+        assert!(w.try_apply(&a, &tkey(0), &rotation.doc(&w, &token, false), 0));
+        (w, a, token)
+    };
+
+    // The same passkey twice.
+    let (w, a, token) = setup();
+    let mut dup = tkey(1);
+    dup.credential_id = std::vec![0xd0; 16];
+    let signers: std::vec::Vec<(String, std::vec::Vec<u8>)> = [0, 1, 2]
+        .iter()
+        .map(|&i| (format!("k{i}"), tkey(i).key_data()))
+        .chain(std::iter::once(("dup".to_string(), dup.key_data())))
+        .collect();
+    let ids: std::vec::Vec<String> = signers.iter().map(|(id, _)| id.clone()).collect();
+    let duplicate = w.transition_doc(&token, &signers, "k0", &ids, None, false);
+    let before = raw_entries(&w.env);
+    assert!(!w.try_apply(&a, &tkey(0), &duplicate, 0));
+    assert_eq!(
+        raw_entries(&w.env),
+        before,
+        "a duplicate key changes nothing"
+    );
+
+    // The rotation's full cost, then a fresh world for each fraction of it
+    // (AGENTS.md: don't chain recovered panics in one `Env`).
+    let (twin, a, token) = setup();
+    assert!(twin.try_apply(&a, &tkey(0), &rotation.doc(&twin, &token, true), 0));
+    let cost = twin.env.cost_estimate().resources().instructions as u64;
+    for percent in [25u64, 50, 75, 95] {
+        let (w, a, token) = setup();
+        let doc = rotation.doc(&w, &token, true);
+        let before = raw_entries(&w.env);
+        let root = w.invocation(
+            &a.address,
+            "apply_doc",
+            std::vec![w.sc(doc.clone()), w.sc(0u32)],
+        );
+        w.env
+            .set_auths(&[w.passkey_entry(&a.address, &tkey(0), "admin", root)]);
+        w.env
+            .cost_estimate()
+            .budget()
+            .reset_limits(cost * percent / 100, 1 << 30);
+        let client = w.account(&a);
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            client.try_apply_doc(&doc, &0)
+        }));
+        w.env.cost_estimate().budget().reset_unlimited();
+        w.env.set_auths(&[]);
+        assert!(
+            out.is_err() || out.as_ref().is_ok_and(|r| r.is_err()),
+            "{percent}% of the budget"
+        );
+        assert_eq!(raw_entries(&w.env), before, "{percent}%: nothing changed");
+        assert!(
+            w.try_apply(&a, &tkey(0), &doc, 0),
+            "{percent}%: the account still applies it"
+        );
+    }
 }
 
 /// Sizing the caps: every worst-case flow over the shapes in

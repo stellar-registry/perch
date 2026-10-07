@@ -5,7 +5,7 @@
 // deployments/testnet.json. Regenerate with scripts/bindings-contracts.sh.
 
 /** sha256 of the wasm these bindings were generated from. */
-export const WASM_SHA256 = "833639d15cce2fd96a0b28c80d4388eef6ea003b2e9709150ba20c2fce44580c";
+export const WASM_SHA256 = "e9005eb5a828d8bf59e63b1885702c8b93dec90bdb02eaf911f347339e765afb";
 
 import { Buffer } from "buffer";
 import { Address } from "@stellar/stellar-sdk";

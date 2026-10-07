@@ -143,21 +143,22 @@ in its generated "Circuit identities" table). In summary:
   fallback.
 
 Workstream 4 measured the §2 full-transaction rows on testnet, against the
-deployed depth-32 release wasm (`deployments/testnet.json`, built before the
-ZK-flavor verifier, WS3's completion fixes, the final caps, and the small
-wasm stacks; the redeploy re-measures them) under enforcing authorization
-with real proofs; see
+deployed release wasm (`deployments/testnet.json`: stack commit `704aa23`,
+the quiet, reconciling `apply_doc` at caps 8 x 11, WS2's ZK-flavor verifier,
+and WS3's two-digest target binding) under enforcing authorization with
+real proofs; see
 [`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md). Every
-row is within the 75% budget. The largest are `submit_zk` at 91.2M
-instructions (22.8%) and 16.5 KB of transaction (12.5%), `submit_zk_change`
-at 89.3M (22.3%), enrollment at 72.8M (18.2%), and the `Combined`
-completion with ZK rotation at 71.2M (17.8%). No row reaches 11% of the
-footprint-entry or 15% of the written-entry limit. Memory is not reported
-by the RPC; the release-stack suite meters it in-process on the same wasm,
-and every row stays under 18 MB of the 41.9 MB limit. Two rows are measured
-only in-process: an enrollment that seals a tree (65.7M instructions) and
-`execute_upgrade` (6.7M), whose seven-day delay testnet would need. The
-deployed adapter's `circuit_id()` is
+row is within the 75% budget. The largest are `submit_zk` at 124.8M
+instructions (31.2%) and 18.2 KB of transaction (13.8%), `submit_zk_change`
+at 123.1M (30.8%), and the `Combined` completion with ZK rotation at 65.5M
+(16.4%). No row reaches 11% of the footprint (distinct keys) or 15% of the
+written-entry limit. Memory is not reported by the RPC; the release-stack
+suite meters it in-process on the same wasm, where every row is within
+budget at the caps (the largest, 25.4 MB, at 60.5%). Two rows are measured
+only in-process: an enrollment that seals a tree and `execute_upgrade`,
+whose seven-day delay testnet would need. The release-stack suite passes
+17 of 17 against the bytes fetched back from the deployment. The deployed
+adapter's `circuit_id()` is
 `9e39c41f4f35aad43e64b255dfe3ba13f10e8c9d36d6f56fce23c2d97c0a0b4a`, the
 `vk_sha256` in `circuits/manifest.json`. The open §1 rows (reference phone
 and laptop) remain open.

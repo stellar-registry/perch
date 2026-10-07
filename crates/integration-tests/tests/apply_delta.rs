@@ -620,7 +620,8 @@ fn a_rule_keeping_its_name_with_new_functions_changes_only_its_program() {
         &doc(delegated(1), std::vec![admin(&[0]), b]),
     );
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
-    // The interpreter is this rule's alone, so OZ deregisters it as the old
+    // A policy-only edit: no signer changes, so no signer batch at all. The
+    // interpreter is this rule's alone, so OZ deregisters it as the old
     // program goes and registers it again as the new one comes.
     assert_eq!(
         names(&events, &w.delta),
@@ -698,6 +699,24 @@ fn adding_a_signer_to_a_rule_emits_only_that_signer() {
         names(&events, &w.delta),
         sorted(&["signer_registered", "signer_added"])
     );
+}
+
+#[test]
+fn adding_several_signers_is_one_batch() {
+    let a = doc(delegated(3), std::vec![admin(&[0, 1, 2])]);
+    let b = doc(delegated(7), std::vec![admin(&[0, 1, 2, 3, 4, 5, 6])]);
+    let w = DeltaWorld::new();
+    w.apply(&w.delta, &a).unwrap();
+    let plan = plan_of(&w, &w.delta, &b, Mode::Cheapest);
+    // One `batch_add_signer`: one rule write, then each new signer's registry
+    // and lookup entries.
+    assert_eq!(plan[0].step, Step::InPlace);
+    assert_eq!(plan[0].cost.writes, 1 + 4 * 2);
+    let (w, events, before, after) = case(&a, &b);
+    assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
+    let mut expected = std::vec!["signer_registered"; 4];
+    expected.extend(["signer_added"; 4]);
+    assert_eq!(names(&events, &w.delta), sorted(&expected));
 }
 
 #[test]
@@ -846,6 +865,26 @@ fn full_swap(old: usize, new: usize) -> PlannedRule {
     let w = DeltaWorld::new();
     w.apply(&w.delta, &a).unwrap();
     plan_of(&w, &w.delta, &b, Mode::InPlace).remove(0)
+}
+
+#[test]
+fn an_edit_where_nothing_survives_re_adds_a_changed_policy_after_the_new_ones() {
+    // Every part of r1 changes: its signer, its interpreter program (new
+    // functions), and a new cap. Nothing survives, so an in-place edit adds
+    // the new signer and the new spending limit first, removes the old
+    // signer and program, and only then re-adds the interpreter. Forced in
+    // place, it must still reach the full replace's state, priced exactly.
+    let mut a = rule("r1", Some(0), &[1]);
+    a.functions = Some(std::vec!["transfer"]);
+    let mut b = rule("r1", Some(0), &[2]);
+    b.functions = Some(std::vec!["transfer", "approve"]);
+    b.cap = Some((1_000, 100));
+    let a = doc(delegated(3), std::vec![admin(&[0]), a]);
+    let b = doc(delegated(3), std::vec![admin(&[0]), b]);
+    let (plan, measured) = forced(&a, &b, true);
+    let r1 = plan.iter().find(|p| p.step == Step::InPlace).unwrap();
+    assert!(r1.editable);
+    assert_eq!(measured, priced(&plan));
 }
 
 #[test]

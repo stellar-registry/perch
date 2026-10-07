@@ -451,7 +451,9 @@ impl Refs {
 /// [`Meter`] prices them; [`edit`] and [`replace`] drive both through the
 /// same sequence, so the model prices exactly what runs.
 trait Effects {
-    fn add_signer(&mut self, rule: &InstalledRule, signer: &Signer);
+    /// One OZ `batch_add_signer`: one rule read, one duplicate check across
+    /// the old and new signers, one rule write. Never called empty.
+    fn add_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>);
     fn remove_signer(&mut self, rule: &InstalledRule, signer: &Signer);
     fn add_policy(&mut self, rule: &InstalledRule, policy: &Address, param: &Val);
     fn remove_policy(&mut self, rule: &InstalledRule, policy: &Address);
@@ -541,10 +543,12 @@ impl<'a> Meter<'a> {
 }
 
 impl Effects for Meter<'_> {
-    fn add_signer(&mut self, _: &InstalledRule, signer: &Signer) {
+    fn add_signers(&mut self, _: &InstalledRule, signers: &Vec<Signer>) {
         self.cost.writes += 1;
-        self.register_signer(signer);
-        self.cost.events += SIGNER_ADDED;
+        for s in signers.iter() {
+            self.register_signer(&s);
+            self.cost.events += SIGNER_ADDED;
+        }
     }
 
     fn remove_signer(&mut self, _: &InstalledRule, signer: &Signer) {
@@ -621,8 +625,8 @@ impl Apply<'_> {
 }
 
 impl Effects for Apply<'_> {
-    fn add_signer(&mut self, rule: &InstalledRule, signer: &Signer) {
-        smart_account::add_signer(self.e, rule.id, signer);
+    fn add_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
+        smart_account::batch_add_signer(self.e, rule.id, signers);
     }
 
     fn remove_signer(&mut self, rule: &InstalledRule, signer: &Signer) {
@@ -724,8 +728,8 @@ fn edit(
         for p in remove_policies.iter() {
             fx.remove_policy(c, &p);
         }
-        for s in add_signers.iter() {
-            fx.add_signer(c, &s);
+        if !add_signers.is_empty() {
+            fx.add_signers(c, &add_signers);
         }
         for (p, val) in add_policies.iter() {
             fx.add_policy(c, &p, &val);
@@ -736,8 +740,8 @@ fn edit(
     {
         // Nothing survives: add first so the rule is never empty, then remove
         // the old, then re-add changed policies.
-        for s in add_signers.iter() {
-            fx.add_signer(c, &s);
+        if !add_signers.is_empty() {
+            fx.add_signers(c, &add_signers);
         }
         for (p, val) in fresh.iter() {
             fx.add_policy(c, &p, &val);
@@ -866,14 +870,15 @@ mod test {
         let w = world();
         let r = rule(&w, &[], &[]);
         let s = signer(&w.e);
+        let one = Vec::from_array(&w.e, [s.clone()]);
         let mut m = fresh(&w);
         // First reference: the addition, the registration with the signer,
         // and the rule, registry, and lookup entries.
-        m.add_signer(&r, &s);
+        m.add_signers(&r, &one);
         assert_eq!(cost(&m), (120 + 116 + 72, 3));
         assert_eq!(m.refs.signers.get(s.clone()), Some(1));
         // A second reference: the addition and the count.
-        m.add_signer(&r, &s);
+        m.add_signers(&r, &one);
         assert_eq!(cost(&m), (308 + 120, 5));
         assert_eq!(m.refs.signers.get(s.clone()), Some(2));
         // Dropping to one reference: the removal and the count.
@@ -885,6 +890,20 @@ mod test {
         m.remove_signer(&r, &s);
         assert_eq!(cost(&m), (552 + 124 + 100, 10));
         assert_eq!(m.refs.signers.get(s), None);
+    }
+
+    #[test]
+    fn a_batch_of_signers_writes_the_rule_once() {
+        let w = world();
+        let r = rule(&w, &[], &[]);
+        let (a, b) = (signer(&w.e), signer(&w.e));
+        let mut m = fresh(&w);
+        m.add_signers(&r, &Vec::from_array(&w.e, [a.clone(), b.clone()]));
+        // Each signer's addition and registration; one rule write, then each
+        // signer's registry and lookup entries.
+        assert_eq!(cost(&m), (2 * (120 + 116 + 72), 1 + 2 * 2));
+        assert_eq!(m.refs.signers.get(a), Some(1));
+        assert_eq!(m.refs.signers.get(b), Some(1));
     }
 
     #[test]

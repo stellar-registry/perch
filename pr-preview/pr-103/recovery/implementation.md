@@ -106,7 +106,9 @@ against the release artifacts belong to the integration layer.
   ways costs less (`rules::Cost`, the in-place edit on a tie):
   - **edited in place** under its id: its expiry is updated, and signers
     and policies are removed then added (or, when none would survive, added
-    first, so the rule is never left with neither);
+    first, so the rule is never left with neither). New signers go in one
+    OZ `batch_add_signer` call, with one duplicate check and one rule
+    write; a change with no new signers makes no such call;
   - **replaced whole** under a new id, the only way when no in-place order
     keeps the rule valid.
 

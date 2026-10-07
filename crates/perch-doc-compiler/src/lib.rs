@@ -45,13 +45,28 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 /// document with more declared signers, more rules, or longer canonical
 /// bytes than these, on every `compile_doc` and `derive_target`. They bound
 /// the worst-case recovery completion (every removed credential revoked,
-/// every rule replaced). **Provisional:** workstream 2 sizes them against
-/// the measured completion budget (`docs/recovery/budgets.md`).
-pub const MAX_DOC_SIGNERS: u32 = 16;
+/// every rule replaced or edited by `apply_doc`'s diff). Sized against the
+/// measured budget
+/// (`docs/recovery/budgets.md`, "Document caps"): the costliest document
+/// they admit stays within 75% of every per-transaction limit through
+/// enrollment, a lost-key or compromise completion, and a reconfiguration,
+/// whatever a thief who held the owner key changed. The binding limit is
+/// CPU instructions: a thief who keeps every rule's name and changes every
+/// program, whose rules the reconcile edits in place. Written entries are
+/// next.
+pub const MAX_DOC_SIGNERS: u32 = 8;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_RULES: u32 = 16;
+pub const MAX_DOC_RULES: u32 = 11;
 /// See [`MAX_DOC_SIGNERS`].
 pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
+/// The longest rule name, in bytes: OZ's context-rule name limit. Checked
+/// here so that a document that compiles also installs: a compromise
+/// baseline is only published, never applied, until its recovery completes.
+pub const MAX_RULE_NAME_BYTES: u32 = stellar_accounts::smart_account::MAX_NAME_SIZE;
+
+// A rule can name every declared signer; OZ installs at most `MAX_SIGNERS`
+// per rule.
+const _: () = assert!(MAX_DOC_SIGNERS <= stellar_accounts::smart_account::MAX_SIGNERS);
 
 /// Everything `compile_doc` can refuse. (`#[scerr]` assigns sequential codes
 /// from 1, in variant order.)
@@ -70,7 +85,8 @@ pub enum DocCompilerError {
     /// The document cannot be lowered to rules (unsupported rule shape).
     DocCompile,
     /// The document exceeds a document cap ([`MAX_DOC_SIGNERS`],
-    /// [`MAX_DOC_RULES`], [`MAX_DOC_CANONICAL_BYTES`]).
+    /// [`MAX_DOC_RULES`], [`MAX_DOC_CANONICAL_BYTES`],
+    /// [`MAX_RULE_NAME_BYTES`]).
     DocTooLarge,
     /// A signer's verifier could not canonicalize its key, so the credential
     /// cannot be fingerprinted for revocation.
@@ -354,7 +370,13 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         return Err(DocCompilerError::WrongNetwork);
     }
 
-    if doc.signers.len() > MAX_DOC_SIGNERS as usize || doc.rules.len() > MAX_DOC_RULES as usize {
+    if doc.signers.len() > MAX_DOC_SIGNERS as usize
+        || doc.rules.len() > MAX_DOC_RULES as usize
+        || doc
+            .rules
+            .iter()
+            .any(|r| r.name.len() > MAX_RULE_NAME_BYTES as usize)
+    {
         return Err(DocCompilerError::DocTooLarge);
     }
 

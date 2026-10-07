@@ -37,9 +37,38 @@ jobs:
       - uses: ./.github/actions/fetch-infra-wasm
         with:
           stack: target/stack
+      # Whether the recorded deployment is this branch's: built from a commit
+      # in its history. A pull request below the deployment record changes
+      # contracts the deployment predates, so its tests pin this source's own
+      # build (pin order, against the manifest's registry) instead of the
+      # deployed bytes, and the checks of the deployed bytes (testnet_pins,
+      # and the release-stack suite below) skip until the next deployment.
+      - name: Is the deployment this branch's?
+        id: deployment
+        run: |
+          deployed="$(jq -r .source.commit deployments/testnet.json)"
+          if git merge-base --is-ancestor "$deployed" HEAD 2>/dev/null; then
+            echo "ours=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ours=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::deployments/testnet.json was built from $deployed, outside this branch's history: tests pin this source's build, and the deployed-bytes checks skip until the next deployment"
+          fi
+      - name: Pin this source's build
+        if: steps.deployment.outputs.ours == 'false'
+        run: |
+          scripts/build-stack.sh --builder contract \
+            --registry "$(jq -r .registry.id deployments/testnet.json)" --out target/source-stack
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - name: cargo test --workspace
+        env:
+          OURS: ${{ steps.deployment.outputs.ours }}
+        run: |
+          if [ "$OURS" = true ]; then
+            cargo test --workspace
+          else
+            cargo test --workspace -- --skip consumers_pin_the_deployment_manifest
+          fi
       # The manifest against the chain: every contract at its content address
       # running its recorded wasm, and what the factory, adapter, pool, and
       # exercised accounts actually resolve.

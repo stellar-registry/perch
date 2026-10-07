@@ -42,8 +42,13 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
   every arg predicate, caps, expiries, and the optional `recovery` member
   (both profiles; `guardian-only`, `zk-only`, and `combined` modes with every
   guardian and ZK field; controller; optional baseline; replaceable ids; the
-  three ledger counts). As of our survey (2026-08), no other
-  machine-verified implementation of an RFC 8785 subset exists.
+  three ledger counts). The proofs hold at any size; the doc compiler's
+  caps (`MAX_DOC_*`) only narrow the domain. `canonical_bytes_identity`:
+  parsing a document's canonical bytes returns that document, so its
+  identity preimage is those same bytes. That is why a recovery target's
+  two digests (`target_bytes_hash`, `target_doc_hash`) agree under CANON
+  v1. As of our survey (2026-08), no other machine-verified implementation
+  of an RFC 8785 subset exists.
 - **T8** fragment hashes (`CANONICAL.md`, "Fragment hashes"):
   `configPreimage_injective` and `rulePreimage_injective`. The preimages
   `"perch/recovery/config" || recovery_canonical_json` and
@@ -119,9 +124,15 @@ the recovery stack has a model or a proof:
 - **The recovery controller's state machine** (`crates/perch-recovery`):
   attempts and their lifecycle, the `Protected` freeze, cancellation and
   the cancel cap, evidence freshness and expiry, epochs, nullifier spending,
-  baselines, upgrade approvals. These are pinned by enforcing-auth
-  integration tests (`crates/integration-tests/tests/recovery.rs`), not
-  proofs.
+  baselines, upgrade approvals, and the two-digest target binding (`enforce`
+  checks `sha256` of the completing bytes against `target_bytes_hash`, then
+  `rcv_sync` checks the compiled identity against `target_doc_hash`). These
+  are pinned by enforcing-auth integration tests
+  (`crates/integration-tests/tests/recovery.rs`, `target_binding.rs`), not
+  proofs. The model contributes `canonical_bytes_identity` and T7: an honest
+  completion's bytes compile to the identity the attempt recorded, and that
+  identity names one document. For the Rust parser the same round trip is
+  fuzzed (`ir_parse_roundtrip` checks `parse(emit(doc)) == doc`).
 - **Account authorization paths** (`crates/perch-smart-account`:
   `__check_auth`, OZ context-rule selection, `execute`, `apply_doc`,
   upgrades). Tests only (`account_capabilities.rs`, `matrix.rs`). That

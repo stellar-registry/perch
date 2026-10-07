@@ -662,6 +662,19 @@ theorem emitDoc_injective : Function.Injective emitDoc := by
   rw [h] at h1
   exact congrArg Prod.fst (Option.some.inj (h1.symm.trans h2))
 
+/-- **Canonical bytes are their own identity preimage.** Whatever parses
+from a document's canonical bytes is that document, with nothing left
+over, so its identity preimage is those same bytes. This is why a recovery
+target's two digests agree under CANON v1 (`docs/recovery/spec.md` §6.3
+T1, T5): `sha256` of the bytes `derive_target` returns, and the identity of
+the document they compile to, hash the same text. -/
+theorem canonical_bytes_identity (d d' : CDoc) (rest : List Char)
+    (h : pDoc (emitDoc d) = some (d', rest)) : rest = [] ∧ emitDoc d' = emitDoc d := by
+  have hrt := pDoc_rt d []
+  rw [List.append_nil, h] at hrt
+  cases hrt
+  exact ⟨rfl, rfl⟩
+
 /-- `recovery_canonical_json` is injective: two recovery configurations with
 the same canonical text are equal. -/
 theorem emitRecovery_injective : Function.Injective emitRecovery := by

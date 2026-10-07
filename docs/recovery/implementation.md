@@ -153,10 +153,20 @@ against the release artifacts belong to the integration layer.
   pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
-- **Document caps.** 6 declared signers, 8 rules, 8 192 canonical bytes,
+- **Document caps.** 6 declared signers, 13 rules, 8 192 canonical bytes,
   and rule names of at most OZ's 20 bytes, sized against the measured
-  worst-case completion (`budgets.md`, "Document caps"). The binding limit
-  is contract events. Every stack contract links a 64 KiB wasm stack
+  worst-case completion (`budgets.md`, "Experiment: OZ's per-item events
+  suppressed"). The binding limit is written entries (the renamed
+  thief's completion replaces every rule); with OZ's events (PR 103) it is
+  contract events, at 6 signers and 8 rules.
+- **`DocApplied`** (quiet-events experiment). `apply_doc` performs every
+  rule, signer, and policy mutation through OZ's `_no_events` variants
+  (theahaco/stellar-contracts-OZ PR #4) and emits one `DocApplied` per
+  application: `doc_hash` as its topic, and the delta's counts (rules
+  added, removed, and edited in place; signers and policies added and
+  removed by the in-place edits). `apply_delta.rs` checks the counts
+  against the plan and the diff of the installed rules, and that the
+  account emits nothing else. Every stack contract links a 64 KiB wasm stack
   (`build.rs`): with rustc's 1 MiB default, every cross-contract call's VM
   cost more than 1 MB of the transaction's memory.
 - **`execute`** returns the called function's value.

@@ -1614,6 +1614,7 @@ dependencies = [
  "perch-smart-account",
  "perch-spending-limit",
  "perch-testkit",
+ "perch-vspike",
  "perch-zk-pool",
  "perch-zk-primitives",
  "perch-zk-prover",
@@ -1765,6 +1766,24 @@ dependencies = [
  "stellar-strkey 0.0.16",
  "stellar-xdr",
  "ureq",
+]
+
+[[package]]
+name = "perch-vspike"
+version = "0.0.0"
+dependencies = [
+ "perch-doc-compiler",
+ "perch-program",
+ "soroban-sdk",
+ "stellar-accounts",
+]
+
+[[package]]
+name = "perch-vspike-eval"
+version = "0.0.0"
+dependencies = [
+ "perch-program",
+ "soroban-sdk",
 ]
 
 [[package]]

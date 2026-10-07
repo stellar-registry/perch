@@ -377,19 +377,28 @@ and take the most rules. Compared with OZ's events (6 and 8), the
 experiment gains 5 rules. The other frontier points are 2 and 17, 4 and 15,
 8 and 11, 10 and 9, 12 and 6, 13 and 5, 14 and 4, and 15 and 3.
 
-At the caps, the worst rows are:
+At the caps, on WS3's batched signer additions (4d11470: one
+`batch_add_signer` per edited rule), the worst rows are:
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
 | Enroll `Combined` through `apply_doc` | 199.1M (49.8%) | 15.9 MB | 156 | 65 | 52 000 | 888 |
-| `begin_lost_key` / `begin_compromise` | 133.9M (33.5%) | 4.7 MB | 25 | 2 | 1 888 | 248 |
-| Thief's `apply_doc` (every key swapped, every rule kept) | 220.4M (55.1%) | 22.8 MB | 226 | 102 | 48 032 | 340 |
-| Thief's `apply_doc` (every key swapped, every rule renamed) | 204.9M (51.2%) | 22.4 MB | 232 | 106 | 48 280 | 340 |
-| Compromise completion, every rule kept by name | 269.0M (67.3%) | 27.5 MB (65.5%) | 290 (72.5%) | 137 (68.5%) | 56 300 (42.6%) | 2 700 (16.5%) |
-| Compromise completion, every rule renamed | 254.4M (63.6%) | 27.1 MB (64.6%) | 296 (74.0%) | 141 (70.5%) | 56 572 (42.8%) | 2 700 (16.5%) |
-| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 262.3M (65.6%) | 25.6 MB | 278 | 131 | 55 656 | 1 908 |
-| `Protected` reconfiguration, every rule edited | 263.0M (65.7%) | 25.9 MB | 255 | 114 | 52 192 | 888 |
-| `Protected` reconfiguration, every rule replaced | 249.0M (62.2%) | 25.5 MB | 261 | 118 | 52 440 | 888 |
+| `begin_lost_key` / `begin_compromise` | 134.0M (33.5%) | 4.7 MB | 25 | 2 | 1 888 | 248 |
+| Thief's `apply_doc` (every key swapped, every rule kept) | 211.1M (52.8%) | 11.6 MB | 112 | 46 | 35 948 | 340 |
+| Thief's `apply_doc` (every key swapped, every rule renamed) | 205.5M (51.4%) | 22.4 MB | 232 | 106 | 48 280 | 340 |
+| Compromise completion, every rule kept by name | 254.3M (63.6%) | 14.7 MB (35.1%) | 175 (43.8%) | 80 (40.0%) | 44 112 (33.4%) | 2 700 (16.5%) |
+| Compromise completion, every rule renamed | 254.7M (63.7%) | 27.1 MB (64.7%) | 296 (74.0%) | 141 (70.5%) | 56 572 (42.8%) | 2 700 (16.5%) |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 252.1M (63.0%) | 14.1 MB | 163 | 74 | 43 276 | 1 908 |
+| `Protected` reconfiguration, every rule edited | 253.2M (63.3%) | 14.5 MB | 141 | 58 | 39 932 | 888 |
+| `Protected` reconfiguration, every rule replaced | 248.5M (62.1%) | 25.5 MB | 261 | 118 | 52 440 | 888 |
+
+Batching makes an in-place edit cheap enough that the reconcile keeps
+kept-name rules in place again (the kept-name completion's footprint falls
+from 290 to 175). The binding row is now the one whose thief renamed every
+rule, which forces every rule to be replaced. The frontier above was
+measured before batching; at 6 and 13 it re-measures at the same 74.0%
+footprint (instructions 63.7%), 6 and 14 is still over (77.0%), and 8 and 11
+(74.5%) and 10 and 9 (75.0%) are unchanged.
 
 The "Release stack, in process" table above is from PR 103, with OZ's
 events. On this branch, the `worst_case_*` tests hold the rows above at the

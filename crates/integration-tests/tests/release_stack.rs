@@ -82,7 +82,7 @@ thread_local! {
     static UNBUDGETED: Cell<bool> = const { Cell::new(false) };
     /// LAB (W2): documents built while set change every policy's install
     /// parameters (the cap's limit and the program's function list).
-    static REPARAM: Cell<bool> = const { Cell::new(false) };
+    static REPARAM: Cell<u8> = const { Cell::new(0) };
 }
 
 fn report(label: &str, e: &Env) {
@@ -941,7 +941,7 @@ impl World {
             format!(
                 r#""principals":{{"type":"threshold","m":1,"signers":[{}]}},"functions":["{}"],"args":[{{"index":0,"pred":{{"type":"is-self"}}}}]"#,
                 named.join(","),
-                if REPARAM.with(Cell::get) { "protectee" } else { "protected" }
+                if matches!(REPARAM.with(Cell::get), 1 | 2) { "protectee" } else { "protected" }
             )
         };
         let signers: std::vec::Vec<String> = ids
@@ -989,7 +989,7 @@ impl World {
             rules.push(if j < shape.both {
                 format!(
                     r#"{{"name":"{name}",{scope},{interpreted},"cap":{{"limit":"{}","period-ledgers":1000}}}}"#,
-                    if REPARAM.with(Cell::get) { "11" } else { "10" }
+                    if matches!(REPARAM.with(Cell::get), 1 | 3) { "11" } else { "10" }
                 )
             } else if j < shape.both + shape.interp {
                 format!(r#"{{"name":"{name}",{scope},{interpreted}}}"#)
@@ -1860,7 +1860,8 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: 
     ));
 
     let thief = passkeys(seed + 1, shape.signers);
-    let reparam = thief_tag == "p";
+    let mode: u8 = match thief_tag { "p" => 1, "q" => 2, "c" => 3, _ => 0 };
+    let reparam = mode != 0;
     let thief_tag = if reparam { "" } else { thief_tag };
     let stolen = Shape {
         tag: thief_tag,
@@ -1872,10 +1873,15 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: 
     } else {
         "the thief renamed every rule"
     };
-    REPARAM.with(|r| r.set(reparam));
+    REPARAM.with(|r| r.set(mode));
     let stolen_doc = w.shaped_doc(&thief, &rec, stolen, bytes, true);
-    REPARAM.with(|r| r.set(false));
-    let how = if reparam { "the thief kept every name but changed every policy" } else { how };
+    REPARAM.with(|r| r.set(0));
+    let how = match mode {
+        1 => "the thief kept every name but changed every policy",
+        2 => "the thief kept every name but changed every program",
+        3 => "the thief kept every name but changed every cap",
+        _ => how,
+    };
     assert!(w.try_apply(&a, &keys[0], &stolen_doc, 0));
     report(
         &label(
@@ -2019,6 +2025,14 @@ fn worst_compromise_reparam(w: &World, shape: Shape, bytes: usize, seed: u8) {
     worst_compromise(w, shape, bytes, seed, "p")
 }
 
+fn worst_compromise_reprogram(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, "q")
+}
+
+fn worst_compromise_recap(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, "c")
+}
+
 fn worst_reconfiguration_in_place(w: &World, shape: Shape, bytes: usize, seed: u8) {
     worst_reconfiguration(w, shape, bytes, seed, "")
 }
@@ -2028,13 +2042,15 @@ fn worst_reconfiguration_renamed(w: &World, shape: Shape, bytes: usize, seed: u8
 }
 
 /// Every worst-case flow, both ways a diff can go.
-const WORST_FLOWS: [fn(&World, Shape, usize, u8); 6] = [
+const WORST_FLOWS: [fn(&World, Shape, usize, u8); 8] = [
     worst_lost_key,
     worst_compromise_in_place,
     worst_compromise_renamed,
     worst_reconfiguration_in_place,
     worst_reconfiguration_renamed,
     worst_compromise_reparam,
+    worst_compromise_reprogram,
+    worst_compromise_recap,
 ];
 
 #[test]

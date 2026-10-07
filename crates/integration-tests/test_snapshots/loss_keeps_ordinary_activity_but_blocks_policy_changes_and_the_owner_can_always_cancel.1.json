@@ -999,6 +999,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "c3120be01e26f351a2fb79fa67f02a740a41df661c387bbbe2f405a577f82ce3"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -1202,6 +1210,14 @@
                           "symbol": "Cancelled"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "f8cf65f69164f7bc48c3f0ed69286be51a73d517583e7c68ac6bc0646f550efb"
                     }
                   },
                   {
@@ -1413,6 +1429,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "9c309e728db917fd075a85c787411f2390b8e56b7a133534683bb90056e70c14"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -1616,6 +1640,14 @@
                           "symbol": "Cancelled"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "b7caf888d9baf7610d58e6cc5ed3a748a81732d4307b97259c0008f4f7ef5ff2"
                     }
                   },
                   {

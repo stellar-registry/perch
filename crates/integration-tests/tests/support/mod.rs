@@ -403,10 +403,41 @@ pub struct Opts {
     /// [`FailingPolicy`] sits at the spending-limit address: any capped
     /// rule's install fails.
     pub failing_spending_limit: bool,
+    /// Which compiler sits at the compiler's address.
+    pub compiler: TestCompiler,
 }
 
+/// The compiler a world runs (`perch_doc_compiler::testutils`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TestCompiler {
+    /// The real one: CANON v1, identity = `sha256(canonical)`.
+    #[default]
+    Real,
+    /// Identities are a different function of the canonical document, as a
+    /// CANON v2 root would be.
+    StandInIdentity,
+    /// `derive_target` returns an identity that does not name its bytes.
+    InconsistentPair,
+}
+
+impl TestCompiler {
+    pub fn from_env() -> TestCompiler {
+        match std::env::var("PERCH_TEST_COMPILER").as_deref() {
+            Ok("stand-in") => TestCompiler::StandInIdentity,
+            Ok("inconsistent-pair") => TestCompiler::InconsistentPair,
+            _ => TestCompiler::Real,
+        }
+    }
+}
+
+/// A world with the compiler `PERCH_TEST_COMPILER` names (`stand-in` or
+/// `inconsistent-pair`; the real one otherwise), so a whole suite can be run
+/// under another identity scheme.
 pub fn world() -> World {
-    world_with(Opts::default())
+    world_with(Opts {
+        compiler: TestCompiler::from_env(),
+        ..Opts::default()
+    })
 }
 
 pub fn world_with(opts: Opts) -> World {
@@ -424,7 +455,19 @@ pub fn world_with(opts: Opts) -> World {
     });
     // The infra at exactly the content addresses the account derives.
     let compiler = infra::perch_doc_compiler::address(&env);
-    env.register_at(&compiler, PerchDocCompiler, ());
+    match opts.compiler {
+        TestCompiler::Real => env.register_at(&compiler, PerchDocCompiler, ()),
+        TestCompiler::StandInIdentity => env.register_at(
+            &compiler,
+            perch_doc_compiler::testutils::StandInIdentityCompiler,
+            (),
+        ),
+        TestCompiler::InconsistentPair => env.register_at(
+            &compiler,
+            perch_doc_compiler::testutils::InconsistentPairCompiler,
+            (),
+        ),
+    };
     env.register_at(
         &infra::perch_interpreter::address(&env),
         PerchInterpreter,

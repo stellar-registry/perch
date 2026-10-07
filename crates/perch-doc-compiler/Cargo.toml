@@ -41,3 +41,6 @@ hex = { version = "0.4", default-features = false, features = ["alloc"], optiona
 # this so their wasm links no compiler code.
 default = ["contract"]
 contract = ["dep:perch-ir", "dep:perch-compile", "dep:hex"]
+# Test-only compilers with other document identities (`testutils` module).
+# Never enabled by a deployable.
+testutils = ["contract"]

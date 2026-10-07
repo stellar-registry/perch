@@ -641,3 +641,85 @@ fn hex_bytes_32(e: &Env, s: &str) -> Result<BytesN<32>, DocCompilerError> {
     }
     Ok(BytesN::from_array(e, &out))
 }
+
+/// Test-only compilers whose document identity is not the CANON v1 bytes
+/// digest, so tests can check that the controller and the account never
+/// assume it is (`docs/recovery/spec.md` §6.3 T1, T5). Behind the
+/// `testutils` feature; never built into a deployable.
+#[cfg(all(feature = "contract", feature = "testutils"))]
+pub mod testutils {
+    use super::*;
+
+    /// A stand-in for a structured (CANON v2) identity: a different function
+    /// of the same canonical document. Its tag cannot begin a canonical
+    /// document, so it never equals the bytes digest.
+    fn stand_in_identity(e: &Env, canonical: &Bytes) -> BytesN<32> {
+        let mut preimage = Bytes::from_slice(e, b"perch/doc/test-v2");
+        preimage.append(canonical);
+        e.crypto().sha256(&preimage).to_bytes()
+    }
+
+    /// The compiler with [`stand_in_identity`] as every document's identity,
+    /// consistently across `compile_doc` and `derive_target`.
+    #[contract]
+    pub struct StandInIdentityCompiler;
+
+    #[contractimpl]
+    impl StandInIdentityCompiler {
+        pub fn compile_doc(e: &Env, doc_json: Bytes) -> Result<CompiledDoc, DocCompilerError> {
+            let mut compiled = PerchDocCompiler::compile_doc(e, doc_json)?;
+            compiled.doc_hash = stand_in_identity(e, &compiled.canonical);
+            Ok(compiled)
+        }
+
+        pub fn derive_target(
+            e: &Env,
+            source_json: Bytes,
+            current_json: Bytes,
+            action: RecoveryAction,
+            replacements: ReplacementSet,
+        ) -> Result<DerivedTarget, DocCompilerError> {
+            let mut derived = PerchDocCompiler::derive_target(
+                e,
+                source_json,
+                current_json,
+                action,
+                replacements,
+            )?;
+            derived.doc_hash = stand_in_identity(e, &derived.canonical);
+            Ok(derived)
+        }
+    }
+
+    /// A faulty compiler: `derive_target` returns an identity that does not
+    /// name the bytes it returns; `compile_doc` is the real one.
+    #[contract]
+    pub struct InconsistentPairCompiler;
+
+    #[contractimpl]
+    impl InconsistentPairCompiler {
+        pub fn compile_doc(e: &Env, doc_json: Bytes) -> Result<CompiledDoc, DocCompilerError> {
+            PerchDocCompiler::compile_doc(e, doc_json)
+        }
+
+        pub fn derive_target(
+            e: &Env,
+            source_json: Bytes,
+            current_json: Bytes,
+            action: RecoveryAction,
+            replacements: ReplacementSet,
+        ) -> Result<DerivedTarget, DocCompilerError> {
+            let mut derived = PerchDocCompiler::derive_target(
+                e,
+                source_json,
+                current_json,
+                action,
+                replacements,
+            )?;
+            let mut preimage = Bytes::from_slice(e, b"perch/test/bad-pair");
+            preimage.append(&derived.canonical);
+            derived.doc_hash = e.crypto().sha256(&preimage).to_bytes();
+            Ok(derived)
+        }
+    }
+}

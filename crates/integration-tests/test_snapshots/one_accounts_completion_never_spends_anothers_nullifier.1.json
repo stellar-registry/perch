@@ -434,6 +434,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "322352531557c33e68eaece54dadbf380cb9839a47d00dce6600c53b19f951a3"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -632,6 +640,14 @@
                           "symbol": "Completed"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "14d428c393d64a55446df42c5dd51e7301c59c1ed7d94f841fe11614b32cb8c9"
                     }
                   },
                   {

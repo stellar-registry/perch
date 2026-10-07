@@ -601,6 +601,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "9c309e728db917fd075a85c787411f2390b8e56b7a133534683bb90056e70c14"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -804,6 +812,14 @@
                           "symbol": "Invalidated"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "c3120be01e26f351a2fb79fa67f02a740a41df661c387bbbe2f405a577f82ce3"
                     }
                   },
                   {

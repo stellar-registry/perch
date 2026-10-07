@@ -417,6 +417,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "8c3ececd5cf3c961e25f5949ef2c18db9a0b01e69ac23100d3a8f0caf652918f"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -615,6 +623,14 @@
                           "symbol": "Collecting"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "7237cf92878c01e16cac7df46d4d83ec5e6f8e16c60bdbd44edb25ff047eb03b"
                     }
                   },
                   {

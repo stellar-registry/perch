@@ -416,6 +416,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "3047c34ae97423d2c8b9b5776edf4dc170a2c50f395b80d033212aebbd0f5c1e"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -612,6 +620,14 @@
                           "symbol": "Collecting"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "a56b8c0d5a7866e70409bffaae49e49bd9e648aee0d8d265a299c4343291c6c7"
                     }
                   },
                   {
@@ -816,6 +832,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "188b5a9fa739d7c5b9178c795e2bc9cf692abd1e3a6e655c492cb8b70b924501"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -1016,6 +1040,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "3772e7e03a051b05d66ed589d9f8eff2e7d30bab3693892b70c0000b47cd9e01"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -1212,6 +1244,14 @@
                           "symbol": "Collecting"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "76410018943512d4801b8360bc147ceccc27cacea838a80a3dbe4e4e64b4ed72"
                     }
                   },
                   {

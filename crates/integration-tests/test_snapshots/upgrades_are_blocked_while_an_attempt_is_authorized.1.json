@@ -593,6 +593,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "c3120be01e26f351a2fb79fa67f02a740a41df661c387bbbe2f405a577f82ce3"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -796,6 +804,14 @@
                           "symbol": "Cancelled"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "c3120be01e26f351a2fb79fa67f02a740a41df661c387bbbe2f405a577f82ce3"
                     }
                   },
                   {

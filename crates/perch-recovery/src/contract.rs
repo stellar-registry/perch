@@ -679,12 +679,20 @@ fn begin(
         }
         _ => current.clone(),
     };
-    let source_doc_hash: BytesN<32> = e.crypto().sha256(&source).to_bytes();
+    // The source's identity is read, never computed from bytes here: the
+    // enrolled baseline, or the account's applied identity.
+    let source_doc_hash = match action {
+        RecoveryAction::Compromise => config.baseline.clone().ok_or(RecoveryError::NoBaseline)?,
+        _ => view.applied_doc_hash().ok_or(RecoveryError::NotEnrolled)?,
+    };
 
     let derived = DocCompilerClient::new(e, &view.doc_compiler())
         .try_derive_target(&source, &current, &action, &replacements)
         .map_err(|_| RecoveryError::InvalidReplacements)?
         .map_err(|_| RecoveryError::InvalidReplacements)?;
+    // Both target digests come from this one derivation: the identity the
+    // compiler computed, and the digest of the bytes it returned.
+    let target_bytes_hash: BytesN<32> = e.crypto().sha256(&derived.canonical).to_bytes();
     // The checks against the account's history are the controller's:
     // `derive_target` is pure and sees only the documents (spec §7.3).
     // Rule 4, the enrollment-id half.
@@ -735,6 +743,7 @@ fn begin(
         expires_at: 0,
         source_doc_hash,
         target_doc_hash: derived.doc_hash.clone(),
+        target_bytes_hash,
         target_config_hash: derived.config_hash,
         replacements_hash,
         replaced: derived.replaced,
@@ -893,8 +902,9 @@ fn authorize_completion(
     if e.ledger().sequence() < attempt.executable_after {
         return Err(RecoveryError::NotExecutableYet);
     }
-    let hash: BytesN<32> = e.crypto().sha256(&target).to_bytes();
-    if hash != attempt.target_doc_hash {
+    // Authorization binds the exact bytes; `rcv_sync` then binds the
+    // identity of what the account compiled from them.
+    if e.crypto().sha256(&target).to_bytes() != attempt.target_bytes_hash {
         return Err(RecoveryError::WrongTarget);
     }
     RecoveryStorage::set_completing(
@@ -902,7 +912,7 @@ fn authorize_completion(
         account,
         &CompletionMarker {
             attempt_id: attempt.id,
-            target_doc_hash: hash,
+            target_doc_hash: attempt.target_doc_hash.clone(),
             ledger: e.ledger().sequence(),
         },
     );

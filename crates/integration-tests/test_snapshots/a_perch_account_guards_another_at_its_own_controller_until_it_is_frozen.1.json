@@ -515,6 +515,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "7edc287a3b90278ee0a46529aefac4ac65d8ee5869456f2682b19c10bde29a32"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {
@@ -718,6 +726,14 @@
                           "symbol": "Authorized"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "741b282a20ee43ffa0b1a39cfef57d6798e89a2edda322a94b29a2b753984347"
                     }
                   },
                   {
@@ -945,6 +961,14 @@
                           "symbol": "Collecting"
                         }
                       ]
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "ea203b2c8d3e3609861bc51dd61d5ade62650db3638670454a6f5460392da6ce"
                     }
                   },
                   {

@@ -77,11 +77,21 @@ pub struct Attempt {
     /// First ledger the authorized attempt is no longer live; `0` while
     /// collecting.
     pub expires_at: u32,
-    /// Lost-key: the applied document's hash at T1. Compromise: the
-    /// baseline's hash.
+    /// The source document's identity: lost-key, the account's applied
+    /// identity at T1; compromise, the enrolled baseline. Read, never
+    /// computed here, so the controller does not depend on how identities
+    /// are computed.
     pub source_doc_hash: BytesN<32>,
-    /// The derived target's canonical hash.
+    /// The derived target's document identity, as the compiler computed it:
+    /// what the statement names and what the completing `apply_doc` must
+    /// compile to.
     pub target_doc_hash: BytesN<32>,
+    /// `sha256` of the canonical bytes `derive_target` returned, computed by
+    /// the controller from the same derivation: what `enforce` requires the
+    /// completing `apply_doc` argument to hash to. Under CANON v1 it equals
+    /// `target_doc_hash`; a structured identity would differ (spec §6.3 T1,
+    /// T5).
+    pub target_bytes_hash: BytesN<32>,
     /// The derived target's recovery `config_hash` (the current one, or the
     /// current one with the declared ZK rotation).
     pub target_config_hash: BytesN<32>,

@@ -2030,6 +2030,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "target_bytes_hash"
+                    },
+                    "val": {
+                      "bytes": "0154867f831f8a7b8dc2973b14ab8a94bb01a9f7df02916e3edac19606f218c6"
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "target_config_hash"
                     },
                     "val": {

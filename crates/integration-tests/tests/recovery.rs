@@ -74,7 +74,7 @@ fn guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_ke
     w.advance(DELAY);
     let hash = w.complete(&target).expect("completion");
     assert_eq!(w.client().applied_doc(), Some(target.clone()));
-    assert_eq!(hash, w.env.crypto().sha256(&target).to_bytes());
+    assert_eq!(hash, w.compiler().compile_doc(&target).doc_hash);
     assert_eq!(state(&w, id), AttemptState::Completed);
     assert_eq!(w.ctl().epoch(&w.account), 2, "enrollment and completion");
 

@@ -139,7 +139,11 @@ the recovery stack has a model or a proof:
   includes the delta `apply_doc`: T8 shows equal `rule_hash` preimages
   mean equal rule text, but that the account then touches exactly the
   changed rules is tested (the delta tests, the `apply_doc_delta` fuzz
-  target), not proved.
+  target), not proved. The configuration revision and `apply_doc`'s
+  `expected_revision` (#110) are account state outside the document: no
+  hash here covers them, and T7 names a document, not an account state.
+  After A→B→A the same `doc_hash` returns at a later revision, by design
+  (`revision.rs`).
 - **The ZK circuit, verifier, adapter, and pool** (`circuits/`,
   `crates/perch-zk-adapter`, the membership pool): real-proof tests and
   cross-implementation Poseidon2 vectors (`docs/zk/README.md`), no proofs.

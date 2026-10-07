@@ -23,14 +23,20 @@ Code that sits outside any perch diff is part of the scope: the
 ## The stack
 
 Each pull request is based on the one before it. Merges into a branch carry
-`.gitattributes` forward from #100; they add no code.
+`.gitattributes` forward from #100; they add no code. #103 was split into #111
+and #103 on 2026-10-07. The history before the split is kept at
+`fm/perch-epic99-release-p8-archive-17f2c9c`, and older measurement tables cite
+its commits.
 
 | Pull request | Branch | Commits (first parent) | Content |
 | --- | --- | --- | --- |
 | [#100](https://github.com/stellar-registry/perch/pull/100) | `fm/perch-epic99-spec-p5` | `19ee060..ffe6519`, then `48d2445` | spec, `perch-recovery-interface`, CANON fragment hash |
 | [#101](https://github.com/stellar-registry/perch/pull/101) | `fm/perch-epic99-zkpool-p6` | `ffe6519..9978e36` | circuit, ZK primitives, pool, adapter, verifier ZK delta, prover |
 | [#102](https://github.com/stellar-registry/perch/pull/102) | `fm/perch-epic99-controller-p7` | `9978e36..8557cd2` | controller, account capabilities, delta `apply_doc`, target binding |
-| [#103](https://github.com/stellar-registry/perch/pull/103) | `fm/perch-epic99-release-p8` | `8557cd2..17f2c9c`, then merges | quiet OZ mutations, `reconcile_signers`, caps, new deployables, release machinery, testnet deployment |
+| [#111](https://github.com/stellar-registry/perch/pull/111) | `fm/perch-epic99-oz-layer-p8` | `886486c..4ab2b72` | the OZ materialization layer: quiet OZ mutations, `reconcile_signers`, the OZ fork re-pin, caps |
+| [#103](https://github.com/stellar-registry/perch/pull/103) | `fm/perch-epic99-release-p8` | `4ab2b72..` (this branch) | new deployables, release machinery, the release-stack harness, `perch-testnet`, JS packages |
+| [#110](https://github.com/stellar-registry/perch/pull/110) | `fm/perch-consumer-interface-p11` | on #103 | the consumer interface: configuration revision, views, `expected_revision` |
+| deployment record (top) | `fm/perch-epic99-deploy-p8` | on #110 | the testnet deployment built from everything below it |
 
 ## Unit 1: the backend-independent core
 
@@ -44,13 +50,13 @@ Each pull request is based on the one before it. Merges into a branch carry
 | `crates/perch-ir/**`, `CANONICAL.md` | The document schema, validation, and CANON v1 canonical bytes (`doc_hash`, the per-rule fragment hash) | pre-existing; #100 `2e3c371`; #102 `ba28bfe` |
 | `crates/perch-doc-compiler/**` except the caps | `compile_doc`, `derive_target`, `config_hash`, credential canonicalization; the test-only compilers behind `testutils` | pre-existing; #102 `ba28bfe`, `8557cd2` |
 | `crates/perch-compile/**`, `crates/perch-interpreter/**`, `crates/perch-program/**` | Lowering rules to interpreter programs (with per-rule provenance), and the interpreter policy | pre-existing; #102 `849e4da` |
-| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth`, `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, and inside `apply` the revocation and enrollment-id checks and the `rcv_sync` gate | #102 `ba28bfe`, `57f8e12`, `957129f`, `fa14e89`; `infra()` view #103 `bfd4757` |
-| `crates/perch-account/**` | The deployable account contract over `perch-smart-account` | pre-existing; #103 `2155a21` (stack size) |
-| `crates/perch-webauthn-verifier/**` | Constructorless passkey verifier (OZ `webauthn::verify`) | #103 `70921b5` |
-| `crates/perch-account-factory/**` | Constructorless factory: deploys the pinned account build, address bound to the admin signers | #103 `43666f3` |
+| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth`, `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, and inside `apply` the revocation and enrollment-id checks and the `rcv_sync` gate | #102 `ba28bfe`, `57f8e12`, `957129f`, `fa14e89`; `infra()` view #103 `6c4af63` |
+| `crates/perch-account/**` | The deployable account contract over `perch-smart-account` | pre-existing; #103 `6c4af63` (stack size) |
+| `crates/perch-webauthn-verifier/**` | Constructorless passkey verifier (OZ `webauthn::verify`) | #103 `6c4af63` |
+| `crates/perch-account-factory/**` | Constructorless factory: deploys the pinned account build, address bound to the admin signers | #103 `6c4af63` |
 | `crates/perch-ed25519-verifier/**` | Ed25519 external-signer verifier | pre-existing |
-| `crates/perch-registry-resolve/**`, `crates/perch-registry-resolve-macro/**` | Build-time infra resolution: the account calls `deployer(registry, sha256(pinned wasm))`, with no runtime address (`AGENTS.md`) | pre-existing; #103 `110468c` |
-| `crates/*/build.rs` | Wasm stack size: 64 KiB per contract, 128 KiB for the ZK adapter. An overflow traps. | #103 `2155a21`, `9596b1f` |
+| `crates/perch-registry-resolve/**`, `crates/perch-registry-resolve-macro/**` | Build-time infra resolution: the account calls `deployer(registry, sha256(pinned wasm))`, with no runtime address (`AGENTS.md`) | pre-existing; #103 `6c4af63` |
+| `crates/*/build.rs` | Wasm stack size: 64 KiB per contract, 128 KiB for the ZK adapter. An overflow traps. | #103 `6c4af63` |
 
 **Evidence** (tests, read first):
 - `crates/integration-tests/tests/{recovery,account_capabilities,target_binding,cap71_semantics}.rs`;
@@ -62,11 +68,11 @@ Each pull request is based on the one before it. Merges into a branch carry
 
 | Path | What | Introduced in |
 | --- | --- | --- |
-| `crates/perch-smart-account/src/rules.rs` | The delta reconcile: rules matched by slot; the cheaper of an in-place edit and a replacement per rule (the cost model, `Meter`); every OZ mutation through the `_no_events` variants (`Apply`); the `DeltaSummary` | #102 `2987383`, `849e4da`, part of `350b7cc`, `e4947c5`, `6fdd492`, `4d11470`; #103 `ba1365e` (quiet mutations), `86276c5` (`reconcile_signers`) |
-| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (`apply_rules`, enrollment write, `DocApplied`), the `DocApplied` event, `installed_rules`, the OZ rule views, `install_admin` | #102 `2987383`; #103 `ba1365e` |
-| `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 11, `MAX_DOC_CANONICAL_BYTES` = 8 192, `MAX_RULE_NAME_BYTES` (OZ's 20), and the check that refuses a document past them | #103 `495789a`, `b1329da`, `4d48b79`, `edaa5d8` |
-| `crates/perch-spending-limit/**` | The deployable wrapper of OZ's `spending_limit`, installing and uninstalling quietly | pre-existing; #103 `ba1365e` |
-| `Cargo.toml`: `stellar-accounts` | The pin, `8200220` (OZ fork #3) → `3372676` (OZ fork #5 on #4). It applies workspace-wide, so to every contract above. | #103 `ba1365e`, `86276c5` |
+| `crates/perch-smart-account/src/rules.rs` | The delta reconcile: rules matched by slot; the cheaper of an in-place edit and a replacement per rule (the cost model, `Meter`); every OZ mutation through the `_no_events` variants (`Apply`); the `DeltaSummary` | #102 `2987383`, `849e4da`, part of `350b7cc`, `e4947c5`, `6fdd492`, `4d11470`; #111 `554cf48` (quiet mutations), `64bdeda` (`reconcile_signers`) |
+| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (`apply_rules`, enrollment write, `DocApplied`), the `DocApplied` event, `installed_rules`, the OZ rule views, `install_admin` | #102 `2987383`; #111 `554cf48` |
+| `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 11, `MAX_DOC_CANONICAL_BYTES` = 8 192, `MAX_RULE_NAME_BYTES` (OZ's 20), and the check that refuses a document past them | #111 `b5a581a` |
+| `crates/perch-spending-limit/**` | The deployable wrapper of OZ's `spending_limit`, installing and uninstalling quietly | pre-existing; #111 `554cf48` |
+| `Cargo.toml`: `stellar-accounts` | The pin, `8200220` (OZ fork #3) → `3372676` (OZ fork #5 on #4). It applies workspace-wide, so to every contract above. | #111 `554cf48`, `64bdeda` |
 | theahaco/stellar-contracts-OZ #3, #4, #5 | The fork code those revisions add (below) | outside every perch diff |
 
 **Evidence:**
@@ -96,9 +102,9 @@ them.
 These are reviewed with the release, not in the audit. They cannot change
 what a deployed contract does.
 
-- **Release machinery and supply chain:** `scripts/{build-stack,deploy-stack,fetch-infra-wasm,verify-deployment}.sh`, `crates/perch-deploy`, `crates/perch-derive-id`, `.github/workflows/`. Introduced in #103 `113662d`, `c006b18`, `ba28535`, `313c68a`, `7e50260`, `43f0fb7`, `565bacd`, `f662cc9`, `8187777`. They decide which bytes are deployed and pinned. `verify-deployment.sh` and CI's `release-stack-source` job check them.
+- **Release machinery and supply chain:** `scripts/{build-stack,deploy-stack,fetch-infra-wasm,verify-deployment}.sh`, `crates/perch-deploy`, `crates/perch-derive-id`, `.github/workflows/`. Introduced in #103 `fa2da5d`. They decide which bytes are deployed and pinned. `verify-deployment.sh` and CI's `release-stack-source` job check them.
 - **Off-chain tooling and harnesses:** `crates/perch-testnet`, `crates/perch-zk-prover` (the client prover), `crates/perch-testkit`, `crates/perch-bench*`, `crates/perch-conformance`, `crates/perch-golden`, `crates/perch-analyze`.
-- **JS packages:** `packages/perch-js`, `packages/perch-zk` (with its `indexer` subpath), `packages/perch-relay`, and `packages/perch-interpreter-js`. The relay's admission and forgery checks (#103 `a078595`, `0eaab12`, `54bf8d6`) matter to Nido, but the chain, not the relay, decides an approval.
+- **JS packages:** `packages/perch-js`, `packages/perch-zk` (with its `indexer` subpath), `packages/perch-relay`, and `packages/perch-interpreter-js`. The relay's admission and forgery checks (#103 `9df7b4a`) matter to Nido, but the chain, not the relay, decides an approval.
 - **Docs and slides:** `docs/**`, `*.md`. `docs/recovery/spec.md` is normative for both units.
 
 ## Generated and vendored content

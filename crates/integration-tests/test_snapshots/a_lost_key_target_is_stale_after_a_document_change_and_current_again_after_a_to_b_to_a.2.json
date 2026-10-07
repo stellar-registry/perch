@@ -2229,7 +2229,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM",
+              "contract": "CBOD3WSW75SYZQM3KI4ZCY5PJG5Y4GSCSX4VLHPRNDXKKFF4KX27F3KU",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -2252,7 +2252,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY",
+              "contract": "CBW66V7Z3VYMRP3MYJOKVTDW3LCNCUUZPPYB3NEDHNKOMGZSSWSNOZMC",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -2275,7 +2275,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CDC6GSNZCBZGAP3GMM4MNHEGOQKDJBZ5FHAWWHYO7NV6NXMKMGEGVEJV",
+              "contract": "CCRSUPI7XC3Z3RV6BAERSWDA26F6QSVGBARZXQGUUAI3OBWCGHRI23MA",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -2398,196 +2398,6 @@
           "v0": {
             "topics": [
               {
-                "symbol": "signer_registered"
-              },
-              {
-                "u32": 1
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "signer"
-                  },
-                  "val": {
-                    "vec": [
-                      {
-                        "symbol": "Delegated"
-                      },
-                      {
-                        "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2ZMN"
-                      }
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "signer_added"
-              },
-              {
-                "u32": 0
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "signer_id"
-                  },
-                  "val": {
-                    "u32": 1
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "signer_removed"
-              },
-              {
-                "u32": 0
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "signer_id"
-                  },
-                  "val": {
-                    "u32": 0
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "signer_added"
-              },
-              {
-                "u32": 1
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "signer_id"
-                  },
-                  "val": {
-                    "u32": 1
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "signer_deregistered"
-              },
-              {
-                "u32": 0
-              }
-            ],
-            "data": {
-              "map": []
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
-                "symbol": "signer_removed"
-              },
-              {
-                "u32": 1
-              }
-            ],
-            "data": {
-              "map": [
-                {
-                  "key": {
-                    "symbol": "signer_id"
-                  },
-                  "val": {
-                    "u32": 0
-                  }
-                }
-              ]
-            }
-          }
-        }
-      },
-      "failed_call": false
-    },
-    {
-      "event": {
-        "ext": "v0",
-        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVAX5",
-        "type_": "contract",
-        "body": {
-          "v0": {
-            "topics": [
-              {
                 "symbol": "credential_revoked"
               },
               {
@@ -2618,7 +2428,64 @@
               }
             ],
             "data": {
-              "map": []
+              "map": [
+                {
+                  "key": {
+                    "symbol": "policies_added"
+                  },
+                  "val": {
+                    "u32": 0
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "policies_removed"
+                  },
+                  "val": {
+                    "u32": 0
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "rules_added"
+                  },
+                  "val": {
+                    "u32": 0
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "rules_edited"
+                  },
+                  "val": {
+                    "u32": 2
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "rules_removed"
+                  },
+                  "val": {
+                    "u32": 0
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "signers_added"
+                  },
+                  "val": {
+                    "u32": 2
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "signers_removed"
+                  },
+                  "val": {
+                    "u32": 2
+                  }
+                }
+              ]
             }
           }
         }

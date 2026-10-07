@@ -177,7 +177,9 @@ against the release artifacts belong to the integration layer.
   worst-case completion (`budgets.md`, "Document caps"). The binding limit
   is instructions: the thief who keeps every name and changes every
   program is edited in place, at 73.6% at the caps. Written entries are
-  next (70.5%, the renamed thief).
+  next (70.5%, the renamed thief). Every stack contract links a 64 KiB wasm
+  stack (`build.rs`): with rustc's 1 MiB default, every cross-contract
+  call's VM cost more than 1 MB of the transaction's memory.
 - **Quiet OZ mutations and `DocApplied`.** `apply_doc` performs every
   rule, signer, and policy mutation through OZ's `_no_events` variants
   (theahaco/stellar-contracts-OZ PR #4, pinned), and the spending-limit
@@ -239,5 +241,6 @@ key and value, the canonical applied document, and its hash.
 
 - Real proofs, the release circuit, and resource measurements: workstream 2
   and the integration layer.
-- Registry publication, release pipeline, testnet deployment: workstream 4.
+- Registry publication, release pipeline, testnet deployment: workstream 4
+  ([`docs/deploy/`](../deploy/README.md)).
 - Wallet integration: Nido.

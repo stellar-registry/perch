@@ -156,8 +156,11 @@ against the release artifacts belong to the integration layer.
 - **Document caps.** 6 declared signers, 13 rules, 8 192 canonical bytes,
   and rule names of at most OZ's 20 bytes, sized against the measured
   worst-case completion (`budgets.md`, "Experiment: OZ's per-item events
-  suppressed"). The binding limit is the footprint; with OZ's events
-  (PR 103) it is contract events, at 6 signers and 8 rules.
+  suppressed"). On this branch (with `reconcile_signers`) the binding
+  limit is instructions: the thief who keeps every name and changes every
+  program is edited in place, at 71.8% of instructions at 6 and 13, with
+  written entries at 70.5% close behind. With OZ's events (PR 103) it is
+  contract events, at 6 signers and 8 rules.
 - **`reconcile_signers`** (reconcile experiment, stacked on quiet events).
   An in-place edit changes a rule's signers in one OZ
   `reconcile_signers_no_events` call (theahaco/stellar-contracts-OZ PR #5).

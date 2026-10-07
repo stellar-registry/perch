@@ -215,9 +215,9 @@ pub enum Mode {
 
 /// The cost model's price of reconciling one rule: bytes of contract events
 /// (the account's and its policies'), then ledger-entry writes, compared in
-/// that order. On this branch (the quiet-events experiment) every OZ
-/// mutation and policy hook runs through its `_no_events` variant, so
-/// `events` is always 0 and the choice is by writes.
+/// that order. Every OZ mutation and policy hook runs through its
+/// `_no_events` variant, so `events` is always 0 and the choice is by
+/// writes.
 ///
 /// `writes` counts the entries each OZ operation writes, an entry two
 /// operations write counting twice: the rule's own entry, the registry

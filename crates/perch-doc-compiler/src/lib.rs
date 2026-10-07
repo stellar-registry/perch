@@ -49,11 +49,14 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 /// measured budget
 /// (`docs/recovery/budgets.md`, "Document caps"): the costliest document
 /// they admit stays within 75% of every per-transaction limit through
-/// enrollment, a lost-key or compromise completion, and a reconfiguration.
-/// The binding limit is contract events.
-pub const MAX_DOC_SIGNERS: u32 = 6;
+/// enrollment, a lost-key or compromise completion, and a reconfiguration,
+/// whatever a thief who held the owner key changed. The binding limit is
+/// CPU instructions: a thief who keeps every rule's name and changes every
+/// program, whose rules the reconcile edits in place. Written entries are
+/// next.
+pub const MAX_DOC_SIGNERS: u32 = 8;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_RULES: u32 = 8;
+pub const MAX_DOC_RULES: u32 = 11;
 /// See [`MAX_DOC_SIGNERS`].
 pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
 /// The longest rule name, in bytes: OZ's context-rule name limit. Checked

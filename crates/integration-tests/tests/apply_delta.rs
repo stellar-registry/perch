@@ -210,9 +210,9 @@ fn check_accounting(
     changed_keys: &[String],
 ) {
     let me = contract_hex(&w.delta);
-    // Quiet-events experiment: the OZ mutations emit nothing, so the
-    // account's only event is `DocApplied`, whose summary must be exactly
-    // what the plan and the diff of the records say was done.
+    // The OZ mutations run quietly (`_no_events`), so the account's only
+    // event is `DocApplied`, whose summary must be exactly what the plan and
+    // the diff of the records say was done.
     let ours: std::vec::Vec<&Event> = events.iter().filter(|e| e.contract == me).collect();
     assert!(
         ours.iter().all(|e| e.name == "doc_applied"),
@@ -845,116 +845,14 @@ fn an_edit_where_nothing_survives_re_adds_a_changed_policy_after_the_new_ones() 
 }
 
 #[test]
-fn a_full_swap_can_be_edited_in_place_up_to_the_signer_limit() {
-    // Nothing survives, so an in-place edit adds before it removes: at the
-    // signer cap the peak is twice the cap, and an in-place order exists
-    // while that is within OZ's per-rule limit (15), as it is at the caps.
+fn a_full_swap_is_editable_in_place_at_the_signer_cap() {
+    // Nothing survives, but `reconcile_signers` checks only the final set,
+    // so no order needs room for the old and new keys side by side: a full
+    // swap at the signer cap is one in-place edit.
     let n = MAX_DOC_SIGNERS as usize;
     let p = full_swap(n, n);
-    assert_eq!(p.editable, 2 * n <= 15);
-    assert_eq!(
-        p.step,
-        if p.editable {
-            Step::InPlace
-        } else {
-            Step::Replace
-        }
-    );
-}
-
-/// The rule `name`'s planned step for `a`→`b` under the cheapest apply, and
-/// the priced event bytes measured for the cheapest apply, the in-place
-/// edit, and the replacement.
-fn crossover(a: &DocModel, b: &DocModel, name: &str) -> (Step, u32, u32, u32) {
-    let w = DeltaWorld::new();
-    w.apply(&w.delta, a).unwrap();
-    let plan = plan_of(&w, &w.delta, b, Mode::Cheapest);
-    w.apply(&w.delta, b).unwrap();
-    let (cheapest, _) = event_bytes(&w.env);
-    let step = plan
-        .iter()
-        .find(|p| p.name == soroban_sdk::String::from_str(&w.env, name))
-        .unwrap()
-        .step;
-    let (_, in_place) = forced(a, b, true);
-    let (_, replaced) = forced(a, b, false);
-    (step, cheapest, in_place, replaced)
-}
-
-/// Signers `from..from + k` of `a` with fresh keys, ids unchanged: a key
-/// rotation, which leaves every rule's text (and so its policies) as is.
-fn rotate(a: &DocModel, from: usize, k: usize) -> DocModel {
-    let mut b = a.clone();
-    for i in from..from + k {
-        b.signers[i].key = KeyModel::Delegated(10 + i);
-    }
-    b
-}
-
-/// Rotate 1..=n keys of a rule; at each count the apply emits exactly the
-/// cheaper path's bytes. Returns the steps taken.
-fn sweep(a: &DocModel, name: &str, from: usize, n: usize) -> std::vec::Vec<Step> {
-    let mut steps = std::vec::Vec::new();
-    for k in 1..=n {
-        let (step, cheapest, in_place, replaced) = crossover(a, &rotate(a, from, k), name);
-        assert_eq!(cheapest, in_place.min(replaced), "{k} of {n} keys");
-        assert_eq!(
-            step == Step::InPlace,
-            in_place <= replaced,
-            "{k} of {n} keys"
-        );
-        steps.push(step);
-    }
-    steps
-}
-
-#[test]
-#[ignore = "quiet-events experiment: these pin event-priced crossovers; with no OZ events the model chooses by writes"]
-fn rotating_the_admin_rules_keys_switches_to_replacement_where_it_is_cheaper() {
-    // A policy-free rule: replacing it costs a removal and an addition (100
-    // and 332 bytes) plus 288 to deregister and re-register each key it
-    // keeps; editing it costs 244 per rotated key. Registering the new keys
-    // and deregistering the old costs the same either way. One or two
-    // rotated keys: 244 or 488 in place against 1 008 or 720 to replace.
-    // All three: 732 against 432.
-    let a = doc(delegated(3), std::vec![admin(&[0, 1, 2])]);
-    assert_eq!(
-        sweep(&a, "admin", 0, 3),
-        [Step::InPlace, Step::InPlace, Step::Replace]
-    );
-}
-
-#[test]
-#[ignore = "quiet-events experiment: these pin event-priced crossovers; with no OZ events the model chooses by writes"]
-fn rotating_a_capped_rules_keys_switches_to_replacement_where_it_is_cheaper() {
-    // A rule with both policies: replacing it also reinstalls and
-    // re-registers the interpreter and the spending limit, so in-place edits
-    // stay cheaper for more rotated keys.
-    // The largest such rule the caps admit: every signer but the admin's.
-    let n = MAX_DOC_SIGNERS as usize - 1;
-    let keys: std::vec::Vec<usize> = (1..=n).collect();
-    let mut capped = rule("r1", Some(0), &keys);
-    capped.functions = Some(std::vec!["transfer"]);
-    capped.cap = Some((1_000, 100));
-    let a = doc(delegated(n + 1), std::vec![admin(&[0]), capped]);
-    // Each rotated key costs 532 bytes in place (an addition and a removal,
-    // and a registration and deregistration either path pays). Replacing
-    // costs the same whatever the count: the removal and addition (484), the
-    // policies' reinstallation and re-registration (928), and 288 to
-    // deregister and re-register each of the rule's keys. With eight keys
-    // six rotate in place and seven or eight replace the rule; at the caps
-    // (five keys) every rotation stays in place.
-    let replace = 484 + 928 + 288 * n;
-    let expected: std::vec::Vec<Step> = (1..=n)
-        .map(|k| {
-            if 532 * k <= replace {
-                Step::InPlace
-            } else {
-                Step::Replace
-            }
-        })
-        .collect();
-    assert_eq!(sweep(&a, "r1", 1, n), expected);
+    assert!(p.editable);
+    assert_eq!(p.step, Step::InPlace);
 }
 
 #[test]

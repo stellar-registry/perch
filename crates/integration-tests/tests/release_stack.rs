@@ -2321,14 +2321,14 @@ const TRANSITIONS: &[Transition] = &[
         capped: false,
     },
     Transition {
-        name: "one swap at the signer cap",
+        name: "one swap in a six-key rule",
         owner: (0, 0),
         pay: (&[0, 1, 2, 3, 4, 5], &[0, 1, 2, 3, 4, 6]),
         work: None,
         capped: false,
     },
     Transition {
-        name: "five swaps at the signer cap",
+        name: "five swaps in a six-key rule",
         owner: (0, 0),
         pay: (&[0, 1, 2, 3, 4, 5], &[0, 6, 7, 8, 9, 10]),
         work: None,

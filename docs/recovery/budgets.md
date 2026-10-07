@@ -376,6 +376,23 @@ At the caps, the worst rows are:
 | `Protected` reconfiguration, every rule edited | 257.5M (64.4%) | 12.9 MB | 83 | 60 | 39 960 | 888 |
 | `Protected` reconfiguration, every rule replaced | 244.3M (61.1%) | 23.1 MB | 141 | 114 | 51 592 | 888 |
 
+**The configuration revision (#108)** adds one instance field, written by
+every `apply_doc` and executed upgrade, and 28 bytes to `DocApplied`
+(its `revision` field). The release-stack suite on stacks built from
+`7e1061c` and from the change (`build-stack.sh --builder contract`, real
+proofs, the same toolchain), all eighteen measured rows:
+
+| Change per row | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- |
+| Every `apply_doc` (thieves, completions, enrollment, reconfigurations) | -0.32M to +0.11M | +5 to +7 KB | 0 | 0 | +28 | +28 bytes |
+| `begin_*`, `publish_baseline`, factory `create_passkey` | +0.01M to +0.12M | +3 to +26 KB | 0 | 0 | 0 | 0 |
+
+Every apply already writes the instance, so no row gains a footprint or
+written entry. Instructions move by at most 0.08% of the limit, in both
+directions. The binding rows are unchanged: the reprogram thief's
+completion at 294.4M (73.6%), and written entries at 141 (70.5%, the
+renamed thief).
+
 The `worst_case_*` tests in `release_stack.rs` run all eight flows at the
 compiled-in caps and assert each stays within budget, so lowering a limit
 or growing a flow's cost fails CI's `release-stack-source` job.

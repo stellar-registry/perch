@@ -4,6 +4,12 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [Unreleased]
+
+### 🚀 Features
+
+- Consumer interface (#108): `readSnapshot` and `assertRevision` (reads at one configuration revision), `selectRules` by name and scope, `signingDigest` and `buildAuthPayload` (pinned against the account's own encodings), `checkLimits` and the compiler's `limits()`, typed errors (`StaleRevision`, `StaleSelection`, `OverLimits`, `AccountFrozen`, ...), `applyDocument` with `oneTransactionBackend`, and `accountReader` over the generated bindings
+
 ## [0.3.1] - 2026-09-29
 
 ### 🐛 Bug Fixes

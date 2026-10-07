@@ -154,7 +154,8 @@ were a policy change during the window.
 So a client building a completion must put the recovery-rule entry in the
 transaction itself: address credentials for the account, a fresh nonce, an
 `AuthPayload` with no signers selecting the recovery rule, and a root
-invocation of exactly `apply_doc(target, 0)`. Then it simulates, in
+invocation of exactly `apply_doc(target, 0, expected_revision)` (`None`,
+or the revision the target was derived at). Then it simulates, in
 enforcing mode. `perch-testnet` does this (`Entries::Root`). The same goes
 for any check that should observe the `Protected` freeze rather than the
 controller's own refusal.

@@ -1318,12 +1318,12 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__check_auth` | Freeze (§9), then reserved names, then OZ `do_check_auth` |
-| Account | `apply_doc(doc_json, approval_valid_until)` | Owner authorization, or the recovery rule (completion only) |
+| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
 | Account | `rcv_gate(attempt_id, frozen_until)` | Invoker-only: the adopted controller's authorization, and the caller must be the adopted controller |
-| Account | `applied_doc`, `applied_doc_hash`, `is_revoked`, `is_enrolled_id`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `doc_compiler`, rule views | None (read-only; `account::RecoveryAccountClient`) |
+| Account | `applied_doc`, `applied_doc_hash`, `is_revoked`, `is_enrolled_id`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `doc_compiler`, rule views; `revision`, `configuration`, `document`, `capabilities` (#108) | None (read-only; `account::RecoveryAccountClient`) |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade` (`controller::RecoveryHooksClient`), `install`, `uninstall`, `enforce` | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |

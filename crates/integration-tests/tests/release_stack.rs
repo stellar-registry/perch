@@ -47,8 +47,9 @@ use perch_zk_prover::{Inputs, Toolchain, Tree};
 use soroban_sdk::testutils::{EnvTestConfig, Ledger as _};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::xdr::{
-    InvokeContractArgs, ScVal, SorobanAddressCredentials, SorobanAuthorizationEntry,
-    SorobanAuthorizedFunction, SorobanAuthorizedInvocation, SorobanCredentials, StringM, VecM,
+    AccountId, HostFunction, InvokeContractArgs, PublicKey, ScVal, SorobanAddressCredentials,
+    SorobanAuthorizationEntry, SorobanAuthorizedFunction, SorobanAuthorizedInvocation,
+    SorobanCredentials, StringM, Uint256, VecM,
 };
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, IntoVal, Map, Symbol, TryFromVal, Val, Vec};
 use std::cell::Cell;
@@ -80,16 +81,31 @@ const BUDGET_PCT: u64 = 75;
 thread_local! {
     /// Set by [`cap_sweep`] only: report rows without asserting the budget.
     static UNBUDGETED: Cell<bool> = const { Cell::new(false) };
+    /// While set, [`World::shaped_json`] changes every interpreter program
+    /// (`.0`) and every spending cap (`.1`): the keep-names thieves.
+    static REPARAM: Cell<(bool, bool)> = const { Cell::new((false, false)) };
+    /// While set, every `apply_doc` is first simulated the way RPC simulation
+    /// runs it, and its metered footprint checked against the simulated one
+    /// ([`World::check_footprint`]).
+    static SIMULATE: Cell<bool> = const { Cell::new(false) };
+    /// How many `apply_doc` calls were checked that way.
+    static SIMULATED: Cell<u32> = const { Cell::new(0) };
 }
 
 fn report(label: &str, e: &Env) {
     let r = e.cost_estimate().resources();
     let fee = e.cost_estimate().fee();
     let read_entries = r.memory_read_entries + r.disk_read_entries;
-    // Counted the way the host's own limit check counts it
-    // (`InvocationResources::verify_limits`): reads plus writes, so a
-    // read-write entry counts twice and this is an upper bound.
-    let footprint_entries = read_entries + r.write_entries;
+    // The footprint the network limits is the transaction's distinct ledger
+    // keys, read-only plus read-write (stellar-core:
+    // `readOnly.size() + readWrite.size()`). The host meters one read entry
+    // per footprint key of either kind, and one write entry more per
+    // read-write key, so the reads alone are the footprint, and the writes
+    // are its read-write part, limited separately (200). The host's own
+    // in-process check adds the two, counting a read-write key twice.
+    // `the_metered_footprint_is_the_simulated_transactions` checks both
+    // against a simulated transaction's footprint.
+    let footprint_entries = read_entries;
     println!(
         "\n{{\"case\":\"{label}\",\"instructions\":{},\"instructions_pct_of_tx_limit\":{:.1},\"mem_bytes\":{},\"read_entries\":{},\"write_entries\":{},\"footprint_entries\":{},\"write_bytes\":{},\"events_bytes\":{},\"fee_resource_stroops\":{},\"fee_rent_stroops\":{}}}",
         r.instructions,
@@ -630,13 +646,19 @@ impl World {
             "apply_doc",
             std::vec![self.sc(doc.clone()), self.sc(approval_valid_until)],
         );
-        self.env
-            .set_auths(&[self.passkey_entry(&a.address, key, "admin", root)]);
+        let entry = self.passkey_entry(&a.address, key, "admin", root.clone());
+        let simulated = SIMULATE
+            .with(Cell::get)
+            .then(|| self.simulated_footprint(&root, &entry));
+        self.env.set_auths(&[entry]);
         let ok = matches!(
             self.account(a).try_apply_doc(doc, &approval_valid_until),
             Ok(Ok(_))
         );
         self.env.set_auths(&[]);
+        if let (true, Some(simulated)) = (ok, simulated) {
+            self.check_footprint(simulated);
+        }
         ok
     }
 
@@ -691,6 +713,68 @@ impl World {
         ok
     }
 
+    /// The footprint RPC simulation declares for `root` authorized by
+    /// `entry`, on the current ledger: its read-only and read-write key
+    /// counts, or why the simulated call failed. Runs the call in recording mode on a fresh host over a
+    /// snapshot of this ledger (`e2e_invoke`, what simulation runs), so the
+    /// test environment's own metering plays no part.
+    fn simulated_footprint(
+        &self,
+        root: &SorobanAuthorizedInvocation,
+        entry: &SorobanAuthorizationEntry,
+    ) -> Result<(usize, usize), String> {
+        use soroban_env_host::{budget::Budget, e2e_invoke, storage::SnapshotSource};
+        let SorobanAuthorizedFunction::ContractFn(call) = &root.function else {
+            unreachable!("apply_doc is a contract call")
+        };
+        let budget = Budget::default();
+        budget.reset_unlimited().unwrap();
+        let snapshot: std::rc::Rc<dyn SnapshotSource> =
+            std::rc::Rc::new(self.env.to_ledger_snapshot());
+        let mut diagnostics = std::vec::Vec::new();
+        let out = e2e_invoke::invoke_host_function_in_recording_mode(
+            &budget,
+            false,
+            &HostFunction::InvokeContract(call.clone()),
+            &AccountId(PublicKey::PublicKeyTypeEd25519(Uint256([7; 32]))),
+            e2e_invoke::RecordingInvocationAuthMode::Enforcing(std::vec![entry.clone()]),
+            self.env.ledger().get(),
+            snapshot,
+            [0; 32],
+            &mut diagnostics,
+        )
+        .expect("the simulation runs");
+        if let Err(e) = &out.invoke_result {
+            return Err(format!("{e:?}"));
+        }
+        let footprint = out.resources.footprint;
+        Ok((footprint.read_only.len(), footprint.read_write.len()))
+    }
+
+    /// The `apply_doc` just metered, which succeeded, against its simulation:
+    /// the simulation succeeds too, the metered footprint is its read-only
+    /// plus read-write keys, and the written entries are the read-write keys.
+    fn check_footprint(&self, simulated: Result<(usize, usize), String>) {
+        let (read_only, read_write) =
+            simulated.unwrap_or_else(|e| panic!("the call succeeded, its simulation failed: {e}"));
+        let r = self.env.cost_estimate().resources();
+        let reads = (r.memory_read_entries + r.disk_read_entries) as usize;
+        assert_eq!(
+            reads,
+            read_only + read_write,
+            "metered footprint = simulated read-only + read-write keys"
+        );
+        assert_eq!(
+            r.write_entries as usize, read_write,
+            "metered written entries = simulated read-write keys"
+        );
+        SIMULATED.with(|n| n.set(n.get() + 1));
+        println!(
+            "\n{{\"footprint_check\":{{\"read_only\":{read_only},\"read_write\":{read_write},\"metered_footprint\":{reads},\"metered_written\":{}}}}}",
+            r.write_entries
+        );
+    }
+
     /// Complete through the recovery rule: anyone may submit.
     fn try_complete(&self, a: &Acct, target: &Bytes) -> bool {
         let root = self.invocation(
@@ -698,10 +782,16 @@ impl World {
             "apply_doc",
             std::vec![self.sc(target.clone()), self.sc(0u32)],
         );
-        self.env
-            .set_auths(&[self.recovery_rule_entry(&a.address, root)]);
+        let entry = self.recovery_rule_entry(&a.address, root.clone());
+        let simulated = SIMULATE
+            .with(Cell::get)
+            .then(|| self.simulated_footprint(&root, &entry));
+        self.env.set_auths(&[entry]);
         let ok = matches!(self.account(a).try_apply_doc(target, &0), Ok(Ok(_)));
         self.env.set_auths(&[]);
+        if let (true, Some(simulated)) = (ok, simulated) {
+            self.check_footprint(simulated);
+        }
         ok
     }
 
@@ -909,6 +999,9 @@ impl World {
     ) -> String {
         let ids = signer_ids(shape.signers);
         let id_refs: std::vec::Vec<&str> = ids.iter().map(String::as_str).collect();
+        let (reprogram, recap) = REPARAM.with(Cell::get);
+        let function = if reprogram { "protectee" } else { "protected" };
+        let limit = if recap { "11" } else { "10" };
         let scope = format!(
             r#""scope":{{"type":"contract","address":"{}"}}"#,
             strkey(&self.target)
@@ -925,7 +1018,7 @@ impl World {
             let named: std::vec::Vec<String> =
                 named.iter().map(|id| format!(r#""{id}""#)).collect();
             format!(
-                r#""principals":{{"type":"threshold","m":1,"signers":[{}]}},"functions":["protected"],"args":[{{"index":0,"pred":{{"type":"is-self"}}}}]"#,
+                r#""principals":{{"type":"threshold","m":1,"signers":[{}]}},"functions":["{function}"],"args":[{{"index":0,"pred":{{"type":"is-self"}}}}]"#,
                 named.join(",")
             )
         };
@@ -973,7 +1066,7 @@ impl World {
             }
             rules.push(if j < shape.both {
                 format!(
-                    r#"{{"name":"{name}",{scope},{interpreted},"cap":{{"limit":"10","period-ledgers":1000}}}}"#
+                    r#"{{"name":"{name}",{scope},{interpreted},"cap":{{"limit":"{limit}","period-ledgers":1000}}}}"#
                 )
             } else if j < shape.both + shape.interp {
                 format!(r#"{{"name":"{name}",{scope},{interpreted}}}"#)
@@ -1096,7 +1189,12 @@ static PROVING: Mutex<()> = Mutex::new(());
 fn prove_inputs(inputs: &Inputs) -> std::vec::Vec<u8> {
     let _guard = PROVING.lock().unwrap_or_else(|p| p.into_inner());
     let tc = Toolchain::from_env().expect("pinned nargo/bb (eval \"$(scripts/zk-toolchain.sh)\")");
-    let work = repo().join("target/release-stack-proofs");
+    // `PERCH_PROOF_DIR` separates concurrent runs (each writes Prover.toml).
+    let work = repo().join(
+        std::env::var_os("PERCH_PROOF_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| "target/release-stack-proofs".into()),
+    );
     let proof = perch_zk_prover::prove(
         &tc,
         &repo().join("circuits"),
@@ -1811,15 +1909,64 @@ fn worst_lost_key(w: &World, shape: Shape, bytes: usize, seed: u8) {
     assert!(!w.activity(&a, &keys[0]));
 }
 
+/// What a compromise thief changes besides every signer's key, which
+/// decides how the completion's diff goes.
+#[derive(Clone, Copy)]
+enum Thief {
+    /// Nothing else: every rule keeps its slot, and the reconcile takes each
+    /// rule's cheaper path.
+    KeepNames,
+    /// Every rule's name: every rule is removed and added.
+    Rename,
+    /// Every interpreter program and every spending cap, names kept.
+    Reparam,
+    /// Every interpreter program, names kept.
+    Reprogram,
+    /// Every spending cap, names kept.
+    Recap,
+}
+
+impl Thief {
+    fn tag(self) -> &'static str {
+        match self {
+            Thief::Rename => "t",
+            _ => "",
+        }
+    }
+
+    /// What [`REPARAM`] is set to while the thief's document is built.
+    fn edits(self) -> (bool, bool) {
+        match self {
+            Thief::Reparam => (true, true),
+            Thief::Reprogram => (true, false),
+            Thief::Recap => (false, true),
+            Thief::KeepNames | Thief::Rename => (false, false),
+        }
+    }
+
+    fn how(self) -> &'static str {
+        match self {
+            Thief::KeepNames => "the thief kept every rule",
+            Thief::Rename => "the thief renamed every rule",
+            Thief::Reparam => "the thief kept every name, changed every program and cap",
+            Thief::Reprogram => "the thief kept every name, changed every program",
+            Thief::Recap => "the thief kept every name, changed every cap",
+        }
+    }
+}
+
 /// `Combined` compromise recovery of a `shape` document under `Protected`,
 /// revoking the most a completion can: a thief holding the owner key swaps
 /// every signer's key (no recovery text changes, so no condition), and the
 /// completion restores the baseline with new keys, revoking the replaced
 /// baseline credentials and every key the thief added. The thief chooses
-/// how the completion's diff goes: keeping every rule's name (`thief_tag`
-/// empty) makes it edit every rule in place, signer by signer; renaming
-/// every rule makes it remove and add every rule. Both are measured.
-fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: &'static str) {
+/// how the completion's diff goes ([`Thief`]): keeping every rule's name
+/// leaves each rule's path to the reconcile; renaming every rule forces
+/// every rule to be removed and added; keeping names while changing every
+/// program, cap, or both forces every policy to be reinstalled whichever
+/// path the reconcile takes. All are measured.
+fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Thief) {
+    let thief_tag = variant.tag();
     let keys = passkeys(seed, shape.signers);
     let a = w.new_account(passkeys(seed, 1).swap_remove(0));
     let zk1 = Zk {
@@ -1849,17 +1996,11 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, thief_tag: 
         ..shape
     };
     let thief_rule = format!("{thief_tag}target");
-    let how = if thief_tag.is_empty() {
-        "the thief kept every rule"
-    } else {
-        "the thief renamed every rule"
-    };
-    assert!(w.try_apply(
-        &a,
-        &keys[0],
-        &w.shaped_doc(&thief, &rec, stolen, bytes, true),
-        0
-    ));
+    let how = variant.how();
+    REPARAM.with(|r| r.set(variant.edits()));
+    let stolen_doc = w.shaped_doc(&thief, &rec, stolen, bytes, true);
+    REPARAM.with(|r| r.set((false, false)));
+    assert!(w.try_apply(&a, &keys[0], &stolen_doc, 0));
     report(
         &label(
             shape,
@@ -1991,11 +2132,23 @@ fn worst_case_lost_key_recovery_at_the_document_caps() {
 }
 
 fn worst_compromise_in_place(w: &World, shape: Shape, bytes: usize, seed: u8) {
-    worst_compromise(w, shape, bytes, seed, "")
+    worst_compromise(w, shape, bytes, seed, Thief::KeepNames)
 }
 
 fn worst_compromise_renamed(w: &World, shape: Shape, bytes: usize, seed: u8) {
-    worst_compromise(w, shape, bytes, seed, "t")
+    worst_compromise(w, shape, bytes, seed, Thief::Rename)
+}
+
+fn worst_compromise_reparam(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, Thief::Reparam)
+}
+
+fn worst_compromise_reprogram(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, Thief::Reprogram)
+}
+
+fn worst_compromise_recap(w: &World, shape: Shape, bytes: usize, seed: u8) {
+    worst_compromise(w, shape, bytes, seed, Thief::Recap)
 }
 
 fn worst_reconfiguration_in_place(w: &World, shape: Shape, bytes: usize, seed: u8) {
@@ -2006,13 +2159,21 @@ fn worst_reconfiguration_renamed(w: &World, shape: Shape, bytes: usize, seed: u8
     worst_reconfiguration(w, shape, bytes, seed, "n")
 }
 
-/// Every worst-case flow, both ways a diff can go.
-const WORST_FLOWS: [fn(&World, Shape, usize, u8); 5] = [
+/// A worst-case flow over a document shape, padded to some bytes, from a seed.
+type Flow = fn(&World, Shape, usize, u8);
+
+/// Every worst-case flow: both ways a diff can go, and the keep-names
+/// thieves that force every policy to be reinstalled. `PERCH_FLOWS` selects
+/// by index in [`cap_sweep`].
+const WORST_FLOWS: [Flow; 8] = [
     worst_lost_key,
     worst_compromise_in_place,
     worst_compromise_renamed,
     worst_reconfiguration_in_place,
     worst_reconfiguration_renamed,
+    worst_compromise_reparam,
+    worst_compromise_reprogram,
+    worst_compromise_recap,
 ];
 
 #[test]
@@ -2035,6 +2196,67 @@ fn worst_case_compromise_at_the_document_caps_replaces_every_rule() {
         MAX_DOC_CANONICAL_BYTES as usize,
         85,
     );
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_compromise_at_the_document_caps_reparameterizes_every_rule() {
+    worst_compromise_reparam(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        100,
+    );
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_compromise_at_the_document_caps_reprograms_every_rule() {
+    worst_compromise_reprogram(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        105,
+    );
+}
+
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn worst_case_compromise_at_the_document_caps_recaps_every_rule() {
+    worst_compromise_recap(
+        &world(),
+        worst_shape(),
+        MAX_DOC_CANONICAL_BYTES as usize,
+        110,
+    );
+}
+
+/// The footprint `report` counts is the transaction's: every `apply_doc` of
+/// the binding flows at the caps (enrollment, the thief's, and the
+/// completion) is first simulated the way RPC simulation runs it, and its
+/// metered footprint must equal the simulated read-only plus read-write
+/// keys, its written entries the read-write keys.
+#[test]
+#[ignore = "needs the built stack and the pinned proving toolchain"]
+fn the_metered_footprint_is_the_simulated_transactions() {
+    SIMULATE.with(|s| s.set(true));
+    let flows: [(Flow, u8); 4] = [
+        (worst_lost_key, 120),
+        (worst_compromise_renamed, 125),
+        (worst_compromise_reprogram, 130),
+        (worst_reconfiguration_renamed, 135),
+    ];
+    for (flow, seed) in flows {
+        flow(
+            &world(),
+            worst_shape(),
+            MAX_DOC_CANONICAL_BYTES as usize,
+            seed,
+        );
+    }
+    SIMULATE.with(|s| s.set(false));
+    // Each flow applies at least two documents through `apply_doc`.
+    assert!(SIMULATED.with(Cell::get) >= 8);
 }
 
 #[test]
@@ -2561,7 +2783,14 @@ fn cap_sweep() {
             skip("does not fit the byte target");
             continue;
         }
-        for flow in WORST_FLOWS {
+        let flows = std::env::var("PERCH_FLOWS").ok();
+        SIMULATE.with(|s| s.set(std::env::var_os("PERCH_SIMULATE").is_some()));
+        for (i, flow) in WORST_FLOWS.iter().enumerate() {
+            if let Some(flows) = &flows {
+                if !flows.split(',').any(|f| f.trim().parse() == Ok(i)) {
+                    continue;
+                }
+            }
             let w = world();
             w.env.cost_estimate().disable_resource_limits();
             UNBUDGETED.with(|u| u.set(true));

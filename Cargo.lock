@@ -1620,6 +1620,7 @@ dependencies = [
  "proptest",
  "serde_json",
  "sha2",
+ "soroban-env-host",
  "soroban-sdk",
  "stellar-accounts",
 ]

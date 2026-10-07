@@ -5,7 +5,8 @@ per-transaction limit (docs/recovery/budgets.md, "Document caps").
 
 Usage:
   eval "$(scripts/zk-toolchain.sh)"
-  scripts/cap-sweep.py [--stack target/stack] [--bytes N|0] [--budget 75] S,R [S,R ...]
+  scripts/cap-sweep.py [--stack target/stack] [--bytes N|0] [--budget 75]
+                       [--flows 0,1,...] [--simulate] [--save sweep.log] S,R [S,R ...]
   scripts/cap-sweep.py --log sweep.log      # tabulate an earlier run's output
 
 Each S,R is the worst shape with S signers and R rules: every signer a
@@ -13,7 +14,14 @@ passkey some rule names (up to OZ's 15 per rule), every rule but `admin` and
 `target` with both policies, padded to --bytes (default: the build's byte
 cap; 0: the larger of 8 192 and the shape's own size rounded up to 1 KiB).
 The stack's compiler must admit the shapes: to measure past the current
-caps, build a stack with them raised. Standard library only.
+caps, build a stack with them raised. --flows runs only those indices of
+release_stack.rs's WORST_FLOWS (default: all eight); --simulate also checks
+every apply_doc's footprint against an RPC-style simulation (slower).
+
+Footprint is the transaction's distinct ledger keys, read-only plus
+read-write, the count the network limits (400); written entries are the
+read-write keys (200). Logs from before 2026-10-07 counted every read-write
+key twice in footprint_entries. Standard library only.
 """
 
 import argparse
@@ -50,6 +58,10 @@ def run(args) -> str:
             shape += f",{args.bytes}"
         shapes.append(shape)
     env = dict(os.environ, PERCH_STACK_DIR=args.stack, PERCH_CAP_SWEEP=";".join(shapes))
+    if args.flows:
+        env["PERCH_FLOWS"] = args.flows
+    if args.simulate:
+        env["PERCH_SIMULATE"] = "1"
     out = subprocess.run(
         ["cargo", "test", "-q", "-p", "perch-integration-tests", "--test", "release_stack",
          "cap_sweep", "--", "--ignored", "--nocapture", "--test-threads", "1"],
@@ -111,9 +123,15 @@ def main() -> None:
     p.add_argument("--stack", default="target/stack")
     p.add_argument("--bytes", type=int, default=None)
     p.add_argument("--budget", type=float, default=75.0)
+    p.add_argument("--flows", help="comma-separated WORST_FLOWS indices to run (default: all)")
+    p.add_argument("--simulate", action="store_true", help="check each footprint against a simulation")
+    p.add_argument("--save", help="also write the raw cap_sweep output here")
     p.add_argument("--log", help="tabulate this cap_sweep output instead of running")
     args = p.parse_args()
     log = open(args.log).read() if args.log else run(args)
+    if args.save and not args.log:
+        with open(args.save, "w") as f:
+            f.write(log)
     tabulate(log, args.budget)
 
 

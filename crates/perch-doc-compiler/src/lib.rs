@@ -52,11 +52,11 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, Val};
 /// enrollment, a lost-key or compromise completion, and a reconfiguration.
 /// The binding limit is the footprint: with OZ's per-item events
 /// suppressed (the quiet-events experiment), events no longer bind.
-pub const MAX_DOC_SIGNERS: u32 = 6;
+pub const MAX_DOC_SIGNERS: u32 = 15;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_RULES: u32 = 13;
+pub const MAX_DOC_RULES: u32 = 40;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
+pub const MAX_DOC_CANONICAL_BYTES: u32 = 32_768;
 /// The longest rule name, in bytes: OZ's context-rule name limit. Checked
 /// here so that a document that compiles also installs: a compromise
 /// baseline is only published, never applied, until its recovery completes.

@@ -1,0 +1,42 @@
+[package]
+name = "perch-testnet"
+description = "Exercise a deployed perch stack on testnet: passkey owners, G-account guardians, real proofs, enforcing auth, measured transactions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "perch-testnet"
+path = "src/main.rs"
+
+[dependencies]
+# The transaction, RPC, and signing layer the deploy tool already uses.
+perch-deploy = { version = "0.1.1", path = "../perch-deploy" }
+# The software passkey and its WebAuthn signature encoding.
+perch-testkit = { version = "0.1.1", path = "../perch-testkit" }
+# Contract types, for encoding arguments and decoding results.
+perch-recovery = { version = "0.1.0", path = "../perch-recovery" }
+perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
+perch-account = { version = "0.3.0", path = "../perch-account" }
+perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
+perch-zk-pool = { version = "0.1.0", path = "../perch-zk-pool" }
+perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
+# Witnesses and real proofs with the pinned nargo/bb.
+perch-zk-prover = { version = "0.1.0", path = "../perch-zk-prover" }
+stellar-accounts = { workspace = true }
+# testutils: a host `Env` encodes contract types to ScVal and runs the
+# statement digest and Poseidon2 exactly as the contracts do.
+soroban-sdk = { workspace = true, features = ["testutils"] }
+soroban-sdk-tools = { workspace = true }
+stellar-xdr = { version = "=27.0.0", features = ["base64", "serde", "serde_json"] }
+stellar-strkey = "=0.0.16"
+ed25519-dalek = "2"
+sha2 = "0.10"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4", features = ["derive"] }
+ureq = { version = "2", features = ["json"] }
+anyhow = "1"

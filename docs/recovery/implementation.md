@@ -172,12 +172,31 @@ against the release artifacts belong to the integration layer.
   pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
-- **Document caps.** 6 declared signers, 8 rules, 8 192 canonical bytes,
+- **Document caps.** 8 declared signers, 11 rules, 8 192 canonical bytes,
   and rule names of at most OZ's 20 bytes, sized against the measured
   worst-case completion (`budgets.md`, "Document caps"). The binding limit
-  is contract events. Every stack contract links a 64 KiB wasm stack
-  (`build.rs`): with rustc's 1 MiB default, every cross-contract call's VM
-  cost more than 1 MB of the transaction's memory.
+  is instructions: the thief who keeps every name and changes every
+  program is edited in place, at 73.6% at the caps. Written entries are
+  next (70.5%, the renamed thief). Every stack contract links a 64 KiB wasm
+  stack (`build.rs`): with rustc's 1 MiB default, every cross-contract
+  call's VM cost more than 1 MB of the transaction's memory.
+- **Quiet OZ mutations and `DocApplied`.** `apply_doc` performs every
+  rule, signer, and policy mutation through OZ's `_no_events` variants
+  (theahaco/stellar-contracts-OZ PR #4, pinned), and the spending-limit
+  policy installs and uninstalls quietly. It emits one `DocApplied` per
+  application: `doc_hash` as its topic, and the delta's counts (rules
+  added, removed, and edited in place; signers and policies added and
+  removed by the in-place edits). `apply_delta.rs` checks the counts
+  against the plan and the diff of the installed rules, and that the
+  account emits nothing else. An indexer reads the installed rules from
+  the account (`applied_doc`, OZ's rule views); it cannot replay OZ's
+  per-item events, which no longer exist.
+- **`reconcile_signers`.** An in-place edit changes a rule's signers in
+  one OZ `reconcile_signers_no_events` call (theahaco/stellar-contracts-OZ
+  PR #5, pinned). The call checks the final set whole, keeps retained
+  signers' ids, and writes the rule once. When the target has signers the
+  swap goes first; when it has none, the policies change first and the
+  signers go last.
 - **`execute`** returns the called function's value.
 - **`max-cancels` is a lifetime count per controller.** Nothing resets it;
   switching controllers starts a new one (T6).

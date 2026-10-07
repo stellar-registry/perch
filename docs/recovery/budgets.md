@@ -80,12 +80,14 @@ and transaction size. The headroom covers authorization growth (more
 guardians) and network limit changes. Workstream 4 applies the same 75% to
 the footprint entries (distinct keys, read-only plus read-write, of 400),
 written entries (the read-write keys, of 200), and contract-event bytes as
-well: each is a hard per-transaction limit, and contract events turned out
-to be the one these caps hit first. That tightens the rule; it relaxes nothing. The
-document caps (spec §7.5) are then set to the largest values for which the
-completion and reconfiguration rows stay within budget: see "Document caps"
-under Results (`perch_doc_compiler::MAX_DOC_SIGNERS` = 6, `MAX_DOC_RULES` =
-8, `MAX_DOC_CANONICAL_BYTES` = 8 192).
+well: each is a hard per-transaction limit. With OZ's per-item events,
+contract events were the one the caps hit first; the release suppresses
+them, and instructions and written entries bind instead. That tightens
+the rule; it relaxes nothing. The document caps (spec §7.5) are then set
+from the frontier where every completion and reconfiguration row stays
+within budget: see "Document caps" under Results
+(`perch_doc_compiler::MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 11,
+`MAX_DOC_CANONICAL_BYTES` = 8 192).
 
 ## 3. End-to-end latency
 
@@ -162,36 +164,34 @@ and laptop) remain open.
 
 ### Release stack, in process
 
-Workstream 4, 2026-10-06: the release-stack suite on this branch's stack
+Workstream 4, 2026-10-07: the release-stack suite on this branch's stack
 (`build-stack.sh --builder contract`), with WS2's ZK-flavor verifier, WS3's
-cheaper-path delta `apply_doc`, the final caps, and the 64 KiB (adapter: 128 KiB) wasm
-stacks, real proofs, and enforcing authorization. The worst row of each §2
-kind, as a share of the protocol-29 limits. Footprint is the transaction's
-distinct ledger keys, read-only plus read-write, which is what the network
-limits (400). Written entries are the read-write keys (200). Before
-2026-10-07 this table counted every read-write key twice in the footprint
-column (reads plus writes): the old value was the new one plus the written
-entries. `the_metered_footprint_is_the_simulated_transactions` checks the
-count against an RPC-style simulation of each binding `apply_doc`.
+delta `apply_doc` on quiet OZ mutations with `reconcile_signers`, the 8 x 11
+caps, and the 64 KiB (adapter: 128 KiB) wasm stacks, real proofs, and
+enforcing authorization. The worst row of each §2 kind, as a share of the
+protocol-29 limits. Footprint is the transaction's distinct ledger keys,
+read-only plus read-write, which is what the network limits (400). Written
+entries are the read-write keys (200).
+`the_metered_footprint_is_the_simulated_transactions` checks the count
+against an RPC-style simulation of each binding `apply_doc`.
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
-| Enroll `Combined` through `apply_doc`, at the caps | 185.2M (46.3%) | 12.1 MB | 76 | 50 | 42 184 | 6 876 |
-| `begin_lost_key` / `begin_compromise`, at the caps | 138.9M (34.7%) | 5.2 MB | 23 | 2 | 1 888 | 248 |
-| `publish_baseline`, at the caps | 101.2M (25.3%) | 2.3 MB | 10 | 1 | 7 464 | 0 |
+| Enroll `Combined` through `apply_doc`, at the caps | 197.2M (49.3%) | 14.6 MB | 91 | 63 | 51 144 | 888 |
+| `begin_lost_key` / `begin_compromise`, at the caps | 134.8M (33.7%) | 5.4 MB | 25 | 2 | 2 176 | 248 |
+| `publish_baseline`, at the caps | 96.1M (24.0%) | 1.8 MB | 10 | 1 | 7 452 | 0 |
 | `submit_guardian` (promoting, sets the freeze) | 1.8M | 0.7 MB | 13 | 6 | 1 996 | 368 |
 | `submit_zk` (promoting, `Combined`, sets the freeze) | 119.2M (29.8%) | 5.7 MB | 17 | 5 | 2 284 | 368 |
-| Completion, at the caps (compromise, both key sets revoked, every rule renamed) | 215.5M (53.9%) | 18.3 MB (43.6%) | 125 (31.2%) | 111 (55.5%) | 46 756 (35.4%) | 11 940 (72.9%) |
-| Completion, at the caps (compromise, both key sets revoked, every rule kept) | 224.3M (56.1%) | 18.4 MB (43.9%) | 123 | 107 | 46 484 | 11 428 (69.8%) |
-| Completion, at the caps (compromise, every rule kept by name, every program and cap changed) | 225.1M (56.3%) | 18.4 MB (44.0%) | 123 | 107 | 46 484 | 11 428 (69.8%) |
-| Completion, at the caps (lost-key, every signer revoked) | 221.1M (55.3%) | 17.5 MB | 117 | 101 | 45 840 | 10 636 (64.9%) |
+| Completion, at the caps (compromise, names kept, every program changed) | 294.5M (73.6%) | 19.8 MB (47.1%) | 116 | 99 | 53 160 | 3 228 (19.7%) |
+| Completion, at the caps (compromise, every rule renamed) | 251.6M (62.9%) | 24.9 MB (59.3%) | 157 (39.2%) | 141 (70.5%) | 56 532 (42.8%) | 3 228 |
+| Completion, at the caps (lost-key, every signer revoked) | 257.0M (64.2%) | 12.5 MB | 91 | 77 | 43 752 | 2 172 |
 | Cancellation (`Combined`, ZK last) | 118.6M (29.7%) | 5.4 MB | 16 | 5 | 2 132 | 332 |
 | `approve_change` | 0.9M | 0.3 MB | 8 | 2 | 392 | 192 |
-| `submit_zk_change` | 117.6M (29.4%) | 5.1 MB | 12 | 1 | 240 | 192 |
-| `Protected` reconfiguration `apply_doc`, at the caps | 222.8M (55.7%) | 17.9 MB | 113 | 88 | 42 632 | 10 132 |
-| `Protected` `schedule_upgrade` | 6.2M | 1.2 MB | 13 | 2 | 1 116 | 196 |
+| `submit_zk_change` | 117.7M (29.4%) | 5.1 MB | 12 | 1 | 240 | 192 |
+| `Protected` reconfiguration `apply_doc`, at the caps | 257.5M (64.4%) | 23.1 MB | 141 | 114 | 51 592 | 888 |
+| `Protected` `schedule_upgrade` | 6.3M | 1.2 MB | 13 | 2 | 1 116 | 196 |
 | `execute_upgrade` | 6.3M | 1.2 MB | 12 | 5 | 1 232 | 696 |
-| Enrollment that seals a tree (small document) | 58.5M | 4.4 MB | 34 | 18 | 8 016 | 1 460 |
+| Enrollment that seals a tree (small document) | 58.7M | 4.4 MB | 34 | 18 | 8 016 | 888 |
 
 Every row is within 75% of every limit. Native proving (`nargo execute` +
 `bb prove`, 15 proofs on an Apple M-series desktop): 69 ms median witness,
@@ -225,40 +225,56 @@ that, at one VM per ZK transaction. The verifier's stack use does not
 depend on its input, and the compiler's only input-driven recursion (JSON
 nesting) refuses cleanly at its depth limit on the 64 KiB stack.
 
-**The binding limit: contract events.** OZ emits an event for every rule
-added, removed, or edited, every signer registered, added to a rule, or
-removed from one, and every policy installed and uninstalled; the
+**With OZ's events, events bound.** OZ emits an event for every rule
+added, removed, or edited, for every signer registered, added to a rule, or
+removed from one, and for every policy installed or uninstalled. The
 controller emits one per revoked credential. `apply_doc` applies only the
 delta between documents (spec §7.5): rules are matched by name and scope,
-and each changed rule takes the cheaper of an in-place edit (signer by
-signer) and a whole replacement, priced in event bytes and then ledger
-writes. So a completion's cost depends on how the source and the target
-differ, and the worst cases are the ones with the largest difference, both
-ways the diff can go:
+and each changed rule takes the cheaper of an in-place edit and a whole
+replacement. With OZ's events, contract events bound every frontier row:
+
+| Signers | 2 | 4 | 6 | 8 | 10 | 12 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Most rules within budget | 11 | 10 | 8 (72.9%) | 6 | 5 | fewer than 5 |
+
+That allowed 6 signers and 8 rules. The release removes that limit in two
+steps, both from theahaco/stellar-contracts-OZ, the OZ fork this repo pins:
+
+- **Quiet mutations (OZ fork PR #4).** `apply_doc` makes every rule,
+  signer, and policy mutation through `_no_events` variants, and the
+  spending-limit policy installs and uninstalls quietly. The account emits
+  one `DocApplied` per application: `doc_hash` is its topic, and the
+  delta's counts are its data (rules added, removed, and edited in place;
+  signers and policies added and removed). `applied_doc` serves the
+  document, and `CredentialRevoked` is unchanged. Events drop to at most 31%
+  anywhere measured. With no events to price, the reconcile chooses each
+  rule's path by ledger writes, counted per OZ operation.
+- **One call per in-place signer change (OZ fork PR #5).** An in-place edit
+  changes a rule's signers in one `reconcile_signers_no_events`, instead of
+  a `remove_signer` per leaving signer and a `batch_add_signer`. The call
+  checks the final set as a whole (size, key sizes, canonical duplicates),
+  keeps the retained signers' registry ids, and writes the rule once. The
+  edit no longer needs room for old and new keys side by side. The cost
+  model prices it as one rule write plus each leaving and joining signer's
+  registry and lookup entries.
+
+**Worst cases.** A completion's cost depends on how its source and target
+differ, so the flows are the ones with the largest difference, every way
+the diff can go:
 
 - **Compromise recovery after a thief replaced every key.** A thief holding
   the owner key under `Protected` changes every signer's key without a
   condition (no recovery text changes), and the completion revokes both key
-  sets. The thief also chooses the diff: keeping every rule's name leaves
-  the reconcile to pick each rule's cheaper path; renaming every rule forces
-  every rule to be removed and added. **The renamed variant is the binding
-  row**: the cheaper-path choice keeps the kept-name variant below it.
+  sets. The thief also chooses the diff:
+  - keep every rule's name, so the reconcile picks each rule's path;
+  - rename every rule, so every rule is removed and added;
+  - keep every name but change every interpreter program and cap
+    (reparam), every program (reprogram), or every cap (recap), so every
+    policy is reinstalled whichever path is taken.
 - **Lost-key recovery replacing every signer.**
 - **A `Protected` reconfiguration replacing every key**, with recorded
   quorum and proof and a new ZK enrollment, both with every rule kept by
   name and with every rule renamed.
-- **Compromise recovery after a thief kept every name but changed every
-  policy**: every interpreter program and cap (reparam), every program
-  (reprogram), or every cap (recap). Each forces every policy to be
-  reinstalled, whichever path the reconcile takes. Here (events priced
-  first) all three replace every rule and cost what the kept-name row
-  costs, within 0.4 points.
-
-Before the reconcile priced its paths it always edited a matched rule in
-place, one `signer_removed` and one `signer_added` event per signer
-swapped, which outgrows a whole replacement once a rule names a few
-signers: the frontier then fell to 4 signers and 9 rules. Choosing the
-cheaper path restores it.
 
 **Method.** `cap_sweep` (in `release_stack.rs`) runs those eight flows
 (`WORST_FLOWS`) over a document shape, and `scripts/cap-sweep.py` runs it
@@ -275,78 +291,210 @@ the costliest the caps admit:
 **Footprint is counted as the network counts it**: the transaction's
 distinct ledger keys, read-only plus read-write, against 400. Written
 entries (the read-write keys) are a separate limit of 200. Until
-2026-10-07 the sweep added the two, counting every read-write key twice;
-those footprint figures were too high by the written entries.
-`the_metered_footprint_is_the_simulated_transactions` simulates each
-binding `apply_doc` the way RPC simulation runs it and checks both counts
-against the simulated footprint's key sets. `cap-sweep.py --simulate` does
-the same inside a sweep.
+2026-10-07 the sweep added the two, which counted every read-write key
+twice and reported the footprint as binding when it never was.
+`the_metered_footprint_is_the_simulated_transactions` simulates every
+`apply_doc` of the binding flows at the caps the way RPC simulation runs
+it, and checks the metered footprint against the simulated read-only plus
+read-write keys, and the written entries against the read-write keys.
+`cap-sweep.py --simulate` does the same inside a sweep: 63 of 63 matched at
+6 and 14, 8 and 11, and 10 and 9.
 
-The sweep ran on a stack built from this branch with the compiler's caps
+The sweep ran on a stack built from this source with the compiler's caps
 raised (15 signers, OZ's per-rule maximum; 32 rules; 32 768 bytes). The
-shapes and padding are the same ones PR 106 and PR 107 were swept with. The
-corrected frontier, each shape's worst share over every row of every flow:
+same 33 shapes, padding, flows, and toolchain were also run on the two
+earlier designs: OZ's events, and quiet mutations with per-signer edits.
+For each signer count, the most rules within budget and the first row past
+it:
 
 | Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2 | 11 | 54.7% | 50.5% | 28.8% | 52.5% | 34.0% | 71.5% |
-| 2 | 12 | 56.0% | 54.1% | 30.2% | 55.5% | 35.0% | **76.7%** |
-| 4 | 9 | 55.3% | 45.6% | 29.2% | 52.5% | 34.4% | 69.7% |
-| 4 | 10 | 56.9% | 49.4% | 30.8% | 55.5% | 35.7% | 75.0% (12 284 B, on the line) |
-| **6** | **8** | **56.3%** | **44.0%** | **31.2%** | **55.5%** | **35.4%** | **72.9%** |
-| 6 | 9 | 58.5% | 48.1% | 32.8% | 58.5% | 36.9% | **78.3%** |
-| 8 | 6 | 53.7% | 37.6% | 31.8% | 55.5% | 34.2% | 70.4% |
-| 8 | 7 | 56.4% | 42.0% | 33.2% | 58.5% | 35.9% | **75.9%** |
-| 10 | 5 | 52.5% | 35.0% | 33.8% | 58.5% | 34.0% | 73.1% |
-| 10 | 6 | 55.8% | 39.7% | 35.2% | 61.5% | 35.9% | **78.7%** |
-| 12 | 5 | 54.2% | 37.0% | 37.2% | 64.5% | 35.5% | **81.3%** |
-| 15 | 3 | 47.3% | 29.1% | 39.5% | 67.5% | 32.7% | **81.9%** |
+| 2 | 17 | 62.8% | 73.2% | 37.8% | 70.5% | 40.1% | 10.0% |
+| 2 | 18 | 64.3% | **77.3%** | 39.2% | 73.5% | 41.1% | 10.0% |
+| 4 | 16 | 69.6% | 74.3% | 39.8% | 73.5% | 43.2% | 13.3% |
+| 4 | 17 | 71.6% | **78.8%** | 41.2% | **76.5%** | 44.4% | 13.3% |
+| 6 | 14 | 74.5% | 70.4% | 40.2% | 73.5% | 44.3% | 16.5% |
+| 6 | 15 | **77.3%** | **75.2%** | 41.8% | **76.5%** | 45.8% | 16.5% |
+| **8** | **11** | **73.6%** | **60.5%** | **39.2%** | **70.5%** | **42.8%** | **19.7%** |
+| 8 | 12 | **77.1%** | 65.5% | 40.8% | 73.5% | 44.5% | 19.7% |
+| 10 | 9 | 72.6% | 54.4% | 39.8% | 70.5% | 41.8% | 22.9% |
+| 10 | 10 | **76.8%** | 59.6% | 41.2% | 73.5% | 43.8% | 22.9% |
+| 12 | 8 | 73.6% | 52.6% | 41.8% | 73.5% | 42.1% | 26.1% |
+| 12 | 9 | **79.0%** | 58.3% | 43.2% | **76.5%** | 44.3% | 26.1% |
+| 15 | 5 | 62.2% | 40.0% | 42.5% | 73.5% | 37.8% | 31.0% |
+| 15 | 6 | 69.0% | 45.9% | 44.0% | **76.5%** | 40.3% | 31.0% |
 
-**Events bind at every frontier row**, in the compromise whose thief
-renamed every rule. The frontier runs from 10 signers and 5 rules to 2
-signers and 11. At 12 and 15 signers not even the smallest measured
-documents fit (5 and 3 rules). No other limit is near the budget at those
-points. Measured up to 18 rules:
-- the footprint never passes 44.0% (15 signers, 6 rules);
-- instructions reach 73.0% at 6 signers and 15 rules;
-- memory first passes 75% at 2 signers and 18 rules;
-- written entries first pass it at 4 and 17, and at 6 and 15.
+**What binds.**
+- **Instructions bind from 6 to 12 signers**, in the thief who keeps every
+  name and changes every program.
+- **Memory binds at 2 and 4 signers.**
+- **Written entries bind at 15 signers.** Everywhere else they are close
+  behind, in the renamed thief's completion: it replaces every rule whole,
+  and each capped rule it replaces writes 6 entries (old and new rule,
+  program, and spending window).
+- **The footprint is never above 44.0%.**
 
-**The caps are 6 signers, 8 rules, and 8 192 canonical bytes** (events
-72.9%, the compromise whose thief renamed every rule), the same 75% rule
-and the same frontier point as when `apply_doc` replaced every rule: the
-point that keeps the most rules (a scope per contract) without dropping
-signers below 6. 2 signers and 11 rules, 4 and 10, 8 and 6, or 10 and 5
-are the alternatives. Rerun `scripts/cap-sweep.py` after a change to the
-reconcile's cost model, OZ's events, the controller's, or the policies,
-and after a network limit change.
+**The reprogram thief costs instructions because of the cost model.** The
+model prices only ledger writes. For a rule whose name is kept and whose
+program changed, the in-place edit writes fewer entries than a
+replacement: one `reconcile_signers` and a reinstall of the interpreter
+policy, against a removal and an addition. So the reconcile edits the rule
+in place. Each of those OZ calls re-reads the rule and its signers, and the
+in-place path costs more instructions. With per-signer edits, the
+in-place path writes more, so the same thief is replaced and instructions
+never bind (8 and 12, and 10 and 10, fit there). A model that also priced
+instructions would take the replacement for these rules, at the reparam
+rows' cost (72.2% at 8 and 12, 71.1% at 10 and 10). That would add a rule
+at 8 and at 10 signers. It is not needed at the caps and is not
+implemented: it would change the reviewed cost model, which the tests
+require to price exactly what runs.
+
+**The caps are 8 signers, 11 rules, and 8 192 canonical bytes** (the
+captain's choice from this frontier). Every shape up to the caps fits the
+8 192-byte canonical cap. The worst share at the caps is instructions at
+73.6%, in the reprogram thief's completion; written entries are at 70.5%
+(the renamed thief). Other frontier points are 2 and 17, 4 and 16, 6 and
+14, 10 and 9, 12 and 8, and 15 and 5. Rerun `scripts/cap-sweep.py` after a
+change to the reconcile's cost model, OZ's mutations, the controller's or
+the policies' storage, or a network limit.
 
 At the caps, the worst rows are:
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
-| Enroll `Combined` through `apply_doc` | 185.2M | 12.1 MB | 76 | 50 | 42 184 | 6 876 |
-| `begin_lost_key` / `begin_compromise` | 138.9M | 5.2 MB | 23 | 2 | 1 888 | 248 |
-| Thief's `apply_doc` (every key swapped, every rule renamed) | 171.1M | 14.7 MB | 96 | 76 | 38 472 | 8 908 |
-| Compromise completion, every rule renamed (12 revoked) | 215.8M (54.0%) | 18.3 MB (43.6%) | 125 (31.2%) | 111 (55.5%) | 46 756 (35.4%) | 11 940 (72.9%) |
-| Compromise completion, every rule kept by name (12 revoked) | 224.4M (56.1%) | 18.4 MB (43.9%) | 123 (30.8%) | 107 (53.5%) | 46 484 (35.2%) | 11 428 (69.8%) |
-| Compromise completion, names kept, every program and cap changed | 225.1M (56.3%) | 18.4 MB (44.0%) | 123 | 107 | 46 484 | 11 428 (69.8%) |
-| Compromise completion, names kept, every program changed | 224.6M (56.2%) | 18.4 MB | 123 | 107 | 46 484 | 11 428 |
-| Compromise completion, names kept, every cap changed | 225.0M (56.3%) | 18.4 MB | 123 | 107 | 46 484 | 11 428 |
-| Lost-key completion (`Combined`, ZK rotation, 6 revoked) | 221.2M | 17.5 MB | 117 | 101 | 45 840 | 10 636 |
-| `Protected` reconfiguration, every rule kept by name | 222.8M | 17.9 MB | 111 | 84 | 42 368 | 9 616 |
-| `Protected` reconfiguration, every rule renamed | 214.5M | 17.7 MB | 113 | 88 | 42 632 | 10 132 |
+| Enroll `Combined` through `apply_doc` | 197.2M (49.3%) | 14.6 MB | 91 | 63 | 51 144 | 888 |
+| `begin_lost_key` / `begin_compromise` | 134.8M (33.7%) | 5.4 MB | 25 | 2 | 2 176 | 248 |
+| Thief's `apply_doc` (every key swapped, every rule renamed) | 201.7M (50.4%) | 20.1 MB | 124 | 102 | 47 408 | 340 |
+| Thief's `apply_doc` (names kept, every program changed) | 249.3M (62.3%) | 16.2 MB | 83 | 61 | 44 156 | 340 |
+| Compromise completion, names kept, every program changed (binding) | 294.5M (73.6%) | 19.8 MB (47.1%) | 116 (29.0%) | 99 (49.5%) | 53 160 (40.2%) | 3 228 (19.7%) |
+| Compromise completion, names kept, every program and cap changed | 276.2M (69.0%) | 25.4 MB (60.5%) | 155 (38.8%) | 137 (68.5%) | 56 260 | 3 228 |
+| Compromise completion, names kept, every cap changed | 275.6M (68.9%) | 24.7 MB | 152 | 134 | 55 812 | 3 228 |
+| Compromise completion, every rule renamed | 251.6M (62.9%) | 24.9 MB (59.3%) | 157 (39.2%) | 141 (70.5%) | 56 532 (42.8%) | 3 228 |
+| Compromise completion, every rule kept by name | 259.6M (64.9%) | 13.2 MB | 99 | 85 | 44 852 | 3 228 |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 257.0M (64.2%) | 12.5 MB | 91 | 77 | 43 752 | 2 172 |
+| `Protected` reconfiguration, every rule edited | 257.5M (64.4%) | 12.9 MB | 83 | 60 | 39 960 | 888 |
+| `Protected` reconfiguration, every rule replaced | 244.3M (61.1%) | 23.1 MB | 141 | 114 | 51 592 | 888 |
 
 The `worst_case_*` tests in `release_stack.rs` run all eight flows at the
 compiled-in caps and assert each stays within budget, so lowering a limit
-or growing an event fails CI's `release-stack-source` job.
+or growing a flow's cost fails CI's `release-stack-source` job.
+
+**Signer transitions, in release wasm.** `signer_transitions`
+(`release_stack.rs`) applies one document change per row to `pay`, a
+1-of-n rule (the interpreter policy), and to the spending cap in the
+capped row. It compares the release with the two earlier designs, all on
+WS3's batched-addition base (4d11470), on stacks built with the caps raised
+so the 15-signer rows run. In "full six-key rotation" every declared key
+changes, the owner's (and so `admin`'s) too. Each cost is the whole
+`apply_doc`, compiling the document included.
+
+**CPU instructions**
+
+| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
+| --- | ---: | ---: | ---: |
+| single addition | 22.51M | 22.36M | 23.08M |
+| several additions | 25.01M | 24.77M | 25.75M |
+| full six-key rotation | 30.81M | 30.36M | 30.40M |
+| one swap in a six-key rule | 28.21M | 28.03M | 28.93M |
+| five swaps in a six-key rule | 28.74M | 28.38M | 31.19M |
+| shared signers | 27.10M | 27.76M | 28.44M |
+| full rotation with an active spending cap | 32.54M | 32.07M | 34.02M |
+| one swap at OZ's 15 | 52.61M | 52.26M | 54.87M |
+| seven swaps at OZ's 15 | 57.04M | 56.24M | 58.84M |
+
+**Memory**
+
+| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
+| --- | ---: | ---: | ---: |
+| single addition | 2.42 MB | 2.40 MB | 2.41 MB |
+| several additions | 2.50 MB | 2.46 MB | 2.48 MB |
+| full six-key rotation | 3.11 MB | 3.03 MB | 3.02 MB |
+| one swap in a six-key rule | 2.54 MB | 2.50 MB | 2.50 MB |
+| five swaps in a six-key rule | 2.75 MB | 2.70 MB | 2.75 MB |
+| shared signers | 2.49 MB | 2.48 MB | 2.48 MB |
+| full rotation with an active spending cap | 3.68 MB | 3.61 MB | 3.13 MB |
+| one swap at OZ's 15 | 2.88 MB | 2.81 MB | 2.82 MB |
+| seven swaps at OZ's 15 | 3.45 MB | 3.34 MB | 3.30 MB |
+
+**Footprint entries (distinct keys)**
+
+| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
+| --- | ---: | ---: | ---: |
+| single addition | 27 | 27 | 27 |
+| several additions | 31 | 31 | 31 |
+| full six-key rotation | 50 | 50 | 50 |
+| one swap in a six-key rule | 33 | 33 | 33 |
+| five swaps in a six-key rule | 48 | 48 | 45 |
+| shared signers | 33 | 29 | 29 |
+| full rotation with an active spending cap | 57 | 57 | 49 |
+| one swap at OZ's 15 | 51 | 51 | 51 |
+| seven swaps at OZ's 15 | 69 | 69 | 69 |
+
+**Written entries**
+
+| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
+| --- | ---: | ---: | ---: |
+| single addition | 12 | 12 | 12 |
+| several additions | 16 | 16 | 16 |
+| full six-key rotation | 37 | 37 | 37 |
+| one swap in a six-key rule | 14 | 14 | 14 |
+| five swaps in a six-key rule | 33 | 33 | 30 |
+| shared signers | 16 | 12 | 12 |
+| full rotation with an active spending cap | 42 | 42 | 35 |
+| one swap at OZ's 15 | 14 | 14 | 14 |
+| seven swaps at OZ's 15 | 38 | 38 | 38 |
+
+**Event bytes**
+
+| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
+| --- | ---: | ---: | ---: |
+| single addition | 1,020 | 340 | 340 |
+| several additions | 1,812 | 340 | 340 |
+| full six-key rotation | 3,340 | 340 | 340 |
+| one swap in a six-key rule | 1,244 | 340 | 340 |
+| five swaps in a six-key rule | 2,720 | 340 | 340 |
+| shared signers | 844 | 340 | 340 |
+| full rotation with an active spending cap | 4,020 | 340 | 340 |
+| one swap at OZ's 15 | 1,244 | 340 | 340 |
+| seven swaps at OZ's 15 | 4,964 | 340 | 340 |
+
+**Path and what it preserved** (rule id, spending window)
+
+| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
+| --- | --- | --- | --- |
+| single addition | in place, id kept | in place, id kept | in place, id kept |
+| several additions | in place, id kept | in place, id kept | in place, id kept |
+| full six-key rotation | replaced, new id | replaced, new id | replaced, new id |
+| one swap in a six-key rule | in place, id kept | in place, id kept | in place, id kept |
+| five swaps in a six-key rule | replaced, new id | replaced, new id | in place, id kept |
+| shared signers | replaced, new id | in place, id kept | in place, id kept |
+| full rotation with an active spending cap | replaced, new id, window reset | replaced, new id, window reset | in place, id kept, window kept |
+| one swap at OZ's 15 | in place, id kept | in place, id kept | in place, id kept |
+| seven swaps at OZ's 15 | in place, id kept | in place, id kept | in place, id kept |
+
+On all three designs the rule ends up with exactly the target signers: a
+joining key acts and a leaving key cannot. Retained signers keep their
+registry ids. `a_rejected_signer_transition_changes_nothing` passes. In
+it, a duplicate key (one passkey under a second credential id) and a budget
+running out at 25, 50, 75, and 95% of a full rotation leave every ledger
+entry unchanged.
+
+`reconcile_signers` keeps two more transitions in place than per-signer
+edits do: five swaps in a six-key rule, and the full rotation under an
+active spending cap. The capped rotation now keeps its rule id and its
+spending window, which a replacement reset (a key rotation also reset what
+the cap had counted). It costs 0.7 to 2.6M more instructions on small
+applies, where both designs edit in place. OZ's call reads the current
+signers back from the registry and re-checks duplicates over the whole set.
+At the caps, the flows that edit every rule in place are cheaper with it,
+because a rule's whole swap is one call.
 
 The compiler also refuses a rule name longer than OZ's 20-byte context-rule
 limit (`MAX_RULE_NAME_BYTES`). Before, such a document compiled and failed
 only at install, so a published compromise baseline with one could never be
 restored. A rule cannot name more signers than OZ's per-rule 15 because the
-document cannot declare more than 6.
+document cannot declare more than 8.
 
 Assumption: signer keys are at most a passkey's (81 bytes of key data). A
 custom verifier with keys up to the 256 bytes the IR admits would grow every
-signer's registration event and needs its own measurement.
+signer's registry entry and the write bytes, and needs its own measurement.

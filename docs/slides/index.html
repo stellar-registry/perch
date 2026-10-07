@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Perch — a policy layer for Soroban smart accounts</title>
+<title>Perch: policy documents and account recovery for Soroban smart accounts</title>
 <style>
   :root {
     --bg:        #0B1116;
@@ -75,6 +75,7 @@
   }
   .punch em { font-style:normal; color:var(--accent); }
   code { font-family:var(--mono); font-size:.92em; }
+  p code, li code, td code { overflow-wrap:anywhere; }
 
   .quote {
     border-left:2px solid var(--accent);
@@ -168,7 +169,7 @@
   pre .add { color:var(--accent); }
   .code-cap {
     font-family:var(--mono); font-size:.74rem; letter-spacing:.08em;
-    color:var(--faint); margin-top:.8rem;
+    color:var(--faint); margin-top:.8rem; overflow-wrap:anywhere;
   }
   .hashline {
     font-family:var(--mono); font-size:clamp(.58rem,1.5vw,.85rem);
@@ -186,6 +187,17 @@
   .callouts .f { display:block; font-family:var(--mono); font-size:.78rem; color:var(--accent); margin-bottom:.15rem; }
   .callouts .d { color:var(--muted); font-size:clamp(.85rem,1.3vw,.98rem); }
   .callouts .d code { font-size:.88em; }
+
+  /* ---- tables ---- */
+  .tblwrap { overflow-x:auto; margin-top:1rem; }
+  .tbl { width:100%; border-collapse:collapse; font-size:clamp(.8rem,1.25vw,.96rem); }
+  .tbl th, .tbl td { text-align:left; padding:.55rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }
+  .tbl th { font-family:var(--mono); font-size:.7rem; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); font-weight:500; }
+  .tbl td { color:var(--muted); }
+  .tbl td:first-child { color:var(--text); }
+  .tbl td.num { font-family:var(--mono); color:var(--accent); white-space:nowrap; }
+  .tbl td.deny { color:var(--deny); }
+  .tbl code { font-size:.88em; }
 
   /* ---- diagrams ---- */
   .diagram { margin-top:1rem; }
@@ -291,44 +303,44 @@
         <circle cx="124" cy="27" r="6"  fill="none" stroke="currentColor" stroke-width="1.5"/>
       </svg>
       <h1>Perch</h1>
-      <p class="subtitle">A policy layer for Soroban smart accounts.</p>
-      <p class="tagline">What each key may do — <em>written down, hashed, enforced.</em></p>
+      <p class="subtitle">Policy documents for OpenZeppelin smart accounts on Soroban, and an account-recovery stack built on them.</p>
+      <p class="tagline">Slides 2–23: the policy layer. 24–31: recovery. 32–34: release and testnet deployment.</p>
       <p class="byline">Willem Wyndham &nbsp;·&nbsp; github.com/stellar-registry/perch</p>
-      <p class="keys-hint"><kbd>→</kbd> next &nbsp; <kbd>←</kbd> back &nbsp;·&nbsp; or click a screen edge &nbsp;·&nbsp; 25 slides</p>
+      <p class="keys-hint"><kbd>→</kbd> next &nbsp; <kbd>←</kbd> back &nbsp;·&nbsp; or click a screen edge &nbsp;·&nbsp; 36 slides</p>
     </div>
   </section>
 
   <!-- 2 ▸ the problem -->
   <section class="slide" aria-label="Slide 2">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">02</span> · The problem everyone has</p>
-      <h2>Every operational key does too much.</h2>
-      <p class="lead">A wallet session key. A treasury payout key. An AI agent's tool key. A CI key that ships wasm to the registry. Each one should do <strong>exactly one narrow thing</strong> — yet on Stellar today, scoping a key that tightly means writing and auditing a smart contract. We'll follow one concrete example the whole way — <strong>a robot key in GitHub Actions</strong> that publishes releases — where all we want the account to guarantee, on-chain, is:</p>
+      <p class="eyebrow"><span class="n">02</span> · Problem</p>
+      <h2>Restricting an operational key to one call</h2>
+      <p class="lead">Operational keys (wallet session keys, treasury payout keys, agent tool keys, CI keys that publish wasm) each need authority over a narrow set of calls. On Soroban, restricting a key to specific functions and arguments requires a contract written and audited for that purpose. The example used throughout this deck is <strong>a CI key in GitHub Actions</strong> that publishes releases to the registry. The account must enforce, on-chain:</p>
       <p class="quote">This key may call <code>publish</code> on the registry contract, as the account — and nothing else.</p>
-      <p class="punch">Today that's a contract to write, audit, and deploy. With perch it's <em>a JSON file you can read in one sitting.</em></p>
+      <p class="lead" style="margin-top:1.6rem">Without perch this needs a custom policy contract. With perch it is a policy document (JSON), compiled into OZ context rules and an interpreter program.</p>
     </div>
   </section>
 
   <!-- 3 ▸ the cast -->
   <section class="slide" aria-label="Slide 3">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">03</span> · The cast</p>
-      <h2>Three characters.</h2>
+      <p class="eyebrow"><span class="n">03</span> · Running example</p>
+      <h2>The three parties in the example</h2>
       <div class="cards">
         <div class="card">
           <span class="tag">the account</span>
           <h3>A smart account</h3>
-          <p>A contract that is itself an account: it decides <em>in code</em> what it approves. Ours owns the <code>unverified/perch</code> name on the registry and is the author of every release.</p>
+          <p>A contract account: the host calls its <code>__check_auth</code> to approve anything done in its name. Ours, <code>perch-account</code>, owns the <code>unverified/perch</code> name on the registry and authors every release.</p>
         </div>
         <div class="card">
           <span class="tag">the target</span>
           <h3>The registry contract</h3>
-          <p>Where wasm releases get published. It has the method we want the robot to call — <code>publish</code> — and methods we never want it near: <code>set_manager</code>, and friends.</p>
+          <p>Stores published wasm by name and version. The CI key needs <code>publish</code> and <code>publish_hash</code>; it must not reach <code>set_manager</code>, <code>upgrade</code>, or the other admin entry points.</p>
         </div>
         <div class="card">
-          <span class="tag">the risk</span>
-          <h3>The robot key</h3>
-          <p>An ordinary Stellar keypair — an address starting with <code>G</code>. Its secret half sits in GitHub Actions secrets. Assume it can leak; plan for the day it does.</p>
+          <span class="tag">the key</span>
+          <h3>The CI key</h3>
+          <p>An ed25519 keypair with a <code>G…</code> address. Its secret is a GitHub Actions secret, so the design assumes it can leak.</p>
         </div>
       </div>
     </div>
@@ -337,10 +349,9 @@
   <!-- 4 ▸ the hard part -->
   <section class="slide" aria-label="Slide 4">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">04</span> · The hard part</p>
-      <h2>Authorization is a function the account writes.</h2>
-      <p class="lead">On Stellar, a contract account has no built-in notion of "allowed". Whenever something claims the account's authority, the <strong>host</strong> — the Stellar runtime that executes contracts — calls the account's own function, <code>__check_auth</code>, and asks:</p>
-      <p class="quote">"Here is what's being approved — which contract, which function, which arguments — and here are the signatures. Yes or no?"</p>
+      <p class="eyebrow"><span class="n">04</span> · Soroban authorization</p>
+      <h2>Contract accounts authorize in <code>__check_auth</code></h2>
+      <p class="lead">A contract account has no built-in permission model. When a call requires the account's authorization, the host (the Soroban runtime) calls the account's <code>__check_auth(signature_payload, signatures, auth_contexts)</code>. Each context names the contract, function, and arguments being authorized; the function returns <code>Ok(())</code> or an error.</p>
       <div class="diagram">
         <svg viewBox="0 0 980 176" role="img" aria-label="Authorization flow: transaction to host to the account's check_auth function, which approves or rejects">
           <defs>
@@ -373,33 +384,33 @@
           <text class="md" x="906" y="136" text-anchor="middle">reject</text>
         </svg>
       </div>
-      <p class="punch">Whatever that code doesn't reject, happens. So "only publish" has to live in code somewhere — the question is <em>whose code, and how much of it.</em></p>
+      <p class="lead" style="margin-top:1.6rem">Anything <code>__check_auth</code> does not reject is authorized, so a restriction such as "<code>publish</code> only" must be implemented in code the account runs.</p>
     </div>
   </section>
 
   <!-- 5 ▸ attempt 1: by hand -->
   <section class="slide" aria-label="Slide 5">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">05</span> · Without perch · attempt 1</p>
-      <h2>Write it yourself.</h2>
+      <p class="eyebrow"><span class="n">05</span> · Without perch · option 1</p>
+      <h2>A hand-written <code>__check_auth</code></h2>
 <pre><span class="k">pub fn</span> <span class="fn">__check_auth</span><span class="pn">(</span>e<span class="pn">:</span> Env<span class="pn">,</span> payload<span class="pn">:</span> Hash<span class="pn">&lt;</span><span class="nm">32</span><span class="pn">&gt;,</span> sigs<span class="pn">:</span> MySigs<span class="pn">,</span> contexts<span class="pn">:</span> Vec<span class="pn">&lt;</span>Context<span class="pn">&gt;)</span> <span class="k">-&gt;</span> Result<span class="pn">&lt;(),</span> Error<span class="pn">&gt;</span> <span class="pn">{</span>
-    <span class="fn">verify_ed25519</span><span class="pn">(&amp;</span>e<span class="pn">,</span> <span class="pn">&amp;</span>payload<span class="pn">,</span> <span class="pn">&amp;</span>sigs<span class="pn">)?;</span>                  <span class="cm">// signature math, by hand — get this wrong, lose everything</span>
+    <span class="fn">verify_ed25519</span><span class="pn">(&amp;</span>e<span class="pn">,</span> <span class="pn">&amp;</span>payload<span class="pn">,</span> <span class="pn">&amp;</span>sigs<span class="pn">)?;</span>                  <span class="cm">// signature verification, implemented by the account</span>
     <span class="k">for</span> ctx <span class="k">in</span> contexts<span class="pn">.</span><span class="fn">iter</span><span class="pn">()</span> <span class="pn">{</span>
         <span class="k">match</span> ctx <span class="pn">{</span>
             Context<span class="pn">::</span><span class="fn">Contract</span><span class="pn">(</span>c<span class="pn">)</span> <span class="k">=&gt;</span> <span class="pn">{</span>
                 <span class="k">if</span> c<span class="pn">.</span>contract <span class="pn">!=</span> <span class="fn">registry</span><span class="pn">()</span>            <span class="pn">{</span> <span class="k">return</span> <span class="fn">Err</span><span class="pn">(</span>Error<span class="pn">::</span>NotAllowed<span class="pn">);</span> <span class="pn">}</span>
                 <span class="k">if</span> c<span class="pn">.</span>fn_name  <span class="pn">!=</span> <span class="fn">symbol</span><span class="pn">(</span><span class="s">"publish"</span><span class="pn">)</span>    <span class="pn">{</span> <span class="k">return</span> <span class="fn">Err</span><span class="pn">(</span>Error<span class="pn">::</span>NotAllowed<span class="pn">);</span> <span class="pn">}</span>
-                <span class="cm">// …did you remember to check the arguments? the expiry? every other key?</span>
+                <span class="cm">// arguments, expiry, and other signers: not checked here</span>
             <span class="pn">}</span>
-            _ <span class="k">=&gt;</span> <span class="k">return</span> <span class="fn">Err</span><span class="pn">(</span>Error<span class="pn">::</span>NotAllowed<span class="pn">),</span>          <span class="cm">// deployments, sub-calls, edge cases…</span>
+            _ <span class="k">=&gt;</span> <span class="k">return</span> <span class="fn">Err</span><span class="pn">(</span>Error<span class="pn">::</span>NotAllowed<span class="pn">),</span>          <span class="cm">// deploy contexts and anything else: refused</span>
         <span class="pn">}</span>
     <span class="pn">}</span>
     <span class="fn">Ok</span><span class="pn">(())</span>
 <span class="pn">}</span></pre>
       <ul class="biglist" style="margin-top:1.4rem">
-        <li>Every team writes its own <strong>consensus-critical authorization code</strong> — the code standing between the chain and the account's money.</li>
-        <li><strong>One bug — an unchecked argument, a signature subtlety — and the account is drained.</strong></li>
-        <li>Auditors must re-read every account from scratch. Nothing transfers.</li>
+        <li>Each account implements its own authorization code, which every call made in its name depends on.</li>
+        <li>An unchecked argument or a signature-verification bug authorizes calls the account should refuse.</li>
+        <li>Each account needs its own audit; reviewing one does not cover another.</li>
       </ul>
     </div>
   </section>
@@ -407,9 +418,9 @@
   <!-- 6 ▸ attempt 2: OZ building blocks -->
   <section class="slide" aria-label="Slide 6">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">06</span> · Without perch · attempt 2</p>
-      <h2>OpenZeppelin smart accounts: rules as data.</h2>
-      <p class="lead">OpenZeppelin's <code>stellar-accounts</code> library replaces hand-written checks with <strong>context rules</strong> — "who may do what", stored as data inside the account. This is the actual call that installs the robot's rule:</p>
+      <p class="eyebrow"><span class="n">06</span> · Without perch · option 2: OZ <code>stellar-accounts</code></p>
+      <h2>OZ context rules: <code>add_context_rule</code></h2>
+      <p class="lead">OpenZeppelin's <code>stellar-accounts</code> library replaces hand-written checks with <strong>context rules</strong> in the account's storage: a scope, signers, optional policy contracts, and an expiry. This call installs the CI key's rule:</p>
       <div class="docgrid" style="margin-top:1.2rem">
 <pre><span class="fn">add_context_rule</span><span class="pn">(</span>
     <span class="pn">&amp;</span>env<span class="pn">,</span>
@@ -420,22 +431,22 @@
     <span class="pn">&amp;</span>Map<span class="pn">::</span><span class="fn">new</span><span class="pn">(&amp;</span>env<span class="pn">),</span>                            <span class="cm">// policies</span>
 <span class="pn">)</span></pre>
         <ul class="callouts">
-          <li><span class="f">scope</span><span class="d">What the rule covers: calls to <em>one specific contract</em>. Other options: deploying a specific binary, or anything at all.</span></li>
-          <li><span class="f">expiry</span><span class="d">An optional ledger number — a point in chain time (one ledger ≈ a few seconds) — after which the rule stops working.</span></li>
-          <li><span class="f">signers</span><span class="d">Who must approve, up to 15. Here: just the robot's ordinary <code>G</code> address.</span></li>
-          <li><span class="f">policies</span><span class="d">Optional extra checks, packaged as <em>separate contracts</em> the account calls out to (up to 5). Empty — for now.</span></li>
-          <li><span class="f">self-administering</span><span class="d">This call, and <code>add_signer</code>, <code>add_policy</code>, … are functions on the account itself, guarded by the same rules.</span></li>
+          <li><span class="f">scope</span><span class="d"><code>CallContract(address)</code>: calls to one contract. The other <code>ContextRuleType</code> variants cover deploying a given wasm hash, or any context (<code>Default</code>).</span></li>
+          <li><span class="f">expiry</span><span class="d">Optional ledger sequence after which the rule no longer matches.</span></li>
+          <li><span class="f">signers</span><span class="d">Signers that must authenticate, at most 15. Here one: <code>Signer::Delegated(robot)</code>, the CI key's <code>G</code> address.</span></li>
+          <li><span class="f">policies</span><span class="d">Policy contracts whose <code>enforce</code> the account calls, at most 5. Empty here.</span></li>
+          <li><span class="f">administration</span><span class="d"><code>add_context_rule</code>, <code>add_signer</code>, <code>add_policy</code>, … are entry points on the account, authorized by its own rules.</span></li>
         </ul>
       </div>
-      <p class="code-cap">the library's real API — our integration test makes this call in crates/integration-tests/tests/delegated.rs</p>
+      <p class="code-cap">the library's API; crates/integration-tests/tests/delegated.rs makes this call</p>
     </div>
   </section>
 
   <!-- 7 ▸ OZ signers -->
   <section class="slide" aria-label="Slide 7">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">07</span> · Without perch · attempt 2</p>
-      <h2>Two kinds of signer.</h2>
+      <p class="eyebrow"><span class="n">07</span> · Without perch · OZ signer types</p>
+      <h2><code>Signer</code>: <code>Delegated</code> and <code>External</code></h2>
 <pre><span class="k">pub enum</span> <span class="fn">Signer</span> <span class="pn">{</span>
     <span class="cm">/// A delegated signer that uses built-in signature verification.</span>
     <span class="fn">Delegated</span><span class="pn">(</span>Address<span class="pn">),</span>
@@ -443,16 +454,16 @@
     <span class="cm">/// Contains the verifier contract address and the public key data.</span>
     <span class="fn">External</span><span class="pn">(</span>Address<span class="pn">,</span> Bytes<span class="pn">),</span>
 <span class="pn">}</span></pre>
-      <p class="code-cap">verbatim from the library — stellar-accounts, smart_account/storage.rs</p>
+      <p class="code-cap">stellar-accounts, smart_account/storage.rs (verbatim)</p>
       <div class="cards two" style="margin-top:1.2rem">
         <div class="card">
           <h3><code>Delegated(address)</code></h3>
-          <p><strong>Another account approves.</strong> For our robot, that's just its ordinary <code>G</code> address. Since protocol 27 (a change called CAP-0071), the host checks that key's signature as part of the <em>same approval</em> the smart account is already making — no extra contract, no extra ceremony.</p>
+          <p>Another address authenticates: for the CI key, its <code>G</code> address. With CAP-0071 (protocol 27) the host verifies that address's signature inside the smart account's own authorization entry (<code>SorobanCredentials::AddressWithDelegates</code>), not in a separate entry.</p>
         </div>
         <div class="card">
           <h3><code>External(verifier, key)</code></h3>
-          <p><strong>Raw key bytes plus a verifier contract</strong> — a small contract whose only job is the signature math: <code>verify(payload, key, signature) → yes/no</code>. This is how any signature scheme plugs in: passkeys today, anything tomorrow.</p>
-          <p><strong>Remember this one</strong> — the finale hangs on it.</p>
+          <p>Key bytes plus a verifier contract implementing <code>verify(signature_payload, key_data, sig_data) -&gt; bool</code>. A new signature scheme is a new verifier contract; perch deploys ed25519 and WebAuthn (secp256r1) verifiers.</p>
+          <p>Slides 19–22 use an <code>External</code> signer for a post-quantum key.</p>
         </div>
       </div>
     </div>
@@ -461,8 +472,8 @@
   <!-- 8 ▸ the complete OZ account -->
   <section class="slide" aria-label="Slide 8">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">08</span> · Without perch · attempt 2</p>
-      <h2>The complete account, on OZ.</h2>
+      <p class="eyebrow"><span class="n">08</span> · Without perch · a minimal OZ account</p>
+      <h2>A minimal OZ smart account (<code>perch-account</code>)</h2>
 <pre><span class="pn">#[</span>contract<span class="pn">]</span>
 <span class="k">pub struct</span> <span class="fn">PerchAccount</span><span class="pn">;</span>
 
@@ -487,25 +498,25 @@
 <span class="pn">}</span>
 
 <span class="k">impl</span> SmartAccount <span class="k">for</span> <span class="fn">PerchAccount</span> <span class="pn">{}</span>  <span class="cm">// implemented, NOT exported — these entry points don't exist on-chain (slide 16)</span></pre>
-      <p class="code-cap">crates/perch-account/src/lib.rs — the OZ core of our account, abridged (its one extension, apply_doc, is on slide 16)</p>
-      <p class="punch">A complete, deployable smart account. Everything after deploy — rules, signers, policies — is <em>data</em>. What's still missing: a guarantee about <em>where that data comes from</em>.</p>
+      <p class="code-cap">crates/perch-account/src/lib.rs — the OZ core, abridged (apply_doc: slide 16; the rest: slide 31)</p>
+      <p class="lead" style="margin-top:1.6rem">This account deploys as is. After deployment its rules, signers, and policies are storage written through its own entry points, and nothing records which reviewed configuration that storage should match.</p>
     </div>
   </section>
 
   <!-- 9 ▸ how one check runs -->
   <section class="slide" aria-label="Slide 9">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">09</span> · Without perch · attempt 2</p>
-      <h2>How one check actually runs.</h2>
-      <p class="lead">Inside <code>do_check_auth</code> — the library function the account hands off to — four steps:</p>
+      <p class="eyebrow"><span class="n">09</span> · Without perch · OZ evaluation</p>
+      <h2><code>do_check_auth</code> in four steps</h2>
+      <p class="lead"><code>stellar_accounts::smart_account::do_check_auth</code>, called from the account's <code>__check_auth</code>:</p>
       <ol class="steps" style="margin-top:1.4rem">
         <li>
           <h3>Select</h3>
-          <p>The signed payload names <strong>which rule id</strong> to check for each approved action — and those ids are baked into what gets signed, so rules can't be swapped afterward.</p>
+          <p><code>AuthPayload.context_rule_ids</code> names one rule per context. The ids are hashed into the signed digest, <code>sha256(signature_payload ‖ xdr(ids))</code>, so a relayer cannot substitute another rule.</p>
         </li>
         <li>
           <h3>Match</h3>
-          <p>Look the rule up: not expired? Does its scope cover this exact contract call?</p>
+          <p>Load the rule; check it has not expired and that its scope covers the context.</p>
         </li>
         <li>
           <h3>Authenticate</h3>
@@ -513,7 +524,7 @@
         </li>
         <li>
           <h3>Enforce</h3>
-          <p>Call <code>enforce(…)</code> on every policy contract attached to the rule. <strong>All must say yes</strong> — any failure anywhere rejects the whole transaction.</p>
+          <p>Call <code>enforce(…)</code> on every policy attached to the rule. Any failure rejects the transaction.</p>
         </li>
       </ol>
     </div>
@@ -522,29 +533,29 @@
   <!-- 10 ▸ OZ footguns -->
   <section class="slide" aria-label="Slide 10">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">10</span> · Without perch · sharp edges</p>
-      <h2>Powerful primitives, loaded footguns.</h2>
-      <p class="lead">All four of these are real behaviors of the library — some documented as your problem to manage.</p>
+      <p class="eyebrow"><span class="n">10</span> · Without perch · library behaviors</p>
+      <h2>Four <code>stellar-accounts</code> behaviors perch constrains</h2>
+      <p class="lead">Each is documented library behavior. The line under each card is how perch handles it.</p>
       <div class="cards two" style="margin-top:1.2rem">
         <div class="card">
-          <h3>One enum variant from "anything"</h3>
-          <p>A rule's scope can be <code>Default</code>, which the library defines as able to <em>"authorize any context"</em>. Pick it by mistake — or copy-paste it — and the robot's rule covers everything the account can do.</p>
+          <h3><code>ContextRuleType::Default</code> matches any context</h3>
+          <p>The library documents <code>Default</code> as able to "authorize any context". A rule with this scope authorizes every call the account can make.</p>
           <span class="fix">the document format has no "anything" scope. A rule names the account itself or one contract; anything else fails to parse.</span>
         </div>
         <div class="card">
-          <h3>Attaching a policy weakens signer checks</h3>
-          <p>No policies → <em>all</em> rule signers must have signed. Attach one policy and the library <em>defers signer validation to the policy</em>. Add a spending limit, silently lose the signature requirement — unless your policy re-checks it.</p>
+          <h3>With a policy attached, signer checks move to the policy</h3>
+          <p>With no policies, every rule signer must authenticate. With policies attached, the library defers signer checks to them, so a policy that skips them drops the signer requirement.</p>
           <span class="fix">the compiler injects a minimum-signer check into every program, and the interpreter denies outright when no signer authenticated.</span>
         </div>
         <div class="card">
-          <h3>Rules accumulate; nobody reconciles them</h3>
-          <p>Multiple rules can cover the same contract, and the caller picks which rule id to authorize under. The library's own docs: <em>"It is the caller's responsibility to avoid creating redundant rules."</em> Stale grants linger, live.</p>
+          <h3>Overlapping rules are the caller's to manage</h3>
+          <p>Several rules can cover one contract, and the signer selects the rule id. The library docs: "It is the caller's responsibility to avoid creating redundant rules." A rule that is not removed stays active.</p>
           <span class="fix">one document names every rule. Verification reads the account back and compares — a leftover is a detected mismatch, not a mystery.</span>
         </div>
         <div class="card">
-          <h3>A policy is whatever code sits at that address</h3>
-          <p>The account calls the attached contract and trusts its answer. Nothing requires that contract to fail closed — a buggy or expired policy can approve by accident.</p>
-          <span class="fix">the interpreter is the one policy contract, and it denies by default: no program installed for a rule → deny, never allow.</span>
+          <h3>The account accepts the attached policy's result</h3>
+          <p>The account calls the attached contract's <code>enforce</code> and accepts its result. Nothing requires a policy to refuse by default.</p>
+          <span class="fix">the interpreter is the one policy contract, and it denies by default: no program installed for a rule → deny.</span>
         </div>
       </div>
     </div>
@@ -553,35 +564,34 @@
   <!-- 11 ▸ the gap -->
   <section class="slide" aria-label="Slide 11">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">11</span> · The gap</p>
-      <h2>OZ gets us to the contract. Not to the method.</h2>
-      <p class="lead">Scope the robot's rule to the registry contract, and here's what that rule authorizes:</p>
+      <p class="eyebrow"><span class="n">11</span> · Without perch · contract-level scope</p>
+      <h2><code>CallContract</code> scope covers every function</h2>
+      <p class="lead">A rule scoped <code>CallContract(registry)</code> authorizes:</p>
       <div class="grants">
         <div class="grant">
-          <h3>What we wanted</h3>
+          <h3>Required</h3>
           <ul>
             <li><span class="ok">▸</span><code>publish</code></li>
           </ul>
         </div>
         <div class="grant danger">
-          <h3>What "scoped to the registry" allows</h3>
+          <h3>Authorized by <code>CallContract(registry)</code></h3>
           <ul>
             <li><span class="bad">▸</span><code>publish</code></li>
-            <li><span class="bad">▸</span><code>set_manager</code> — hand the registry name to an attacker</li>
+            <li><span class="bad">▸</span><code>set_manager</code> — reassigns management of the registry</li>
             <li><span class="bad">▸</span><code>upgrade</code>, and every other method it has</li>
           </ul>
         </div>
       </div>
-      <p class="lead" style="margin-top:1.8rem">To narrow to one <em>method</em>, you must attach a policy — which means writing a <strong>policy contract</strong>. Custom Rust again: write, audit, deploy. For each shape of constraint. For each team.</p>
-      <p class="punch">And what got deployed is code; what got reviewed was intent. <em>That gap is where perch lives.</em></p>
+      <p class="lead" style="margin-top:1.8rem">Restricting the function or its arguments needs a policy contract: custom Rust, written, audited, and deployed for each kind of constraint. Perch provides that policy as one shared interpreter contract plus a per-rule program compiled from a reviewed document.</p>
     </div>
   </section>
 
   <!-- 12 ▸ perch: the idea -->
   <section class="slide" aria-label="Slide 12">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">12</span> · Perch · the idea</p>
-      <h2>Write the constraint as a document, not a contract.</h2>
+      <p class="eyebrow"><span class="n">12</span> · Perch · policy documents</p>
+      <h2>The CI policy as a perch document</h2>
       <div class="docgrid">
 <pre><span class="pn">{</span>
   <span class="k">"version"</span><span class="pn">:</span> <span class="nm">1</span><span class="pn">,</span>
@@ -603,11 +613,11 @@
   <span class="pn">]</span>
 <span class="pn">}</span></pre>
         <ul class="callouts">
-          <li><span class="f">"signers"</span><span class="d">Who may act. <strong>admin</strong>: raw key bytes checked by a verifier contract. <strong>ci</strong>: the robot — just its ordinary account address.</span></li>
-          <li><span class="f">"scope"</span><span class="d"><strong>admin</strong> covers managing the account itself; <strong>ci-publish</strong> covers calls to one contract: the registry.</span></li>
-          <li><span class="f">"functions"</span><span class="d">Only these two methods authorize. <code>set_manager</code> isn't on the list, so it can't happen.</span></li>
-          <li><span class="f">"args" · is-self</span><span class="d">Argument 1 — the author — must be the account itself. The robot publishes as us, never as anyone else.</span></li>
-          <li><span class="f">"not-after-ledger"</span><span class="d">The rule dies at ledger 55,000,000 — chain time; we set it to roughly end of quarter.</span></li>
+          <li><span class="f">"signers"</span><span class="d"><strong>admin</strong>: an <code>External</code> signer (verifier contract and key bytes). <strong>ci</strong>: a <code>Delegated</code> signer, the CI key's <code>G</code> address.</span></li>
+          <li><span class="f">"scope"</span><span class="d"><code>self-admin</code>: calls on the account itself. <code>contract</code>: calls to the registry only.</span></li>
+          <li><span class="f">"functions"</span><span class="d">Only <code>publish</code> and <code>publish_hash</code> match; <code>set_manager</code> is refused.</span></li>
+          <li><span class="f">"args" · is-self</span><span class="d">Argument 1, the author, must equal the account's own address.</span></li>
+          <li><span class="f">"not-after-ledger"</span><span class="d">The rule stops matching after ledger 55,000,000.</span></li>
         </ul>
       </div>
       <p class="code-cap">testdata/ci-publish-delegated.json — abridged (long keys and addresses shortened)</p>
@@ -617,9 +627,9 @@
   <!-- 13 ▸ perch: just send the JSON -->
   <section class="slide" aria-label="Slide 13">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">13</span> · Perch · authoring</p>
-      <h2>Just send the JSON.</h2>
-      <p class="lead">No registration step, no schema ceremony: <strong>the JSON string is the entire input.</strong> Hand-write the document from the previous slide, commit it, and pass the string to any entry point — the parser and compiler handle everything else.</p>
+      <p class="eyebrow"><span class="n">13</span> · Perch · inputs</p>
+      <h2>Every entry point takes the document's JSON text</h2>
+      <p class="lead">There is no registration step: the document's JSON text is the whole input to the parser, the compiler, the CLI, and the account.</p>
       <div class="docgrid" style="margin-top:1rem">
 <pre><span class="cm">// Rust — string in, compiled plan out. Two calls, both fail closed:</span>
 <span class="k">let</span> doc  <span class="pn">=</span> perch_ir<span class="pn">::</span><span class="fn">from_json</span><span class="pn">(&amp;</span>json<span class="pn">)?;</span>
@@ -631,9 +641,9 @@
 <span class="cm"># CLI — the file is the input (interim; the goal is stock stellar CLI end to end):</span>
 <span class="fn">perch-deploy</span> compose <span class="pn">--doc</span> policy.json …</pre>
         <ul class="callouts">
-          <li><span class="f">fail closed</span><span class="d">An unknown field, a malformed address, a rule with no checks — a typed error, never a silent skip. <strong>If it parses, it's a valid policy.</strong></span></li>
-          <li><span class="f">builder optional</span><span class="d">Prefer code to JSON? <code>packages/perch-js</code> ships a builder — <code>policy().signer(…).rule(…).build()</code> — that emits exactly this document. Sugar, not a requirement.</span></li>
-          <li><span class="f">one string everywhere</span><span class="d">Repo, PR review, CLI, and — with <code>apply_doc</code>, three slides ahead — the account itself all consume the <strong>same JSON bytes</strong>. One artifact, end to end.</span></li>
+          <li><span class="f">fail closed</span><span class="d">An unknown field, a malformed address, or a rule with no checks returns a typed error; nothing is skipped.</span></li>
+          <li><span class="f">builder</span><span class="d"><code>packages/perch-js</code> has a builder, <code>policy().signer(…).rule(…).build()</code>, that emits the same document.</span></li>
+          <li><span class="f">same bytes</span><span class="d">The repository, review, the CLI, and the account's <code>apply_doc</code> (slide 16) all take the same JSON bytes.</span></li>
         </ul>
       </div>
       <p class="code-cap">from_json — crates/perch-ir (used verbatim in the integration test) · parsePolicyDoc — packages/perch-js</p>
@@ -643,20 +653,20 @@
   <!-- 14 ▸ perch: the hash -->
   <section class="slide" aria-label="Slide 14">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">14</span> · Perch · the hash</p>
-      <h2>The document has one identity: its hash.</h2>
-      <p class="lead">Before hashing, the document is put into one exactly-specified byte form — keys sorted, no whitespace, one escaping rule. That spec (<code>CANONICAL.md</code>) is written down independently of any JSON library, so <strong>Rust and TypeScript produce the identical bytes</strong>. Shared test files pin the result; if either side ever drifts by one byte, CI fails.</p>
+      <p class="eyebrow"><span class="n">14</span> · Perch · canonical form</p>
+      <h2><code>doc_hash</code>: SHA-256 of the canonical form</h2>
+      <p class="lead"><code>CANONICAL.md</code> defines the canonical byte form, independent of any JSON library: sorted keys, no whitespace, one escaping rule. Rust (<code>perch-ir</code>) and TypeScript (<code>perch-js</code>) produce identical bytes, pinned by shared vectors in <code>testdata/</code>; a one-byte difference fails CI.</p>
       <div class="hashline"><span class="lbl">doc_hash&nbsp;=&nbsp;SHA-256(those&nbsp;bytes)&nbsp;→&nbsp;</span>27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98</div>
-      <p class="code-cap">testdata/ci-publish.doc-hash — the pinned hash of the flagship policy (it's also the progress bar below)</p>
-      <p class="punch">You approve a hash. The chain stores it. Anyone can check that <em>what's installed is what was reviewed.</em></p>
+      <p class="code-cap">testdata/ci-publish.doc-hash — the pinned hash of the example policy (also shown in the footer)</p>
+      <p class="lead" style="margin-top:1.6rem">Reviewers approve the <code>doc_hash</code>. The account stores it, and anyone can compare the stored hash with the reviewed one.</p>
     </div>
   </section>
 
   <!-- 15 ▸ perch: compile + install -->
   <section class="slide" aria-label="Slide 15">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">15</span> · Perch · compile &amp; install</p>
-      <h2>From JSON string to installed rule.</h2>
+      <p class="eyebrow"><span class="n">15</span> · Perch · compile and install</p>
+      <h2>Compiling a document into OZ rules and interpreter programs</h2>
       <div class="docgrid" style="margin-top:.6rem">
 <pre><span class="k">let</span> doc  <span class="pn">=</span> perch_ir<span class="pn">::</span><span class="fn">from_json</span><span class="pn">(&amp;</span>fixture<span class="pn">())?;</span>   <span class="cm">// parse the reviewed document</span>
 perch_ir<span class="pn">::</span><span class="fn">validate</span><span class="pn">(&amp;</span>doc<span class="pn">)?;</span>                     <span class="cm">// structural checks, fail closed</span>
@@ -671,72 +681,74 @@ perch_ir<span class="pn">::</span><span class="fn">validate</span><span class="p
     <span class="pn">&amp;</span>String<span class="pn">::</span><span class="fn">from_str</span><span class="pn">(&amp;</span>env<span class="pn">,</span> <span class="s">"ci-publish"</span><span class="pn">),</span> None<span class="pn">,</span>
     <span class="pn">&amp;</span><span class="k">vec!</span><span class="pn">[&amp;</span>env<span class="pn">,</span> Signer<span class="pn">::</span><span class="fn">Delegated</span><span class="pn">(</span>robot<span class="pn">)],</span> <span class="pn">&amp;</span>policies<span class="pn">);</span></pre>
         <ul class="callouts">
-          <li><span class="f">from_json + validate</span><span class="d">Parsing is fail-closed: an unknown field, a malformed address, a rule with no checks — all rejected, never skipped.</span></li>
-          <li><span class="f">compile</span><span class="d">Rules OZ can express alone become plain context rules. Constrained rules get a tiny <strong>program</strong> the shared interpreter evaluates, filed under (account, rule id) with the <code>doc_hash</code> stored beside it.</span></li>
-          <li><span class="f">verify_plan_matches_doc</span><span class="d">Before attaching on a real network, this gate recomputes the plan from the reviewed document and <strong>refuses anything that doesn't match</strong>. Hash-verified, or it doesn't happen.</span></li>
+          <li><span class="f">from_json + validate</span><span class="d">Refuse unknown fields, malformed addresses, and rules with no checks.</span></li>
+          <li><span class="f">compile</span><span class="d">Rules OZ can express alone become plain context rules. A constrained rule gets a <strong>program</strong> the shared interpreter evaluates, stored under (account, rule id) with the <code>doc_hash</code>.</span></li>
+          <li><span class="f">verify_plan_matches_doc</span><span class="d">Recomputes the plan from the reviewed document and refuses any plan that differs.</span></li>
         </ul>
       </div>
-      <p class="code-cap">abridged from our integration test — crates/integration-tests/tests/delegated.rs, fn setup()</p>
+      <p class="code-cap">crates/integration-tests/tests/delegated.rs, fn setup() — abridged</p>
     </div>
   </section>
 
   <!-- 16 ▸ perch: one call -->
   <section class="slide" aria-label="Slide 16">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">16</span> · Perch · one call</p>
-      <h2>Publish the document. Switch in one call.</h2>
-      <p class="lead">A perch account has <strong>no piecemeal mutation surface</strong> — <code>add_signer</code>, <code>remove_signer</code>, <code>add_policy</code>… <strong>those entry points don't exist on the contract</strong>. Computation and state are split: parsing + compiling live in a shared <strong>stateless</strong> compiler contract; the account holds only the <strong>stateful</strong> half — its rules and the applied hash — and changes through exactly one call:</p>
+      <p class="eyebrow"><span class="n">16</span> · Perch · <code>apply_doc</code></p>
+      <h2><code>apply_doc</code>: the account's only authorization write path</h2>
+      <p class="lead">A perch account does not export OZ's mutation entry points (<code>add_signer</code>, <code>remove_signer</code>, <code>add_policy</code>, …). Parsing and compiling run in the shared, stateless <code>perch-doc-compiler</code> contract; the account stores its rules and applied document and changes them only through <code>apply_doc</code>:</p>
       <div class="docgrid" style="margin-top:1rem">
-<pre><span class="cm">/// The doc-only account trait, extending OZ's evaluation machinery.</span>
-<span class="k">pub trait</span> <span class="fn">PerchSmartAccount</span><span class="pn">:</span> CustomAccountInterface <span class="pn">+</span> SmartAccount <span class="pn">{</span>
+<pre><span class="k">pub trait</span> <span class="fn">PerchSmartAccount</span><span class="pn">:</span> CustomAccountInterface <span class="pn">+</span> SmartAccount <span class="pn">{</span>
     <span class="cm">/// Apply a policy document — the ONLY way authorization changes.</span>
-    <span class="k">fn</span> <span class="fn">apply_doc</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">,</span> doc_json<span class="pn">:</span> Bytes<span class="pn">,</span> compiler<span class="pn">:</span> Address<span class="pn">,</span> interpreter<span class="pn">:</span> Address<span class="pn">)</span>
+    <span class="k">fn</span> <span class="fn">apply_doc</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">,</span> doc_json<span class="pn">:</span> Bytes<span class="pn">,</span> approval_valid_until<span class="pn">:</span> <span class="k">u32</span><span class="pn">)</span>
         <span class="k">-&gt;</span> Result<span class="pn">&lt;</span>BytesN<span class="pn">&lt;</span><span class="nm">32</span><span class="pn">&gt;,</span> PerchAccountError<span class="pn">&gt;</span> <span class="pn">{</span>
-        e<span class="pn">.</span><span class="fn">current_contract_address</span><span class="pn">().</span><span class="fn">require_auth</span><span class="pn">();</span>      <span class="cm">// the admin rule approves</span>
-        <span class="cm">// stateless: parse + validate + network binding + compile, in ONE shared contract</span>
-        <span class="k">let</span> compiled <span class="pn">=</span> DocCompilerClient<span class="pn">::</span><span class="fn">new</span><span class="pn">(</span>e<span class="pn">,</span> <span class="pn">&amp;</span>compiler<span class="pn">).</span><span class="fn">try_compile_doc</span><span class="pn">(&amp;</span>doc_json<span class="pn">)??;</span>
-        <span class="fn">ensure_admin_survives</span><span class="pn">(&amp;</span>compiled<span class="pn">)?;</span>                  <span class="cm">// anti-brick refusal</span>
-        <span class="cm">// …remove every rule; install the document's — atomically…</span>
-        <span class="cm">// …store + return compiled.doc_hash (the canonical identity)…</span>
+        e<span class="pn">.</span><span class="fn">current_contract_address</span><span class="pn">().</span><span class="fn">require_auth</span><span class="pn">();</span>   <span class="cm">// the admin rule</span>
+        <span class="k">let</span> compiler <span class="pn">=</span> infra<span class="pn">::</span>perch_doc_compiler<span class="pn">::</span><span class="fn">address</span><span class="pn">(</span>e<span class="pn">);</span>  <span class="cm">// pinned at build</span>
+        <span class="k">let</span> compiled <span class="pn">=</span> DocCompilerClient<span class="pn">::</span><span class="fn">new</span><span class="pn">(</span>e<span class="pn">,</span> <span class="pn">&amp;</span>compiler<span class="pn">)</span>
+            <span class="pn">.</span><span class="fn">try_compile_doc</span><span class="pn">(&amp;</span>doc_json<span class="pn">)??;</span>      <span class="cm">// stateless, shared</span>
+        <span class="k">if</span> <span class="pn">!</span><span class="fn">admin_survives</span><span class="pn">(&amp;</span>compiled<span class="pn">.</span>rules<span class="pn">)</span> <span class="pn">{</span> <span class="k">return</span> <span class="fn">Err</span><span class="pn">(</span>AdminLockout<span class="pn">);</span> <span class="pn">}</span>
+        <span class="cm">// …refuse revoked credentials; rcv_sync classifies…</span>
+        <span class="cm">// …replace every rule, atomically; store the bytes…</span>
     <span class="pn">}</span>
-    <span class="k">fn</span> <span class="fn">applied_doc_hash</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">)</span> <span class="k">-&gt;</span> Option<span class="pn">&lt;</span>BytesN<span class="pn">&lt;</span><span class="nm">32</span><span class="pn">&gt;&gt;</span> <span class="pn">{</span> <span class="pn">…</span> <span class="pn">}</span>  <span class="cm">// read-only</span>
+    <span class="k">fn</span> <span class="fn">applied_doc</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">)</span> <span class="k">-&gt;</span> Option<span class="pn">&lt;</span>Bytes<span class="pn">&gt;</span> <span class="pn">{</span> <span class="pn">…</span> <span class="pn">}</span>
+    <span class="k">fn</span> <span class="fn">applied_doc_hash</span><span class="pn">(</span>e<span class="pn">:</span> <span class="pn">&amp;</span>Env<span class="pn">)</span> <span class="k">-&gt;</span> Option<span class="pn">&lt;</span>BytesN<span class="pn">&lt;</span><span class="nm">32</span><span class="pn">&gt;&gt;</span> <span class="pn">{</span> <span class="pn">…</span> <span class="pn">}</span>
 <span class="pn">}</span></pre>
         <ul class="callouts">
-          <li><span class="f">one transaction</span><span class="d">Send the <strong>same JSON you reviewed</strong>; the entire rule set switches in one call. No half-migrated states, ever — and formatting doesn't matter: the stored hash is canonical.</span></li>
-          <li><span class="f">anti-brick</span><span class="d">A document that would leave the account without a working admin rule is <strong>rejected before anything changes</strong>. You cannot lock yourself out with an edit. (Tested.)</span></li>
-          <li><span class="f">shipped</span><span class="d"><strong>Real code, in this PR</strong> — the account is a <strong>28&nbsp;KB</strong> wasm with exactly <strong>six exports</strong> (constructor, <code>__check_auth</code>, <code>apply_doc</code>, three reads); the stateless compiler (<code>perch-doc-compiler</code>) exports one. Six end-to-end tests prove replace, re-apply, anti-brick, wrong-network, unknown-field, and that the mutator entry points don't exist.</span></li>
+          <li><span class="f">one invocation</span><span class="d">The reviewed JSON replaces the whole rule set in one invocation, with no intermediate state. <code>doc_hash</code> is over the canonical form, so formatting does not change it.</span></li>
+          <li><span class="f">anti-brick</span><span class="d"><code>admin_survives</code>: a document with no working self-admin rule returns <code>AdminLockout</code> before any rule changes.</span></li>
+          <li><span class="f">pinned infra</span><span class="d">The compiler and interpreter are <strong>not arguments</strong>: their addresses are baked in at build time and reported by <code>infra()</code>. Using a newer compiler requires a new account build.</span></li>
+          <li><span class="f">shipped</span><span class="d">A <strong>46,701-byte</strong> account wasm with <strong>22 exports</strong> (slide 31); the compiler, 104,767 bytes, exports <code>compile_doc</code> and <code>derive_target</code>.</span></li>
         </ul>
       </div>
-<pre style="margin-top:1rem"><span class="cm"># today — one command; the shim signs the admin's approval (the one gap in stock CLI):</span>
-<span class="fn">perch-deploy</span> apply <span class="pn">--account</span> C…ACCT <span class="pn">--doc</span> policy.json <span class="pn">--compiler</span> C…COMP <span class="pn">--interpreter</span> C…INTR
-<span class="cm"># and anyone can check installed == reviewed with the stock CLI, no keys at all:</span>
+<pre style="margin-top:1rem"><span class="cm"># perch-deploy signs the admin's smart-account approval, which the stock CLI cannot yet:</span>
+<span class="fn">perch-deploy</span> apply <span class="pn">--account</span> C…ACCT <span class="pn">--doc</span> policy.json
+<span class="cm"># read the applied hash with the stock CLI (a simulation; no keys):</span>
 <span class="fn">stellar</span> contract invoke <span class="pn">--id</span> C…ACCT <span class="pn">--</span> applied_doc_hash</pre>
-      <p class="punch">The account's entire authorization = <em>one hash</em>. State you can read, not replay.</p>
+      <p class="lead" style="margin-top:1.6rem"><code>applied_doc_hash</code> identifies the account's authorization state; <code>applied_doc</code> returns the full canonical document.</p>
     </div>
   </section>
 
   <!-- 17 ▸ perch: release day on-chain -->
   <section class="slide" aria-label="Slide 17">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">17</span> · Perch · release day</p>
-      <h2>The robot publishes.</h2>
+      <p class="eyebrow"><span class="n">17</span> · Perch · a publish transaction</p>
+      <h2>A CI publish, step by step</h2>
       <ol class="steps">
         <li>
-          <h3>The robot signs</h3>
+          <h3>The CI key signs</h3>
 <pre style="margin:.6rem 0 0"><span class="fn">stellar</span> contract invoke <span class="pn">--id</span> C…REG <span class="pn">--source</span> robot <span class="pn">--</span> publish <span class="pn">--wasm</span> … <span class="pn">--author</span> C…ACCT</pre>
-          <p style="margin-top:.6rem">One command in GitHub Actions; the only secret is the robot's ordinary <code>G</code> key. CAP-0071 lets the host verify its signature directly. (Today an interim shim, <code>perch-deploy publish</code>, signs the account's approval selecting rule 1 — the one piece the stock CLI can't sign yet. Everything else in the repo already runs on plain <code>stellar</code>; the shim's job is to disappear.)</p>
+          <p style="margin-top:.6rem">The GitHub Actions job holds only the CI key's secret; with CAP-0071 the host verifies its signature inside the account's authorization entry. <code>perch-deploy publish</code> builds that entry selecting rule 1, which the stock CLI cannot do yet.</p>
         </li>
         <li>
           <h3>OZ matches the rule</h3>
-          <p>The account's <code>__check_auth</code> runs, finds rule <code>ci-publish</code>, confirms the robot is its signer and the signature checks out.</p>
+          <p><code>__check_auth</code> → <code>do_check_auth</code> loads rule <code>ci-publish</code> and authenticates the CI key as its <code>Delegated</code> signer.</p>
         </li>
         <li>
           <h3>OZ calls the interpreter's <code>enforce</code></h3>
-          <p>The rule's attached policy is the shared perch interpreter. It loads the stored program for (this account, this rule).</p>
+          <p>The rule's attached policy is the shared interpreter, which loads the program stored for (account, rule id).</p>
         </li>
         <li>
           <h3>The program checks the call</h3>
-          <p>Function is <code>publish</code> or <code>publish_hash</code>? Argument 1 is the account itself? Current ledger below 55,000,000? <strong>Any "no" rejects the whole transaction.</strong></p>
+          <p>Checks <code>fn_name</code> ∈ {<code>publish</code>, <code>publish_hash</code>}, argument 1 = the account, and ledger ≤ 55,000,000. Any failure rejects the transaction.</p>
         </li>
       </ol>
 <pre style="margin-top:1.4rem"><span class="cm">// the same key, the same rule — calling a method the document doesn't allow:</span>
@@ -744,38 +756,38 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
 <span class="k">assert!</span><span class="pn">(</span>MockRegistryClient<span class="pn">::</span><span class="fn">new</span><span class="pn">(&amp;</span>w<span class="pn">.</span>env<span class="pn">,</span> <span class="pn">&amp;</span>w<span class="pn">.</span>registry<span class="pn">)</span>
     <span class="pn">.</span><span class="fn">try_set_manager</span><span class="pn">(&amp;</span><span class="nm">7</span><span class="pn">,</span> <span class="pn">&amp;</span>w<span class="pn">.</span>account<span class="pn">)</span>
     <span class="pn">.</span><span class="fn">is_err</span><span class="pn">());</span>  <span class="cm">// the delegation authenticates — the program still says no</span></pre>
-      <p class="code-cap">real test, passing today — crates/integration-tests/tests/delegated.rs (no mocks; fully enforced authorization)</p>
-      <p class="punch">If the key leaks: worst case, someone publishes a wasm as us. <em>Visible, revocable, bounded.</em></p>
+      <p class="code-cap">crates/integration-tests/tests/delegated.rs — enforcing authorization, no mocks</p>
+      <p class="lead" style="margin-top:1.6rem">If the key leaks, its holder can publish wasm authored by the account until the rule expires or a new document removes it. Each publish is an on-chain event.</p>
     </div>
   </section>
 
   <!-- 18 ▸ perch: audit surface -->
   <section class="slide" aria-label="Slide 18">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">18</span> · Perch · the audit</p>
-      <h2>What you actually audited.</h2>
+      <p class="eyebrow"><span class="n">18</span> · Perch · audit surface</p>
+      <h2>Audit surface with and without perch</h2>
       <div class="cards two" style="margin-top:1.2rem">
         <div class="card">
           <h3>Without perch</h3>
-          <p>A bespoke policy contract per constraint, per team. Each one consensus-critical, each one a fresh audit, forever.</p>
+          <p>One policy contract per kind of constraint, per team, each audited separately.</p>
           <span class="verdict">n teams × m constraints</span>
         </div>
         <div class="card">
           <h3>With perch</h3>
-          <p><strong>Two shared, stateless-or-immutable contracts, audited once for everyone</strong>: the interpreter (evaluation — machine-checked core, immutable, one per network) and the doc compiler (parsing + compiling — stateless, one export). The account itself is a <strong>28&nbsp;KB</strong> wasm with <strong>six exports</strong> and <strong>zero policy logic of its own</strong>.</p>
-          <p>It fails closed by construction: no program installed → deny. No signer authenticated → deny. A malformed program, or an attempt to overwrite an existing one → refused at install.</p>
+          <p><strong>Shared contracts with no admin or upgrade path, audited once</strong>: the interpreter (evaluation — machine-checked core, 16,989 bytes) and the doc compiler (parsing + compiling — stateless, 104,767 bytes); for recovery, one controller, one pool, and one adapter (slides 30–31). None has an admin or an upgrade path. The account is a <strong>46,701-byte</strong> wasm with <strong>zero policy logic of its own</strong>.</p>
+          <p>The interpreter refuses by default: no program installed → deny; no signer authenticated → deny; a malformed program, or an install over an existing one → refused.</p>
         </div>
       </div>
-      <p class="punch">Audit once. Every policy after that is <em>a document</em>.</p>
+      <p class="lead" style="margin-top:1.6rem">After that audit, a new policy is a document to review rather than a contract to audit.</p>
     </div>
   </section>
 
   <!-- 19 ▸ payoff: today's verifier -->
   <section class="slide" aria-label="Slide 19">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">19</span> · The payoff · pluggable verifiers</p>
-      <h2>Today's verifier, in full.</h2>
-      <p class="lead">Remember <code>External(verifier, key)</code>? A verifier is a tiny, stateless contract — deployed once per network, shared by every account. Implement <code>verify → yes/no</code> and any signature scheme joins the system. This is ours for <strong>ed25519</strong>, the scheme behind every ordinary Stellar key:</p>
+      <p class="eyebrow"><span class="n">19</span> · Verifiers</p>
+      <h2><code>perch-ed25519-verifier</code></h2>
+      <p class="lead">An <code>External</code> signer names a verifier contract: stateless, deployed once per network, shared by every account. A signature scheme is added by implementing the <code>Verifier</code> trait. The ed25519 verifier (1,413 bytes deployed):</p>
 <pre><span class="pn">#[</span>contract<span class="pn">]</span>
 <span class="k">pub struct</span> <span class="fn">PerchEd25519Verifier</span><span class="pn">;</span>
 
@@ -789,16 +801,17 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
         ed25519<span class="pn">::</span><span class="fn">verify</span><span class="pn">(</span>e<span class="pn">,</span> <span class="pn">&amp;</span>signature_payload<span class="pn">,</span> <span class="pn">&amp;</span>key_data<span class="pn">,</span> <span class="pn">&amp;</span>sig_data<span class="pn">)</span>
     <span class="pn">}</span>
 <span class="pn">}</span></pre>
-      <p class="code-cap">crates/perch-ed25519-verifier/src/lib.rs — the entire deployed contract, minus two key-normalization helpers</p>
+      <p class="code-cap">crates/perch-ed25519-verifier/src/lib.rs — the deployed contract minus two key-canonicalization functions</p>
+      <p class="code-cap">perch-webauthn-verifier (11,801 bytes, no admin) implements the same trait for WebAuthn assertions over secp256r1; the factory pins it (slide 31)</p>
     </div>
   </section>
 
   <!-- 20 ▸ payoff: ML-DSA verifier -->
   <section class="slide" aria-label="Slide 20">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">20</span> · The payoff · going post-quantum</p>
-      <h2>The ML-DSA verifier, sketched.</h2>
-      <p class="lead">ed25519 is not post-quantum. <strong>ML-DSA</strong> — FIPS 204, NIST's post-quantum lattice signature standard — is. Same shape, one twist: the key doesn't fit in the key field.</p>
+      <p class="eyebrow"><span class="n">20</span> · Verifiers · post-quantum (sketch)</p>
+      <h2>An ML-DSA verifier (not implemented)</h2>
+      <p class="lead"><strong>ML-DSA</strong> (FIPS 204) is a post-quantum signature standard; ed25519 is not. An ML-DSA public key is larger than a signer's key field, so the verifier stores a hash of it.</p>
       <div class="docgrid" style="margin-top:1rem">
 <pre><span class="pn">#[</span>contractimpl<span class="pn">]</span>
 <span class="k">impl</span> Verifier <span class="k">for</span> <span class="fn">PerchMlDsaVerifier</span> <span class="pn">{</span>
@@ -813,9 +826,9 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
     <span class="pn">}</span>
 <span class="pn">}</span></pre>
         <ul class="callouts">
-          <li><span class="f">the twist: a commitment</span><span class="d">ML-DSA public keys are ~1.3&nbsp;KB — bigger than the 256-byte key field a signer may hold. So the stored key is a <strong>32-byte hash of the public key</strong>. perch's document model anticipated this: its key-size comment says the cap exists for "commitment-style keys".</span></li>
-          <li><span class="f">the key rides along</span><span class="d">The full public key travels with each signature; the verifier re-hashes it against the commitment, then checks the signature under it. Both must pass.</span></li>
-          <li><span class="f">same trait, ~50 lines</span><span class="d">The exact <code>Verifier</code> trait ed25519 implements. A sketch today — it's the last item on the roadmap.</span></li>
+          <li><span class="f">key_data: a commitment</span><span class="d">An ML-DSA-44 public key is 1,312 bytes; a document's signer key is at most 256 bytes (<code>perch-ir</code>). <code>key_data</code> is the 32-byte sha256 of the public key; <code>perch-ir</code>'s key-size comment names "commitment-style keys".</span></li>
+          <li><span class="f">sig_data</span><span class="d">Carries the public key and the signature. <code>verify</code> checks the hash against <code>key_data</code>, then the signature.</span></li>
+          <li><span class="f">status</span><span class="d">The same <code>Verifier</code> trait as ed25519. Not implemented; on the roadmap (slide 35).</span></li>
         </ul>
       </div>
     </div>
@@ -824,17 +837,17 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
   <!-- 21 ▸ payoff: the migration on raw OZ -->
   <section class="slide" aria-label="Slide 21">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">21</span> · The payoff · the migration, raw</p>
-      <h2>Rotating the robot's key on raw OZ.</h2>
-<pre><span class="cm">// remember to do this for EVERY rule the robot appears in:</span>
+      <p class="eyebrow"><span class="n">21</span> · Key rotation · OZ entry points</p>
+      <h2>Rotating the CI key with OZ entry points</h2>
+<pre><span class="cm">// repeated for every rule that names the old signer:</span>
 <span class="k">let</span> old <span class="pn">=</span> <span class="fn">get_signer_id</span><span class="pn">(&amp;</span>env<span class="pn">,</span> Signer<span class="pn">::</span><span class="fn">Delegated</span><span class="pn">(</span>robot<span class="pn">));</span>            <span class="cm">// find the old signer</span>
 <span class="fn">add_signer</span><span class="pn">(&amp;</span>env<span class="pn">,</span> rule_id<span class="pn">,</span> Signer<span class="pn">::</span><span class="fn">External</span><span class="pn">(</span>mldsa<span class="pn">,</span> commitment<span class="pn">));</span>   <span class="cm">// both keys now live…</span>
 <span class="fn">remove_signer</span><span class="pn">(&amp;</span>env<span class="pn">,</span> rule_id<span class="pn">,</span> old<span class="pn">);</span>                               <span class="cm">// …until this lands</span></pre>
-      <p class="code-cap">the library's real API — each call its own admin-signed transaction</p>
+      <p class="code-cap">the library's API; each call is its own admin-signed transaction</p>
       <ul class="biglist" style="margin-top:1.2rem">
-        <li><strong>Did you find every rule?</strong> Nothing enumerates "all grants held by this key" — you grep your own memory.</li>
-        <li><strong>Between transactions the account is half-migrated</strong> — old and new key both live, and that intermediate state is real and authorized.</li>
-        <li><strong>Nothing records the intended end state.</strong> Reviewers approve individual transactions; no artifact says what the account should look like when you're done.</li>
+        <li>No entry point lists the rules a signer appears in; the operator has to find each one.</li>
+        <li>Each call is its own transaction; between them the old and the new key are both valid.</li>
+        <li>No artifact records the intended final configuration; reviewers approve individual transactions.</li>
       </ul>
     </div>
   </section>
@@ -842,30 +855,30 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
   <!-- 22 ▸ payoff: the migration with perch -->
   <section class="slide" aria-label="Slide 22">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">22</span> · The payoff · the migration, perch</p>
-      <h2>The same migration as a document edit.</h2>
+      <p class="eyebrow"><span class="n">22</span> · Key rotation · perch</p>
+      <h2>Rotating the CI key with a document edit</h2>
       <ol class="steps">
         <li>
           <h3>Deploy <code>perch-ml-dsa-verifier</code></h3>
-          <p>The only new code — the ~50-line contract from two slides ago.</p>
+          <p>The verifier from slide 20 (not yet implemented).</p>
         </li>
         <li>
           <h3>Edit the document — one signer line</h3>
 <pre style="margin:.6rem 0 0"><span class="del">-  { "id": "ci", "address": "GA327GGW…57YGA" }</span>
 <span class="add">+  { "id": "ci", "verifier": "CMLDSA00…VRFR", "key": "b3a1c04d…9c4e" }</span></pre>
-          <p style="margin-top:.6rem">Every rule stays identical — same scope, same functions, same expiry. Every rule that names <code>"ci"</code> picks up the new key; none can be missed.</p>
+          <p style="margin-top:.6rem">Rules reference signers by id, so every rule naming <code>"ci"</code> uses the new key and nothing else changes.</p>
         </li>
         <li>
           <h3>Review</h3>
-          <p>The diff is one line. The new <code>doc_hash</code> is the thing approved — the intended end state, in writing.</p>
+          <p>The diff is one line; reviewers approve the new <code>doc_hash</code>.</p>
         </li>
         <li>
           <h3>Apply — one call</h3>
-          <p>The admin applies the new document whole: <code>apply_doc</code>, one signed transaction, the entire rule set switches, no half-migrated in-between. <code>applied_doc_hash</code> then confirms installed == reviewed — a read-only stock-CLI call.</p>
+          <p>One admin-signed <code>apply_doc</code> replaces the rule set; <code>applied_doc_hash</code> then returns the reviewed hash.</p>
         </li>
         <li>
           <h3>Rotate the GitHub secret</h3>
-          <p>Swap <code>PERCH_CI_KEY</code> for the ML-DSA private key. The robot signs the same rule-bound bytes as before — only the key changed.</p>
+          <p>Replace <code>PERCH_CI_KEY</code> with the ML-DSA secret. The CI job signs the same rule-bound digest with the new key.</p>
         </li>
       </ol>
     </div>
@@ -874,63 +887,346 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
   <!-- 23 ▸ payoff: what did not change -->
   <section class="slide" aria-label="Slide 23">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">23</span> · The payoff</p>
-      <h2>What did not change.</h2>
+      <p class="eyebrow"><span class="n">23</span> · Key rotation · unchanged</p>
+      <h2>What the rotation leaves unchanged</h2>
       <ul class="biglist">
-        <li><strong>The account contract</strong> — untouched. Not redeployed, not re-audited.</li>
-        <li><strong>The interpreter</strong> — same immutable contract, same program shape.</li>
-        <li><strong>The registry</strong> — never knew anything happened.</li>
-        <li><strong>The review process</strong> — read a one-line diff, approve a hash.</li>
+        <li><strong><code>perch-account</code></strong> — not redeployed.</li>
+        <li><strong><code>perch-interpreter</code></strong> — same contract, same program for <code>ci-publish</code>.</li>
+        <li><strong>The registry</strong> — no change.</li>
+        <li><strong>Review</strong> — a one-line diff and a new <code>doc_hash</code>.</li>
       </ul>
-      <p class="punch">Authorization policy is <em>data</em>. Proof: a post-quantum key migration that's a one-line diff.</p>
     </div>
   </section>
 
-  <!-- 24 ▸ roadmap -->
+  <!-- 24 ▸ recovery: the problem -->
   <section class="slide" aria-label="Slide 24">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">24</span> · Roadmap</p>
-      <h2>Where this goes.</h2>
+      <p class="eyebrow"><span class="n">24</span> · Recovery · overview</p>
+      <h2>Recovery: the document's <code>recovery</code> member</h2>
+      <p class="lead">A document's optional <code>recovery</code> member enrolls the account at a recovery controller: a profile, a mode, timing in ledgers, and the signer ids a recovery may replace. <code>docs/recovery/spec.md</code> (decisions D1–D16) specifies the states, the transitions, and the authorization each one needs. Evidence types:</p>
+      <ul class="biglist" style="margin-top:1rem">
+        <li><strong>Guardians</strong> — any Stellar addresses, <code>G…</code> or <code>C…</code>, and a quorum of them.</li>
+        <li><strong>A ZK credential</strong> — a proof of knowing a secret whose commitment the account enrolled in a membership pool, without revealing which leaf.</li>
+        <li><strong>Both</strong> — a quorum and a proof.</li>
+      </ul>
+      <p class="lead" style="margin-top:1.6rem">A recovery installs a target document the controller derives on-chain from the account's current state (slide 27); no caller supplies a target hash.</p>
+    </div>
+  </section>
+
+  <!-- 25 ▸ recovery: profiles x modes -->
+  <section class="slide" aria-label="Slide 25">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">25</span> · Recovery · profiles and modes</p>
+      <h2>Profiles (<code>loss</code>, <code>protected</code>) and modes</h2>
+      <div class="tblwrap">
+        <table class="tbl">
+          <tr><th></th><th>Loss</th><th>Protected</th></tr>
+          <tr><td>Assumes</td><td>the owner key may be lost, not stolen</td><td>the owner key may be stolen</td></tr>
+          <tr><td>Change the recovery configuration</td><td>owner authorization</td><td>owner + the enrolled condition's evidence over a <code>Reconfigure</code> statement</td></tr>
+          <tr><td>Upgrade the account</td><td>owner, after 7 days</td><td>owner + the condition, after 7 days</td></tr>
+          <tr><td>An attempt collecting evidence</td><td>blocks nothing</td><td>blocks nothing</td></tr>
+          <tr><td>Once an attempt is authorized</td><td>ordinary activity continues; policy changes and upgrades are refused</td><td class="deny">the account authorizes <strong>nothing</strong> but that attempt's completion — on every path</td></tr>
+          <tr><td>Cancel</td><td>the owner, never capped — or the condition</td><td>the condition only</td></tr>
+        </table>
+      </div>
+      <div class="cards" style="margin-top:1.4rem">
+        <div class="card"><h3><code>guardian-only</code></h3><p>A quorum of guardians. No ZK enrollment, no proof, no pool access anywhere on the path.</p></div>
+        <div class="card"><h3><code>zk-only</code></h3><p>One UltraHonk proof per statement, from the enrolled credential.</p></div>
+        <div class="card"><h3><code>combined</code></h3><p>The quorum and a proof, in either order.</p></div>
+      </div>
+      <p class="code-cap">docs/recovery/spec.md §2, §5, §6, §9, §12 — an evidence cancellation of an authorized attempt counts toward max-cancels in both; all six combinations exercised on testnet (slide 33)</p>
+    </div>
+  </section>
+
+  <!-- 26 ▸ recovery: one statement -->
+  <section class="slide" aria-label="Slide 26">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">26</span> · Recovery · the statement</p>
+      <h2><code>RecoveryStatement</code>: the bytes evidence signs</h2>
+      <div class="docgrid" style="margin-top:.6rem">
+<pre><span class="cm">offset  size  field</span>
+<span class="nm">     0</span>    <span class="nm">24</span>  <span class="s">"perch/recovery/statement"</span>
+<span class="nm">    24</span>     <span class="nm">1</span>  version <span class="nm">0x02</span>
+<span class="nm">    25</span>     <span class="nm">1</span>  action <span class="cm">1 lost-key · 2 compromise · 3 cancel</span>
+                     <span class="cm">4 reconfigure · 5 upgrade</span>
+<span class="nm">    26</span>    <span class="nm">32</span>  network_id
+<span class="nm">    58</span>    <span class="nm">32</span>  account
+<span class="nm">    90</span>    <span class="nm">32</span>  controller
+<span class="nm">   122</span>     <span class="nm">8</span>  configuration epoch
+<span class="nm">   130</span>    <span class="nm">32</span>  config_hash
+<span class="nm">   162</span>  <span class="nm">4+4+4</span>  delay · expiry · valid-until <span class="cm">(ledgers)</span>
+<span class="nm">   174</span>     <span class="pn">…</span>  subject <span class="cm">— 278 · 214 · 207 · 214 bytes in all</span>
+
+<span class="k">digest</span> <span class="pn">=</span> <span class="fn">sha256</span><span class="pn">(</span>encoding<span class="pn">)</span></pre>
+        <ul class="callouts">
+          <li><span class="f">guardians</span><span class="d">Authorize exactly the digest: <code>require_auth_for_args((digest,))</code> inside <code>submit_guardian</code> or <code>approve_change</code>.</span></li>
+          <li><span class="f">the circuit</span><span class="d">Binds the same digest, with the account and enrollment id, into its third public input.</span></li>
+          <li><span class="f">ledgers, not seconds</span><span class="d">All timing is native ledger counts. No approximate conversion anywhere.</span></li>
+          <li><span class="f">three implementations</span><span class="d">Rust (the interface crate), Python (writes <code>testdata/recovery/statement-v2.json</code>), and TypeScript (<code>perch-js</code>) agree on every vector, byte for byte ; a guardian's wallet can recompute the digest it signs.</span></li>
+        </ul>
+      </div>
+      <p class="code-cap">docs/recovery/statement.md</p>
+    </div>
+  </section>
+
+  <!-- 27 ▸ recovery: derived targets -->
+  <section class="slide" aria-label="Slide 27">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">27</span> · Recovery · permitted changes</p>
+      <h2>Recovery targets: <code>derive_target</code> and revocation</h2>
+      <div class="cards two" style="margin-top:1rem">
+        <div class="card">
+          <span class="tag">lost key</span>
+          <h3>The applied document, with replacements</h3>
+          <p>The source is a snapshot of the account's applied document; <code>derive_target</code> replaces exactly the declared signer slots. A replacement keeps the slot's kind and verifier. If the source changes before the attempt is authorized, the attempt can never promote — start a fresh one.</p>
+        </div>
+        <div class="card">
+          <span class="tag">compromise</span>
+          <h3>The enrolled baseline, restored</h3>
+          <p>The source is a baseline whose hash the recovery member enrolled and anyone may publish: its signers and rules, the current recovery member, and the replacements. Signers and rules added after the baseline are not in the target.</p>
+        </div>
+      </div>
+      <ul class="biglist" style="margin-top:1.2rem">
+        <li><strong>Revocation.</strong> Every replaced credential, and every credential a compromise removes, joins the account's permanent revoked set — checked on every <code>apply_doc</code>, on every path.</li>
+        <li><strong>Completion versus reconfiguration.</strong> A completion is not a reconfiguration. It is recognized by the attempt it consumes in the same invocation. Configuration identity is the recovery member's canonical text, so rotating a signer's key never counts as reconfiguring recovery.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 28 ▸ recovery: the freeze mirror -->
+  <section class="slide" aria-label="Slide 28">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">28</span> · Recovery · the freeze</p>
+      <h2><code>Protected</code> freeze: a <code>FreezeGate</code> in account storage</h2>
+      <div class="diagram">
+        <svg viewBox="0 0 980 190" role="img" aria-label="The controller sets a freeze gate in the account's storage through rcv_gate; the account's __check_auth reads its own storage">
+          <defs>
+            <marker id="ah2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0 L8 4 L0 8 Z" fill="var(--faint)"/>
+            </marker>
+          </defs>
+          <rect class="box" x="8" y="64" width="250" height="66" rx="8"/>
+          <text class="t" x="133" y="92" text-anchor="middle">controller</text>
+          <text class="sub" x="133" y="112" text-anchor="middle">an attempt is authorized</text>
+
+          <line class="arrow" x1="258" y1="97" x2="346" y2="97" marker-end="url(#ah2)"/>
+          <text class="ma" x="302" y="86" text-anchor="middle">rcv_gate</text>
+
+          <rect class="box-a" x="350" y="64" width="280" height="66" rx="8"/>
+          <text class="t" x="490" y="92" text-anchor="middle">account storage</text>
+          <text class="m" x="490" y="112" text-anchor="middle">FreezeGate { attempt_id, until }</text>
+
+          <line class="arrow" x1="720" y1="97" x2="632" y2="97" marker-end="url(#ah2)"/>
+          <text class="m" x="676" y="86" text-anchor="middle">reads</text>
+
+          <rect class="box" x="724" y="64" width="248" height="66" rx="8"/>
+          <text class="t" x="848" y="92" text-anchor="middle">__check_auth</text>
+          <text class="sub" x="848" y="112" text-anchor="middle">only the completion passes</text>
+
+          <text class="md" x="490" y="170" text-anchor="middle">__check_auth makes no call to the controller</text>
+        </svg>
+      </div>
+      <p class="lead" style="margin-top:1rem"><strong>Why a mirror:</strong> Soroban refuses to re-enter a contract already on the call stack. A perch account can be a guardian at the controller it uses itself, and then its <code>__check_auth</code> runs while that controller is mid-call. A read of the controller from <code>__check_auth</code> would then fail with <code>Error(Context, InvalidAction)</code>, so the controller sets the gate, through the account's invoker-only <code>rcv_gate</code>, and no hook ever calls back into the account.</p>
+      <p class="code-cap">spec D16, §9 · pinned under enforcing auth in crates/integration-tests/tests/cap71_semantics.rs (C8)</p>
+    </div>
+  </section>
+
+  <!-- 29 ▸ recovery: reserved hooks -->
+  <section class="slide" aria-label="Slide 29">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">29</span> · Recovery · invoker-only hooks</p>
+      <h2>Invoker-only hooks and the compile-time scope rule</h2>
+      <div class="grants">
+        <div class="grant danger">
+          <h3>The account never authorizes</h3>
+          <ul>
+            <li><span class="bad">▸</span><code>install</code> · <code>uninstall</code> · <code>enforce</code></li>
+            <li><span class="bad">▸</span><code>rcv_sync</code> · <code>rcv_cancel</code> · <code>rcv_upgrade</code></li>
+            <li><span class="bad">▸</span><code>rcv_insert</code> · <code>rcv_gate</code></li>
+          </ul>
+          <p class="note">On any contract, through <code>__check_auth</code> or <code>execute</code>. The hooks are reachable only from the account's own flows, which closes direct configuration writes (#90).</p>
+        </div>
+        <div class="grant">
+          <h3>The compiler refuses (narrowed rule)</h3>
+          <ul>
+            <li><span class="bad">▸</span>a rule scoped to the document's own ZK <strong>adapter</strong></li>
+            <li><span class="bad">▸</span>a rule scoped to the document's own <strong>pool</strong></li>
+            <li><span class="ok">▸</span>a rule scoped to its own <strong>controller</strong> — allowed</li>
+          </ul>
+          <p class="note">A perch account that guards others at its own controller must sign <code>submit_guardian</code> and <code>approve_change</code> there. The reserved-name guard, not the scope rule, protects the controller's hooks.</p>
+        </div>
+      </div>
+      <p class="code-cap">crates/integration-tests/tests/recovery.rs, a_controller_scoped_rule_reaches_no_reserved_controller_entry_point — every reserved name, at __check_auth and through signed calls</p>
+    </div>
+  </section>
+
+  <!-- 30 ▸ recovery: zk -->
+  <section class="slide" aria-label="Slide 30">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">30</span> · Recovery · ZK</p>
+      <h2>Membership pool and ZK adapter: reproducible builds</h2>
+      <div class="cards">
+        <div class="card">
+          <span class="tag">perch-zk-pool</span>
+          <h3>Depth-32 trees with rollover</h3>
+          <p>No constructor, admin, or upgrade. An account inserts its own leaf through the invoker-only <code>rcv_insert</code>; the pool binds it to that account and enrollment id.</p>
+          <p>2<sup>32</sup> leaves per tree. The insertion that fills a tree seals it; the next opens a new one. Every root a tree has ever had stays acceptable.</p>
+        </div>
+        <div class="card">
+          <span class="tag">perch-zk-adapter</span>
+          <h3>UltraHonk verifier with the VK compiled in</h3>
+          <p>NethermindEth's UltraHonk verifier (internally reviewed and audited by OpenZeppelin), vendored unmodified at <code>c2160987</code>, with the circuit's verification key compiled in. <code>circuit_id</code> = sha256 of that key.</p>
+          <p>It checks the circuit, field canonicality, the root against the enrolled pool, and the 14,592-byte proof.</p>
+        </div>
+        <div class="card">
+          <span class="tag">circuits/manifest.json</span>
+          <h3>Pinned artifacts</h3>
+          <p>Pins the Noir sources, ACIR, VKs, every fixture proof, and the toolchain (nargo 1.0.0-beta.9, bb 0.87.0). <code>just zk-artifacts check</code> rebuilds all of it and fails on any byte of drift; CI does it on Linux.</p>
+          <p>One circuit (5,685 gates) serves every action, including reconfiguration.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 31 ▸ recovery: controller + account -->
+  <section class="slide" aria-label="Slide 31">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">31</span> · Recovery · controller and account</p>
+      <h2><code>perch-recovery</code> and the account's entry points</h2>
+      <div class="cards two" style="margin-top:.6rem">
+        <div class="card">
+          <span class="tag">perch-recovery · 63,162 bytes</span>
+          <h3>The controller</h3>
+          <p>Constructorless and immutable; per-account state only. Attempts, evidence, cancellation, completion. A per-account <strong>epoch</strong>, bumped on every configuration change, invalidates every earlier attempt and approval. Nullifiers are spent only by a completion, recorded per account, never released.</p>
+        </div>
+        <div class="card">
+          <span class="tag">perch-account · 46,701 bytes</span>
+          <h3>The account's capabilities</h3>
+          <p><code>execute(target, fn, args)</code> — calls <code>target</code> as the account; reserved names refused. <code>applied_doc()</code> — the full canonical document. <code>infra()</code> — what it resolves.</p>
+          <p><code>schedule_upgrade</code> → <strong>120,960 ledgers</strong> (seven days) → <code>execute_upgrade</code>. Under Protected the condition approves the exact wasm hash and request id. Refused during an authorized attempt; any epoch change makes a queued request stale; a completed recovery drops it.</p>
+        </div>
+      </div>
+      <p class="lead" style="margin-top:1.2rem"><code>perch-account-factory</code> (4,717 bytes) deploys the account wasm it was built against. The deploy salt is <code>sha256(salt ‖ xdr(admin_signers))</code>, so a predicted address can only be created with the signers it was computed for. <code>create_passkey</code> names the pinned WebAuthn verifier.</p>
+    </div>
+  </section>
+
+  <!-- 32 ▸ release: pin order -->
+  <section class="slide" aria-label="Slide 32">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">32</span> · Release · pin order</p>
+      <h2>Build order: tier 0, then the account, then the factory</h2>
       <ol class="steps">
         <li>
-          <h3>Testnet live test <span class="now">now</span></h3>
-          <p>The registry publish pipeline end-to-end, robot key and all.</p>
+          <h3>Tier 0 — pins nothing</h3>
+          <p>Compiler, interpreter, spending limit, both verifiers, pool, adapter, controller. Each deployed content-addressed: address = <code>deployer(registry, sha256(wasm))</code>, known before deployment.</p>
+        </li>
+        <li>
+          <h3>Tier 1 — the account</h3>
+          <p>Built with tier 0's exact bytes and the registry id staged as its pins.</p>
+        </li>
+        <li>
+          <h3>Tier 2 — the factory</h3>
+          <p>Built with the account wasm and the WebAuthn verifier as its pins.</p>
+        </li>
+        <li>
+          <h3>The manifest</h3>
+          <p><code>deployments/testnet.json</code> records every hash, address, and pin. <code>fetch-infra-wasm.sh</code> refuses any byte whose sha256 or content address doesn't match it; <code>verify-deployment.sh</code> checks the chain — including what the factory and each account actually resolve. Never a name lookup alone.</p>
+        </li>
+      </ol>
+      <p class="lead" style="margin-top:1.6rem">Previously <code>scripts/fetch-infra-wasm.sh</code> resolved the compiler by name through a deploy nothing updated, so builds pinned the pre-cap v0.1.0 compiler (#95). A rebuild from the deployment commit now reproduces every recorded hash.</p>
+    </div>
+  </section>
+
+  <!-- 33 ▸ release: testnet -->
+  <section class="slide" aria-label="Slide 33">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">33</span> · Release · testnet</p>
+      <h2>Measured testnet runs</h2>
+      <p class="lead">Nine contracts content-addressed under a fresh registry instance (<code>CDOTZIJU…</code>), and the account wasm installed for the factory. Six profile/mode scenarios plus compromise recovery: passkey owners from the factory, G-account guardians, real proofs over the pool's on-chain leaves, enforcing authorization. <strong>70 transactions, 28 refusals checked, 0 failures.</strong></p>
+      <div class="tblwrap">
+        <table class="tbl">
+          <tr><th>Transaction</th><th>Instructions</th><th>Share of 400M</th><th>Fee (XLM)</th></tr>
+          <tr><td>Factory <code>create_passkey</code></td><td class="num">2,733,487</td><td class="num">0.7%</td><td class="num">0.053</td></tr>
+          <tr><td>Enroll <code>combined</code> through <code>apply_doc</code></td><td class="num">72,843,565</td><td class="num">18.2%</td><td class="num">4.525</td></tr>
+          <tr><td><code>begin_lost_key</code></td><td class="num">23,663,162</td><td class="num">5.9%</td><td class="num">0.184</td></tr>
+          <tr><td><code>submit_guardian</code> (promoting, sets the freeze)</td><td class="num">2,968,474</td><td class="num">0.7%</td><td class="num">1.582</td></tr>
+          <tr><td><code>submit_zk</code> (promoting, real proof)</td><td class="num">91,161,336</td><td class="num">22.8%</td><td class="num">1.640</td></tr>
+          <tr><td><code>submit_zk_change</code> (Reconfigure proof)</td><td class="num">89,214,169</td><td class="num">22.3%</td><td class="num">0.026</td></tr>
+          <tr><td>Completion with ZK rotation</td><td class="num">71,169,029</td><td class="num">17.8%</td><td class="num">1.370</td></tr>
+          <tr><td>Ordinary activity (direct)</td><td class="num">5,554,361</td><td class="num">1.4%</td><td class="num">0.107</td></tr>
+        </table>
+      </div>
+      <p class="code-cap">deployments/testnet-exercise.json · docs/deploy/testnet-exercise.md — every row within the 75% budget; fees are mostly 180-day rent; native proving 69 ms median</p>
+    </div>
+  </section>
+
+  <!-- 34 ▸ ownership -->
+  <section class="slide" aria-label="Slide 34">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">34</span> · Ownership</p>
+      <h2>Ownership: Perch and Nido</h2>
+      <div class="cards two" style="margin-top:.6rem">
+        <div class="card">
+          <span class="tag">perch</span>
+          <h3>Contracts, packages, tooling</h3>
+          <p>The shared smart account — execution, full document reads, policy management, controlled upgrades. The WebAuthn verifier and the account factory. One recovery controller and statement specification. The circuit, verifier, adapter, pool, proof SDK, and reproducible artifacts. Indexer and relay software, bindings, integration tests, deployment tooling, audit-facing documentation.</p>
+        </div>
+        <div class="card">
+          <span class="tag">nido</span>
+          <h3>Wallet and hosted services</h3>
+          <p>Wallet UI, account naming, product defaults, and the passkey and recovery experience. Operating the hosted services. Integrating the published Perch contracts and packages — <code>@stellar-registry/perch-contracts</code>, <code>perch-zk</code> and its indexer, <code>perch-relay</code> — from the manifest.</p>
+        </div>
+      </div>
+      <p class="code-cap">epic #99 — Nido's own account, recovery, and crypto implementations are retired once it uses this stack</p>
+    </div>
+  </section>
+
+  <!-- 35 ▸ roadmap -->
+  <section class="slide" aria-label="Slide 35">
+    <div class="wrap">
+      <p class="eyebrow"><span class="n">35</span> · Roadmap</p>
+      <h2>Roadmap</h2>
+      <ol class="steps">
+        <li>
+          <h3>Nido on the shared stack <span class="now">now</span></h3>
+          <p>Fresh wallet accounts from the factory; onboarding and every recovery combination through <code>apply_doc</code>.</p>
+        </li>
+        <li>
+          <h3>Client proving budgets</h3>
+          <p>Proving on the reference phone and laptop is unmeasured; native proving and every on-chain row are measured.</p>
+        </li>
+        <li>
+          <h3>Canonical publication</h3>
+          <p>Tier 0 into the release pipeline's allow-list, then the account and the factory in pin order.</p>
         </li>
         <li>
           <h3>Stock-CLI signing</h3>
-          <p><code>apply_doc</code> already shipped (slide 16); what remains is teaching the stellar CLI to sign smart-account approvals, so the <code>perch-deploy</code> shim disappears and the stellar CLI is the only tool.</p>
+          <p>Teach the stellar CLI to sign smart-account approvals, so the <code>perch-deploy</code> shim disappears.</p>
         </li>
         <li>
-          <h3>Mainnet</h3>
-          <p>Same policy, real stakes.</p>
+          <h3>Audit, then mainnet</h3>
+          <p>Audit of the implementation with its specification, threat model, and measured costs; then a mainnet deployment.</p>
         </li>
         <li>
-          <h3>Passkey admin</h3>
-          <p>The maintainer's admin signer becomes a passkey (WebAuthn) via a verifier contract.</p>
-        </li>
-        <li>
-          <h3>CAP-0071 support upstream to OZ</h3>
-          <p>Our delegated-signer patch lands in <code>stellar-accounts</code> proper.</p>
-        </li>
-        <li>
-          <h3>ML-DSA verifier</h3>
-          <p>The finale, for real.</p>
+          <h3>CAP-0071 upstream, then ML-DSA</h3>
+          <p>The delegated-signer patch merged into upstream <code>stellar-accounts</code>; an ML-DSA verifier.</p>
         </li>
       </ol>
     </div>
   </section>
 
-  <!-- 25 ▸ CTA -->
-  <section class="slide" aria-label="Slide 25">
+  <!-- 36 ▸ CTA -->
+  <section class="slide" aria-label="Slide 36">
     <div class="wrap">
-      <p class="eyebrow"><span class="n">25</span> · Where you come in</p>
-      <h2>Let's make scoped keys the easy path on Stellar.</h2>
+      <p class="eyebrow"><span class="n">36</span> · Repository and entry points</p>
+      <h2>Where to start in the repository</h2>
       <a class="repo" href="https://github.com/stellar-registry/perch">github.com/stellar-registry/perch</a>
-      <p class="code-cap">status: working pipeline, live on testnet</p>
+      <p class="code-cap">status: deployed to testnet — deployments/testnet.json</p>
       <ul class="biglist" style="margin-top:1.6rem">
-        <li><strong>Adopt the document format</strong> — a wallet session key, a treasury limit, an agent's tool key. Any operational key you'd rather not think about is a policy document waiting to be written. <code>CANONICAL.md</code> is normative and short; the flagship documents live in <code>testdata/</code>.</li>
-        <li><strong>Build on it</strong> — <code>packages/perch-js</code> emits the exact same canonical bytes as Rust, pinned in CI. Wire it into a wallet, an agent framework, or a deploy tool with no fear of drift.</li>
-        <li><strong>Upstream the primitives with us</strong> — CAP-0071 delegated signers into <code>stellar-accounts</code>, smart-account signing into the stock stellar CLI. The roadmap's last miles are really invitations to collaborate.</li>
+        <li><strong>Documents</strong> — <code>CANONICAL.md</code> (the canonical form, normative), <code>testdata/</code> (example documents and vectors), <code>docs/recovery/spec.md</code> (recovery).</li>
+        <li><strong>Packages</strong> — <code>perch-js</code> (documents, canonical bytes, statement digests), <code>perch-contracts</code> (bindings from the deployed wasm), <code>perch-zk</code> (proving and the pool indexer), <code>perch-relay</code> (guardian approvals).</li>
+        <li><strong>Deployment</strong> — <code>deployments/testnet.json</code>, <code>docs/deploy/README.md</code>, <code>docs/deploy/testnet-exercise.md</code>.</li>
+        <li><strong>Upstream work</strong> — CAP-0071 delegated signers in <code>stellar-accounts</code>; smart-account signing in the stock stellar CLI.</li>
       </ul>
     </div>
   </section>
@@ -942,7 +1238,7 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
 
 <footer class="chrome">
   <div id="ribbon" title="testdata/ci-publish.doc-hash — the deck fills in the hash as you go" aria-hidden="true"></div>
-  <div id="counter">1 / 25</div>
+  <div id="counter">1 / 36</div>
 </footer>
 
 <script>

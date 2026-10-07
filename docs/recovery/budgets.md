@@ -86,7 +86,7 @@ document caps (spec §7.5) are then set to the largest values for which the
 completion and reconfiguration rows stay within budget: see "Document caps"
 under Results (`perch_doc_compiler::MAX_DOC_SIGNERS` = 6, `MAX_DOC_RULES` =
 8, `MAX_DOC_CANONICAL_BYTES` = 8 192; on the quiet-events experiment branch,
-where OZ's per-item events are suppressed, 6, 12, and 8 192: see
+where OZ's per-item events are suppressed, 6, 13, and 8 192: see
 "Experiment: OZ's per-item events suppressed").
 
 ## 3. End-to-end latency
@@ -356,7 +356,7 @@ signer's registration event and needs its own measurement.
 
 ### Experiment: OZ's per-item events suppressed
 
-Quiet-events experiment, 2026-10-06. This branch only, not PR 103.
+Quiet-events experiment, 2026-10-07. This branch only, not PR 103.
 `stellar-accounts` is pinned to theahaco/stellar-contracts-OZ PR #4
 (`fm/oz-quiet-events-x1`, 74f9f64). That PR adds `_no_events` variants of
 every context-rule, signer, and policy mutation, and of `spending_limit`'s
@@ -365,67 +365,64 @@ then emits one `DocApplied`: `doc_hash` is its topic, and the delta's
 counts are its data (rules added, removed, and edited in place; signers and
 policies added and removed by the in-place edits). The controller's
 `CredentialRevoked`, one per revoked credential, is unchanged. Nothing is
-emitted, so the reconcile prices only ledger writes. Each changed rule
-takes whichever path writes fewer entries.
+emitted, so the reconcile prices only ledger writes, counted per operation
+as WS3's model counts them. Each changed rule takes whichever path writes
+fewer entries.
 
 Same method, budget, and five flows as above, on a stack built from this
 branch with the compiler's caps raised. Contract events drop from the
 binding limit (72.9% at 6 signers and 8 rules) to at most 31%, which is
-reached at 15 signers. The frontier moves out, and its binding limits
-become CPU instructions (from 6 to 12 signers) and the footprint (at the
-ends). For each signer count, the most rules within budget and the first
-row past it:
+reached at 15 signers. The frontier moves out, and the footprint binds
+along all of it. For each signer count, the most rules within budget and
+the first row past it:
 
 | Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | 2 | 17 | 61.2% | 72.7% | 73.0% | 70.5% | 40.1% | 10.0% |
 | 2 | 18 | 62.8% | **76.8%** | **76.0%** | 73.5% | 41.1% | 10.0% |
-| 4 | 15 | 66.2% | 69.1% | 73.5% | 70.5% | 41.9% | 13.3% |
-| 4 | 16 | 68.2% | 73.4% | **76.5%** | 73.5% | 43.2% | 13.3% |
-| **6** | **12** | **72.5%** | **66.7%** | **71.0%** | **67.5%** | **41.3%** | **16.5%** |
-| 6 | 13 | **75.5%** | 71.5% | 74.0% | 70.5% | 42.8% | 16.5% |
-| 8 | 9 | 73.6% | 66.9% | 68.5% | 64.5% | 39.4% | 19.7% |
-| 8 | 10 | **77.8%** | 73.3% | 71.5% | 67.5% | 41.1% | 19.7% |
-| 10 | 7 | 73.2% | 65.6% | 69.0% | 64.5% | 37.9% | 22.9% |
-| 10 | 8 | **79.2%** | 73.8% | 72.0% | 67.5% | 39.9% | 22.9% |
-| 12 | 5 | 67.9% | 57.5% | 69.5% | 64.5% | 35.5% | 26.1% |
-| 12 | 6 | **75.3%** | 67.6% | 72.5% | 67.5% | 37.7% | 26.1% |
-| 13 | 5 | 71.2% | 61.8% | 72.8% | 67.5% | 36.3% | 27.8% |
-| 14 | 4 | 65.4% | 54.0% | 73.0% | 67.5% | 34.6% | 29.4% |
-| 14 | 5 | 74.6% | 66.0% | **76.0%** | 70.5% | 37.0% | 29.4% |
-| 15 | 3 | 57.8% | 44.5% | 73.2% | 67.5% | 32.7% | 31.0% |
-| 15 | 4 | 68.1% | 57.5% | **76.2%** | 70.5% | 35.3% | 31.0% |
+| 4 | 15 | 65.9% | 69.1% | 73.5% | 70.5% | 41.9% | 13.3% |
+| 4 | 16 | 67.7% | 73.4% | **76.5%** | 73.5% | 43.2% | 13.3% |
+| **6** | **13** | **67.3%** | **65.5%** | **74.0%** | **70.5%** | **42.8%** | **16.5%** |
+| 6 | 14 | 69.7% | 70.2% | **77.0%** | 73.5% | 44.3% | 16.5% |
+| 8 | 11 | 67.4% | 60.3% | 74.5% | 70.5% | 42.8% | 19.7% |
+| 8 | 12 | 70.3% | 65.3% | **77.5%** | 73.5% | 44.5% | 19.7% |
+| 10 | 9 | 65.7% | 54.2% | 75.0% | 70.5% | 41.8% | 22.9% |
+| 12 | 6 | 57.8% | 41.7% | 72.5% | 67.5% | 37.7% | 26.1% |
+| 12 | 7 | 61.9% | 47.0% | **75.5%** | 70.5% | 39.9% | 26.1% |
+| 13 | 5 | 54.8% | 37.6% | 72.8% | 67.5% | 36.3% | 27.8% |
+| 14 | 4 | 51.2% | 33.1% | 73.0% | 67.5% | 34.6% | 29.4% |
+| 14 | 5 | 55.8% | 38.6% | **76.0%** | 70.5% | 37.0% | 29.4% |
+| 15 | 3 | 47.1% | 28.7% | 73.2% | 67.5% | 32.7% | 31.0% |
+| 15 | 4 | 51.8% | 34.1% | **76.2%** | 70.5% | 35.3% | 31.0% |
 
-Every shape still fits the 8 192-byte canonical cap.
+At 10 signers and 9 rules the footprint is exactly 300 of 400 entries,
+which is on the budget line; 10 and 10 was not measured. Every shape still
+fits the 8 192-byte canonical cap. Before writes were counted per operation
+(each rule's entry once), the reconcile edited a rule in place whenever its
+name was kept. That costs more instructions than a replacement, and
+instructions bound at 72.5% at 6 signers and 12 rules, against 64.9% now.
 
-**On this branch the caps are 6 signers, 12 rules, and 8 192 canonical
-bytes.** The worst share is instructions at 72.5%, in the compromise whose
-thief kept every rule's name. This is the same rule as above: keep 6
-signers and the most rules. Compared with OZ's events (6 and 8), the
-experiment gains 4 rules. The other frontier points are 2 and 17, 4 and
-15, 8 and 9, 10 and 7, 13 and 5, 14 and 4, and 15 and 3.
+**On this branch the caps are 6 signers, 13 rules, and 8 192 canonical
+bytes.** The worst share is the footprint at 74.0%, in the compromise whose
+thief renamed every rule. This is the same rule as above: keep 6 signers
+and take the most rules. Compared with OZ's events (6 and 8), the
+experiment gains 5 rules. The other frontier points are 2 and 17, 4 and 15,
+8 and 11, 10 and 9, 12 and 6, 13 and 5, 14 and 4, and 15 and 3.
 
 At the caps, the worst rows are:
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
-| Enroll `Combined` through `apply_doc` | 195.9M (49.0%) | 15.1 MB | 150 | 62 | 50 040 | 888 |
-| `begin_lost_key` / `begin_compromise` | 135.0M (33.7%) | 4.8 MB | 25 | 2 | 1 888 | 248 |
-| Thief's `apply_doc` (every key swapped, every rule kept) | 245.7M (61.4%) | 24.8 MB | 100 | 41 | 33 472 | 340 |
-| Thief's `apply_doc` (every key swapped, every rule renamed) | 197.7M (49.4%) | 20.8 MB | 220 | 100 | 46 320 | 340 |
-| Compromise completion, every rule kept by name | 290.2M (72.5%) | 28.0 MB (66.7%) | 162 (40.5%) | 74 (37.0%) | 41 532 (31.4%) | 2 700 (16.5%) |
-| Compromise completion, every rule renamed | 246.4M (61.6%) | 25.2 MB (60.2%) | 284 (71.0%) | 135 (67.5%) | 54 612 (41.3%) | 2 700 (16.5%) |
-| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 287.4M (71.9%) | 27.3 MB | 150 | 68 | 40 696 | 1 908 |
-| `Protected` reconfiguration, every rule edited | 289.1M (72.3%) | 27.7 MB | 129 | 53 | 37 448 | 888 |
-| `Protected` reconfiguration, every rule replaced | 241.6M (60.4%) | 23.8 MB | 249 | 112 | 50 480 | 888 |
+| Enroll `Combined` through `apply_doc` | 199.1M (49.8%) | 15.9 MB | 156 | 65 | 52 000 | 888 |
+| `begin_lost_key` / `begin_compromise` | 133.9M (33.5%) | 4.7 MB | 25 | 2 | 1 888 | 248 |
+| Thief's `apply_doc` (every key swapped, every rule kept) | 220.4M (55.1%) | 22.8 MB | 226 | 102 | 48 032 | 340 |
+| Thief's `apply_doc` (every key swapped, every rule renamed) | 204.9M (51.2%) | 22.4 MB | 232 | 106 | 48 280 | 340 |
+| Compromise completion, every rule kept by name | 269.0M (67.3%) | 27.5 MB (65.5%) | 290 (72.5%) | 137 (68.5%) | 56 300 (42.6%) | 2 700 (16.5%) |
+| Compromise completion, every rule renamed | 254.4M (63.6%) | 27.1 MB (64.6%) | 296 (74.0%) | 141 (70.5%) | 56 572 (42.8%) | 2 700 (16.5%) |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 262.3M (65.6%) | 25.6 MB | 278 | 131 | 55 656 | 1 908 |
+| `Protected` reconfiguration, every rule edited | 263.0M (65.7%) | 25.9 MB | 255 | 114 | 52 192 | 888 |
+| `Protected` reconfiguration, every rule replaced | 249.0M (62.2%) | 25.5 MB | 261 | 118 | 52 440 | 888 |
 
 The "Release stack, in process" table above is from PR 103, with OZ's
 events. On this branch, the `worst_case_*` tests hold the rows above at the
 compiled-in caps.
-
-A lead for the cost model: when a rule keeps its name, editing it in place
-writes fewer entries than replacing it, but costs more instructions. At the
-caps that is 290M against 246M, with a footprint of 162 against 284. With
-events gone, instructions now bind, so a model that also prices
-instructions could pick replacement for some rules and move the frontier
-further. That has not been measured.

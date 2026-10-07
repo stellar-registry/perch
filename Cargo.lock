@@ -664,6 +664,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
 dependencies = [
  "const-oid",
+ "pem-rfc7468",
  "zeroize",
 ]
 
@@ -758,6 +759,7 @@ dependencies = [
  "elliptic-curve",
  "rfc6979",
  "signature",
+ "spki",
 ]
 
 [[package]]
@@ -815,6 +817,8 @@ dependencies = [
  "ff",
  "generic-array",
  "group",
+ "pem-rfc7468",
+ "pkcs8",
  "rand_core 0.6.4",
  "sec1",
  "subtle",
@@ -1444,6 +1448,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "pem-rfc7468"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
+dependencies = [
+ "base64ct",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1454,6 +1467,22 @@ name = "perch-account"
 version = "0.3.0"
 dependencies = [
  "perch-smart-account",
+ "soroban-sdk",
+ "stellar-accounts",
+]
+
+[[package]]
+name = "perch-account-factory"
+version = "0.1.0"
+dependencies = [
+ "perch-account",
+ "perch-doc-compiler",
+ "perch-interpreter",
+ "perch-registry-resolve",
+ "perch-smart-account",
+ "perch-spending-limit",
+ "perch-testkit",
+ "perch-webauthn-verifier",
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -1572,6 +1601,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "perch-account",
+ "perch-account-factory",
  "perch-compile",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
@@ -1585,8 +1615,12 @@ dependencies = [
  "perch-spending-limit",
  "perch-testkit",
  "perch-zk-pool",
+ "perch-zk-primitives",
+ "perch-zk-prover",
  "proptest",
  "serde_json",
+ "sha2",
+ "soroban-env-host",
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -1691,7 +1725,9 @@ name = "perch-testkit"
 version = "0.1.1"
 dependencies = [
  "arbitrary",
+ "base64",
  "hex",
+ "p256",
  "perch-account",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
@@ -1699,6 +1735,44 @@ dependencies = [
  "perch-recovery",
  "perch-smart-account",
  "perch-spending-limit",
+ "sha2",
+ "soroban-sdk",
+ "stellar-accounts",
+]
+
+[[package]]
+name = "perch-testnet"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ed25519-dalek",
+ "hex",
+ "perch-account",
+ "perch-deploy",
+ "perch-doc-compiler",
+ "perch-recovery",
+ "perch-recovery-interface",
+ "perch-testkit",
+ "perch-zk-pool",
+ "perch-zk-primitives",
+ "perch-zk-prover",
+ "serde",
+ "serde_json",
+ "sha2",
+ "soroban-sdk",
+ "soroban-sdk-tools",
+ "stellar-accounts",
+ "stellar-strkey 0.0.16",
+ "stellar-xdr",
+ "ureq",
+]
+
+[[package]]
+name = "perch-webauthn-verifier"
+version = "0.1.0"
+dependencies = [
+ "perch-testkit",
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -2115,6 +2189,7 @@ dependencies = [
  "base16ct",
  "der",
  "generic-array",
+ "pkcs8",
  "subtle",
  "zeroize",
 ]

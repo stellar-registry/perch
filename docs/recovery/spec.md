@@ -779,35 +779,42 @@ role; a document rule by its name and compiled scope (context type)**:
   - (a) **edited in place** under its existing rule id:
     - a changed `valid_until` is updated;
     - signers and policies present in both are kept;
-    - when something on the rule survives, removals run first, so its
-      counts never exceed OZ's per-rule limits mid-edit; when nothing
-      survives, additions run first, so it is never empty;
+    - the signer set changes in one `reconcile_signers` call, which checks
+      the final set as a whole and keeps retained signers' registry ids;
+    - when the target has signers, the swap runs first and then the
+      policies, removals first, so their count never exceeds OZ's
+      per-rule limit; when it has none, the policies change first and the
+      signers go last, so the rule is never empty;
     - a policy whose install parameters change counts as removed and
       re-added.
   - or (b) **replaced whole** under a new rule id: the rule is removed and
     the target rule added.
 
   The model prices the exact OZ operation sequence each way would run, from
-  the diff and the signer and policy registry reference counts at that point
-  (registrations and deregistrations are events of their own): contract-event
-  bytes first (the ContractEvent XDR the per-transaction events limit counts,
-  including the spending-limit policy's install and uninstall events), then
-  ledger entries written as the tiebreak. An in-place edit costs per changed
-  signer and policy; a replacement costs a rule removal and addition plus
-  deregistering, re-registering, and reinstalling everything the rule keeps.
-- Replacement is the only way when nothing on the slot survives and no order
-  of additions and removals keeps it non-empty within OZ's per-rule limits
-  (`MAX_SIGNERS` 15, `MAX_POLICIES` 5). Example: the recovery rule, which has
-  no signers, when its only policy's parameters change. Adding first is
-  impossible (one policy per address) and removing first would empty it. A
-  changed scope is a different slot (removed and added).
+  the diff and the signer and policy registry reference counts at that point.
+  Every OZ mutation runs through its `_no_events` variant (the account emits
+  one `DocApplied` per apply instead), so the price is the ledger entries
+  each operation writes. An in-place edit costs one rule write for the
+  signer swap plus each changed signer's and policy's entries; a
+  replacement costs a rule removal and addition plus deregistering,
+  re-registering, and reinstalling everything the rule keeps.
+- Replacement is the only way when no in-place order keeps the rule
+  non-empty within OZ's per-rule limits (`MAX_SIGNERS` 15, `MAX_POLICIES`
+  5): neither side has signers, nothing survives, and the new policies
+  cannot be added first. Example: the recovery rule, which has no signers,
+  when its only policy's parameters change. Adding first is impossible (one
+  policy per address) and removing first would empty it. A changed scope
+  is a different slot (removed and added).
 - An installed rule whose slot the target lacks is removed, before
   anything is added; a target rule whose slot is not installed is added.
 
 The installed rule set that results authorizes exactly what a full replace
 would. A full replace takes replacement for every rule and deregisters and
 re-registers every signer and policy, so taking the cheaper way per rule
-means no apply emits more event bytes than a full replace. A replaced rule
+means no apply writes more ledger entries than a full replace. Writes are
+not the only limit: the in-place path can cost more instructions than a
+replacement, so the document caps are sized with flows that force each
+path (`budgets.md`, "Document caps"). A replaced rule
 gets a new id and its policies are reinstalled, resetting their state (a
 spending limit's window), as a full replace always did; an in-place edit
 keeps the id and the kept policies' state. The account keeps one record per
@@ -821,10 +828,14 @@ Two rules bound that cost:
 
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps on signers, rules, and
-  canonical size. The caps are sized so that the worst-case completion
-  fits the transaction budget (`budgets.md`). The worst case is a
-  maximum-size pre-recovery document whose every slot differs from a
-  maximum-size target, after any amount of prior rule churn.
+  canonical size (`perch_doc_compiler::MAX_DOC_SIGNERS` = 8,
+  `MAX_DOC_RULES` = 11, `MAX_DOC_CANONICAL_BYTES` = 8 192). The caps are
+  sized so that the worst-case completion fits the transaction budget: the
+  measurements, the frontier, and the choice are in `budgets.md`, "Document
+  caps", and `release_stack.rs`'s `worst_case_*` tests hold them in CI.
+  The worst case is a maximum-size pre-recovery document whose every slot
+  differs from a maximum-size target, after any amount of prior rule
+  churn.
 - **Bounded revocation writes.** The revoked set is one persistent entry per
   fingerprint, so a completion writes at most one entry per removed
   credential, a number the caps bound.

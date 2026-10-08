@@ -117,3 +117,10 @@ komet:
 # https://github.com/nidohq/soroban-flux (`just flux-setup` there).
 flux:
     PATH="$HOME/.cargo/bin:$PATH" RUSTUP_TOOLCHAIN=nightly-2026-02-05 FLUXFLAGS="-Fpointer-width=32 -Fcheck-overflow=strict -Fcache=target/flux-cache" cargo flux -p perch-program
+
+# The Perch Book (mdBook 0.4.52; see book/README.md).
+book:
+    mdbook build book
+
+book-serve:
+    mdbook serve book --hostname 127.0.0.1 --port 3000

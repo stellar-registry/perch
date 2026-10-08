@@ -1,13 +1,13 @@
 name: Pages
 
-# Publishes docs/ (currently the perch slide deck at /slides/) to the gh-pages
+# Publishes docs/ (the book at /book/ and slide deck at /slides/) to the gh-pages
 # branch, which GitHub Pages serves. PR previews (deck-preview.yml) live under
 # /pr-preview/ on the same branch — clean-exclude keeps production deploys
 # from wiping them.
 on:
   push:
     branches: [main]
-    paths: ["docs/**"]
+    paths: ["docs/**", "book/**", "testdata/**", ".github/actions/build-book/**", ".github/workflows/pages.yml"]
   workflow_dispatch:
 
 permissions: {}
@@ -25,6 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         # the deploy action pushes gh-pages with the checkout token, so
         # credentials must persist for this job (unlike the rest of CI).
+      - uses: ./.github/actions/build-book
       - uses: JamesIves/github-pages-deploy-action@fa24774553152dd7873cd16ebd8d959b010c5445 # v4.9.0
         with:
           folder: docs

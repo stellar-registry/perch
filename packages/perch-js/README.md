@@ -83,10 +83,15 @@ snapshot.configuration.revision;             // what every value in it belongs t
 
 `readSnapshot` reads `configuration()` (rules with their ids, the applied
 `doc_hash`, recovery wiring, the freeze, the pinned infra), the compiler's
-limits, and the account's capabilities, then the revision again. If any read
-reports another revision, or an RPC answers from an older ledger than one
+limits, the account's capabilities, and optionally `document()`, then the
+revision again. `configuration()` and `document()` carry the revision they
+belong to; the closing `revision()` read covers the limits and capabilities.
+If any of these disagree, or an RPC answers from an older ledger than one
 already seen (share a `LedgerClock` per endpoint), everything is read again;
-after three tries it throws `InconsistentRead`.
+after three tries it throws `InconsistentRead`. The compiler client must be
+the account's pinned `infra.docCompiler`, or `readSnapshot` throws
+`CompilerMismatch`: the limits checked are then the ones the account's own
+compiler enforces.
 
 ### Selecting rules by name and scope
 
@@ -109,9 +114,14 @@ XDR of OZ's `AuthPayload` for that entry's `signature`.
 
 The pre-sign check guarantees the selection was current when it was signed,
 not when it executes. A transaction whose selected rule was removed or
-replaced since fails closed on chain (`ContextRuleNotFound`;
-`mapSubmissionError` turns it into `StaleSelection`). One whose rule was
-edited in place executes under the edited rule.
+replaced since fails closed on chain: the account's authentication fails
+with `ContextRuleNotFound`, which `mapSubmissionError(err, { account, ... })`
+turns into `StaleSelection`. One whose rule was edited in place executes
+under the edited rule. `mapSubmissionError` reads the host's diagnostic
+event log in the error and maps a code only when the account raised it
+(its `apply_doc`, or its `__check_auth` through the host's "failed account
+authentication" event), since the same number means something else in
+another contract.
 
 ### Limits and capabilities
 
@@ -138,8 +148,10 @@ const { revision } = await op.result;
 
 `applyDocument` reads a snapshot, refuses a frozen account (`AccountFrozen`)
 or an over-limit document before anything is signed, selects the `admin`
-rule, and runs the backend's steps. Each step is re-checked against the
-snapshot's revision just before its signature is asked for. The one
+rule, and runs the backend's steps. Just before each signature is asked
+for, one `configuration()` read must show the snapshot's revision and no
+freeze (`assertSignable`): a freeze does not move the revision, so the
+revision alone would not show one set since the snapshot. The one
 transaction `apply_doc` sends names that revision as `expected_revision`,
 so it executes only at that revision: if another device's change lands
 first, the account refuses it with `StaleRevision` and `onError` decides
@@ -162,8 +174,9 @@ landed is skipped when an operation is retried or started again.
 | `StaleRevision` | The account moved past the revision a selection or document was prepared at: before signing, or `apply_doc`'s `expected_revision` on chain |
 | `StaleSelection` | A submitted transaction selected a rule id that no longer exists |
 | `OverLimits` | A document over the compiler's caps |
-| `AccountFrozen` | A `Protected` recovery attempt is authorized |
+| `AccountFrozen` | A `Protected` recovery attempt is authorized: before signing (with the attempt and its expiry), or the account refusing a submission |
 | `InconsistentRead` | Reads kept disagreeing on the revision, or an RPC went backwards |
+| `CompilerMismatch` | The reader's compiler is not the account's pinned one |
 | `RuleNotFound`, `UnsupportedCapability`, `Aborted` | As named |
 
 ### Hashes and encodings

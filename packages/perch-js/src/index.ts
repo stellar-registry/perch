@@ -91,6 +91,8 @@ export {
 export {
   readSnapshot,
   assertRevision,
+  assertSignable,
+  frozenAt,
   checkCapabilities,
   LedgerClock,
   type AccountReader,
@@ -121,7 +123,9 @@ export {
   RuleNotFound,
   UnsupportedCapability,
   Aborted,
+  CompilerMismatch,
   ERROR_CODES,
+  accountErrorCodes,
   mapSubmissionError,
 } from './errors.js';
 export {

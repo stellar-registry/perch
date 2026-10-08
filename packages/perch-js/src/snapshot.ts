@@ -10,7 +10,7 @@
 // guarantee the transaction executes at that revision: only `apply_doc`'s
 // `expected_revision` does, for document changes (see `apply.ts`).
 
-import { InconsistentRead, StaleRevision, UnsupportedCapability } from './errors.js';
+import { AccountFrozen, CompilerMismatch, InconsistentRead, StaleRevision, UnsupportedCapability } from './errors.js';
 import type { FlatDocLimits } from './limits.js';
 import type { SignerKey } from './xdr.js';
 
@@ -66,6 +66,9 @@ export interface Read<T> {
 export interface AccountReader {
   /** The account's address (`C...`). */
   readonly account: string;
+  /** The compiler `limits()` reads from, if known. `readSnapshot` refuses
+   *  it unless it is the account's pinned `infra.docCompiler`. */
+  readonly compiler?: string;
   configuration(): Promise<Read<AccountConfiguration>>;
   revision(): Promise<Read<bigint>>;
   document(): Promise<Read<{ revision: bigint; canonical: Uint8Array | null }>>;
@@ -157,6 +160,9 @@ export async function readSnapshot(reader: AccountReader, options: SnapshotOptio
       continue;
     }
     checkCapabilities(capabilities.value);
+    if (reader.compiler !== undefined && reader.compiler !== config.value.infra.docCompiler) {
+      throw new CompilerMismatch(config.value.infra.docCompiler, reader.compiler);
+    }
     return {
       account: reader.account,
       ledger: clock.latest,
@@ -177,4 +183,26 @@ export async function assertRevision(reader: AccountReader, revision: bigint, cl
     throw new InconsistentRead(`revision() answered from ledger ${now.latestLedger}, older than ${clock.latest}`);
   }
   if (now.value !== revision) throw new StaleRevision(revision, now.value);
+}
+
+/** Whether the `Protected` freeze is in force at `ledger`. */
+export function frozenAt(config: AccountConfiguration, ledger: number): boolean {
+  return config.gate !== null && ledger < config.gate.until;
+}
+
+/**
+ * The check immediately before a signature is asked for: one
+ * `configuration()` read must show the account still at `revision`
+ * ({@link StaleRevision} otherwise) and not frozen ({@link AccountFrozen}).
+ * A freeze does not move the revision, so the revision alone cannot show
+ * one set since the snapshot.
+ */
+export async function assertSignable(reader: AccountReader, revision: bigint, clock?: LedgerClock): Promise<void> {
+  const now = await reader.configuration();
+  if (clock && !clock.observe(now.latestLedger)) {
+    throw new InconsistentRead(`configuration() answered from ledger ${now.latestLedger}, older than ${clock.latest}`);
+  }
+  if (now.value.revision !== revision) throw new StaleRevision(revision, now.value.revision);
+  const gate = now.value.gate;
+  if (gate && frozenAt(now.value, now.latestLedger)) throw new AccountFrozen(gate.attemptId, gate.until);
 }

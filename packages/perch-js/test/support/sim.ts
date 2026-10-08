@@ -70,9 +70,22 @@ export function docJson(
 
 class ChainError extends Error {}
 
-/** `Error(Contract, #N)`, rendered as the host does. */
+/** The account's entry point refusing with `code`, rendered as the host's
+ *  diagnostic event log renders it. */
 function contractError(code: number): ChainError {
-  return new ChainError(`HostError: Error(Contract, #${code})`);
+  return new ChainError(
+    `HostError: Error(Contract, #${code})\n\nEvent log (newest first):\n` +
+      `   0: [Diagnostic Event] contract:${ACCOUNT}, topics:[error, Error(Contract, #${code})], data:"escalating error to panic"`,
+  );
+}
+
+/** The account's `__check_auth` failing with `code`, as the host renders it
+ *  in the invoked contract's log. */
+function authError(code: number): ChainError {
+  return new ChainError(
+    `HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n` +
+      `   0: [Diagnostic Event] contract:${OTHER}, topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", ${ACCOUNT}, Error(Contract, #${code})]`,
+  );
 }
 
 function decodeRuleIds(xdr: Uint8Array): number[] {
@@ -184,14 +197,14 @@ export class SimAccount {
 
   /** Check an auth payload as `__check_auth` would: every selected rule
    *  exists and scopes to the account, and its signers signed the digest. */
-  private checkAuth(signaturePayload: Uint8Array, authXdr: Uint8Array) {
-    if (this.gate && this.ledger < this.gate.until) throw contractError(2);
+  private checkAuth(signaturePayload: Uint8Array, authXdr: Uint8Array, invoked = this.account) {
+    if (this.gate && this.ledger < this.gate.until) throw authError(2);
     const ids = decodeRuleIds(authXdr);
     const signatures: SignerSignature[] = [];
     for (const id of ids) {
       const rule = this.rules.find((r) => r.id === id);
-      if (!rule) throw contractError(3000);
-      if (rule.contract !== this.account) throw new ChainError('rule does not scope to the account');
+      if (!rule) throw authError(3000);
+      if (rule.contract !== invoked) throw new ChainError('rule does not scope to the invoked contract');
       for (const s of rule.signers) {
         if (s.kind !== 'external') continue;
         signatures.push({ signer: s, signature: signWith(s.key, signingDigest(signaturePayload, ids)) });
@@ -199,6 +212,13 @@ export class SimAccount {
     }
     const want = authPayloadXdr({ contextRuleIds: ids, signers: signatures });
     if (hex(want) !== hex(authXdr)) throw new ChainError('Error(Auth, InvalidAction): signature mismatch');
+  }
+
+  /** An ordinary transaction calling `contract`, authorized now with an
+   *  auth payload built earlier over `signaturePayload`. Throws what the
+   *  host would render if the account's authentication fails. */
+  submitCall(contract: string, signaturePayload: Uint8Array, authXdr: Uint8Array) {
+    this.checkAuth(signaturePayload, authXdr, contract);
   }
 
   /** `apply_doc(canonical, 0, expected_revision)`. */

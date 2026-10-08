@@ -256,7 +256,7 @@ key and value, the canonical applied document, and its hash.
 | Named cases: functions, scope, cap parameters, added and shared signers and policies, rename, remove and re-add, a key swapped under one id, a one-signer swap in place (the compromise shape), minimal and maximal documents, reformatting, reordering, expiry, a recovery-only change | the remaining `apply_delta.rs` tests |
 | Revoked credentials stay refused after an in-place edit; the freeze and generation behave as under the full replace; reserved names stay closed; a delta in the authorized window changes nothing | `delta_security.rs` |
 | A failing policy install, and budget exhaustion at every point of a delta, revert everything under enforcing auth | `delta_security.rs` |
-| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_replace_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
+| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_edit_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
 | Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |
 
 `PERCH_DELTA_CASES` sets the proptest case count (CI defaults: 32 to 48 per property; a 400-case sweep also passes).

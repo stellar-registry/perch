@@ -19,11 +19,26 @@ import {
   StaleRevision,
   StaleSelection,
   docHash,
+  buildAuthPayload,
+  signingDigest,
+  type RuleSelection,
+  type SignRequest,
   type ApplyBackend,
   type ApplyEvent,
   type PolicyDoc,
 } from '../src/index.js';
 import { ACCOUNT, docJson, LIMITS, OTHER, SimAccount } from './support/sim.js';
+
+/** The fields of a sign request the stand-in signer reads. */
+const signRequest = (selection: RuleSelection): SignRequest => ({
+  step: 'call',
+  description: 'an ordinary call',
+  account: ACCOUNT,
+  revision: selection.revision,
+  selection,
+  signaturePayload: new Uint8Array(32),
+  digest: new Uint8Array(32),
+});
 
 const APP = { name: 'app', scope: { type: 'contract' as const, address: OTHER } };
 const doc = (json: string): PolicyDoc => parsePolicyDocJson(json);
@@ -110,14 +125,25 @@ describe('selection by name and scope', () => {
     await expect(assertRevision(reader, at1.revision)).rejects.toEqual(new StaleRevision(1n, 3n));
     await expect(assertRevision(reader, at3.revision)).resolves.toBeUndefined();
 
-    // A transaction signed with the r1 selection fails closed on chain with
-    // ContextRuleNotFound, which maps to StaleSelection.
-    const onChain = new Error('HostError: Error(Auth, InvalidAction)', {
-      cause: 'contract call failed: Error(Contract, #3000)',
-    });
-    expect(mapSubmissionError(onChain, { ruleIds: at1.ruleIds, revision: at1.revision })).toEqual(
+    // A transaction signed with the r1 selection: its submission fails closed
+    // on chain (the account's authentication fails with ContextRuleNotFound),
+    // and that failure maps to StaleSelection.
+    const payload = new Uint8Array(32).fill(7);
+    const stale = buildAuthPayload(at1, await sim.sign({ ...signRequest(at1), digest: signingDigest(payload, at1.ruleIds) }));
+    const failure = (() => {
+      try {
+        sim.submitCall(OTHER, payload, stale);
+      } catch (err) {
+        return err;
+      }
+      throw new Error('the stale selection was accepted');
+    })();
+    expect(mapSubmissionError(failure, { account: ACCOUNT, ruleIds: at1.ruleIds, revision: at1.revision })).toEqual(
       new StaleSelection(at1.ruleIds),
     );
+    // Re-resolved at r3, the same call is authorized.
+    const fresh = buildAuthPayload(at3, await sim.sign({ ...signRequest(at3), digest: signingDigest(payload, at3.ruleIds) }));
+    expect(() => sim.submitCall(OTHER, payload, fresh)).not.toThrow();
   });
 
   it('self-admin resolves to the account; the scope must match', async () => {
@@ -239,6 +265,39 @@ describe.each(backends)('applyDocument over %s', (_, backendFor) => {
     expect(op.phase).toBe('failed');
   });
 
+  it('a freeze set after prepare is refused before anything is signed', async () => {
+    const sim = new SimAccount();
+    const backend = backendFor(sim);
+    const plan = backend.plan.bind(backend);
+    backend.plan = async (input) => {
+      const steps = await plan(input);
+      sim.gate = { attemptId: 9n, until: sim.ledger + 1_000 };
+      return steps;
+    };
+    let signed = 0;
+    const op = applyDocument(doc(A), backend, {
+      sign: async (req) => {
+        signed++;
+        return sim.sign(req);
+      },
+    });
+    await expect(op.result).rejects.toEqual(expect.objectContaining({ code: 'ACCOUNT_FROZEN', attemptId: 9n }));
+    expect(signed).toBe(0);
+    expect(sim.revision).toBe(0n);
+  });
+
+  it('a freeze set after signing is refused on chain and maps to AccountFrozen', async () => {
+    const sim = new SimAccount();
+    const op = applyDocument(doc(A), backendFor(sim), {
+      sign: async (req) => {
+        sim.gate = { attemptId: 9n, until: sim.ledger + 1_000 };
+        return sim.sign(req);
+      },
+    });
+    await expect(op.result).rejects.toEqual(new AccountFrozen(undefined, undefined));
+    expect(sim.revision).toBe(0n);
+  });
+
   it('a frozen account is refused before anything is signed', async () => {
     const sim = new SimAccount();
     sim.gate = { attemptId: 4n, until: sim.ledger + 1_000 };
@@ -312,5 +371,52 @@ describe('the signed transaction binds the digest', () => {
     });
     await expect(op.result).rejects.toThrow(/signature mismatch/);
     expect(sim.revision).toBe(0n);
+  });
+});
+
+describe('mapSubmissionError matches by the contract that raised the code', () => {
+  const ctx = { account: ACCOUNT, ruleIds: [4], revision: 3n };
+  const log = (...events: string[]) =>
+    new Error(
+      'HostError: Error(Auth, InvalidAction)\n\nEvent log (newest first):\n' +
+        events.map((e, i) => `   ${i}: [Diagnostic Event] ${e}`).join('\n'),
+    );
+  const authFailed = (account: string, code: number) =>
+    `contract:${OTHER}, topics:[error, Error(Auth, InvalidAction)], data:["failed account authentication with error", ${account}, Error(Contract, #${code})]`;
+  const raised = (contract: string, code: number) =>
+    `contract:${contract}, topics:[error, Error(Contract, #${code})], data:"escalating error to panic"`;
+  const STRANGER = 'CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5';
+
+  it("the account's authentication failing with ContextRuleNotFound is StaleSelection", () => {
+    expect(mapSubmissionError(log(authFailed(ACCOUNT, 3000)), ctx)).toEqual(new StaleSelection([4]));
+  });
+
+  it("the account's authentication failing with AccountFrozen (code 2) is AccountFrozen", () => {
+    expect(mapSubmissionError(log(authFailed(ACCOUNT, 2)), ctx)).toEqual(new AccountFrozen(undefined, undefined));
+  });
+
+  it("the account's apply_doc refusing with StaleRevision is StaleRevision", () => {
+    expect(mapSubmissionError(log(raised(ACCOUNT, 55)), ctx)).toEqual(new StaleRevision(3n, undefined));
+  });
+
+  it('the same numbers from another contract are not mapped', () => {
+    for (const err of [
+      log(authFailed(STRANGER, 3000)),
+      log(authFailed(STRANGER, 2)),
+      log(raised(STRANGER, 55)),
+      log(raised(STRANGER, 3000)),
+    ]) {
+      expect(mapSubmissionError(err, ctx)).toBe(err);
+    }
+  });
+
+  it("code 2 from the account's apply_doc (RevokedCredential) is not a freeze", () => {
+    const err = log(raised(ACCOUNT, 2));
+    expect(mapSubmissionError(err, ctx)).toBe(err);
+  });
+
+  it('a code with no event log naming its contract is not mapped', () => {
+    const err = new Error('HostError: Error(Contract, #55)');
+    expect(mapSubmissionError(err, ctx)).toBe(err);
   });
 });

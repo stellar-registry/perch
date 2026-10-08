@@ -56,11 +56,12 @@ impl Credential {
     /// `sha256(CREDENTIAL_DOMAIN || encode())`.
     ///
     /// For revocation this must be computed over the verifier's canonical
-    /// key (OZ `Verifier::canonicalize_key`), not the bytes a document
-    /// happened to spell: two encodings of one physical key (compressed vs
-    /// uncompressed, say) must fingerprint identically or a revoked key
-    /// returns under its other spelling. Delegated addresses are already
-    /// canonical.
+    /// key (OZ `Verifier::canonicalize_key`, or its batched form
+    /// `batch_canonicalize_key`, which the doc compiler calls), not the bytes
+    /// a document happened to spell: two encodings of one physical key
+    /// (compressed vs uncompressed, say) must fingerprint identically or a
+    /// revoked key returns under its other spelling. Delegated addresses are
+    /// already canonical.
     pub fn fingerprint(&self, e: &Env) -> Result<BytesN<32>, StatementError> {
         let mut preimage = Bytes::from_slice(e, CREDENTIAL_DOMAIN);
         preimage.append(&self.encode(e)?);

@@ -2,7 +2,7 @@
 // (`packages/perch-contracts/src/{account,doc-compiler}.ts`) return them.
 
 import { describe, expect, it } from 'vitest';
-import { accountReader, readSnapshot, selectRules, UnsupportedCapability } from '../src/index.js';
+import { accountReader, CompilerMismatch, readSnapshot, selectRules, UnsupportedCapability } from '../src/index.js';
 
 const ACCOUNT = 'CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF';
 const TOKEN = 'CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE';
@@ -70,7 +70,7 @@ const client = {
 
 describe('accountReader over the generated bindings', () => {
   it('decodes every view', async () => {
-    const reader = accountReader(ACCOUNT, client, { limits: () => sim(limits) });
+    const reader = accountReader(ACCOUNT, client, { options: { contractId: VERIFIER }, limits: () => sim(limits) });
     const s = await readSnapshot(reader, { document: true });
     expect(s.configuration.revision).toBe(7n);
     expect(s.configuration.gate).toEqual({ attemptId: 3n, until: 800 });
@@ -90,13 +90,19 @@ describe('accountReader over the generated bindings', () => {
   });
 
   it('refuses a limits format it does not know', async () => {
-    const reader = accountReader(ACCOUNT, client, { limits: () => sim({ tag: 'V2', values: [{}] }) });
+    const reader = accountReader(ACCOUNT, client, { options: { contractId: VERIFIER }, limits: () => sim({ tag: 'V2', values: [{}] }) });
     await expect(readSnapshot(reader)).rejects.toBeInstanceOf(UnsupportedCapability);
   });
 
   it('refuses another authorization digest', async () => {
     const other = { ...client, capabilities: () => sim({ ...capabilities, auth_digest: 'perch_v2' }) };
-    const reader = accountReader(ACCOUNT, other, { limits: () => sim(limits) });
+    const reader = accountReader(ACCOUNT, other, { options: { contractId: VERIFIER }, limits: () => sim(limits) });
     await expect(readSnapshot(reader)).rejects.toBeInstanceOf(UnsupportedCapability);
+  });
+
+  it('refuses limits read from a compiler the account does not pin', async () => {
+    const reader = accountReader(ACCOUNT, client, { options: { contractId: TOKEN }, limits: () => sim(limits) });
+    expect(reader.compiler).toBe(TOKEN);
+    await expect(readSnapshot(reader)).rejects.toEqual(new CompilerMismatch(VERIFIER, TOKEN));
   });
 });

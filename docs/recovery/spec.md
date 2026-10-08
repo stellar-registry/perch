@@ -1317,7 +1317,7 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
-| Account | `__check_auth` | Freeze (§9), then reserved names, then OZ `do_check_auth` |
+| Account | `__check_auth` | Reserved names (§15), then the freeze (§9), then OZ `do_check_auth` |
 | Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |

@@ -54,11 +54,18 @@ controller ──verify(statement, binding, evidence)──▶ adapter
    │                                                  │ 1. binding.circuit_id == sha256(VK)
    │ statement: its own RecoveryStatement             │ 2. project statement → account, enrollment, digest
    │ binding:   enrolled pool, enrollment id,         │ 3. root, nullifier < r
-   │            circuit id                            │ 4. pool.is_known_root(tree_id, root) ──▶ enrolled pool
-   │ evidence:  tree id, root, nullifier, proof       │ 5. ZK UltraHonk verify(root ‖ nullifier ‖ statement_hash)
+   │            circuit id                            │ 4. proof is 16,224 bytes (else MalformedProof)
+   │ evidence:  tree id, root, nullifier, proof       │ 5. pool.is_known_root(tree_id, root) ──▶ enrolled pool
+   │                                                  │ 6. ZK UltraHonk verify(root ‖ nullifier ‖ statement_hash)
    ▼                                                  ▼
 nullifier bookkeeping, freshness, attempts         Ok(()) or a ZkAdapterError; writes nothing
 ```
+
+The checks run in that order, and the first failure is the error returned.
+Everything before step 5 is local, so a malformed or mismatched submission
+never reaches the pool. `verify` does not compare tree depths. The adapter
+only exposes `tree_depth()`, and the controller compares it with the pool's
+`depth()` when a ZK factor is enrolled.
 
 The circuit's public inputs are `root`, `nullifier`, and
 `statement_hash = H(DOM_AUTH, account, enrollment_id, digest)`, where `digest`
@@ -132,7 +139,7 @@ The consequences are measured in [`measurements.md`](measurements.md):
 - Proofs are 16,224 bytes, 507 field elements. bb 0.87.0 pads to 28 sumcheck
   rounds. Non-ZK proofs were 14,592 bytes, and Nido's bb 3 proofs 6,976.
 - `verify_proof` costs about 131M instructions, a third of a transaction.
-  The non-ZK verifier cost 91M, and Nido's 159M to 179M. Most of the increase
+  The non-ZK verifier cost 91M, and Nido's 179M. Most of the increase
   is the consistency check, about 2,000 field operations over a 256-element
   subgroup.
 - Proofs are randomized: two proofs of one witness differ, and both verify.

@@ -25,6 +25,8 @@ export interface AccountBindings {
 }
 
 export interface CompilerBindings {
+  /** The generated client's options: the compiler's address. */
+  options: { contractId: string };
   limits(): Promise<Simulated<any>>;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -91,7 +93,10 @@ export function decodeCapabilities(c: Record<string, unknown>): AccountCapabilit
 
 /**
  * An {@link AccountReader} for `account` over its generated client and the
- * client of the compiler it pins (`configuration().infra.docCompiler`).
+ * client of the compiler it pins. `readSnapshot` refuses the reads with
+ * `CompilerMismatch` unless `compiler` is at the account's
+ * `configuration().infra.docCompiler`, so the limits checked are the ones
+ * the account's own compiler enforces.
  */
 export function accountReader(account: string, client: AccountBindings, compiler: CompilerBindings): AccountReader {
   const read = async <T>(call: Promise<Simulated<unknown>>, decode: (v: unknown) => T): Promise<Read<T>> => {
@@ -100,6 +105,7 @@ export function accountReader(account: string, client: AccountBindings, compiler
   };
   return {
     account,
+    compiler: compiler.options.contractId,
     configuration: () => read(client.configuration(), (v) => decodeConfiguration(v as Record<string, unknown>)),
     revision: () => read(client.revision(), (v) => BigInt(v as bigint)),
     document: () =>

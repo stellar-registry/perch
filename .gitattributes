@@ -1,6 +1,9 @@
 # Review hygiene: GitHub collapses `linguist-generated` files in pull-request
 # diffs by default, and `linguist-vendored` keeps third-party code out of the
 # language statistics. Nothing here changes how files are built or checked out.
+# Several paths below arrive only in later PRs of the epic #99 stack (circuits,
+# vendor/, deployments/, testdata/zk/); they are listed here, at the base, so
+# every branch above inherits one file.
 
 # Generated: test-host ledger snapshots, rewritten by `cargo test`.
 **/test_snapshots/** linguist-generated=true

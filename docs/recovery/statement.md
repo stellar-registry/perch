@@ -78,8 +78,9 @@ external:  0x02 || tag(verifier) || payload(verifier) || key_len (u32) || key
 fingerprint = sha256("perch/recovery/credential" || encoding)
 ```
 
-For revocation, `key` is the verifier's canonical key
-(`Verifier::canonicalize_key`), not the bytes a document spelled.
+For revocation, `key` is the verifier's canonical key (OZ
+`Verifier::canonicalize_key`; the doc compiler calls its batched form
+`batch_canonicalize_key`), not the bytes a document spelled.
 
 ## Replacement set
 

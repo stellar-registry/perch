@@ -611,7 +611,7 @@ fn a_rule_keeping_its_name_with_a_new_scope_is_replaced() {
 }
 
 #[test]
-fn new_cap_parameters_replace_only_that_rule() {
+fn new_cap_parameters_edit_only_that_rule() {
     let mut a = rule("r1", Some(0), &[0]);
     a.cap = Some((1_000, 100));
     let mut b = a.clone();
@@ -669,7 +669,7 @@ fn adding_several_signers_is_one_batch() {
     let w = DeltaWorld::new();
     w.apply(&w.delta, &a).unwrap();
     let plan = plan_of(&w, &w.delta, &b, Mode::Cheapest);
-    // One `batch_add_signer`: one rule write, then each new signer's registry
+    // One `reconcile_signers`: one rule write, then each new signer's registry
     // and lookup entries.
     assert_eq!(plan[0].step, Step::InPlace);
     assert_eq!(plan[0].cost.writes, 1 + added as u32 * 2);
@@ -790,7 +790,8 @@ fn a_signer_keeping_its_id_with_a_new_key_is_swapped_in_every_rule_that_names_it
 #[test]
 fn a_one_signer_rule_swaps_its_only_signer_in_place() {
     // The compromise shape: the admin's only key changes. Nothing on the rule
-    // survives, so the new key is added before the old one is removed.
+    // survives; one `reconcile_signers` swaps the key, checking the final
+    // set as a whole, so the rule is never empty.
     let a = doc(delegated(1), std::vec![admin(&[0])]);
     let mut b = a.clone();
     b.signers[0].key = KeyModel::Delegated(5);
@@ -825,12 +826,13 @@ fn full_swap(old: usize, new: usize) -> PlannedRule {
 }
 
 #[test]
-fn an_edit_where_nothing_survives_re_adds_a_changed_policy_after_the_new_ones() {
+fn an_edit_where_nothing_survives_swaps_the_signers_then_the_policies() {
     // Every part of r1 changes: its signer, its interpreter program (new
-    // functions), and a new cap. Nothing survives, so an in-place edit adds
-    // the new signer and the new spending limit first, removes the old
-    // signer and program, and only then re-adds the interpreter. Forced in
-    // place, it must still reach the full replace's state, priced exactly.
+    // functions), and a new cap. Nothing survives, but the target has a
+    // signer, so an in-place edit swaps the signers first (one
+    // `reconcile_signers`, which never empties the rule), then removes the
+    // old program and installs the new policies. Forced in place, it must
+    // still reach the full replace's state, priced exactly.
     let mut a = rule("r1", Some(0), &[1]);
     a.functions = Some(std::vec!["transfer"]);
     let mut b = rule("r1", Some(0), &[2]);

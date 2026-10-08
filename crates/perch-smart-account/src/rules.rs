@@ -7,17 +7,20 @@
 //!
 //! - a rule present in both, with the same signers, policy parameters, and
 //!   expiry, is not touched at all: no OZ call, no storage access, no event;
-//! - a rule present in both that differs is either edited in place with
-//!   OZ's per-signer, per-policy, and expiry updates, keeping its id, or
-//!   replaced whole under a new id, whichever [`Cost`] prices lower;
+//! - a rule present in both that differs is either edited in place (one
+//!   `reconcile_signers` swap, then per-policy and expiry updates), keeping
+//!   its id, or replaced whole under a new id, whichever [`Cost`] prices
+//!   lower;
 //! - a rule only in the record is removed; a rule only in the document is
 //!   added.
 //!
 //! The cost model prices the exact operation sequence each path would run
-//! (the same code drives the pricing and the operations): contract event
-//! bytes first, then ledger writes. An in-place edit costs per changed
-//! signer and policy; a replacement costs a rule removal and addition plus
-//! re-registering and reinstalling everything the rule keeps. Replacement is
+//! (the same code drives the pricing and the operations). Every OZ mutation
+//! runs through its `_no_events` variant, so the price is the ledger
+//! entries written. An in-place edit costs one rule write for the signer
+//! swap plus each changed signer's and policy's entries; a replacement costs
+//! a rule removal and addition plus re-registering and reinstalling
+//! everything the rule keeps. Replacement is
 //! also the only path when no in-place order keeps the rule valid at every
 //! step (nothing on it survives and adding first would exceed OZ's per-rule
 //! limits or is impossible). Choosing the cheaper path per rule keeps every
@@ -299,10 +302,10 @@ pub(crate) fn plan(
 /// Unmatched records are removed first, so their signers and policies leave
 /// the registries before anything is added. Each changed rule is then priced
 /// both ways against the registry reference counts at that point (a
-/// registration or deregistration is an event of its own) and reconciled the
-/// cheaper way. Taking the minimum per rule keeps the whole apply at or below
-/// a full replace: that replaces every rule, and deregisters and registers
-/// every signer and policy on the way.
+/// registration or deregistration writes entries of its own) and reconciled
+/// the cheaper way. Taking the minimum per rule keeps the whole apply's
+/// writes at or below a full replace's: that replaces every rule, and
+/// deregisters and registers every signer and policy on the way.
 fn run(
     e: &Env,
     current: &Vec<InstalledRule>,
@@ -402,8 +405,8 @@ fn run(
 }
 
 /// The policies whose own `install` and `uninstall` cost something: the
-/// interpreter writes its program, the spending limit writes its window and
-/// emits an event. The recovery controller's hooks write and emit nothing.
+/// interpreter writes its program, the spending limit writes its window
+/// (quietly). The recovery controller's hooks write nothing.
 struct Hooks {
     interpreter: Address,
     spending_limit: Address,

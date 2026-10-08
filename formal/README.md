@@ -14,9 +14,13 @@ dependencies beyond Lean core; the toolchain is pinned by `lean-toolchain`.
 | `PerchFormal/Theorems.lean` | the evaluator/lowering proofs (below) |
 | `PerchFormal/Canon.lean` | CANON v1 twin: the canonical JSON emitter for every `PolicyDoc` shape (including `threshold` principals and the `recovery` member), the `config_hash` and `rule_hash` preimages, and verified inverse parsers |
 | `PerchFormal/CanonProofs.lean` | round-trips + `emitDoc_injective` (doc_hash names exactly one document) + the fragment-hash theorems (config_hash names one recovery configuration, rule_hash one rule) |
+| `CheckAxioms.lean` | the axiom audit: fails unless every `PerchFormal` declaration depends only on `propext`, `Classical.choice`, and `Quot.sound` (a `sorry` would appear as `sorryAx`). CI runs it after `lake build` |
 | `Main.lean` | `lake exe drt`. Replays `testdata/eval/eval-vectors.json` through the model, and round-trips Rust-emitted canonical documents and (after `--recovery`) recovery members through the verified canonicalizer |
 
 ## Theorems (all sorry-free)
+
+CI checks this two ways: a source grep forbids the words, and `CheckAxioms.lean`
+checks what every declaration actually depends on.
 
 - **T1** lattice laws: `and`/`or` commutative + associative, De Morgan, double
   negation, `neg U = U`.
@@ -161,4 +165,5 @@ the recovery stack has a model or a proof:
 ```sh
 curl -sSf https://elan.lean-lang.org/elan-init.sh | sh   # installs elan
 cd formal && lake build                                  # checks all proofs
+lake env lean CheckAxioms.lean                           # audits their axioms
 ```

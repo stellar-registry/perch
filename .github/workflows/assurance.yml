@@ -62,6 +62,12 @@ jobs:
         working-directory: formal
         run: |
           ! grep -rnE '\b(sorry|admit|axiom)\b' PerchFormal PerchFormal.lean Main.lean
+      # The grep sees only source text. This checks what every PerchFormal
+      # declaration actually depends on: nothing beyond propext,
+      # Classical.choice and Quot.sound (a sorry shows up as sorryAx).
+      - name: Audit axioms
+        working-directory: formal
+        run: lake env lean CheckAxioms.lean
       # Whole documents first (canonical_json), then recovery members on their
       # own (recovery_canonical_json, the config_hash text). Keep in sync with
       # the justfile's drt recipe.

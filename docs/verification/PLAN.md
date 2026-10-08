@@ -25,8 +25,10 @@ assurance runs continuously in CI; wasm-artifact-level proof runs happen per rel
 
 ## Coverage today
 
-What an auditor can rely on, by kind of evidence. "Proved" means a sorry-free Lean theorem
-about the Lean model, checked by the `formal` job in `.github/workflows/assurance.yml`
+What an auditor can rely on, by kind of evidence. "Proved" means a Lean theorem about the
+Lean model that depends on no axiom beyond `propext`, `Classical.choice`, and `Quot.sound`
+(so no `sorry`), checked by `lake build` and the `CheckAxioms.lean` audit in the `formal` job
+of `.github/workflows/assurance.yml`
 (weekly, on dispatch, and on PRs touching `formal/`, `fuzz/`, `komet/`, `crates/perch-ir/`,
 or the canonical fixtures). A proof about the model says nothing about the Rust code on its
 own; the second table is what ties the two together, and it is evidence, not proof.

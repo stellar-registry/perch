@@ -74,11 +74,12 @@ bench-build:
 bench: bench-build
     cargo test -p perch-bench --test metered -- --ignored --nocapture
 
-# Build the Lean 4 formal model and check every theorem (formal/). Setup:
+# Build the Lean 4 formal model, check every theorem, and audit that nothing
+# depends on more than Lean's standard axioms (formal/). Setup:
 # `curl -sSf https://elan.lean-lang.org/elan-init.sh | sh` — elan then picks
 # the pinned toolchain from formal/lean-toolchain automatically.
 formal:
-    cd formal && lake build
+    cd formal && lake build && lake env lean CheckAxioms.lean
 
 # Keep the fixture list below in sync with .github/workflows/assurance.yml.
 # Differential conformance: run the frozen eval vectors through the real Rust

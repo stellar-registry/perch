@@ -48,10 +48,13 @@ tree, then rotates into the next one and proves from it.
 ## Reproducibility
 
 Building the stack from `source.commit` with the recorded toolchain gives
-every hash in the manifest. This was checked twice on the deploying machine
-(macOS arm64): a rebuild in the working tree, and a rebuild from a fresh
-`git archive` copy at another path with an empty target directory. Building
-on other hosts and toolchains has not been checked: `stellar scaffold build`
+every hash in the manifest. For this record (`aa5a78f`) that was checked on
+2026-10-08 on the deploying machine (macOS arm64). `build-stack.sh` with the
+manifest's builder (`scaffold`) and registry, run on this branch's tree,
+reproduced all ten artifacts' hashes; the tree's contract source is
+identical to `aa5a78f`'s. The rebuild from a fresh `git archive` copy at
+another path was done only for the first deployment (`c10a8f7`). Building on
+other hosts and toolchains has not been checked: `stellar scaffold build`
 optimizes with the wasm-opt its version ships.
 
 ## Findings

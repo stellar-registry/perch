@@ -501,10 +501,10 @@ Refuses if any of the following hold:
 - for compromise: no baseline is enrolled or its content is unpublished.
 
 The checks against the account's history (enrolled ids, revoked set) are
-the controller's. `derive_target` writes nothing and sees only the two
-documents and the replacement set (plus the verifiers' key canonicalization,
-§7.1), never the account's history. T1 is an external entry point, so the controller
-may read the account's views there (D16).
+the controller's. `derive_target` writes no storage and sees only the
+documents, the action, and the replacement set (plus the verifiers it calls
+to canonicalize keys). T1 is an external entry point, so the controller may
+read the account's views there (D16).
 
 Otherwise:
 
@@ -655,26 +655,26 @@ caller-chosen hash.
 
 `derive_target(source_json, current_json, action, replacements)` is an
 entry point of the doc compiler, the one contract that parses documents.
-`source_json` is the lost-key snapshot or the published baseline (§7.2),
-`current_json` is the applied document whose `recovery` member the target
-keeps, and `action` is lost-key or compromise. It writes nothing.
+`source_json` is the account's applied document (lost-key) or the published
+baseline (compromise). `current_json` is the applied document, whose
+recovery member the target keeps. `action` is `LostKey` or `Compromise`.
 
 The controller calls it at T1 through the account's own compiler (§16). It
-returns:
+returns a `DerivedTarget`:
 
-- the target's canonical bytes and document identity;
+- the target's canonical bytes and `doc_hash`;
 - the target's configuration hash;
-- the fingerprints of every signer credential in the target;
+- the canonical fingerprint of every credential in the target (for rule 7);
 - the credentials occupying the replaced signer slots in the source. For
   compromise these are the **baseline's** credentials. They are recorded at
   T1 and revoked at completion (§8).
 
-The compiler canonicalizes every external key through its verifier's
-`batch_canonicalize_key` (the read-only call OZ also uses to detect duplicate
-signers) before it fingerprints or returns it, so each fingerprint is the one
-revocation compares. The controller fingerprints the returned replaced
-credentials (`Credential::fingerprint`), then checks them and the target's
-fingerprints against the account for rules 7 and 8.
+The compiler writes no storage and needs no authorization. It does make
+read-only calls: to canonicalize external keys, it calls each verifier's
+`batch_canonicalize_key` (OZ `Verifier`; the batched form of
+`canonicalize_key`). The fingerprints and the replaced credentials it
+returns are therefore already canonical. The controller compares them for
+rules 7 and 8 without canonicalizing anything itself.
 
 Completers obtain the canonical bytes by simulating the same call.
 
@@ -871,9 +871,10 @@ Two rules bound that cost:
     fails §7.3 rule 7.
 - Every `apply_doc`, on every path, refuses a compiled document containing a
   revoked credential.
-- Fingerprints are computed over the verifier's canonical key bytes
-  (`Verifier::batch_canonicalize_key`), so a revoked key cannot return under
-  a different encoding. Delegated addresses are already canonical.
+- Fingerprints are computed over the verifier's canonical key bytes (OZ
+  `Verifier::canonicalize_key`, called in its batched form
+  `batch_canonicalize_key`), so a revoked key cannot return under a
+  different encoding. Delegated addresses are already canonical.
 - A spent ZK credential stays dead through its nullifier (§11), and its
   enrollment id can never be enrolled again (§3.4).
 
@@ -1073,8 +1074,8 @@ Every account, enrolled or not, upgrades in two steps:
 2. **`execute_upgrade(request_id)`** — owner authorization. The checks run
    in this order (`UpgradeRequest::readiness`):
    - **Stale:** the request's `generation` differs from the current
-     recovery generation. The call is refused (`StaleUpgrade`), whether or
-     not the delay has passed. It does **not** clear the request: a refused
+     recovery generation. The account refuses the call with its own
+     `StaleUpgrade` error, whether or not the delay has passed. It does **not** clear the request: a refused
      invocation rolls back its writes. Nothing needs clearing anyway. The
      generation never decreases, so a stale request can never execute; it
      stays inert until `schedule_upgrade` replaces it, `cancel_upgrade`
@@ -1090,8 +1091,9 @@ Every account, enrolled or not, upgrades in two steps:
 
    If a controller is adopted, the account then calls `rcv_upgrade(account,
    UpgradeStep::Execute(controller_epoch))`. As a second check, that call
-   refuses if the controller's epoch moved or an attempt is authorized,
-   then bumps the epoch.
+   refuses if the controller's epoch moved (the controller's
+   `RecoveryError::StaleUpgrade`, "recorded under an older epoch") or an
+   attempt is authorized, then bumps the epoch.
 
    The account advances its recovery generation and calls
    `update_current_contract_wasm(wasm_hash)`. The epoch bump invalidates
@@ -1313,13 +1315,13 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
-| Account | `__check_auth` | Freeze (§9), then reserved names, then OZ `do_check_auth` |
+| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then OZ `do_check_auth`. The order does not matter for security: each step only refuses. |
 | Account | `apply_doc(doc_json, approval_valid_until)` | Owner authorization, or the recovery rule (completion only) |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
 | Account | `rcv_gate(attempt_id, frozen_until)` | Invoker-only: the adopted controller's authorization, and the caller must be the adopted controller |
-| Account | `applied_doc`, `applied_doc_hash`, `is_revoked`, `is_enrolled_id`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `doc_compiler`, rule views | None (read-only; `account::RecoveryAccountClient`) |
+| Account | `applied_doc`, `applied_doc_hash`, `is_revoked`, `is_enrolled_id`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `doc_compiler`, rule views | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade` (`controller::RecoveryHooksClient`), `install`, `uninstall`, `enforce` | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |

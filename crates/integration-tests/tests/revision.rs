@@ -23,7 +23,7 @@ use perch_recovery_interface::account::ACCOUNT_UPGRADE_DELAY_LEDGERS;
 use perch_recovery_interface::RecoveryAction;
 use perch_testkit::delta::{events, storage_state, History};
 use perch_testkit::FIXTURE_NETWORK;
-use soroban_sdk::{Address, Bytes, Symbol, Vec};
+use soroban_sdk::{Address, Bytes, Symbol, TryFromVal, Vec};
 use stellar_accounts::smart_account::SmartAccountError;
 use support::*;
 
@@ -112,12 +112,51 @@ fn sign_activity(w: &World, key: &Address, id: u32) -> soroban_sdk::xdr::Soroban
 }
 
 fn submit(w: &World, entry: soroban_sdk::xdr::SorobanAuthorizationEntry) -> bool {
+    submit_result(w, entry).is_ok()
+}
+
+/// The submission's own outcome: the error the host reports for it.
+fn submit_result(
+    w: &World,
+    entry: soroban_sdk::xdr::SorobanAuthorizationEntry,
+) -> Result<u32, soroban_sdk::Error> {
     w.env.set_auths(&[entry]);
-    let ok = TargetClient::new(&w.env, &w.target)
-        .try_protected(&w.account)
-        .is_ok();
+    let out = TargetClient::new(&w.env, &w.target).try_protected(&w.account);
     w.env.set_auths(&[]);
-    ok
+    match out {
+        Ok(Ok(hits)) => Ok(hits),
+        Ok(Err(e)) => panic!("unexpected conversion error {e:?}"),
+        Err(Ok(e)) => Err(e),
+        Err(Err(e)) => panic!("unexpected invoke error {e:?}"),
+    }
+}
+
+/// The account and the error its `__check_auth` failed with in the last
+/// invocation: the host's "failed account authentication" diagnostic.
+fn account_auth_failure(w: &World) -> Option<(Address, soroban_sdk::Error)> {
+    use soroban_sdk::xdr::{ContractEventBody, ScVal};
+    let events = w.env.host().get_events().unwrap();
+    events.0.iter().find_map(|e| {
+        let ContractEventBody::V0(body) = &e.event.body;
+        let ScVal::Vec(Some(data)) = &body.data else {
+            return None;
+        };
+        match data.as_slice() {
+            [ScVal::String(msg), ScVal::Address(account), ScVal::Error(err)]
+                if msg.to_utf8_string_lossy() == "failed account authentication with error" =>
+            {
+                Some((
+                    Address::try_from_val(&w.env, &ScVal::Address(account.clone())).unwrap(),
+                    soroban_sdk::Error::from(err.clone()),
+                ))
+            }
+            _ => None,
+        }
+    })
+}
+
+fn rule_not_found() -> soroban_sdk::Error {
+    soroban_sdk::Error::from_contract_error(SmartAccountError::ContextRuleNotFound as u32)
 }
 
 /// Whether OZ holds no rule `id`.
@@ -336,12 +375,19 @@ fn a_b_a_restores_the_doc_hash_but_not_the_selection() {
     // The r1 selection names an id that no longer exists: the transaction
     // signed with it fails closed.
     assert!(rule_missing(&w, i));
-    assert!(!submit(&w, signed_at_r1), "stale selection fails closed");
     assert_eq!(
-        w.client().try_get_context_rule(&i),
-        Err(Ok(soroban_sdk::Error::from_contract_error(
-            SmartAccountError::ContextRuleNotFound as u32
-        )))
+        submit_result(&w, signed_at_r1),
+        Err(soroban_sdk::Error::from_type_and_code(
+            soroban_sdk::xdr::ScErrorType::Context,
+            soroban_sdk::xdr::ScErrorCode::InvalidAction
+        )),
+        "the stale selection fails closed"
+    );
+    // The submission's own failure: the account's authentication failed with
+    // OZ's `ContextRuleNotFound`, which perch-js maps to `StaleSelection`.
+    assert_eq!(
+        account_auth_failure(&w),
+        Some((w.account.clone(), rule_not_found()))
     );
     // Re-resolved at r3, it works.
     assert!(submit(&w, sign_activity(&w, &w.owner, j)));
@@ -374,6 +420,10 @@ fn a_selected_rule_removed_or_replaced_after_signing_fails_closed() {
     let signed = sign_activity(&w, &w.owner, id);
     w.apply_bytes(&doc(&w, &[]), 0).unwrap();
     assert!(!submit(&w, signed), "removed: fails closed");
+    assert_eq!(
+        account_auth_failure(&w),
+        Some((w.account.clone(), rule_not_found()))
+    );
 
     // Replaced: same name, another scope, so another slot and a new id.
     let at_target = Rule {
@@ -389,6 +439,10 @@ fn a_selected_rule_removed_or_replaced_after_signing_fails_closed() {
     assert_ne!(select(&w, "app"), Some(id), "replaced under a new id");
     assert!(rule_missing(&w, id));
     assert!(!submit(&w, signed), "replaced: fails closed");
+    assert_eq!(
+        account_auth_failure(&w),
+        Some((w.account.clone(), rule_not_found()))
+    );
 }
 
 /// G2 is not provided for ordinary transactions: a rule edited in place

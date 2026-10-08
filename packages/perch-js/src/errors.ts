@@ -53,13 +53,20 @@ export class OverLimits extends PerchError {
 }
 
 /** A `Protected` recovery attempt is authorized: the account authorizes
- *  nothing but that attempt's completion until `until`. */
+ *  nothing but that attempt's completion until `until`. Raised before
+ *  signing from the account's freeze gate (`attemptId` and `until` known),
+ *  or after submission from the account's refusal (both unknown). */
 export class AccountFrozen extends PerchError {
   constructor(
-    readonly attemptId: bigint,
-    readonly until: number,
+    readonly attemptId: bigint | undefined,
+    readonly until: number | undefined,
   ) {
-    super('ACCOUNT_FROZEN', `frozen by recovery attempt ${attemptId} until ledger ${until}`);
+    super(
+      'ACCOUNT_FROZEN',
+      attemptId === undefined
+        ? 'the account is frozen by an authorized recovery attempt'
+        : `frozen by recovery attempt ${attemptId} until ledger ${until}`,
+    );
   }
 }
 
@@ -96,6 +103,18 @@ export class Aborted extends PerchError {
   }
 }
 
+/** A reader's compiler is not the one the account pins
+ *  (`configuration().infra.docCompiler`), so its limits are not the
+ *  account's. */
+export class CompilerMismatch extends PerchError {
+  constructor(
+    readonly pinned: string,
+    readonly given: string,
+  ) {
+    super('COMPILER_MISMATCH', `the account pins compiler ${pinned}, the reader reads ${given}`);
+  }
+}
+
 /**
  * Contract error codes perch-js recognizes in a failed submission. The
  * account's codes are positional, so they are pinned by
@@ -111,25 +130,56 @@ export const ERROR_CODES = {
   contextRuleNotFound: 3000,
 } as const;
 
-function contractErrorCodes(err: unknown): number[] {
-  const text =
-    err instanceof Error ? `${err.message}\n${String((err as { cause?: unknown }).cause ?? '')}` : String(err);
-  return [...text.matchAll(/Error\(Contract, #(\d+)\)/g)].map((m) => Number(m[1]));
+function errorText(err: unknown): string {
+  if (err instanceof Error) return `${err.message}\n${String((err as { cause?: unknown }).cause ?? '')}`;
+  return String(err);
 }
 
 /**
- * Map a failed submission to a typed error where perch-js recognizes it:
- * `ContextRuleNotFound` to {@link StaleSelection}, `apply_doc`'s
- * `StaleRevision` to {@link StaleRevision}. Anything else is returned as is.
+ * The contract error codes `account` itself raised, read from the host's
+ * diagnostic event log in a failed submission's rendered error:
+ *
+ * - `call`: raised by one of the account's entry points (`apply_doc`'s
+ *   `StaleRevision`), the event `contract:<account>, topics:[error,
+ *   Error(Contract, #N)]`;
+ * - `auth`: raised by the account's `__check_auth` (OZ's
+ *   `ContextRuleNotFound`, Perch's `AccountFrozen`), the host's
+ *   `"failed account authentication with error", <account>,
+ *   Error(Contract, #N)`.
+ *
+ * A code raised by any other contract is not the account's, so it is not
+ * reported: the same number means different things in different contracts.
+ */
+export function accountErrorCodes(err: unknown, account: string): { call: number[]; auth: number[] } {
+  const text = errorText(err);
+  const call: number[] = [];
+  const auth: number[] = [];
+  for (const line of text.split('\n')) {
+    const raised = line.match(/contract:([A-Z2-7]{56}),\s*topics:\[error,\s*Error\(Contract, #(\d+)\)\]/);
+    if (raised && raised[1] === account) call.push(Number(raised[2]));
+    const failed = line.match(/failed account authentication with error",\s*([A-Z2-7]{56}),\s*Error\(Contract, #(\d+)\)/);
+    if (failed && failed[1] === account) auth.push(Number(failed[2]));
+  }
+  return { call, auth };
+}
+
+/**
+ * Map a failed submission to a typed error where perch-js recognizes it, by
+ * the code and the contract that raised it: `account`'s authentication
+ * failing with `ContextRuleNotFound` is {@link StaleSelection}, with
+ * `AccountFrozen` is {@link AccountFrozen}, and `account`'s `apply_doc`
+ * refusing with `StaleRevision` is {@link StaleRevision}. Anything else,
+ * including those numbers raised by another contract, is returned as is.
  * The input is whatever the transport threw; its message (and `cause`) is
- * searched for the host's `Error(Contract, #N)` rendering.
+ * searched for the host's diagnostic event log.
  */
 export function mapSubmissionError(
   err: unknown,
-  context: { ruleIds: readonly number[]; revision: bigint },
+  context: { account: string; ruleIds: readonly number[]; revision: bigint },
 ): unknown {
-  const codes = contractErrorCodes(err);
-  if (codes.includes(ERROR_CODES.contextRuleNotFound)) return new StaleSelection(context.ruleIds);
-  if (codes.includes(ERROR_CODES.accountStaleRevision)) return new StaleRevision(context.revision, undefined);
+  const { call, auth } = accountErrorCodes(err, context.account);
+  if (auth.includes(ERROR_CODES.contextRuleNotFound)) return new StaleSelection(context.ruleIds);
+  if (auth.includes(ERROR_CODES.accountFrozen)) return new AccountFrozen(undefined, undefined);
+  if (call.includes(ERROR_CODES.accountStaleRevision)) return new StaleRevision(context.revision, undefined);
   return err;
 }

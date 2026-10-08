@@ -46,6 +46,11 @@ again, as `MembershipPoolInterface::rcv_insert` specifies. The record that enfor
   `CurrentTree`, so the current tree always has room and no enrollment ever
   fails because a tree is full. The full tree is sealed and never written
   again.
+- One exception, unreachable in practice: the last slot of the last tree
+  (`tree_id` `u32::MAX`) cannot be filled. Rolling over past it would
+  overflow the tree id, so that insertion fails with `TreeIdOverflow` and
+  changes nothing. A pool therefore holds at most 2^32 · 2^32 − 1 leaves,
+  and reaching the limit takes about 1.8 · 10^19 insertions.
 - Every root is identified as `(tree_id, root)`. The adapter accepts a root
   only if the enrolled pool retains it for the tree the evidence names. A root
   is never accepted for a different tree, nor by a pool that never computed
@@ -161,7 +166,7 @@ insertion lands at index 1 and the earlier root still verifies.
 The Merkle code (`merkle.rs`) takes the depth as a parameter, and the
 contract always passes `TREE_DEPTH`. The tests drive the same code at depth 2
 to fill trees, roll over repeatedly, and check that sealed trees' roots
-survive (`full_tree_rolls_over_and_keeps_its_roots`). The real depth-32
+survive (`full_tree_is_sealed_and_keeps_its_roots`). The real depth-32
 boundary is reached by writing a `TreeState` one slot short of full, with an
 all-empty frontier, and filling the last slot through the real `rcv_insert`
 entry point. The resulting root is checked against an independent

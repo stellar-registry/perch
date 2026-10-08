@@ -8,8 +8,8 @@
 // it was prepared at as `expected_revision`, so it executes only at that
 // revision (RFC #109 §3c). The same caller code runs against a backend that
 // takes several transactions: a step already landed is skipped when an
-// operation is retried or started again, and a revision change between steps
-// is a `StaleRevision` before anything more is signed.
+// operation is retried or started again, and a revision change or a freeze
+// between steps is refused before anything more is signed.
 
 import { authPayloadXdr } from './xdr.js';
 import { authPayload, signingDigest, type SignerSignature } from './auth.js';
@@ -18,7 +18,7 @@ import { AccountFrozen, Aborted, mapSubmissionError } from './errors.js';
 import { checkLimits } from './limits.js';
 import type { PolicyDoc } from './schema.js';
 import { selectRules, type RuleRef, type RuleSelection } from './selection.js';
-import { assertRevision, LedgerClock, readSnapshot, type AccountReader, type Snapshot } from './snapshot.js';
+import { assertSignable, frozenAt, LedgerClock, readSnapshot, type AccountReader, type Snapshot } from './snapshot.js';
 
 export type ApplyPhase = 'prepare' | 'authorize' | 'submit' | 'confirm';
 
@@ -145,7 +145,7 @@ export function applyDocument(
     enter('prepare');
     const snapshot = await readSnapshot(reader, { clock });
     const config = snapshot.configuration;
-    if (config.gate && snapshot.ledger < config.gate.until) {
+    if (config.gate && frozenAt(config, snapshot.ledger)) {
       throw new AccountFrozen(config.gate.attemptId, config.gate.until);
     }
     checkLimits(doc, snapshot.limits);
@@ -172,8 +172,9 @@ export function applyDocument(
         aborted = true;
         throw new Aborted('authorize');
       }
-      // The pre-sign check: nothing is signed for a revision that has gone.
-      await assertRevision(reader, config.revision, clock);
+      // The pre-sign check: nothing is signed for a revision that has gone,
+      // or for an account frozen since the snapshot.
+      await assertSignable(reader, config.revision, clock);
       const digest = signingDigest(prepared.signaturePayload, selection.ruleIds);
       const signatures = await callbacks.sign({
         step: step.id,
@@ -195,7 +196,7 @@ export function applyDocument(
         progress({ phase: 'confirm', step: step.id, index, of });
         await submitted.confirm();
       } catch (err) {
-        throw mapSubmissionError(err, { ruleIds: selection.ruleIds, revision: config.revision });
+        throw mapSubmissionError(err, { account: snapshot.account, ruleIds: selection.ruleIds, revision: config.revision });
       }
       ran.push(step.id);
     }

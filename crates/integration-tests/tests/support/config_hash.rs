@@ -23,7 +23,8 @@ use std::vec::Vec;
 
 use super::strkey;
 
-/// `CONFIG_DOMAIN` in `perch-doc-compiler`, restated from the spec.
+/// `perch_recovery_interface::config::CONFIG_DOMAIN`, restated from the spec
+/// rather than imported, so the expected hash does not depend on it.
 const CONFIG_DOMAIN: &[u8] = b"perch/recovery/config";
 
 /// The committed recovery-member fixtures, one per mode.

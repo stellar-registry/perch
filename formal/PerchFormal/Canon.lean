@@ -285,7 +285,7 @@ def emitRecovery (r : CRecovery) : List Char :=
     ++ lit ",\"replaceable\":" ++ emitList emitStr r.replaceable
     ++ lit "}"
 
-/-- `CONFIG_DOMAIN` in `perch-doc-compiler`. -/
+/-- `perch_recovery_interface::config::CONFIG_DOMAIN`. -/
 def configDomain : List Char := lit "perch/recovery/config"
 
 /-- The `config_hash` preimage: `config_hash = sha256(configPreimage r)`
@@ -293,7 +293,8 @@ def configDomain : List Char := lit "perch/recovery/config"
 def configPreimage (r : CRecovery) : List Char :=
   configDomain ++ emitRecovery r
 
-/-- `RULE_HASH_DOMAIN` in `perch-ir`. -/
+/-- `perch_ir::RULE_HASH_DOMAIN`, equal to
+`perch_recovery_interface::fragment::RULE_DOMAIN` (`fragment_hashes.rs`). -/
 def ruleDomain : List Char := lit "perch/rule"
 
 /-- The `rule_hash` preimage: `rule_hash = sha256(rulePreimage r)`

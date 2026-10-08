@@ -1646,8 +1646,6 @@ fn protected_reconfiguration_and_upgrade_need_real_proofs() {
     assert_eq!(w.ctl().epoch(&a.address), 3);
 }
 
-/// `GuardianOnly` under `Loss`: no ZK enrollment, proof, or pool access
-/// anywhere on the path, and the owner can always veto.
 /// The stack's compiler wasm computes `config_hash` as
 /// `sha256("perch/recovery/config" || recovery_canonical_json)`, recomputed
 /// here from the committed fixtures, and it changes with every configuration
@@ -1663,6 +1661,8 @@ fn the_stack_compiler_hashes_the_canonical_recovery_text() {
     support::config_hash::check(&env, &compiler);
 }
 
+/// `GuardianOnly` under `Loss`: no ZK enrollment, proof, or pool access
+/// anywhere on the path, and the owner can always veto.
 #[test]
 #[ignore = "needs the built stack"]
 fn guardian_only_recovery_needs_no_zk_and_the_loss_owner_can_veto() {

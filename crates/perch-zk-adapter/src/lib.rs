@@ -9,8 +9,9 @@
 //! 2. projects the statement onto the circuit's account, enrollment, and
 //!    digest fields (`zk_statement_fields`);
 //! 3. refuses a non-canonical root or nullifier;
-//! 4. asks the enrolled pool whether it retains `(tree_id, root)`;
-//! 5. checks the zero-knowledge proof against
+//! 4. refuses a proof that is not [`PROOF_BYTES`] long;
+//! 5. asks the enrolled pool whether it retains `(tree_id, root)`;
+//! 6. checks the zero-knowledge proof against
 //!    `root || nullifier || statement_hash` with this circuit's verification
 //!    key and the `UltraKeccakZKFlavor` verifier in
 //!    `vendor/ultrahonk-soroban-verifier`: NethermindEth's audited UltraHonk

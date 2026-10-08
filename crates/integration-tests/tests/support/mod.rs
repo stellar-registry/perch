@@ -715,8 +715,9 @@ impl World {
         }
     }
 
-    /// The id of `account`'s live rule named `name`. `apply_doc` re-creates
-    /// every rule, so ids move; the newest match wins.
+    /// The id of `account`'s live rule named `name`. `apply_doc` keeps a rule
+    /// it edits in place under its id, but a rule it replaces whole gets a
+    /// new one, so ids can move; the newest match wins.
     pub fn rule_id(&self, account: &Address, name: &str) -> u32 {
         let next: u32 = self.env.as_contract(account, || {
             self.env

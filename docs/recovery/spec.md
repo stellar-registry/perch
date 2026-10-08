@@ -501,8 +501,9 @@ Refuses if any of the following hold:
 - for compromise: no baseline is enrolled or its content is unpublished.
 
 The checks against the account's history (enrolled ids, revoked set) are
-the controller's. `derive_target` is pure and sees only the two documents
-and the replacement set. T1 is an external entry point, so the controller
+the controller's. `derive_target` writes nothing and sees only the two
+documents and the replacement set (plus the verifiers' key canonicalization,
+§7.1), never the account's history. T1 is an external entry point, so the controller
 may read the account's views there (D16).
 
 Otherwise:
@@ -652,22 +653,28 @@ caller-chosen hash.
 
 ### 7.1 Derivation
 
-`derive_target(source_json, recovery_json, replacements)` is a pure entry
-point of the doc compiler, the one contract that parses documents.
+`derive_target(source_json, current_json, action, replacements)` is an
+entry point of the doc compiler, the one contract that parses documents.
+`source_json` is the lost-key snapshot or the published baseline (§7.2),
+`current_json` is the applied document whose `recovery` member the target
+keeps, and `action` is lost-key or compromise. It writes nothing.
 
 The controller calls it at T1 through the account's own compiler (§16). It
 returns:
 
-- the target's canonical bytes and hash;
+- the target's canonical bytes and document identity;
 - the target's configuration hash;
-- every signer credential in the target, as declared;
+- the fingerprints of every signer credential in the target;
 - the credentials occupying the replaced signer slots in the source. For
   compromise these are the **baseline's** credentials. They are recorded at
   T1 and revoked at completion (§8).
 
-The compiler is pure and makes no verifier calls. The controller therefore
-canonicalizes the returned credentials (`Verifier::batch_canonicalize_key`)
-and fingerprints them (`Credential::fingerprint`) for rules 7 and 8.
+The compiler canonicalizes every external key through its verifier's
+`batch_canonicalize_key` (the read-only call OZ also uses to detect duplicate
+signers) before it fingerprints or returns it, so each fingerprint is the one
+revocation compares. The controller fingerprints the returned replaced
+credentials (`Credential::fingerprint`), then checks them and the target's
+fingerprints against the account for rules 7 and 8.
 
 Completers obtain the canonical bytes by simulating the same call.
 

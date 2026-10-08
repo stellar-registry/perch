@@ -15,8 +15,9 @@
 //! **stateless** shared `perch-doc-compiler` contract; this trait holds the
 //! **stateful** half — the account's rule set and applied `doc_hash`.
 //! `apply_doc` sends the document's JSON bytes to the compiler, refuses any
-//! result that could lock the admin out, atomically replaces the whole rule
-//! set, and stores the canonical `doc_hash` so anyone can check
+//! result that could lock the admin out, brings the installed rules to the
+//! compiled document in one invocation (changing only the rules that differ,
+//! `rules`), and stores the canonical `doc_hash` so anyone can check
 //! installed == reviewed via [`PerchSmartAccount::applied_doc_hash`].
 #![no_std]
 

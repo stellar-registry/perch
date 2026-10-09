@@ -396,6 +396,35 @@ fn evidence_cancellation_counts_toward_max_cancels_only_for_authorized_attempts(
         .expect("the uncancellable attempt completes");
 }
 
+/// `max-cancels` is a lifetime count per controller and account. Removing
+/// recovery clears the configuration and kills the attempts (epoch), but not
+/// the count, so re-enrolling at the same controller does not reset it.
+#[test]
+fn the_cancellation_count_survives_removal_and_re_enrollment_at_the_same_controller() {
+    let w = world();
+    let mut r = w.recovery("loss", Mode::Guardian);
+    r.max_cancels = 1;
+    w.enroll(&w.doc(Some(r.clone())));
+    let (first, _, _) = open_lost_key(&w, None);
+    authorize(&w, first);
+    w.guardian(0, first, Cancel);
+    w.guardian(1, first, Cancel);
+    assert_eq!(state(&w, first), AttemptState::Cancelled);
+
+    w.enroll(&w.doc(None));
+    assert_eq!(w.ctl().config(&w.account), None);
+    w.enroll(&w.doc(Some(r)));
+
+    let (second, _, _) = open_lost_key(&w, None);
+    authorize(&w, second);
+    w.guardian(0, second, Cancel);
+    assert_eq!(
+        w.try_guardian(1, second, Cancel),
+        Err(Ok(RecoveryError::MaxCancelsReached))
+    );
+    assert_eq!(state(&w, second), AttemptState::Authorized);
+}
+
 // ---------------------------------------------------------------------------
 // D4, §10: reconfiguration versus completion
 // ---------------------------------------------------------------------------

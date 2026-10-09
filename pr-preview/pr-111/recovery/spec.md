@@ -458,7 +458,12 @@ The stored states are `Collecting`, `Authorized`, `Completed`,
   against the attempt's windows.
 - **`Invalidated` is stored for exactly one cause:** T4 finding a lost-key
   attempt's source changed. The evidence call that ran T4 succeeds, writes
-  `AttemptState::Invalidated`, and emits `AttemptInvalidated`.
+  `AttemptState::Invalidated`, and emits `AttemptInvalidated`. The record is
+  kept for at least the attempt's evidence window, after which the attempt
+  would be `Expired` anyway. A controller may keep a collecting attempt in
+  temporary storage for exactly that window. Later evidence is refused either
+  way: as an attempt that is not live, or, once the entry is gone, as no
+  such attempt.
 - **Every other invalidation is derived:** an epoch change, or a sibling's
   authorization (`invalidate_below`). Nothing is written for these, because
   the cause is already in storage and an attempt from an older epoch or

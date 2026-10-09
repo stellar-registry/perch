@@ -4,7 +4,13 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [0.1.2] - 2026-10-09
+## [10.0.0] - 2026-10-09
+
+The version jumps from 0.1.1 to 10.0.0 and the code does not: canonical
+releases publish into `unverified/perch/constructorless`, which already
+holds a 9.9.9 test publish of this name, and the registry only accepts a
+version above the current one (`#8 VersionMustBeGreaterThanCurrent`). The
+changes are those 0.1.2 would have carried.
 
 ### 🐛 Bug Fixes
 

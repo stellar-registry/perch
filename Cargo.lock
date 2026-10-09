@@ -1577,7 +1577,7 @@ dependencies = [
 
 [[package]]
 name = "perch-ed25519-verifier"
-version = "0.1.2"
+version = "10.0.0"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",

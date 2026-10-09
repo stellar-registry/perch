@@ -1,6 +1,6 @@
 # Measurements and the tree depth
 
-These are workstream 2's measurements for
+These are Epic #99 workstream 2's measurements for
 [`docs/recovery/budgets.md`](../recovery/budgets.md), and the depth decision
 its rule produces from them.
 

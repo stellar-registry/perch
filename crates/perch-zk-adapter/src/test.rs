@@ -23,7 +23,7 @@ use perch_zk_prover::fixture::{
 };
 use perch_zk_prover::{commitment, Bytes32};
 use soroban_sdk::testutils::Ledger as _;
-use soroban_sdk::{Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{Address, Bytes, BytesN, Env, IntoVal, TryFromVal, Val, Vec};
 use std::path::PathBuf;
 
 fn load(name: &str) -> Loaded {
@@ -472,7 +472,7 @@ fn tampered_proofs_are_rejected() {
     }
 }
 
-/// The adapter is a pure check: the same evidence verifies every time.
+/// The adapter keeps no state: the same evidence verifies every time.
 /// Refusing a replay of identical evidence is the controller's job (it
 /// reserves and spends nullifiers and consumes attempts); what the adapter
 /// guarantees is that evidence cannot be redirected to any other statement,
@@ -483,6 +483,57 @@ fn verification_is_stateless() {
     let w = World::new(&l);
     assert_eq!(w.verify(&l), Ok(()));
     assert_eq!(w.verify(&l), Ok(()));
+}
+
+/// `verify` writes no contract state. Its one ledger effect is the pool's
+/// `is_known_root` extending the matched `Root` entry's TTL (so a root a
+/// recovery relies on stays live), which the submitter pays for and which a
+/// simulation's footprint must include. Every other entry, and every
+/// entry's value, is unchanged.
+#[test]
+fn verification_only_extends_the_matched_roots_ttl() {
+    let l = load("lost_key");
+    let w = World::new(&l);
+    // Age the entries so an extension is visible, staying inside every
+    // entry's TTL (the test host restores, and so rewrites, archived ones).
+    w.e.ledger().with_mut(|li| li.sequence_number += 1_000);
+    let entries = |w: &World| {
+        w.e.to_ledger_snapshot()
+            .ledger_entries
+            .into_iter()
+            .map(|(k, (v, ttl))| (*k, (*v, ttl)))
+            .collect::<std::collections::BTreeMap<_, _>>()
+    };
+    let before = entries(&w);
+    assert_eq!(w.verify(&l), Ok(()));
+    let after = entries(&w);
+
+    assert_eq!(
+        before.keys().collect::<std::vec::Vec<_>>(),
+        after.keys().collect::<std::vec::Vec<_>>(),
+        "verify created or removed a ledger entry"
+    );
+    let changed: std::vec::Vec<_> = before
+        .iter()
+        .filter(|(k, v)| after[*k] != **v)
+        .map(|(k, _)| k)
+        .collect();
+    let root: Val = PoolKey::Root(l.fixture.tree_id, w.b32(&h32(&l.fixture.root))).into_val(&w.e);
+    let root_key =
+        soroban_sdk::xdr::LedgerKey::ContractData(soroban_sdk::xdr::LedgerKeyContractData {
+            contract: (&w.pool).into(),
+            key: soroban_sdk::xdr::ScVal::try_from_val(&w.e, &root).unwrap(),
+            durability: soroban_sdk::xdr::ContractDataDurability::Persistent,
+        });
+    assert_eq!(
+        changed,
+        [&root_key],
+        "verify changed something besides the root's TTL"
+    );
+    let (entry_before, ttl_before) = &before[&root_key];
+    let (entry_after, ttl_after) = &after[&root_key];
+    assert_eq!(entry_before, entry_after, "the root entry's value changed");
+    assert!(ttl_after > ttl_before, "the root's TTL was not extended");
 }
 
 /// The raw verifier entry point (`ProofVerifierInterface`) checks a proof

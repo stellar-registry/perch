@@ -235,8 +235,14 @@ bytes.
 
 The ZK factor `(adapter, circuit-id, pool, enrollment-id, commitment)`
 either stays entirely unchanged across an `apply_doc` or carries a new
-`enrollment-id`. The account inserts a leaf exactly when the enrollment id
-changes, into the configured pool, from the compiled document's commitment.
+`enrollment-id`. Both the account and the controller enforce this. The
+account's `apply_doc` refuses before any rule changes
+(`ZkFactorChangedInPlace`). The controller's `rcv_sync` refuses the same
+transition at enrollment and reconfiguration
+(`RecoveryError::ZkFactorChangedInPlace`), so an enrolled account that is not
+a perch account cannot change its factor in place at the shared controller
+either. The account inserts a leaf exactly when the enrollment id changes,
+into the configured pool, from the compiled document's commitment.
 
 Whenever the ZK factor changes, at enrollment or reconfiguration,
 `rcv_sync` refuses unless:

@@ -80,9 +80,12 @@ against the release artifacts belong to the integration layer.
   of its choosing, so a controller-wide record would let it mark a victim's
   (public) nullifier spent and block every later proof by the victim.
   `one_accounts_completion_never_spends_anothers_nullifier` pins this.
-- **Hooks re-check what the compiler validates** (non-zero timing, quorum
-  range, the account not among its own guardians), because any contract can
-  call `rcv_sync` for itself.
+- **Hooks re-check what the compiler and the account validate** (non-zero
+  timing, quorum range, the account not among its own guardians, and §3.4's
+  rule that the ZK factor stays unchanged or carries a new enrollment id),
+  because any contract can call `rcv_sync` for itself.
+  `the_controller_itself_refuses_a_zk_factor_changed_in_place` pins the
+  last.
 - **Change approvals are refused during an authorized window** (§9: only
   that attempt's cancellation evidence is accepted).
 - **Attempt storage.** Collecting attempts live in temporary storage for

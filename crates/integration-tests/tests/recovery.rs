@@ -8,10 +8,12 @@ mod support;
 
 use perch_account::{PerchAccount, PerchAccountClient, PerchAccountError, PerchAuthError};
 use perch_recovery::{AttemptState, EvidenceDomain, RecoveryError};
+use perch_recovery_interface::controller::SyncOutcome;
 use perch_recovery_interface::credential::{Credential, ZkEnrollment};
 use perch_recovery_interface::zk::ZkEvidence;
 use perch_recovery_interface::{ConfigChange, RecoveryAction, StatementSubject};
 use soroban_sdk::auth::{Context, ContractContext};
+use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{vec, Address, Bytes, BytesN, IntoVal, Symbol};
 use stellar_accounts::smart_account::{AuthPayload, Signer};
 use support::*;
@@ -1166,6 +1168,52 @@ fn a_recovery_cannot_rotate_to_an_enrollment_id_the_account_used() {
         &w.account,
         &w.replacements(&w.new_key(), Some(enrollment(&w.env, 3))),
     );
+}
+
+/// Spec §3.4 at the shared controller. An enrolled account that is not a
+/// perch account reaches `rcv_sync` without the account's own check, so the
+/// controller itself refuses a ZK factor changed without a new enrollment
+/// id. A plain generated address stands in for such an account.
+#[test]
+fn the_controller_itself_refuses_a_zk_factor_changed_in_place() {
+    let w = world();
+    let raw = Address::generate(&w.env);
+    let hash = BytesN::from_array(&w.env, &[7; 32]);
+    let config = |r: &Recovery| {
+        w.compiler()
+            .compile_doc(&w.doc(Some(r.clone())).bytes(&w))
+            .recovery
+            .get(0)
+            .unwrap()
+    };
+    let sync = |r: &Recovery| {
+        w.ctl()
+            .try_rcv_sync(&raw, &hash, &vec![&w.env, config(r)], &0)
+    };
+    w.env.mock_all_auths();
+
+    let base = w.recovery("loss", Mode::Zk);
+    assert_eq!(sync(&base), Ok(Ok(SyncOutcome::Enrolled)));
+
+    // The factor unchanged, other fields changed: a plain reconfiguration.
+    let mut unchanged = base.clone();
+    unchanged.max_cancels += 1;
+    assert_eq!(sync(&unchanged), Ok(Ok(SyncOutcome::Reconfigured)));
+
+    // The factor changed with a new enrollment id.
+    let mut rotated = unchanged.clone();
+    rotated.enrollment = Some(enrollment(&w.env, 2));
+    assert_eq!(sync(&rotated), Ok(Ok(SyncOutcome::Reconfigured)));
+
+    // The factor changed under the same enrollment id: refused, and the
+    // stored configuration is still the rotated one.
+    let mut in_place = rotated.clone();
+    in_place.enrollment.as_mut().unwrap().commitment = BytesN::from_array(&w.env, &[0x02; 32]);
+    assert_eq!(
+        sync(&in_place),
+        Err(Ok(RecoveryError::ZkFactorChangedInPlace))
+    );
+    assert_eq!(w.ctl().config(&raw), Some(config(&rotated)));
 }
 
 #[test]

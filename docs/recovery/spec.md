@@ -34,7 +34,7 @@ writes, or refuses and writes nothing.
 | # | Topic | Decision | Section |
 | --- | --- | --- | --- |
 | D1 | Activity during recovery | `Protected`: while an attempt is authorized, the account authorizes nothing except that attempt's completion, on every path. `Loss`: ordinary activity continues. The `pending-activity` field is removed. | §9 |
-| D2 | Evidence-free attempts | Anyone may open an attempt. Any number may collect evidence at once, and a collecting attempt blocks nothing. | §6 |
+| D2 | Evidence-free attempts | Anyone may open an attempt. Any number of attempts may collect evidence at once, and a collecting attempt blocks nothing. | §6 |
 | D3 | Authorized window | From authorization until completion, cancellation, or expiry, both profiles refuse every policy change except that attempt's completion, and refuse upgrade scheduling and execution. | §9, §12 |
 | D4 | Reconfiguration | `Loss`: owner authorization. `Protected`: owner authorization plus the enrolled condition's evidence over a `Reconfigure` statement (`Combined`: guardian quorum and a ZK proof). | §5, §10 |
 | D5 | Cancellation | The enrolled condition's evidence over a `Cancel` statement, in both profiles. Under `Loss`, owner authorization alone also cancels, and that veto is never capped. An evidence-based cancellation of an authorized attempt counts toward `max-cancels`. | §6 |
@@ -71,7 +71,7 @@ ZK backend; CAP-0085 governance-managed executables.
 | condition | The enrolled mode's evidence requirement over a given statement (§5). |
 | statement | A `RecoveryStatement` (§4). Every piece of evidence is bound to exactly one. |
 | attempt | A lost-key or compromise recovery in progress, identified by `(account, attempt_id)`. |
-| epoch | The controller's per-account configuration epoch (§3.3). |
+| epoch | The controller's per-account counter, starting at 0 and increasing by one every time the account's recovery configration changes at that controller.(§3.3). |
 | enrollment id | The 32-byte identifier of the account's current ZK credential (§3.1). |
 | adapter, verifier, pool | The three ZK contracts (§13, §14). |
 
@@ -106,7 +106,7 @@ ZK backend; CAP-0085 governance-managed executables.
   it.
 - `Protected` without a baseline does not protect against a thief who holds
   the owner key. Any document change invalidates a collecting lost-key
-  attempt (T4), and only compromise recovery is immune to that. Wallets
+  attempt (Transitions T4), and only compromise recovery is immune to that. Wallets
   should require a baseline for `Protected`; that product choice is Nido's
   (nidohq/nido#220).
 - **A rule scoped to the account's own controller is safe, and needed.** An
@@ -444,7 +444,7 @@ most one authorized attempt.
                        ├─ evidence deadline passes ─▶ Expired       ├─ cancel ─▶ Cancelled
                        ├─ cancel ─▶ Cancelled                       └─ L ≥ expires_at ─▶ Expired
                        ├─ epoch change / sibling authorized ─▶ (dead; derived)
-                       └─ stale lost-key source at T4 ─▶ Invalidated (stored)
+                       └─ stale lost-key source at Transition T4 (see below)─▶ Invalidated (stored)
 ```
 
 The stored states are `Collecting`, `Authorized`, `Completed`,

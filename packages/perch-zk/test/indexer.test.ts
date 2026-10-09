@@ -225,6 +225,55 @@ describe('pool indexer at scale', () => {
   }, 120_000);
 });
 
+describe('pool indexer under concurrent requests', () => {
+  beforeAll(init);
+
+  // Depth 3, chunks of two leaves: a witness reads the store several times.
+  const opts = { depth: 3, chunkLevel: 1 };
+  const tree0 = Array.from({ length: 7 }, (_, i) => at(0, BigInt(i), leafN(i + 1), i + 1));
+  const rootOf = (records: LeafRecord[]) => hex(naiveRoot(records.map((r) => r.leaf), 3));
+  const values = <T>(results: PromiseSettledResult<T>[]) => {
+    expect(results.map((r) => r.status)).toEqual(results.map(() => 'fulfilled'));
+    return results.map((r) => (r as PromiseFulfilledResult<T>).value);
+  };
+
+  it('two roots over a stored, unindexed leaf both succeed and agree', async () => {
+    const indexer = new PoolIndexer(new MemoryStore(), new PagedSource([]), opts);
+    await indexer.store.put(tree0[0]!);
+    const roots = values(await Promise.allSettled([indexer.root(0), indexer.root(0)]));
+    expect(roots.map(hex)).toEqual([rootOf(tree0.slice(0, 1)), rootOf(tree0.slice(0, 1))]);
+  });
+
+  it('a witness served during a sync proves against the root it names', async () => {
+    const indexer = new PoolIndexer(new MemoryStore(), new PagedSource([tree0.slice(0, 3), tree0.slice(3), []]), opts);
+    await indexer.sync(1);
+    for (const r of [tree0[0]!, tree0[2]!]) {
+      const [w] = values(await Promise.allSettled([indexer.witness(r.account, r.enrollmentId), indexer.sync()])) as [
+        Awaited<ReturnType<PoolIndexer['witness']>>,
+      ];
+      // Its siblings and root come from one tree size, before the sync's
+      // leaves or after them.
+      expect(hex(rootFromPath(r.leaf, w.index, w.siblings))).toBe(hex(w.root));
+      expect([rootOf(tree0.slice(0, 3)), rootOf(tree0)]).toContain(hex(w.root));
+    }
+    expect(hex(await indexer.root(0))).toBe(rootOf(tree0));
+  });
+
+  it('concurrent syncs take turns: every leaf indexed once, the cursor never moves back', async () => {
+    const store = new MemoryStore();
+    const pages = [tree0.slice(0, 2), tree0.slice(2, 5), tree0.slice(5), []];
+    const indexer = new PoolIndexer(store, new PagedSource(pages), opts);
+    const [a, b] = values(await Promise.allSettled([indexer.sync(), indexer.sync()]));
+    expect(a!.inserted + b!.inserted).toBe(tree0.length);
+    expect([a!.conflicts, b!.conflicts]).toEqual([[], []]);
+    expect(await store.getCursor()).toBe(String(pages.length));
+    expect(hex(await indexer.root(0))).toBe(rootOf(tree0));
+    const r = tree0[6]!;
+    const w = await indexer.witness(r.account, r.enrollmentId);
+    expect(hex(rootFromPath(r.leaf, w.index, w.siblings))).toBe(rootOf(tree0));
+  });
+});
+
 // Against the deployed testnet pool: PERCH_LIVE=1 npm test.
 describe.runIf(process.env.PERCH_LIVE)('the deployed testnet pool', () => {
   beforeAll(init);

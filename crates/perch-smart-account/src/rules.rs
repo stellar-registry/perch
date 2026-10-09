@@ -7,17 +7,20 @@
 //!
 //! - a rule present in both, with the same signers, policy parameters, and
 //!   expiry, is not touched at all: no OZ call, no storage access, no event;
-//! - a rule present in both that differs is either edited in place with
-//!   OZ's per-signer, per-policy, and expiry updates, keeping its id, or
-//!   replaced whole under a new id, whichever [`Cost`] prices lower;
+//! - a rule present in both that differs is either edited in place (one
+//!   `reconcile_signers` swap, then per-policy and expiry updates), keeping
+//!   its id, or replaced whole under a new id, whichever [`Cost`] prices
+//!   lower;
 //! - a rule only in the record is removed; a rule only in the document is
 //!   added.
 //!
 //! The cost model prices the exact operation sequence each path would run
-//! (the same code drives the pricing and the operations): contract event
-//! bytes first, then ledger writes. An in-place edit costs per changed
-//! signer and policy; a replacement costs a rule removal and addition plus
-//! re-registering and reinstalling everything the rule keeps. Replacement is
+//! (the same code drives the pricing and the operations). Every OZ mutation
+//! runs through its `_no_events` variant, so the price is the ledger
+//! entries written. An in-place edit costs one rule write for the signer
+//! swap plus each changed signer's and policy's entries; a replacement costs
+//! a rule removal and addition plus re-registering and reinstalling
+//! everything the rule keeps. Replacement is
 //! also the only path when no in-place order keeps the rule valid at every
 //! step (nothing on it survives and adding first would exceed OZ's per-rule
 //! limits or is impossible). Choosing the cheaper path per rule keeps every
@@ -34,7 +37,7 @@ use perch_doc_compiler::{CompiledDoc, CompiledRule, RuleScope};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, Map, String, Val, Vec};
 use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
-use stellar_accounts::smart_account::{self, ContextRuleType, Signer, MAX_POLICIES, MAX_SIGNERS};
+use stellar_accounts::smart_account::{self, ContextRuleType, Signer, MAX_POLICIES};
 
 /// One policy attached to an installed rule.
 #[contracttype]
@@ -45,6 +48,24 @@ pub struct InstalledPolicy {
     /// change is uninstalled and installed again; one whose parameters are
     /// unchanged is left alone.
     pub params: BytesN<32>,
+}
+
+/// What an `apply_doc` changed in the rule set, counted as it is done. The
+/// OZ mutations run through their `_no_events` variants, so this, carried by
+/// `DocApplied`, is the one record of the change an indexer gets (with the
+/// applied document itself, `applied_doc`). A rule replaced whole counts as
+/// removed and added; signers and policies count only for rules edited in
+/// place.
+#[contracttype]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DeltaSummary {
+    pub rules_added: u32,
+    pub rules_removed: u32,
+    pub rules_edited: u32,
+    pub signers_added: u32,
+    pub signers_removed: u32,
+    pub policies_added: u32,
+    pub policies_removed: u32,
 }
 
 /// One context rule as the account installed it.
@@ -197,8 +218,9 @@ pub enum Mode {
 
 /// The cost model's price of reconciling one rule: bytes of contract events
 /// (the account's and its policies'), then ledger-entry writes, compared in
-/// that order. Events come first because they are what grows fastest per
-/// changed signer and what the network caps per transaction.
+/// that order. Every OZ mutation and policy hook runs through its
+/// `_no_events` variant, so `events` is always 0 and the choice is by
+/// writes.
 ///
 /// `writes` counts the entries each OZ operation writes, an entry two
 /// operations write counting twice: the rule's own entry, the registry
@@ -245,39 +267,6 @@ pub struct PlannedRule {
     pub replace: Cost,
 }
 
-// Contract event sizes, in bytes of `ContractEvent` XDR: the measure the
-// network's per-transaction events limit and fee apply to. Each is 52 bytes
-// of envelope (extension, contract id, type, body tag, topic count), its
-// topics (the event-name symbol, then a `u32` id or the account's address),
-// and its data map. `apply_delta.rs` checks every apply's total against the
-// host's.
-const SIGNER_ADDED: u32 = 120;
-const SIGNER_REMOVED: u32 = 124;
-/// Plus the signer's XDR.
-const SIGNER_REGISTERED: u32 = 116;
-const SIGNER_DEREGISTERED: u32 = 100;
-const POLICY_ADDED: u32 = 120;
-const POLICY_REMOVED: u32 = 124;
-const POLICY_REGISTERED: u32 = 156;
-const POLICY_DEREGISTERED: u32 = 100;
-/// Plus the context type's and name's XDR, 8 per signer and policy id, and
-/// the expiry ([`expiry`]).
-const RULE_ADDED: u32 = 216;
-const RULE_REMOVED: u32 = 100;
-/// Plus the name's XDR and the expiry.
-const RULE_META_UPDATED: u32 = 140;
-const SPENDING_LIMIT_INSTALLED: u32 = 244;
-const SPENDING_LIMIT_UNINSTALLED: u32 = 172;
-
-/// An `Option<u32>` expiry's XDR: a `u32`, or void.
-fn expiry(valid_until: Option<u32>) -> u32 {
-    if valid_until.is_some() {
-        8
-    } else {
-        4
-    }
-}
-
 /// Bring the installed rules from `current` to `desired`, touching only what
 /// differs. Returns the new records, in `desired` order.
 pub(crate) fn reconcile(
@@ -286,7 +275,7 @@ pub(crate) fn reconcile(
     desired: &Vec<InstalledRule>,
     params: &Vec<Vec<Val>>,
     mode: Mode,
-) -> Vec<InstalledRule> {
+) -> (Vec<InstalledRule>, DeltaSummary) {
     #[cfg(feature = "testutils")]
     if mode == Mode::FullReplace {
         return replace_all(e, current, desired, params);
@@ -304,7 +293,7 @@ pub(crate) fn plan(
     mode: Mode,
 ) -> Vec<PlannedRule> {
     let mut planned = Vec::new(e);
-    run(e, current, desired, params, mode, Some(&mut planned));
+    let _ = run(e, current, desired, params, mode, Some(&mut planned));
     planned
 }
 
@@ -313,10 +302,10 @@ pub(crate) fn plan(
 /// Unmatched records are removed first, so their signers and policies leave
 /// the registries before anything is added. Each changed rule is then priced
 /// both ways against the registry reference counts at that point (a
-/// registration or deregistration is an event of its own) and reconciled the
-/// cheaper way. Taking the minimum per rule keeps the whole apply at or below
-/// a full replace: that replaces every rule, and deregisters and registers
-/// every signer and policy on the way.
+/// registration or deregistration writes entries of its own) and reconciled
+/// the cheaper way. Taking the minimum per rule keeps the whole apply's
+/// writes at or below a full replace's: that replaces every rule, and
+/// deregisters and registers every signer and policy on the way.
 fn run(
     e: &Env,
     current: &Vec<InstalledRule>,
@@ -324,14 +313,18 @@ fn run(
     params: &Vec<Vec<Val>>,
     mode: Mode,
     mut dry_run: Option<&mut Vec<PlannedRule>>,
-) -> Vec<InstalledRule> {
+) -> (Vec<InstalledRule>, DeltaSummary) {
     let hooks = Hooks {
         interpreter: infra::perch_interpreter::address(e),
         spending_limit: infra::perch_spending_limit::address(e),
     };
     let mut refs = Refs::of(e, current);
     let live = dry_run.is_none();
-    let mut apply = Apply { e, rule: None };
+    let mut apply = Apply {
+        e,
+        sum: DeltaSummary::default(),
+        rule: None,
+    };
     let mut record =
         |r: &InstalledRule, step: Step, cost: Cost, in_place: Option<Cost>, replace: Cost| {
             if let Some(planned) = dry_run.as_deref_mut() {
@@ -394,6 +387,7 @@ fn run(
             record(&d, Step::InPlace, edited.cost, offered, replaced.cost);
             if live {
                 edit(e, &mut apply, &c, &d, &p);
+                apply.sum.rules_edited += 1;
             }
             next.push_back(d.with_id(c.id));
         } else {
@@ -407,12 +401,12 @@ fn run(
             next.push_back(d.with_id(id));
         }
     }
-    next
+    (next, apply.sum)
 }
 
 /// The policies whose own `install` and `uninstall` cost something: the
-/// interpreter writes its program, the spending limit writes its window and
-/// emits an event. The recovery controller's hooks write and emit nothing.
+/// interpreter writes its program, the spending limit writes its window
+/// (quietly). The recovery controller's hooks write nothing.
 struct Hooks {
     interpreter: Address,
     spending_limit: Address,
@@ -451,10 +445,10 @@ impl Refs {
 /// [`Meter`] prices them; [`edit`] and [`replace`] drive both through the
 /// same sequence, so the model prices exactly what runs.
 trait Effects {
-    /// One OZ `batch_add_signer`: one rule read, one duplicate check across
-    /// the old and new signers, one rule write. Never called empty.
-    fn add_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>);
-    fn remove_signer(&mut self, rule: &InstalledRule, signer: &Signer);
+    /// Replace the rule's signers with `signers` in one write (OZ's
+    /// `reconcile_signers`): the leaving ones are released, the joining ones
+    /// registered, and the rest keep their registry ids.
+    fn reconcile_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>);
     fn add_policy(&mut self, rule: &InstalledRule, policy: &Address, param: &Val);
     fn remove_policy(&mut self, rule: &InstalledRule, policy: &Address);
     fn set_valid_until(&mut self, rule: &InstalledRule, valid_until: Option<u32>);
@@ -487,7 +481,6 @@ impl<'a> Meter<'a> {
         let n = self.refs.signers.get(signer.clone()).unwrap_or(0);
         self.cost.writes += 1;
         if n == 0 {
-            self.cost.events += SIGNER_REGISTERED + signer.clone().to_xdr(self.e).len();
             self.cost.writes += 1;
         }
         self.refs.signers.set(signer.clone(), n + 1);
@@ -497,7 +490,6 @@ impl<'a> Meter<'a> {
         let n = self.refs.signers.get(signer.clone()).unwrap_or(0);
         self.cost.writes += 1;
         if n <= 1 {
-            self.cost.events += SIGNER_DEREGISTERED;
             self.cost.writes += 1;
             self.refs.signers.remove(signer.clone());
         } else {
@@ -509,7 +501,6 @@ impl<'a> Meter<'a> {
         let n = self.refs.policies.get(policy.clone()).unwrap_or(0);
         self.cost.writes += 1;
         if n == 0 {
-            self.cost.events += POLICY_REGISTERED;
             self.cost.writes += 1;
         }
         self.refs.policies.set(policy.clone(), n + 1);
@@ -519,7 +510,6 @@ impl<'a> Meter<'a> {
         let n = self.refs.policies.get(policy.clone()).unwrap_or(0);
         self.cost.writes += 1;
         if n <= 1 {
-            self.cost.events += POLICY_DEREGISTERED;
             self.cost.writes += 1;
             self.refs.policies.remove(policy.clone());
         } else {
@@ -527,54 +517,40 @@ impl<'a> Meter<'a> {
         }
     }
 
-    /// A policy's own `install` (or `uninstall`).
-    fn hook(&mut self, policy: &Address, install: bool) {
-        if *policy == self.hooks.spending_limit {
-            self.cost.events += if install {
-                SPENDING_LIMIT_INSTALLED
-            } else {
-                SPENDING_LIMIT_UNINSTALLED
-            };
-            self.cost.writes += 1;
-        } else if *policy == self.hooks.interpreter {
+    /// A policy's own `install` (or `uninstall`): the spending limit's
+    /// window or the interpreter's program is written.
+    fn hook(&mut self, policy: &Address, _install: bool) {
+        if *policy == self.hooks.spending_limit || *policy == self.hooks.interpreter {
             self.cost.writes += 1;
         }
     }
 }
 
 impl Effects for Meter<'_> {
-    fn add_signers(&mut self, _: &InstalledRule, signers: &Vec<Signer>) {
+    fn reconcile_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
         self.cost.writes += 1;
-        for s in signers.iter() {
-            self.register_signer(&s);
-            self.cost.events += SIGNER_ADDED;
+        for s in missing(self.e, &rule.signers, signers).iter() {
+            self.deregister_signer(&s);
         }
-    }
-
-    fn remove_signer(&mut self, _: &InstalledRule, signer: &Signer) {
-        self.cost.writes += 1;
-        self.deregister_signer(signer);
-        self.cost.events += SIGNER_REMOVED;
+        for s in missing(self.e, signers, &rule.signers).iter() {
+            self.register_signer(&s);
+        }
     }
 
     fn add_policy(&mut self, _: &InstalledRule, policy: &Address, _: &Val) {
         self.cost.writes += 1;
         self.register_policy(policy);
         self.hook(policy, true);
-        self.cost.events += POLICY_ADDED;
     }
 
     fn remove_policy(&mut self, _: &InstalledRule, policy: &Address) {
         self.cost.writes += 1;
         self.hook(policy, false);
         self.deregister_policy(policy);
-        self.cost.events += POLICY_REMOVED;
     }
 
-    fn set_valid_until(&mut self, rule: &InstalledRule, valid_until: Option<u32>) {
+    fn set_valid_until(&mut self, _: &InstalledRule, _: Option<u32>) {
         self.cost.writes += 1;
-        self.cost.events +=
-            RULE_META_UPDATED + rule.name.clone().to_xdr(self.e).len() + expiry(valid_until);
     }
 
     fn remove_rule(&mut self, rule: &InstalledRule) {
@@ -585,7 +561,6 @@ impl Effects for Meter<'_> {
         for s in rule.signers.iter() {
             self.deregister_signer(&s);
         }
-        self.cost.events += RULE_REMOVED;
         self.cost.writes += 1;
     }
 
@@ -597,19 +572,15 @@ impl Effects for Meter<'_> {
             self.register_policy(&p.policy);
             self.hook(&p.policy, true);
         }
-        self.cost.events += RULE_ADDED
-            + rule.context_type.clone().to_xdr(self.e).len()
-            + rule.name.clone().to_xdr(self.e).len()
-            + 8 * (rule.signers.len() + rule.policies.len())
-            + expiry(rule.valid_until);
         self.cost.writes += 1;
         0
     }
 }
 
-/// Performs operations through OZ.
+/// Performs operations through OZ, quietly, and counts them.
 struct Apply<'a> {
     e: &'a Env,
+    sum: DeltaSummary,
     /// The rule being edited, read before its first removal: removals need
     /// OZ's registry ids, which no addition in the same edit changes.
     rule: Option<smart_account::ContextRule>,
@@ -625,20 +596,15 @@ impl Apply<'_> {
 }
 
 impl Effects for Apply<'_> {
-    fn add_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
-        smart_account::batch_add_signer(self.e, rule.id, signers);
-    }
-
-    fn remove_signer(&mut self, rule: &InstalledRule, signer: &Signer) {
-        let oz = self.oz(rule.id);
-        let id = oz
-            .signer_ids
-            .get_unchecked(oz.signers.first_index_of(signer).unwrap());
-        smart_account::remove_signer(self.e, rule.id, id);
+    fn reconcile_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
+        self.sum.signers_added += missing(self.e, signers, &rule.signers).len();
+        self.sum.signers_removed += missing(self.e, &rule.signers, signers).len();
+        smart_account::reconcile_signers_no_events(self.e, rule.id, signers);
     }
 
     fn add_policy(&mut self, rule: &InstalledRule, policy: &Address, param: &Val) {
-        smart_account::add_policy(self.e, rule.id, policy, *param);
+        smart_account::add_policy_no_events(self.e, rule.id, policy, *param);
+        self.sum.policies_added += 1;
     }
 
     fn remove_policy(&mut self, rule: &InstalledRule, policy: &Address) {
@@ -646,15 +612,17 @@ impl Effects for Apply<'_> {
         let id = oz
             .policy_ids
             .get_unchecked(oz.policies.first_index_of(policy).unwrap());
-        smart_account::remove_policy(self.e, rule.id, id);
+        smart_account::remove_policy_no_events(self.e, rule.id, id);
+        self.sum.policies_removed += 1;
     }
 
     fn set_valid_until(&mut self, rule: &InstalledRule, valid_until: Option<u32>) {
-        smart_account::update_context_rule_valid_until(self.e, rule.id, valid_until);
+        smart_account::update_context_rule_valid_until_no_events(self.e, rule.id, valid_until);
     }
 
     fn remove_rule(&mut self, rule: &InstalledRule) {
-        smart_account::remove_context_rule(self.e, rule.id);
+        smart_account::remove_context_rule_no_events(self.e, rule.id);
+        self.sum.rules_removed += 1;
     }
 
     fn add_rule(&mut self, rule: &InstalledRule, params: &Vec<Val>) -> u32 {
@@ -662,7 +630,8 @@ impl Effects for Apply<'_> {
         for (i, p) in rule.policies.iter().enumerate() {
             policies.set(p.policy, params.get_unchecked(i as u32));
         }
-        smart_account::add_context_rule(
+        self.sum.rules_added += 1;
+        smart_account::add_context_rule_no_events(
             self.e,
             &rule.context_type,
             &rule.name,
@@ -719,35 +688,40 @@ fn edit(
     }
     let kept =
         (c.signers.len() - remove_signers.len()) + (c.policies.len() - remove_policies.len());
-    if kept > 0 {
-        // Something survives, so removing first never empties the rule, and
-        // the counts only shrink before they grow to the target.
-        for s in remove_signers.iter() {
-            fx.remove_signer(c, &s);
+    let signers_change = !add_signers.is_empty() || !remove_signers.is_empty();
+    if !d.signers.is_empty() {
+        // The target signers are never empty, so after one atomic swap
+        // (OZ's `reconcile_signers`, which checks the final set as a whole)
+        // the rule never is: then its policies, removals first, so their
+        // count never exceeds OZ's per-rule limit.
+        if signers_change {
+            fx.reconcile_signers(c, &d.signers);
         }
         for p in remove_policies.iter() {
             fx.remove_policy(c, &p);
         }
-        if !add_signers.is_empty() {
-            fx.add_signers(c, &add_signers);
+        for (p, val) in add_policies.iter() {
+            fx.add_policy(c, &p, &val);
+        }
+    } else if !c.signers.is_empty() || kept > 0 {
+        // No target signers: the current ones (or a surviving policy) keep
+        // the rule non-empty while its policies change, and the signers go
+        // last, once the target's policies are installed.
+        for p in remove_policies.iter() {
+            fx.remove_policy(c, &p);
         }
         for (p, val) in add_policies.iter() {
             fx.add_policy(c, &p, &val);
         }
-    } else if (!add_signers.is_empty() || !fresh.is_empty())
-        && c.signers.len() + add_signers.len() <= MAX_SIGNERS
-        && c.policies.len() + fresh.len() <= MAX_POLICIES
-    {
-        // Nothing survives: add first so the rule is never empty, then remove
-        // the old, then re-add changed policies.
-        if !add_signers.is_empty() {
-            fx.add_signers(c, &add_signers);
+        if signers_change {
+            fx.reconcile_signers(c, &d.signers);
         }
+    } else if !fresh.is_empty() && c.policies.len() + fresh.len() <= MAX_POLICIES {
+        // Policies only, and none survives: add the new addresses first so
+        // the rule is never empty, then remove the old, then re-add changed
+        // policies.
         for (p, val) in fresh.iter() {
             fx.add_policy(c, &p, &val);
-        }
-        for s in remove_signers.iter() {
-            fx.remove_signer(c, &s);
         }
         for p in remove_policies.iter() {
             fx.remove_policy(c, &p);
@@ -780,8 +754,12 @@ fn replace_all(
     current: &Vec<InstalledRule>,
     desired: &Vec<InstalledRule>,
     params: &Vec<Vec<Val>>,
-) -> Vec<InstalledRule> {
-    let mut apply = Apply { e, rule: None };
+) -> (Vec<InstalledRule>, DeltaSummary) {
+    let mut apply = Apply {
+        e,
+        sum: DeltaSummary::default(),
+        rule: None,
+    };
     for c in current.iter() {
         apply.remove_rule(&c);
     }
@@ -790,7 +768,7 @@ fn replace_all(
         let id = apply.add_rule(&d, &params.get_unchecked(i as u32));
         next.push_back(d.with_id(id));
     }
-    next
+    (next, apply.sum)
 }
 
 /// The elements of `from` that `other` lacks.
@@ -861,49 +839,54 @@ mod test {
         Meter::new(&w.e, &w.hooks, &Refs::of(&w.e, &Vec::new(&w.e)))
     }
 
-    fn cost(m: &Meter) -> (u32, u32) {
-        (m.cost.events, m.cost.writes)
+    /// The writes priced so far. On this branch nothing is emitted, so no
+    /// event bytes are priced.
+    fn cost(m: &Meter) -> u32 {
+        assert_eq!(m.cost.events, 0);
+        m.cost.writes
     }
 
     #[test]
     fn signers_are_priced_by_their_registry_reference_count() {
         let w = world();
-        let r = rule(&w, &[], &[]);
         let s = signer(&w.e);
-        let one = Vec::from_array(&w.e, [s.clone()]);
+        let (none, one) = (Vec::new(&w.e), Vec::from_array(&w.e, [s.clone()]));
+        let (empty, with) = (rule(&w, &[], &[]), rule(&w, core::slice::from_ref(&s), &[]));
         let mut m = fresh(&w);
-        // First reference: the addition, the registration with the signer,
-        // and the rule, registry, and lookup entries.
-        m.add_signers(&r, &one);
-        assert_eq!(cost(&m), (120 + 116 + 72, 3));
+        // First reference: the rule, registry, and lookup entries.
+        m.reconcile_signers(&empty, &one);
+        assert_eq!(cost(&m), 3);
         assert_eq!(m.refs.signers.get(s.clone()), Some(1));
-        // A second reference: the addition and the count.
-        m.add_signers(&r, &one);
-        assert_eq!(cost(&m), (308 + 120, 5));
+        // A second reference: the rule and the count.
+        m.reconcile_signers(&empty, &one);
+        assert_eq!(cost(&m), 5);
         assert_eq!(m.refs.signers.get(s.clone()), Some(2));
-        // Dropping to one reference: the removal and the count.
-        m.remove_signer(&r, &s);
-        assert_eq!(cost(&m), (428 + 124, 7));
+        // Dropping to one reference: the rule and the count.
+        m.reconcile_signers(&with, &none);
+        assert_eq!(cost(&m), 7);
         assert_eq!(m.refs.signers.get(s.clone()), Some(1));
-        // The last reference: the removal, the deregistration, and the
-        // registry and lookup entries.
-        m.remove_signer(&r, &s);
-        assert_eq!(cost(&m), (552 + 124 + 100, 10));
+        // The last reference: the rule, registry, and lookup entries.
+        m.reconcile_signers(&with, &none);
+        assert_eq!(cost(&m), 10);
         assert_eq!(m.refs.signers.get(s), None);
     }
 
+    /// A swap writes the rule's entry once, however many signers change.
     #[test]
-    fn a_batch_of_signers_writes_the_rule_once() {
+    fn a_signer_swap_writes_the_rule_once() {
         let w = world();
-        let r = rule(&w, &[], &[]);
-        let (a, b) = (signer(&w.e), signer(&w.e));
-        let mut m = fresh(&w);
-        m.add_signers(&r, &Vec::from_array(&w.e, [a.clone(), b.clone()]));
-        // Each signer's addition and registration; one rule write, then each
-        // signer's registry and lookup entries.
-        assert_eq!(cost(&m), (2 * (120 + 116 + 72), 1 + 2 * 2));
-        assert_eq!(m.refs.signers.get(a), Some(1));
-        assert_eq!(m.refs.signers.get(b), Some(1));
+        let old: std::vec::Vec<Signer> = (0..3).map(|_| signer(&w.e)).collect();
+        let new: std::vec::Vec<Signer> = (0..3).map(|_| signer(&w.e)).collect();
+        let c = rule(&w, &old, &[]);
+        let mut m = Meter::new(
+            &w.e,
+            &w.hooks,
+            &Refs::of(&w.e, &Vec::from_array(&w.e, [c.clone()])),
+        );
+        m.reconcile_signers(&c, &Vec::from_slice(&w.e, &new));
+        // The rule, then each leaving and each joining signer's registry and
+        // lookup entries.
+        assert_eq!(cost(&m), 1 + 3 * 2 + 3 * 2);
     }
 
     #[test]
@@ -912,46 +895,41 @@ mod test {
         let r = rule(&w, &[], &[]);
         let param: Val = ().into_val(&w.e);
 
-        // The interpreter writes its program and emits nothing.
+        // The interpreter writes its program.
         let mut m = fresh(&w);
         m.add_policy(&r, &w.hooks.interpreter, &param);
-        assert_eq!(cost(&m), (120 + 156, 4));
+        assert_eq!(cost(&m), 4);
         m.remove_policy(&r, &w.hooks.interpreter);
-        assert_eq!(cost(&m), (276 + 124 + 100, 8));
+        assert_eq!(cost(&m), 8);
 
-        // The spending limit writes its window and emits its own events.
+        // The spending limit writes its window.
         let mut m = fresh(&w);
         m.add_policy(&r, &w.hooks.spending_limit, &param);
-        assert_eq!(cost(&m), (120 + 156 + 244, 4));
+        assert_eq!(cost(&m), 4);
         m.remove_policy(&r, &w.hooks.spending_limit);
-        assert_eq!(cost(&m), (520 + 124 + 172 + 100, 8));
+        assert_eq!(cost(&m), 8);
 
-        // The controller's hooks write and emit nothing.
+        // The controller's hooks write nothing.
         let mut m = fresh(&w);
         m.add_policy(&r, &w.controller, &param);
-        assert_eq!(cost(&m), (120 + 156, 3));
+        assert_eq!(cost(&m), 3);
         // A policy another rule still names is not deregistered.
         m.add_policy(&r, &w.controller, &param);
         m.remove_policy(&r, &w.controller);
-        assert_eq!(cost(&m), (276 + 120 + 124, 7));
+        assert_eq!(cost(&m), 7);
         assert_eq!(m.refs.policies.get(w.controller.clone()), Some(1));
     }
 
     #[test]
-    fn whole_rules_and_expiries_are_priced_from_their_contents() {
+    fn whole_rules_and_expiries_are_priced_by_their_writes() {
         let w = world();
         let (a, b) = (signer(&w.e), signer(&w.e));
         let r = rule(&w, &[a, b], &[&w.hooks.spending_limit]);
         let mut m = Meter::new(&w.e, &w.hooks, &Refs::of(&w.e, &Vec::new(&w.e)));
         m.add_rule(&r, &Vec::new(&w.e));
-        // The addition carries the context type, name, three ids, and the
-        // expiry; then two signer and one policy registrations and the
-        // spending limit's install.
-        let added = 216 + 72 + 12 + 8 * 3 + 8;
-        let registered = 2 * (116 + 72) + 156 + 244;
         // The rule entry, two signers' and one policy's registry and lookup
         // entries, and the window.
-        assert_eq!(cost(&m), (added + registered, 1 + 2 * 2 + 2 + 1));
+        assert_eq!(cost(&m), 1 + 2 * 2 + 2 + 1);
 
         // Removing it drops every last reference.
         let mut m = Meter::new(
@@ -960,15 +938,15 @@ mod test {
             &Refs::of(&w.e, &Vec::from_array(&w.e, [r.clone()])),
         );
         m.remove_rule(&r);
-        assert_eq!(cost(&m), (100 + 2 * 100 + 172 + 100, 1 + 2 * 2 + 1 + 2));
+        assert_eq!(cost(&m), 1 + 2 * 2 + 1 + 2);
         assert!(m.refs.signers.is_empty() && m.refs.policies.is_empty());
 
-        // An expiry update carries the name and the new expiry.
+        // An expiry update writes the rule.
         let mut m = Meter::new(&w.e, &w.hooks, &Refs::of(&w.e, &Vec::new(&w.e)));
         m.set_valid_until(&r, None);
-        assert_eq!(cost(&m), (140 + 12 + 4, 1));
+        assert_eq!(cost(&m), 1);
         m.set_valid_until(&r, Some(5));
-        assert_eq!(cost(&m), (156 + 140 + 12 + 8, 2));
+        assert_eq!(cost(&m), 2);
     }
 
     /// Beyond what a compiled document attaches (at most the interpreter

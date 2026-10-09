@@ -1303,16 +1303,20 @@ fn a_replaced_baseline_credential_never_returns() {
     assert!(w.activity_as(&c));
 }
 
-/// Names for the rules that bring a test document to the 16-rule cap.
-const CAP_RULES: [&str; 14] = [
+/// Names for the rules that bring a test document (its two own rules plus
+/// these) to the rule cap.
+const CAP_RULE_NAMES: [&str; 14] = [
     "r00", "r01", "r02", "r03", "r04", "r05", "r06", "r07", "r08", "r09", "r10", "r11", "r12",
     "r13",
 ];
+const CAP_RULES: &[&str] = CAP_RULE_NAMES
+    .split_at(perch_doc_compiler::MAX_DOC_RULES as usize - 2)
+    .0;
 
 /// Spec §7.5: a completion's cost is bounded by the document caps, not by
 /// the account's history. `apply_doc` once scanned every rule id ever
 /// assigned, so (the review's regression) 19 applications of a 16-rule
-/// document pushed a completion past the 400-entry footprint limit, and a
+/// document (the cap then) pushed a completion past the 400-entry footprint limit, and a
 /// twentieth ordinary application failed at 403. The test host enforces
 /// the mainnet limits, so every application and the completion here must
 /// fit, and the completion's footprint must not depend on the churn.
@@ -1321,7 +1325,7 @@ fn completion_cost_does_not_grow_with_policy_churn() {
     let completion_entries = |applications: u32| {
         let w = world();
         let mut doc = w.doc(Some(w.recovery("protected", Mode::Guardian)));
-        for name in CAP_RULES {
+        for &name in CAP_RULES {
             doc.rules.push((name, w.new_key()));
         }
         for _ in 0..applications {

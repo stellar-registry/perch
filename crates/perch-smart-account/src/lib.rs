@@ -151,12 +151,22 @@ pub struct FreezeGate {
 /// generation.
 pub use perch_recovery_interface::account::UpgradeRequest;
 
-/// Emitted after a document is applied: the new canonical `doc_hash`.
+/// Emitted after a document is applied: the new canonical `doc_hash`, and
+/// what changed in the rule set. The rule, signer, and policy mutations
+/// emit nothing themselves (OZ's `_no_events` variants), so this is the
+/// whole record of the change; `applied_doc` serves the document.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocApplied {
     #[topic]
     pub doc_hash: BytesN<32>,
+    pub rules_added: u32,
+    pub rules_removed: u32,
+    pub rules_edited: u32,
+    pub signers_added: u32,
+    pub signers_removed: u32,
+    pub policies_added: u32,
+    pub policies_removed: u32,
 }
 
 /// Emitted when a recovery completion revokes a credential.
@@ -706,7 +716,7 @@ fn apply(
         }
     }
 
-    apply_rules(e, &compiled, mode);
+    let delta = apply_rules(e, &compiled, mode);
 
     if let Some(leaf) = &insert {
         MembershipPoolClient::new(e, &leaf.pool).rcv_insert(
@@ -741,6 +751,13 @@ fn apply(
     }
     DocApplied {
         doc_hash: compiled.doc_hash.clone(),
+        rules_added: delta.rules_added,
+        rules_removed: delta.rules_removed,
+        rules_edited: delta.rules_edited,
+        signers_added: delta.signers_added,
+        signers_removed: delta.signers_removed,
+        policies_added: delta.policies_added,
+        policies_removed: delta.policies_removed,
     }
     .publish(e);
     Ok(compiled.doc_hash)
@@ -794,10 +811,10 @@ pub mod testutils {
 /// observable half-migrated state. The recovery rule is not one of
 /// `doc.rules`: it is a zero-signer self-scoped rule whose only policy is the
 /// adopted controller, installed for the compiled configuration's hash.
-fn apply_rules(e: &Env, compiled: &CompiledDoc, mode: rules::Mode) {
+fn apply_rules(e: &Env, compiled: &CompiledDoc, mode: rules::Mode) -> rules::DeltaSummary {
     let current = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
     let (desired, params) = rules::desired(e, compiled);
-    let next = rules::reconcile(e, &current, &desired, &params, mode);
+    let (next, sum) = rules::reconcile(e, &current, &desired, &params, mode);
     if next != current {
         PerchStorage::set_installed_rules(e, &next);
         extend_persistent(e, |ttl| {
@@ -818,6 +835,7 @@ fn apply_rules(e: &Env, compiled: &CompiledDoc, mode: rules::Mode) {
             None => PerchStorage::remove_recovery_controller(e),
         }
     }
+    sum
 }
 
 /// Constructor helper: install rule 0, "admin", scoped

@@ -72,12 +72,12 @@ impl Policy for PerchSpendingLimit {
         context_rule: ContextRule,
         smart_account: Address,
     ) {
-        spending_limit::install(e, &install_params, &context_rule, &smart_account)
+        spending_limit::install_no_events(e, &install_params, &context_rule, &smart_account)
     }
 
     /// Remove the cap's state for `(smart_account, rule)`.
     fn uninstall(e: &Env, context_rule: ContextRule, smart_account: Address) {
-        spending_limit::uninstall(e, &context_rule, &smart_account)
+        spending_limit::uninstall_no_events(e, &context_rule, &smart_account)
     }
 }
 

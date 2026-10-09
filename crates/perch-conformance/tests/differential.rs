@@ -8,9 +8,10 @@
 //! Also asserts the plan-shape invariants on every generated document:
 //! INV-1 (an interpreter-attached rule denies zero-signature auth), INV-2
 //! (constraint-free + cap-free rules lower policy-free), the
-//! `not_after_ledger → valid_until = X-1` boundary, and that the on-chain
-//! `doc_hash` (host sha256 over canonical bytes) equals the std-side
-//! `perch_ir::doc_hash` (sha2 crate) — two hash paths, one identity.
+//! `not_after_ledger → valid_until = X-1` boundary, and that each program's
+//! provenance (host sha256 over the domain-prefixed canonical rule bytes)
+//! equals the std-side `perch_ir::rule_hash` (sha2 crate) — two hash paths,
+//! one identity.
 //!
 //! Randomness is fixed-seed splitmix64, per the security-core convention.
 
@@ -406,9 +407,6 @@ fn compiled_programs_agree_with_the_doc_level_reference() {
         let plan = compile(&env, &doc, &cfg).expect("valid documents must lower");
         assert_eq!(plan.rules.len(), doc.rules.len());
 
-        // Two hash paths, one identity: host sha256 (compile) == sha2 (std).
-        let std_hash = perch_ir::doc_hash(&doc);
-
         for (rule, lowered) in doc.rules.iter().zip(plan.rules.iter()) {
             // Expiry boundary: dead at X ⇒ valid through X-1.
             assert_eq!(
@@ -436,10 +434,11 @@ fn compiled_programs_agree_with_the_doc_level_reference() {
                 continue;
             };
             lowered_rules += 1;
+            // Two hash paths, one identity: host sha256 (compile) == sha2 (std).
             assert_eq!(
                 install.doc_hash.to_array(),
-                std_hash,
-                "on-chain doc_hash diverged from perch_ir::doc_hash"
+                perch_ir::rule_hash(rule),
+                "on-chain rule hash diverged from perch_ir::rule_hash"
             );
             rpn::validate(&install.program).expect("compiled programs always validate");
 

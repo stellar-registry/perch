@@ -7,7 +7,7 @@
 //! `perch_testkit::Bootstrap::native()` call; the stand-in verifier, the
 //! fixture constants and `fixture()` live in the testkit.
 
-use perch_testkit::{fixture, no_recovery_evidence, Bootstrap, World, FIXTURE_NETWORK};
+use perch_testkit::{fixture, Bootstrap, World, FIXTURE_NETWORK};
 use soroban_sdk::testutils::Ledger;
 use soroban_sdk::{vec, Bytes, BytesN, String as SString, Symbol, Val};
 
@@ -20,8 +20,7 @@ fn setup() -> World {
 
 fn apply_fixture(w: &World) -> BytesN<32> {
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    w.account_client()
-        .apply_doc(&doc, &no_recovery_evidence(&w.env))
+    w.account_client().apply_doc(&doc, &0)
 }
 
 #[test]
@@ -37,12 +36,18 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     assert_eq!(hash, expected);
     assert_eq!(client.applied_doc_hash(), Some(expected));
 
-    // Constructor rule 0 is gone; the document's two rules are installed.
+    // The document's two rules are installed. The constructor's admin rule
+    // (id 0) is the document's `admin` slot, so it is edited in place: its
+    // signer becomes the document's admin key and it keeps its id.
     assert_eq!(client.get_context_rules_count(), 2);
-    let admin = client.get_context_rule(&1);
+    let installed = client.installed_rules();
+    assert_eq!(installed.len(), 2);
+    assert_eq!(installed.get_unchecked(0).id, 0);
+    let admin = client.get_context_rule(&0);
     assert_eq!(admin.name, SString::from_str(&w.env, "admin"));
     assert_eq!(admin.policies.len(), 0); // policy-free admin path (INV-2)
-    let ci = client.get_context_rule(&2);
+    assert_ne!(admin.signers, w.admin_signers);
+    let ci = client.get_context_rule(&installed.get_unchecked(1).id);
     assert_eq!(ci.name, SString::from_str(&w.env, "ci-publish"));
     assert_eq!(ci.policies.len(), 1); // the interpreter program is attached
     assert_eq!(ci.policies.get_unchecked(0), w.interpreter);
@@ -52,7 +57,7 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
 }
 
 #[test]
-fn reapply_replaces_the_whole_rule_set() {
+fn reapply_installs_exactly_the_new_rule_set() {
     let w = setup();
     let client = w.account_client();
     let first = apply_fixture(&w);
@@ -72,21 +77,18 @@ fn reapply_replaces_the_whole_rule_set() {
   ]
 }}"#
     );
-    let second = client.apply_doc(
-        &Bytes::from_slice(&w.env, doc2.as_bytes()),
-        &no_recovery_evidence(&w.env),
-    );
+    let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()), &0);
 
     assert_ne!(first, second);
     assert_eq!(client.applied_doc_hash(), Some(second));
     assert_eq!(client.get_context_rules_count(), 1);
-    // The old rules (ids 1 and 2) no longer exist.
+    // The ci grant (id 1) is gone; the admin slot is edited in place.
     assert!(client.try_get_context_rule(&1).is_err());
-    assert!(client.try_get_context_rule(&2).is_err());
-    assert_eq!(
-        client.get_context_rule(&3).name,
-        SString::from_str(&w.env, "admin")
-    );
+    let installed = client.installed_rules();
+    assert_eq!(installed.len(), 1);
+    let admin = client.get_context_rule(&installed.get_unchecked(0).id);
+    assert_eq!(admin.name, SString::from_str(&w.env, "admin"));
+    assert_eq!(admin.signers.len(), 1);
 }
 
 #[test]
@@ -136,10 +138,7 @@ fn doc_without_admin_rule_is_rejected_anti_brick() {
 }}"#
     );
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, doc.as_bytes()),
-            &no_recovery_evidence(&w.env)
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0)
         .is_err());
     // Nothing changed: the constructor's rule 0 is still the only rule.
     assert_eq!(client.get_context_rules_count(), 1);
@@ -166,9 +165,7 @@ fn doc_for_another_network_is_rejected() {
 
     let client = w.account_client();
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    assert!(client
-        .try_apply_doc(&doc, &no_recovery_evidence(&w.env))
-        .is_err());
+    assert!(client.try_apply_doc(&doc, &0).is_err());
     assert_eq!(client.applied_doc_hash(), None);
 }
 
@@ -178,17 +175,11 @@ fn garbage_and_unknown_fields_are_rejected() {
     let client = w.account_client();
     // Not JSON at all.
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, b"not json"),
-            &no_recovery_evidence(&w.env)
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"), &0)
         .is_err());
     // Unknown field: fail closed, never skipped.
     let doc = fixture().replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
     assert!(client
-        .try_apply_doc(
-            &Bytes::from_slice(&w.env, doc.as_bytes()),
-            &no_recovery_evidence(&w.env)
-        )
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0)
         .is_err());
 }

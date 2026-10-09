@@ -14,8 +14,8 @@
 //!     .build();
 //!
 //! let doc = soroban_sdk::Bytes::from_slice(&w.env, perch_testkit::fixture().as_bytes());
-//! let evidence = perch_testkit::no_recovery_evidence(&w.env);
-//! let _hash = w.account_client().apply_doc(&doc, &evidence);
+//! // `approval_valid_until` matters only to a `Protected` reconfiguration.
+//! let _hash = w.account_client().apply_doc(&doc, &0);
 //! ```
 //!
 //! # Modes
@@ -35,14 +35,15 @@
 //!
 //! [`Env`]: soroban_sdk::Env
 
+pub mod delta;
 pub mod faithful;
 pub mod fixture;
 pub mod manifest;
 pub mod native;
 
 pub use fixture::{
-    auth_digest, ci_publish_doc_hash, fixture, no_recovery_evidence, AnyKeyVerifier,
-    CI_PUBLISH_DOC_HASH, FIXTURE_NETWORK, FIXTURE_REGISTRY, FIXTURE_VERIFIERS,
+    auth_digest, ci_publish_doc_hash, fixture, AnyKeyVerifier, CI_PUBLISH_DOC_HASH,
+    FIXTURE_NETWORK, FIXTURE_REGISTRY, FIXTURE_VERIFIERS,
 };
 pub use manifest::{
     Apply, Author, Backend, BackendError, BootstrapManifest, Deploy, KometBackend, Publish, Rotate,

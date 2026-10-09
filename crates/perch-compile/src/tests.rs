@@ -49,7 +49,13 @@ fn ci_publish_lowers_to_the_expected_plan() {
         .install
         .as_ref()
         .expect("ci-publish attaches the interpreter");
+    // Provenance is the rule's own hash, domain-separated from the document
+    // hash: a change elsewhere in the document leaves this program as is.
     assert_eq!(
+        install.doc_hash,
+        BytesN::from_array(&env, &perch_ir::rule_hash(&doc.rules[1]))
+    );
+    assert_ne!(
         install.doc_hash,
         BytesN::from_array(&env, &perch_ir::doc_hash(&doc))
     );
@@ -349,13 +355,45 @@ fn verify_plan_rejects_a_tampered_doc_hash() {
     );
 }
 
+/// A program's provenance follows its own rule only: changing another rule
+/// leaves it byte-identical, changing this rule changes it.
+#[test]
+fn a_programs_provenance_is_its_rules_hash_alone() {
+    let env = Env::default();
+    let doc = perch_ir::from_json(&fixture()).expect("parse");
+    let program = |d: &perch_ir::PolicyDoc| {
+        compile(&env, d, &cfg(&env)).expect("compile").rules[1]
+            .install
+            .clone()
+            .expect("ci-publish attaches")
+    };
+    let mut other_rule = doc.clone();
+    other_rule.signers[0].id = "admin".to_string();
+    other_rule.rules[0].name = "owner".to_string();
+    assert_eq!(program(&doc), program(&other_rule));
+
+    let mut this_rule = doc.clone();
+    this_rule.rules[1].not_after_ledger = Some(56_000_000);
+    assert_ne!(program(&doc).doc_hash, program(&this_rule).doc_hash);
+    assert_eq!(program(&doc).program, program(&this_rule).program);
+
+    // The domain prefix separates it from a plain hash of the same bytes.
+    let plain = perch_ir::rule_canonical_json(&doc.rules[1]);
+    let undomained = env
+        .crypto()
+        .sha256(&soroban_sdk::Bytes::from_slice(&env, plain.as_bytes()))
+        .to_bytes();
+    assert_ne!(program(&doc).doc_hash, undomained);
+}
+
 #[test]
 fn verify_plan_rejects_a_plan_from_a_different_doc() {
     let env = Env::default();
     let doc = perch_ir::from_json(&fixture()).expect("parse");
     let plan = compile(&env, &doc, &cfg(&env)).expect("compile");
-    // Same plan, but checked against a document whose canonical form differs
-    // (renamed rule → different doc_hash) → refuse.
+    // Same plan, but checked against a document whose interpreter-attached
+    // rule differs (renamed → not in the document, or a different hash) →
+    // refuse.
     let mut other = doc.clone();
     other.rules[1].name = "ci-publish-v2".to_string();
     assert!(matches!(

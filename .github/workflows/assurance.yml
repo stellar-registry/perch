@@ -80,11 +80,14 @@ jobs:
           restore-keys: |
             fuzz-corpus-
       - run: cargo install cargo-fuzz --locked
+      # apply_doc_delta builds the smart account, which reads the pinned infra
+      # wasm at build time.
+      - uses: ./.github/actions/fetch-infra-wasm
       # -s none: ASan fails to link soroban-sdk's rlib, and the targets are
       # pure safe Rust — the findings of interest are panics and divergence.
       - name: Fuzz each target
         run: |
-          for t in eval_fail_closed ir_parse_roundtrip; do
+          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta; do
             cargo +"$NIGHTLY" fuzz run -s none "$t" -- -max_total_time=300
           done
       - name: Save fuzz corpus

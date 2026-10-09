@@ -92,3 +92,40 @@ export function canonicalJson(doc: unknown): string {
 export function docHash(doc: unknown): string {
   return bytesToHex(sha256(new TextEncoder().encode(canonicalJson(doc))));
 }
+
+/** Domain tag of {@link ruleHash} (`CANONICAL.md`, "Fragment hashes"). */
+export const RULE_HASH_DOMAIN = 'perch/rule';
+
+/** Domain tag of {@link configHash} (`docs/recovery/spec.md` §3.2). */
+export const CONFIG_HASH_DOMAIN = 'perch/recovery/config';
+
+function taggedHash(tag: string, fragment: unknown): string {
+  const enc = new TextEncoder();
+  const t = enc.encode(tag);
+  const f = enc.encode(canonicalJson(fragment));
+  const preimage = new Uint8Array(t.length + f.length);
+  preimage.set(t);
+  preimage.set(f, t.length);
+  return bytesToHex(sha256(preimage));
+}
+
+/**
+ * Lowercase-hex `rule_hash` of one element of a document's `rules`:
+ * `SHA-256("perch/rule" || canonical JSON of the rule)`, the exact bytes the
+ * rule contributes to the document's canonical form. An installed interpreter
+ * program carries it as provenance. It covers the rule's text and signer ids,
+ * not the signers' credentials; only {@link docHash} identifies a document.
+ */
+export function ruleHash(rule: unknown): string {
+  return taggedHash(RULE_HASH_DOMAIN, rule);
+}
+
+/**
+ * Lowercase-hex `config_hash` of a document's recovery configuration:
+ * `SHA-256("perch/recovery/config" || canonical JSON of its recovery member)`.
+ * Recovery statements bind it. Throws if the document enrolls no recovery.
+ */
+export function configHash(doc: { recovery?: unknown }): string {
+  if (doc.recovery === undefined) throw new Error('document has no recovery member');
+  return taggedHash(CONFIG_HASH_DOMAIN, doc.recovery);
+}

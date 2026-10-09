@@ -20,7 +20,7 @@
 
 use crate::doc::{
     ArgPred, GuardianSet, PolicyDoc, Principals, RecoveryConfig, RecoveryMode, Rule, Scope,
-    SignerMethod, ZkVerifierConfig,
+    SignerMethod, ZkFactor,
 };
 use alloc::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 #[cfg(not(feature = "std"))]
@@ -280,6 +280,23 @@ pub enum ValidationError {
         /// The rule's contract scope address.
         scope: String,
     },
+    /// A rule is scoped to the document's own ZK adapter or membership pool.
+    /// The account has no reason to authorize calls to either (the adapter
+    /// is pure, and the pool's only account-facing entry point is the
+    /// invoker-only `rcv_insert`), so such a rule is refused as defence in
+    /// depth behind the account's reserved-name guard
+    /// (`docs/recovery/spec.md` §15). A rule scoped to the controller is
+    /// allowed: a perch account approves, as a guardian, recoveries at the
+    /// controller it uses itself. The reserved-name guard is what protects
+    /// the controller: every entry point acting on the account's own
+    /// recovery state is reserved, and every other one takes a guardian's
+    /// approval of another account's statement (spec §15, I1-I3).
+    RuleScopedToRecoveryContract {
+        /// The offending rule name.
+        rule: String,
+        /// The adapter or pool address it is scoped to.
+        address: String,
+    },
     /// `recovery.replaceable` is empty. Recovery enrolled with nothing to
     /// replace can never restore access.
     EmptyRecoveryReplaceable,
@@ -340,16 +357,29 @@ pub enum ValidationError {
         /// The guardian count (the N).
         n: u32,
     },
-    /// A recovery mode's `verifier` is not shaped like a C-address strkey
+    /// A recovery mode's `adapter` is not shaped like a C-address strkey
     /// (checksum not verified — see module docs).
-    InvalidRecoveryVerifier {
+    InvalidRecoveryAdapter {
         /// The malformed address string.
         address: String,
     },
-    /// A recovery mode's `circuit-id` is not valid non-empty hex.
+    /// A recovery mode's `circuit-id` is not 64 lowercase hex characters
+    /// (the `sha256` of a verification key).
     InvalidCircuitId {
         /// The malformed circuit id string.
         circuit_id: String,
+    },
+    /// A recovery mode's `enrollment-id` is not 64 lowercase hex characters.
+    InvalidEnrollmentId {
+        /// The malformed enrollment id string.
+        enrollment_id: String,
+    },
+    /// A recovery mode's `commitment` is not 64 lowercase hex characters, or
+    /// encodes a value at or above the BN254 scalar modulus (a
+    /// non-canonical field element).
+    InvalidCommitment {
+        /// The malformed commitment string.
+        commitment: String,
     },
     /// A recovery mode's `pool` is not shaped like a C-address strkey
     /// (checksum not verified — see module docs).
@@ -477,6 +507,10 @@ impl fmt::Display for ValidationError {
                 f,
                 "rule `{rule}`: cap token `{token}` differs from the contract scope `{scope}` (omit it or set it equal)"
             ),
+            E::RuleScopedToRecoveryContract { rule, address } => write!(
+                f,
+                "rule `{rule}`: scoped to the document's own ZK adapter or pool `{address}`"
+            ),
             E::EmptyRecoveryReplaceable => write!(
                 f,
                 "recovery: replaceable is empty (nothing for recovery to restore)"
@@ -511,13 +545,21 @@ impl fmt::Display for ValidationError {
                 f,
                 "recovery: guardian quorum={quorum} out of range 1..={n} (guardian count)"
             ),
-            E::InvalidRecoveryVerifier { address } => write!(
+            E::InvalidRecoveryAdapter { address } => write!(
                 f,
-                "recovery: verifier `{address}` is not a C-address strkey"
+                "recovery: adapter `{address}` is not a C-address strkey"
             ),
             E::InvalidCircuitId { circuit_id } => write!(
                 f,
-                "recovery: circuit-id `{circuit_id}` is not valid non-empty hex"
+                "recovery: circuit-id `{circuit_id}` is not 64 lowercase hex characters"
+            ),
+            E::InvalidEnrollmentId { enrollment_id } => write!(
+                f,
+                "recovery: enrollment-id `{enrollment_id}` is not 64 lowercase hex characters"
+            ),
+            E::InvalidCommitment { commitment } => write!(
+                f,
+                "recovery: commitment `{commitment}` is not a canonical BN254 field element in 64 lowercase hex characters"
             ),
             E::InvalidRecoveryPool { address } => {
                 write!(f, "recovery: pool `{address}` is not a C-address strkey")
@@ -656,6 +698,7 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
 
     if let Some(recovery) = &doc.recovery {
         validate_recovery(recovery, &declared, &mut errors);
+        validate_rules_avoid_zk_contracts(doc, recovery, &mut errors);
     }
 
     if errors.is_empty() {
@@ -851,6 +894,29 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
     }
 }
 
+/// Refuse rules scoped to the document's own ZK adapter or pool (see
+/// [`ValidationError::RuleScopedToRecoveryContract`]).
+fn validate_rules_avoid_zk_contracts(
+    doc: &PolicyDoc,
+    r: &RecoveryConfig,
+    errors: &mut Vec<ValidationError>,
+) {
+    let zk = match &r.mode {
+        RecoveryMode::GuardianOnly(_) => return,
+        RecoveryMode::ZkOnly(z) | RecoveryMode::Combined(_, z) => z,
+    };
+    for rule in &doc.rules {
+        if let Scope::Contract(scope) = &rule.scope {
+            if scope.address == zk.adapter || scope.address == zk.pool {
+                errors.push(ValidationError::RuleScopedToRecoveryContract {
+                    rule: rule.name.clone(),
+                    address: scope.address.clone(),
+                });
+            }
+        }
+    }
+}
+
 /// Whether `s` is 64 lowercase hex characters — the shape of a SHA-256 digest
 /// as [`RecoveryConfig`]'s baseline commitment stores it.
 fn is_sha256_hex(s: &str) -> bool {
@@ -902,10 +968,10 @@ fn validate_recovery(
 
     match &r.mode {
         RecoveryMode::GuardianOnly(g) => validate_guardian_set(g, errors),
-        RecoveryMode::ZkOnly(z) => validate_zk_verifier_config(z, errors),
+        RecoveryMode::ZkOnly(z) => validate_zk_factor(z, errors),
         RecoveryMode::Combined(g, z) => {
             validate_guardian_set(g, errors);
-            validate_zk_verifier_config(z, errors);
+            validate_zk_factor(z, errors);
         }
     }
 }
@@ -939,24 +1005,38 @@ fn validate_guardian_set(g: &GuardianSet, errors: &mut Vec<ValidationError>) {
     }
 }
 
-/// Shared checks for a [`ZkVerifierConfig`]: verifier and pool (if any) are
-/// C-address shaped, and `circuit_id` is non-empty valid hex.
-fn validate_zk_verifier_config(z: &ZkVerifierConfig, errors: &mut Vec<ValidationError>) {
-    if !is_contract_address_shape(&z.verifier) {
-        errors.push(ValidationError::InvalidRecoveryVerifier {
-            address: z.verifier.clone(),
+/// The BN254 scalar field modulus `r`, as 64 lowercase hex characters.
+/// Fixed-width lowercase hex compares in the same order as the number.
+const BN254_SCALAR_MODULUS_HEX: &str =
+    "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
+
+/// Shared checks for a [`ZkFactor`]: adapter and pool are C-address shaped,
+/// the circuit and enrollment ids are 32-byte lowercase hex, and the
+/// commitment is a canonical field element in 32-byte lowercase hex.
+fn validate_zk_factor(z: &ZkFactor, errors: &mut Vec<ValidationError>) {
+    if !is_contract_address_shape(&z.adapter) {
+        errors.push(ValidationError::InvalidRecoveryAdapter {
+            address: z.adapter.clone(),
         });
     }
-    if z.circuit_id.is_empty() || hex::decode(&z.circuit_id).is_err() {
+    if !is_sha256_hex(&z.circuit_id) {
         errors.push(ValidationError::InvalidCircuitId {
             circuit_id: z.circuit_id.clone(),
         });
     }
-    if let Some(pool) = &z.pool {
-        if !is_contract_address_shape(pool) {
-            errors.push(ValidationError::InvalidRecoveryPool {
-                address: pool.clone(),
-            });
-        }
+    if !is_contract_address_shape(&z.pool) {
+        errors.push(ValidationError::InvalidRecoveryPool {
+            address: z.pool.clone(),
+        });
+    }
+    if !is_sha256_hex(&z.enrollment_id) {
+        errors.push(ValidationError::InvalidEnrollmentId {
+            enrollment_id: z.enrollment_id.clone(),
+        });
+    }
+    if !is_sha256_hex(&z.commitment) || z.commitment.as_str() >= BN254_SCALAR_MODULUS_HEX {
+        errors.push(ValidationError::InvalidCommitment {
+            commitment: z.commitment.clone(),
+        });
     }
 }

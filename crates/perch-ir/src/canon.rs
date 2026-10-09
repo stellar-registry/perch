@@ -29,9 +29,8 @@
 //! format version.
 
 use crate::doc::{
-    ArgPred, CapConstraint, GuardianSet, PendingActivityPolicy, PolicyDoc, Principals,
-    RecoveryConfig, RecoveryMode, RecoveryProfile, Rule, Scope, SignerDecl, SignerMethod,
-    ZkVerifierConfig,
+    ArgPred, CapConstraint, GuardianSet, PolicyDoc, Principals, RecoveryConfig, RecoveryMode,
+    RecoveryProfile, Rule, Scope, SignerDecl, SignerMethod, ZkFactor,
 };
 #[cfg(not(feature = "std"))]
 use alloc::{
@@ -75,6 +74,49 @@ pub fn canonical_json(doc: &PolicyDoc) -> String {
     let mut out = String::new();
     write_value(&doc_to_cv(doc), &mut out);
     out
+}
+
+/// The canonical JSON of a document's `recovery` member on its own: exactly
+/// the bytes that member contributes to [`canonical_json`]. The recovery
+/// controller's configuration identity is `config_hash = sha256(
+/// "perch/recovery/config" || recovery_canonical_json(r))`
+/// (`docs/recovery/spec.md` §3.2).
+#[must_use]
+pub fn recovery_canonical_json(r: &RecoveryConfig) -> String {
+    let mut out = String::new();
+    write_value(&recovery_to_cv(r), &mut out);
+    out
+}
+
+/// Domain tag of a rule's fragment hash (`CANONICAL.md`, "Fragment
+/// hashes"). Distinct from the document hash (untagged) and from the
+/// recovery `config_hash` (`perch/recovery/config`), so none of the three
+/// can collide. Must equal `perch_recovery_interface::fragment::RULE_DOMAIN`.
+pub const RULE_HASH_DOMAIN: &str = "perch/rule";
+
+/// The canonical JSON of one rule on its own: exactly the bytes that rule
+/// contributes to [`canonical_json`]'s `rules` array.
+///
+/// An interpreter program records `sha256(RULE_HASH_DOMAIN ||
+/// rule_canonical_json(rule))` ([`rule_hash`]) as its provenance, so an
+/// unchanged rule keeps an unchanged program across documents.
+#[must_use]
+pub fn rule_canonical_json(rule: &Rule) -> String {
+    let mut out = String::new();
+    write_value(&rule_to_cv(rule), &mut out);
+    out
+}
+
+/// `sha256(RULE_HASH_DOMAIN || rule_canonical_json(rule))`: the provenance an
+/// interpreter program carries. `std`-only (see [`doc_hash`]); on-chain,
+/// hash the same bytes with the host `sha256`.
+#[cfg(feature = "std")]
+#[must_use]
+pub fn rule_hash(rule: &Rule) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(RULE_HASH_DOMAIN.as_bytes());
+    h.update(rule_canonical_json(rule).as_bytes());
+    h.finalize().into()
 }
 
 /// SHA-256 of the canonical JSON bytes of `doc`. This is the document's
@@ -136,10 +178,6 @@ fn recovery_to_cv(r: &RecoveryConfig) -> Cv<'_> {
     o.push(("delay-ledgers", Cv::U32(r.delay_ledgers)));
     o.push(("expiry-ledgers", Cv::U32(r.expiry_ledgers)));
     o.push(("max-cancels", Cv::U32(r.max_cancels)));
-    o.push((
-        "pending-activity",
-        Cv::Str(pending_activity_str(r.pending_activity)),
-    ));
     Cv::Obj(o)
 }
 
@@ -147,13 +185,6 @@ fn recovery_profile_str(p: RecoveryProfile) -> &'static str {
     match p {
         RecoveryProfile::Loss => "loss",
         RecoveryProfile::Protected => "protected",
-    }
-}
-
-fn pending_activity_str(p: PendingActivityPolicy) -> &'static str {
-    match p {
-        PendingActivityPolicy::Freeze => "freeze",
-        PendingActivityPolicy::Continue => "continue",
     }
 }
 
@@ -186,12 +217,12 @@ fn push_guardian_fields<'a>(o: &mut Vec<(&'static str, Cv<'a>)>, g: &'a Guardian
     o.push(("quorum", Cv::U32(g.quorum)));
 }
 
-fn push_zk_fields<'a>(o: &mut Vec<(&'static str, Cv<'a>)>, z: &'a ZkVerifierConfig) {
-    o.push(("verifier", Cv::Str(&z.verifier)));
+fn push_zk_fields<'a>(o: &mut Vec<(&'static str, Cv<'a>)>, z: &'a ZkFactor) {
+    o.push(("adapter", Cv::Str(&z.adapter)));
     o.push(("circuit-id", Cv::Str(&z.circuit_id)));
-    if let Some(pool) = &z.pool {
-        o.push(("pool", Cv::Str(pool)));
-    }
+    o.push(("pool", Cv::Str(&z.pool)));
+    o.push(("enrollment-id", Cv::Str(&z.enrollment_id)));
+    o.push(("commitment", Cv::Str(&z.commitment)));
 }
 
 fn signer_to_cv(s: &SignerDecl) -> Cv<'_> {

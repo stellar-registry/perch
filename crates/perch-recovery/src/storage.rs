@@ -1,45 +1,46 @@
-//! Typed storage handles, via `soroban-sdk-tools`' `#[contractstorage]` (see
-//! `crates/perch-smart-account/src/lib.rs` for the same convention). All
-//! persistent — recovery state must outlive the enrolling account's own
-//! `applied_doc` bumps, and TTL is extended explicitly wherever a write
-//! matters (see each call site in `contract.rs`).
+//! Typed storage handles (`soroban-sdk-tools`' `#[contractstorage]`). Every
+//! entry is per account, per attempt, per nullifier, or per statement
+//! digest: the controller has no global configuration (spec §16).
+//!
+//! Persistent entries are extended to the network maximum whenever written
+//! (and by the permissionless `renew`), and an archived persistent entry is
+//! unavailable rather than absent, so no counter or configuration can
+//! silently reset (spec §3.6). Collecting attempts and completion markers
+//! are temporary: losing a collecting attempt to expiry is the same as its
+//! evidence window ending.
 
-use crate::types::Attempt;
-use perch_doc_compiler::CompiledRecoveryConfig;
-use soroban_sdk::{Address, BytesN, Vec};
-use soroban_sdk_tools::{contractstorage, PersistentMap};
+use crate::types::{Attempt, ChangeApproval, CompletionMarker};
+use perch_recovery_interface::config::CompiledRecoveryConfig;
+use soroban_sdk::{Address, Bytes, BytesN};
+use soroban_sdk_tools::{contractstorage, PersistentMap, TemporaryMap};
 
 #[contractstorage]
 #[allow(dead_code)] // the field names only derive storage keys + accessors
 pub struct RecoveryStorage {
-    /// Enrolled configuration per account. Written only by `install` (after
-    /// `guard_apply_doc` has already authorized the change — see
-    /// `contract.rs`'s module docs on why the gate can't live here).
+    /// The account's configuration at this controller. Written only by
+    /// `rcv_sync`.
     pub config: PersistentMap<Address, CompiledRecoveryConfig>,
-    /// The account's single live-or-terminal attempt, if any.
-    pub attempt: PersistentMap<Address, Attempt>,
-    /// Monotonic per-account attempt-id counter — the proposal commitment's
-    /// nonce. Never reused, even across terminal attempts.
-    pub next_attempt_id: PersistentMap<Address, u64>,
-    /// Cumulative cancellations across the account's whole history (a
-    /// griefing bound — see `RecoveryError::MaxCancelsReached`), never reset by
-    /// a new attempt.
-    pub cancels_used: PersistentMap<Address, u32>,
-    /// Guardian cancel-evidence for one `(account, attempt_id)` — a
-    /// deliberately separate domain from `Attempt::guardian_approvals`:
-    /// initiation evidence never counts toward cancellation, and vice versa.
-    pub cancel_tally: PersistentMap<(Address, u64), Vec<Address>>,
-    /// Whether a valid ZK cancellation proof has been verified for one
-    /// `(account, attempt_id)`. Tracked separately from `cancel_tally` so
-    /// `Combined` mode can require both factors before cancelling —
-    /// each factor's own evidence is recorded independently and
-    /// `cancel_attempt` only fires once the mode's full set is present.
-    pub zk_cancel_verified: PersistentMap<(Address, u64), bool>,
-    /// Permanent, append-only fingerprints of every credential this account
-    /// has ever had recovery-revoked. A later attempt — even from an old
-    /// baseline — must never reintroduce one of these.
-    pub revoked: PersistentMap<Address, Vec<BytesN<32>>>,
-    /// Global (not per-account) spent-nullifier set — a ZK nullifier's
-    /// uniqueness is cross-account by design.
-    pub nullifier: PersistentMap<BytesN<32>, bool>,
+    /// The account's configuration epoch (spec §3.3). Never reset.
+    pub epoch: PersistentMap<Address, u64>,
+    /// The next attempt id. Never reused.
+    pub next_attempt: PersistentMap<Address, u64>,
+    /// Collecting attempts with a smaller id were invalidated by a
+    /// sibling's authorization (spec T4).
+    pub invalidate_below: PersistentMap<Address, u64>,
+    /// The id of the authorized attempt, while one may be live.
+    pub authorized: PersistentMap<Address, u64>,
+    /// Evidence-based cancellations of authorized attempts (spec T6).
+    pub cancels: PersistentMap<Address, u32>,
+    /// Attempts that were ever authorized.
+    pub attempt: PersistentMap<(Address, u64), Attempt>,
+    /// Attempts that never left `Collecting` (or were cancelled there).
+    pub collecting: TemporaryMap<(Address, u64), Attempt>,
+    /// The completing invocation's marker (spec T5).
+    pub completing: TemporaryMap<Address, CompletionMarker>,
+    /// Spent nullifiers, per account (spec §11). Never cleared.
+    pub nullifier: PersistentMap<(Address, BytesN<32>), bool>,
+    /// Recorded `Reconfigure`/`Upgrade` evidence, by statement digest.
+    pub approval: PersistentMap<(Address, BytesN<32>), ChangeApproval>,
+    /// Published baseline documents' canonical bytes, by hash (spec §3.5).
+    pub baseline: PersistentMap<(Address, BytesN<32>), Bytes>,
 }

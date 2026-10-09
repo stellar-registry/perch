@@ -51,6 +51,12 @@ refused. Where only contracts are allowed (statement `account` and
 | reconfigure | `0x00 ‖ 32 zero bytes` (remove) or `0x01 ‖ new_config_hash (32)` (set) | 207 |
 | upgrade | `request_id (u64) ‖ wasm_hash (32)` | 214 |
 
+`source_doc_hash` and `target_doc_hash` are document identities: under
+CANON v1, `sha256` of the canonical document. The attempt also records
+`target_bytes_hash`, the digest the completing `apply_doc` bytes must have
+(spec §6.3 T1, T5). It is not part of the statement, so the encoding above
+does not depend on how identities are computed.
+
 `digest = sha256(encoding)`. The action byte comes before the subject and
 selects its layout, so the encoding is injective without length prefixes.
 Two statements that differ only in action differ at byte 25.

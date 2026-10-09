@@ -1,8 +1,9 @@
 # Account mutation path inventory
 
 > **Pre-spec.** This inventories the implementation that predates
-> [`spec.md`](spec.md). The required entry points and their authorization
-> are spec §15.
+> [`spec.md`](spec.md), since replaced. The entry points and their
+> authorization are spec §15; [`implementation.md`](implementation.md) maps
+> them to code.
 
 Every entry point that can change a `PerchAccount`'s stored authorization
 state (context rules, signers, applied `doc_hash`), or a recovery

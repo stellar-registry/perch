@@ -8,9 +8,10 @@ import {
   authorizeEntry,
   buildAuthorizationEntryPreimage,
   buildWithDelegatesEntry,
-  StrKey,
+  contract,
   hash,
   nativeToScVal,
+  StrKey,
   scValToNative,
   xdr,
 } from '@stellar/stellar-sdk';
@@ -18,16 +19,25 @@ import {
   ApprovalError,
   MemoryKv,
   addressCredentials,
+  callArgsFor,
+  encodeStatement,
   fetchApprovals,
   handleRelay,
   parseApproval,
   parseCallArgs,
+  parseStatement,
   postApproval,
   rpcSimulator,
   signedByGuardianKey,
+  statementCall,
+  statementDigest,
+  statementJson,
 } from '../src/index.js';
-import type { ApprovalCall, Simulate } from '../src/index.js';
+import type { ApprovalCall, RecoveryStatement, Simulate } from '../src/index.js';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { listen } from '../src/node.js';
 
 // A guardian's `submit_guardian` approval exactly as a perch-testnet run
@@ -40,7 +50,23 @@ const TESTNET_ENTRY =
 
 const ACCOUNT = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 const CONTRACT_GUARDIAN = 'CA3D5KRYM6CB7OWQ6TWYRR3Z4T7GNZLKERYNZGGA5SOAOPIFY6YQGAXE';
-const D = 'ab'.repeat(32);
+
+// A lost-key statement for ACCOUNT's attempt 7 through CONTROLLER on
+// testnet; `D` is what its guardians sign.
+const fill = (b: number) => new Uint8Array(32).fill(b);
+const STATEMENT: RecoveryStatement = {
+  networkId: Uint8Array.from(hash(Buffer.from(Networks.TESTNET))),
+  account: ACCOUNT,
+  controller: CONTROLLER,
+  epoch: 1n,
+  configHash: fill(0x11),
+  delayLedgers: 17_280,
+  expiryLedgers: 120_960,
+  validUntilLedger: 1_000_000,
+  subject: { action: 'lost-key', attemptId: 7n, sourceDocHash: fill(0x22), targetDocHash: fill(0x33), replacementsHash: fill(0x44) },
+};
+const D = statementDigest(STATEMENT);
+const WIRE = statementJson(STATEMENT);
 
 function unsignedEntry(
   address: string,
@@ -158,15 +184,86 @@ function delegated(
   }).toXDR('base64');
 }
 
-/** `submit_guardian(account, attempt_id, Initiate, guardian)`, base64. */
+/** `submit_guardian(account, 7, EvidenceDomain::Initiate, guardian)`, base64:
+ * for `account` = ACCOUNT, the call STATEMENT commits to. */
 function callArgs(guardian: string, account = ACCOUNT): string[] {
   return [
     Address.fromString(account).toScVal(),
     xdr.ScVal.scvU64(7n),
-    xdr.ScVal.scvVec([xdr.ScVal.scvSymbol('Initiate')]),
+    // An integer `#[contracttype]` enum is a `u32`.
+    xdr.ScVal.scvU32(0),
     Address.fromString(guardian).toScVal(),
   ].map((v) => v.toXDR('base64'));
 }
+
+// The vectors perch-js, the Rust interface crate, and an independent Python
+// implementation assert (scripts/recovery-statement-vectors.py).
+const here = dirname(fileURLToPath(import.meta.url));
+const vectors = JSON.parse(readFileSync(resolve(here, '../../../testdata/recovery/statement-v2.json'), 'utf8')) as {
+  statements: (Record<string, unknown> & { name: string; action: string; encoding: string; digest: string })[];
+};
+
+/** The deployed controller's own contract spec, from the bindings
+ * perch-contracts generates from the wasm in deployments/testnet.json. */
+function controllerSpec(): contract.Spec {
+  const src = readFileSync(resolve(here, '../../perch-contracts/src/recovery.ts'), 'utf8');
+  const start = src.indexOf('new ContractSpec([');
+  const block = src.slice(start, src.indexOf(']),', start));
+  return new contract.Spec([...block.matchAll(/"([A-Za-z0-9+/=]+)"/g)].map((m) => m[1]!));
+}
+
+describe('statement', () => {
+  it('encodes and hashes every vector, and round-trips its wire form', () => {
+    for (const v of vectors.statements) {
+      const s = parseStatement(v);
+      expect(Buffer.from(encodeStatement(s)).toString('hex'), v.name).toBe(v.encoding);
+      expect(statementDigest(s), v.name).toBe(v.digest);
+      expect(statementDigest(parseStatement(JSON.parse(JSON.stringify(statementJson(s))))), v.name).toBe(v.digest);
+    }
+  });
+
+  it("rebuilds exactly the call the deployed controller's spec encodes", () => {
+    const spec = controllerSpec();
+    const guardian = Keypair.random().publicKey();
+    const h = (x: unknown) => Buffer.from(x as string, 'hex');
+    for (const v of vectors.statements) {
+      const sub = v.subject as Record<string, string | number>;
+      const change = v.action === 'reconfigure' || v.action === 'upgrade';
+      const fn = change ? 'approve_change' : 'submit_guardian';
+      const native = !change
+        ? { account: v.account, attempt_id: BigInt(sub.attempt_id!), domain: v.action === 'cancel' ? 1 : 0, guardian }
+        : {
+            account: v.account,
+            subject:
+              v.action === 'upgrade'
+                ? { tag: 'Upgrade', values: [{ request_id: BigInt(sub.request_id!), wasm_hash: h(sub.wasm_hash) }] }
+                : {
+                    tag: 'Reconfigure',
+                    values: [sub.change === 'remove' ? { tag: 'Remove', values: undefined } : { tag: 'Set', values: [h(sub.new_config_hash)] }],
+                  },
+            valid_until: v.valid_until_ledger,
+            guardian,
+          };
+      const expected = spec.funcArgsToScVals(fn, native).map((a) => a.toXDR('base64'));
+      expect(callArgsFor(parseStatement(v), fn, guardian), v.name).toEqual(expected);
+    }
+    expect(callArgsFor(STATEMENT, 'submit_guardian', CONTRACT_GUARDIAN)).toEqual(callArgs(CONTRACT_GUARDIAN));
+  });
+
+  it('refuses a statement approved through the other entry point, or for another controller or network', async () => {
+    const g = Keypair.random();
+    const a = parseApproval(await approval(g, D), CONTROLLER, D);
+    expect(statementCall(WIRE, a, CONTROLLER, Networks.TESTNET)).toEqual(callArgs(g.publicKey()));
+    const viaChange = parseApproval(await approval(g, D, { fn: 'approve_change' }), CONTROLLER, D);
+    expect(() => statementCall(WIRE, viaChange, CONTROLLER, Networks.TESTNET)).toThrow(/submit_guardian/);
+    const upgrade = parseStatement(vectors.statements.find((v) => v.action === 'upgrade'));
+    expect(() => callArgsFor(upgrade, 'submit_guardian', g.publicKey())).toThrow(/approve_change/);
+    expect(() => statementCall(WIRE, a, CONTRACT_GUARDIAN, Networks.TESTNET)).toThrow(/another controller/);
+    expect(() => statementCall(WIRE, a, CONTROLLER, Networks.PUBLIC)).toThrow(/another network/);
+    expect(() => statementCall({ ...WIRE, config_epoch: '2' }, a, CONTROLLER, Networks.TESTNET)).toThrow(/digest/);
+    expect(() => statementCall({ ...WIRE, action: 'steal' }, a, CONTROLLER, Networks.TESTNET)).toThrow(ApprovalError);
+  });
+});
 
 describe('parseApproval', () => {
   it('accepts and verifies the approval the deployed controller accepted', () => {
@@ -262,12 +359,13 @@ describe('relay', () => {
   const opts = { controller: CONTROLLER, networkPassphrase: Networks.TESTNET };
   const req = (method: string, path: string, body?: string) =>
     new Request(`https://relay.test${path}`, { method, body });
-  const put = (kv: MemoryKv, o: typeof opts & { simulate?: Simulate }, entry: string, args: string[], digest = D) =>
-    handleRelay(req('PUT', `/approvals/${digest}`, JSON.stringify({ entry, args })), kv, o);
+  const put = (kv: MemoryKv, o: typeof opts & { simulate?: Simulate }, entry: string, args: string[], statement?: unknown) =>
+    handleRelay(req('PUT', `/approvals/${D}`, JSON.stringify({ entry, args, statement })), kv, o);
   const get = async (kv: MemoryKv, digest = D) =>
     (await (await handleRelay(req('GET', `/approvals/${digest}`), kv, opts)).json()) as {
       approvals: { guardian: string; function: string; entry: string; args: string[]; admittedBy: string }[];
     };
+  const error = async (res: Response) => ((await res.json()) as { error: string }).error;
 
   /** A stand-in for enforcing simulation that accepts exactly `genuine`. */
   function simulator(genuine: string[]): { simulate: Simulate; calls: ApprovalCall[] } {
@@ -316,17 +414,17 @@ describe('relay', () => {
     const kv = new MemoryKv();
     const [g1, g2] = [Keypair.random(), Keypair.random()];
     for (const g of [g1, g2]) {
-      const res = await put(kv, opts, await approval(g, D), callArgs(g.publicKey()));
+      const res = await put(kv, opts, await approval(g, D), callArgs(g.publicKey()), WIRE);
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual({ stored: g.publicKey(), admittedBy: 'signature' });
     }
     // A guardian re-posting replaces their own entry.
-    const again = await approval(g1, D, { fn: 'approve_change' });
-    expect((await put(kv, opts, again, callArgs(g1.publicKey()))).status).toBe(201);
+    const again = await approval(g1, D, { expiration: 5_000_100 });
+    expect((await put(kv, opts, again, callArgs(g1.publicKey()), WIRE)).status).toBe(201);
     const got = await get(kv);
     expect(got.approvals.map((a) => a.guardian).sort()).toEqual([g1.publicKey(), g2.publicKey()].sort());
     const first = got.approvals.find((a) => a.guardian === g1.publicKey())!;
-    expect(first.function).toBe('approve_change');
+    expect(first.entry).toBe(again);
     expect(first.args).toEqual(callArgs(g1.publicKey()));
     expect((await get(kv, 'cd'.repeat(32))).approvals).toEqual([]);
   });
@@ -335,12 +433,53 @@ describe('relay', () => {
     const kv = new MemoryKv();
     const g = Keypair.random();
     const forged = await approval(g, D, { signer: Keypair.random() });
-    expect((await put(kv, opts, forged, callArgs(g.publicKey()))).status).toBe(403);
+    expect((await put(kv, opts, forged, callArgs(g.publicKey()), WIRE)).status).toBe(403);
     const fromContract = delegated(CONTRACT_GUARDIAN, Keypair.random(), D);
-    const res = await put(kv, opts, fromContract, callArgs(CONTRACT_GUARDIAN));
+    const res = await put(kv, opts, fromContract, callArgs(CONTRACT_GUARDIAN), WIRE);
     expect(res.status).toBe(403);
-    expect(((await res.json()) as { error: string }).error).toMatch(/simulation/);
+    expect(await error(res)).toMatch(/simulation/);
+    // The guardian's own signature, but nothing to check the call against.
+    const unbound = await put(kv, opts, await approval(g, D), callArgs(g.publicKey()));
+    expect(unbound.status).toBe(403);
+    expect(await error(unbound)).toMatch(/statement/);
     expect((await get(kv)).approvals).toEqual([]);
+  });
+
+  it('a signed approval reposted with other arguments never replaces the call it was stored with', async () => {
+    // The signature covers the digest only; the call's other arguments are
+    // the controller's to rebuild the statement from.
+    const kv = new MemoryKv();
+    const g = Keypair.random();
+    const entry = await approval(g, D);
+    const genuine = callArgs(g.publicKey());
+    expect((await put(kv, opts, entry, genuine, WIRE)).status).toBe(201);
+    // The same entry, its signature, guardian, and expiration unchanged,
+    // with another account: not the call the signed statement commits to,
+    const otherAccount = callArgs(g.publicKey(), CONTRACT_GUARDIAN);
+    const res = await put(kv, opts, entry, otherAccount, WIRE);
+    expect(res.status).toBe(400);
+    expect(await error(res)).toMatch(/not the call the statement commits to/);
+    // unauthenticated without the statement,
+    expect((await put(kv, opts, entry, otherAccount)).status).toBe(403);
+    // and a statement naming that account is not the one signed.
+    expect((await put(kv, opts, entry, otherAccount, { ...WIRE, account: CONTRACT_GUARDIAN })).status).toBe(400);
+    // Nor another attempt, or the other evidence domain.
+    for (const [i, v] of [
+      [1, xdr.ScVal.scvU64(8n)],
+      [2, xdr.ScVal.scvU32(1)],
+    ] as const) {
+      const args = genuine.map((a, j) => (j === i ? v.toXDR('base64') : a));
+      expect((await put(kv, opts, entry, args, WIRE)).status).toBe(400);
+    }
+    expect((await get(kv)).approvals.map((a) => [a.entry, a.args])).toEqual([[entry, genuine]]);
+
+    // With simulation the controller rebuilds a statement from the altered
+    // call whose digest the signature does not cover, so it fails there.
+    const simulated = new MemoryKv();
+    const o = { ...opts, simulate: classicAccount(g.publicKey(), new Map([[g.publicKey(), 1]]), 1, genuine).simulate };
+    expect((await put(simulated, o, entry, genuine)).status).toBe(201);
+    expect((await put(simulated, o, entry, otherAccount)).status).toBe(403);
+    expect((await get(simulated)).approvals.map((a) => [a.entry, a.args])).toEqual([[entry, genuine]]);
   });
 
   it("with simulation, admits a G guardian's approval signed by another of its signers", async () => {
@@ -365,7 +504,7 @@ describe('relay', () => {
     expect((await put(kv, o, byMaster, callArgs(g.publicKey()))).status).toBe(403);
     expect((await get(kv)).approvals.map((a) => [a.entry, a.admittedBy])).toEqual([[bySigner, 'simulation']]);
     // Without simulation the relay can check only the master key's signature.
-    expect((await put(new MemoryKv(), opts, bySigner, callArgs(g.publicKey()))).status).toBe(403);
+    expect((await put(new MemoryKv(), opts, bySigner, callArgs(g.publicKey()), WIRE)).status).toBe(403);
   });
 
   it("forged entries posted first never exclude a delegated guardian's approval", async () => {
@@ -425,9 +564,9 @@ describe('relay', () => {
     const g = Keypair.random();
     const later = await approval(g, D, { expiration: 6_000_000 });
     const sooner = await approval(g, D, { expiration: 5_000_000 });
-    expect((await put(kv, opts, later, callArgs(g.publicKey()))).status).toBe(201);
+    expect((await put(kv, opts, later, callArgs(g.publicKey()), WIRE)).status).toBe(201);
     // A replay of the guardian's own older approval.
-    expect((await put(kv, opts, sooner, callArgs(g.publicKey()))).status).toBe(409);
+    expect((await put(kv, opts, sooner, callArgs(g.publicKey()), WIRE)).status).toBe(409);
     expect((await get(kv)).approvals[0]!.entry).toBe(later);
   });
 
@@ -435,8 +574,9 @@ describe('relay', () => {
     const kv = new MemoryKv();
     const g = Keypair.random();
     const elsewhere = await approval(g, 'cd'.repeat(32));
-    expect((await put(kv, opts, elsewhere, callArgs(g.publicKey()))).status).toBe(400);
-    expect((await put(kv, opts, await approval(g, D), callArgs(ACCOUNT))).status).toBe(400);
+    expect((await put(kv, opts, elsewhere, callArgs(g.publicKey()), WIRE)).status).toBe(400);
+    expect((await put(kv, opts, await approval(g, D), callArgs(ACCOUNT), WIRE)).status).toBe(400);
+    expect((await put(kv, opts, await approval(g, D), callArgs(g.publicKey()), 'a statement')).status).toBe(400);
     const raw = await approval(g, D);
     expect((await handleRelay(req('PUT', `/approvals/${D}`, raw), kv, opts)).status).toBe(400);
     expect((await handleRelay(req('PUT', `/approvals/${D}`, 'x'.repeat(40_000)), kv, opts)).status).toBe(413);
@@ -447,7 +587,8 @@ describe('relay', () => {
     let now = 0;
     const kv = new MemoryKv(() => now);
     const g = Keypair.random();
-    await put(kv, { ...opts, ttlSeconds: 60 } as typeof opts, await approval(g, D), callArgs(g.publicKey()));
+    await put(kv, { ...opts, ttlSeconds: 60 } as typeof opts, await approval(g, D), callArgs(g.publicKey()), WIRE);
+    expect((await get(kv)).approvals).toHaveLength(1);
     now = 61_000;
     expect((await get(kv)).approvals).toEqual([]);
   });
@@ -458,11 +599,13 @@ describe('relay', () => {
     try {
       const g = Keypair.random();
       const entry = await approval(g, D);
-      await postApproval(url, D, entry, callArgs(g.publicKey()).map((a) => xdr.ScVal.fromXDR(a, 'base64')));
+      const args = callArgs(g.publicKey()).map((a) => xdr.ScVal.fromXDR(a, 'base64'));
+      await expect(postApproval(url, D, entry, args)).rejects.toThrow(/403/);
+      await postApproval(url, D, entry, args, STATEMENT);
       const got = await fetchApprovals(url, D);
       expect(got.map((a) => [a.guardian, a.entry, a.args])).toEqual([[g.publicKey(), entry, callArgs(g.publicKey())]]);
       const forged = await approval(g, D, { signer: Keypair.random() });
-      await expect(postApproval(url, D, forged, callArgs(g.publicKey()))).rejects.toThrow(/403/);
+      await expect(postApproval(url, D, forged, callArgs(g.publicKey()), WIRE)).rejects.toThrow(/403/);
     } finally {
       server.close();
     }

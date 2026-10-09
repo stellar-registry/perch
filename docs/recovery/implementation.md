@@ -184,11 +184,14 @@ against the release artifacts belong to the integration layer.
   policy installs and uninstalls quietly. It emits one `DocApplied` per
   application: `doc_hash` as its topic, and the delta's counts (rules
   added, removed, and edited in place; signers and policies added and
-  removed by the in-place edits). `apply_delta.rs` checks the counts
-  against the plan and the diff of the installed rules, and that the
-  account emits nothing else. An indexer reads the installed rules from
-  the account (`applied_doc`, OZ's rule views); it cannot replay OZ's
-  per-item events, which no longer exist.
+  removed by the in-place edits). A rule replaced whole counts once as
+  removed and once as added, and its signers and policies are in no
+  count. `apply_delta.rs` checks the counts against the plan and the diff
+  of the installed rules, and that the account emits nothing else. An
+  indexer reads the installed rules from the account (`applied_doc`, OZ's
+  rule views); it cannot replay OZ's per-item events, which no longer
+  exist, so one that wants every signer change (a replaced rule's
+  included) diffs the rules it reads before and after the apply.
 - **`reconcile_signers`.** An in-place edit changes a rule's signers in
   one OZ `reconcile_signers_no_events` call (theahaco/stellar-contracts-OZ
   PR #5, pinned). The call checks the final set whole, keeps retained

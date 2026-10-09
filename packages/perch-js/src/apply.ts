@@ -14,7 +14,7 @@
 import { authPayloadXdr } from './xdr.js';
 import { authPayload, signingDigest, type SignerSignature } from './auth.js';
 import { canonicalJson, docHash } from './canonical.js';
-import { AccountFrozen, Aborted, mapSubmissionError } from './errors.js';
+import { AccountFrozen, Aborted, InconsistentRead, mapSubmissionError } from './errors.js';
 import { checkLimits } from './limits.js';
 import type { PolicyDoc } from './schema.js';
 import { selectRules, type RuleRef, type RuleSelection } from './selection.js';
@@ -110,6 +110,8 @@ export interface ApplyResult {
   revision: bigint;
   /** The steps this operation ran (not those it skipped). */
   ran: string[];
+  /** The newest ledger a step it ran was confirmed at (0 if it ran none). */
+  ledger: number;
 }
 
 export interface ApplyOperation {
@@ -121,6 +123,9 @@ export interface ApplyOperation {
 }
 
 const ADMIN: RuleRef = { name: 'admin', scope: { type: 'self-admin' } };
+
+/** Reads of the revision after a confirmed apply before giving up. */
+const FINAL_READ_ATTEMPTS = 3;
 
 /** Apply `doc` to the backend's account. */
 export function applyDocument(
@@ -140,6 +145,11 @@ export function applyDocument(
   const reader = backend.reader;
   const canonical = new TextEncoder().encode(canonicalJson(doc));
   const hash = docHash(doc);
+
+  // The newest ledger a step was confirmed at, and whether a step landed:
+  // after that, the operation never starts again (it would apply twice).
+  let confirmedAt = 0;
+  let landed = false;
 
   async function attempt(): Promise<ApplyResult> {
     enter('prepare');
@@ -194,16 +204,38 @@ export function applyDocument(
         submitted = await prepared.submit(payload);
         enter('confirm');
         progress({ phase: 'confirm', step: step.id, index, of });
-        await submitted.confirm();
+        const confirmed = await submitted.confirm();
+        confirmedAt = Math.max(confirmedAt, confirmed.ledger);
       } catch (err) {
         throw mapSubmissionError(err, { account: snapshot.account, ruleIds: selection.ruleIds, revision: config.revision });
       }
       ran.push(step.id);
     }
-    const now = await reader.revision();
-    clock.observe(now.latestLedger);
-    progress({ phase: 'done', revision: now.value });
-    return { docHash: hash, revision: now.value, ran };
+    landed = ran.length > 0;
+    const revision = await confirmedRevision(config.revision, landed);
+    progress({ phase: 'done', revision });
+    return { docHash: hash, revision, ran, ledger: confirmedAt };
+  }
+
+  /** The revision after the apply, from a read at least as recent as the
+   *  last confirmation and every answer already seen, and past the revision
+   *  the apply started from. A lagging RPC is read again; one that keeps
+   *  lagging is `InconsistentRead`, never a pre-transaction revision. */
+  async function confirmedRevision(before: bigint, applied: boolean): Promise<bigint> {
+    let why = '';
+    for (let i = 0; i < FINAL_READ_ATTEMPTS; i++) {
+      const now = await reader.revision();
+      if (!clock.observe(now.latestLedger)) {
+        why = `revision() answered from ledger ${now.latestLedger}, older than ${clock.latest}`;
+      } else if (now.latestLedger < confirmedAt) {
+        why = `revision() answered from ledger ${now.latestLedger}, before the confirmation at ${confirmedAt}`;
+      } else if (applied && now.value <= before) {
+        why = `revision() reports ${now.value}, not past ${before}, after the apply was confirmed`;
+      } else {
+        return now.value;
+      }
+    }
+    throw new InconsistentRead(`the apply was confirmed, but no read showed its revision: ${why}`);
   }
 
   async function run(): Promise<ApplyResult> {
@@ -215,7 +247,7 @@ export function applyDocument(
         return out;
       } catch (err) {
         const failedIn = phase as ApplyPhase;
-        if (aborted || err instanceof Aborted || n >= max || !callbacks.onError) {
+        if (aborted || landed || err instanceof Aborted || n >= max || !callbacks.onError) {
           phase = 'failed';
           throw err;
         }

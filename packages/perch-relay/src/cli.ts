@@ -5,8 +5,9 @@
 //       --rpc-url https://soroban-testnet.stellar.org [--host 127.0.0.1] [--port 8787]
 //
 // With --rpc-url every entry is admitted by enforcing simulation; without it
-// only G guardians' own signatures are accepted. Prints the URL it serves as
-// its first line of output. Approvals do not survive a restart.
+// only G guardians' own signatures are accepted, posted with the statement
+// they sign. Prints the URL it serves as its first line of output.
+// Approvals do not survive a restart.
 
 import { parseArgs } from 'node:util';
 import { MemoryKv } from './kv.js';

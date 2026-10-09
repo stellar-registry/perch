@@ -14,3 +14,12 @@ export type { Approval, RelayOptions } from './relay.js';
 export { rpcSimulator } from './simulate.js';
 export type { ApprovalCall, Simulate } from './simulate.js';
 export { fetchApprovals, postApproval } from './client.js';
+export {
+  callArgsFor,
+  encodeStatement,
+  parseStatement,
+  statementCall,
+  statementDigest,
+  statementJson,
+} from './statement.js';
+export type { RecoveryAction, RecoveryStatement, StatementJson, StatementSubject } from './statement.js';

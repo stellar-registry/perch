@@ -114,11 +114,20 @@ records.
 
 ## The testnet registry
 
-The stack is published to its own instance of the registry wasm the perch
-registries already run (`4b2d9ea4…`, the code at `unverified/perch/stateless`
-and `unverified/perch/constructorless`). The instance is deployed unnamed,
-with a fresh deployer key as admin, manager, and author. Publishing pre-merge
-builds into the canonical registries instead would have:
+Perch has one canonical registry, `unverified/perch/constructorless`
+(`CDX2DMYM…PDA7`, `vars.PERCH_REGISTRY_CONTRACT_ID`). `release.yml` publishes
+and `deploy_stateless`es every released infra contract there. An account or
+factory bakes one registry id and derives every infra address from it as
+`deployer(registry, sha256(wasm))`, so everything one consumer resolves must
+live in that one registry. The `unverified/perch/stateless` registry, where
+the spending limit used to be published by a job of its own, is retired. It
+keeps `perch-spending-limit` 0.1.1 and earlier, and nothing new is published
+there.
+
+A deployment by `deploy-stack.sh` goes to its own instance of the same
+registry wasm (`4b2d9ea4…`), deployed unnamed, with a fresh deployer key as
+admin, manager, and author. Publishing pre-merge builds into the canonical
+registry instead would have:
 
 - taken version numbers the release pipeline will publish later with
   different bytes. A registry refuses a second hash under a version, so the
@@ -127,9 +136,9 @@ builds into the canonical registries instead would have:
   because the registry has no author transfer.
 
 Both are maintainers' decisions, not a deployment script's. `release.yml`
-therefore tags and version-tracks the new contracts but keeps them out of
-the publish allow-list (see its `publish-plan` comment). Publishing the stack
-canonically means:
+therefore tags and version-tracks the recovery-stack contracts but keeps them
+out of the publish allow-list (see its `publish-plan` comment). Publishing
+the stack canonically means:
 
 1. adding the tier-0 contracts to `ALLOW`;
 2. having the manager make the one-time initial publish of each new name;
@@ -137,9 +146,12 @@ canonically means:
 4. running `deploy-stack.sh --registry <canonical>`, or the equivalent
    ordered pipeline job, and committing the manifest it writes.
 
-The spending-limit release job publishes to the canonical `stateless`
-registry by its id (`vars.PERCH_STATELESS_REGISTRY_ID`), not through the
-account's pin cache, which now follows the manifest.
+A name that is new to the canonical registry needs the manager's one-time
+initial publish before its first CI publish can succeed. The registry is
+managed: without the manager's signature, it refuses a new name with
+`#12 ManagerRequired`. That publish also binds the name's author, the
+perch-author smart account, permanently. The command is in `release.yml`'s
+header.
 
 ## Simulating a recovery completion
 

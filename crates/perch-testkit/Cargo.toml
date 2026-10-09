@@ -15,16 +15,16 @@ doctest = false
 # worlds, and it is consumed exclusively as a dev-dependency (never shipped).
 soroban-sdk = { workspace = true, features = ["testutils"] }
 stellar-accounts = { workspace = true }
-perch-account = { version = "0.3.0", path = "../perch-account" }
-perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler" }
-perch-interpreter = { version = "0.1.1", path = "../perch-interpreter" }
-perch-ed25519-verifier = { version = "0.1.1", path = "../perch-ed25519-verifier" }
-perch-spending-limit = { version = "0.1.1", path = "../perch-spending-limit" }
+perch-account = { version = "0.3.1", path = "../perch-account" }
+perch-doc-compiler = { version = "0.3.1", path = "../perch-doc-compiler" }
+perch-interpreter = { version = "0.1.3", path = "../perch-interpreter" }
+perch-ed25519-verifier = { version = "10.0.0", path = "../perch-ed25519-verifier" }
+perch-spending-limit = { version = "0.1.2", path = "../perch-spending-limit" }
 # The pinned infra-resolution modules (`registry_pins`), so native mode registers
 # the infra at exactly the content addresses the account derives.
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account", features = ["testutils"] }
 # The controller generated recovery documents adopt (`delta`).
-perch-recovery = { version = "0.1.0", path = "../perch-recovery" }
+perch-recovery = { version = "0.1.1", path = "../perch-recovery" }
 # Shared document generator for proptest and cargo-fuzz (`delta`).
 arbitrary = "1"
 hex = "0.4"

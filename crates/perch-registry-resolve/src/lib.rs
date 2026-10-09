@@ -47,9 +47,10 @@
 //! // infra::perch_doc_compiler::address(env) -> Address   (registry baked in)
 //!
 //! // Pinned mode — compile-time hash literal, zero cross-contract calls, offline.
-//! // Hashes below are the perch infra published to `unverified/perch/stateless`
-//! // on **testnet** (registry CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O);
-//! // `address(env, &that_registry)` under testnet's network id derives the live ids.
+//! // Hashes below are illustrative builds of the perch infra; `address(env,
+//! // &registry)` under a network's id derives where that registry's
+//! // `deploy_stateless` put them (perch's canonical registry is
+//! // `unverified/perch/constructorless`).
 //! registry_contract! {
 //!     mod: interpreter,
 //!     wasm_name: "perch-interpreter",
@@ -77,13 +78,13 @@
 //!
 //! // Name-salted mode — `deploy_name:` instead of `wasm_name:`. Resolves a
 //! // *named* deploy (salt = sha256(name), the base `deploy` convention) from its
-//! // PARENT registry, so e.g. the stateless subregistry derives from the perch
-//! // registry id — no need to hardcode the child's strkey.
+//! // PARENT registry, so e.g. the constructorless subregistry derives from the
+//! // perch registry id — no need to hardcode the child's strkey.
 //! registry_contract! {
-//!     mod: stateless,
-//!     deploy_name: "stateless",
+//!     mod: constructorless,
+//!     deploy_name: "constructorless",
 //! }
-//! // stateless::address(env, &perch_registry) → CC6ELNH6…RY26O (on testnet)
+//! // constructorless::address(env, &perch_registry) → CDX2DMYM…PDA7 (on testnet)
 //!
 //! // Content-addressed modes expand to a module exposing:
 //! //   pub fn address(env: &Env, registry: &Address) -> Address

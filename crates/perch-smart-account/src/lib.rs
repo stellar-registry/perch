@@ -74,10 +74,10 @@ pub mod infra {
     perch_registry_resolve::registry_contract!(perch_doc_compiler);
     perch_registry_resolve::registry_contract!(perch_interpreter);
 
-    // Published to `unverified/perch/stateless` and `deploy_stateless`\'d like
-    // the two above; its wasm is downloaded by NAME from the stateless registry
-    // (`stellar registry download` — it has no name-salted perch-registry
-    // instance for `contract fetch` to pull from).
+    // Published and `deploy_stateless`\'d into the same registry as the two
+    // above: the one id in `wasm/stateless.id` derives all three, so they must
+    // share a registry (canonically unverified/perch/constructorless; a
+    // deployment's own instance otherwise, per its manifest).
     perch_registry_resolve::registry_contract!(perch_spending_limit);
 }
 
@@ -335,8 +335,9 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// Apply a policy document — **the only way authorization changes**.
     /// The two shared, immutable infra contracts (the stateless doc compiler
     /// and the interpreter) are derived from the build-time-pinned
-    /// [`stateless_registry`] (see [`infra`]), never passed in. Replaces the
-    /// entire rule set atomically and returns the canonical `doc_hash`.
+    /// [`stateless_registry`] (see [`infra`]), never passed in. Brings the
+    /// installed rules to the document in one invocation, changing only the
+    /// rules that differ, and returns the canonical `doc_hash`.
     ///
     /// Authorized by the owner (any ordinary rule scoped to the account),
     /// or, for a recovery completion only, by the zero-signer recovery rule
@@ -388,7 +389,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     }
 
     /// The applied document's canonical bytes, or `None` before the first
-    /// `apply_doc`. `sha256` of them is [`Self::applied_doc_hash`].
+    /// `apply_doc`. Under CANON v1, `sha256` of them is
+    /// [`Self::applied_doc_hash`].
     fn applied_doc(e: &Env) -> Option<Bytes> {
         PerchStorage::get_applied_doc_bytes(e)
     }

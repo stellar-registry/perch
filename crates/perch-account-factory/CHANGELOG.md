@@ -4,42 +4,13 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [0.3.1] - 2026-10-09
-
-### 🐛 Bug Fixes
-
-- *(deps)* Stellar-accounts 0.7.1 (git 82002206b1da) -> 0.7.1 (git 33726766a1fd)
+## [0.1.1] - 2026-10-09
 
 ### 💼 Other
 
-- Authoritative spec, one recovery statement, and the ZK adapter interface (epic #99 WS1) (#100)
-- One controller and the shared account capabilities (epic #99 WS3) (#102)
-- OZ materialization layer: quiet OZ mutations, reconcile_signers, OZ fork re-pin, caps 8x11 (epic #99, split from #103) (#111)
-- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
 - Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
 
-## [0.3.0] - 2026-09-24
-
-### 🚀 Features
-
-- *(recovery)* Stage 4 — recovery schema, shared controller, compiler + client support
-
-### 🐛 Bug Fixes
-
-- *(doc-compiler)* Unblock 0.2.0 cap-capable release, republish as 0.2.1 (#79)
-- *(recovery)* Close review-surfaced auth/timing gaps; reframe docs as standalone
-
-### 🚜 Refactor
-
-- *(recovery)* Convert 0-or-1 Vec fields to Option where the SDK allows it
-
-## [0.2.0] - 2026-09-09
-
-### 🚀 Features
-
-- Interpreter TS bindings (@stellar-registry/perch-interpreter) + perch-js threshold/cap parity (#77)
-
-## [0.1.1] - 2026-08-25
+## [0.1.0] - 2026-10-09
 
 ### 🚀 Features
 
@@ -52,11 +23,19 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 - *(registry-resolve)* Pin the resolver macro to the testnet infra deployment (#47)
 - *(ir,compile)* Native M-of-N via Principals::Threshold → MinSigners(m) (#52)
 - *(spending-limit)* Wire cap composition through apply_doc (#54)
+- Interpreter TS bindings (@stellar-registry/perch-interpreter) + perch-js threshold/cap parity (#77)
+- *(recovery)* Stage 4 — recovery schema, shared controller, compiler + client support
 
 ### 🐛 Bug Fixes
 
 - *(release)* Verify the reusable signer + publish-only dispatch + tag all six contracts (#59)
 - *(release)* Version the six release-tracked contracts independently (#69)
+- *(doc-compiler)* Unblock 0.2.0 cap-capable release, republish as 0.2.1 (#79)
+- *(recovery)* Close review-surfaced auth/timing gaps; reframe docs as standalone
+
+### 🚜 Refactor
+
+- *(recovery)* Convert 0-or-1 Vec fields to Option where the SDK allows it
 
 ### 📚 Documentation
 
@@ -71,5 +50,9 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 
 - Wire-format benchmark — freeze postfix as v1 (#2) (#14)
 - The `admin-root` rule → `admin` (closes #50) (#51)
+- Authoritative spec, one recovery statement, and the ZK adapter interface (epic #99 WS1) (#100)
+- One controller and the shared account capabilities (epic #99 WS3) (#102)
+- OZ materialization layer: quiet OZ mutations, reconcile_signers, OZ fork re-pin, caps 8x11 (epic #99, split from #103) (#111)
+- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
 
 

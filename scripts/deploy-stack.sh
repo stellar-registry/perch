@@ -32,7 +32,8 @@
 # Env: STELLAR_NETWORK (default testnet), STELLAR_RPC_URL,
 #      STELLAR_NETWORK_PASSPHRASE, PERCH_ROOT_REGISTRY, PERCH_REGISTRY_WASM_FROM
 #      (a contract running the registry wasm to reuse; default: the
-#      `stateless` registry under unverified/perch).
+#      `constructorless` registry under unverified/perch, perch's canonical
+#      registry).
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -40,7 +41,7 @@ export STELLAR_NETWORK="${STELLAR_NETWORK:-testnet}"
 RPC_URL="${STELLAR_RPC_URL:-https://soroban-testnet.stellar.org}"
 PASSPHRASE="${STELLAR_NETWORK_PASSPHRASE:-Test SDF Network ; September 2015}"
 ROOT="${PERCH_ROOT_REGISTRY:-CAAXJETKPYAATU4HVVQUTE2FFBULNFGZNEOC3MS635U5K3GZLAY2HI4M}"
-REGISTRY_WASM_FROM="${PERCH_REGISTRY_WASM_FROM:-CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O}"
+REGISTRY_WASM_FROM="${PERCH_REGISTRY_WASM_FROM:-CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7}"
 
 source_key=""
 registry=""

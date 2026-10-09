@@ -1,10 +1,10 @@
 {
-  "$comment": "Declarative set of perch infra contracts that are published + content-addressed deployed (deploy_stateless, salt = wasm_hash) via the managed `stateless` registry. Consumed by scripts/bootstrap-testnet.sh (PERCH_STATELESS=1) and, once #41 lands, by the registry_contract! resolver macro + perch-compile's interpreter_wasm_hash. Requires #38 (upstream StatelessDeployable / deploy-stateless CLI) and #39 (crates/perch-stateless-registry). perch-account is deliberately ABSENT: its __constructor takes admin_signers, so it is not content-addressable and stays name-salted on unverified/perch.",
+  "$comment": "Declarative set of perch infra contracts that are published + content-addressed deployed (deploy_stateless, salt = wasm_hash) via perch's canonical managed registry, `constructorless` under unverified/perch (the former `stateless` subregistry is retired: an account bakes one registry id, so all its infra must share one registry). Consumed by scripts/bootstrap-testnet.sh (PERCH_STATELESS=1) and, once #41 lands, by the registry_contract! resolver macro + perch-compile's interpreter_wasm_hash. Requires #38 (upstream StatelessDeployable / deploy-stateless CLI) and #39 (crates/perch-stateless-registry). perch-account is deliberately ABSENT: its __constructor takes admin_signers, so it is not content-addressable and stays name-salted on unverified/perch.",
   "registry": {
-    "name": "stateless",
+    "name": "constructorless",
     "wasm": "perch_stateless_registry.wasm",
     "wasm_name": "perch-stateless-registry",
-    "note": "A second managed subregistry, registered as `stateless` under unverified/perch (admin=manager=deployer at deploy, manager rotated to the perch smart account in phase 6). Its deploy_stateless entry point uses salt = wasm_hash. Built by #39; the entry point is #38's StatelessDeployable."
+    "note": "perch's canonical managed subregistry, registered as `constructorless` under unverified/perch (already deployed on testnet: CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7; its manager is the deployer key until phase 6 rotates it to the perch smart account). Its deploy_stateless entry point uses salt = wasm_hash; release.yml publishes every infra contract into it."
   },
   "contracts": [
     {

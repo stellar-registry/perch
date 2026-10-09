@@ -1,6 +1,6 @@
 name: Release
 
-# Three chained halves:
+# Two chained halves:
 #
 #   1. `detect-releases` — on every push to main, tag any contract whose crate
 #      manifest `version` has no matching `<contract>-v<version>` tag yet (i.e.
@@ -10,25 +10,25 @@ name: Release
 #      against the crates.io index and also packaged the immutable last-release
 #      tags as its diff baseline, wedging the pipeline. To release a contract,
 #      bump its version in a PR.
-#   2. The spending-limit chain (`spending-limit-release` → `build-attest` →
-#      `publish-stateless`) — when a run of this workflow tags
-#      `perch-spending-limit-v*`, build the wasm via the
-#      stellar-registry/actions reusable workflow (scaffold build + optimize +
-#      GitHub release + stellar.expert validation + GitHub build-provenance
-#      attestation), then publish it to the STATELESS registry
-#      (content-addressed, salt = wasm_hash) and `deploy_stateless` it,
-#      authorized by the CI_PUBLISH_SECRET_KEY author key.
-#   3. The constructorless publishes (`publish-plan` → `constructorless-build`
-#      → `constructorless-publish`) — a generic, contract-AGNOSTIC fan-out:
-#      whichever constructorless contracts this run released (perch-interpreter
-#      / perch-doc-compiler / perch-ed25519-verifier) are each built+attested and
-#      published to unverified/perch/constructorless via the reusable
-#      stellar-registry/actions workflows (contract-release → registry-publish),
-#      authored by the perch-author-account smart account and signed by the
-#      theahaco/stellar-cli fork (on-chain rule discovery — no perch-deploy).
-#      No per-contract code — the set is data (see publish-plan).
+#   2. The infra publishes (`publish-plan` → `constructorless-build` →
+#      `constructorless-publish`) — a generic, contract-AGNOSTIC fan-out:
+#      whichever infra contracts this run released (the ALLOW list in
+#      publish-plan: perch-interpreter, perch-doc-compiler,
+#      perch-ed25519-verifier, perch-spending-limit) are each built+attested
+#      and published + `deploy_stateless`'d (content-addressed, salt =
+#      wasm_hash) into unverified/perch/constructorless via the reusable
+#      stellar-registry/actions workflows (contract-release →
+#      registry-publish), authored by the perch-author-account smart account
+#      and signed by the theahaco/stellar-cli fork (on-chain rule discovery —
+#      no perch-deploy). No per-contract code — the set is data (see
+#      publish-plan). That registry is perch's ONE canonical registry: an
+#      account or factory bakes a single registry id and derives every infra
+#      address as deployer(registry, sha256(wasm)), so every contract one
+#      consumer resolves must live in the same registry. (The spending limit
+#      used to have its own chain into unverified/perch/stateless; that
+#      registry is retired and keeps only perch-spending-limit <= 0.1.1.)
 #
-# A fourth, off-chain leg — `npm-publish` — mirrors the same convention for
+# A third, off-chain leg — `npm-publish` — mirrors the same convention for
 # the TypeScript packages: detect-releases also tags `<pkg>-v<version>` when a
 # packages/<pkg> manifest version was bumped in the merged PR (perch-js →
 # @stellar-registry/perch, perch-interpreter-js →
@@ -41,7 +41,7 @@ name: Release
 # build-time pins are fetched and verified from (scripts/fetch-infra-wasm.sh,
 # docs/deploy/README.md). Its contracts are tagged and version-tracked here
 # like the rest, but are not in the publish-plan allow-list: publishing them
-# to the canonical registries is a separate, deliberate step (see the
+# to the canonical registry is a separate, deliberate step (see the
 # publish-plan comment). The account and the factory pin what they consume,
 # so their release always follows the publication of their tier-0 pins.
 #
@@ -51,25 +51,26 @@ name: Release
 # App required. (This is why the old per-contract publish.yml, which needed the
 # App token's tag push to retrigger, was folded in here and removed.)
 #
-# ONE-TIME BOOTSTRAP (manager-signed): the stateless registry is MANAGED — the
-# manager must approve the INITIAL publish of a new wasm name; that first
-# publish also binds the author, and every later version needs only the
-# author's own signature. So before the first CI publish can succeed, the
-# manager must publish any earlier version with author = the CI key (pubkey of
-# CI_PUBLISH_SECRET_KEY). From a machine holding the manager key:
+# ONE-TIME BOOTSTRAP (manager-signed), once per NEW wasm name: the
+# constructorless registry is MANAGED — while its manager is set, the INITIAL
+# publish of a wasm name needs the manager's signature (registry error #12
+# ManagerRequired otherwise); that first publish also binds the name's author
+# for good (the registry has no author transfer), and every later version
+# needs only the author's own authorization (the smart account's ci-publish
+# rule). So before a contract newly added to ALLOW can publish, the manager
+# publishes an earlier version of it with author = the perch-author smart
+# account (vars.PERCH_AUTHOR_ADDRESS), using any wasm already uploaded to the
+# network (e.g. the contract's previous release):
 #
-#   stellar scaffold build --package perch-spending-limit
-#   stellar contract upload --wasm target/stellar/testnet/perch_spending_limit.wasm \
-#     --source-account <manager> --network testnet
-#   stellar contract invoke --id <stateless-registry> --network testnet \
+#   stellar contract invoke --id <constructorless registry> --network testnet \
 #     --source-account <manager> -- publish_hash \
-#     --wasm_name perch-spending-limit --author <CI-public-key> \
-#     --wasm_hash <hash-from-upload> --version 0.0.1
+#     --wasm_name <name> --author <PERCH_AUTHOR_ADDRESS> \
+#     --wasm_hash <uploaded hash> --version <earlier version>
 #
-# (0.0.1 < the first released version 0.1.0 — versions must be strictly
-# increasing.) After that the chain is autonomous: bump a contract's version in
-# a merged PR and detect-releases tags + publishes it. Run the bootstrap any
-# time after this workflow lands and before the first version bump merges.
+# (Versions must be strictly increasing, so the bootstrap version must be
+# below the first CI release.) If a release merges first, its publish leg
+# fails with #12 and the tag stays: after the bootstrap, re-run it with the
+# `publish_tag` dispatch input (detect-releases never re-tags a version).
 
 on:
   push:
@@ -84,12 +85,8 @@ on:
   # (`gh release delete <tag>` — keep the tag).
   workflow_dispatch:
     inputs:
-      spending_limit_tag:
-        description: "Existing spending-limit tag to (re)publish to the STATELESS registry, e.g. perch-spending-limit-v0.1.0"
-        required: false
-        type: string
       publish_tag:
-        description: "Existing constructorless-contract tag to (re)publish to unverified/perch/constructorless, e.g. perch-interpreter-v0.1.0"
+        description: "Existing tag of an ALLOW-listed contract to (re)publish to unverified/perch/constructorless, e.g. perch-spending-limit-v0.1.2"
         required: false
         type: string
 
@@ -102,7 +99,7 @@ permissions: {}
 # skips a same-hash republish and refuses a different-hash one, and
 # deploy_stateless is idempotent.
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && format('release-plz-dispatch-{0}{1}', inputs.spending_limit_tag, inputs.publish_tag) || 'release-plz' }}
+  group: ${{ github.event_name == 'workflow_dispatch' && format('release-plz-dispatch-{0}', inputs.publish_tag) || 'release-plz' }}
   cancel-in-progress: false
 
 jobs:
@@ -418,246 +415,20 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  # Gate + parameters for the spending-limit chain: did THIS run tag
-  # perch-spending-limit (or was a tag passed by hand via dispatch)?
-  spending-limit-release:
-    needs: detect-releases
-    # !cancelled(): on dispatch the detect-releases job is skipped, which would
-    # otherwise skip everything downstream of this `needs:`.
-    if: >-
-      !cancelled() && (
-        (github.event_name == 'workflow_dispatch' && inputs.spending_limit_tag != '') ||
-        (needs.detect-releases.outputs.releases_created == 'true' &&
-         contains(needs.detect-releases.outputs.releases, '"perch-spending-limit"'))
-      )
-    runs-on: ubuntu-latest
-    permissions: {}
-    outputs:
-      tag: ${{ steps.params.outputs.tag }}
-      version: ${{ steps.params.outputs.version }}
-    env:
-      RELEASES: ${{ needs.detect-releases.outputs.releases }}
-      DISPATCH_TAG: ${{ inputs.spending_limit_tag }}
-    steps:
-      - name: Extract tag and version
-        id: params
-        # Strict allow-list, not a prefix glob: the tag flows into the reusable
-        # workflow's release_name input, which that workflow interpolates
-        # directly into `run:` shell — any character beyond exact semver shape
-        # would be a cross-workflow command injection.
-        run: |
-          if [ -n "$DISPATCH_TAG" ]; then
-            TAG="$DISPATCH_TAG"
-          else
-            TAG=$(jq -r '.[] | select(.package_name == "perch-spending-limit") | .tag' <<<"$RELEASES")
-          fi
-          if ! [[ "$TAG" =~ ^perch-spending-limit-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "unexpected spending-limit tag: '$TAG'" >&2
-            exit 1
-          fi
-          {
-            echo "tag=$TAG"
-            echo "version=${TAG#perch-spending-limit-v}"
-          } >>"$GITHUB_OUTPUT"
-  # Build + attest + GitHub release via stellar-registry/actions: scaffold
-  # build with source_repo meta, `stellar contract optimize` (preserves the
-  # name/binver contractmeta — verified), a GitHub release at the release tag
-  # holding perch-spending-limit_v<version>.wasm, the hash submitted to
-  # stellar.expert contract-validation, and GitHub build provenance signed for
-  # the asset (verified again in publish-stateless before anything goes
-  # on-chain). detect-releases deliberately does NOT create this release: the
-  # reusable workflow's `gh release create` fails on an existing release.
-  #
-  # Push-only: the reusable workflow has no ref input — it builds this run's
-  # github.sha, which on push IS the commit detect-releases tagged, but on
-  # dispatch is wherever main has drifted to. So a dispatch never rebuilds; it
-  # republishes the existing attested asset (see the recovery note at the
-  # top).
-  build-attest:
-    needs: spending-limit-release
-    if: >-
-      !cancelled() &&
-      needs.spending-limit-release.result == 'success' &&
-      github.event_name == 'push'
-    permissions:
-      id-token: write
-      contents: write
-      attestations: write
-    uses: stellar-registry/actions/.github/workflows/contract-release.yml@470d61ccad7240f496497c66906a03e6540e8405 # main 2026-08
-    with:
-      package: perch-spending-limit
-      release_name: ${{ needs.spending-limit-release.outputs.tag }}
-      release_description: >-
-        Attested build of the perch-spending-limit policy contract, published
-        content-addressed to the perch stateless registry (see the attached
-        publish receipt).
-    secrets:
-      release_token: ${{ secrets.GITHUB_TOKEN }}
-
-  # The on-chain half: download the attested release asset, verify its
-  # provenance + binver, then publish_hash + deploy_stateless on the stateless
-  # registry. The CI key is the bound AUTHOR of the perch-spending-limit wasm
-  # name (see the bootstrap note at the top) — author auth is all a
-  # subsequent-version publish needs, and deploy_stateless (deployer = the
-  # registry itself) needs no auth at all and is idempotent.
-  # On push, build-attest must have succeeded; on dispatch it is skipped by
-  # design and the existing release asset is republished (its provenance is
-  # verified below either way — that check, not git position, is what makes
-  # the asset trustworthy).
-  publish-stateless:
-    needs: [spending-limit-release, build-attest]
-    if: >-
-      !cancelled() &&
-      needs.spending-limit-release.result == 'success' &&
-      (needs.build-attest.result == 'success' ||
-       (github.event_name == 'workflow_dispatch' && needs.build-attest.result == 'skipped'))
-    runs-on: ubuntu-latest
-    # mainnet would add required-reviewer protection on the environment (and
-    # needs the stateless registry deployed there first); testnet none.
-    environment: testnet
-    permissions:
-      contents: write # gh release download + upload receipt
-    env:
-      TAG: ${{ needs.spending-limit-release.outputs.tag }}
-      VERSION: ${{ needs.spending-limit-release.outputs.version }}
-      STELLAR_NETWORK: testnet
-      STELLAR_RPC_URL: ${{ vars.STELLAR_RPC_URL || 'https://soroban-testnet.stellar.org' }}
-      STELLAR_NETWORK_PASSPHRASE: ${{ vars.STELLAR_NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015' }}
-      WASM_NAME: perch-spending-limit
-      # unverified/perch/stateless (derive: name-salt "stateless" under
-      # unverified/perch, docs/testnet-deployment.md).
-      REGISTRY: ${{ vars.PERCH_STATELESS_REGISTRY_ID || 'CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O' }}
-      # Author bound to the wasm name at bootstrap = pubkey of the CI key.
-      AUTHOR: ${{ vars.SPENDING_LIMIT_AUTHOR || 'GDCB32GYRIYTZGERRSDRJVXALKR3TYA3W7YXQNXDNHJAOQSMRXBNUYAX' }}
-    steps:
-      # Checkout for the setup-stellar composite. The target registry is the
-      # canonical `stateless` subregistry of unverified/perch, named here
-      # rather than read from the account's pin cache: those pins come from
-      # deployments/testnet.json, which names whichever registry the current
-      # stack was deployed to (#95).
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-stellar
-      - name: Download the attested release asset
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          WASM="${WASM_NAME}_v${VERSION}.wasm"
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --pattern "$WASM" --dir dist
-          test -s "dist/$WASM" || { echo "release asset $WASM missing" >&2; exit 1; }
-          echo "WASM=dist/$WASM" >>"$GITHUB_ENV"
-      - name: Verify build provenance
-        # The attestation's SIGNER is the reusable workflow we call, not this
-        # repo's own workflow — in a reusable-workflow run the certificate's
-        # job_workflow_ref points at stellar-registry/actions. Without
-        # --signer-workflow, `gh attestation verify --repo <this repo>` finds
-        # the attestation but rejects the signer (the v0.1.0 failure:
-        # 'Error: verifying with issuer "sigstore.dev"').
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh attestation verify "$WASM" --repo "$GITHUB_REPOSITORY" \
-            --signer-workflow "stellar-registry/actions/.github/workflows/contract-release.yml"
-      - name: Cross-check wasm meta binver against the tag
-        run: |
-          meta_binver=$(stellar contract info meta --wasm "$WASM" | sed -n 's/^ • binver: \(.*\)$/\1/p')
-          if [ "$meta_binver" != "$VERSION" ]; then
-            echo "tag version $VERSION != wasm meta binver $meta_binver" >&2
-            exit 1
-          fi
-      - name: Publish to the stateless registry
-        env:
-          # stellar-cli reads the signing source account from STELLAR_ACCOUNT
-          # (accepts a raw S... seed) — the key never appears in argv.
-          STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
-        run: |
-          LOCAL_HASH=$(sha256sum "$WASM" | cut -d' ' -f1)
-          echo "LOCAL_HASH=$LOCAL_HASH" >>"$GITHUB_ENV"
-
-          # Idempotency preflight (same shape as perch-deploy publish): if this
-          # exact version is already on-chain with the same hash, skip the
-          # publish; a different hash under the same version is a supply-chain
-          # smell and refuses. Registry errors #1 NoSuchWasmPublished and
-          # #2 NoSuchVersion mean "not published yet" and proceed.
-          # fetch_hash's version is Option<String>: the CLI parses Option args
-          # as JSON, so the value must be a JSON string ("0.1.0", quotes and
-          # all) — bare 0.1.0 is rejected as invalid JSON before simulation.
-          set +e
-          onchain=$(stellar contract invoke --id "$REGISTRY" --network "$STELLAR_NETWORK" -- \
-            fetch_hash --wasm_name "$WASM_NAME" --version "\"$VERSION\"" 2>preflight.err)
-          rc=$?
-          set -e
-          onchain=${onchain//\"/}
-          if [ "$rc" -eq 0 ]; then
-            if [ "$onchain" = "$LOCAL_HASH" ]; then
-              echo "version $VERSION already published with the same hash — skipping publish"
-              exit 0
-            fi
-            echo "version $VERSION already on-chain with DIFFERENT hash $onchain (local $LOCAL_HASH)" >&2
-            exit 1
-          elif ! grep -qE 'Error\(Contract, #(1|2)\)' preflight.err; then
-            echo "unexpected preflight failure:" >&2
-            cat preflight.err >&2
-            exit 1
-          fi
-
-          # Upload prints the ledger wasm hash = sha256 of the bytes; assert it
-          # matches the attested asset before binding name+version to it.
-          uploaded=$(stellar contract upload --wasm "$WASM" --network "$STELLAR_NETWORK")
-          if [ "$uploaded" != "$LOCAL_HASH" ]; then
-            echo "uploaded hash $uploaded != local hash $LOCAL_HASH" >&2
-            exit 1
-          fi
-          stellar contract invoke --id "$REGISTRY" --network "$STELLAR_NETWORK" -- \
-            publish_hash --wasm_name "$WASM_NAME" --author "$AUTHOR" \
-            --wasm_hash "$LOCAL_HASH" --version "$VERSION"
-      - name: Deploy the content-addressed instance
-        env:
-          STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
-        run: |
-          # deployer = the registry itself → address is the pure function
-          # deployer(registry, wasm_hash); a redeploy of identical bytes is a
-          # no-op returning the same address. version is Option<String> → JSON
-          # string, same as the preflight.
-          addr=$(stellar contract invoke --id "$REGISTRY" --network "$STELLAR_NETWORK" -- \
-            deploy_stateless --wasm_name "$WASM_NAME" --version "\"$VERSION\"")
-          CONTRACT_ID=${addr//\"/}
-          echo "CONTRACT_ID=$CONTRACT_ID" >>"$GITHUB_ENV"
-      - name: Attach the publish receipt to the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          jq -n \
-            --arg registry "$REGISTRY" \
-            --arg wasm_name "$WASM_NAME" \
-            --arg version "$VERSION" \
-            --arg wasm_hash "$LOCAL_HASH" \
-            --arg contract_id "$CONTRACT_ID" \
-            --arg network "$STELLAR_NETWORK" \
-            '$ARGS.named' >publish-receipt.json
-          gh release upload "$TAG" publish-receipt.json --clobber \
-            --repo "$GITHUB_REPOSITORY"
-          {
-            echo "### perch-spending-limit $VERSION published"
-            echo '```json'
-            cat publish-receipt.json
-            echo '```'
-          } >>"$GITHUB_STEP_SUMMARY"
-
   # ── Constructorless contract publishes ────────────────────────────────────
-  # The generic, contract-agnostic half: any released CONSTRUCTORLESS contract
-  # (the reusable infra wasms authored by the perch-author-account smart
-  # account) is published to unverified/perch/constructorless. There is no
-  # per-contract workflow code — the set is data (the ALLOW list below, kept in
-  # step with the detect-releases CONTRACTS list), and everything else (wasm
-  # path, registry name, version) derives from the release tag. Adding a
-  # contract is a one-line edit here + a detect-releases CONTRACTS entry.
+  # The generic, contract-agnostic half: any released infra contract in the
+  # ALLOW list (the reusable infra wasms authored by the perch-author-account
+  # smart account) is published to unverified/perch/constructorless, perch's
+  # one canonical registry (see the header). There is no per-contract workflow
+  # code — the set is data (the ALLOW list below, kept in step with the
+  # detect-releases CONTRACTS list), and everything else (wasm path, registry
+  # name, version) derives from the release tag. Adding a contract is a
+  # one-line edit here + a detect-releases CONTRACTS entry + the manager's
+  # one-time initial publish of its name (the bootstrap note at the top).
   #
-  # Like the spending-limit chain this hangs off detect-releases's `releases` output
-  # in the SAME run, not a tag/release trigger — so it fires even though tags are
-  # pushed with the default GITHUB_TOKEN (no GitHub App required).
+  # This hangs off detect-releases's `releases` output in the SAME run, not a
+  # tag/release trigger — so it fires even though tags are pushed with the
+  # default GITHUB_TOKEN (no GitHub App required).
 
   # Which constructorless contracts did THIS run release (or was one passed by
   # hand)? Emit the publish matrix; empty ⇒ publish-constructorless skips.
@@ -680,9 +451,11 @@ jobs:
       - name: Build the publish matrix
         id: plan
         run: |
-          # The constructorless set. Keep in step with the detect-releases
+          # The canonical infra set. Keep in step with the detect-releases
           # CONTRACTS list. A contract not listed here is tagged but never
-          # published to the constructorless registry.
+          # published to the constructorless registry. Each name needs the
+          # manager's one-time initial publish there (the bootstrap note at the
+          # top) before its first CI publish can succeed.
           # The recovery stack (perch-recovery, perch-zk-pool,
           # perch-zk-adapter, perch-webauthn-verifier, perch-account-factory)
           # is deliberately NOT in this allow-list: it is tagged/versioned
@@ -693,17 +466,17 @@ jobs:
           # these here also needs the manager's one-time initial publish of
           # each new name, and the factory must publish after the account
           # build it pins.
-          ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier"]'
+          ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier","perch-spending-limit"]'
           if [ -n "$DISPATCH_TAG" ]; then
             # Strict allow-list regex, not a prefix glob: the tag and the package
             # parsed from it flow into later `run:` shells and perch-deploy args,
             # so anything beyond exact <pkg>-v<semver> shape is rejected.
-            if [[ "$DISPATCH_TAG" =~ ^(perch-interpreter|perch-doc-compiler|perch-ed25519-verifier)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            if [[ "$DISPATCH_TAG" =~ ^(perch-interpreter|perch-doc-compiler|perch-ed25519-verifier|perch-spending-limit)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
               matrix=$(jq -cn \
                 --arg p "${BASH_REMATCH[1]}" --arg t "$DISPATCH_TAG" --arg v "${BASH_REMATCH[2]}" \
                 '[{package: $p, tag: $t, version: $v}]')
             else
-              echo "publish_tag '$DISPATCH_TAG' is not a constructorless contract tag" >&2
+              echo "publish_tag '$DISPATCH_TAG' is not the tag of an ALLOW-listed contract" >&2
               exit 1
             fi
           else

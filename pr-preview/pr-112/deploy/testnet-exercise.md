@@ -48,15 +48,14 @@ tree, then rotates into the next one and proves from it.
 ## Reproducibility
 
 Building the stack from `source.commit` with the recorded toolchain gives
-every hash in the manifest. For this record (`aa5a78f`) that was checked on
-2026-10-08 on the deploying machine (macOS arm64). `build-stack.sh` with the
-manifest's builder (`scaffold`) and registry, run on this branch's tree,
-reproduced all ten artifacts' hashes; the tree's contract source is
-identical to `aa5a78f`'s. On 2026-10-09 the stack review (Fable r1) rebuilt
-it from a fresh `git archive aa5a78f` on a second macOS arm64 host with the
-recorded toolchain (rustc 1.97.1, stellar 27.0.0, scaffold 0.0.27), and all
-ten hashes matched. Other platforms and toolchains have not been checked:
-`stellar scaffold build` optimizes with the wasm-opt its version ships.
+every hash in the manifest. For this record (`7ae915d`, a commit on `main`)
+that was checked on 2026-10-09 on the deploying machine (macOS arm64). A
+fresh clone of the commit at another path, built by `build-stack.sh` with
+the manifest's builder (`scaffold`) and registry and the recorded toolchain
+(rustc 1.97.1, stellar 27.0.0, scaffold 0.0.27), reproduced all ten
+artifacts' hashes. Building on other hosts and toolchains has not been
+checked: `stellar scaffold build` optimizes with the wasm-opt its version
+ships.
 
 ## Findings
 
@@ -65,14 +64,17 @@ ten hashes matched. Other platforms and toolchains have not been checked:
   `rcv_sync` refuses the completion as a change during the window. See
   [`README.md`](README.md#simulating-a-recovery-completion). Wallets and
   relays (nidohq/nido) need to build the recovery-rule entry themselves.
-- **Two `perch-spending-limit 0.1.1`s.** This registry's 0.1.1
-  (`875fdb15…`) is the wrapper that installs and uninstalls quietly (#111
-  `554cf48`). The canonical `unverified/perch/stateless` registry's 0.1.1
-  (`8509ae9f…`) is the code before it. The code changed without a version
-  bump, so resolving `(perch-spending-limit, 0.1.1)` in the two registries
-  gives different code. Resolve it by this manifest's hash or address.
-  The 0.1.1 → 0.1.2 bump that ends this is held for the next contract wasm
-  change (#111), and must land before any canonical publish.
+- **The same version is different bytes in the canonical registry.** The
+  infra contracts this record publishes into its own registry instance
+  carry the versions `release.yml` also published canonically, into
+  `unverified/perch/constructorless`. Interpreter 0.1.3, compiler 0.3.1,
+  spending limit 0.1.2, and ed25519 verifier 10.0.0 all appear in both
+  places, but the bytes differ. `release.yml` builds through
+  stellar-registry/actions' attested release build, while
+  `build-stack.sh` runs its own scaffold build. For example, interpreter
+  0.1.3 is `2254f17d…` here and `e4d7fb8d…` canonically. Resolve infra by
+  this manifest's hash or address, never by `(name, version)` across
+  registries.
 - **Rent dominates fees.** Enrollment writes the pool's leaf and enrollment
   entries, the controller's configuration, and the account's applied
   document, all extended to the maximum TTL (3 110 400 ledgers, about 180
@@ -82,7 +84,7 @@ ten hashes matched. Other platforms and toolchains have not been checked:
 
 ## Results
 
-Run `1791409227` against `deployments/testnet.json` (stack commit `aa5a78f13be1`), ledgers 5077129–5077253: 81 transactions submitted, 31 refusals checked, 0 scenario failures. Fees paid: 67.3314 XLM.
+Run `1791582053` against `deployments/testnet.json` (stack commit `7ae915dc1ac6`), ledgers 5111694–5111823: 81 transactions submitted, 31 refusals checked, 0 scenario failures. Fees paid: 78.9806 XLM.
 
 ### Against the budget
 
@@ -90,161 +92,161 @@ Worst measured transaction per row of `docs/recovery/budgets.md` §2, as a share
 
 | Row | Worst step | Instructions | Footprint entries | Written entries | Write bytes | Tx size | Fee (XLM) | Latency (s) | Within budget |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Enroll ZK through `apply_doc` | enroll Combined through apply_doc | 64,695,405 (16.2%) | 34 (8.5%) | 17 (8.5%) | 8,352 (6.3%) | 6,400 (4.8%) | 5.8832 | 4.7 | yes |
-| `begin_lost_key` | begin_lost_key | 21,164,956 (5.3%) | 17 (4.2%) | 2 (1.0%) | 1,236 (0.9%) | 2,084 (1.6%) | 0.1925 | 4.7 | yes |
-| `begin_compromise` | begin_compromise | 16,484,854 (4.1%) | 17 (4.2%) | 2 (1.0%) | 1,236 (0.9%) | 2,008 (1.5%) | 0.1922 | 4.8 | yes |
-| `publish_baseline` | publish_baseline | 6,730,453 (1.7%) | 10 (2.5%) | 1 (0.5%) | 776 (0.6%) | 1,504 (1.1%) | 1.0471 | 4.8 | yes |
-| `submit_guardian` | submit_guardian (2 of 2, promoting; a delegated perch guardian, relayed) | 3,940,614 (1.0%) | 16 (4.0%) | 5 (2.5%) | 1,532 (1.2%) | 2,240 (1.7%) | 2.0662 | 3.2 | yes |
-| `submit_zk` | submit_zk (Combined, promoting; sets the freeze) | 124,921,826 (31.2%) | 17 (4.2%) | 5 (2.5%) | 2,388 (1.8%) | 18,176 (13.8%) | 2.0438 | 3.2 | yes |
-| Completion `apply_doc` | completion apply_doc (Combined, ZK rotation) | 65,548,738 (16.4%) | 40 (10.0%) | 29 (14.5%) | 10,336 (7.8%) | 6,720 (5.1%) | 1.3989 | 3.2 | yes |
-| Owner cancellation (`Loss`) | Loss owner cancel_recovery (the veto) | 6,953,421 (1.7%) | 14 (3.5%) | 4 (2.0%) | 1,252 (0.9%) | 2,084 (1.6%) | 0.0032 | 4.7 | yes |
-| `approve_change` | approve_change (G-account, 2 of 2) | 1,627,621 (0.4%) | 8 (2.0%) | 2 (1.0%) | 404 (0.3%) | 1,468 (1.1%) | 0.0042 | 4.7 | yes |
-| `submit_zk_change` | submit_zk_change (Reconfigure) | 123,040,919 (30.8%) | 12 (3.0%) | 1 (0.5%) | 240 (0.2%) | 17,832 (13.5%) | 0.0300 | 3.3 | yes |
-| `Protected` reconfiguration `apply_doc` | Protected Combined reconfiguration apply_doc | 25,068,364 (6.3%) | 25 (6.2%) | 12 (6.0%) | 5,588 (4.2%) | 5,736 (4.3%) | 0.0375 | 4.8 | yes |
-| `Protected` `schedule_upgrade` | Protected schedule_upgrade | 6,925,867 (1.7%) | 13 (3.2%) | 2 (1.0%) | 1,144 (0.9%) | 2,044 (1.5%) | 0.0163 | 4.7 | yes |
-| Ordinary activity (direct authorization) | activity before the condition is met | 5,376,318 (1.3%) | 10 (2.5%) | 3 (1.5%) | 440 (0.3%) | 1,752 (1.3%) | 0.0586 | 4.7 | yes |
-| Ordinary activity (`execute`) | ordinary activity: execute | 6,006,074 (1.5%) | 10 (2.5%) | 3 (1.5%) | 440 (0.3%) | 1,888 (1.4%) | 0.0027 | 3.2 | yes |
-| Factory `create_passkey` | factory create_passkey | 2,456,655 (0.6%) | 10 (2.5%) | 5 (2.5%) | 1,500 (1.1%) | 992 (0.8%) | 0.7400 | 4.7 | yes |
+| Enroll ZK through `apply_doc` | enroll Combined through apply_doc | 64,707,224 (16.2%) | 34 (8.5%) | 17 (8.5%) | 8,352 (6.3%) | 6,400 (4.8%) | 6.9056 | 4.7 | yes |
+| `begin_lost_key` | begin_lost_key | 21,159,993 (5.3%) | 17 (4.2%) | 2 (1.0%) | 1,236 (0.9%) | 2,084 (1.6%) | 0.2254 | 4.7 | yes |
+| `begin_compromise` | begin_compromise | 16,490,355 (4.1%) | 17 (4.2%) | 2 (1.0%) | 1,236 (0.9%) | 2,008 (1.5%) | 0.2250 | 3.1 | yes |
+| `publish_baseline` | publish_baseline | 6,728,134 (1.7%) | 10 (2.5%) | 1 (0.5%) | 776 (0.6%) | 1,504 (1.1%) | 1.2293 | 4.7 | yes |
+| `submit_guardian` | submit_guardian (2 of 2, promoting; a delegated perch guardian, relayed) | 3,941,974 (1.0%) | 16 (4.0%) | 5 (2.5%) | 1,532 (1.2%) | 2,240 (1.7%) | 2.4259 | 3.4 | yes |
+| `submit_zk` | submit_zk (Combined, promoting; sets the freeze) | 124,928,841 (31.2%) | 17 (4.2%) | 5 (2.5%) | 2,388 (1.8%) | 18,176 (13.8%) | 2.3966 | 3.4 | yes |
+| Completion `apply_doc` | completion apply_doc (Combined, ZK rotation) | 65,505,293 (16.4%) | 40 (10.0%) | 29 (14.5%) | 10,336 (7.8%) | 6,720 (5.1%) | 1.6390 | 3.1 | yes |
+| Owner cancellation (`Loss`) | Loss owner cancel_recovery (the veto) | 6,942,176 (1.7%) | 14 (3.5%) | 4 (2.0%) | 1,252 (0.9%) | 2,084 (1.6%) | 0.0032 | 4.7 | yes |
+| `approve_change` | approve_change (G-account, 2 of 2) | 1,627,842 (0.4%) | 8 (2.0%) | 2 (1.0%) | 404 (0.3%) | 1,468 (1.1%) | 0.0047 | 4.6 | yes |
+| `submit_zk_change` | submit_zk_change (Reconfigure) | 123,088,802 (30.8%) | 12 (3.0%) | 1 (0.5%) | 240 (0.2%) | 17,832 (13.5%) | 0.0322 | 6.7 | yes |
+| `Protected` reconfiguration `apply_doc` | Protected Combined reconfiguration apply_doc | 25,072,307 (6.3%) | 25 (6.2%) | 12 (6.0%) | 5,588 (4.2%) | 5,736 (4.3%) | 0.0422 | 4.7 | yes |
+| `Protected` `schedule_upgrade` | Protected schedule_upgrade | 6,922,054 (1.7%) | 13 (3.2%) | 2 (1.0%) | 1,144 (0.9%) | 2,044 (1.5%) | 0.0187 | 4.7 | yes |
+| Ordinary activity (direct authorization) | the new passkey after recovery | 5,376,465 (1.3%) | 10 (2.5%) | 3 (1.5%) | 440 (0.3%) | 1,752 (1.3%) | 0.0651 | 3.4 | yes |
+| Ordinary activity (`execute`) | ordinary activity: execute | 6,006,083 (1.5%) | 10 (2.5%) | 3 (1.5%) | 440 (0.3%) | 1,888 (1.4%) | 0.0027 | 4.7 | yes |
+| Factory `create_passkey` | factory create_passkey | 2,456,813 (0.6%) | 10 (2.5%) | 5 (2.5%) | 1,500 (1.1%) | 992 (0.8%) | 0.8684 | 3.1 | yes |
 
-Native proving on the deploying machine (Apple silicon; see [`docs/zk/measurements.md`](../zk/measurements.md) for the browser and the depth comparison), 11 proofs (`nargo execute` + `bb prove`, the pinned toolchain): witness 68 ms median / 77 ms max, proof 97 ms median / 108 ms max, peak RSS 51 MiB.
+Native proving, 11 proofs (`nargo execute` + `bb prove`, the pinned toolchain): witness 68 ms median / 95 ms max, proof 97 ms median / 110 ms max, peak RSS 49 MiB.
 
 ### zk-only / loss: lost-key recovery with a real proof
 
 | Step | Result | Instructions | Fee (XLM) | Transaction |
 | --- | --- | --- | --- | --- |
-| factory create_passkey | ok | 2,450,532 | 0.7400 | [`82825b8ab0…`](https://stellar.expert/explorer/testnet/tx/82825b8ab012a4a38a2bb59bb67e9769f57129273a3b2d1b767b7b5a2b5f9a66) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`2badd5de7d…`](https://stellar.expert/explorer/testnet/tx/2badd5de7dba46a8186fdafba5adb7c7c65360a458dbc90a5b8e51de062fbe97) |
-| enroll ZkOnly through apply_doc (pool insert) | ok | 62,464,028 | 7.3211 | [`a20302ccc3…`](https://stellar.expert/explorer/testnet/tx/a20302ccc31d39ba7bad787affd3770f52bb2084e9569f836b62dc06a7c09fc1) |
-| ordinary activity: direct authorization | ok | 5,375,619 | 0.0586 | [`da6b81493a…`](https://stellar.expert/explorer/testnet/tx/da6b81493ae49e54837b4cda702932f9e968c40c8d2fd86d3ecd98893bb82e4b) |
-| ordinary activity: execute | ok | 6,006,074 | 0.0027 | [`dba6c8538b…`](https://stellar.expert/explorer/testnet/tx/dba6c8538bee50dd04a753331b8aeaf221eb12e12ef25e93dcb1ba2c9c666d4d) |
-| begin_lost_key | ok | 18,742,788 | 0.1923 | [`6c02dab78c…`](https://stellar.expert/explorer/testnet/tx/6c02dab78c9496bd9e083a027d38836be42140e7bb74ceff00463ae3b88ff3fb) |
-| begin_lost_key (a second, evidence-free attempt) | ok | 18,757,879 | 0.0038 | [`b9b8c624b4…`](https://stellar.expert/explorer/testnet/tx/b9b8c624b4a465d5b86e01ae23e455f1c3d0cbbadc4641c9942d1315c4e49ad6) |
-| activity while attempts collect | ok | 5,374,330 | 0.0026 | [`b5799be171…`](https://stellar.expert/explorer/testnet/tx/b5799be17132d8732436a10b35c3e316fed684b785c608b14ef0af7f1af0de95) |
+| factory create_passkey | ok | 2,452,960 | 0.8683 | [`e94db76f10…`](https://stellar.expert/explorer/testnet/tx/e94db76f10348c6adf7e78754aa2411d105021ad2ea755b414f0afc3b885c96a) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0605 | [`14db5d492e…`](https://stellar.expert/explorer/testnet/tx/14db5d492e0435a40d13614221e1b2c83a160cbdc54bdf1833d987884325dfa3) |
+| enroll ZkOnly through apply_doc (pool insert) | ok | 62,471,419 | 8.5943 | [`eb83823b9e…`](https://stellar.expert/explorer/testnet/tx/eb83823b9e14ae5e57e8756036b55634a1a9133baa462b86cd43fee31b1041a3) |
+| ordinary activity: direct authorization | ok | 5,375,625 | 0.0683 | [`0ae1ec1bec…`](https://stellar.expert/explorer/testnet/tx/0ae1ec1bec978d906f6b06579402863625ad18822df5949fe544a6f20c0e5d7e) |
+| ordinary activity: execute | ok | 6,006,083 | 0.0027 | [`c6beaaa31f…`](https://stellar.expert/explorer/testnet/tx/c6beaaa31fa815156d4a68438e17615ec4e2e4a49ac43522b0cb60666a070b89) |
+| begin_lost_key | ok | 18,736,080 | 0.2252 | [`6fd3e3a73f…`](https://stellar.expert/explorer/testnet/tx/6fd3e3a73f784be7fc4356eb011e17c856d3619739ed10d8993c1474dcdb3ddc) |
+| begin_lost_key (a second, evidence-free attempt) | ok | 18,750,703 | 0.0038 | [`e40e98e746…`](https://stellar.expert/explorer/testnet/tx/e40e98e7462bd9d8f393992003addcb73242d08fcc96f9639c76e53e6b620763) |
+| activity while attempts collect | ok | 5,374,336 | 0.0026 | [`78e49eee34…`](https://stellar.expert/explorer/testnet/tx/78e49eee34e4829d49487afa15aa287bb7d2d225378a7d4f08d5869f16951d3a) |
 | another attempt's proof | refused (recording simulation): `HostError: Error(Contract, #12)` | | | |
 | a Cancel proof submitted as Initiate | refused (recording simulation): `HostError: Error(Contract, #12)` | | | |
 | a tampered proof | refused (recording simulation): `HostError: Error(Contract, #12)` | | | |
 | a root the pool never had | refused (recording simulation): `HostError: Error(Contract, #12)` | | | |
-| submit_zk (real proof; authorizes the attempt) | ok | 124,193,102 | 1.9206 | [`0f50a7c652…`](https://stellar.expert/explorer/testnet/tx/0f50a7c6523ebbdab9f806f5bc2086b6f2e4e6a3ef9403339d07a1dc5380ca8c) |
+| submit_zk (real proof; authorizes the attempt) | ok | 124,177,562 | 2.2521 | [`fb821769cb…`](https://stellar.expert/explorer/testnet/tx/fb821769cb1d4737cf7aeb3aaf4c716e1ae4d756698787ec0340f06317e85494) |
 | the same proof again | refused (recording simulation): `HostError: Error(Contract, #5)` | | | |
-| Loss: activity during the authorized window | ok | 5,374,330 | 0.0026 | [`4385f32be7…`](https://stellar.expert/explorer/testnet/tx/4385f32be7049af33216d798b6f4a9b2f9846a64c2b95c72b47793c64fa91319) |
+| Loss: activity during the authorized window | ok | 5,374,336 | 0.0026 | [`2973783f2b…`](https://stellar.expert/explorer/testnet/tx/2973783f2b44ef5f2ec2907f05a23df78d03fedda48f789f1b7c2fcf260995b5) |
 | Loss: an owner policy change during the window | refused (recording simulation): `HostError: Error(Contract, #25)` | | | |
 | completion before the delay | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #6` | | | |
 | completion with other bytes than the target | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #7` | | | |
-| completion apply_doc (spends the nullifier, rotates the leaf) | ok | 63,270,441 | 1.3983 | [`1b98b4a5bb…`](https://stellar.expert/explorer/testnet/tx/1b98b4a5bb00a91f9268a08c32438b013f7f5b60d88f78eba73bf1520d192378) |
+| completion apply_doc (spends the nullifier, rotates the leaf) | ok | 63,211,574 | 1.6383 | [`7f4eaff268…`](https://stellar.expert/explorer/testnet/tx/7f4eaff268656dea2eb69fcfae8dfedbd28db85938c9c5626f00e9bac05839e3) |
 | the lost passkey after recovery | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #3002` | | | |
-| the new passkey after recovery | ok | 5,375,760 | 0.0558 | [`b7d362acb6…`](https://stellar.expert/explorer/testnet/tx/b7d362acb661894b481f429ec73ac7623a615b9c9c791de413e43723dd88dca0) |
-| begin_lost_key (after recovery) | ok | 18,760,393 | 0.0038 | [`3d015bca54…`](https://stellar.expert/explorer/testnet/tx/3d015bca547fb01ef7eb11a9c645732319bb1a5891fb41185359a174bd4db817) |
+| the new passkey after recovery | ok | 5,375,766 | 0.0651 | [`b58e3f45b7…`](https://stellar.expert/explorer/testnet/tx/b58e3f45b7931525c02c7f6914aa8daf0e436b8c947840c7053cfe9735517c92) |
+| begin_lost_key (after recovery) | ok | 18,753,311 | 0.0038 | [`3cd5850379…`](https://stellar.expert/explorer/testnet/tx/3cd5850379852efcd6c49b2c61337546e812fbab489c0637b074ed6cfb1a997e) |
 | a proof by the consumed credential | refused (recording simulation): `HostError: Error(Contract, #12)` | | | |
 ### combined / protected: freeze, cancellation, reconfiguration
 
 | Step | Result | Instructions | Fee (XLM) | Transaction |
 | --- | --- | --- | --- | --- |
-| factory create_passkey | ok | 2,456,655 | 0.7400 | [`ab9ec44567…`](https://stellar.expert/explorer/testnet/tx/ab9ec44567b68d2d4beeae35c35cec75d41dbe9b1bae95aa6ce476f465425ddc) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`9b59ae8d0a…`](https://stellar.expert/explorer/testnet/tx/9b59ae8d0a31e860d691e535311d776ae81ff8e86ca5385a672ebeae0766533f) |
-| enroll Combined through apply_doc | ok | 64,695,405 | 5.8832 | [`ecf9c5ed31…`](https://stellar.expert/explorer/testnet/tx/ecf9c5ed31c5c8f9b43b798bc03d8274d6efad0677bdd0958da94ce65902d44c) |
-| begin_lost_key | ok | 21,164,956 | 0.1925 | [`8c3dc2ff21…`](https://stellar.expert/explorer/testnet/tx/8c3dc2ff21bed2fe4aa1b3222526e2160a08e00f49982e4f7b11a8cb5e7e0631) |
-| submit_guardian (G-account, 1 of 2) | ok | 1,863,365 | 0.0020 | [`e2e49bc9c9…`](https://stellar.expert/explorer/testnet/tx/e2e49bc9c927e4e50247d9d688283362713fadbf84dff7b5044481d367f1e4d4) |
-| submit_guardian (G-account, 2 of 2) | ok | 1,867,169 | 0.0020 | [`8e88a536da…`](https://stellar.expert/explorer/testnet/tx/8e88a536dac05a00fe87288b07395c0f9760b78e77128151f240ddf83d4217e7) |
-| activity before the condition is met | ok | 5,376,318 | 0.0586 | [`da587ec0c4…`](https://stellar.expert/explorer/testnet/tx/da587ec0c476d5d770b5cfe2f675c775aa04192840ccd57d50b8fd15a105864e) |
-| submit_zk (Combined, promoting; sets the freeze) | ok | 124,921,826 | 2.0438 | [`17b1a2b37e…`](https://stellar.expert/explorer/testnet/tx/17b1a2b37e318668d1236a0f8bf3d46efb67af82354ae56bf9068bb5873c608d) |
+| factory create_passkey | ok | 2,452,960 | 0.8683 | [`914e82db34…`](https://stellar.expert/explorer/testnet/tx/914e82db346a5dce7ae820f65d3474635f21ada8dd7af82f5c4f7919a7692430) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0605 | [`077d9584be…`](https://stellar.expert/explorer/testnet/tx/077d9584be3cd865308718a15841824dca062ff496c9a4920f3fd974d0e95136) |
+| enroll Combined through apply_doc | ok | 64,707,224 | 6.9056 | [`8dead878fc…`](https://stellar.expert/explorer/testnet/tx/8dead878fcc8e064110640b3c5f37ed0662190f824dd8aa04e6e84340972ddf0) |
+| begin_lost_key | ok | 21,159,993 | 0.2254 | [`478c35dce8…`](https://stellar.expert/explorer/testnet/tx/478c35dce8d44406f0ae01470fde07f1cab90812a4839cf8e1a3446b5f8b8dcf) |
+| submit_guardian (G-account, 1 of 2) | ok | 1,863,586 | 0.0020 | [`16bb7d1464…`](https://stellar.expert/explorer/testnet/tx/16bb7d1464ebc489a96a92a3f9bfedd21faeea019fa6443846b4416072dcaa41) |
+| submit_guardian (G-account, 2 of 2) | ok | 1,867,389 | 0.0020 | [`29b3bcecb7…`](https://stellar.expert/explorer/testnet/tx/29b3bcecb7b809d9c7c1dcb4fe13083d8ee4b1762fdf85694252f7713dd765fa) |
+| activity before the condition is met | ok | 5,375,625 | 0.0683 | [`1462409d3e…`](https://stellar.expert/explorer/testnet/tx/1462409d3e0688ce2269d1b6d11cef9faa1c288b112fbe8dc7d7e15993ec5417) |
+| submit_zk (Combined, promoting; sets the freeze) | ok | 124,928,841 | 2.3966 | [`cae2c1fc47…`](https://stellar.expert/explorer/testnet/tx/cae2c1fc47e14fb2ee4b60ffa04c78764fcb0b246f35ce696bf0e87dfee65610) |
 | frozen: direct authorization | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #2` | | | |
 | frozen: execute | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #2` | | | |
 | frozen: apply_doc | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #2` | | | |
 | an Initiate proof submitted as Cancel | refused (recording simulation): `HostError: Error(Contract, #12)` | | | |
-| cancel: guardian 1 of 2 | ok | 1,979,475 | 0.0617 | [`b4a99637b1…`](https://stellar.expert/explorer/testnet/tx/b4a99637b1f8e8b954f0702955016361409a7a6652aa62d06ba2c60b5a7e6fc1) |
-| cancel: guardian 2 of 2 | ok | 1,983,588 | 0.0617 | [`9718af21ec…`](https://stellar.expert/explorer/testnet/tx/9718af21ecfd590451199580cb7c1368aceb5487bd05a8f92433402756602eb8) |
-| cancellation (Combined: the ZK Cancel proof completes it, clears the freeze) | ok | 124,333,828 | 0.1968 | [`ccf8a7ffce…`](https://stellar.expert/explorer/testnet/tx/ccf8a7ffce7186f0e3556bd9f396fae8bdd3b6b66cd42f0bb4ab9f3297d7b694) |
-| activity after the cancellation | ok | 5,375,028 | 0.0026 | [`a4f0e6b130…`](https://stellar.expert/explorer/testnet/tx/a4f0e6b1305d5317f1027fc0bcbcc4598b6a51ed78a4295178d4c5eb037a9b97) |
-| execute after the cancellation | ok | 6,005,837 | 0.0027 | [`378fd530b1…`](https://stellar.expert/explorer/testnet/tx/378fd530b14fa747c144fe6d2f46be7cf8c2535049809e2167250abef889bac0) |
-| submit_zk_change (Reconfigure) | ok | 123,040,919 | 0.0300 | [`d11966472f…`](https://stellar.expert/explorer/testnet/tx/d11966472fe572719de5317d552e4cfdd19d6574e576f23404925e699f58bd72) |
+| cancel: guardian 1 of 2 | ok | 1,979,696 | 0.0721 | [`0057671049…`](https://stellar.expert/explorer/testnet/tx/005767104929b2cb8efad9c765fa38b1ce0c387b390543f660dac6fd9d4ed8c8) |
+| cancel: guardian 2 of 2 | ok | 1,983,809 | 0.0721 | [`31b4dc93f7…`](https://stellar.expert/explorer/testnet/tx/31b4dc93f78c5b21fa6aa85b2673e377d6f939b02d0d38b8f5194a06372ac400) |
+| cancellation (Combined: the ZK Cancel proof completes it, clears the freeze) | ok | 124,323,348 | 0.2278 | [`92aa36f88c…`](https://stellar.expert/explorer/testnet/tx/92aa36f88c2452d9191c3ac42c5d659a7dcd22105d3e16bed036b8d47cd0aa6f) |
+| activity after the cancellation | ok | 5,374,336 | 0.0026 | [`5207403a42…`](https://stellar.expert/explorer/testnet/tx/5207403a4263102308c5f0e7ddd09ee5addee442662424bcf6fd500b5d1612f2) |
+| execute after the cancellation | ok | 6,006,083 | 0.0027 | [`afc3316e9b…`](https://stellar.expert/explorer/testnet/tx/afc3316e9b65b50cc024d26f8fbe5750a147a79f6059e064b8eabbf160889e76) |
+| submit_zk_change (Reconfigure) | ok | 123,060,660 | 0.0322 | [`963875008a…`](https://stellar.expert/explorer/testnet/tx/963875008a5b9dbd270c8386016e3f46b2da472043682c698460aa0cf8d58741) |
 | reconfiguration with ZK evidence alone | refused (recording simulation): `HostError: Error(Contract, #39)` | | | |
-| approve_change (G-account, 1 of 2) | ok | 1,623,843 | 0.0042 | [`6ecd1856c6…`](https://stellar.expert/explorer/testnet/tx/6ecd1856c6fc68b1c5a5e0e1fd9dd7ebb3640c47bebf125488a65a17aef46348) |
-| approve_change (G-account, 2 of 2) | ok | 1,627,621 | 0.0042 | [`3dab197ab8…`](https://stellar.expert/explorer/testnet/tx/3dab197ab8da118843e33a31b1318ad0bfe1090b1c4a8ecd34c56120c9eb4bbf) |
-| Protected Combined reconfiguration apply_doc | ok | 25,068,364 | 0.0375 | [`e5e9f6196b…`](https://stellar.expert/explorer/testnet/tx/e5e9f6196b0c5fd0c9672732d9f77319b91faf886c208c9758549e06accd03df) |
+| approve_change (G-account, 1 of 2) | ok | 1,624,064 | 0.0046 | [`487abe8865…`](https://stellar.expert/explorer/testnet/tx/487abe8865d02d65cc74055f4e9376f1aeb0eb7aa50e9a8955463cce393f8f6d) |
+| approve_change (G-account, 2 of 2) | ok | 1,627,842 | 0.0047 | [`ec8ed9cca3…`](https://stellar.expert/explorer/testnet/tx/ec8ed9cca3f9ff13589cce852d9a89c174f4a4bbf455583960ee9ef2bc6dee2a) |
+| Protected Combined reconfiguration apply_doc | ok | 25,072,307 | 0.0422 | [`63d21e9c77…`](https://stellar.expert/explorer/testnet/tx/63d21e9c77e0b810444135335c74c19e33109ad3f5e6462395de85ada2f1c006) |
 ### zk-only / protected: reconfiguration and upgrade evidence
 
 | Step | Result | Instructions | Fee (XLM) | Transaction |
 | --- | --- | --- | --- | --- |
-| factory create_passkey | ok | 2,450,532 | 0.7400 | [`59ed899793…`](https://stellar.expert/explorer/testnet/tx/59ed8997933c581147bbd56af2e6ee29f49595e7374dfc98c8753f7972787a51) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`ced7d9dbac…`](https://stellar.expert/explorer/testnet/tx/ced7d9dbac9feabb857e67b18f1cc9e5346587dd2865616700d67bdc75aaeb47) |
-| enroll ZkOnly Protected | ok | 62,458,217 | 5.3387 | [`c61189c48a…`](https://stellar.expert/explorer/testnet/tx/c61189c48a04d5c43087d5db0f45112233193d639ed83804ac430398c4e9beb0) |
+| factory create_passkey | ok | 2,452,960 | 0.8683 | [`141c01c133…`](https://stellar.expert/explorer/testnet/tx/141c01c13365a088568946f23fa550037cfa7b32d450e206014cde22369c305a) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0605 | [`0438125d72…`](https://stellar.expert/explorer/testnet/tx/0438125d72ed8894feaa836e7514f7501765d6dc44332e2ce76f592d8c1ddca9) |
+| enroll ZkOnly Protected | ok | 62,478,656 | 6.2664 | [`a16d72ee40…`](https://stellar.expert/explorer/testnet/tx/a16d72ee4087c31ee90803f2ff0fa35ddbc551077e6797fa765b1ac5e02adc07) |
 | owner alone cannot reconfigure | refused (recording simulation): `HostError: Error(Contract, #39)` | | | |
 | a proof for another configuration | refused (recording simulation): `HostError: Error(Contract, #12)` | | | |
-| submit_zk_change (Reconfigure) | ok | 123,001,045 | 0.0300 | [`a4057bd540…`](https://stellar.expert/explorer/testnet/tx/a4057bd54000a3ce6c9b7fd045b71815bce969067a9db09e09a61cc7538a3ab6) |
-| Protected reconfiguration apply_doc | ok | 22,805,309 | 0.0371 | [`39f70fd046…`](https://stellar.expert/explorer/testnet/tx/39f70fd046032c0dc52591c30a6cc93d5b8a7dbee056fc825677243367e73fd4) |
+| submit_zk_change (Reconfigure) | ok | 123,088,802 | 0.0322 | [`0a2397a6e7…`](https://stellar.expert/explorer/testnet/tx/0a2397a6e70572a1617f73de7fdef3814ce49a2923d113c60ff30a2cff81364b) |
+| Protected reconfiguration apply_doc | ok | 22,804,098 | 0.0418 | [`3b5a2f22fa…`](https://stellar.expert/explorer/testnet/tx/3b5a2f22fa82adb4eacf7399e41348d8f06cdeb5a7f4cc1ea67713e442cc84f0) |
 | owner alone cannot schedule an upgrade | refused (recording simulation): `HostError: Error(Contract, #39)` | | | |
-| submit_zk_change (Upgrade) | ok | 123,021,647 | 0.0300 | [`84e4708177…`](https://stellar.expert/explorer/testnet/tx/84e47081772c29752efc98d6126e0e0d232f06a1818cc6dd6c466845e4440541) |
-| Protected schedule_upgrade | ok | 6,925,867 | 0.0163 | [`b3bd22e03d…`](https://stellar.expert/explorer/testnet/tx/b3bd22e03d044297546bede87778298032ad5fbe9afb932156a8a49b2f746d18) |
+| submit_zk_change (Upgrade) | ok | 123,048,681 | 0.0322 | [`d39961d235…`](https://stellar.expert/explorer/testnet/tx/d39961d235c7a31f1872f4ed68fd31d29c34094850583862b8b397bcd268f305) |
+| Protected schedule_upgrade | ok | 6,922,054 | 0.0187 | [`ff5cf5938a…`](https://stellar.expert/explorer/testnet/tx/ff5cf5938aa2325433fc55177e76be4863036f7eb9a3f344b24c7e29f0956ba8) |
 | execute_upgrade before the seven-day delay | refused (recording simulation): `HostError: Error(Contract, #9)` | | | |
 ### guardian-only / loss: veto and completion, no ZK
 
 | Step | Result | Instructions | Fee (XLM) | Transaction |
 | --- | --- | --- | --- | --- |
-| factory create_passkey | ok | 2,450,532 | 0.7400 | [`e80a2b7bc1…`](https://stellar.expert/explorer/testnet/tx/e80a2b7bc124a26fe6168491c44c882d93e54af74319254cd89d5c6af6b597d7) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`b10e99095a…`](https://stellar.expert/explorer/testnet/tx/b10e99095a3f688af4a87a420efd531f7308bd8386e6d2949d484e0c1c61d864) |
-| enroll GuardianOnly through apply_doc | ok | 19,635,878 | 4.0602 | [`0e17b56cdf…`](https://stellar.expert/explorer/testnet/tx/0e17b56cdfd78b6aea85a5c3fd151810dbd60ddf05aae4baf4412ac0d977e354) |
-| begin_lost_key | ok | 15,946,797 | 0.1920 | [`46a7d3462e…`](https://stellar.expert/explorer/testnet/tx/46a7d3462e6c7d44302233b5dadb8bf09e6317782bae1c485b09e54d52ec937d) |
-| submit_guardian (1 of 2) | ok | 1,835,107 | 0.0020 | [`88ece7efcc…`](https://stellar.expert/explorer/testnet/tx/88ece7efcc63b9a65dbbb09cee80516e5e8fb4bcebbf007b9a49ba39647d38fa) |
-| submit_guardian (2 of 2, promoting) | ok | 2,740,180 | 1.9754 | [`5f030c9ba4…`](https://stellar.expert/explorer/testnet/tx/5f030c9ba4679f9cec5b15bdbb56a5dc84e9b302232bc6bb6963452975042801) |
+| factory create_passkey | ok | 2,452,960 | 0.8684 | [`a96ce01810…`](https://stellar.expert/explorer/testnet/tx/a96ce01810fed676ecf5182198cc8846b84c0167e5a0d8995b283c384d544613) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0606 | [`8cfd2d7659…`](https://stellar.expert/explorer/testnet/tx/8cfd2d7659b1daa8cc5dd0b370017f9629045fdd9e6157a9649cb06dd689cd7b) |
+| enroll GuardianOnly through apply_doc | ok | 19,632,699 | 4.7668 | [`ce66eafde2…`](https://stellar.expert/explorer/testnet/tx/ce66eafde21429f850c920632f9500b6e7815cf34f4621b757dbe3a79829131a) |
+| begin_lost_key | ok | 15,941,184 | 0.2249 | [`c84785900d…`](https://stellar.expert/explorer/testnet/tx/c84785900da0f97a02388c5bef9e356c7866c4300aca4473a85ee6cd388433b6) |
+| submit_guardian (1 of 2) | ok | 1,835,327 | 0.0020 | [`4433927550…`](https://stellar.expert/explorer/testnet/tx/443392755030750e3ce9648fe231484a7659f9e0918a57244a7720794af537b6) |
+| submit_guardian (2 of 2, promoting) | ok | 2,739,272 | 2.3195 | [`9f7f932b9a…`](https://stellar.expert/explorer/testnet/tx/9f7f932b9a8c2d6326157c96541846bf21afb256186d3585920cddcacf044c4c) |
 | a third guardian on an authorized attempt | refused (recording simulation): `HostError: Error(Contract, #5)` | | | |
-| Loss owner cancel_recovery (the veto) | ok | 6,953,421 | 0.0032 | [`80cc4e28fc…`](https://stellar.expert/explorer/testnet/tx/80cc4e28fc9d2680581668387b52b3daca292710271b9cfbce2003b6584519b8) |
-| begin_lost_key (again) | ok | 15,964,481 | 0.0035 | [`a61ca80b45…`](https://stellar.expert/explorer/testnet/tx/a61ca80b45a25975c3be14c5fc928cf076b36d54e6b143f298304bde97ab1325) |
-| submit_guardian (1 of 2) | ok | 1,850,016 | 0.0020 | [`50278bcdf7…`](https://stellar.expert/explorer/testnet/tx/50278bcdf7da33871ece8064dfca33e02c7767e8804206fa47226026fb8caeda) |
-| submit_guardian (2 of 2, promoting) | ok | 2,758,626 | 1.7818 | [`a9cf46d71a…`](https://stellar.expert/explorer/testnet/tx/a9cf46d71ae0028aa00754d3e031f345876a8b1ab4e5e78b6e25c4e629ab32a7) |
-| completion apply_doc (GuardianOnly) | ok | 19,473,859 | 0.3815 | [`63b2d274eb…`](https://stellar.expert/explorer/testnet/tx/63b2d274eb7b94a923d4abc5a1b614e33c6a73a0b7c92b5dc1bda18630e5d7b5) |
+| Loss owner cancel_recovery (the veto) | ok | 6,942,176 | 0.0032 | [`e11db66216…`](https://stellar.expert/explorer/testnet/tx/e11db66216fe3876e96aaac606b6e30b0df67156bae3fb030cb02e1c9d200412) |
+| begin_lost_key (again) | ok | 15,958,348 | 0.0035 | [`f36580af03…`](https://stellar.expert/explorer/testnet/tx/f36580af03386f62c62acbf3a0c35a70cd2f7a2f03851e93ad399c651763ce6a) |
+| submit_guardian (1 of 2) | ok | 1,850,236 | 0.0020 | [`7a0d16ccf8…`](https://stellar.expert/explorer/testnet/tx/7a0d16ccf89ba2e835d7514c4f0b34ccdd7f76f450716a7faa6e8d14dfced47b) |
+| submit_guardian (2 of 2, promoting) | ok | 2,756,880 | 2.0917 | [`56aea34546…`](https://stellar.expert/explorer/testnet/tx/56aea34546352b8882611187dd62f88a29247f3833b2f989638672d7f236d3b9) |
+| completion apply_doc (GuardianOnly) | ok | 19,430,088 | 0.4458 | [`29d509cb31…`](https://stellar.expert/explorer/testnet/tx/29d509cb316ca7288f7b9eaacb0e6a78e3f0286803bdb1813bad4ae410e6aa4f) |
 | the lost passkey after recovery | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #3002` | | | |
-| the new passkey after recovery | ok | 5,350,085 | 0.0558 | [`160b1d3798…`](https://stellar.expert/explorer/testnet/tx/160b1d3798d464b9c22ce0ca0512b35a47e5c4154466346e0c22f549c4fd42e6) |
+| the new passkey after recovery | ok | 5,350,091 | 0.0651 | [`5c8d0ff8e2…`](https://stellar.expert/explorer/testnet/tx/5c8d0ff8e21202b681551b4accf7e20d0e08c31f35779150c02924b1369ee79e) |
 ### combined / loss: both factors, ZK rotation
 
 | Step | Result | Instructions | Fee (XLM) | Transaction |
 | --- | --- | --- | --- | --- |
-| factory create_passkey | ok | 2,450,532 | 0.7401 | [`20ad9c5321…`](https://stellar.expert/explorer/testnet/tx/20ad9c53218e55e8aeb6925f35ff2bbffcfb78b1677975d3509ebb788774c05b) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`ee2ace80cc…`](https://stellar.expert/explorer/testnet/tx/ee2ace80cc55826d3d75a0b66faaed6c640cd668abf85696a2a2bcdcbc608a0c) |
-| enroll Combined Loss | ok | 64,632,523 | 5.8627 | [`f5c775fdbf…`](https://stellar.expert/explorer/testnet/tx/f5c775fdbf6736cc215b188c2ff45cf720d4290d54ed8be8b3610e959c687cf8) |
-| begin_lost_key | ok | 21,125,514 | 0.1925 | [`db634c7f05…`](https://stellar.expert/explorer/testnet/tx/db634c7f054c596a707cfffcda91fea8adfa3723a409d6ad9824f6fbc69505a3) |
-| submit_guardian (1 of 2) | ok | 1,863,399 | 0.0020 | [`d2bac9c5e7…`](https://stellar.expert/explorer/testnet/tx/d2bac9c5e7841a43f80fc6664daf8ce72768fc351864ceafeaf031491d985dbb) |
-| submit_zk (Combined, not yet promoting) | ok | 123,253,645 | 0.0172 | [`66a4d3248a…`](https://stellar.expert/explorer/testnet/tx/66a4d3248ab26b7f532796072daa801f960daa9f4a347ea51d7049820d6920ec) |
-| submit_guardian (2 of 2, promoting: ZK already in) | ok | 2,799,310 | 2.0243 | [`267f3521c9…`](https://stellar.expert/explorer/testnet/tx/267f3521c960bb85c7f71b21165be78e90212a406eb3d6ed967d1dca0a53fa71) |
-| Loss: activity during the authorized window | ok | 5,375,619 | 0.0586 | [`c169bde126…`](https://stellar.expert/explorer/testnet/tx/c169bde126ec18cc2d7f99fd7ec44f0a303e147c7572eac2252c59dd8bf000e4) |
-| completion apply_doc (Combined, ZK rotation) | ok | 65,548,738 | 1.3989 | [`0c522757a3…`](https://stellar.expert/explorer/testnet/tx/0c522757a30ff67287d2da291ee09c9bf47d13cf9116b7021adddeacdf706edf) |
+| factory create_passkey | ok | 2,456,813 | 0.8684 | [`210a5e342e…`](https://stellar.expert/explorer/testnet/tx/210a5e342e2eb64aba881ce895b7d63a0a2ecf64c97ec4ecd2f24148f082f5f9) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0606 | [`456a1ac6c1…`](https://stellar.expert/explorer/testnet/tx/456a1ac6c19602829dd2fa72fee8f5276bd4aa6f3862ed88613d6ed268a45f02) |
+| enroll Combined Loss | ok | 64,649,445 | 6.8814 | [`2389f3ccf9…`](https://stellar.expert/explorer/testnet/tx/2389f3ccf97c78895f3df8f2238227354d3bd2c5c8245f27bf3f74bbf4082ae4) |
+| begin_lost_key | ok | 21,117,065 | 0.2254 | [`58945a58a3…`](https://stellar.expert/explorer/testnet/tx/58945a58a3c29d25784c61a6d2fd0f3c9bde0ae99b654fa28ee9ae52284fa9b5) |
+| submit_guardian (1 of 2) | ok | 1,863,619 | 0.0020 | [`9a33ca0b02…`](https://stellar.expert/explorer/testnet/tx/9a33ca0b02b6147ceb0f2aca931fcd7b834bab072e0950c51ea9ac332ae69095) |
+| submit_zk (Combined, not yet promoting) | ok | 123,242,610 | 0.0172 | [`4169998495…`](https://stellar.expert/explorer/testnet/tx/41699984954941ad3d1277b1dd2c3e1a519a0eb1858cb68bc74733edff74c157) |
+| submit_guardian (2 of 2, promoting: ZK already in) | ok | 2,798,402 | 2.3764 | [`a1c3708296…`](https://stellar.expert/explorer/testnet/tx/a1c3708296d5031f66b4c464de6fc5420a2323a012d04260b9de4b8507af8f0a) |
+| Loss: activity during the authorized window | ok | 5,376,324 | 0.0683 | [`410722a853…`](https://stellar.expert/explorer/testnet/tx/410722a853745e969018db48eea29e7dd46f9568df09146c66b8e25c910df11e) |
+| completion apply_doc (Combined, ZK rotation) | ok | 65,505,293 | 1.6390 | [`9f05041368…`](https://stellar.expert/explorer/testnet/tx/9f05041368c25f205d55cc19e1a4b587c6a0f5aa9ba694e9f98f3424170a3a4e) |
 | the lost passkey after recovery | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #3002` | | | |
-| the new passkey after recovery | ok | 5,375,760 | 0.0558 | [`bf570ed11d…`](https://stellar.expert/explorer/testnet/tx/bf570ed11d55b44fe41951288b44f226db6c3b295f13859d97043cb2d224908d) |
+| the new passkey after recovery | ok | 5,376,465 | 0.0651 | [`6907164405…`](https://stellar.expert/explorer/testnet/tx/6907164405fa80342777df5000031fa62dcd50d471617b5dbadedc90b430131c) |
 ### guardian-only / protected: compromise recovery from the baseline
 
 | Step | Result | Instructions | Fee (XLM) | Transaction |
 | --- | --- | --- | --- | --- |
-| factory create_passkey | ok | 2,452,802 | 0.7401 | [`08174c749c…`](https://stellar.expert/explorer/testnet/tx/08174c749c2699a1c8f7279f82092befd726ef92b4ea1ed1dea7b4030212bc9c) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`71f72d335e…`](https://stellar.expert/explorer/testnet/tx/71f72d335edd46dba473675bccd78595ef9cfb0e508ab679cff9390ff50b189c) |
-| enroll GuardianOnly Protected with a baseline | ok | 20,692,321 | 4.2497 | [`5bb16141d2…`](https://stellar.expert/explorer/testnet/tx/5bb16141d2fa3517efa72caeb41752fcb976a757c0c883235dc6bda64c08be11) |
-| the thief adds a signer with the stolen owner key | ok | 23,438,484 | 1.2291 | [`c152b0279a…`](https://stellar.expert/explorer/testnet/tx/c152b0279a8f942613a5eb53cc3284e1d8a31f83f366a0ca061b9ede26c392f4) |
-| the thief's signer moves XLM | ok | 5,351,518 | 0.1126 | [`94e5cef985…`](https://stellar.expert/explorer/testnet/tx/94e5cef985610871f192ad625dbbe9133a5cf1e61eff8e671bbbf41632f4c64f) |
+| factory create_passkey | ok | 2,450,690 | 0.8684 | [`98d40d8b56…`](https://stellar.expert/explorer/testnet/tx/98d40d8b5655bc2ce8cb51963dbecb55e39defefcd1b4992a461715b1e54be13) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0606 | [`7a28f4804a…`](https://stellar.expert/explorer/testnet/tx/7a28f4804a00f2bbfe91e5f3e530d360be2fe8ee0faf4c27a76e2cc482937628) |
+| enroll GuardianOnly Protected with a baseline | ok | 20,699,294 | 4.9884 | [`bd16b986c1…`](https://stellar.expert/explorer/testnet/tx/bd16b986c12df01ee2dea744e9e52f0d695230d86a197fa24fec737552265429) |
+| the thief adds a signer with the stolen owner key | ok | 23,439,475 | 1.4417 | [`289999c9ef…`](https://stellar.expert/explorer/testnet/tx/289999c9ef2f49f72e2cdf09d7ded9ca576ae6729d9e127e253c3a4bbe1f75fe) |
+| the thief's signer moves XLM | ok | 5,350,722 | 0.1316 | [`1528a160b6…`](https://stellar.expert/explorer/testnet/tx/1528a160b6cf976703261a2d6b71f5bb3a25d5519e36e2d39c86c28a09026c16) |
 | begin_compromise before the baseline is published | refused (recording simulation): `HostError: Error(Contract, #23)` | | | |
 | publish_baseline of another document | refused (recording simulation): `HostError: Error(Contract, #24)` | | | |
-| publish_baseline | ok | 6,730,453 | 1.0471 | [`c800667644…`](https://stellar.expert/explorer/testnet/tx/c800667644961898fd87f9e8ef71f58f024323df926873f981e2e916947997a3) |
-| begin_compromise | ok | 16,484,854 | 0.1922 | [`5f34d910d1…`](https://stellar.expert/explorer/testnet/tx/5f34d910d1421cbfb8d3134c794df0f0150803823b462983ba70814039fd705d) |
-| submit_guardian (1 of 2) | ok | 1,838,980 | 0.0020 | [`50330bf543…`](https://stellar.expert/explorer/testnet/tx/50330bf543a8fcfa5f80fbfc67699976522252bf986230c017d679890ccab2c5) |
-| submit_guardian (2 of 2, promoting; sets the freeze) | ok | 2,829,975 | 1.9804 | [`1b6a7fa8fc…`](https://stellar.expert/explorer/testnet/tx/1b6a7fa8fc42f378d2de43b0dc225064b9cc19004bb54af3ac647d3a1f5bfef9) |
+| publish_baseline | ok | 6,728,134 | 1.2293 | [`13e7f3fcc4…`](https://stellar.expert/explorer/testnet/tx/13e7f3fcc4f0193acf3e0ea4e24c686c3aba18f9f1be67a7858f4ffb39e5d362) |
+| begin_compromise | ok | 16,490,355 | 0.2250 | [`b537ea4d9a…`](https://stellar.expert/explorer/testnet/tx/b537ea4d9a23ba5bdb820e9332c291082f6ae381f607708d585a973ba1272367) |
+| submit_guardian (1 of 2) | ok | 1,839,200 | 0.0020 | [`2866a7a7fa…`](https://stellar.expert/explorer/testnet/tx/2866a7a7faca6e34c4a01c158a6db90a45829e07d124747d44c0680fd1fa4124) |
+| submit_guardian (2 of 2, promoting; sets the freeze) | ok | 2,830,201 | 2.3248 | [`e65235d5db…`](https://stellar.expert/explorer/testnet/tx/e65235d5dbb299d44651ed15e0234924c4eeca70517a2dc6b0d17578754b2478) |
 | frozen: the thief's signer | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #2` | | | |
 | frozen: the owner key | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #2` | | | |
-| completion apply_doc (compromise: revokes the stolen and added keys) | ok | 21,478,223 | 0.5610 | [`abc5528691…`](https://stellar.expert/explorer/testnet/tx/abc5528691305535c47ac8d53752a56ebf55733b2d0738cbc120783d4d51b704) |
-| the new owner after recovery | ok | 5,350,085 | 0.0558 | [`bd3e9eb931…`](https://stellar.expert/explorer/testnet/tx/bd3e9eb931d1698905cb00ca8733185f95bd89df3712f1547a94a4f61e84497a) |
+| completion apply_doc (compromise: revokes the stolen and added keys) | ok | 21,482,954 | 0.6564 | [`9bd932d121…`](https://stellar.expert/explorer/testnet/tx/9bd932d121592bd8bbb9a626adf0217cbb04fd8bb040c0d9357b0b12c810f352) |
+| the new owner after recovery | ok | 5,349,340 | 0.0651 | [`7b54b87276…`](https://stellar.expert/explorer/testnet/tx/7b54b8727661e7357355338d4b6ec19b7ce79186e6777333e855b437e74494ac) |
 | the stolen owner key after recovery | refused (enforcing simulation): `HostError: Error(Auth, InvalidAction), `__check_auth` #3002` | | | |
 | re-adding the thief's key, signed by the new owner | refused (recording simulation): `HostError: Error(Contract, #2)` | | | |
 ### relay: a delegated perch guardian's approval, relayed
 
 | Step | Result | Instructions | Fee (XLM) | Transaction |
 | --- | --- | --- | --- | --- |
-| factory create_passkey | ok | 2,450,532 | 0.7401 | [`3c26c7a1f1…`](https://stellar.expert/explorer/testnet/tx/3c26c7a1f10c3f9bffad5e926b5ef715b6ffe5dd62ec41d1d36102c16a62b7a0) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`c6dfe3751d…`](https://stellar.expert/explorer/testnet/tx/c6dfe3751dfa6d17088ffa59eff8bcc9b3a9c08394a7881b49b3fefa5841df83) |
-| guardian account: a delegated approver for the controller | ok | 13,131,868 | 1.8870 | [`ff47bc56af…`](https://stellar.expert/explorer/testnet/tx/ff47bc56afde8372b87ab83235c969f7ffe032652e58b85f13f82434be505c7e) |
-| factory create_passkey | ok | 2,450,532 | 0.7401 | [`ada71c3dda…`](https://stellar.expert/explorer/testnet/tx/ada71c3ddaf4a7da0921df07ad2e2c9909ebbcaa305415a4ae8b26893c9d5bcb) |
-| fund the account (XLM transfer) | ok | 245,621 | 0.0518 | [`3ded7f83ca…`](https://stellar.expert/explorer/testnet/tx/3ded7f83cab1d46af054806b41ed9f2a983c4a317b4538e30cc1c0a76f98a6b5) |
-| enroll GuardianOnly (a perch account among the guardians) | ok | 19,039,989 | 3.9154 | [`8d4736804b…`](https://stellar.expert/explorer/testnet/tx/8d4736804b463ef7dc513f1d63993469779773d67be17bf776f46bad1652fd17) |
-| begin_lost_key | ok | 15,321,500 | 0.1920 | [`9b3824060a…`](https://stellar.expert/explorer/testnet/tx/9b3824060a5135364853c861c391311fdf23a34ef1d52f34d75dd7a34d3c656f) |
-| submit_guardian (1 of 2) | ok | 1,832,878 | 0.0020 | [`c00eefacad…`](https://stellar.expert/explorer/testnet/tx/c00eefacad3b980d1ca98f373707127bbd3ccb1c5b25c6380cab4805fad1a546) |
+| factory create_passkey | ok | 2,456,813 | 0.8684 | [`54b7f74a8a…`](https://stellar.expert/explorer/testnet/tx/54b7f74a8ac6ecd3cc16afedf5856f8df28a24a5577fef2647f5a49b50ff2bbe) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0606 | [`851d477887…`](https://stellar.expert/explorer/testnet/tx/851d4778874b05a11b2a2cd8569643b4cb5385fcb0856a1b219bfed5f7a6f650) |
+| guardian account: a delegated approver for the controller | ok | 13,142,865 | 2.2146 | [`e56a014b92…`](https://stellar.expert/explorer/testnet/tx/e56a014b923a16e0b5d50553267d1e127b9e17e42d71caa6e7efa7de0b009ae5) |
+| factory create_passkey | ok | 2,452,960 | 0.8686 | [`d1db460b17…`](https://stellar.expert/explorer/testnet/tx/d1db460b178b40b90f885d8f658fa19673793adac6781072592126bfe1d25aef) |
+| fund the account (XLM transfer) | ok | 245,621 | 0.0606 | [`802a81e614…`](https://stellar.expert/explorer/testnet/tx/802a81e6141d9f75d8605b7b7900f4181831f408b222fa47e1a8c6444121adec) |
+| enroll GuardianOnly (a perch account among the guardians) | ok | 19,037,152 | 4.5966 | [`b2ad018f54…`](https://stellar.expert/explorer/testnet/tx/b2ad018f54d308b8ab9a0d9f4f358180cbd9d090db54e93b92f624483426b70b) |
+| begin_lost_key | ok | 15,317,218 | 0.2249 | [`53f5fa3ad8…`](https://stellar.expert/explorer/testnet/tx/53f5fa3ad8b3f79094284b33ebc182c229e8c23420700a60070b92bb1bcaaf70) |
+| submit_guardian (1 of 2) | ok | 1,833,098 | 0.0020 | [`3be19dd953…`](https://stellar.expert/explorer/testnet/tx/3be19dd9537b819c33f2f3b4f1d2e844671ff8791bbc39a20d6c968a48bee52c) |
 | relay: forged approval, another delegate | refused (relay admission): `403 refused in simulation: HostError: Error(Auth, InvalidAction)` | | | |
 | relay: forged approval, the approver under a rule it is not in | refused (relay admission): `403 refused in simulation: HostError: Error(Auth, InvalidAction)` | | | |
 | relay: forged approval, a tampered delegate signature | refused (relay admission): `403 refused in simulation: HostError: Error(Auth, InvalidAction)` | | | |
-| submit_guardian (2 of 2, promoting; a delegated perch guardian, relayed) | ok | 3,940,614 | 2.0662 | [`a16332b200…`](https://stellar.expert/explorer/testnet/tx/a16332b200ce968946c2350ea3cfa1196d1fbe5fcd7c998f7a9cd272676103f1) |
-| completion apply_doc (GuardianOnly) | ok | 18,866,766 | 0.3815 | [`74a6a7328e…`](https://stellar.expert/explorer/testnet/tx/74a6a7328eaf8b811048252375e6ac7162544dcd67297a53a311b151950edbcb) |
-| the new passkey after recovery | ok | 5,350,085 | 0.0559 | [`fa53065ac6…`](https://stellar.expert/explorer/testnet/tx/fa53065ac6a6362d1b82924d93fd988c0041dc75dec003534245369a041ed564) |
+| submit_guardian (2 of 2, promoting; a delegated perch guardian, relayed) | ok | 3,941,974 | 2.4259 | [`79d2b19974…`](https://stellar.expert/explorer/testnet/tx/79d2b199744b48ff28f669f84d7fc1e58576514cbc3ae5935dfb113686896729) |
+| completion apply_doc (GuardianOnly) | ok | 18,827,766 | 0.4458 | [`c199e14af5…`](https://stellar.expert/explorer/testnet/tx/c199e14af5fc41a2307683311cccf14433278e320d1bfc9c05cb39a2477ffe20) |
+| the new passkey after recovery | ok | 5,350,091 | 0.0651 | [`c955eca97f…`](https://stellar.expert/explorer/testnet/tx/c955eca97f1377bcf0148218729d104cbe92bf9d655c21be97135d59b0aba8a4) |

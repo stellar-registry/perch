@@ -27,6 +27,9 @@ signers and rules.
 5. [`implementation.md`](implementation.md): where each part of the spec
    is implemented and tested, and the choices made where the spec leaves
    room.
+6. [`formal-verification-impact.md`](formal-verification-impact.md): what
+   the Lean model proves about recovery documents and `config_hash`, and
+   what has no formal model at all.
 
 **Pre-spec documents.** These describe the first controller and account
 wiring, which the spec's implementation has replaced. They are kept for the
@@ -44,8 +47,6 @@ reasoning they record, not as current behaviour:
   entry-point inventory; spec §15 is the current one.
 - [`migration.md`](migration.md): why an account cannot gain recovery in
   place. Epic #99 uses fresh deployments only.
-- [`formal-verification-impact.md`](formal-verification-impact.md): Lean
-  and `perch-conformance` impact of the schema field.
 
 A companion smart-account implementation (guardian/ZK/combined modes, real
 UltraHonk proofs) was built in Nido

@@ -126,7 +126,7 @@ before §5 runs, and the confirmed values are recorded here.
 
 ## Results
 
-Workstream 2's measurements and the rule's application are in
+Epic #99 Workstream 2's measurements and the rule's application are in
 [`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-06, protocol
 29 limits, zero-knowledge proofs; the measured circuits' `circuit_id`s are
 in its generated "Circuit identities" table). In summary:
@@ -143,15 +143,14 @@ in its generated "Circuit identities" table). In summary:
   fallback.
 
 Workstream 4 measured the §2 full-transaction rows on testnet, against the
-deployed release wasm (`deployments/testnet.json`: stack commit `aa5a78f`,
-the top of the #99 stack: the quiet, reconciling `apply_doc` at caps 8 x 11,
-WS2's ZK-flavor verifier, WS3's two-digest target binding, and #110's
-consumer interface) under enforcing authorization with
+deployed release wasm (`deployments/testnet.json`: stack commit `704aa23`,
+the quiet, reconciling `apply_doc` at caps 8 x 11, WS2's ZK-flavor verifier,
+and WS3's two-digest target binding) under enforcing authorization with
 real proofs; see
 [`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md). Every
-row is within the 75% budget. The largest are `submit_zk` at 124.9M
+row is within the 75% budget. The largest are `submit_zk` at 124.8M
 instructions (31.2%) and 18.2 KB of transaction (13.8%), `submit_zk_change`
-at 123.0M (30.8%), and the `Combined` completion with ZK rotation at 65.5M
+at 123.1M (30.8%), and the `Combined` completion with ZK rotation at 65.5M
 (16.4%). No row reaches 11% of the footprint (distinct keys) or 15% of the
 written-entry limit. Memory is not reported by the RPC; the release-stack
 suite meters it in-process on the same wasm, where every row is within

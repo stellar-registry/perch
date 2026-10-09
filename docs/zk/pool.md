@@ -14,7 +14,7 @@ factory. It also holds no recovery state machine, which is the controller's.
 | --- | --- | --- |
 | `rcv_insert(account, enrollment_id, commitment)` (returns nothing) | `account`, invoker-only | appends `H(DOM_BIND, account, enrollment_id, commitment)`; once per `(account, enrollment_id)` |
 | `enrollment(account, enrollment_id) -> Option<LeafPosition>` | none | where that enrollment's leaf is |
-| `is_known_root(tree_id, root) -> bool` | none | `MembershipPoolInterface`, the adapter's root check |
+| `is_known_root(tree_id, root) -> bool` | none | `MembershipPoolInterface`, the adapter's root check; a match extends that `Root` entry's TTL |
 | `depth() -> u32` | none | `MembershipPoolInterface`; the controller compares it with the adapter's `tree_depth()` |
 | `current_tree()`, `tree(id)`, `leaves(id, start, count)` | none | reads for clients and indexers |
 | `renew_tree(id)`, `renew_root(id, root)`, `renew_leaves(id, start, count)`, `renew_enrollment(account, enrollment_id)` | none | extend TTLs to the network maximum; change nothing else |
@@ -60,7 +60,10 @@ again, as `MembershipPoolInterface::rcv_insert` specifies. The record that enfor
 
 The pool keeps a `Root(tree_id, root)` entry for every root produced by an
 insertion, paid for by the inserter. `is_known_root(tree_id, root)` is true
-exactly when that entry exists (spec §14.1).
+exactly when that entry exists (spec §14.1). A match also extends the entry's
+TTL to the network maximum, so a root a recovery relies on stays live. The
+adapter's `verify` therefore writes that one TTL extension, paid for by the
+submitter.
 
 - **Every historical root stays acceptable.** Trees are append-only, so an
   old root proves membership as soundly as the latest one. A recent-roots

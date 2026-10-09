@@ -133,26 +133,30 @@ export async function readSnapshot(reader: AccountReader, options: SnapshotOptio
   const attempts = options.attempts ?? 3;
   let why = '';
   for (let i = 0; i < attempts; i++) {
-    const config = await reader.configuration();
+    // Every answer's ledger is recorded as it arrives, before any early
+    // retry, so a retry never accepts answers older than one already seen,
+    // whether or not the attempt that saw it was used.
+    let stale: number | undefined;
+    const take = <T>(read: Read<T>): Read<T> => {
+      if (!clock.observe(read.latestLedger)) stale = Math.min(stale ?? read.latestLedger, read.latestLedger);
+      return read;
+    };
+    const config = take(await reader.configuration());
     const r = config.value.revision;
-    const reads: Read<unknown>[] = [config];
-    const capabilities = await reader.capabilities();
-    const limits = await reader.limits();
-    reads.push(capabilities, limits);
+    const capabilities = take(await reader.capabilities());
+    const limits = take(await reader.limits());
     let document: Uint8Array | null | undefined;
     if (options.document) {
-      const d = await reader.document();
-      reads.push(d);
+      const d = take(await reader.document());
       if (d.value.revision !== r) {
         why = `document() at revision ${d.value.revision}, configuration() at ${r}`;
         continue;
       }
       document = d.value.canonical;
     }
-    const after = await reader.revision();
-    reads.push(after);
-    if (!reads.every((x) => clock.observe(x.latestLedger))) {
-      why = `an answer came from ledger ${Math.min(...reads.map((x) => x.latestLedger))}, older than ${clock.latest}`;
+    const after = take(await reader.revision());
+    if (stale !== undefined) {
+      why = `an answer came from ledger ${stale}, older than ${clock.latest}`;
       continue;
     }
     if (after.value !== r) {

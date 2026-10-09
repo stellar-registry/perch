@@ -63,9 +63,26 @@ export interface PoolIndexerOptions {
 /** Most leaves `leaves()` returns at once. */
 export const MAX_LEAVES_PAGE = 1024;
 
+/** Runs operations one at a time, in call order. */
+class Serial {
+  private tail: Promise<unknown> = Promise.resolve();
+
+  run<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.tail.then(fn);
+    this.tail = next.catch(() => undefined);
+    return next;
+  }
+}
+
 export class PoolIndexer {
   readonly depth: number;
   private readonly index: PoolWitnessIndex;
+  // Requests share one witness index: one at a time advances it and reads
+  // it, so no request ingests a leaf another already has, and a witness's
+  // siblings and root come from one tree size. Syncs take turns too, so a
+  // cursor never moves back.
+  private readonly indexing = new Serial();
+  private readonly syncing = new Serial();
 
   constructor(
     readonly store: LeafStore,
@@ -92,7 +109,7 @@ export class PoolIndexer {
   }
 
   /** Append every stored leaf the witness index has not seen, in pool
-   * order, up to the first one not stored yet. */
+   * order, up to the first one not stored yet. Only inside `indexing`. */
   private async advance(): Promise<void> {
     for (;;) {
       const treeId = this.index.currentTree;
@@ -103,8 +120,14 @@ export class PoolIndexer {
     }
   }
 
-  /** Pull pages until the source is caught up (or `maxPages` were read). */
-  async sync(maxPages = 100): Promise<SyncResult> {
+  /** Pull pages until the source is caught up (or `maxPages` were read).
+   * Witnesses and roots are served meanwhile, from the leaves indexed so
+   * far. */
+  sync(maxPages = 100): Promise<SyncResult> {
+    return this.syncing.run(() => this.pull(maxPages));
+  }
+
+  private async pull(maxPages: number): Promise<SyncResult> {
     const out: SyncResult = { inserted: 0, conflicts: [] };
     let cursor = await this.store.getCursor();
     for (let i = 0; i < maxPages; i++) {
@@ -120,7 +143,7 @@ export class PoolIndexer {
       }
       if (records.length === 0 || next === undefined) break;
     }
-    await this.advance();
+    await this.indexing.run(() => this.advance());
     return out;
   }
 
@@ -142,9 +165,11 @@ export class PoolIndexer {
   }
 
   /** The root of every leaf of `treeId` indexed so far. */
-  async root(treeId: number): Promise<Bytes32> {
-    await this.advance();
-    return this.index.root(treeId);
+  root(treeId: number): Promise<Bytes32> {
+    return this.indexing.run(async () => {
+      await this.advance();
+      return this.index.root(treeId);
+    });
   }
 
   /** The witness for `account`'s enrollment `enrollmentId`, against the
@@ -153,11 +178,13 @@ export class PoolIndexer {
   async witness(account: string, enrollmentId: Bytes32): Promise<Witness> {
     const record = await this.store.find(account, enrollmentId);
     if (!record) throw new Error(`no leaf indexed for ${account} / ${hex(enrollmentId)}`);
-    await this.advance();
-    if (record.index >= this.index.size(record.treeId)) {
-      throw new Error(`tree ${record.treeId} has a gap before index ${record.index}: sync again`);
-    }
-    const path = await this.index.witness(record.treeId, record.index);
+    const path = await this.indexing.run(async () => {
+      await this.advance();
+      if (record.index >= this.index.size(record.treeId)) {
+        throw new Error(`tree ${record.treeId} has a gap before index ${record.index}: sync again`);
+      }
+      return this.index.witness(record.treeId, record.index);
+    });
     return {
       treeId: record.treeId,
       index: record.index,

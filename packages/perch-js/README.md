@@ -87,7 +87,9 @@ limits, the account's capabilities, and optionally `document()`, then the
 revision again. `configuration()` and `document()` carry the revision they
 belong to; the closing `revision()` read covers the limits and capabilities.
 If any of these disagree, or an RPC answers from an older ledger than one
-already seen (share a `LedgerClock` per endpoint), everything is read again;
+already seen (share a `LedgerClock` per endpoint), everything is read again.
+Every answer's ledger counts, including those of an attempt that was thrown
+away, so a retry never accepts an older one;
 after three tries it throws `InconsistentRead`. The compiler client must be
 the account's pinned `infra.docCompiler`, or `readSnapshot` throws
 `CompilerMismatch`: the limits checked are then the ones the account's own
@@ -155,7 +157,11 @@ revision alone would not show one set since the snapshot. The one
 transaction `apply_doc` sends names that revision as `expected_revision`,
 so it executes only at that revision: if another device's change lands
 first, the account refuses it with `StaleRevision` and `onError` decides
-whether to start again from a fresh read.
+whether to start again from a fresh read. Once the last step is
+confirmed, the result's `revision` comes from a read at least as recent as
+the confirmation ledger (`result.ledger`) and past the revision the apply
+started from. A lagging RPC is read again, and one that keeps lagging is
+`InconsistentRead`, without starting the apply again.
 
 `transport` builds the transaction with the Stellar SDK. `prepareApplyDoc`
 builds `apply_doc(doc_json, approval_valid_until, expected_revision)`, adds

@@ -2,15 +2,20 @@
 
 import { xdr } from '@stellar/stellar-sdk';
 import type { Approval } from './relay.js';
+import { statementJson } from './statement.js';
+import type { RecoveryStatement, StatementJson } from './statement.js';
 
 /** Post a guardian's signed approval entry (base64 XDR) with the controller
  * call it authorizes: `submit_guardian(account, attempt_id, domain,
- * guardian)` or `approve_change(account, subject, valid_until, guardian)`. */
+ * guardian)` or `approve_change(account, subject, valid_until, guardian)`.
+ * A relay without simulation also needs the statement the entry signs (a
+ * perch-js `RecoveryStatement` as is): it rebuilds the call from it. */
 export async function postApproval(
   relayUrl: string,
   digest: string,
   entryXdr: string,
   args: (xdr.ScVal | string)[],
+  statement?: RecoveryStatement | StatementJson,
 ): Promise<void> {
   const res = await fetch(new URL(`approvals/${digest}`, withSlash(relayUrl)), {
     method: 'PUT',
@@ -18,6 +23,7 @@ export async function postApproval(
     body: JSON.stringify({
       entry: entryXdr,
       args: args.map((a) => (typeof a === 'string' ? a : a.toXDR('base64'))),
+      statement: statement && 'networkId' in statement ? statementJson(statement) : statement,
     }),
   });
   if (!res.ok) throw new Error(`relay refused the approval: ${res.status} ${await res.text()}`);

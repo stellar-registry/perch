@@ -240,6 +240,30 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  # The release workflow's version-bump scoping (scripts/release-deps.py:
+  # what re-releases a contract besides its crate trees, and that every
+  # paths_for() list covers the crates its contract links) and the stack
+  # builder's dirty check (scripts/source-dirty.sh), with release.yml's
+  # pinned git-cliff.
+  release-scripts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install git-cliff
+        run: |
+          mkdir -p "$RUNNER_TEMP/gc"
+          curl -fsSL https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-unknown-linux-gnu.tar.gz -o "$RUNNER_TEMP/gc.tar.gz"
+          echo "bb40f68e752db1a32526c43e0108e8eff785f7c24c67024cffe1c316e034372975fd78c9af8e9a48148235aad15c9a103f1a5b490c282f1db09a7a793794b69f  $RUNNER_TEMP/gc.tar.gz" | sha512sum -c -
+          tar -xz -C "$RUNNER_TEMP/gc" --strip-components=1 -f "$RUNNER_TEMP/gc.tar.gz"
+          echo "$RUNNER_TEMP/gc" >>"$GITHUB_PATH"
+      - run: python3 scripts/test-release-scripts.py
+        env:
+          PERCH_REQUIRE_GIT_CLIFF: "1"
+
   # Every npm package as `npm publish` would ship it: packed, installed from
   # the tarball into an empty project, every entry point imported. Nothing
   # is published.

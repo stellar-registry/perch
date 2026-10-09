@@ -29,6 +29,15 @@ fix — it only tags versions with no existing tag. Recovering a
 build-that-never-published requires a fresh version bump (see PR #79), not a
 rerun once the underlying commit's tree is fixed.
 
+A contract's version also moves when a build input outside every crate tree
+changes: `scripts/release-deps.py` feeds `release-pr` one `fix(deps)` commit
+per locked external package it links that moved since its last tag, and per
+change to an inherited workspace pin, `[profile]`, `[patch]`, or the
+toolchain. A workspace-wide re-pin (the OZ fork, `soroban-sdk`) touches no
+`paths_for()` path and usually lands as a `chore(deps)` commit git-cliff
+skips. `scripts/test-release-scripts.py` (CI's `release-scripts` job) also
+fails when a `paths_for()` list misses a crate its contract links.
+
 Adding a brand-new deployable contract crate needs entries in **four**
 places in `release.yml`, not just workspace membership: both `CONTRACTS=`
 lists (`detect-releases` and `release-pr` — kept as duplicated literals, not

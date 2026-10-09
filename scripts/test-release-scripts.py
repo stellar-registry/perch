@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Tests for the release scripts: what a contract's release scope covers
-(scripts/release-deps.py, used by release.yml's release-pr job).
+"""Tests for the release and build-provenance scripts: what a contract's
+release scope covers (scripts/release-deps.py, used by release.yml's
+release-pr job) and what a stack build records as dirty
+(scripts/source-dirty.sh, used by scripts/build-stack.sh).
 
   python3 scripts/test-release-scripts.py
 
@@ -18,6 +20,7 @@ import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RELEASE_DEPS = os.path.join(REPO, "scripts", "release-deps.py")
+SOURCE_DIRTY = os.path.join(REPO, "scripts", "source-dirty.sh")
 RELEASE_YML = os.path.join(REPO, ".github", "workflows", "release.yml")
 GIT_CLIFF = shutil.which("git-cliff")
 
@@ -322,6 +325,52 @@ _, ext, _ = rd.Tree("HEAD").closure({contract!r})
 print(" ".join(sorted({{n for n, _, _ in ext}})))
 """], REPO).stdout.split()
             self.assertIn("soroban-sdk", tree, contract)
+
+
+class SourceDirty(unittest.TestCase):
+    INPUTS = [
+        "crates/a/src/lib.rs",
+        "vendor/ultrahonk-soroban-verifier/src/lib.rs",
+        "circuits/recovery/src/main.nr",
+        "scripts/build.sh",
+        ".cargo/config.toml",
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml",
+    ]
+
+    def setUp(self):
+        self.repo = Repo()
+        for path in self.INPUTS + ["docs/notes.md"]:
+            self.repo.write(path, "original\n")
+        self.repo.write(".gitignore", "target/\ncrates/a/wasm/\n")
+        self.repo.commit("base")
+
+    def tearDown(self):
+        self.repo.cleanup()
+
+    def dirty(self):
+        return run([SOURCE_DIRTY, self.repo.dir], self.repo.dir).stdout.strip()
+
+    def test_a_clean_checkout_is_clean(self):
+        self.assertEqual(self.dirty(), "false")
+
+    def test_an_edit_to_any_build_input_is_dirty(self):
+        for path in self.INPUTS:
+            self.repo.write(path, "edited\n")
+            self.assertEqual(self.dirty(), "true", path)
+            run(["git", "checkout", "--", path], self.repo.dir)
+            self.assertEqual(self.dirty(), "false", path)
+
+    def test_an_untracked_file_in_a_build_input_is_dirty(self):
+        self.repo.write("vendor/ultrahonk-soroban-verifier/src/extra.rs", "new\n")
+        self.assertEqual(self.dirty(), "true")
+
+    def test_docs_and_ignored_files_are_not(self):
+        self.repo.write("docs/notes.md", "edited\n")
+        self.repo.write("target/stack/build.json", "{}\n")
+        self.repo.write("crates/a/wasm/pin.wasm", "bytes\n")
+        self.assertEqual(self.dirty(), "false")
 
 
 if __name__ == "__main__":

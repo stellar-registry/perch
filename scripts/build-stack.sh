@@ -97,7 +97,7 @@ stage perch-account-factory "${FACTORY_PINS[@]}"
 build perch-account-factory 2 "$staged"
 
 commit=$(git -C "$repo_root" rev-parse HEAD)
-dirty=$([ -z "$(git -C "$repo_root" status --porcelain -- crates Cargo.toml Cargo.lock)" ] && echo false || echo true)
+dirty=$("$repo_root/scripts/source-dirty.sh" "$repo_root")
 jq -n --arg reg "$registry" --arg commit "$commit" --argjson dirty "$dirty" \
     --arg rustc "$(rustc --version)" --arg stellar "$(stellar --version | head -1)" \
     --arg scaffold "$(stellar scaffold version 2>/dev/null | head -1 || true)" \

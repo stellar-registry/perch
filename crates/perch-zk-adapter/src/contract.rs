@@ -89,7 +89,7 @@ impl PerchZkAdapter {
 
     /// `ProofVerifierInterface::verify_proof`: the raw verifier, for callers
     /// that assemble public inputs themselves. Same ABI and error codes as
-    /// Nido's `nido-recovery-verifier`.
+    /// Nido's old `nido-recovery-verifier`.
     pub fn verify_proof(
         e: &Env,
         public_inputs: Bytes,

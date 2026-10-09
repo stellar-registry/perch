@@ -143,12 +143,13 @@ in its generated "Circuit identities" table). In summary:
   fallback.
 
 Workstream 4 measured the §2 full-transaction rows on testnet, against the
-deployed release wasm (`deployments/testnet.json`: stack commit `704aa23`,
-the quiet, reconciling `apply_doc` at caps 8 x 11, WS2's ZK-flavor verifier,
-and WS3's two-digest target binding) under enforcing authorization with
-real proofs; see
+deployed release wasm (`deployments/testnet.json`: stack commit `7ae915d` on
+`main`, the whole #99 stack: the quiet, reconciling `apply_doc` at caps 8 x
+11, WS2's ZK-flavor verifier, WS3's two-digest target binding, and the
+controller's own §3.4 check) under enforcing authorization with real
+proofs; see
 [`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md). Every
-row is within the 75% budget. The largest are `submit_zk` at 124.8M
+row is within the 75% budget. The largest are `submit_zk` at 124.9M
 instructions (31.2%) and 18.2 KB of transaction (13.8%), `submit_zk_change`
 at 123.1M (30.8%), and the `Combined` completion with ZK rotation at 65.5M
 (16.4%). No row reaches 11% of the footprint (distinct keys) or 15% of the
@@ -157,7 +158,7 @@ suite meters it in-process on the same wasm, where every row is within
 budget at the caps (the largest, 25.4 MB, at 60.5%). Two rows are measured
 only in-process: an enrollment that seals a tree and `execute_upgrade`,
 whose seven-day delay testnet would need. The release-stack suite passes
-17 of 17 against the bytes fetched back from the deployment. The deployed
+18 of 18 against the bytes fetched back from the deployment. The deployed
 adapter's `circuit_id()` is
 `9e39c41f4f35aad43e64b255dfe3ba13f10e8c9d36d6f56fce23c2d97c0a0b4a`, the
 `vk_sha256` in `circuits/manifest.json`. The open §1 rows (reference phone

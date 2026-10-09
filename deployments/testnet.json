@@ -4,10 +4,10 @@
   "network_passphrase": "Test SDF Network ; September 2015",
   "rpc_url": "https://soroban-testnet.stellar.org",
   "channel": "beta",
-  "deployed_at": "2026-10-07T18:23:14Z",
-  "deployed_ledger": 5074730,
+  "deployed_at": "2026-10-09T21:39:53Z",
+  "deployed_ledger": 5111647,
   "source": {
-    "commit": "704aa23f3cebe1e291f70385b4d55f704a30e994",
+    "commit": "7ae915dc1ac6ae36cacf6db87794b056923d3b1f",
     "dirty": false
   },
   "toolchain": {
@@ -17,7 +17,7 @@
     "scaffold": "scaffold 0.0.27 (stellar-scaffold-cli-v0.0.27-0-g6f1f06c3e8d2cf82573ec214b20d1550e9ce326b)"
   },
   "registry": {
-    "id": "CBU7P2S72OL4TD63OBJC3WYQSJSPKS7WRLDO4YT5STOKH7CSQ54HCUY5",
+    "id": "CCUC5RDRGRFFC5VGG7HCB3OMNNSYDFAQOSA7SBGYUM2GDXAJBUWI5TFQ",
     "wasm_hash": "4b2d9ea4148474715076e81067cff06b765248d9c4cd7d0e99e53df3e368adec",
     "admin": "GBQQGD4AEWBBAU3TIH56XRHQI5CONAEIOPFMWASOKQMLUEITPZOWQLE7",
     "manager": "GBQQGD4AEWBBAU3TIH56XRHQI5CONAEIOPFMWASOKQMLUEITPZOWQLE7",
@@ -30,40 +30,40 @@
   },
   "contracts": {
     "perch-doc-compiler": {
-      "version": "0.3.0",
+      "version": "0.3.1",
       "wasm": "perch_doc_compiler.wasm",
-      "sha256": "f04df788c0d5c9bffed53dc39a49ecf5159307f3a6448ec6ab64cdd84c8b05cf",
-      "bytes": 106080,
+      "sha256": "e0f8aacd3ffba3e5ceb2373049319e62cb238d77280d1303e99074b68d6dfdad",
+      "bytes": 107799,
       "tier": 0,
       "pins": {},
-      "address": "CCECBBCM5WV6KHZULIO6ORWWBT35ZKVLEJTO6ALIOOULRXAVD7JHICO6"
+      "address": "CDHZT7NLQDPMWCUDNUVCYC2EAMGRFWABQO5WDSRJGDQVIDHOWQB2FANB"
     },
     "perch-interpreter": {
-      "version": "0.1.2",
+      "version": "0.1.3",
       "wasm": "perch_interpreter.wasm",
-      "sha256": "5498ebbff9ced40b56d5be05271dc44d29a687ad6a37fc0c3f1670c29d4e7406",
+      "sha256": "2254f17dd722e5113caee901be96849c13e5a6853a6213d62473abe637ae33e1",
       "bytes": 16954,
       "tier": 0,
       "pins": {},
-      "address": "CDUU5QEXGCZ5TJNK35WVVSPYURIIFM5H5ZNWJJW3QDSZB57B66C3DNHQ"
+      "address": "CAI6RPWAJ7Z6MP3HLGMTD3W4P4DTD6BEKPFV7XF6VANC2H7XYAQHIXHP"
     },
     "perch-spending-limit": {
-      "version": "0.1.1",
+      "version": "0.1.2",
       "wasm": "perch_spending_limit.wasm",
-      "sha256": "875fdb15f4d412d8eb346db4db1f7113698f4c16207cbef2c6e0b33b8ce86fff",
+      "sha256": "f2f0560ce501ab59144ed71a10349b30bcefaf344ca121c0bd9841577b83c2b7",
       "bytes": 12571,
       "tier": 0,
       "pins": {},
-      "address": "CCUM47GUADDA5CQ54CSPPGAKFXGJQHNZYKP7HQH5Z3UX3E2TBTSAINAD"
+      "address": "CCVXXCAKMROSWAH6QKZ2PUMMH3QUUEUERJQ3CI4XMAWVOMTKKJHYSMTF"
     },
     "perch-ed25519-verifier": {
-      "version": "0.1.1",
+      "version": "10.0.0",
       "wasm": "perch_ed25519_verifier.wasm",
-      "sha256": "bec62a6e1b0c378d8b68b81bf3b912fada37adf1194354e9f1447f3fa3a6a459",
+      "sha256": "851cb7bc36f7917548431cc1490880488f165264516aaf6bd72b93c31b6b39cc",
       "bytes": 1411,
       "tier": 0,
       "pins": {},
-      "address": "CDTVGVGYGUVP57ALIMBHH5EVSBPQ2B575AOJP73W3O7QHGFNBFDNLXTD"
+      "address": "CA3WZODTJPP45D3IJDWRF2ZKHUJ7E2X5HB3GYM75KPIHWPSD6NRMQIUO"
     },
     "perch-webauthn-verifier": {
       "version": "0.1.0",
@@ -72,58 +72,58 @@
       "bytes": 11783,
       "tier": 0,
       "pins": {},
-      "address": "CCN63JUG7EAMFSQ2VEZA73ZDFDW6WMOCOM67U5Z7ERI5B67KWTMQ6UBG"
+      "address": "CBCCINHRMS3COAV5RHTCUASZLOEC52FCOBR3HMU4FKWJTAHWZTVFTHHY"
     },
     "perch-zk-pool": {
-      "version": "0.1.0",
+      "version": "0.1.1",
       "wasm": "perch_zk_pool.wasm",
-      "sha256": "8cb74d03411201e69c478691820b4d464093e33d27976c6f4ccdc4854b91b640",
-      "bytes": 46055,
+      "sha256": "5389aef52582831184715bd06ff34e6265800e4b439536af6664882498626105",
+      "bytes": 46179,
       "tier": 0,
       "pins": {},
-      "address": "CDVEAUJCXT4H3P6PN75JUNWCPJZI26X2T27GI5MZO2KEAKLRSQCDMVH4"
+      "address": "CB46EOGM6FSSHO2TNKFWZF5AOIDROPNE6QW75XBKETX5IS757B25WK2Y"
     },
     "perch-zk-adapter": {
-      "version": "0.1.0",
+      "version": "0.1.1",
       "wasm": "perch_zk_adapter.wasm",
-      "sha256": "9eae13c48ba63afb8ba6b4e0c9f7e18d3f2e937e798bfafcd350d7fe7029e709",
-      "bytes": 68374,
+      "sha256": "8a1deec2bbc9ec5d43dbbea7ed91bbd1b4c75397d1f6231e403ff520c8255057",
+      "bytes": 68502,
       "tier": 0,
       "pins": {},
-      "address": "CB7PYUMZLBHP3DVT6SF2YVTSTCLSXKZC4EPIII7VHYLJ6BRDJCQZISIU"
+      "address": "CBGN355IPW63XPNOSG4O3EZD46ASBXCM5W55PQHEZXJYAFZXN23BNAWC"
     },
     "perch-recovery": {
-      "version": "0.1.0",
+      "version": "0.1.1",
       "wasm": "perch_recovery.wasm",
-      "sha256": "ad0b9b2587cbd87befb9a3b0ca1b01f42aab200a1d6107a564ecdbcdc1d67771",
-      "bytes": 66785,
+      "sha256": "fb4425cf9e59ffc90122e34831614961ee65ebc0551671d1d0c9ae6ce4456afe",
+      "bytes": 67108,
       "tier": 0,
       "pins": {},
-      "address": "CCJGLH3SHOVN3ALAJKBMZ2WVA3ISHFE5ENLYTHZBJKWZ2ELMVA4ZHVWN"
+      "address": "CDIGZVWVXJT2PVDIAUKLX62LW7DNJBC6SZUSR6SLQ6MNICGCGZ6EEXPR"
     },
     "perch-account": {
-      "version": "0.3.0",
+      "version": "0.3.1",
       "wasm": "perch_account.wasm",
-      "sha256": "7743becf9382698f0a6e36d9987d6bac903ed96ed859c3a93cd4486a9e1474e5",
-      "bytes": 64884,
+      "sha256": "bbb30174bbd85a2956a2f6146a156769621254011a6bdcac707cf787ce7bcd52",
+      "bytes": 69269,
       "tier": 1,
       "pins": {
-        "perch-doc-compiler": "f04df788c0d5c9bffed53dc39a49ecf5159307f3a6448ec6ab64cdd84c8b05cf",
-        "perch-interpreter": "5498ebbff9ced40b56d5be05271dc44d29a687ad6a37fc0c3f1670c29d4e7406",
-        "perch-spending-limit": "875fdb15f4d412d8eb346db4db1f7113698f4c16207cbef2c6e0b33b8ce86fff"
+        "perch-doc-compiler": "e0f8aacd3ffba3e5ceb2373049319e62cb238d77280d1303e99074b68d6dfdad",
+        "perch-interpreter": "2254f17dd722e5113caee901be96849c13e5a6853a6213d62473abe637ae33e1",
+        "perch-spending-limit": "f2f0560ce501ab59144ed71a10349b30bcefaf344ca121c0bd9841577b83c2b7"
       }
     },
     "perch-account-factory": {
-      "version": "0.1.0",
+      "version": "0.1.1",
       "wasm": "perch_account_factory.wasm",
-      "sha256": "e9005eb5a828d8bf59e63b1885702c8b93dec90bdb02eaf911f347339e765afb",
+      "sha256": "b71bd8881bd84798493e9088c30fbd21b9f397ed8cdada1a363e84cd53343a42",
       "bytes": 4696,
       "tier": 2,
       "pins": {
-        "perch-account": "7743becf9382698f0a6e36d9987d6bac903ed96ed859c3a93cd4486a9e1474e5",
+        "perch-account": "bbb30174bbd85a2956a2f6146a156769621254011a6bdcac707cf787ce7bcd52",
         "perch-webauthn-verifier": "9e9fbe7886d9bb149a6e3ee10de15954c57bbdf20f817ed94e1370c01b9c669e"
       },
-      "address": "CCWDMTENTHYEAWO74I7TBWVPDW4XRSO6I5N52IRXMPOPQZ4DLT7WNPUB"
+      "address": "CDO3IQAR7EF5NFGXK2VI2Q5XU244TDA2IGZUVXHQHOYHHEL3WEJD77OT"
     }
   }
 }

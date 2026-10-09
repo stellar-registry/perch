@@ -133,7 +133,7 @@ jobs:
           # crates/<contract>/Cargo.toml in a PR; on merge this tags + publishes
           # it. The constructorless allow-list in publish-plan decides which of
           # these actually publish on-chain (the rest just get a tag).
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-zk-pool perch-zk-adapter"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           releases='[]'
@@ -237,6 +237,8 @@ jobs:
           # intra-workspace lib crates it embeds, so a lib change re-releases the
           # contract that ships it. Update these lists if a contract's perch deps
           # change; a miss just means that release needs a manual version bump.
+          # A bare name is a crate under crates/; an entry with a slash is a
+          # repo path (perch-zk-adapter compiles in vendor/'s verifier).
           paths_for() { case "$1" in
             perch-interpreter) echo "perch-interpreter perch-program";;
             perch-doc-compiler) echo "perch-doc-compiler perch-compile perch-ir perch-program";;
@@ -245,14 +247,21 @@ jobs:
             # the account too — see AGENTS.md's version-pin sharp edge.
             perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery";;
             perch-recovery) echo "perch-recovery perch-doc-compiler perch-compile perch-ir perch-program";;
+            perch-zk-pool) echo "perch-zk-pool perch-zk-primitives perch-recovery-interface";;
+            perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface vendor/ultrahonk-soroban-verifier";;
             *) echo "$1";;
           esac; }
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-zk-pool perch-zk-adapter"
           summary=""
           bumped=""
           for c in $CONTRACTS; do
             inc=()
-            for d in $(paths_for "$c"); do inc+=(--include-path "crates/$d/**"); done
+            for d in $(paths_for "$c"); do
+              case "$d" in
+                */*) inc+=(--include-path "$d/**");;
+                *) inc+=(--include-path "crates/$d/**");;
+              esac
+            done
             # feat -> minor, fix -> patch; pre-1.0 breaking stays minor (cliff.toml).
             # Returns the crate's current version when nothing is releasable.
             next_tag=$(git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" --bumped-version 2>/dev/null) || true
@@ -647,7 +656,8 @@ jobs:
           # separate, deliberate decision (see
           # docs/recovery/pending-activity-policy.md) — add it here explicitly
           # when that decision is made, not as a side effect of adding the
-          # crate.
+          # crate. perch-zk-pool and perch-zk-adapter are likewise tagged but not
+          # published until the release workstream enables them.
           ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier"]'
           if [ -n "$DISPATCH_TAG" ]; then
             # Strict allow-list regex, not a prefix glob: the tag and the package

@@ -42,6 +42,12 @@ crates/
   perch-recovery/     deployable account-recovery controller (guardian/ZK/combined modes),
                       an OZ Policy attached via apply_doc's `recovery` document field —
                       see docs/recovery/
+  perch-zk-pool/      deployable ZK recovery membership pool: account-authorized enrollment,
+                      depth-32 Poseidon2 trees with rollover — see docs/zk/
+  perch-zk-adapter/   deployable ZK recovery adapter: root check + statement binding + the
+                      zero-knowledge UltraHonk verifier with the circuit's VK compiled in
+  perch-zk-primitives/  host-side Poseidon2 for the circuit's formulas (no_std)
+  perch-zk-prover/    native witnesses/proving + `perch-zk-fixtures` (artifacts, fixtures, bench)
   perch-deploy/       deploy/CI bin: signs smart-account auth entries (apply_doc, publish)
   perch-conformance/  eval-semantics conformance vectors: hand-authored (program,
                       invocation) → verdict cases + compile→eval differential + wasm-leg suites
@@ -53,6 +59,11 @@ packages/
   perch-interpreter-js/  interpreter contract client bindings, published to npm as
                       @stellar-registry/perch-interpreter (generated from the wasm;
                       regen via `just bindings-interpreter-js`)
+  perch-zk/           ZK recovery proof helpers: commitments, witnesses, bb.js proving
+circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
+                      artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
+vendor/               vendored audited UltraHonk verifier plus perch's ZK-flavor delta
+                      (the delta is unaudited; see its README and NOTICE)
 formal/               Lean 4 model of the v1 semantics + machine-checked theorems
                       (fail-closed, validation soundness, lowering preservation, and CANON v1
                       canonicalizer injectivity); replays the conformance + canonical vectors
@@ -60,14 +71,17 @@ formal/               Lean 4 model of the v1 semantics + machine-checked theorem
 fuzz/                 cargo-fuzz targets: evaluator totality, parser/canonicalization round-trip
 komet/                Komet (K-framework) symbolic property tests — an independent wasm-level
                       second opinion (maintainer-gated on the K toolchain; see komet/README.md)
-scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap
+scripts/              bootstrap-testnet.sh — one-time registry + account bootstrap;
+                      zk-toolchain.sh — pinned, checksummed nargo/bb for the ZK circuit
 docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
 docs/verification/    the layered verification plan (PLAN.md) + enforceability theory (THEORY.md)
 docs/recovery/        opt-in account recovery: schema, controller governance, migration,
                       and the open release-blocking pending-activity gate
+docs/zk/              ZK recovery circuit, pool, adapter, measurements, and the depth decision
 docs/testnet-deployment.md  verified live-state map of the canonical testnet deployment
 testdata/             golden vectors shared by the Rust and TS suites (frozen)
 testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and the wasm leg
+testdata/zk/          real-proof ZK recovery fixtures, one per action and pool boundary
 testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)
 ```
 
@@ -93,6 +107,9 @@ just drt               # differential conformance: Rust evaluator + Lean model
 just fuzz              # coverage-guided fuzzing (needs cargo-fuzz + nightly)
 just mutants           # mutation testing of the security core (cargo-mutants)
 just coverage          # branch coverage incl. the conformance suite (cargo-llvm-cov)
+just zk-artifacts check  # rebuild the ZK circuit artifacts, VKs, and proof fixtures
+                         #   with the pinned toolchain; fail on any byte of drift
+just zk-bench          # ZK proving + metered on-chain costs (docs/zk/measurements.md)
 ```
 
 [`docs/verification/PLAN.md`](./docs/verification/PLAN.md) covers what is

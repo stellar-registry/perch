@@ -1,0 +1,46 @@
+{
+  "description": "Protected reconfiguration evidence: replace configuration v1 with v2.",
+  "pool_id": "0xc6d3820a1f47a48e83e109b49a8949248d2a9fe39602387b0068a377e9093c5c",
+  "account_id": "0x2f55f804e95d6a81c9409dc2ea908b6d6c87d0881f8db9ed238a75deec804d21",
+  "enrollment_id": "0x2b68379f50f7afcd99f335de81057eb4e0c9e534bbd4b78692e16fddc2b68c23",
+  "statement": {
+    "network_passphrase": "Test SDF Network ; September 2015",
+    "account_id": "0x2f55f804e95d6a81c9409dc2ea908b6d6c87d0881f8db9ed238a75deec804d21",
+    "controller_id": "0xd2ab8d41bd56feed2802ec950d99591222eed271261e4001b407ae6458a8a123",
+    "epoch": 3,
+    "config_hash": "0xba481f11749d4f1a2ff92d9cd30603a09419dd7253a944a7be23c8e46bf4e39f",
+    "delay_ledgers": 120960,
+    "expiry_ledgers": 241920,
+    "valid_until_ledger": 2000000,
+    "subject": {
+      "ReconfigureSet": {
+        "config_hash": "0xdc6ffe93ef4e08c7250af2b14683d28c4dc97ca841624d3797220288251052f2"
+      }
+    }
+  },
+  "digest": "0x7540246e6b46979ec369090d6e46d6124f29dc01c5cad6a25201f992aa6ff31e",
+  "tree_id": 0,
+  "synthetic_prefix": 0,
+  "enrollments": [
+    {
+      "account_id": "0x5cef49af37bf237723cfc159f43568c848685064d39dae011491baf3146f68db",
+      "enrollment_id": "0xb6a90daaf6e8e7eb0bf1efd221101bf9c42eedb1a9e79fe1705de2a9f4ed0f7f",
+      "commitment": "0x01b12bbecb87af8adbd91c708bc27c33788c3ecfb0606fb86dc44c9ffd4fbf3a"
+    },
+    {
+      "account_id": "0x2f55f804e95d6a81c9409dc2ea908b6d6c87d0881f8db9ed238a75deec804d21",
+      "enrollment_id": "0x2b68379f50f7afcd99f335de81057eb4e0c9e534bbd4b78692e16fddc2b68c23",
+      "commitment": "0x2cd66bdbf730727946a4d745d9f654de5d0aae1f43e3eda984d1601512dcf336"
+    },
+    {
+      "account_id": "0xcfb9e7d561b1acd1987e23232e839b70bfda9ccb4cd38e60ec85386625160a43",
+      "enrollment_id": "0xc098e3cb5222abd606bad3470f2f2b75b4316d5ed08a980aaf7d0cafd0965410",
+      "commitment": "0x029b393df0e40da59a86e720efcb1dd9df4faaa928a6e54fae2f6c38ffefae31"
+    }
+  ],
+  "leaf_index": 1,
+  "secret": "0x0787c09e29339f17e2daa425de916d5e8472ab7eb14eb2b95dfe434ffd2072c8",
+  "root": "0x2b0b60d01cae92326abc85a67ced84214ab0e0b09f0efce478bf52571bc52b98",
+  "nullifier": "0x06e2681c8720a76b03b287cf6212a4cad256f80761ccf4ed2008938c9f18f86d",
+  "statement_hash": "0x1243bf2c8155ea01ac7eda85d32030da951420f536065458c9d5b95044d52095"
+}

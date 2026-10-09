@@ -1,0 +1,101 @@
+{
+  "circuits": {
+    "perch_zk_recovery": {
+      "acir_bytecode_sha256": "0xc8ad8dd21b473ba421ecc32a78052f410fbac350db51b23dbda1421b6e23eba9",
+      "artifact": "circuits/artifacts/perch_zk_recovery.json",
+      "artifact_sha256": "0x9a5030751a6dbedc8c840a1bfc8b3170ec91b8d33a379df4fd2c7610acf93363",
+      "circuit_size": 5685,
+      "depth": 32,
+      "public_inputs": [
+        "root",
+        "nullifier",
+        "statement_hash"
+      ],
+      "vk": "crates/perch-zk-adapter/vk/perch_zk_recovery.vk",
+      "vk_sha256": "0x9e39c41f4f35aad43e64b255dfe3ba13f10e8c9d36d6f56fce23c2d97c0a0b4a"
+    },
+    "perch_zk_recovery_d24": {
+      "acir_bytecode_sha256": "0x7376cd62914c2b42c4e611fe1fc5b25a3a25d2a16104b63167b6671b0291203b",
+      "artifact": "circuits/artifacts/perch_zk_recovery_d24.json",
+      "artifact_sha256": "0x014ca693ba9613b7cc52df6cb8bb97273abf5fa8e96081039788fe493621ae00",
+      "circuit_size": 4426,
+      "depth": 24,
+      "public_inputs": [
+        "root",
+        "nullifier",
+        "statement_hash"
+      ],
+      "vk": "crates/perch-zk-adapter/vk/perch_zk_recovery_d24.vk",
+      "vk_sha256": "0xecf0731f6e1b009da198278649b1e66926fbcf9bdd3cb04a32903eedf2f8ec66"
+    }
+  },
+  "fixtures": {
+    "cancel": {
+      "action": "Cancel",
+      "proof_sha256": "0x414f0e257be9663ce3ce30d14fa4bc6cf87123173523e3131f30b91b75c7fc20",
+      "public_inputs_sha256": "0xc7a5df3a3fdf052714d9897957918f49127c63d76e553f9f36fae18a8ab43afd"
+    },
+    "compromise": {
+      "action": "Compromise",
+      "proof_sha256": "0x9e3919d6547a9bd5441ae325d7e298272ab060137998119f51d677837f4bf904",
+      "public_inputs_sha256": "0x9233e1c7c531b12c95e5360e4879d4c46e4aafc95384f2f922ef6e003d0e9624"
+    },
+    "earlier_tree": {
+      "action": "LostKey",
+      "proof_sha256": "0x6d08fc8688c98455d8eea963462b7aa6266a8389afec1964fa051a3dd8948647",
+      "public_inputs_sha256": "0x78865a0146a8550ac1288692b24cb289b2cdcdde55b12c0763938b9a77b13f41"
+    },
+    "later_root": {
+      "action": "LostKey",
+      "proof_sha256": "0x6ff939dcd6d387bed901aca2577f1947bf195dadc7e21a071f4c2fe43671aeb8",
+      "public_inputs_sha256": "0xbd415a231bdf4361a000c0418ff3d754ae17390e27fab50ea0b66143ae0ee072"
+    },
+    "lost_key": {
+      "action": "LostKey",
+      "proof_sha256": "0xe79e5c701abdb3e3ea13a8ec515e749646202fb221ff554a3bfec8a1429f48c9",
+      "public_inputs_sha256": "0x0253ef94bc7e5b0149af846c72a7b2490080c512c1478d79b7655ae41087dc6b"
+    },
+    "reconfigure": {
+      "action": "Reconfigure",
+      "proof_sha256": "0x36ae43f85293c5fc50bf0c1848aab8e36bc1946846fba68c7e81f0108b2fc062",
+      "public_inputs_sha256": "0x54f7c0177c93971091d9327b084aa962042b6aa1982c33fd4696c4181b27afbc"
+    },
+    "reconfigure_remove": {
+      "action": "Reconfigure",
+      "proof_sha256": "0xbb55c46d0d1241aea1bdcb59aab04bc03d0f07c1eed6640eba259f87af9badb7",
+      "public_inputs_sha256": "0xcc0b6b4ac8e5fc8bcd06a82e35aa0b8bc01dbe5d7f7bc7e7800609ae9b719a32"
+    },
+    "upgrade": {
+      "action": "Upgrade",
+      "proof_sha256": "0x8b85c9066b30fb2cf8fe0784d6c353cc491410e71e016b82fd32584777a1d623",
+      "public_inputs_sha256": "0xe1d2e44a2a2e3a93ddd60e7953e2f8bd804b3f698f6af5dd248e68921b729f35"
+    }
+  },
+  "sources": {
+    "circuits/Nargo.toml": "0x89656f62229446ecef93f5e113a336f05aee2b2cf500d02fc3eff0c275b7f2d2",
+    "circuits/perch_zk/Nargo.toml": "0x80d0fca4230d24dada0f8b49afd932f81d9fb424c220833c04177faedf750b8d",
+    "circuits/perch_zk/src/lib.nr": "0x86f2dd40ebec07dfd9f5da6df5f94e46706d9e7a5729328e379f499673e4a066",
+    "circuits/perch_zk/src/tests.nr": "0x5a6809a5178c1c59610aa508db3bff4e729fa0b6a0964e6a0a6c988190471431",
+    "circuits/perch_zk_recovery/Nargo.toml": "0x09df9eaab78005336f3f1af1b08bc9b0d66b00d9917f757aafdbc1ad1e4a416c",
+    "circuits/perch_zk_recovery/src/main.nr": "0xc4ec5d3c1b37fd85a34545dc34119d484e147faeff3555739966a63049e23b23",
+    "circuits/perch_zk_recovery_d24/Nargo.toml": "0x2bf98ff8654a184c3f9fcd88cd745117c732e9dd65fb8aaada56669113ed58dd",
+    "circuits/perch_zk_recovery_d24/src/main.nr": "0x0a3fe7ff890c44edff2d0dfdec6facaf9a1a47c3de556499b304819f7e4e16d6",
+    "circuits/vendor/poseidon/Nargo.toml": "0x551d27ec7bf58e6e40896ee424210ac0f3724b29c05068cf34fef3ea8ca1b57a",
+    "circuits/vendor/poseidon/src/bench.nr": "0x6f37e9a3bc035d6a4d72a5ff6b31cd088089616f3262516ab261ae2b3b7b9d7c",
+    "circuits/vendor/poseidon/src/lib.nr": "0x5d8b3eeccceb4ac36b66430d3678fc2e8d9e6ab5b759556244be1234882fdff9",
+    "circuits/vendor/poseidon/src/oracle_tests.nr": "0x5cbc92699d59102e18f3809a59b8b37d0325069bdba8450ebf51a56fcc0e2943",
+    "circuits/vendor/poseidon/src/poseidon/bn254.nr": "0x3007cd7ed46c89b92d613e5af93f40ab9c9aa76a05ae1b13c39c507a7b342694",
+    "circuits/vendor/poseidon/src/poseidon/bn254/consts.nr": "0x0e1ce6ec6ed2ebbab52739ab07a2ab7a9cfb9b479cb012527f5e08447677dfd2",
+    "circuits/vendor/poseidon/src/poseidon/bn254/perm.nr": "0x1daf55657af0418deb717b74cd45a1a4e9ac9d59678335cf0e677ed8a682be23",
+    "circuits/vendor/poseidon/src/poseidon/mod.nr": "0xa4682f0d4aa03250784c07a06da5bc7c7278eb02a95bd77eb36795e3206f0f9b",
+    "circuits/vendor/poseidon/src/poseidon2.nr": "0x6d3ddc2ab0812a660fa2861415cdb6f108ea140a03dc1e83f627a3ccd272e1f9",
+    "circuits/vendor/poseidon/src/tests.nr": "0x41515204b15fb01b0277bc4745dde42032d4e314545f4f4c109b21b54f783662"
+  },
+  "toolchain": {
+    "bb": "0.87.0",
+    "bb_scheme": "ultra_honk --oracle_hash keccak --zk (UltraKeccakZKFlavor)",
+    "nargo": "1.0.0-beta.9",
+    "noirc": "noirc version = 1.0.0-beta.9+6abff2f16e1c1314ba30708d1cf032a536de3d19",
+    "verifier": "NethermindEth/rs-soroban-ultrahonk@c2160987260284c656ffbdad8344210fc162b177 + perch UltraKeccakZKFlavor delta (src/zk.rs)"
+  }
+}

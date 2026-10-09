@@ -142,11 +142,66 @@ in its generated "Circuit identities" table). In summary:
   provisional on the open rows above. D = 24 stays buildable as the
   fallback.
 
-### Document caps
+Workstream 4 measured the §2 full-transaction rows on testnet, against the
+deployed release wasm (`deployments/testnet.json`: stack commit `704aa23`,
+the quiet, reconciling `apply_doc` at caps 8 x 11, WS2's ZK-flavor verifier,
+and WS3's two-digest target binding) under enforcing authorization with
+real proofs; see
+[`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md). Every
+row is within the 75% budget. The largest are `submit_zk` at 124.8M
+instructions (31.2%) and 18.2 KB of transaction (13.8%), `submit_zk_change`
+at 123.1M (30.8%), and the `Combined` completion with ZK rotation at 65.5M
+(16.4%). No row reaches 11% of the footprint (distinct keys) or 15% of the
+written-entry limit. Memory is not reported by the RPC; the release-stack
+suite meters it in-process on the same wasm, where every row is within
+budget at the caps (the largest, 25.4 MB, at 60.5%). Two rows are measured
+only in-process: an enrollment that seals a tree and `execute_upgrade`,
+whose seven-day delay testnet would need. The release-stack suite passes
+17 of 17 against the bytes fetched back from the deployment. The deployed
+adapter's `circuit_id()` is
+`9e39c41f4f35aad43e64b255dfe3ba13f10e8c9d36d6f56fce23c2d97c0a0b4a`, the
+`vk_sha256` in `circuits/manifest.json`. The open §1 rows (reference phone
+and laptop) remain open.
 
-The measurements below use `release_stack.rs` (`cap_sweep`, the `worst_case_*`
-tests) and `scripts/cap-sweep.py`, which arrive with the release stack in
-the pull request above this one (#103) and hold these caps in its CI.
+### Release stack, in process
+
+Workstream 4, 2026-10-07: the release-stack suite on this branch's stack
+(`build-stack.sh --builder contract`), with WS2's ZK-flavor verifier, WS3's
+delta `apply_doc` on quiet OZ mutations with `reconcile_signers`, the 8 x 11
+caps, and the 64 KiB (adapter: 128 KiB) wasm stacks, real proofs, and
+enforcing authorization. The worst row of each §2 kind, as a share of the
+protocol-29 limits. Footprint is the transaction's distinct ledger keys,
+read-only plus read-write, which is what the network limits (400). Written
+entries are the read-write keys (200).
+`the_metered_footprint_is_the_simulated_transactions` checks the count
+against an RPC-style simulation of each binding `apply_doc`.
+
+| Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- |
+| Enroll `Combined` through `apply_doc`, at the caps | 197.2M (49.3%) | 14.6 MB | 91 | 63 | 51 144 | 888 |
+| `begin_lost_key` / `begin_compromise`, at the caps | 134.8M (33.7%) | 5.4 MB | 25 | 2 | 2 176 | 248 |
+| `publish_baseline`, at the caps | 96.1M (24.0%) | 1.8 MB | 10 | 1 | 7 452 | 0 |
+| `submit_guardian` (promoting, sets the freeze) | 1.8M | 0.7 MB | 13 | 6 | 1 996 | 368 |
+| `submit_zk` (promoting, `Combined`, sets the freeze) | 119.2M (29.8%) | 5.7 MB | 17 | 5 | 2 284 | 368 |
+| Completion, at the caps (compromise, names kept, every program changed) | 294.5M (73.6%) | 19.8 MB (47.1%) | 116 | 99 | 53 160 | 3 228 (19.7%) |
+| Completion, at the caps (compromise, every rule renamed) | 251.6M (62.9%) | 24.9 MB (59.3%) | 157 (39.2%) | 141 (70.5%) | 56 532 (42.8%) | 3 228 |
+| Completion, at the caps (lost-key, every signer revoked) | 257.0M (64.2%) | 12.5 MB | 91 | 77 | 43 752 | 2 172 |
+| Cancellation (`Combined`, ZK last) | 118.6M (29.7%) | 5.4 MB | 16 | 5 | 2 132 | 332 |
+| `approve_change` | 0.9M | 0.3 MB | 8 | 2 | 392 | 192 |
+| `submit_zk_change` | 117.7M (29.4%) | 5.1 MB | 12 | 1 | 240 | 192 |
+| `Protected` reconfiguration `apply_doc`, at the caps | 257.5M (64.4%) | 23.1 MB | 141 | 114 | 51 592 | 888 |
+| `Protected` `schedule_upgrade` | 6.3M | 1.2 MB | 13 | 2 | 1 116 | 196 |
+| `execute_upgrade` | 6.3M | 1.2 MB | 12 | 5 | 1 232 | 696 |
+| Enrollment that seals a tree (small document) | 58.7M | 4.4 MB | 34 | 18 | 8 016 | 888 |
+
+Every row is within 75% of every limit. Native proving (`nargo execute` +
+`bb prove`, 15 proofs on an Apple M-series desktop): 69 ms median witness,
+97 ms median and 117 ms maximum proof. The deployable adapter is 67 982
+bytes (`stellar scaffold build`; 52% of the 131 072-byte contract limit) and
+the pool 45 663: `docs/zk/measurements.md`'s 116 776 and 75 264 are plain
+`cargo build` sizes, without the CLI's spec shaking.
+
+### Document caps
 
 Workstream 4, 2026-10-06, protocol-29 limits, the release-stack suite on the
 stack built from this branch's source (`build-stack.sh --builder contract`)

@@ -49,10 +49,11 @@ fn register_infra_at_derived(env: &Env) -> (Address, Address) {
 pub struct World {
     /// The unit host every contract shares.
     pub env: Env,
-    /// The `stateless` subregistry address the account content-addresses its
-    /// infra off (`deployer(stateless, hash)`). Native mode deploys no contract there —
-    /// resolution is a pure offline derivation — but the field is populated for
-    /// parity with [`crate::faithful`] mode, which puts the real registry here.
+    /// The registry the account content-addresses its infra off
+    /// (`deployer(registry, hash)`, the id it bakes as `stateless.id`). Native
+    /// mode deploys no contract there — resolution is a pure offline
+    /// derivation — but the field is populated for parity with
+    /// [`crate::faithful`] mode, which puts the real registry here.
     pub registry: Option<Address>,
     /// The stateless doc-compiler (`compile_doc`).
     pub compiler: Address,

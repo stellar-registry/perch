@@ -30,8 +30,8 @@ measured exercise. The canonical registries below are unchanged.
 | Component | Address | Notes |
 | --- | --- | --- |
 | `unverified/perch` registry (phase 1) | `CASB2M4JQSGP3QHFBGK5U6DGJXJX34GX37C2JFBU73LKKDXXNNIZHCP7` | resolves from the root registry by name |
-| `stateless` registry (phase 1b) | `CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O` | name `stateless` under unverified/perch |
-| `constructorless` registry | `CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7` | = `vars.PERCH_REGISTRY_CONTRACT_ID`; target of the CI release chain |
+| `stateless` registry (phase 1b) | `CC6ELNH6YVRRO4WIETIURY3PZLD7NHSDXHRMTJQUT7D733SYVQFYB26O` | name `stateless` under unverified/perch; **retired**: holds `perch-spending-limit` ≤ 0.1.1, nothing new is published here |
+| `constructorless` registry | `CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7` | name `constructorless` under unverified/perch; = `vars.PERCH_REGISTRY_CONTRACT_ID`; **the one canonical registry**: CI publishes and `deploy_stateless`es every released infra contract here (interpreter, doc-compiler, ed25519 verifier, spending limit) |
 | perch-ed25519-verifier (phase 2) | `CA4G72A6XEIYPORY7UKZB3WFRJYX564UAQB5I7ASZMEAEST7PRHT4PSF` | v0.1.0 name-salted instance |
 | perch-doc-compiler (phase 2) | `CA7I42XDFRDQZQ4QMGOGM2QYRECLZRPE5ILS6CFQNNIPVLHPA2DSEPHT` | v0.1.0 name-salted instance |
 | perch-account smart account (phase 2) | `CDIFS3JDMVQBVANOSHEL6AUAKRYLFZFQQVX37QKQGJGQVQXQEHJCJ6PG` | = `vars.PERCH_AUTHOR_ADDRESS`; live, 2 context rules |
@@ -56,6 +56,20 @@ measured exercise. The canonical registries below are unchanged.
   step, not a blocker for consuming the deployment.
 
 ## Observations
+
+- **One registry.** An account bakes one registry id and derives its
+  compiler, interpreter, and spending-limit addresses from it
+  (`deployer(registry, sha256(wasm))`). Until the consolidation, the
+  canonical compiler and interpreter were only under `constructorless`, and
+  the spending limit was only under `stateless`, so no account built
+  against canonical pins could resolve all three. From
+  `perch-spending-limit` 0.1.2 on, the spending limit publishes into
+  `constructorless` too, after the manager's one-time initial publish of
+  the name there.
+- `perch-ed25519-verifier` in `constructorless` is at `9.9.9`, a manual test
+  publish. The registry only accepts strictly increasing versions, so no
+  0.x release of it can publish there (`#8
+  VersionMustBeGreaterThanCurrent`).
 
 - The smart account is **not** name-resolvable as `perch-account` in the
   registry (`fetch_contract_id("perch-account")` fails with `Error(Contract,

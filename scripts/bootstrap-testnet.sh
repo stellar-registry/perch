@@ -36,8 +36,9 @@
 #
 # Optional env:
 #   PERCH_STATELESS=1 — route the ed25519-verifier / doc-compiler / interpreter
-#               through the managed `stateless` registry via deploy_stateless
-#               (salt = wasm_hash) instead of the name-salted deploy. GUARDED
+#               through perch's canonical managed registry, `constructorless`
+#               under unverified/perch, via deploy_stateless (salt =
+#               wasm_hash) instead of the name-salted deploy. GUARDED
 #               off by default: requires #38 (deploy-stateless CLI/trait) + #39
 #               (perch-stateless-registry crate). See the STATELESS block below.
 set -euo pipefail
@@ -61,11 +62,15 @@ RULES_OUT="$REPO_ROOT/testdata/deploy/perch-testnet.rules.json"
 
 # --- Stateless registry (content-addressed infra) — issue #40 / epic #37 -----
 # PERCH_STATELESS=1 routes the three constructorless / per-caller-keyed infra
-# contracts (ed25519-verifier, doc-compiler, interpreter) through the managed
-# `stateless` registry via deploy_stateless (salt = wasm_hash) instead of the
-# name-salted `deploy` on unverified/perch. Content-addressing makes each
-# address a pure function of (stateless registry id + wasm hash): derivable
-# offline, identical across networks, permissionless, idempotent.
+# contracts (ed25519-verifier, doc-compiler, interpreter) through perch's one
+# canonical content-addressed registry — `constructorless` under
+# unverified/perch, where release.yml publishes every infra contract — via
+# deploy_stateless (salt = wasm_hash) instead of the name-salted `deploy` on
+# unverified/perch. Content-addressing makes each address a pure function of
+# (registry id + wasm hash): derivable offline, identical across networks,
+# permissionless, idempotent. (The STATELESS_* names refer to that
+# deploy_stateless route. The former `stateless` subregistry is retired: an
+# account bakes one registry id, so all its infra must share one registry.)
 # GUARDED OFF by default — the live path needs BOTH:
 #   * #38 — upstream StatelessDeployable + a `stellar registry deploy-stateless`
 #           verb (override PERCH_DEPLOY_STATELESS_CMD if it ships differently);
@@ -73,7 +78,7 @@ RULES_OUT="$REPO_ROOT/testdata/deploy/perch-testnet.rules.json"
 # Neither is merged yet, so with the flag on the script degrades to symbolic
 # dry-run output and refuses to --execute (die) at the first missing dependency.
 PERCH_STATELESS="${PERCH_STATELESS:-0}"
-STATELESS_REGISTRY_NAME="${PERCH_STATELESS_REGISTRY_NAME:-stateless}"
+STATELESS_REGISTRY_NAME="${PERCH_STATELESS_REGISTRY_NAME:-constructorless}"
 STATELESS_REGISTRY_WASM="${PERCH_STATELESS_REGISTRY_WASM:-perch_stateless_registry.wasm}"
 STATELESS_REGISTRY_WASM_NAME="${PERCH_STATELESS_REGISTRY_WASM_NAME:-perch-stateless-registry}"
 STELLAR_DEPLOY_STATELESS="${PERCH_DEPLOY_STATELESS_CMD:-deploy-stateless}"
@@ -239,12 +244,14 @@ fi
 export STELLAR_REGISTRY_CONTRACT_ID="$PERCH_SUB"
 
 # ---------------------------------------------------------------------------
-# Phase 1b — managed `stateless` registry (content-addressed infra) [#40]
+# Phase 1b — the canonical content-addressed registry [#40]
 # ---------------------------------------------------------------------------
-# GUARDED: only when PERCH_STATELESS=1. Deploys a SECOND managed subregistry —
-# `stateless` — under unverified/perch, whose deploy_stateless entry point uses
-# salt = wasm_hash. Phases 2-4 then resolve the three infra contracts as
-# name → hash → derived address instead of via the name-salted deploy.
+# GUARDED: only when PERCH_STATELESS=1. Resolves (deploying only if missing)
+# the managed `$STATELESS_REGISTRY_NAME` subregistry under unverified/perch —
+# `constructorless`, which already exists on testnet — whose deploy_stateless
+# entry point uses salt = wasm_hash. Phases 2-4 then resolve the three infra
+# contracts as name → hash → derived address instead of via the name-salted
+# deploy.
 #   Requires #39 (crates/perch-stateless-registry → $STATELESS_REGISTRY_WASM)
 #   and #38 (StatelessDeployable / `stellar registry $STELLAR_DEPLOY_STATELESS`).
 if [ "$PERCH_STATELESS" -eq 1 ]; then
@@ -302,7 +309,7 @@ log "Phase 2: verifier + smart account"
 [ -n "${CI_G:-}" ]     || die "CI_G (G... strkey of the delegated CI key) is required from phase 2 on"
 
 if [ "$PERCH_STATELESS" -eq 1 ]; then
-    # Content-addressed via the stateless registry (salt = wasm_hash).
+    # Content-addressed via the canonical registry (deploy_stateless, salt = wasm_hash).
     read -r VERIFIER_HASH VERIFIER <<<"$(stateless_deploy perch-ed25519-verifier)"
     log "VERIFIER=$VERIFIER (stateless; wasm hash $VERIFIER_HASH)"
 else
@@ -327,7 +334,7 @@ fi
 # The stateless doc compiler: parse+compile live here, shared by every
 # account (accounts carry no parser). Immutable, like the interpreter.
 if [ "$PERCH_STATELESS" -eq 1 ]; then
-    # Content-addressed via the stateless registry (salt = wasm_hash).
+    # Content-addressed via the canonical registry (deploy_stateless, salt = wasm_hash).
     read -r COMPILER_HASH COMPILER <<<"$(stateless_deploy perch-doc-compiler)"
     log "COMPILER=$COMPILER (stateless; wasm hash $COMPILER_HASH)"
 else
@@ -398,9 +405,9 @@ fi
 # ---------------------------------------------------------------------------
 log "Phase 4: deploy perch-interpreter"
 if [ "$PERCH_STATELESS" -eq 1 ]; then
-    # Already content-addressed deployed in phase 3 via the stateless registry.
+    # Already content-addressed deployed in phase 3 via the canonical registry.
     INTERPRETER="${INTERPRETER:-<unknown>}"
-    log "perch-interpreter deployed via the stateless registry (phase 3)"
+    log "perch-interpreter deployed via the $STATELESS_REGISTRY_NAME registry (phase 3)"
 else
     INTERPRETER="$(contract_id perch-interpreter)"
     if [ -n "$INTERPRETER" ]; then
@@ -517,8 +524,8 @@ else
         set_manager --new_manager "$SA"
 fi
 
-# The stateless registry is also managed (its manager gates the "only stateless-
-# eligible wasm" publish policy) — rotate it to the smart account too. [#40/#39]
+# The content-addressed registry is also managed (its manager gates each new
+# wasm name's initial publish) — rotate it to the smart account too. [#40/#39]
 if [ "$PERCH_STATELESS" -eq 1 ] && [ "$STATELESS_REG" != "<unknown>" ]; then
     sl_manager="$(stellar contract invoke --id "$STATELESS_REG" "${net_args[@]}" -- manager 2>/dev/null | tr -d '"' || true)"
     if [ "$sl_manager" = "$SA" ]; then

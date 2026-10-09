@@ -74,10 +74,10 @@ pub mod infra {
     perch_registry_resolve::registry_contract!(perch_doc_compiler);
     perch_registry_resolve::registry_contract!(perch_interpreter);
 
-    // Published to `unverified/perch/stateless` and `deploy_stateless`\'d like
-    // the two above; its wasm is downloaded by NAME from the stateless registry
-    // (`stellar registry download` — it has no name-salted perch-registry
-    // instance for `contract fetch` to pull from).
+    // Published and `deploy_stateless`\'d into the same registry as the two
+    // above: the one id in `wasm/stateless.id` derives all three, so they must
+    // share a registry (canonically unverified/perch/constructorless; a
+    // deployment's own instance otherwise, per its manifest).
     perch_registry_resolve::registry_contract!(perch_spending_limit);
 }
 

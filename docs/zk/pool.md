@@ -2,7 +2,7 @@
 
 `crates/perch-zk-pool` is the pool a ZK recovery proof shows membership in,
 implementing `docs/recovery/spec.md` §14.
-It replaces the pool half of Nido's combined `contracts/zk-recovery`
+It replaces the pool half of Nido's old combined `contracts/zk-recovery`
 contract. That contract was constructor-configured, held an upgradeable admin
 key, and gave a configured factory authority to enroll any account. This pool
 has none of those: no constructor, no admin, no upgrade entry point, and no

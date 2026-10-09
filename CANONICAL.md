@@ -140,6 +140,12 @@ canonical document.
   `docs/recovery/statement.md`). Different fragment kinds therefore never
   share a preimage.
 
+The Lean model (`formal/`) proves both preimages injective and the
+separations between document, `rule_hash`, and `config_hash` preimages
+(`rulePreimage_injective`, `configPreimage_injective`,
+`rulePreimage_ne_emitDoc`, `configPreimage_ne_emitDoc`,
+`rulePreimage_ne_configPreimage`). It does not model the statement tags.
+
 **What a rule hash covers.** A `rule_hash` covers the rule's own text,
 signer *ids* included. It does not cover the signers' credentials, which
 live in the document's `signers` member. The same rule text in two
@@ -182,6 +188,10 @@ and the hash matches:
 
 - Rust: `crates/perch-ir/tests/fixture.rs`
 - TypeScript: `packages/perch-js/test/parity.test.ts`
+
+The Lean model (`formal/`) parses and re-emits it, and the other
+`testdata/*.canonical.json` fixtures, byte-identically with a verified inverse
+of its own canonical emitter (`just drt`), and proves that emitter injective.
 
 A change to any byte of `ci-publish.canonical.json` or `ci-publish.doc-hash` is,
 by definition, a canonical-form break; see **Version** above.

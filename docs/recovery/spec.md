@@ -235,8 +235,14 @@ bytes.
 
 The ZK factor `(adapter, circuit-id, pool, enrollment-id, commitment)`
 either stays entirely unchanged across an `apply_doc` or carries a new
-`enrollment-id`. The account inserts a leaf exactly when the enrollment id
-changes, into the configured pool, from the compiled document's commitment.
+`enrollment-id`. Both the account and the controller enforce this. The
+account's `apply_doc` refuses before any rule changes
+(`ZkFactorChangedInPlace`). The controller's `rcv_sync` refuses the same
+transition at enrollment and reconfiguration
+(`RecoveryError::ZkFactorChangedInPlace`), so an enrolled account that is not
+a perch account cannot change its factor in place at the shared controller
+either. The account inserts a leaf exactly when the enrollment id changes,
+into the configured pool, from the compiled document's commitment.
 
 Whenever the ZK factor changes, at enrollment or reconfiguration,
 `rcv_sync` refuses unless:
@@ -1427,7 +1433,7 @@ controller    adapter ──pins──▶ verifier     pool        account ─�
 | perch #85 no circuit | §13 | Interface aligned with Nido's working proof system. Circuit, verifier, adapter: workstream 2. |
 | perch #86 real auth tests | §15, `cap-0071.md` | Host semantics pinned under enforcing auth here. Controller and account tests: workstream 3. |
 | perch #87, #94 baseline review and audiences | §3.5, §7.4 | Specified who owns each unenforced property. |
-| perch #88 Lean canon coverage | — | Not affected. Still open. |
+| perch #88 Lean canon coverage | §3.2 | Covered: `emitDoc_injective` over recovery documents and `configPreimage_injective` for `config_hash` (`formal/`, `formal-verification-impact.md`). |
 | perch #89 evidence-free griefing | D2, §6.4, §9 | Specified. |
 | perch #90 direct `install` | D12, §10, §15 | Specified. |
 | perch #91 nullifier release | §11 | Specified: nullifiers are only ever spent, never released. |

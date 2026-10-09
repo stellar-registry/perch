@@ -9,7 +9,7 @@ the one recovery controller and the shared account capabilities.
 
 | Spec | Code | Tests |
 | --- | --- | --- |
-| §3.1 schema, §3.2 `config_hash` | `perch-ir` (`doc.rs`, `parse.rs`, `canon.rs::recovery_canonical_json`, `validate.rs`); `perch-doc-compiler::to_compiled_recovery` | `crates/perch-ir/tests/recovery.rs` |
+| §3.1 schema, §3.2 `config_hash` | `perch-ir` (`doc.rs`, `parse.rs`, `canon.rs::recovery_canonical_json`, `validate.rs`); `perch-doc-compiler::to_compiled_recovery` | `crates/perch-ir/tests/recovery.rs`; `crates/integration-tests/tests/config_hash.rs`; Lean T7/T8 and `drt` (`formal/`); `fuzz/fuzz_targets/recovery_canonical_roundtrip.rs` |
 | §3.3 epoch, §6 state machine, §10 `rcv_sync`, §11 nullifiers | `crates/perch-recovery/src/contract.rs` | `crates/integration-tests/tests/recovery.rs` |
 | §3.4 enrollment ids, §8 revocation, §9 freeze, §15 reserved names | `crates/perch-smart-account/src/lib.rs` (`apply_doc`, `check_auth`, `rcv_gate`) | `recovery.rs`, `account_capabilities.rs` |
 | §3.5 baselines | `PerchRecovery::publish_baseline` | `recovery.rs` (compromise tests) |
@@ -80,9 +80,12 @@ against the release artifacts belong to the integration layer.
   of its choosing, so a controller-wide record would let it mark a victim's
   (public) nullifier spent and block every later proof by the victim.
   `one_accounts_completion_never_spends_anothers_nullifier` pins this.
-- **Hooks re-check what the compiler validates** (non-zero timing, quorum
-  range, the account not among its own guardians), because any contract can
-  call `rcv_sync` for itself.
+- **Hooks re-check what the compiler and the account validate** (non-zero
+  timing, quorum range, the account not among its own guardians, and §3.4's
+  rule that the ZK factor stays unchanged or carries a new enrollment id),
+  because any contract can call `rcv_sync` for itself.
+  `the_controller_itself_refuses_a_zk_factor_changed_in_place` pins the
+  last.
 - **Change approvals are refused during an authorized window** (§9: only
   that attempt's cancellation evidence is accepted).
 - **Attempt storage.** Collecting attempts live in temporary storage for

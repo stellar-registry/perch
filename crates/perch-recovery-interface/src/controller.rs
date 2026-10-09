@@ -111,7 +111,9 @@ pub enum SyncOutcome {
     Removed,
     /// The authorized attempt completed in this invocation. The account
     /// inserts the new leaf if the enrollment id changed, records the
-    /// enrollment id, revokes [`Completion::revocations`] (spec §8), clears
+    /// enrollment id, revokes [`Completion::replaced`] together with every
+    /// credential the completion removed from its current document (spec §8;
+    /// `credential::revocations` computes the union), clears
     /// its pending upgrade, and clears its freeze mirror.
     Completed(Completion),
 }

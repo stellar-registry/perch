@@ -29,7 +29,9 @@ use crate::types::{
 };
 use perch_doc_compiler::{admin_survives, DocCompilerClient};
 use perch_recovery_interface::account::RecoveryAccountClient;
-use perch_recovery_interface::config::{CompiledRecoveryConfig, CompiledZkFactor, RecoveryProfile};
+use perch_recovery_interface::config::{
+    zk_factor_transition_ok, CompiledRecoveryConfig, CompiledZkFactor, RecoveryProfile,
+};
 use perch_recovery_interface::controller::{Completion, RecoveryError, SyncOutcome, UpgradeStep};
 use perch_recovery_interface::credential::{replaced_credentials_leave, ReplacementSet};
 use perch_recovery_interface::zk::{MembershipPoolClient, ZkAdapterClient, ZkEvidence};
@@ -1168,13 +1170,20 @@ fn check_config(account: &Address, config: &CompiledRecoveryConfig) -> Result<()
     Ok(())
 }
 
-/// A new ZK factor must be provable at all (spec §3.4): its adapter verifies
-/// the named circuit, at the named pool's depth.
+/// Spec §3.4 at the controller: a ZK factor stays entirely unchanged or
+/// carries a new enrollment id, and a new factor must be provable at all: its
+/// adapter verifies the named circuit, at the named pool's depth.
 fn check_zk_wiring(
     e: &Env,
     old: Option<&CompiledZkFactor>,
     new: Option<&CompiledZkFactor>,
 ) -> Result<(), RecoveryError> {
+    // Spec §3.4: the factor stays entirely unchanged or carries a new
+    // enrollment id. The account checks this too, but this controller is
+    // shared, and an account that is not a perch account reaches it directly.
+    if !zk_factor_transition_ok(old, new) {
+        return Err(RecoveryError::ZkFactorChangedInPlace);
+    }
     let Some(new) = new else {
         return Ok(());
     };

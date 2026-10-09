@@ -45,3 +45,10 @@ path = "fuzz_targets/apply_doc_delta.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "recovery_canonical_roundtrip"
+path = "fuzz_targets/recovery_canonical_roundtrip.rs"
+test = false
+doc = false
+bench = false

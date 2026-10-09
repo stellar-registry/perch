@@ -1,22 +1,38 @@
-# Heavy assurance passes that don't belong on the PR path: coverage-guided
-# fuzzing, mutation testing, and branch coverage of the security core.
-# Weekly + on demand. Findings here are bugs to fix or tests to add, not
-# merge gates (yet) — see docs/verification/PLAN.md phase 0.
+# Heavy assurance passes that don't belong on every PR: the Lean model,
+# coverage-guided fuzzing, mutation testing, branch coverage, and Komet.
+# Weekly + on demand, all jobs. A PR that touches what the Lean model or the
+# fuzz targets cover (the paths below) runs only the formal job and a short
+# fuzz pass. Findings here are bugs to fix or tests to add, not merge gates
+# (yet) — see docs/verification/PLAN.md phase 0.
 name: Assurance
 
 on:
   schedule:
     - cron: "17 6 * * 1"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "formal/**"
+      - "fuzz/**"
+      - "komet/**"
+      - "crates/perch-ir/**"
+      - "testdata/*.canonical.json"
+      - "testdata/recovery/*.canonical.json"
+      - ".github/workflows/assurance.yml"
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   # The Lean 4 formal model (formal/): checks every theorem, then replays the
-  # frozen eval-semantics vectors through the model. Heavy (elan install +
-  # `lake build`), so it runs here on the weekly/on-demand assurance path
-  # rather than on every PR — the rust job (crates/perch-conformance) already
-  # replays the same vectors through the real evaluator on each PR.
+  # frozen eval-semantics vectors and the Rust-emitted canonical fixtures
+  # through the model. Heavy (elan install + `lake build`), so it runs on the
+  # weekly/on-demand path and on PRs touching the paths above, rather than on
+  # every PR — the rust job (crates/perch-conformance) already replays the
+  # same vectors through the real evaluator on each PR.
   formal:
     runs-on: ubuntu-latest
     permissions:
@@ -46,12 +62,28 @@ jobs:
         working-directory: formal
         run: |
           ! grep -rnE '\b(sorry|admit|axiom)\b' PerchFormal PerchFormal.lean Main.lean
+      # The grep sees only source text. This checks what every PerchFormal
+      # declaration actually depends on: nothing beyond propext,
+      # Classical.choice and Quot.sound (a sorry shows up as sorryAx).
+      - name: Audit axioms
+        working-directory: formal
+        run: lake env lean CheckAxioms.lean
+      # Whole documents first (canonical_json), then recovery members on their
+      # own (recovery_canonical_json, the config_hash text). Keep in sync with
+      # the justfile's drt recipe.
       - name: Replay conformance vectors + canonical fixtures through the model
         working-directory: formal
         run: |
           lake exe drt ../testdata/eval/eval-vectors.json \
             ../testdata/ci-publish.canonical.json \
-            ../testdata/ci-publish-delegated.canonical.json
+            ../testdata/ci-publish-delegated.canonical.json \
+            ../testdata/ci-publish-threshold.canonical.json \
+            ../testdata/ci-publish-recovery.canonical.json \
+            ../testdata/ci-publish-recovery-combined.canonical.json \
+            --recovery \
+            ../testdata/recovery/config-guardian-only.canonical.json \
+            ../testdata/recovery/config-zk-only.canonical.json \
+            ../testdata/recovery/config-combined.canonical.json
 
   fuzz:
     runs-on: ubuntu-latest
@@ -83,12 +115,25 @@ jobs:
       # apply_doc_delta builds the smart account, which reads the pinned infra
       # wasm at build time.
       - uses: ./.github/actions/fetch-infra-wasm
+      # The parser target starts from the golden documents (recovery-enrolled
+      # ones included) and the grammar's keys and tags, so it reaches every
+      # shape without having to discover the key names byte by byte.
+      - name: Seed the parser corpus
+        run: |
+          mkdir -p fuzz/corpus/ir_parse_roundtrip
+          cp testdata/ci-publish*.json fuzz/corpus/ir_parse_roundtrip/
       # -s none: ASan fails to link soroban-sdk's rlib, and the targets are
       # pure safe Rust — the findings of interest are panics and divergence.
+      # PRs get a short pass; the weekly/dispatch runs fuzz longer.
       - name: Fuzz each target
+        env:
+          SECONDS_PER_TARGET: ${{ github.event_name == 'pull_request' && '60' || '300' }}
         run: |
-          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta; do
-            cargo +"$NIGHTLY" fuzz run -s none "$t" -- -max_total_time=300
+          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta recovery_canonical_roundtrip; do
+            dict=()
+            if [ -f "fuzz/dicts/$t.dict" ]; then dict=("-dict=fuzz/dicts/$t.dict"); fi
+            cargo +"$NIGHTLY" fuzz run -s none "$t" -- \
+              -max_total_time="$SECONDS_PER_TARGET" "${dict[@]}"
           done
       - name: Save fuzz corpus
         if: always()
@@ -104,6 +149,7 @@ jobs:
           path: fuzz/artifacts
 
   mutants:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # Burn-in: surviving mutants are missing-test findings, not merge blockers.
     continue-on-error: true
@@ -127,6 +173,7 @@ jobs:
           path: mutants.out
 
   coverage:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -155,6 +202,7 @@ jobs:
   # is needed). Burn-in: continue-on-error while the soroban-sdk 27 contract is
   # confirmed to run under semantics whose examples pin sdk 22.
   komet:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

@@ -1,7 +1,7 @@
 [package]
 name = "perch-recovery"
 description = "Deployable account-recovery controller: guardian/ZK/combined recovery under Loss and Protected profiles, as an OZ smart-account Policy"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -26,7 +26,7 @@ stellar-accounts = { workspace = true }
 perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
 # Client and wire types only (`contract` off): the controller calls the
 # account's own pinned compiler for `derive_target` and `compile_doc`.
-perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
+perch-doc-compiler = { version = "0.3.1", path = "../perch-doc-compiler", default-features = false }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }

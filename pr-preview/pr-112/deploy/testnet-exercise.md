@@ -52,10 +52,11 @@ every hash in the manifest. For this record (`aa5a78f`) that was checked on
 2026-10-08 on the deploying machine (macOS arm64). `build-stack.sh` with the
 manifest's builder (`scaffold`) and registry, run on this branch's tree,
 reproduced all ten artifacts' hashes; the tree's contract source is
-identical to `aa5a78f`'s. The rebuild from a fresh `git archive` copy at
-another path was done only for the first deployment (`c10a8f7`). Building on
-other hosts and toolchains has not been checked: `stellar scaffold build`
-optimizes with the wasm-opt its version ships.
+identical to `aa5a78f`'s. On 2026-10-09 the stack review (Fable r1) rebuilt
+it from a fresh `git archive aa5a78f` on a second macOS arm64 host with the
+recorded toolchain (rustc 1.97.1, stellar 27.0.0, scaffold 0.0.27), and all
+ten hashes matched. Other platforms and toolchains have not been checked:
+`stellar scaffold build` optimizes with the wasm-opt its version ships.
 
 ## Findings
 
@@ -64,6 +65,14 @@ optimizes with the wasm-opt its version ships.
   `rcv_sync` refuses the completion as a change during the window. See
   [`README.md`](README.md#simulating-a-recovery-completion). Wallets and
   relays (nidohq/nido) need to build the recovery-rule entry themselves.
+- **Two `perch-spending-limit 0.1.1`s.** This registry's 0.1.1
+  (`875fdb15…`) is the wrapper that installs and uninstalls quietly (#111
+  `554cf48`). The canonical `unverified/perch/stateless` registry's 0.1.1
+  (`8509ae9f…`) is the code before it. The code changed without a version
+  bump, so resolving `(perch-spending-limit, 0.1.1)` in the two registries
+  gives different code. Resolve it by this manifest's hash or address.
+  The 0.1.1 → 0.1.2 bump that ends this is held for the next contract wasm
+  change (#111), and must land before any canonical publish.
 - **Rent dominates fees.** Enrollment writes the pool's leaf and enrollment
   entries, the controller's configuration, and the account's applied
   document, all extended to the maximum TTL (3 110 400 ledgers, about 180

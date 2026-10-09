@@ -1341,6 +1341,18 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 | Pool | `is_known_root`, `depth`, tree views, `renew_tree` | None |
 | Adapter | `verify`, `circuit_id`, `tree_depth` | None (pure) |
 
+**Revision binding (#108).** Only `apply_doc` can be bound to a
+configuration revision, through `expected_revision`. Ordinary authorization
+is not: a signature binds the invocation and the selected rule ids (OZ's
+`sha256(signature_payload || context_rule_ids.to_xdr())`), not a revision.
+A transaction signed at revision r whose selected rule was removed or
+replaced before inclusion fails closed (`ContextRuleNotFound`); one whose
+selected rule was edited in place keeps the rule's id and executes under
+the rule as it is at inclusion. Binding a revision into ordinary
+authorization would change every signer's digest, and RFC
+[#109](https://github.com/stellar-registry/perch/issues/109) §3b defers it.
+`crates/integration-tests/tests/revision.rs` pins both cases.
+
 ## 16. Dependency layering and immutability
 
 ```text

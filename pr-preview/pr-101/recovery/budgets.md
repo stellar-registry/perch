@@ -118,7 +118,7 @@ before §5 runs, and the confirmed values are recorded here.
 
 ## Results
 
-Workstream 2's measurements and the rule's application are in
+Epic #99 Workstream 2's measurements and the rule's application are in
 [`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-06, protocol
 29 limits, zero-knowledge proofs; the measured circuits' `circuit_id`s are
 in its generated "Circuit identities" table). In summary:

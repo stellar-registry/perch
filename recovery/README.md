@@ -9,35 +9,44 @@ signers and rules.
 
 **Start here:**
 
-1. [`pending-activity-policy.md`](pending-activity-policy.md) — an
-   explicit, unresolved, release-blocking configuration decision this
-   change does not make. Read this first: nothing else here should be read
-   as resolving it.
-2. [`schema.md`](schema.md) — the `recovery` document field: design, the
-   non-circular baseline commitment, and the canonical-form guarantee for
-   documents that don't use it.
-3. [`controller-governance.md`](controller-governance.md) — the shared
-   `perch-recovery` controller: how completion authorizes `apply_doc`, the
-   `guard_apply_doc` reconfigure gate, ZK adapter scope, and what's proven
-   end-to-end.
-4. [`vk-and-controller-immutability.md`](vk-and-controller-immutability.md) —
-   the constructorless/immutable requirement for the controller and any ZK
-   verifier, and what "upgrade" means instead of code mutation.
-5. [`account-mutation-paths.md`](account-mutation-paths.md) — every entry
-   point that can change an account's rules or a controller's per-account
-   state, in one table.
-6. [`migration.md`](migration.md) — why an account deployed before this
-   change can never gain recovery in place, and what moving to a new one
-   actually requires.
-7. [`formal-verification-impact.md`](formal-verification-impact.md) — Lean
-   and `perch-conformance` impact: what needed no change and why, and what's
-   explicitly scoped out with rationale rather than silently skipped.
+1. [`spec.md`](spec.md): **the authoritative specification** (epic
+   [#99](https://github.com/stellar-registry/perch/issues/99)). It covers
+   states and transitions, authorization per profile and mode, permitted
+   document changes, revocation, nullifiers, account upgrades, the ZK
+   adapter boundary, and the membership pool. Where any other document here
+   disagrees with it, it wins.
+2. [`statement.md`](statement.md): byte layouts of the one recovery
+   statement, credential fingerprints, replacement sets, and the ZK
+   projection, with cross-implementation vectors in
+   `testdata/recovery/statement-v2.json`.
+3. [`cap-0071.md`](cap-0071.md): the delegated-auth and invoker-auth
+   behaviour of the pinned OpenZeppelin fork and host that the spec relies
+   on, each property pinned by an enforcing-auth test.
+4. [`budgets.md`](budgets.md): resource budgets to be measured, and the rule
+   that picks the pool depth.
 
-A companion smart-account implementation (guardian/ZK/combined modes, the
-same completion mechanism, real proofs) was built and exercised end-to-end
-in a separate project before this change; see
-[nidohq/nido#206](https://github.com/nidohq/nido/pull/206) for that prior
-art. This change is not a port of it — the design differs in a few places
-where perch's own schema and architecture allow something stronger (see
-`controller-governance.md`'s opening section for exactly what and why) — but
-everything needed to review *this* change is in this repository.
+**Pre-spec documents.** These describe the implementation that the spec
+replaces. They are kept for the reasoning they record, not as current
+behaviour:
+
+- [`pending-activity-policy.md`](pending-activity-policy.md): the open
+  decision that spec D1 resolves.
+- [`schema.md`](schema.md): the `recovery` field as first added; spec §3
+  lists the schema changes.
+- [`controller-governance.md`](controller-governance.md): the first
+  `perch-recovery` controller.
+- [`vk-and-controller-immutability.md`](vk-and-controller-immutability.md):
+  the immutability requirement, which spec §16 carries forward.
+- [`account-mutation-paths.md`](account-mutation-paths.md): the pre-spec
+  entry-point inventory; spec §15 is the current one.
+- [`migration.md`](migration.md): why an account cannot gain recovery in
+  place. Epic #99 uses fresh deployments only.
+- [`formal-verification-impact.md`](formal-verification-impact.md): Lean
+  and `perch-conformance` impact of the schema field.
+
+A companion smart-account implementation (guardian/ZK/combined modes, real
+UltraHonk proofs) was built in Nido
+([nidohq/nido#206](https://github.com/nidohq/nido/pull/206) and later PRs).
+Epic #99 consolidates it into perch: the spec takes Nido's working proof
+system (circuit topology, Poseidon2, UltraHonk, constructorless verifier) as
+input, and changes what the epic requires (spec §13).

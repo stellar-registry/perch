@@ -1,5 +1,9 @@
 # Account mutation path inventory
 
+> **Pre-spec.** This inventories the implementation that predates
+> [`spec.md`](spec.md). The required entry points and their authorization
+> are spec §15.
+
 Every entry point that can change a `PerchAccount`'s stored authorization
 state (context rules, signers, applied `doc_hash`), or a recovery
 controller's per-account state. This is the concrete answer to "review...

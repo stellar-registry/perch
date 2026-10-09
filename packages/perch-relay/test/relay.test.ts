@@ -8,13 +8,16 @@ import {
   authorizeEntry,
   buildAuthorizationEntryPreimage,
   buildWithDelegatesEntry,
+  StrKey,
   hash,
   nativeToScVal,
+  scValToNative,
   xdr,
 } from '@stellar/stellar-sdk';
 import {
   ApprovalError,
   MemoryKv,
+  addressCredentials,
   fetchApprovals,
   handleRelay,
   parseApproval,
@@ -278,6 +281,37 @@ describe('relay', () => {
     };
   }
 
+  /** A stand-in for enforcing simulation of a classic `guardian` account
+   * with `signers` (key to weight) and a `threshold`: the entry's ed25519
+   * signatures over its payload must reach the threshold, and the call must
+   * be `args`, the one the controller rebuilds the signed digest from. */
+  function classicAccount(
+    guardian: string,
+    signers: Map<string, number>,
+    threshold: number,
+    args: string[],
+  ): { simulate: Simulate; calls: ApprovalCall[] } {
+    const calls: ApprovalCall[] = [];
+    const refused = 'HostError: Error(Auth, InvalidAction)';
+    return {
+      calls,
+      simulate: async (call) => {
+        calls.push(call);
+        if (call.args.some((a, i) => a.toXDR('base64') !== args[i])) return refused;
+        const creds = addressCredentials(call.entry);
+        if (Address.fromScAddress(creds.address).toString() !== guardian) return refused;
+        const payload = hash(buildAuthorizationEntryPreimage(call.entry, creds.signatureExpirationLedger, Networks.TESTNET).toXDR());
+        const sigs = scValToNative(creds.signature) as { public_key: Uint8Array; signature: Uint8Array }[];
+        let weight = 0;
+        for (const sig of sigs) {
+          const key = Keypair.fromPublicKey(StrKey.encodeEd25519PublicKey(Buffer.from(sig.public_key)));
+          if (key.verify(Buffer.from(payload), Buffer.from(sig.signature))) weight += signers.get(key.publicKey()) ?? 0;
+        }
+        return weight >= threshold ? null : refused;
+      },
+    };
+  }
+
   it('collects approvals per statement and serves them back', async () => {
     const kv = new MemoryKv();
     const [g1, g2] = [Keypair.random(), Keypair.random()];
@@ -307,6 +341,31 @@ describe('relay', () => {
     expect(res.status).toBe(403);
     expect(((await res.json()) as { error: string }).error).toMatch(/simulation/);
     expect((await get(kv)).approvals).toEqual([]);
+  });
+
+  it("with simulation, admits a G guardian's approval signed by another of its signers", async () => {
+    // The guardian's master key has weight 0; another signer meets its
+    // threshold. Only the account's own check, in simulation, can tell.
+    const kv = new MemoryKv();
+    const g = Keypair.random();
+    const signer = Keypair.random();
+    const signers = new Map([
+      [g.publicKey(), 0],
+      [signer.publicKey(), 1],
+    ]);
+    const account = classicAccount(g.publicKey(), signers, 1, callArgs(g.publicKey()));
+    const o = { ...opts, simulate: account.simulate };
+    const bySigner = await approval(g, D, { signer });
+    const res = await put(kv, o, bySigner, callArgs(g.publicKey()));
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ stored: g.publicKey(), admittedBy: 'simulation' });
+    expect(account.calls.map((c) => c.entry.toXDR('base64'))).toEqual([bySigner]);
+    // The zero-weight master key's own signature is what the account refuses.
+    const byMaster = await approval(g, D, { expiration: 6_000_000 });
+    expect((await put(kv, o, byMaster, callArgs(g.publicKey()))).status).toBe(403);
+    expect((await get(kv)).approvals.map((a) => [a.entry, a.admittedBy])).toEqual([[bySigner, 'simulation']]);
+    // Without simulation the relay can check only the master key's signature.
+    expect((await put(new MemoryKv(), opts, bySigner, callArgs(g.publicKey()))).status).toBe(403);
   });
 
   it("forged entries posted first never exclude a delegated guardian's approval", async () => {
@@ -344,7 +403,7 @@ describe('relay', () => {
     expect(call.args.map((a) => a.toXDR('base64'))).toEqual(callArgs(CONTRACT_GUARDIAN));
   });
 
-  it('with simulation, checks a G signature locally before simulating', async () => {
+  it('with simulation, leaves every signature to the simulation', async () => {
     const kv = new MemoryKv();
     const g = Keypair.random();
     const genuine = await approval(g, D);
@@ -352,7 +411,7 @@ describe('relay', () => {
     const o = { ...opts, simulate };
     const forged = await approval(g, D, { signer: Keypair.random() });
     expect((await put(kv, o, forged, callArgs(g.publicKey()))).status).toBe(403);
-    expect(calls).toHaveLength(0);
+    expect(calls.map((c) => c.entry.toXDR('base64'))).toEqual([forged]);
     // A real signature by a key that is no guardian is refused by the
     // simulation, not stored.
     const stranger = Keypair.random();

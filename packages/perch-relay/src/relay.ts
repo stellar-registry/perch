@@ -30,9 +30,9 @@ export interface RelayOptions {
   networkPassphrase: string;
   /** Enforcing simulation of the controller call (`rpcSimulator`). With it,
    * every entry is admitted only if the call it authorizes would succeed
-   * now. Without it, only a `G...` guardian's own signature can be checked,
-   * and every other entry (a contract guardian, a delegated entry) is
-   * refused. */
+   * now, whoever signed it. Without it, only a `G...` guardian's own
+   * signature can be checked, and every other entry (a contract guardian, a
+   * delegated entry, a `G...` account's other signers) is refused. */
   simulate?: Simulate;
   /** How long an approval is kept, in seconds (default one day). The
    * statement's own freshness bound is what the controller enforces. */
@@ -62,10 +62,8 @@ async function admit(
   args: xdr.ScVal[],
   opts: RelayOptions,
 ): Promise<{ refused: string } | { unavailable: string } | { admittedBy: Approval['admittedBy'] }> {
-  const ownKey = signedByGuardianKey(approval, opts.networkPassphrase);
-  if (!ownKey && approval.guardian.startsWith('G') && approval.credentials !== 'addressWithDelegates') {
-    return { refused: "the entry is not signed by the guardian's key" };
-  }
+  // Simulation runs the guardian's own `__check_auth`, so it alone judges
+  // whoever signed: a `G...` account's other signers and thresholds too.
   if (opts.simulate) {
     let refusal: string | null;
     try {
@@ -80,8 +78,10 @@ async function admit(
     }
     return refusal === null ? { admittedBy: 'simulation' } : { refused: `refused in simulation: ${refusal}` };
   }
-  if (ownKey) return { admittedBy: 'signature' };
-  return { refused: 'only enforcing simulation can authenticate this entry, and this relay has none configured' };
+  if (signedByGuardianKey(approval, opts.networkPassphrase)) return { admittedBy: 'signature' };
+  return approval.guardian.startsWith('G') && approval.credentials !== 'addressWithDelegates'
+    ? { refused: "the entry is not signed by the guardian's key, and this relay has no simulation to check other signers" }
+    : { refused: 'only enforcing simulation can authenticate this entry, and this relay has none configured' };
 }
 
 /**

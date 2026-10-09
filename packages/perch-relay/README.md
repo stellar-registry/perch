@@ -24,15 +24,17 @@ guardian:
   passphrase)`), every entry is admitted only if the whole controller call
   it authorizes, with the entry as its only authorization, succeeds under
   `simulateTransaction`'s `enforce` mode against live state. Every
-  `__check_auth` runs: a contract guardian's context rules and delegates, a
-  `G...` guardian's signers. So only a real approval by an enrolled
-  guardian of a live statement is ever stored, and an attacker posting
-  forgeries first, in any number, cannot take or displace a guardian's slot.
+  `__check_auth` runs, whoever signed: a contract guardian's context rules
+  and delegates, a `G...` guardian's signers and thresholds. So only a real
+  approval by an enrolled guardian of a live statement is ever stored, and
+  an attacker posting forgeries first, in any number, cannot take or
+  displace a guardian's slot.
 - **Without it**, the relay can authenticate only a `G...` guardian's own
   key: one ed25519 signature, by the guardian's key, over the entry's
   authorization payload on the configured network. Every other entry (any
-  contract guardian, any delegated entry) is refused. A `G...` account whose
-  master key alone cannot sign should submit its approval directly.
+  contract guardian, any delegated entry, a `G...` account's other signers)
+  is refused. A `G...` account whose master key alone cannot sign should
+  post to a relay with simulation, or submit its approval directly.
 
 A guardian's new approval replaces its stored one unless the stored one
 expires later, so replaying a guardian's older entry cannot shorten its

@@ -16,7 +16,7 @@ soroban-sdk-tools = { workspace = true }
 stellar-accounts = { workspace = true }
 # Client + wire types only — `contract` off, so no compiler code (parser,
 # lowering) is ever linked into account wasm.
-perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
+perch-doc-compiler = { version = "0.3.1", path = "../perch-doc-compiler", default-features = false }
 # The recovery controller's hook client, the pool's insertion client, the
 # account constants (upgrade delay, invoker-only names), and the compiled
 # recovery types. A plain library: no controller code is linked into account

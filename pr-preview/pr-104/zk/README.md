@@ -58,7 +58,7 @@ controller ──verify(statement, binding, evidence)──▶ adapter
    │ evidence:  tree id, root, nullifier, proof       │ 5. pool.is_known_root(tree_id, root) ──▶ enrolled pool
    │                                                  │ 6. ZK UltraHonk verify(root ‖ nullifier ‖ statement_hash)
    ▼                                                  ▼
-nullifier bookkeeping, freshness, attempts         Ok(()) or a ZkAdapterError; writes nothing
+nullifier bookkeeping, freshness, attempts         Ok(()) or a ZkAdapterError; no state written
 ```
 
 The checks run in that order, and the first failure is the error returned.
@@ -66,6 +66,16 @@ Everything before step 5 is local, so a malformed or mismatched submission
 never reaches the pool. `verify` does not compare tree depths. The adapter
 only exposes `tree_depth()`, and the controller compares it with the pool's
 `depth()` when a ZK factor is enrolled.
+
+`verify` writes no contract state, but it has one ledger effect. When step 5
+matches, the pool's `is_known_root` extends that `Root` entry's TTL, so a
+root a recovery relies on stays live. The submitter pays for that extension,
+and a simulation of `verify` must carry the entry in its read-write
+footprint. Nothing else changes; `verification_only_extends_the_matched_roots_ttl`
+in the adapter's tests pins this. The adapter's and pool's contract doc
+strings still say "writes nothing" and omit the TTL extension. Correcting
+them changes the wasm, so that waits for the next adapter and pool wasm
+change.
 
 The circuit's public inputs are `root`, `nullifier`, and
 `statement_hash = H(DOM_AUTH, account, enrollment_id, digest)`, where `digest`
@@ -92,7 +102,11 @@ contract the adapter calls. The public-input layout belongs to the VK, so a
 new circuit means a new adapter anyway, and an embedded verifier leaves no
 address to pin or misconfigure. The raw verifier is still exported as
 `verify_proof(public_inputs, proof)`, `ProofVerifierInterface`, with the same
-ABI and error codes as Nido's `nido-recovery-verifier`.
+ABI and error codes as Nido's `nido-recovery-verifier`. Nothing in Perch calls
+it: the controller uses `verify`. It is stateless, but it is still audited
+surface with caller-chosen public inputs. Removing it changes the wasm, so
+that is deferred to the next adapter wasm change, unless a consumer of
+Nido's raw-verifier ABI appears first.
 
 ## Which verifier, and why the toolchain changed
 
@@ -208,8 +222,8 @@ tests. The pool's own tests exercise real authorization rules.
   binding for another circuit.
 - **Replay**: evidence cannot be redirected to another attempt, action,
   configuration, or epoch, because the statement binds them. A replay of
-  identical evidence for the identical statement passes the adapter, which is
-  pure by design. The controller refuses it through nullifier reservation and
+  identical evidence for the identical statement passes the adapter, which
+  keeps no state by design. The controller refuses it through nullifier reservation and
   attempt consumption, and its own tests must cover that with these fixtures.
 - **Pool boundaries** without 2^32 inserts: the Merkle code is parameterized
   by depth and driven to fill and roll over at depth 2. The real depth-32 last

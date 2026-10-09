@@ -71,7 +71,7 @@ ZK backend; CAP-0085 governance-managed executables.
 | condition | The enrolled mode's evidence requirement over a given statement (§5). |
 | statement | A `RecoveryStatement` (§4). Every piece of evidence is bound to exactly one. |
 | attempt | A lost-key or compromise recovery in progress, identified by `(account, attempt_id)`. |
-| epoch | The controller's per-account counter, starting at 0 and increasing by one every time the account's recovery configration changes at that controller.(§3.3). |
+| epoch | The controller's per-account counter, starting at 0 and increasing by one every time the account's recovery configuration changes at that controller (§3.3). |
 | enrollment id | The 32-byte identifier of the account's current ZK credential (§3.1). |
 | adapter, verifier, pool | The three ZK contracts (§13, §14). |
 
@@ -247,6 +247,21 @@ Whenever the ZK factor changes, at enrollment or reconfiguration,
 Without these checks a factor could be enrolled that no proof can ever
 satisfy, which would permanently lock a `Protected` account's
 reconfiguration and upgrades.
+
+**Who enforces which check.**
+
+- **The "unchanged or new enrollment id" rule:** the account, in
+  `apply_doc`, before it calls `rcv_sync`. A ZK factor changed in place is
+  refused with `PerchAccountError::ZkFactorChangedInPlace`.
+- **The circuit-id and depth checks:** the controller, in `rcv_sync`.
+- **The interface's `RecoveryError::ZkFactorChangedInPlace`** is reserved.
+  The controller at this release does not raise it, and checks only the
+  circuit id and the depth. A contract that is not a Perch account and
+  adopts the shared controller therefore gets no refusal for an in-place ZK
+  change. The only harm is to that contract: its ZK factor becomes
+  unprovable.
+- **Moving the enrollment-id check into the controller as well** is
+  deferred to the next controller wasm change.
 
 ### 3.5 Baselines
 
@@ -448,7 +463,7 @@ most one authorized attempt.
                        ├─ evidence deadline passes ─▶ Expired       ├─ cancel ─▶ Cancelled
                        ├─ cancel ─▶ Cancelled                       └─ L ≥ expires_at ─▶ Expired
                        ├─ epoch change / sibling authorized ─▶ (dead; derived)
-                       └─ stale lost-key source at Transition T4 (see below)─▶ Invalidated (stored)
+                       └─ stale lost-key source at Transition T4 (see below) ─▶ Invalidated (stored)
 ```
 
 The stored states are `Collecting`, `Authorized`, `Completed`,
@@ -459,6 +474,12 @@ The stored states are `Collecting`, `Authorized`, `Completed`,
 - **`Invalidated` is stored for exactly one cause:** T4 finding a lost-key
   attempt's source changed. The evidence call that ran T4 succeeds, writes
   `AttemptState::Invalidated`, and emits `AttemptInvalidated`.
+
+  The attempt was still collecting, so the record sits in temporary
+  storage (§3.6) and lasts **at least its evidence window**. After the entry
+  expires, evidence naming that attempt is refused as `NoSuchAttempt`
+  rather than `AttemptNotLive`. The effect is the same: the evidence window
+  has ended, so the attempt can never be promoted.
 - **Every other invalidation is derived:** an epoch change, or a sibling's
   authorization (`invalidate_below`). Nothing is written for these, because
   the cause is already in storage and an attempt from an older epoch or
@@ -605,9 +626,10 @@ a live attempt `A`:
    freeze.
 2. If `A` was authorized, the account's cancellation count increments, and
    the cancellation is refused instead if the count has reached
-   `max-cancels`. The controller keeps the count per account. Switching to
-   another controller starts a new count, and that switch needs the
-   reconfiguration authority (§10).
+   `max-cancels`. The controller keeps a **lifetime** count per account.
+   Removing recovery and enrolling again at the same controller does not
+   reset it. Switching to another controller starts a new count, and that
+   switch needs the reconfiguration authority (§10).
 3. Emits `AttemptCancelled`.
 
 Cancelling a collecting attempt never counts: it blocks nothing, so
@@ -712,6 +734,14 @@ below holds:
    verifier the account had not already adopted for that slot.
 3. Lost-key attempts replace at least one signer. Compromise attempts may
    replace none, which restores the baseline as is.
+
+   The compiler refuses an empty lost-key set:
+   - `perch_ir`'s `DeriveError::EmptyReplacements` raises the refusal;
+   - `derive_target` surfaces it as `DocCompilerError::ReplacementRefused`.
+
+   `ReplacementSet::encode` accepts an empty set, because compromise needs
+   one. The interface's `StatementError::EmptyReplacements` is therefore
+   reserved and never produced.
 4. A ZK enrollment's commitment is a canonical field element (compiler),
    and its id is not in the account's set of enrolled ids (§3.4;
    controller, via `is_enrolled_id`). The target's
@@ -1340,6 +1370,18 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 | Pool | `rcv_insert` (returns nothing; `zk::MembershipPoolClient`) | Invoker-only |
 | Pool | `is_known_root`, `depth`, tree views, `renew_tree` | None |
 | Adapter | `verify`, `circuit_id`, `tree_depth` | None (pure) |
+
+**Revision binding (#108).** Only `apply_doc` can be bound to a
+configuration revision, through `expected_revision`. Ordinary authorization
+is not: a signature binds the invocation and the selected rule ids (OZ's
+`sha256(signature_payload || context_rule_ids.to_xdr())`), not a revision.
+A transaction signed at revision r whose selected rule was removed or
+replaced before inclusion fails closed (`ContextRuleNotFound`); one whose
+selected rule was edited in place keeps the rule's id and executes under
+the rule as it is at inclusion. Binding a revision into ordinary
+authorization would change every signer's digest, and RFC
+[#109](https://github.com/stellar-registry/perch/issues/109) §3b defers it.
+`crates/integration-tests/tests/revision.rs` pins both cases.
 
 ## 16. Dependency layering and immutability
 

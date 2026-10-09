@@ -774,7 +774,7 @@ w<span class="pn">.</span>env<span class="pn">.</span><span class="fn">set_auths
         </div>
         <div class="card">
           <h3>With perch</h3>
-          <p><strong>Shared contracts with no admin or upgrade path, audited once</strong>: the interpreter (evaluation — machine-checked core, 16,989 bytes) and the doc compiler (parsing + compiling — stateless, 104,767 bytes); for recovery, one controller, one pool, and one adapter (slides 30–31). None has an admin or an upgrade path. The account is a <strong>46,701-byte</strong> wasm with <strong>zero policy logic of its own</strong>.</p>
+          <p><strong>Shared contracts with no admin or upgrade path, audited once</strong>: the interpreter (evaluation — its semantics proved in a Lean model, 16,989 bytes) and the doc compiler (parsing + compiling — stateless, 104,767 bytes); for recovery, one controller, one pool, and one adapter (slides 30–31). None has an admin or an upgrade path. The account is a <strong>46,701-byte</strong> wasm with <strong>zero policy logic of its own</strong>.</p>
           <p>The interpreter refuses by default: no program installed → deny; no signer authenticated → deny; a malformed program, or an install over an existing one → refused.</p>
         </div>
       </div>

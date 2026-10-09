@@ -1427,7 +1427,7 @@ controller    adapter ──pins──▶ verifier     pool        account ─�
 | perch #85 no circuit | §13 | Interface aligned with Nido's working proof system. Circuit, verifier, adapter: workstream 2. |
 | perch #86 real auth tests | §15, `cap-0071.md` | Host semantics pinned under enforcing auth here. Controller and account tests: workstream 3. |
 | perch #87, #94 baseline review and audiences | §3.5, §7.4 | Specified who owns each unenforced property. |
-| perch #88 Lean canon coverage | — | Not affected. Still open. |
+| perch #88 Lean canon coverage | §3.2 | Covered: `emitDoc_injective` over recovery documents and `configPreimage_injective` for `config_hash` (`formal/`, `formal-verification-impact.md`). |
 | perch #89 evidence-free griefing | D2, §6.4, §9 | Specified. |
 | perch #90 direct `install` | D12, §10, §15 | Specified. |
 | perch #91 nullifier release | §11 | Specified: nullifiers are only ever spent, never released. |

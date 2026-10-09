@@ -109,6 +109,10 @@ export class SimAccount {
   staged = new Map<string, Map<number, Uint8Array>>();
   /** Answer reads from an older ledger (a lagging RPC node) this many times. */
   laggingReads = 0;
+  /** After an apply lands, answer this many `revision()` reads from a node
+   *  that has not seen it: the revision before, at the ledger before. */
+  lagRevisionAfterApply = 0;
+  private beforeApply: { revision: bigint; ledger: number } | undefined;
   /** Runs before each read: lets a test land a change between reads. */
   beforeRead: ((view: string) => void) | undefined;
   private nonce = 0;
@@ -154,7 +158,13 @@ export class SimAccount {
           recoveryGeneration: 0n,
           infra: { docCompiler: OTHER, interpreter: OTHER, spendingLimit: OTHER },
         })),
-      revision: () => this.read('revision', () => this.revision),
+      revision: () => {
+        if (this.lagRevisionAfterApply > 0 && this.beforeApply) {
+          this.lagRevisionAfterApply -= 1;
+          return Promise.resolve({ value: this.beforeApply.revision, latestLedger: this.beforeApply.ledger });
+        }
+        return this.read('revision', () => this.revision);
+      },
       document: () => this.read('document', () => ({ revision: this.revision, canonical: this.canonical })),
       capabilities: () =>
         this.read('capabilities', () => ({
@@ -224,6 +234,7 @@ export class SimAccount {
   /** `apply_doc(canonical, 0, expected_revision)`. */
   applyDoc(canonical: Uint8Array, expectedRevision: bigint | null) {
     if (expectedRevision !== null && expectedRevision !== this.revision) throw contractError(55);
+    this.beforeApply = { revision: this.revision, ledger: this.ledger };
     this.rules = this.reconcile(canonical);
     this.canonical = canonical;
     this.docHashBytes = sha256(canonical);

@@ -8,7 +8,7 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 
 ### 🚀 Features
 
-- Consumer interface (#108): `readSnapshot` and `assertRevision` (reads at one configuration revision), `selectRules` by name and scope, `signingDigest` and `buildAuthPayload` (pinned against the account's own encodings), `checkLimits` and the compiler's `limits()`, typed errors (`StaleRevision`, `StaleSelection`, `OverLimits`, `AccountFrozen`, ...), `applyDocument` with `oneTransactionBackend`, `accountReader` over the generated bindings (checked against the account's pinned compiler), `assertSignable` (revision and freeze immediately before signing), `mapSubmissionError` matching codes by the contract that raised them, and `sortReplacements`
+- Consumer interface (#108): `readSnapshot` and `assertRevision` (reads at one configuration revision), `selectRules` by name and scope, `signingDigest` and `buildAuthPayload` (pinned against the account's own encodings), `checkLimits` and the compiler's `limits()`, typed errors (`StaleRevision`, `StaleSelection`, `OverLimits`, `AccountFrozen`, ...), `applyDocument` with `oneTransactionBackend`, `accountReader` over the generated bindings (checked against the account's pinned compiler), `assertSignable` (revision and freeze immediately before signing), `mapSubmissionError` matching codes by the contract that raised them, `sortReplacements`, and freshness checks: snapshot retries keep every observed ledger, and a confirmed apply reports its revision only from a read at least as recent as the confirmation
 
 ## [0.3.1] - 2026-09-29
 

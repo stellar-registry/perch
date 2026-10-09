@@ -23,6 +23,7 @@ import {
   signingDigest,
   type RuleSelection,
   type SignRequest,
+  type AccountReader,
   type ApplyBackend,
   type ApplyEvent,
   type PolicyDoc,
@@ -88,6 +89,58 @@ describe('consistent reads', () => {
       if (view === 'revision') sim.applyElsewhere(A);
     };
     await expect(readSnapshot(sim.reader(), { attempts: 2 })).rejects.toBeInstanceOf(InconsistentRead);
+  });
+
+  it('a retry after a revision mismatch still refuses answers older than the mismatched ones', async () => {
+    // The review's reproducer: attempt 1 reads configuration() at revision 0
+    // (ledger 100) and document() at revision 1 (ledger 110); attempt 2 is a
+    // lagging node with consistent revision-0 answers at ledgers 90 to 94.
+    const reads: Record<string, { revision: bigint; ledger: number }[]> = {
+      configuration: [
+        { revision: 0n, ledger: 100 },
+        { revision: 0n, ledger: 90 },
+      ],
+      capabilities: [
+        { revision: 0n, ledger: 100 },
+        { revision: 0n, ledger: 91 },
+      ],
+      limits: [
+        { revision: 0n, ledger: 100 },
+        { revision: 0n, ledger: 92 },
+      ],
+      document: [
+        { revision: 1n, ledger: 110 },
+        { revision: 0n, ledger: 93 },
+      ],
+      revision: [{ revision: 0n, ledger: 94 }],
+    };
+    const sim = new SimAccount();
+    const base = sim.reader();
+    const next = (view: string) => {
+      const r = reads[view]!.shift()!;
+      return r;
+    };
+    const lagging: AccountReader = {
+      account: base.account,
+      configuration: async () => {
+        const r = next('configuration');
+        const c = (await base.configuration()).value;
+        return { value: { ...c, revision: r.revision }, latestLedger: r.ledger };
+      },
+      capabilities: async () => ({ value: (await base.capabilities()).value, latestLedger: next('capabilities').ledger }),
+      limits: async () => ({ value: (await base.limits()).value, latestLedger: next('limits').ledger }),
+      document: async () => {
+        const r = next('document');
+        return { value: { revision: r.revision, canonical: null }, latestLedger: r.ledger };
+      },
+      revision: async () => {
+        const r = next('revision');
+        return { value: r.revision, latestLedger: r.ledger };
+      },
+    };
+    const clock = new LedgerClock();
+    await expect(readSnapshot(lagging, { document: true, attempts: 2, clock })).rejects.toBeInstanceOf(InconsistentRead);
+    expect(clock.latest).toBe(110);
   });
 
   it('an answer from an older ledger than one already seen is not trusted', async () => {
@@ -303,6 +356,32 @@ describe.each(backends)('applyDocument over %s', (_, backendFor) => {
     sim.gate = { attemptId: 4n, until: sim.ledger + 1_000 };
     const op = applyDocument(doc(A), backendFor(sim), { sign: sim.sign });
     await expect(op.result).rejects.toBeInstanceOf(AccountFrozen);
+  });
+
+  it('a lagging read after confirmation is read again, never reported as the result', async () => {
+    const sim = new SimAccount();
+    sim.lagRevisionAfterApply = 1;
+    const { result } = await caller(sim, A, backendFor(sim));
+    expect(sim.revision).toBe(1n);
+    expect(result.revision).toBe(1n);
+    expect(result.ledger).toBeGreaterThan(0);
+  });
+
+  it('a read that keeps lagging after confirmation is InconsistentRead, and the apply is not repeated', async () => {
+    const sim = new SimAccount();
+    sim.lagRevisionAfterApply = 100;
+    let retried = 0;
+    const op = applyDocument(doc(A), backendFor(sim), {
+      sign: sim.sign,
+      onError: () => {
+        retried++;
+        return 'retry';
+      },
+    });
+    await expect(op.result).rejects.toBeInstanceOf(InconsistentRead);
+    expect(op.phase).toBe('failed');
+    expect(retried).toBe(0);
+    expect(sim.revision).toBe(1n);
   });
 
   it('abort stops before the next phase', async () => {

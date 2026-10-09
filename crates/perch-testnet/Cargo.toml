@@ -17,11 +17,11 @@ perch-deploy = { version = "0.1.1", path = "../perch-deploy" }
 # The software passkey and its WebAuthn signature encoding.
 perch-testkit = { version = "0.1.1", path = "../perch-testkit" }
 # Contract types, for encoding arguments and decoding results.
-perch-recovery = { version = "0.1.1", path = "../perch-recovery" }
+perch-recovery = { version = "0.1.0", path = "../perch-recovery" }
 perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
-perch-account = { version = "0.3.1", path = "../perch-account" }
-perch-doc-compiler = { version = "0.3.1", path = "../perch-doc-compiler", default-features = false }
-perch-zk-pool = { version = "0.1.1", path = "../perch-zk-pool" }
+perch-account = { version = "0.3.0", path = "../perch-account" }
+perch-doc-compiler = { version = "0.3.0", path = "../perch-doc-compiler", default-features = false }
+perch-zk-pool = { version = "0.1.0", path = "../perch-zk-pool" }
 perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
 # Witnesses and real proofs with the pinned nargo/bb.
 perch-zk-prover = { version = "0.1.0", path = "../perch-zk-prover" }

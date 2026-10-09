@@ -1,7 +1,7 @@
 [package]
 name = "perch-zk-adapter"
 description = "Deployable ZK recovery adapter: the controller-facing check of a zero-knowledge membership proof against the enrolled pool and statement, with the UltraHonk ZK verifier and its verification key compiled in; constructorless and immutable"
-version = "0.1.1"
+version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

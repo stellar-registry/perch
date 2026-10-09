@@ -4,20 +4,6 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [0.3.1] - 2026-10-09
-
-### 🐛 Bug Fixes
-
-- *(deps)* Stellar-accounts 0.7.1 (git 82002206b1da) -> 0.7.1 (git 33726766a1fd)
-
-### 💼 Other
-
-- Authoritative spec, one recovery statement, and the ZK adapter interface (epic #99 WS1) (#100)
-- One controller and the shared account capabilities (epic #99 WS3) (#102)
-- OZ materialization layer: quiet OZ mutations, reconcile_signers, OZ fork re-pin, caps 8x11 (epic #99, split from #103) (#111)
-- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
-- Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
-
 ## [0.3.0] - 2026-09-24
 
 ### 🚀 Features
@@ -32,6 +18,11 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 ### 🚜 Refactor
 
 - *(recovery)* Convert 0-or-1 Vec fields to Option where the SDK allows it
+
+### 💼 Other
+
+- *(review)* Fix(recovery): AND-gate Combined cancellation, keep completed nullifiers spent
+- *(review)* Fix(recovery): reject cancellation evidence on non-live attempts
 
 ## [0.2.0] - 2026-09-09
 

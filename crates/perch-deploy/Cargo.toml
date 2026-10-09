@@ -31,4 +31,4 @@ anyhow = "1"
 
 [dev-dependencies]
 stellar-accounts = { workspace = true }
-perch-ed25519-verifier = { version = "0.1.2", path = "../perch-ed25519-verifier" }
+perch-ed25519-verifier = { version = "0.1.1", path = "../perch-ed25519-verifier" }

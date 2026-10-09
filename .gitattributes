@@ -1,0 +1,35 @@
+# Review hygiene: GitHub collapses `linguist-generated` files in pull-request
+# diffs by default, and `linguist-vendored` keeps third-party code out of the
+# language statistics. Nothing here changes how files are built or checked out.
+# Several paths below arrive only in later PRs of the epic #99 stack (circuits,
+# vendor/, deployments/, testdata/zk/); they are listed here, at the base, so
+# every branch above inherits one file.
+
+# Generated: test-host ledger snapshots, rewritten by `cargo test`.
+**/test_snapshots/** linguist-generated=true
+
+# Generated: lockfiles.
+Cargo.lock linguist-generated=true
+**/package-lock.json linguist-generated=true
+
+# Generated: contract bindings (each file is headed "GENERATED FILE"; see
+# scripts/bindings-contracts.sh).
+packages/perch-contracts/src/** linguist-generated=true
+
+# Generated: deployment records.
+deployments/** linguist-generated=true
+
+# Generated: circuit artifacts, verification keys, and proof fixtures.
+circuits/artifacts/** linguist-generated=true
+circuits/manifest.json linguist-generated=true
+packages/perch-zk/artifacts/** linguist-generated=true
+testdata/zk/** linguist-generated=true
+*.vk linguist-generated=true
+
+# Vendored third-party code (provenance is pinned by checksums and tests).
+vendor/** linguist-vendored=true linguist-generated=true
+circuits/vendor/** linguist-vendored=true linguist-generated=true
+
+# Exception: hand-written perch code that lives under vendor/ and must be
+# reviewed (and audited) like any other source. Later lines win.
+vendor/ultrahonk-soroban-verifier/src/zk.rs -linguist-vendored -linguist-generated

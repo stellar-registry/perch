@@ -1511,6 +1511,7 @@ dependencies = [
  "perch-ir",
  "perch-program",
  "perch-recovery",
+ "perch-recovery-interface",
  "perch-registry-resolve",
  "perch-smart-account",
  "perch-spending-limit",
@@ -1555,6 +1556,16 @@ dependencies = [
  "soroban-sdk",
  "soroban-sdk-tools",
  "stellar-accounts",
+]
+
+[[package]]
+name = "perch-recovery-interface"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "serde_json",
+ "soroban-sdk",
+ "soroban-sdk-tools",
 ]
 
 [[package]]

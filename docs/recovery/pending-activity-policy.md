@@ -1,13 +1,18 @@
-# Open decision: activity during a pending recovery attempt (release-blocking)
+# Activity during a pending recovery attempt
 
 This is now being tracked in [issue #84](https://github.com/stellar-registry/perch/issues/84).
 
-**Status: OPEN. This is a release-blocking gate, not a design note.** No
-recovery-enabled account should be deployed to production, and no
-integration should advertise recovery as safe to rely on, until this
-decision is made explicitly by whoever operates the account or protocol —
-not inferred from this codebase, not defaulted by the library, and not
-resolved by this change.
+**Status: DECIDED by epic [#99](https://github.com/stellar-registry/perch/issues/99)
+([`spec.md`](spec.md) D1, §9).** Once an attempt's evidence is satisfied, a
+`Protected` account authorizes nothing except that attempt's completion, on
+every authorization path; a `Loss` account's ordinary activity continues.
+Both profiles block conflicting policy changes during the authorized window,
+and an attempt without sufficient evidence blocks nothing. The
+`pending-activity` field is removed (spec §3.1).
+
+**Still release-blocking until implemented** (workstream 3). Until the freeze
+is enforced and tested, no recovery-enabled account should rely on it in
+production. The rest of this page records the question as it was posed.
 
 ## The question
 

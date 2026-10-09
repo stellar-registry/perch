@@ -378,7 +378,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CCECBBCM5WV6KHZULIO6ORWWBT35ZKVLEJTO6ALIOOULRXAVD7JHICO6",
+              "contract": "CAI6RPWAJ7Z6MP3HLGMTD3W4P4DTD6BEKPFV7XF6VANC2H7XYAQHIXHP",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -401,7 +401,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CCUM47GUADDA5CQ54CSPPGAKFXGJQHNZYKP7HQH5Z3UX3E2TBTSAINAD",
+              "contract": "CCVXXCAKMROSWAH6QKZ2PUMMH3QUUEUERJQ3CI4XMAWVOMTKKJHYSMTF",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -447,7 +447,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CDUU5QEXGCZ5TJNK35WVVSPYURIIFM5H5ZNWJJW3QDSZB57B66C3DNHQ",
+              "contract": "CDHZT7NLQDPMWCUDNUVCYC2EAMGRFWABQO5WDSRJGDQVIDHOWQB2FANB",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {

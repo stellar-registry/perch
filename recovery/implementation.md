@@ -16,7 +16,7 @@ the one recovery controller and the shared account capabilities.
 | §7 permitted changes | `perch_ir::recovery::derive_target`; `PerchDocCompiler::derive_target` | `crates/perch-ir/tests/recovery.rs`, `recovery.rs` |
 | §3.2 per-rule hash | `perch_ir::{rule_canonical_json, rule_hash}`; `perch_compile::rule_hash_onchain`; `perch_recovery_interface::fragment::rule_hash`; perch-js `ruleHash`, `configHash` | `crates/perch-ir/tests/rule_hash.rs`, `fragment_hashes.rs`, `packages/perch-js/test/fragment.test.ts` |
 | §7.5 delta apply | `crates/perch-smart-account/src/rules.rs` (`desired`, `reconcile`) | `apply_delta.rs`, `delta_security.rs`, `fuzz/fuzz_targets/apply_doc_delta.rs` |
-| §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES}` | — (provisional values, see below) |
+| §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}` | `doc_caps.rs`; `release_stack.rs` `worst_case_*` (see below) |
 | §12 upgrades | `PerchSmartAccount::{schedule_upgrade, execute_upgrade, cancel_upgrade}`; `PerchRecovery::rcv_upgrade` | `account_capabilities.rs` |
 | §15 `execute`, `applied_doc` | `PerchSmartAccount::{execute, applied_doc}` | `account_capabilities.rs` |
 
@@ -176,9 +176,32 @@ against the release artifacts belong to the integration layer.
   pins it.
 - **Guardian set.** The controller refuses a configuration that lists the
   account among its own guardians (`InvalidConfiguration`).
-- **Document caps.** Provisional: 16 declared signers, 16 rules, 8 192
-  canonical bytes. Workstream 2's measurements (`budgets.md`) set the final
-  values.
+- **Document caps.** 8 declared signers, 11 rules, 8 192 canonical bytes,
+  and rule names of at most OZ's 20 bytes, sized against the measured
+  worst-case completion (`budgets.md`, "Document caps"). The binding limit
+  is instructions: the thief who keeps every name and changes every
+  program is edited in place, at 73.6% at the caps. Written entries are
+  next (70.5%, the renamed thief).
+- **Quiet OZ mutations and `DocApplied`.** `apply_doc` performs every
+  rule, signer, and policy mutation through OZ's `_no_events` variants
+  (theahaco/stellar-contracts-OZ PR #4, pinned), and the spending-limit
+  policy installs and uninstalls quietly. It emits one `DocApplied` per
+  application: `doc_hash` as its topic, and the delta's counts (rules
+  added, removed, and edited in place; signers and policies added and
+  removed by the in-place edits). A rule replaced whole counts once as
+  removed and once as added, and its signers and policies are in no
+  count. `apply_delta.rs` checks the counts against the plan and the diff
+  of the installed rules, and that the account emits nothing else. An
+  indexer reads the installed rules from the account (`applied_doc`, OZ's
+  rule views); it cannot replay OZ's per-item events, which no longer
+  exist, so one that wants every signer change (a replaced rule's
+  included) diffs the rules it reads before and after the apply.
+- **`reconcile_signers`.** An in-place edit changes a rule's signers in
+  one OZ `reconcile_signers_no_events` call (theahaco/stellar-contracts-OZ
+  PR #5, pinned). The call checks the final set whole, keeps retained
+  signers' ids, and writes the rule once. When the target has signers the
+  swap goes first; when it has none, the policies change first and the
+  signers go last.
 - **`execute`** returns the called function's value.
 - **`max-cancels` is a lifetime count per controller and account.**
   Nothing resets it. Removing recovery and re-enrolling at the same
@@ -218,7 +241,7 @@ key and value, the canonical applied document, and its hash.
 | Named cases: functions, scope, cap parameters, added and shared signers and policies, rename, remove and re-add, a key swapped under one id, a one-signer swap in place (the compromise shape), minimal and maximal documents, reformatting, reordering, expiry, a recovery-only change | the remaining `apply_delta.rs` tests |
 | Revoked credentials stay refused after an in-place edit; the freeze and generation behave as under the full replace; reserved names stay closed; a delta in the authorized window changes nothing | `delta_security.rs` |
 | A failing policy install, and budget exhaustion at every point of a delta, revert everything under enforcing auth | `delta_security.rs` |
-| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_replace_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
+| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_edit_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
 | Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |
 
 `PERCH_DELTA_CASES` sets the proptest case count (CI defaults: 32 to 48 per property; a 400-case sweep also passes).

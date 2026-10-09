@@ -85,8 +85,12 @@ against the release artifacts belong to the integration layer.
 - **Change approvals are refused during an authorized window** (§9: only
   that attempt's cancellation evidence is accepted).
 - **Attempt storage.** Collecting attempts live in temporary storage for
-  their evidence window; an attempt that is authorized, or whose evidence
-  window is longer than the network's maximum entry TTL, is persistent.
+  their evidence window. An attempt that is authorized, or whose evidence
+  window is longer than the network's maximum entry TTL, is persistent. An
+  attempt recorded `Invalidated` while collecting stays where it was. Its
+  record therefore lasts at least its evidence window, after which the
+  attempt has expired anyway. Once the entry is gone, evidence for it is
+  refused as `NoSuchAttempt` rather than `AttemptNotLive`.
 - **Stale lost-key source (T4).** The submission that meets the condition
   succeeds and records the attempt as `Invalidated` (a stored state, with an
   `AttemptInvalidated` event). Refusing would roll the check back and leave
@@ -176,8 +180,12 @@ against the release artifacts belong to the integration layer.
   canonical bytes. Workstream 2's measurements (`budgets.md`) set the final
   values.
 - **`execute`** returns the called function's value.
-- **`max-cancels` is a lifetime count per controller.** Nothing resets it;
-  switching controllers starts a new one (T6).
+- **`max-cancels` is a lifetime count per controller and account.**
+  Nothing resets it. Removing recovery and re-enrolling at the same
+  controller keeps it, because removal clears the configuration and kills
+  the attempts but not the count. Switching controllers starts a new one
+  (T6). `the_cancellation_count_survives_removal_and_re_enrollment_at_the_same_controller`
+  pins it.
 - **A lost-key source is compared at promotion.** If the applied document
   changes and then changes back before any evidence meets the condition,
   the attempt promotes over the same snapshot it was opened for. Once a

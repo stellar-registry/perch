@@ -133,10 +133,11 @@ the recovery stack has a model or a proof:
   `rcv_sync` checks the compiled identity against `target_doc_hash`). These
   are pinned by enforcing-auth integration tests
   (`crates/integration-tests/tests/recovery.rs`, `target_binding.rs`), not
-  proofs. The model contributes `canonical_bytes_identity` and T7: an honest
-  completion's bytes compile to the identity the attempt recorded, and that
-  identity names one document. For the Rust parser the same round trip is
-  fuzzed (`ir_parse_roundtrip` checks `parse(emit(doc)) == doc`).
+  proofs. The only formal fact behind the claim that `target_bytes_hash ==
+  target_doc_hash` under CANON v1 is `canonical_bytes_identity`: an honest
+  completion's bytes compile to the identity the attempt recorded. T7 adds
+  that the identity names one document. For the Rust parser the same round
+  trip is fuzzed (`ir_parse_roundtrip` checks `parse(emit(doc)) == doc`).
 - **Account authorization paths** (`crates/perch-smart-account`:
   `__check_auth`, OZ context-rule selection, `execute`, `apply_doc`,
   upgrades). Tests only (`account_capabilities.rs`, `matrix.rs`). That

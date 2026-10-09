@@ -66,9 +66,12 @@ real-proof tests, and the testnet exercise:
 - The recovery controller's state machine (`crates/perch-recovery`, spec §6): attempt
   lifecycle, the `Protected` freeze across authorization paths, cancellation rules and the
   cancel cap, evidence freshness and expiry, epochs, nullifier spending, baselines,
-  upgrade approvals, and the two-digest target binding (spec §6.3 T1, T5; tested in
-  `target_binding.rs`). The model supplies only the CANON facts that binding relies on
-  (`canonical_bytes_identity`, T7).
+  upgrade approvals, and the two-digest target binding (spec §6.3 T1, T5). The
+  controller's own two checks are not modeled: `enforce` comparing `sha256` of the
+  completing `apply_doc` bytes with `target_bytes_hash`, and `rcv_sync` comparing the
+  compiled identity with `target_doc_hash`. `target_binding.rs` tests them. The only formal
+  fact behind the claim that `target_bytes_hash == target_doc_hash` under CANON v1 is
+  `canonical_bytes_identity`; T7 adds that the identity names one document.
 - Account authorization paths (`crates/perch-smart-account`): `__check_auth`, OZ
   context-rule selection, `execute`, `apply_doc` and its delta (which rules it touches),
   the reserved-name guards, upgrades, and the configuration revision with `apply_doc`'s

@@ -664,3 +664,104 @@ fn capabilities_and_limits_are_constants_of_the_wasm() {
         soroban_sdk::String::from_str(&w.env, "perch/recovery/config")
     );
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostic event vectors for perch-js
+// ---------------------------------------------------------------------------
+
+/// The last invocation's error diagnostics, as the `DiagnosticEvent` XDR an
+/// RPC returns (simulation `events`, a transaction's
+/// `diagnosticEventsXdr`), base64.
+fn error_diagnostics(w: &World) -> std::vec::Vec<String> {
+    use soroban_sdk::xdr::{ContractEventBody, DiagnosticEvent, Limits, ScVal, WriteXdr};
+    let events = w.env.host().get_events().unwrap();
+    events
+        .0
+        .iter()
+        .filter(|e| {
+            let ContractEventBody::V0(body) = &e.event.body;
+            matches!(body.topics.first(), Some(ScVal::Symbol(s)) if s.to_utf8_string_lossy() == "error")
+        })
+        .map(|e| {
+            DiagnosticEvent {
+                in_successful_contract_call: !e.failed_call,
+                event: e.event.clone(),
+            }
+            .to_xdr_base64(Limits::none())
+            .unwrap()
+        })
+        .collect()
+}
+
+/// `testdata/auth/diagnostic-events.json`: the host's own error events for
+/// the three failures perch-js types after submission, decoded and mapped
+/// by `packages/perch-js/test/diagnostics.test.ts`. Rewrite with
+/// `PERCH_BLESS=1`.
+#[test]
+fn diagnostic_event_vectors_are_the_hosts_own() {
+    let mut cases = std::vec::Vec::new();
+
+    // A selection whose rule is gone: the account's authentication fails
+    // with OZ's ContextRuleNotFound.
+    let w = world();
+    let app = Rule {
+        name: "app",
+        scope: &w.target,
+        signers: &["owner"],
+        not_after: None,
+    };
+    w.apply_bytes(&doc(&w, &[app]), 0).unwrap();
+    let signed = sign_activity(&w, &w.owner, select(&w, "app").unwrap());
+    w.apply_bytes(&doc(&w, &[]), 0).unwrap();
+    assert!(!submit(&w, signed));
+    cases.push(serde_json::json!({
+        "name": "stale_selection",
+        "account": strkey(&w.account),
+        "events": error_diagnostics(&w),
+    }));
+
+    // An apply_doc checked against a revision the account has left.
+    let w = world();
+    w.enroll(&w.doc(None));
+    assert_eq!(
+        err(w.submit_apply(w.apply_entry(&w.owner, &w.doc(None).bytes(&w), 0, Some(0)))),
+        PerchAccountError::StaleRevision
+    );
+    cases.push(serde_json::json!({
+        "name": "stale_revision",
+        "account": strkey(&w.account),
+        "events": error_diagnostics(&w),
+    }));
+
+    // Ordinary activity on a frozen account.
+    let w = world();
+    w.enroll(&w.doc(Some(w.recovery("protected", Mode::Guardian))));
+    let attempt = w
+        .ctl()
+        .begin_lost_key(&w.account, &w.replacements(&w.new_key(), None));
+    w.guardian(0, attempt, Initiate);
+    w.guardian(1, attempt, Initiate);
+    assert!(!w.activity());
+    cases.push(serde_json::json!({
+        "name": "account_frozen",
+        "account": strkey(&w.account),
+        "events": error_diagnostics(&w),
+    }));
+
+    let want = serde_json::to_string_pretty(&serde_json::json!({
+        "comment": "Written by crates/integration-tests/tests/revision.rs (PERCH_BLESS=1); read by packages/perch-js/test/diagnostics.test.ts. Each case is the host's error DiagnosticEvents (base64 XDR) for one failed submission.",
+        "cases": cases,
+    }))
+    .unwrap()
+        + "\n";
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/auth/diagnostic-events.json");
+    if std::env::var("PERCH_BLESS").is_ok() {
+        std::fs::write(&path, &want).unwrap();
+    }
+    let have = std::fs::read_to_string(&path).expect("PERCH_BLESS=1 writes the vectors");
+    assert_eq!(
+        have, want,
+        "diagnostic-events.json is stale: rerun with PERCH_BLESS=1"
+    );
+}

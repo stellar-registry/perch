@@ -127,7 +127,15 @@ export {
   ERROR_CODES,
   accountErrorCodes,
   mapSubmissionError,
+  type SubmissionFailure,
 } from './errors.js';
+export {
+  decodeDiagnosticEvent,
+  accountErrorCodesFromEvents,
+  strkey,
+  type DiagnosticEvent,
+  type DiagnosticValue,
+} from './diagnostics.js';
 export {
   applyDocument,
   oneTransactionBackend,

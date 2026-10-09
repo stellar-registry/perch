@@ -29,6 +29,15 @@ fix — it only tags versions with no existing tag. Recovering a
 build-that-never-published requires a fresh version bump (see PR #79), not a
 rerun once the underlying commit's tree is fixed.
 
+A contract's version also moves when a build input outside every crate tree
+changes: `scripts/release-deps.py` feeds `release-pr` one `fix(deps)` commit
+per locked external package it links that moved since its last tag, and per
+change to an inherited workspace pin, `[profile]`, `[patch]`, or the
+toolchain. A workspace-wide re-pin (the OZ fork, `soroban-sdk`) touches no
+`paths_for()` path and usually lands as a `chore(deps)` commit git-cliff
+skips. `scripts/test-release-scripts.py` (CI's `release-scripts` job) also
+fails when a `paths_for()` list misses a crate its contract links.
+
 Adding a brand-new deployable contract crate needs entries in **four**
 places in `release.yml`, not just workspace membership: both `CONTRACTS=`
 lists (`detect-releases` and `release-pr` — kept as duplicated literals, not
@@ -99,6 +108,21 @@ for how `perch-recovery` handles this). When chaining several
 host's test call-stack bookkeeping was observed not to reliably survive a
 longer chain of recovered panics in one `Env`; prefer a fresh `Env` (a new
 `setup()`) per scenario instead of accumulating them.
+
+## Contract memory: the wasm stack, and metering big documents
+
+The host charges every cross-contract call's VM its whole initial linear
+memory, and rustc's default wasm stack is 1 MiB (17 pages). Each stack
+contract crate therefore has a `build.rs` linking `-zstack-size=65536` for
+its cdylib. A new deployable contract crate needs the same `build.rs`, or
+every call to it costs over 1 MB of the transaction's 41.9 MB. Measure with
+`release_stack.rs` (`cap_sweep`, the `worst_case_*` tests) before changing
+the document caps; `docs/recovery/budgets.md` "Document caps" has the
+method. In soroban tests, `budget().reset_limits(...)` also caps the host's
+shadow bookkeeping (diagnostic events, auth observation), which fails on
+8 KiB documents for reasons no network charges. The SDK's default
+invocation resource limits already enforce the network's per-transaction
+limits.
 
 ## Maintaining this file
 

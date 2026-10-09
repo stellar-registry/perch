@@ -51,6 +51,13 @@ enum Mode {
         /// `address(env)` takes no `registry` arg. When `None` (keyed forms),
         /// `address(env, registry)` takes it explicitly.
         registry_id_file: Option<String>,
+        /// The local wasm the pin was hashed from (name-only and `wasm_file:`
+        /// forms), relative to the invoking crate. The expansion
+        /// `include_bytes!`s it so cargo rebuilds the crate when the file
+        /// changes: rustc records `include_bytes!` inputs in its dep-info, while
+        /// the macro's own read is invisible to cargo and would leave a stale
+        /// pin compiled in after a refetch.
+        pin_file: Option<String>,
     },
     /// Name-salted: `salt == sha256(normalized_name)` — the base registry
     /// `deploy` convention. This is how a *named* deploy (e.g. a subregistry
@@ -189,6 +196,7 @@ impl Parse for RegistrySpec {
                     wasm_name,
                     hash,
                     registry_id_file: None,
+                    pin_file: wasm_file.map(|f| f.value()),
                 }
             }
             (None, Some(deploy_name)) => {
@@ -265,6 +273,7 @@ fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
             // The name-only form bakes the deployer registry too (from the
             // fetched id file), so `address(env)` needs no `registry` arg.
             registry_id_file: Some("wasm/stateless.id".to_string()),
+            pin_file: Some(file),
         },
         client: None,
     })
@@ -404,6 +413,7 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
         wasm_name,
         hash,
         registry_id_file,
+        pin_file,
     } = &spec.mode
     else {
         unreachable!("named mode handled above");
@@ -418,7 +428,19 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
     let (hash_items, derive_impl) = if let Some(bytes) = hash {
         // ---- Pinned mode: compile-time hash literal, zero XCC, fully offline.
         let byte_lits = bytes.iter().map(|b| quote!(#b));
+        let track = pin_file.as_ref().map(|file| {
+            quote! {
+                // A build input, never linked: see `Mode::Content::pin_file`.
+                const _: &[u8] = ::core::include_bytes!(::core::concat!(
+                    ::core::env!("CARGO_MANIFEST_DIR"),
+                    "/",
+                    #file
+                ));
+            }
+        });
         let hash_items = quote! {
+            #track
+
             /// The pinned wasm hash, as raw bytes.
             pub const WASM_HASH: [u8; 32] = [ #(#byte_lits),* ];
 

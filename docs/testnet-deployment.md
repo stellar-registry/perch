@@ -11,6 +11,20 @@ table. Consumers (e.g. nido) should resolve addresses by name through the
 registry (or use `vars.PERCH_AUTHOR_ADDRESS` / `vars.PERCH_REGISTRY_CONTRACT_ID`,
 repo-level Actions variables) rather than hardcoding them.
 
+## The recovery stack (beta)
+
+The epic #99 stack (compiler, interpreter, spending limit, ed25519 and
+WebAuthn verifiers, ZK pool and adapter, recovery controller, account,
+factory) is deployed separately by `scripts/deploy-stack.sh`, to its own
+instance of the registry wasm below. Its addresses, hashes, and pins are in
+[`deployments/testnet.json`](../deployments/testnet.json), and
+`scripts/verify-deployment.sh` checks them against the chain. The account's
+build-time pins now come from that manifest, not from the name-salted
+compiler and interpreter instances in the table below, which were stuck at
+v0.1.0 (#95). See [`deploy/README.md`](deploy/README.md) for the build order
+and [`deploy/testnet-exercise.md`](deploy/testnet-exercise.md) for the
+measured exercise. The canonical registries below are unchanged.
+
 ## Live contracts
 
 | Component | Address | Notes |

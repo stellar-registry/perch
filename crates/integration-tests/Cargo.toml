@@ -27,8 +27,15 @@ perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interf
 perch-zk-pool = { version = "0.1.0", path = "../perch-zk-pool" }
 arbitrary = "1"
 proptest = "1"
+perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
+perch-zk-prover = { version = "0.1.0", path = "../perch-zk-prover" }
+perch-account-factory = { version = "0.1.0", path = "../perch-account-factory" }
+sha2 = "0.10"
 stellar-accounts = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# `e2e_invoke` (simulation in recording mode) for release_stack.rs's footprint
+# check; the same version soroban-sdk pins.
+soroban-env-host = { version = "=27.0.1", features = ["recording_mode"] }
 ed25519-dalek = "2"
 hex = "0.4"
 serde_json = "1"

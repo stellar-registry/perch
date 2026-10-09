@@ -26,6 +26,14 @@ impl SeedKey {
         Ok(Self { signing, public })
     }
 
+    /// A key from raw seed bytes, for host tools that generate their own
+    /// throwaway testnet keys.
+    pub fn from_seed(seed: [u8; 32]) -> Self {
+        let signing = SigningKey::from_bytes(&seed);
+        let public = signing.verifying_key().to_bytes();
+        Self { signing, public }
+    }
+
     /// The G… account funded to pay fees — same key pair as the auth signer.
     pub fn account(&self) -> String {
         // strkey 0.0.16 returns a heapless string; widen to an owned String.

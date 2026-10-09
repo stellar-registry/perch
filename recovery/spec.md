@@ -1357,12 +1357,12 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then OZ `do_check_auth`. The order does not matter for security: each step only refuses. |
-| Account | `apply_doc(doc_json, approval_valid_until)` | Owner authorization, or the recovery rule (completion only) |
+| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
 | Account | `rcv_gate(attempt_id, frozen_until)` | Invoker-only: the adopted controller's authorization, and the caller must be the adopted controller |
-| Account | `applied_doc`, `applied_doc_hash`, `is_revoked`, `is_enrolled_id`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `doc_compiler`, rule views | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
+| Account | `applied_doc`, `applied_doc_hash`, `is_revoked`, `is_enrolled_id`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `doc_compiler`, rule views; `revision`, `configuration`, `document`, `capabilities` (#108) | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade` (`controller::RecoveryHooksClient`), `install`, `uninstall`, `enforce` | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |
@@ -1370,6 +1370,18 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 | Pool | `rcv_insert` (returns nothing; `zk::MembershipPoolClient`) | Invoker-only |
 | Pool | `is_known_root`, `depth`, tree views, `renew_tree` | None |
 | Adapter | `verify`, `circuit_id`, `tree_depth` | None (pure) |
+
+**Revision binding (#108).** Only `apply_doc` can be bound to a
+configuration revision, through `expected_revision`. Ordinary authorization
+is not: a signature binds the invocation and the selected rule ids (OZ's
+`sha256(signature_payload || context_rule_ids.to_xdr())`), not a revision.
+A transaction signed at revision r whose selected rule was removed or
+replaced before inclusion fails closed (`ContextRuleNotFound`); one whose
+selected rule was edited in place keeps the rule's id and executes under
+the rule as it is at inclusion. Binding a revision into ordinary
+authorization would change every signer's digest, and RFC
+[#109](https://github.com/stellar-registry/perch/issues/109) §3b defers it.
+`crates/integration-tests/tests/revision.rs` pins both cases.
 
 ## 16. Dependency layering and immutability
 

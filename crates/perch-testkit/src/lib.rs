@@ -15,7 +15,7 @@
 //!
 //! let doc = soroban_sdk::Bytes::from_slice(&w.env, perch_testkit::fixture().as_bytes());
 //! // `approval_valid_until` matters only to a `Protected` reconfiguration.
-//! let _hash = w.account_client().apply_doc(&doc, &0);
+//! let _hash = w.account_client().apply_doc(&doc, &0, &None);
 //! ```
 //!
 //! # Modes

@@ -6,13 +6,13 @@ plus the manifests themselves.
 
 | Module | Contract |
 | --- | --- |
-| `account` | `perch-account`: `apply_doc`, `execute`, `applied_doc`, `infra`, upgrades, `cancel_recovery` |
+| `account` | `perch-account`: `apply_doc`, `execute`, `applied_doc`, `infra`, upgrades, `cancel_recovery`, and the consumer views `revision`, `configuration`, `document`, `capabilities` |
 | `factory` | `perch-account-factory`: `create`, `create_passkey`, `address_of`, `passkey_address` |
 | `recovery` | `perch-recovery`: attempts, guardian and ZK evidence, change approvals, statements |
 | `pool` | `perch-zk-pool`: trees, leaves, roots, enrollments |
 | `adapter` | `perch-zk-adapter`: `verify`, `circuit_id`, `tree_depth` |
 | `webauthnVerifier` | `perch-webauthn-verifier` |
-| `docCompiler` | `perch-doc-compiler`: `compile_doc`, `derive_target` |
+| `docCompiler` | `perch-doc-compiler`: `compile_doc`, `derive_target`, `limits`, `capabilities` |
 
 ```ts
 import { factory, addressOf, testnet } from '@stellar-registry/perch-contracts';
@@ -30,7 +30,10 @@ const tx = await f.create_passkey({ salt, key_data: passkeyPublicKey });
 Each module exports `WASM_SHA256`, the hash of the wasm it was generated
 from; `npm test` fails if it, or `testnet`, drifts from
 `deployments/testnet.json`. Regenerate with `scripts/bindings-contracts.sh`
-after a deployment. `PERCH_LIVE=1 npm test` also calls the deployed
+after a deployment. A module regenerated from a stack built from source
+(`scripts/bindings-contracts.sh --undeployed <stack> <module>...`), for a
+contract change not deployed yet, exports `DEPLOYED = false` and is exempt
+from that check until the next deployment regenerates it. `PERCH_LIVE=1 npm test` also calls the deployed
 contracts through the bindings.
 
 A recovery completion (`apply_doc` through the zero-signer recovery rule)

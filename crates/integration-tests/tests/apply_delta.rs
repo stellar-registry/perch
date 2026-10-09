@@ -104,8 +104,9 @@ proptest! {
 proptest! {
     #![proptest_config(config(32))]
 
-    /// Re-applying the applied document writes nothing and emits nothing but
-    /// the account's own `DocApplied`.
+    /// Re-applying the applied document writes nothing but the advanced
+    /// configuration revision and emits nothing but the account's own
+    /// `DocApplied`.
     #[test]
     fn reapplying_the_applied_document_is_a_no_op(a in bytes()) {
         let w = DeltaWorld::new();
@@ -116,9 +117,10 @@ proptest! {
         let events = w.events();
         let written = w.env.cost_estimate().resources().write_entries;
         prop_assert!(events.iter().all(|e| e.name == "doc_applied"), "{events:?}");
-        // The one entry an authorized call always writes: its auth nonce.
-        prop_assert_eq!(written, 1);
-        prop_assert!(changed(&before, &raw_entries(&w.env)).is_empty());
+        // The entries an authorized apply always writes: its auth nonce, and
+        // the instance for the revision.
+        prop_assert_eq!(written, 2);
+        prop_assert_eq!(changed(&before, &raw_entries(&w.env)), only_the_instance(&w));
     }
 
     /// `A → B → C` ends in the state `A → C` does (history counters aside:
@@ -914,6 +916,7 @@ fn reformatting_the_same_document_is_a_no_op() {
     let out = perch_account::PerchAccountClient::new(&w.env, &w.delta).apply_doc(
         &soroban_sdk::Bytes::from_slice(&w.env, reformatted.as_bytes()),
         &0,
+        &None,
     );
     // The apply's own events, before the next call replaces them.
     let events = w.events();
@@ -922,7 +925,16 @@ fn reformatting_the_same_document_is_a_no_op() {
         perch_account::PerchAccountClient::new(&w.env, &w.delta).applied_doc_hash()
     );
     assert!(names(&events, &w.delta).is_empty());
-    assert!(changed(&before, &raw_entries(&w.env)).is_empty());
+    assert_eq!(
+        changed(&before, &raw_entries(&w.env)),
+        only_the_instance(&w)
+    );
+}
+
+/// The one entry a no-op apply changes: the account's instance, for the
+/// advanced revision.
+fn only_the_instance(w: &DeltaWorld) -> std::vec::Vec<String> {
+    std::vec![instance_key(&w.delta)]
 }
 
 #[test]

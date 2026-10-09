@@ -390,7 +390,7 @@ fn budget_exhaustion_mid_delta_reverts_every_edit() {
         let root = w.invocation(
             &w.account,
             "apply_doc",
-            std::vec![w.sc(second.clone()), w.sc(0u32)],
+            std::vec![w.sc(second.clone()), w.sc(0u32), w.sc(None::<u64>)],
         );
         w.env.set_auths(&[w.owner_entry("admin", root)]);
         w.env
@@ -399,7 +399,7 @@ fn budget_exhaustion_mid_delta_reverts_every_edit() {
             .reset_limits(cost * percent / 100, 1 << 30);
         let client = w.client();
         let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            client.try_apply_doc(&second, &0)
+            client.try_apply_doc(&second, &0, &None)
         }));
         w.env.cost_estimate().budget().reset_unlimited();
         w.env.set_auths(&[]);

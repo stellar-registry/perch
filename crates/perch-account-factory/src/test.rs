@@ -201,9 +201,13 @@ fn a_new_passkey_account_applies_a_document_signed_by_its_passkey() {
         function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
             contract_address: account.clone().into(),
             function_name: StringM::try_from("apply_doc").unwrap().into(),
-            args: std::vec![sc(&w.env, doc.clone()), sc(&w.env, 0u32)]
-                .try_into()
-                .unwrap(),
+            args: std::vec![
+                sc(&w.env, doc.clone()),
+                sc(&w.env, 0u32),
+                sc(&w.env, None::<u64>)
+            ]
+            .try_into()
+            .unwrap(),
         }),
         sub_invocations: VecM::default(),
     };
@@ -223,7 +227,7 @@ fn a_new_passkey_account_applies_a_document_signed_by_its_passkey() {
         invocation.clone(),
     );
     w.env.set_auths(&[wrong.clone()]);
-    assert!(a.try_apply_doc(&doc, &0).is_err());
+    assert!(a.try_apply_doc(&doc, &0, &None).is_err());
     // The right key over a different invocation is refused too.
     wrong = auth_entry(
         &w.env,
@@ -237,7 +241,7 @@ fn a_new_passkey_account_applies_a_document_signed_by_its_passkey() {
     );
     wrong.root_invocation.sub_invocations = std::vec![invocation.clone()].try_into().unwrap();
     w.env.set_auths(&[wrong]);
-    assert!(a.try_apply_doc(&doc, &0).is_err());
+    assert!(a.try_apply_doc(&doc, &0, &None).is_err());
 
     w.env.set_auths(&[auth_entry(
         &w.env,
@@ -249,7 +253,7 @@ fn a_new_passkey_account_applies_a_document_signed_by_its_passkey() {
         2_000,
         invocation,
     )]);
-    let doc_hash = a.apply_doc(&doc, &0);
+    let doc_hash = a.apply_doc(&doc, &0, &None);
     assert_eq!(a.applied_doc_hash(), Some(doc_hash));
 }
 

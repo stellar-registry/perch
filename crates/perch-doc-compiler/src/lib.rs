@@ -210,6 +210,50 @@ pub struct DerivedTarget {
     pub replaced: Vec<Credential>,
 }
 
+/// The document caps a compiler enforces, as [`PerchDocCompiler::limits`]
+/// returns them. Versioned: a later budget (a complexity-weighted one, say)
+/// is a new variant, which a consumer that does not know it refuses rather
+/// than misreads.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DocLimits {
+    V1(FlatDocLimits),
+}
+
+/// Flat per-document caps: [`MAX_DOC_SIGNERS`], [`MAX_DOC_RULES`],
+/// [`MAX_DOC_CANONICAL_BYTES`], [`MAX_RULE_NAME_BYTES`].
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FlatDocLimits {
+    pub max_signers: u32,
+    pub max_rules: u32,
+    pub max_canonical_bytes: u32,
+    pub max_rule_name_bytes: u32,
+}
+
+/// The caps this crate enforces.
+pub fn doc_limits() -> FlatDocLimits {
+    FlatDocLimits {
+        max_signers: MAX_DOC_SIGNERS,
+        max_rules: MAX_DOC_RULES,
+        max_canonical_bytes: MAX_DOC_CANONICAL_BYTES,
+        max_rule_name_bytes: MAX_RULE_NAME_BYTES,
+    }
+}
+
+/// The canonical form and fragment hashes a compiler produces, as
+/// [`PerchDocCompiler::capabilities`] returns them.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CompilerCapabilities {
+    /// The CANON version `doc_hash` is `sha256` of (`CANONICAL.md`).
+    pub canon_version: u32,
+    /// The domain tag of a rule's `rule_hash` (spec §3.2).
+    pub rule_hash_tag: String,
+    /// The domain tag of a recovery member's `config_hash` (spec §3.2).
+    pub config_hash_tag: String,
+}
+
 /// Whether a compiled rule set keeps a policy-free self-admin rule with at
 /// least one signer — the anti-brick check every applied document and every
 /// recovery target must pass, so the admin path never depends on a policy.
@@ -263,6 +307,21 @@ impl PerchDocCompiler {
     /// document can never compile on mainnet or vice versa.
     pub fn compile_doc(e: &Env, doc_json: Bytes) -> Result<CompiledDoc, DocCompilerError> {
         compile_parsed(e, &parse(&doc_json)?)
+    }
+
+    /// The document caps every `compile_doc` and `derive_target` enforces.
+    pub fn limits(_e: &Env) -> DocLimits {
+        DocLimits::V1(doc_limits())
+    }
+
+    /// The CANON version and the fragment hash domain tags this compiler
+    /// produces.
+    pub fn capabilities(e: &Env) -> CompilerCapabilities {
+        CompilerCapabilities {
+            canon_version: perch_ir::CANON_VERSION,
+            rule_hash_tag: String::from_bytes(e, perch_recovery_interface::fragment::RULE_DOMAIN),
+            config_hash_tag: String::from_bytes(e, perch_recovery_interface::config::CONFIG_DOMAIN),
+        }
     }
 
     /// Derive a recovery target (`docs/recovery/spec.md` §7): `source_json`

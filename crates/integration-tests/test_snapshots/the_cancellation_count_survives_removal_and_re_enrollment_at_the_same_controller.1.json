@@ -34,7 +34,8 @@
                 },
                 {
                   "u32": 0
-                }
+                },
+                "void"
               ]
             }
           },
@@ -146,7 +147,8 @@
                 },
                 {
                   "u32": 0
-                }
+                },
+                "void"
               ]
             }
           },
@@ -173,7 +175,8 @@
                 },
                 {
                   "u32": 0
-                }
+                },
+                "void"
               ]
             }
           },
@@ -2058,6 +2061,14 @@
                     },
                     {
                       "key": {
+                        "symbol": "Revision"
+                      },
+                      "val": {
+                        "u64": "3"
+                      }
+                    },
+                    {
+                      "key": {
                         "vec": [
                           {
                             "symbol": "Count"
@@ -2225,7 +2236,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM",
+              "contract": "CCECBBCM5WV6KHZULIO6ORWWBT35ZKVLEJTO6ALIOOULRXAVD7JHICO6",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -2248,7 +2259,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY",
+              "contract": "CCUM47GUADDA5CQ54CSPPGAKFXGJQHNZYKP7HQH5Z3UX3E2TBTSAINAD",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {
@@ -2271,7 +2282,7 @@
           "data": {
             "contract_data": {
               "ext": "v0",
-              "contract": "CDC6GSNZCBZGAP3GMM4MNHEGOQKDJBZ5FHAWWHYO7NV6NXMKMGEGVEJV",
+              "contract": "CDUU5QEXGCZ5TJNK35WVVSPYURIIFM5H5ZNWJJW3QDSZB57B66C3DNHQ",
               "key": "ledger_key_contract_instance",
               "durability": "persistent",
               "val": {

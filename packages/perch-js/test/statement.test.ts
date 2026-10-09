@@ -10,6 +10,7 @@ import {
   encodeReplacementSet,
   encodeStatement,
   replacementsHash,
+  sortReplacements,
   statementDigest,
   zkStatementFields,
   type Credential,
@@ -111,5 +112,20 @@ describe('recovery statement parity with statement-v2.json', () => {
     expect(() => encodeStatement({ ...statement(v), account: 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ' })).toThrow(
       /contract/,
     );
+  });
+});
+
+describe('sortReplacements', () => {
+  const owner = { kind: 'delegated' as const, address: 'GA327GGWT6747B57DRWJJ3SWBVIQ354TTDRHR76CVAWO6OBPZ4Z57YGA' };
+  it('orders ids by UTF-8 bytes, which the encoding requires', () => {
+    const r = { signers: ['z', 'a', 'é', 'B'].map((signerId) => ({ signerId, credential: owner })) };
+    const sorted = sortReplacements(r);
+    expect(sorted.signers.map((s) => s.signerId)).toEqual(['B', 'a', 'z', 'é']);
+    expect(() => encodeReplacementSet(r)).toThrow();
+    expect(encodeReplacementSet(sorted).length).toBeGreaterThan(0);
+  });
+  it('refuses a repeated id', () => {
+    const r = { signers: ['a', 'a'].map((signerId) => ({ signerId, credential: owner })) };
+    expect(() => sortReplacements(r)).toThrow(/repeated/);
   });
 });

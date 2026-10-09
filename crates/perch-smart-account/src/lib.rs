@@ -119,6 +119,10 @@ pub enum PerchAccountError {
     Compiler(DocCompilerError),
     #[from_contract_client]
     Recovery(RecoveryError),
+    /// `apply_doc` named an `expected_revision` and the account is at
+    /// another revision: the document was prepared against a configuration
+    /// that has since changed. Last, so every earlier code is unchanged.
+    StaleRevision,
 }
 
 // scerr's composed (root) mode predates sdk 27's spec-shaking marker; the
@@ -158,19 +162,71 @@ pub struct InfraPins {
     pub spending_limit: Address,
 }
 
+/// Everything rule selection and signing need, read at one ledger: what
+/// [`PerchSmartAccount::configuration`] returns.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AccountConfiguration {
+    /// The configuration revision every other field belongs to.
+    pub revision: u64,
+    /// The applied document's `doc_hash`, or `None` before the first apply.
+    pub doc_hash: Option<BytesN<32>>,
+    /// Every installed context rule, with its OZ id.
+    pub rules: Vec<InstalledRule>,
+    pub recovery_controller: Option<Address>,
+    /// The zero-signer recovery rule's OZ id, if one is installed.
+    pub recovery_rule: Option<u32>,
+    /// The `Protected` freeze: zero or one entries (a `Vec` because
+    /// `#[contracttype]` has no conversion for `Option` of a custom struct).
+    /// It is in force while the ledger is below its `until`.
+    pub gate: Vec<FreezeGate>,
+    pub recovery_generation: u64,
+    pub infra: InfraPins,
+}
+
+/// Constants of the deployed account wasm a wallet checks before it builds
+/// anything for this account: what [`PerchSmartAccount::capabilities`]
+/// returns.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AccountCapabilities {
+    /// [`INTERFACE_VERSION`].
+    pub interface_version: u32,
+    /// How the applied `doc_hash` is computed: `canon_v1`, `sha256` of the
+    /// CANON v1 canonical bytes.
+    pub doc_identity: Symbol,
+    /// What a signer signs: `oz_rule_ids`, OZ's
+    /// `sha256(signature_payload || context_rule_ids.to_xdr())`.
+    pub auth_digest: Symbol,
+    /// How a document is applied: `one_tx`, one `apply_doc` transaction.
+    pub apply_modes: Vec<Symbol>,
+    /// [`SNAPSHOT_VERSION`].
+    pub snapshot_version: u32,
+}
+
+/// The account's consumer interface version: the views
+/// ([`PerchSmartAccount::revision`], [`PerchSmartAccount::configuration`],
+/// [`PerchSmartAccount::document`], [`PerchSmartAccount::capabilities`]) and
+/// `apply_doc`'s `expected_revision`.
+pub const INTERFACE_VERSION: u32 = 1;
+/// The layout of [`AccountConfiguration`].
+pub const SNAPSHOT_VERSION: u32 = 1;
+
 /// A scheduled account upgrade (spec §12), bound to the account's recovery
 /// generation.
 pub use perch_recovery_interface::account::UpgradeRequest;
 
-/// Emitted after a document is applied: the new canonical `doc_hash`, and
-/// what changed in the rule set. The rule, signer, and policy mutations
-/// emit nothing themselves (OZ's `_no_events` variants), so this is the
-/// whole record of the change; `applied_doc` serves the document.
+/// Emitted after a document is applied: the new canonical `doc_hash`, the
+/// configuration revision it was applied at, and what changed in the rule
+/// set. The rule, signer, and policy mutations emit nothing themselves (OZ's
+/// `_no_events` variants), so this is the whole record of the change;
+/// `applied_doc` serves the document.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocApplied {
     #[topic]
     pub doc_hash: BytesN<32>,
+    pub revision: u64,
     pub rules_added: u32,
     pub rules_removed: u32,
     pub rules_edited: u32,
@@ -263,6 +319,10 @@ struct PerchStorage {
     installed_rules: PersistentItem<Vec<InstalledRule>>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
+    /// The configuration revision: 0 after the constructor, advanced by one
+    /// in every successful `apply_doc` and every executed upgrade, by nothing
+    /// else. Never decreases.
+    revision: InstanceItem<u64>,
 }
 
 /// The doc-only smart account surface. Implementers get OZ evaluation from
@@ -286,12 +346,26 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// (`docs/recovery/spec.md` §10). `approval_valid_until` is the
     /// freshness bound a `Protected` reconfiguration's recorded approvals
     /// were given for; it is ignored otherwise.
+    ///
+    /// With `expected_revision`, the call refuses with `StaleRevision`
+    /// unless the account is still at that [`Self::revision`], so a document
+    /// prepared against one configuration never overwrites a change made
+    /// since. `None` applies over whatever revision is current. Every
+    /// successful call advances the revision by one, a re-apply of the same
+    /// document included.
     fn apply_doc(
         e: &Env,
         doc_json: Bytes,
         approval_valid_until: u32,
+        expected_revision: Option<u64>,
     ) -> Result<BytesN<32>, PerchAccountError> {
-        apply(e, doc_json, approval_valid_until, rules::Mode::Cheapest)
+        apply(
+            e,
+            doc_json,
+            approval_valid_until,
+            expected_revision,
+            rules::Mode::Cheapest,
+        )
     }
 
     /// Call `target_fn` on `target` as this account (the account becomes
@@ -487,6 +561,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
             RecoveryHooksClient::new(e, c).try_rcv_upgrade(&me, &UpgradeStep::Execute(epoch))??;
         }
         advance_generation(e);
+        advance_revision(e);
         UpgradeExecuted {
             request_id,
             wasm_hash: request.wasm_hash.clone(),
@@ -520,6 +595,53 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// The account's recovery generation (spec §12).
     fn recovery_generation(e: &Env) -> u64 {
         generation(e)
+    }
+
+    /// The configuration revision: 0 after the constructor, advanced by one
+    /// in every successful `apply_doc` (whatever it changes, a re-apply of
+    /// the same document included) and every executed upgrade. Freeze
+    /// changes, recovery attempts, evidence, and cancellations do not
+    /// advance it. Never decreases and never repeats, so unlike `doc_hash` it
+    /// tells A -> B -> A apart.
+    fn revision(e: &Env) -> u64 {
+        revision(e)
+    }
+
+    /// Everything rule selection and signing need, read at one ledger, with
+    /// the revision it belongs to.
+    fn configuration(e: &Env) -> AccountConfiguration {
+        AccountConfiguration {
+            revision: revision(e),
+            doc_hash: PerchStorage::get_applied_doc(e),
+            rules: PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e)),
+            recovery_controller: PerchStorage::get_recovery_controller(e),
+            recovery_rule: PerchStorage::get_recovery_rule(e),
+            gate: match PerchStorage::get_gate(e) {
+                Some(g) => Vec::from_array(e, [g]),
+                None => Vec::new(e),
+            },
+            recovery_generation: generation(e),
+            infra: Self::infra(e),
+        }
+    }
+
+    /// The applied document's canonical bytes with the revision they belong
+    /// to; `None` before the first `apply_doc`.
+    fn document(e: &Env) -> (u64, Option<Bytes>) {
+        (revision(e), PerchStorage::get_applied_doc_bytes(e))
+    }
+
+    /// Constants of this account's wasm: interface and snapshot versions,
+    /// the document identity and authorization digest schemes, and the apply
+    /// modes.
+    fn capabilities(e: &Env) -> AccountCapabilities {
+        AccountCapabilities {
+            interface_version: INTERFACE_VERSION,
+            doc_identity: Symbol::new(e, "canon_v1"),
+            auth_digest: Symbol::new(e, "oz_rule_ids"),
+            apply_modes: Vec::from_array(e, [Symbol::new(e, "one_tx")]),
+            snapshot_version: SNAPSHOT_VERSION,
+        }
     }
 
     /// Extend the account's instance, applied document, and the named
@@ -655,6 +777,16 @@ fn advance_generation(e: &Env) {
     PerchStorage::set_recovery_generation(e, &(generation(e) + 1));
 }
 
+fn revision(e: &Env) -> u64 {
+    PerchStorage::get_revision(e).unwrap_or(0)
+}
+
+fn advance_revision(e: &Env) -> u64 {
+    let next = revision(e) + 1;
+    PerchStorage::set_revision(e, &next);
+    next
+}
+
 fn drop_pending_upgrade(e: &Env) {
     if let Some(request) = PerchStorage::get_pending_upgrade(e) {
         PerchStorage::remove_pending_upgrade(e);
@@ -675,10 +807,14 @@ fn apply(
     e: &Env,
     doc_json: Bytes,
     approval_valid_until: u32,
+    expected_revision: Option<u64>,
     mode: rules::Mode,
 ) -> Result<BytesN<32>, PerchAccountError> {
     let me = e.current_contract_address();
     me.require_auth();
+    if expected_revision.is_some_and(|r| r != revision(e)) {
+        return Err(PerchAccountError::StaleRevision);
+    }
 
     let compiled: CompiledDoc = DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
         .try_compile_doc(&doc_json)??;
@@ -771,6 +907,7 @@ fn apply(
     }
     DocApplied {
         doc_hash: compiled.doc_hash.clone(),
+        revision: advance_revision(e),
         rules_added: delta.rules_added,
         rules_removed: delta.rules_removed,
         rules_edited: delta.rules_edited,
@@ -798,8 +935,15 @@ pub mod testutils {
         e: &Env,
         doc_json: Bytes,
         approval_valid_until: u32,
+        expected_revision: Option<u64>,
     ) -> Result<BytesN<32>, PerchAccountError> {
-        apply(e, doc_json, approval_valid_until, Mode::FullReplace)
+        apply(
+            e,
+            doc_json,
+            approval_valid_until,
+            expected_revision,
+            Mode::FullReplace,
+        )
     }
 
     /// `apply_doc` with every changed rule reconciled by `mode` rather than
@@ -810,7 +954,7 @@ pub mod testutils {
         approval_valid_until: u32,
         mode: Mode,
     ) -> Result<BytesN<32>, PerchAccountError> {
-        apply(e, doc_json, approval_valid_until, mode)
+        apply(e, doc_json, approval_valid_until, None, mode)
     }
 
     /// What applying `doc_json` would do to each rule slot, and what the cost

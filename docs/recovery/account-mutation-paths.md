@@ -31,6 +31,13 @@ mutate rules other than `apply_doc`.
 `recovery_controller: InstanceItem<Address>` — set/cleared only inside
 `apply_doc`, in lockstep with whether the applied document enrolls recovery.
 
+Its configuration `revision: InstanceItem<u64>` (#108) is written in exactly
+two places: advanced by one at the end of every successful `apply_doc`, and
+in `execute_upgrade`. `apply_doc(doc_json, approval_valid_until,
+expected_revision)` refuses right after its authorization check, before
+compiling or writing anything, when `expected_revision` is set and differs
+from it.
+
 ## The recovery controller (`crates/perch-recovery`)
 
 None of these mutate the *account's own* rule set directly — they mutate the

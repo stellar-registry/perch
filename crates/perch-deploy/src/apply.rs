@@ -4,32 +4,42 @@
 //! anti-brick check, atomic whole-rule-set swap — this command only
 //! pre-flights locally for a better error message, prints the canonical
 //! `doc_hash` the reviewer approved, and signs the admin's approval
-//! (PERCH_ADMIN_KEY selecting rule 0 — the one thing the stock stellar CLI
-//! cannot sign yet).
+//! (PERCH_ADMIN_KEY selecting the `admin` rule, found by name in the
+//! account's `configuration()` — the one thing the stock stellar CLI cannot
+//! sign yet). The apply names the revision it read as `expected_revision`,
+//! so it never overwrites a change made after that read.
 
 use anyhow::{bail, Context, Result};
 use stellar_xdr::{ScBytes, ScVal};
 
 use crate::keys::SeedKey;
 use crate::rpc::Rpc;
-use crate::tx::{simulate_read, AuthSpec, InvokeSpec, ReadOutcome};
+use crate::tx::{AuthSpec, InvokeSpec};
+use crate::verify::read_configuration;
 use crate::{scv, tx};
 
-/// The verifier address of the on-chain rule-0 `Signer::External` whose key is
-/// `pubkey`. Reads `get_context_rule(0)` — the same storage `__check_auth`
-/// validates against.
-fn onchain_rule0_verifier(rpc: &Rpc, account: &str, pubkey: &[u8; 32]) -> Result<String> {
-    let rule = match simulate_read(rpc, account, "get_context_rule", vec![ScVal::U32(0)])? {
-        ReadOutcome::Value(ScVal::Map(Some(m))) => m,
-        ReadOutcome::Value(other) => bail!("get_context_rule(0) returned {other:?}"),
-        ReadOutcome::ContractError { message, .. } => {
-            bail!("get_context_rule(0) trapped — is the account deployed? {message}")
-        }
+/// The account's `admin` rule (self-admin, by name, in its
+/// `configuration()` snapshot): its id, the verifier of its
+/// `Signer::External` whose key is `pubkey`, and the snapshot's revision.
+/// Rule ids move when a rule is replaced, so the id is read, never assumed.
+fn onchain_admin(rpc: &Rpc, account: &str, pubkey: &[u8; 32]) -> Result<(u32, String, u64)> {
+    let (revision, rules) = read_configuration(rpc, account)
+        .context("read the account's configuration — is the account deployed?")?;
+    let me = scv::address(account)?;
+    let name = scv::string("admin")?;
+    let admin = rules.iter().find(|(_, r)| {
+        scv::map_get(r, "name") == Some(&name)
+            && scv::map_get(r, "recovery") == Some(&ScVal::Bool(false))
+            && matches!(scv::map_get(r, "context_type"),
+                Some(ScVal::Vec(Some(ctx))) if ctx.get(1) == Some(&me))
+    });
+    let Some((id, rule)) = admin else {
+        bail!("the account has no self-admin rule named admin");
     };
     let ScVal::Vec(Some(signers)) =
-        scv::map_get(&rule, "signers").context("rule 0 has no signers field")?
+        scv::map_get(rule, "signers").context("the admin rule has no signers field")?
     else {
-        bail!("rule 0 signers field is not a vec");
+        bail!("the admin rule's signers field is not a vec");
     };
     for signer in signers.iter() {
         // Signer::External = Vec[Sym("External"), Address(verifier), Bytes(key)]
@@ -43,10 +53,10 @@ fn onchain_rule0_verifier(rpc: &Rpc, account: &str, pubkey: &[u8; 32]) -> Result
             continue;
         };
         if tag.to_utf8_string_lossy() == "External" && key.as_slice() == pubkey {
-            return scv::address_to_string(verifier);
+            return Ok((*id, scv::address_to_string(verifier)?, revision));
         }
     }
-    bail!("PERCH_ADMIN_KEY's public key matches no External signer on the ON-CHAIN rule 0")
+    bail!("PERCH_ADMIN_KEY's public key matches no External signer on the on-chain admin rule")
 }
 
 pub fn run(
@@ -77,11 +87,16 @@ pub fn run(
     let doc_hash = perch_ir::doc_hash_hex(&doc);
     println!("canonical doc_hash: {doc_hash}");
 
-    // The document bytes and an `approval_valid_until` of 0: the account
-    // resolves the compiler + interpreter itself through its pinned stateless
-    // registry, and the freshness bound is read only for a `Protected`
-    // recovery reconfiguration, which needs recorded approvals this tool does
-    // not collect.
+    let key = SeedKey::from_env("PERCH_ADMIN_KEY")?;
+    let (rule_id, verifier, revision) = onchain_admin(rpc, account, &key.public)?;
+
+    // The document bytes, an `approval_valid_until` of 0, and the revision
+    // the admin rule was read at: the account resolves the compiler +
+    // interpreter itself through its pinned stateless registry, the
+    // freshness bound is read only for a `Protected` recovery
+    // reconfiguration, which needs recorded approvals this tool does not
+    // collect, and `expected_revision` refuses the apply (`StaleRevision`)
+    // if the account changed since this read.
     let args = vec![
         ScVal::Bytes(ScBytes(
             doc_json
@@ -91,10 +106,8 @@ pub fn run(
                 .context("document too large for an ScVal bytes value")?,
         )),
         ScVal::U32(0),
+        ScVal::U64(revision),
     ];
-
-    let key = SeedKey::from_env("PERCH_ADMIN_KEY")?;
-    let verifier = onchain_rule0_verifier(rpc, account, &key.public)?;
 
     let spec = InvokeSpec {
         contract: account.to_string(),
@@ -103,12 +116,12 @@ pub fn run(
     };
     let auth_spec = AuthSpec {
         mode: tx::AuthMode::External { verifier },
-        rule_id: 0,
+        rule_id,
         account: account.to_string(),
     };
     if let Some(submitted) = tx::run_signed(rpc, passphrase, &key, &auth_spec, &spec, dry_run)? {
         println!(
-            "applied document {doc_hash} in tx {} at ledger {}",
+            "applied document {doc_hash} over revision {revision} in tx {} at ledger {}",
             submitted.tx_hash, submitted.ledger
         );
         println!(

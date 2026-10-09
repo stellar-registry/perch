@@ -204,6 +204,17 @@ const lessThan = (a: Uint8Array, b: Uint8Array) => {
   return a.length < b.length;
 };
 
+/** A replacement set with its signers in the order the encoding requires:
+ * signer ids ascending by UTF-8 bytes. A repeated id is refused. */
+export function sortReplacements(r: ReplacementSet): ReplacementSet {
+  const keyed = r.signers.map((s) => ({ s, id: enc.encode(s.signerId) }));
+  keyed.sort((a, b) => (lessThan(a.id, b.id) ? -1 : lessThan(b.id, a.id) ? 1 : 0));
+  for (let i = 1; i < keyed.length; i++) {
+    if (!lessThan(keyed[i - 1]!.id, keyed[i]!.id)) throw new Error(`repeated replacement id ${keyed[i]!.s.signerId}`);
+  }
+  return { ...r, signers: keyed.map((k) => k.s) };
+}
+
 /** `statement.md`, "Replacement set". Ids must be strictly ascending by
  * bytes; an unsorted or duplicated list is refused, not normalised. */
 export function encodeReplacementSet(r: ReplacementSet): Uint8Array {

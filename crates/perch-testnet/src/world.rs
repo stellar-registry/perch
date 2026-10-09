@@ -3,6 +3,7 @@
 //! controller, and proof operations every scenario composes.
 
 use anyhow::{bail, Context, Result};
+use perch_account::AccountConfiguration;
 use perch_deploy::keys::SeedKey;
 use perch_recovery::{Attempt, EvidenceDomain};
 use perch_recovery_interface::credential::{Credential, Replacement, ReplacementSet, ZkEnrollment};
@@ -13,7 +14,6 @@ use perch_zk_pool::{LeafPosition, TreeInfo};
 use perch_zk_prover::{Inputs, Toolchain, Tree};
 use sha2::{Digest, Sha256};
 use soroban_sdk::{vec, Address, Bytes, BytesN, IntoVal, Symbol, Val, Vec};
-use stellar_accounts::smart_account::ContextRule;
 use stellar_xdr::ScVal;
 
 use crate::chain::{Auth, Chain, Entries};
@@ -212,29 +212,19 @@ impl<'a> World<'a> {
         })
     }
 
-    /// The id of the account's live rule named `name` (`apply_doc` assigns
-    /// fresh ids every time).
+    /// The id of the account's live rule named `name`, by name in its
+    /// `configuration()` snapshot: ids are assigned when a rule is added and
+    /// kept while it is edited in place, so they move on replacement.
     pub fn rule_id(&self, a: &Acct, name: &str) -> Result<u32> {
-        let count: u32 = self
-            .c
-            .read_as(&a.address, "get_context_rules_count", std::vec![])?;
-        let mut found = 0;
-        let mut best = None;
-        let mut id: u32 = 0;
-        while found < count && id < count * 8 + 64 {
-            if let Ok(rule) = self.c.read_as::<ContextRule>(
-                &a.address,
-                "get_context_rule",
-                std::vec![self.c.sc(id)],
-            ) {
-                found += 1;
-                if rule.name == soroban_sdk::String::from_str(&self.c.env, name) {
-                    best = Some(id);
-                }
-            }
-            id += 1;
-        }
-        best.with_context(|| format!("{}: no rule named {name}", a.label))
+        let config: AccountConfiguration =
+            self.c.read_as(&a.address, "configuration", std::vec![])?;
+        let wanted = soroban_sdk::String::from_str(&self.c.env, name);
+        config
+            .rules
+            .iter()
+            .find(|r| r.name == wanted && (r.recovery == (name == "recovery")))
+            .map(|r| r.id)
+            .with_context(|| format!("{}: no rule named {name}", a.label))
     }
 
     pub fn owner_auth<'k>(
@@ -369,7 +359,7 @@ impl<'a> World<'a> {
     // --- account calls -----------------------------------------------------
 
     fn apply_args(&self, doc: &Bytes, valid_until: u32) -> std::vec::Vec<ScVal> {
-        std::vec![self.c.sc(doc.clone()), self.c.sc(valid_until)]
+        std::vec![self.c.sc(doc.clone()), self.c.sc(valid_until), ScVal::Void]
     }
 
     pub fn apply(
@@ -731,7 +721,7 @@ impl<'a> World<'a> {
     }
 
     fn complete_args(&self, target: &Bytes) -> std::vec::Vec<ScVal> {
-        std::vec![self.c.sc(target.clone()), self.c.sc(0u32)]
+        std::vec![self.c.sc(target.clone()), self.c.sc(0u32), ScVal::Void]
     }
 
     /// Complete through the recovery rule. The entry is built, not

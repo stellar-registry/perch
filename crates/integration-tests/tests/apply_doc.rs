@@ -20,7 +20,7 @@ fn setup() -> World {
 
 fn apply_fixture(w: &World) -> BytesN<32> {
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    w.account_client().apply_doc(&doc, &0)
+    w.account_client().apply_doc(&doc, &0, &None)
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn reapply_installs_exactly_the_new_rule_set() {
   ]
 }}"#
     );
-    let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()), &0);
+    let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()), &0, &None);
 
     assert_ne!(first, second);
     assert_eq!(client.applied_doc_hash(), Some(second));
@@ -138,7 +138,7 @@ fn doc_without_admin_rule_is_rejected_anti_brick() {
 }}"#
     );
     assert!(client
-        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0)
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0, &None)
         .is_err());
     // Nothing changed: the constructor's rule 0 is still the only rule.
     assert_eq!(client.get_context_rules_count(), 1);
@@ -165,7 +165,7 @@ fn doc_for_another_network_is_rejected() {
 
     let client = w.account_client();
     let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
-    assert!(client.try_apply_doc(&doc, &0).is_err());
+    assert!(client.try_apply_doc(&doc, &0, &None).is_err());
     assert_eq!(client.applied_doc_hash(), None);
 }
 
@@ -175,11 +175,11 @@ fn garbage_and_unknown_fields_are_rejected() {
     let client = w.account_client();
     // Not JSON at all.
     assert!(client
-        .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"), &0)
+        .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"), &0, &None)
         .is_err());
     // Unknown field: fail closed, never skipped.
     let doc = fixture().replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
     assert!(client
-        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0)
+        .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0, &None)
         .is_err());
 }

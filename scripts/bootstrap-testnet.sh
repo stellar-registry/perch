@@ -472,23 +472,15 @@ run "${deploy_env[@]}" "$PERCH_DEPLOY" apply \
     --account "$SA" --doc "$DOC" --compiler "$COMPILER" --interpreter "$INTERPRETER"
 run "${deploy_env[@]}" "$PERCH_DEPLOY" verify \
     --account "$SA" --interpreter "$INTERPRETER" --rules "$RULES_OUT"
-# The rule id CI signs under comes from the CHAIN, never hard-coded: apply_doc
-# assigns fresh ids on every apply, so scan the live rules by name with the
-# stock stellar CLI (read-only simulation, no keys).
+# The rule id CI signs under comes from the CHAIN, never hard-coded: rule ids
+# are assigned when a rule is added and change when it is replaced, so select
+# it by name in the account's configuration() snapshot with the stock stellar
+# CLI (read-only simulation, no keys).
 if [ "$DRY_RUN" -eq 0 ]; then
-    CI_RULE_ID=""
-    count="$(stellar contract invoke --id "$SA" "${net_args[@]}" -- get_context_rules_count)" \
-        || die "get_context_rules_count failed"
-    found=0 id=0 ceiling=$((count * 8 + 64))
-    while [ "$found" -lt "$count" ] && [ "$id" -lt "$ceiling" ]; do
-        if rule_json="$(stellar contract invoke --id "$SA" "${net_args[@]}" \
-            -- get_context_rule --context_rule_id "$id" 2>/dev/null)"; then
-            found=$((found + 1))
-            [ "$(jq -er '.name' <<<"$rule_json")" = "ci-publish" ] && CI_RULE_ID="$id"
-        fi
-        id=$((id + 1))
-    done
-    [ -n "$CI_RULE_ID" ] || die "ci-publish rule not found on-chain after apply"
+    config_json="$(stellar contract invoke --id "$SA" "${net_args[@]}" -- configuration)" \
+        || die "configuration failed"
+    CI_RULE_ID="$(jq -er '[.rules[] | select(.name == "ci-publish" and (.recovery | not)) | .id][0]' \
+        <<<"$config_json")" || die "ci-publish rule not found on-chain after apply"
 else
     # dry-run prediction for a fresh account: the constructor consumed id 0;
     # apply_doc assigns 1..n in document order.

@@ -757,7 +757,7 @@ fn a_perch_account_guards_another_at_its_own_controller_until_it_is_frozen() {
     let root = w.invocation(
         &g_account,
         "apply_doc",
-        std::vec![w.sc(g_bytes.clone()), w.sc(0u32)],
+        std::vec![w.sc(g_bytes.clone()), w.sc(0u32), w.sc(None::<u64>)],
     );
     w.env.set_auths(&[w.delegated_entry(
         &g_account,
@@ -765,7 +765,7 @@ fn a_perch_account_guards_another_at_its_own_controller_until_it_is_frozen() {
         w.rule_id(&g_account, "admin"),
         root,
     )]);
-    g_client.apply_doc(&g_bytes, &0);
+    g_client.apply_doc(&g_bytes, &0, &None);
     w.env.set_auths(&[]);
 
     let mut r = w.recovery("loss", Mode::Guardian);
@@ -904,11 +904,11 @@ fn one_accounts_completion_never_spends_anothers_nullifier() {
     let root = w.invocation(
         &other,
         "apply_doc",
-        std::vec![w.sc(other_doc.clone()), w.sc(0u32)],
+        std::vec![w.sc(other_doc.clone()), w.sc(0u32), w.sc(None::<u64>)],
     );
     w.env
         .set_auths(&[w.delegated_entry(&other, &other_key, w.rule_id(&other, "admin"), root)]);
-    other_client.apply_doc(&other_doc, &0);
+    other_client.apply_doc(&other_doc, &0, &None);
     w.env.set_auths(&[]);
 
     // It completes a recovery whose evidence carries the victim's nullifier.
@@ -933,10 +933,10 @@ fn one_accounts_completion_never_spends_anothers_nullifier() {
     let root = w.invocation(
         &other,
         "apply_doc",
-        std::vec![w.sc(target.clone()), w.sc(0u32)],
+        std::vec![w.sc(target.clone()), w.sc(0u32), w.sc(None::<u64>)],
     );
     w.env.set_auths(&[w.recovery_rule_entry_for(&other, root)]);
-    other_client.apply_doc(&target, &0);
+    other_client.apply_doc(&target, &0, &None);
     w.env.set_auths(&[]);
     assert!(w.ctl().nullifier_spent(&other, &victim_n));
     assert!(!w.ctl().nullifier_spent(&w.account, &victim_n));
@@ -981,7 +981,7 @@ fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
     root.sub_invocations = std::vec![w.invocation(
         &w.account,
         "apply_doc",
-        std::vec![w.sc(target.clone()), w.sc(0u32)],
+        std::vec![w.sc(target.clone()), w.sc(0u32), w.sc(None::<u64>)],
     )]
     .try_into()
     .unwrap();

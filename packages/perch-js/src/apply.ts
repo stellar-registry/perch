@@ -35,7 +35,10 @@ export interface PreparedStep {
    *  (the hash of its preimage: network, nonce, expiration, invocation). */
   signaturePayload: Uint8Array;
   fee: FeeEstimate;
-  /** Attach the account's `AuthPayload` (`ScVal` XDR) and submit. */
+  /** Attach the account's `AuthPayload` (`ScVal` XDR) and submit. A failure
+   *  should throw an error with the host's `diagnosticEvents` (base64
+   *  `DiagnosticEvent` XDR, see `SubmissionFailure`), from which
+   *  `mapSubmissionError` types it. */
   submit(authPayload: Uint8Array): Promise<SubmittedStep>;
 }
 

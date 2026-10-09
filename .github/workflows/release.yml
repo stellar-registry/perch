@@ -249,9 +249,10 @@ jobs:
           # Each contract's changelog/version scope = its own crate tree + the
           # intra-workspace lib crates it embeds, so a lib change re-releases the
           # contract that ships it. Update these lists if a contract's perch deps
-          # change; a miss just means that release needs a manual version bump.
-          # A bare name is a crate under crates/; an entry with a slash is a
-          # repo path (perch-zk-adapter compiles in vendor/'s verifier).
+          # change: scripts/test-release-scripts.py (CI) fails when a list
+          # misses a crate the contract links. A bare name is a crate under
+          # crates/; an entry with a slash is a repo path (perch-zk-adapter
+          # compiles in vendor/'s verifier).
           paths_for() { case "$1" in
             perch-interpreter) echo "perch-interpreter perch-program";;
             perch-doc-compiler) echo "perch-doc-compiler perch-compile perch-ir perch-program perch-recovery-interface";;
@@ -283,9 +284,19 @@ jobs:
                 *) inc+=(--include-path "crates/$d/**");;
               esac
             done
+            # Build inputs no crate tree holds (the locked external packages
+            # the contract links, the workspace pins it inherits, the release
+            # profile, the toolchain) change its wasm without touching a scoped
+            # path, often in a chore(deps) commit cliff.toml skips: each change
+            # since its last tag counts as one fix(deps) commit, so a re-pin
+            # of the OZ fork or soroban-sdk re-releases every contract linking
+            # it. A release commit's own version bumps are not such a change.
+            deps_out=$(python3 scripts/release-deps.py cliff-args "$c") || { echo "::error::scripts/release-deps.py failed for $c"; exit 1; }
+            deps=()
+            [ -z "$deps_out" ] || mapfile -t deps <<<"$deps_out"
             # feat -> minor, fix -> patch; pre-1.0 breaking stays minor (cliff.toml).
             # Returns the crate's current version when nothing is releasable.
-            next_tag=$(git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" --bumped-version 2>/dev/null) || true
+            next_tag=$(git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" "${deps[@]}" --bumped-version 2>/dev/null) || true
             next_ver=${next_tag#"$c"-v}
             cur=$(grep -m1 '^version = "' "crates/$c/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')
             [ -n "$next_ver" ] || continue
@@ -294,7 +305,7 @@ jobs:
             # already tagged this version on the release-PR merge push).
             [ "$(printf '%s\n%s\n' "$cur" "$next_ver" | sort -V | tail -1)" = "$next_ver" ] || continue
             sed -i "s|^version = \"[^\"]*\"|version = \"$next_ver\"|" "crates/$c/Cargo.toml"
-            git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" --bump -o "crates/$c/CHANGELOG.md" 2>/dev/null
+            git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" "${deps[@]}" --bump -o "crates/$c/CHANGELOG.md" 2>/dev/null
             summary="${summary}- \`$c\`: $cur -> $next_ver"$'\n'
             echo "bump $c: $cur -> $next_ver"
             bumped="${bumped}$c=$next_ver"$'\n'

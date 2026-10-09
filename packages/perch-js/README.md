@@ -114,16 +114,33 @@ keep ids across revisions. `signingDigest` is what every signer signs: OZ's
 the account auth entry's Soroban payload. `buildAuthPayload` is the `ScVal`
 XDR of OZ's `AuthPayload` for that entry's `signature`.
 
-The pre-sign check guarantees the selection was current when it was signed,
-not when it executes. A transaction whose selected rule was removed or
-replaced since fails closed on chain: the account's authentication fails
-with `ContextRuleNotFound`, which `mapSubmissionError(err, { account, ... })`
-turns into `StaleSelection`. One whose rule was edited in place executes
-under the edited rule. `mapSubmissionError` reads the host's diagnostic
-event log in the error and maps a code only when the account raised it
-(its `apply_doc`, or its `__check_auth` through the host's "failed account
-authentication" event), since the same number means something else in
-another contract.
+**Only `apply_doc` is bound to a revision.** The pre-sign check guarantees
+the selection was current when it was signed, not when it executes. An
+ordinary signature binds the invocation and the selected rule ids (OZ's
+digest), not a configuration revision, so between signing and inclusion:
+
+- a selected rule that was removed or replaced fails closed on chain: the
+  account's authentication fails with `ContextRuleNotFound`, which
+  `mapSubmissionError` turns into `StaleSelection`;
+- a selected rule that was **edited in place keeps its id, and the
+  transaction executes under the edited rule**.
+
+Binding a revision into ordinary authorization would change the digest
+every signer signs; RFC
+[#109 §3b](https://github.com/stellar-registry/perch/issues/109) defers it.
+Signatures for ordinary transactions should therefore have a short expiration
+(`signatureExpirationLedger`). Document changes are covered: `apply_doc`'s
+`expected_revision` refuses one signed at a revision the account has left.
+
+`mapSubmissionError(err, { account, ... })` maps a code only when the
+account raised it (its `apply_doc`, or its `__check_auth` through the host's
+"failed account authentication" event), since the same number means
+something else in another contract. It reads the host's diagnostic events as
+`DiagnosticEvent` XDR: from `context.diagnosticEvents`, or from a
+`diagnosticEvents` array on the thrown error (a simulation's `events`, a
+transaction's `diagnosticEventsXdr`). Only without either does it fall back
+to searching the error's rendered text, which depends on how the SDK and the
+host render errors, so transports should attach the events.
 
 ### Limits and capabilities
 
@@ -169,7 +186,10 @@ the account's auth entry (address credentials, a fresh nonce, an
 expiration), and returns that entry's signature payload with a fee
 estimate. Its `submit(authPayload)` puts `authPayload` in the entry's
 `signature`, simulates in enforcing mode (recording-mode simulation never
-runs the account's `__check_auth`), and sends. The same caller code runs
+runs the account's `__check_auth`), and sends. When it fails, it should
+throw an error carrying the host's `diagnosticEvents` (base64
+`DiagnosticEvent` XDR), so the failure is typed from structured data. The
+same caller code runs
 against a backend that takes several transactions: a step that already
 landed is skipped when an operation is retried or started again.
 

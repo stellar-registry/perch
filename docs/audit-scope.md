@@ -10,11 +10,16 @@ so a later swap is a delta review":
 2. **The OZ materialization layer**: `rules.rs`, `apply`, the caps, and the
    OZ fork deltas.
 
-The audit covers a frozen commit, not pull requests. The paths below are as of
-the release head (`fm/perch-epic99-release-p8`). "Introduced in" gives the
-pull request and commits that wrote or last reshaped each path, so a reviewer
-can read them in the order they were built. Record the frozen commit here when
-the audit starts.
+The audit covers a frozen commit, not pull requests.
+
+**Frozen commit: not yet recorded.** It will be the commit on `main` that
+merges the whole #99 stack (its top is #104), recorded here with its date
+before the audit starts. It does not exist yet: until then fixes still merge
+forward through the stack, and every head moves.
+
+The paths below are as of the release head (`fm/perch-epic99-release-p8`).
+"Introduced in" gives the pull request and commits that wrote or last
+reshaped each path, so a reviewer can read them in the order they were built.
 
 Code that sits outside any perch diff is part of the scope: the
 `stellar-accounts` fork the workspace pins (see

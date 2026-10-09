@@ -247,7 +247,8 @@ steps, both from theahaco/stellar-contracts-OZ, the OZ fork this repo pins:
   spending-limit policy installs and uninstalls quietly. The account emits
   one `DocApplied` per application: `doc_hash` is its topic, and the
   delta's counts are its data (rules added, removed, and edited in place;
-  signers and policies added and removed). `applied_doc` serves the
+  signers and policies added and removed by the in-place edits; a rule
+  replaced whole is in no signer or policy count). `applied_doc` serves the
   document, and `CredentialRevoked` is unchanged. Events drop to at most 31%
   anywhere measured. With no events to price, the reconcile chooses each
   rule's path by ledger writes, counted per OZ operation.

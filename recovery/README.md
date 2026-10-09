@@ -24,10 +24,13 @@ signers and rules.
    on, each property pinned by an enforcing-auth test.
 4. [`budgets.md`](budgets.md): resource budgets to be measured, and the rule
    that picks the pool depth.
+5. [`implementation.md`](implementation.md): where each part of the spec
+   is implemented and tested, and the choices made where the spec leaves
+   room.
 
-**Pre-spec documents.** These describe the implementation that the spec
-replaces. They are kept for the reasoning they record, not as current
-behaviour:
+**Pre-spec documents.** These describe the first controller and account
+wiring, which the spec's implementation has replaced. They are kept for the
+reasoning they record, not as current behaviour:
 
 - [`pending-activity-policy.md`](pending-activity-policy.md): the open
   decision that spec D1 resolves.

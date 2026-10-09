@@ -10,9 +10,10 @@ Both profiles block conflicting policy changes during the authorized window,
 and an attempt without sufficient evidence blocks nothing. The
 `pending-activity` field is removed (spec §3.1).
 
-**Still release-blocking until implemented** (workstream 3). Until the freeze
-is enforced and tested, no recovery-enabled account should rely on it in
-production. The rest of this page records the question as it was posed.
+**Implemented** (workstream 3, [`implementation.md`](implementation.md)):
+the account's `__check_auth` enforces the freeze from a mirror the
+controller sets, and enforcing-auth tests pin it on every path. The rest of
+this page records the question as it was posed.
 
 ## The question
 

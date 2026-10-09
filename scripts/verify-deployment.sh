@@ -42,13 +42,29 @@ reader="${PERCH_READER:-perch-fetch-reader}"
 stellar keys address "$reader" >/dev/null 2>&1 || stellar keys generate "$reader" >/dev/null 2>&1
 (cd "$repo_root" && cargo build -q -p perch-derive-id)
 derive() { "$repo_root/target/debug/perch-derive-id" "$@" "$(m .network_passphrase)"; }
-view() { stellar contract invoke "${net[@]}" --source-account "$reader" --send=no --id "$1" -- "${@:2}" 2>/dev/null | tr -d '"'; }
-code_hash() { stellar contract info hash "${net[@]}" --id "$1"; }
+# A chain read that fails prints `unavailable: <its error>`, which `check`
+# reports apart from a mismatch: an RPC outage is not a wrong deployment.
+read_chain() { # command...
+    local out err
+    err="$(mktemp)"
+    if out="$("$@" 2>"$err")"; then
+        printf '%s' "$out"
+    else
+        printf 'unavailable: %s' "$(tr -s '\n' ' ' <"$err" | cut -c1-200)"
+    fi
+    rm -f "$err"
+}
+view() { read_chain stellar contract invoke "${net[@]}" --source-account "$reader" --send=no --id "$1" -- "${@:2}" | tr -d '"'; }
+code_hash() { read_chain stellar contract info hash "${net[@]}" --id "$1"; }
 
 failures=0
+unreadable=0
 check() { # label want got
     if [ "$2" = "$3" ]; then
         printf '  ok    %s\n' "$1"
+    elif [[ "$3" == unavailable:* ]]; then
+        printf '  ERROR %s: %s\n' "$1" "$3"
+        unreadable=$((unreadable + 1))
     else
         printf '  FAIL  %s: want %s, got %s\n' "$1" "$2" "$3"
         failures=$((failures + 1))
@@ -71,8 +87,12 @@ for name in $(jq -r '.contracts | keys[]' "$manifest"); do
             "$(view "$registry" fetch_hash --wasm_name "$name" --version "\"$(c .version)\"")"
     else
         tmp="$(mktemp)"
-        stellar contract fetch "${net[@]}" --wasm-hash "$hash" -o "$tmp" >/dev/null 2>&1 || true
-        check "$name installed" "$hash" "$( [ -s "$tmp" ] && { sha256sum "$tmp" 2>/dev/null || shasum -a 256 "$tmp"; } | cut -d' ' -f1)"
+        fetched="$(read_chain stellar contract fetch "${net[@]}" --wasm-hash "$hash" -o "$tmp")"
+        if [[ "$fetched" == unavailable:* ]]; then
+            check "$name installed" "$hash" "$fetched"
+        else
+            check "$name installed" "$hash" "$( { sha256sum "$tmp" 2>/dev/null || shasum -a 256 "$tmp"; } | cut -d' ' -f1)"
+        fi
         rm -f "$tmp"
     fi
     for dep in $(jq -r --arg n "$name" '.contracts[$n].pins // {} | keys[]' "$manifest"); do
@@ -100,14 +120,16 @@ if [ -f "$exercise" ]; then
 fi
 for account in $accounts; do
     check "account $account code" "$(m '.contracts["perch-account"].sha256')" "$(code_hash "$account")"
-    infra="$(stellar contract invoke "${net[@]}" --source-account "$reader" --send=no --id "$account" -- infra 2>/dev/null || echo '{}')"
-    check "account $account compiler" "$(addr_of perch-doc-compiler)" "$(jq -r .doc_compiler <<<"$infra")"
-    check "account $account interpreter" "$(addr_of perch-interpreter)" "$(jq -r .interpreter <<<"$infra")"
-    check "account $account spending limit" "$(addr_of perch-spending-limit)" "$(jq -r .spending_limit <<<"$infra")"
+    infra="$(read_chain stellar contract invoke "${net[@]}" --source-account "$reader" --send=no --id "$account" -- infra)"
+    field() { if [[ "$infra" == unavailable:* ]]; then printf '%s' "$infra"; else jq -r ".$1" <<<"$infra"; fi; }
+    check "account $account compiler" "$(addr_of perch-doc-compiler)" "$(field doc_compiler)"
+    check "account $account interpreter" "$(addr_of perch-interpreter)" "$(field interpreter)"
+    check "account $account spending limit" "$(addr_of perch-spending-limit)" "$(field spending_limit)"
 done
 
-if [ "$failures" -gt 0 ]; then
-    echo "$failures check(s) failed" >&2
+if [ "$failures" -gt 0 ] || [ "$unreadable" -gt 0 ]; then
+    [ "$failures" -eq 0 ] || echo "$failures check(s) failed" >&2
+    [ "$unreadable" -eq 0 ] || echo "$unreadable check(s) could not read the chain (RPC unavailable?): rerun before reading them as failures" >&2
     exit 1
 fi
 echo "all checks passed"

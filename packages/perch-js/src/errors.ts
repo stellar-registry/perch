@@ -3,6 +3,8 @@
 // is one of these, so a wallet can tell "re-read and retry" from "show the
 // user" without parsing messages.
 
+import { accountErrorCodesFromEvents } from './diagnostics.js';
+
 /** Base class: `code` is stable, `message` is for people. */
 export class PerchError extends Error {
   constructor(
@@ -137,7 +139,8 @@ function errorText(err: unknown): string {
 
 /**
  * The contract error codes `account` itself raised, read from the host's
- * diagnostic event log in a failed submission's rendered error:
+ * diagnostic event log in a failed submission's rendered error (the
+ * fallback when no diagnostic event XDR is available):
  *
  * - `call`: raised by one of the account's entry points (`apply_doc`'s
  *   `StaleRevision`), the event `contract:<account>, topics:[error,
@@ -163,6 +166,14 @@ export function accountErrorCodes(err: unknown, account: string): { call: number
   return { call, auth };
 }
 
+/** What a transport may attach to the error it throws for a failed
+ *  submission: the host's diagnostic events as `DiagnosticEvent` XDR
+ *  (base64 or bytes), as RPC returns them (a simulation's `events`, a
+ *  transaction's `diagnosticEventsXdr`). */
+export interface SubmissionFailure {
+  diagnosticEvents?: readonly (string | Uint8Array)[];
+}
+
 /**
  * Map a failed submission to a typed error where perch-js recognizes it, by
  * the code and the contract that raised it: `account`'s authentication
@@ -170,14 +181,26 @@ export function accountErrorCodes(err: unknown, account: string): { call: number
  * `AccountFrozen` is {@link AccountFrozen}, and `account`'s `apply_doc`
  * refusing with `StaleRevision` is {@link StaleRevision}. Anything else,
  * including those numbers raised by another contract, is returned as is.
- * The input is whatever the transport threw; its message (and `cause`) is
- * searched for the host's diagnostic event log.
+ *
+ * The host's diagnostic events are read from `context.diagnosticEvents` or
+ * the error's own `diagnosticEvents` ({@link SubmissionFailure}), decoded
+ * from XDR. Only when neither is given is the error's rendered text (its
+ * message and `cause`) searched instead, which depends on how the SDK and
+ * the host render errors: transports should attach the events.
  */
 export function mapSubmissionError(
   err: unknown,
-  context: { account: string; ruleIds: readonly number[]; revision: bigint },
+  context: {
+    account: string;
+    ruleIds: readonly number[];
+    revision: bigint;
+    diagnosticEvents?: readonly (string | Uint8Array)[];
+  },
 ): unknown {
-  const { call, auth } = accountErrorCodes(err, context.account);
+  const events = context.diagnosticEvents ?? (err as SubmissionFailure | undefined)?.diagnosticEvents;
+  const { call, auth } = events
+    ? accountErrorCodesFromEvents(events, context.account)
+    : accountErrorCodes(err, context.account);
   if (auth.includes(ERROR_CODES.contextRuleNotFound)) return new StaleSelection(context.ruleIds);
   if (auth.includes(ERROR_CODES.accountFrozen)) return new AccountFrozen(undefined, undefined);
   if (call.includes(ERROR_CODES.accountStaleRevision)) return new StaleRevision(context.revision, undefined);

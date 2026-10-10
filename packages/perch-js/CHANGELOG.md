@@ -4,22 +4,12 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [Unreleased]
+## [0.3.2] - 2026-10-10
 
-### ⚠️ Contract interface changes this release depends on
+### 💼 Other
 
-- The account's `apply_doc` takes a third argument, `expected_revision: Option<u64>`, so every caller that builds the invocation (or its auth entry) must pass it, `Void` for none. In this repo `perch-deploy`, `perch-testnet`, and the regenerated `perch-contracts` bindings are updated; `perch-relay` does not build `apply_doc`. Callers outside the repo, such as Nido's `buildApplyDocTx` and recovery `completionOperation`, need the change.
-- Only `apply_doc` is revision-bound. An ordinary signature can still execute after an in-place edit of its selected rule (RFC #109 §3b defers binding it).
-
-### 🚀 Features
-
-- Consumer interface (#108): `readSnapshot` and `assertRevision` (reads at one configuration revision), `selectRules` by name and scope, `signingDigest` and `buildAuthPayload` (pinned against the account's own encodings), `checkLimits` and the compiler's `limits()`, typed errors (`StaleRevision`, `StaleSelection`, `OverLimits`, `AccountFrozen`, ...), `applyDocument` with `oneTransactionBackend`, `accountReader` over the generated bindings (checked against the account's pinned compiler), `assertSignable` (revision and freeze immediately before signing), `mapSubmissionError` matching codes by the contract that raised them, `sortReplacements`, `mapSubmissionError` typed from the host's diagnostic event XDR (`decodeDiagnosticEvent`), and freshness checks: snapshot retries keep every observed ledger, and a confirmed apply reports its revision only from a read at least as recent as the confirmation
-
-## [0.3.1] - 2026-09-29
-
-### 🐛 Bug Fixes
-
-- Export RecoveryModeSpec/RecoverySpec from the package root, and accept `recovery` on PolicyRequest/requestToPolicyDoc — PolicyBuilder.recovery() needed both to be usable outside the package (#96)
+- One controller and the shared account capabilities (epic #99 WS3) (#102)
+- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
 
 ## [0.3.0] - 2026-09-24
 

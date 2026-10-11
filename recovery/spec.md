@@ -850,6 +850,24 @@ role; a document rule by its name and compiled scope (context type)**:
   is a different slot (removed and added).
 - An installed rule whose slot the target lacks is removed, before
   anything is added; a target rule whose slot is not installed is added.
+- A document rule whose `not-after-ledger` has already passed at the
+  applying ledger is **dropped** rather than installed: its lowered
+  `valid_until` is below the current sequence, so it authorizes nothing and
+  OZ's `add_context_rule` would refuse it (`PastValidUntil`). Dropping it
+  instead of trapping is what keeps "a document that compiles also installs"
+  true for time-bounded rules, and keeps a recovery target installable when
+  one of its bounded rules (a session or CI key) expires between the
+  baseline's publish and the completion: the completion installs the
+  baseline minus the dead rule. The drop depends only on the applying
+  ledger, so the delta and a full replace still install the same set. A
+  thief who holds the owner key therefore cannot brick compromise recovery
+  by deleting a baseline rule that later expires — the completion drops it
+  deterministically. The anti-brick check (§3.5, §7.3) keeps this from ever
+  stranding the account: a policy-free self-admin rule that carries any
+  `not-after-ledger` — already past or still in the future — does **not**
+  count as the surviving admin rule, so a document whose only admin rule is
+  bounded is refused outright rather than installed and later dropped into a
+  brick.
 
 The installed rule set that results authorizes exactly what a full replace
 would. A full replace takes replacement for every rule and deregisters and

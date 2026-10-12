@@ -32,6 +32,8 @@ Every perch constraint is a stateless predicate over a *single* invocation, this
 CANONICAL.md          normative definition of the canonical form + doc_hash (CANON v1)
 crates/
   perch-ir/           policy document model — canonical JSON, doc_hash, validation
+  perch-schema/       host-side generator for the versioned PolicyDoc JSON Schema
+                      (draft 2020-12), derived from perch-ir's constants; see docs/schema.md
   perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)
   perch-interpreter/  the deployable OZ Policy contract (the policy-evaluation surface)
   perch-compile/      lowering: PolicyDoc → executable plan (OZ call sequence)
@@ -64,7 +66,8 @@ crates/
                       conformance (only-calls), semantic attenuation (narrows)
 packages/
   perch-js/           TypeScript surface, published to npm as @stellar-registry/perch:
-                      schemas, builder, canonical JSON + doc_hash (compile/apply/signing planned)
+                      schemas, builder, canonical JSON + doc_hash (compile/apply/signing planned);
+                      ships the generated policy.schema.json under schemas/ (see docs/schema.md)
   perch-interpreter-js/  interpreter contract client bindings, published to npm as
                       @stellar-registry/perch-interpreter (generated from the wasm;
                       regen via `just bindings-interpreter-js`)
@@ -98,11 +101,14 @@ docs/recovery/        opt-in account recovery: the authoritative spec, statement
 docs/zk/              ZK recovery circuit, pool, adapter, measurements, and the depth decision
 docs/deploy/          build order, manifests, pin verification, and the measured testnet
                       exercise of the stack
+docs/schema.md        the PolicyDoc JSON Schema: generation, drift, release path, versioning,
+                      and the boundary between schema-valid and authorized/canonical
 docs/testnet-deployment.md  verified live-state map of the canonical testnet deployment
 testdata/             golden vectors shared by the Rust and TS suites (frozen)
 testdata/eval/        eval-semantics vectors shared by Rust, the Lean model, and the wasm leg
 testdata/zk/          real-proof ZK recovery fixtures, one per action and pool boundary
 testdata/deploy/      deployment policy-doc template + generated per-network docs (NOT golden)
+testdata/schema/      shared PolicyDoc JSON Schema conformance cases (Rust + perch-js suites)
 ```
 
 The release pipeline publishes the interpreter, the doc compiler, and the

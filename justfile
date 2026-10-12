@@ -32,6 +32,14 @@ bindings-interpreter-js:
     rm -rf "$out"
     echo "regenerated $dst"
 
+# Regenerate the committed PolicyDoc JSON Schema (draft 2020-12) from perch-ir's
+# constants. The artifact is packages/perch-js/schemas/policy.schema.json,
+# shipped in the @stellar-registry/perch npm package. It is generated, never
+# hand-edited; CI fails on drift (perch-schema's drift test under
+# `cargo test --workspace`). See docs/schema.md.
+schema:
+    cargo run -q -p perch-schema --bin perch-schema-gen -- --write
+
 # Build the ZK recovery pool and adapter wasm, plus the depth-24 fallback build
 # of both under target/zk-d24/ (for the depth comparison in docs/zk/).
 zk-wasm:

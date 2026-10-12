@@ -1,0 +1,39 @@
+[package]
+name = "perch-schema"
+description = "Host-side generator for the versioned PolicyDoc JSON Schema (draft 2020-12), derived from perch-ir's constants"
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Host-only tooling: this crate is never a dependency of any deployable
+# contract, so nothing it pulls in (serde_json, and the jsonschema validator
+# used only by its tests) can reach a wasm build. perch-ir stays serde-free and
+# float-free; this generator reads its public constants off-chain and emits the
+# schema. See docs/schema.md "What stays off the contract Wasm build".
+
+[lib]
+doctest = false
+
+[[bin]]
+name = "perch-schema-gen"
+path = "src/bin/perch-schema-gen.rs"
+
+[dependencies]
+# std build (the workspace path dep's default features): the generator reads
+# perch-ir's public limit constants (MAX_SIGNER_KEY_LEN, ACK_SENTINEL) and its
+# shape checks, so the schema and the validator cannot silently diverge.
+perch-ir = { workspace = true }
+# Host-only JSON assembly. Its default Map is a sorted BTreeMap, so the emitted
+# schema is byte-deterministic regardless of assembly order (the drift check
+# relies on this).
+serde_json = "1"
+
+[dev-dependencies]
+# A real draft 2020-12 validator, for the conformance suite that compares the
+# schema's accept/reject against perch-ir's own parser + validator. Tests only;
+# never on any ship path. default-features off drops the remote-$ref HTTP stack
+# (reqwest/tokio/hyper): every $ref in this schema is local (#/$defs/...).
+jsonschema = { version = "0.26", default-features = false }
+perch-ir = { workspace = true }

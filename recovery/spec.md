@@ -940,6 +940,19 @@ Two rules bound that cost:
   `Verifier::canonicalize_key`, called in its batched form
   `batch_canonicalize_key`), so a revoked key cannot return under a
   different encoding. Delegated addresses are already canonical.
+- **A document's declared external keys must already be canonical.** The
+  doc compiler refuses any signer whose `key` is not byte-for-byte its
+  verifier-canonical form (`DocCompilerError::KeyNotCanonicalizable`) rather
+  than silently canonicalizing it — CANON refuses non-canonical input, it does
+  not repair it. This holds for an applied document and for a recovery
+  attempt's replacement keys alike (`derive_target` compiles the target the
+  same way). Two consequences: a document's `doc_hash` and a recovery
+  attempt's `replacements_hash` bind exactly the key bytes the installed
+  credential uses, never a spelling the credential drops; and two signers can
+  no longer hide one physical key under two encodings (e.g. a WebAuthn key
+  with and without its credential-id suffix), which would otherwise read as an
+  independent co-signer. The credential-id a wallet needs to select a passkey
+  is client-side metadata; it is not part of the on-chain key.
 - A spent ZK credential stays dead through its nullifier (§11), and its
   enrollment id can never be enrolled again (§3.4).
 
@@ -1336,6 +1349,27 @@ The account must therefore:
 
 `cap-0071.md` pins the host behaviour this relies on (properties C5, C6,
 and C7).
+
+**External-signer digest binds the account address.** Before OZ's
+`do_check_auth`, the account's `check_auth` re-binds the host's
+`signature_payload` to the account's own 32-byte contract id —
+`sha256(AUTH_ADDR_DOMAIN || account_id || signature_payload)`, where
+`AUTH_ADDR_DOMAIN = "perch/account/auth-addr-v1"` — and OZ then layers the
+selected rule ids on top. The digest an `External` signer authenticates
+against is therefore unique to this account, and `capabilities().auth_digest`
+reports the scheme as `addr_oz_v1` so a client knows which digest to sign.
+This is necessary because Soroban's authorization preimage
+(`HashIdPreimage::SorobanAuthorization`, for a non-delegated custom-account
+credential) binds the invocation, nonce, network and expiration but **not** the
+address of the account whose `__check_auth` runs, and the host's per-account
+nonce namespace prevents reuse only within one account. Without the fold, an
+`External` signature collected for one account is replayable on another that
+shares the key and the selected rule ids. `Signer::Delegated` (CAP-0071)
+signers never consume this digest — the host validates them under
+`SorobanAuthorizationWithAddress`, which is already address-bound — so they are
+unaffected. Off-chain signers (`perch-js`'s `signingDigest`, `perch-deploy`'s
+`perch_auth_digest`) reproduce the fold byte-for-byte; `auth_vectors.rs` pins
+them against the digest the on-chain `check_auth` actually hands a verifier.
 
 **Invariants this section maintains.**
 

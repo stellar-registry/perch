@@ -976,7 +976,7 @@ fn passkeys(seed: u8, n: usize) -> std::vec::Vec<SoftPasskey> {
         .map(|i| {
             let mut s = [seed; 32];
             s[1] = i;
-            SoftPasskey::from_seed(s)
+            canonical_passkey(s)
         })
         .collect()
 }
@@ -1253,7 +1253,7 @@ fn tamper(e: &Env, ev: &ZkEvidence) -> ZkEvidence {
 #[ignore = "needs the built stack and the pinned proving toolchain"]
 fn zk_lost_key_recovery_with_real_proofs_across_a_rollover() {
     let w = world();
-    let a = w.new_account(SoftPasskey::from_seed([11; 32]));
+    let a = w.new_account(canonical_passkey([11; 32]));
 
     // The pool's tree 0 has one slot left.
     let depth = perch_zk_pool::TREE_DEPTH;
@@ -1293,7 +1293,7 @@ fn zk_lost_key_recovery_with_real_proofs_across_a_rollover() {
     );
 
     // The passkey is lost. A new passkey and a new ZK credential replace it.
-    let new_owner = SoftPasskey::from_seed([12; 32]);
+    let new_owner = canonical_passkey([12; 32]);
     let zk2 = Zk {
         secret: field("lost-key secret 2"),
         id: field("lost-key enrollment 2"),
@@ -1389,7 +1389,7 @@ fn zk_lost_key_recovery_with_real_proofs_across_a_rollover() {
 
     // The spent credential can never recover again, and the rotated one can,
     // from the new tree.
-    let next_owner = SoftPasskey::from_seed([13; 32]);
+    let next_owner = canonical_passkey([13; 32]);
     let zk3 = Zk {
         secret: field("lost-key secret 3"),
         id: field("lost-key enrollment 3"),
@@ -1419,7 +1419,7 @@ fn zk_lost_key_recovery_with_real_proofs_across_a_rollover() {
 #[ignore = "needs the built stack and the pinned proving toolchain"]
 fn protected_combined_freeze_and_cancellation_with_real_proofs() {
     let w = world();
-    let a = w.new_account(SoftPasskey::from_seed([21; 32]));
+    let a = w.new_account(canonical_passkey([21; 32]));
     let zk = Zk {
         secret: field("combined secret"),
         id: field("combined enrollment"),
@@ -1434,7 +1434,7 @@ fn protected_combined_freeze_and_cancellation_with_real_proofs() {
     assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
     report("enroll Combined through apply_doc", &w.env);
 
-    let thief_key = SoftPasskey::from_seed([22; 32]);
+    let thief_key = canonical_passkey([22; 32]);
     let zk2 = Zk {
         secret: field("combined thief secret"),
         id: field("combined thief enrollment"),
@@ -1522,7 +1522,7 @@ fn protected_combined_freeze_and_cancellation_with_real_proofs() {
 #[ignore = "needs the built stack and the pinned proving toolchain"]
 fn protected_reconfiguration_and_upgrade_need_real_proofs() {
     let w = world();
-    let a = w.new_account(SoftPasskey::from_seed([31; 32]));
+    let a = w.new_account(canonical_passkey([31; 32]));
     let zk = Zk {
         secret: field("protected secret"),
         id: field("protected enrollment"),
@@ -1667,7 +1667,7 @@ fn the_stack_compiler_hashes_the_canonical_recovery_text() {
 #[ignore = "needs the built stack"]
 fn guardian_only_recovery_needs_no_zk_and_the_loss_owner_can_veto() {
     let w = world();
-    let a = w.new_account(SoftPasskey::from_seed([41; 32]));
+    let a = w.new_account(canonical_passkey([41; 32]));
     let rec = Rec {
         profile: "loss",
         mode: Mode::Guardian,
@@ -1678,7 +1678,7 @@ fn guardian_only_recovery_needs_no_zk_and_the_loss_owner_can_veto() {
     assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
     report("enroll GuardianOnly through apply_doc", &w.env);
 
-    let new_owner = SoftPasskey::from_seed([42; 32]);
+    let new_owner = canonical_passkey([42; 32]);
     let replacements = w.replacements(&new_owner, None);
 
     // The owner vetoes a quorum-authorized attempt.
@@ -1710,7 +1710,7 @@ fn guardian_only_recovery_needs_no_zk_and_the_loss_owner_can_veto() {
 #[ignore = "needs the built stack and the pinned proving toolchain"]
 fn combined_loss_lost_key_recovery_rotates_the_zk_credential() {
     let w = world();
-    let a = w.new_account(SoftPasskey::from_seed([51; 32]));
+    let a = w.new_account(canonical_passkey([51; 32]));
     let zk1 = Zk {
         secret: field("combined loss secret 1"),
         id: field("combined loss enrollment 1"),
@@ -1724,7 +1724,7 @@ fn combined_loss_lost_key_recovery_rotates_the_zk_credential() {
     };
     assert!(w.try_apply(&a, &a.owner, &w.doc(&a.owner, Some(&rec)), 0));
 
-    let new_owner = SoftPasskey::from_seed([52; 32]);
+    let new_owner = canonical_passkey([52; 32]);
     let zk2 = Zk {
         secret: field("combined loss secret 2"),
         id: field("combined loss enrollment 2"),
@@ -1771,7 +1771,7 @@ fn combined_loss_lost_key_recovery_rotates_the_zk_credential() {
 #[ignore = "needs the built stack"]
 fn guardian_protected_compromise_restores_the_baseline_and_revokes_the_thief() {
     let w = world();
-    let a = w.new_account(SoftPasskey::from_seed([61; 32]));
+    let a = w.new_account(canonical_passkey([61; 32]));
     let baseline = w.doc(&a.owner, None);
     let rec = Rec {
         profile: "protected",
@@ -1784,12 +1784,12 @@ fn guardian_protected_compromise_restores_the_baseline_and_revokes_the_thief() {
 
     // The thief signs with the stolen owner key. Adding a signer changes no
     // recovery text, so Protected asks for no condition.
-    let thief = SoftPasskey::from_seed([62; 32]);
+    let thief = canonical_passkey([62; 32]);
     let stolen = w.doc_with(&a.owner, Some(&thief), Some(&rec));
     assert!(w.try_apply(&a, &a.owner, &stolen, 0));
     assert!(w.activity_via(&a, &thief, "thief"));
 
-    let new_owner = SoftPasskey::from_seed([63; 32]);
+    let new_owner = canonical_passkey([63; 32]);
     let replacements = w.replacements(&new_owner, None);
     assert_eq!(
         w.ctl().try_begin_compromise(&a.address, &replacements),
@@ -2390,10 +2390,23 @@ const TRANSITIONS: &[Transition] = &[
     },
 ];
 
+/// A soft passkey whose `key_data` is already its verifier-canonical form:
+/// the bare 65-byte public key, with no credential-id suffix. The document
+/// compiler installs external signers at their canonical key, and the account
+/// matches an authorizing signer against that stored key, so a credential the
+/// account can both install and later authenticate with carries no suffix.
+/// (`a_rejected_signer_transition_changes_nothing` adds a suffix on purpose,
+/// to exercise the refusal of a non-canonical key.)
+fn canonical_passkey(seed: [u8; 32]) -> SoftPasskey {
+    let mut key = SoftPasskey::from_seed(seed);
+    key.credential_id = std::vec::Vec::new();
+    key
+}
+
 fn tkey(i: usize) -> SoftPasskey {
     let mut s = [0x61; 32];
     s[1] = i as u8;
-    SoftPasskey::from_seed(s)
+    canonical_passkey(s)
 }
 
 impl Transition {
@@ -2679,7 +2692,9 @@ fn a_rejected_signer_transition_changes_nothing() {
         (w, a, token)
     };
 
-    // The same passkey twice.
+    // The same passkey under a second credential id: `dup` is tkey(1)'s key
+    // with a credential-id suffix, i.e. a non-canonical spelling of a key
+    // already declared canonically. The compiler refuses it.
     let (w, a, token) = setup();
     let mut dup = tkey(1);
     dup.credential_id = std::vec![0xd0; 16];

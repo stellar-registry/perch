@@ -4,10 +4,19 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.2] - 2026-10-12
+
+### 🐛 Bug Fixes
+
+- *(smart-account)* Bind external signer authorization to the account
+- *(doc-compiler)* Refuse non-canonical webauthn keys
+- *(recovery)* Keep recovery targets installable
+
 ## [0.1.1] - 2026-10-09
 
 ### 💼 Other
 
+- Recovery canonicalization assurance and an honest coverage statement (epic #99) (#104)
 - Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
 
 ## [0.1.0] - 2026-10-09

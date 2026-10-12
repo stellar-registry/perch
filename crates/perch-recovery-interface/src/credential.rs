@@ -415,10 +415,10 @@ mod test {
         assert!(!revoked.contains(&c));
     }
 
-    /// The Copilot finding on 1f92b33: swapping two slots' credentials, or
-    /// "replacing" a slot with its own credential, keeps a replaced
-    /// credential in the target. Rule 8 refuses both at T1, so `revocations`
-    /// never revokes a credential the target installs.
+    /// Swapping two slots' credentials, or "replacing" a slot with its own
+    /// credential, keeps a replaced credential in the target. Rule 8 refuses
+    /// both at T1, so `revocations` never revokes a credential the target
+    /// installs.
     #[test]
     fn swaps_and_no_op_replacements_are_refused() {
         let e = Env::default();

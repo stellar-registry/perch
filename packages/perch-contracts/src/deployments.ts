@@ -9,10 +9,10 @@ export const testnet: Deployment = {
   "network_passphrase": "Test SDF Network ; September 2015",
   "rpc_url": "https://soroban-testnet.stellar.org",
   "channel": "beta",
-  "deployed_at": "2026-10-09T21:39:53Z",
-  "deployed_ledger": 5111647,
+  "deployed_at": "2026-10-12T17:27:53Z",
+  "deployed_ledger": 5160473,
   "source": {
-    "commit": "7ae915dc1ac6ae36cacf6db87794b056923d3b1f",
+    "commit": "7b164b6ea99119569c9ceacdf2860713212f00a9",
     "dirty": false
   },
   "toolchain": {
@@ -22,7 +22,7 @@ export const testnet: Deployment = {
     "scaffold": "scaffold 0.0.27 (stellar-scaffold-cli-v0.0.27-0-g6f1f06c3e8d2cf82573ec214b20d1550e9ce326b)"
   },
   "registry": {
-    "id": "CCUC5RDRGRFFC5VGG7HCB3OMNNSYDFAQOSA7SBGYUM2GDXAJBUWI5TFQ",
+    "id": "CAR2DSSOBJB76GGD6MAAKWUK36Y7I7O3NDWTN7HTIRV5I3XZ27U3ZBVZ",
     "wasm_hash": "4b2d9ea4148474715076e81067cff06b765248d9c4cd7d0e99e53df3e368adec",
     "admin": "GBQQGD4AEWBBAU3TIH56XRHQI5CONAEIOPFMWASOKQMLUEITPZOWQLE7",
     "manager": "GBQQGD4AEWBBAU3TIH56XRHQI5CONAEIOPFMWASOKQMLUEITPZOWQLE7",
@@ -35,13 +35,13 @@ export const testnet: Deployment = {
   },
   "contracts": {
     "perch-doc-compiler": {
-      "version": "0.3.1",
+      "version": "0.3.2",
       "wasm": "perch_doc_compiler.wasm",
-      "sha256": "e0f8aacd3ffba3e5ceb2373049319e62cb238d77280d1303e99074b68d6dfdad",
-      "bytes": 107799,
+      "sha256": "ccea12cd4b2f23d9bce07e3d9d3aaf93c43df79416b22a8c9a122d467b707853",
+      "bytes": 108386,
       "tier": 0,
       "pins": {},
-      "address": "CDHZT7NLQDPMWCUDNUVCYC2EAMGRFWABQO5WDSRJGDQVIDHOWQB2FANB"
+      "address": "CCYSZHRHY7GKT2OYXF6JW332GA2BL6ZKPAWIV6RVC5JW2RNPHQPSW5ZI"
     },
     "perch-interpreter": {
       "version": "0.1.3",
@@ -50,7 +50,7 @@ export const testnet: Deployment = {
       "bytes": 16954,
       "tier": 0,
       "pins": {},
-      "address": "CAI6RPWAJ7Z6MP3HLGMTD3W4P4DTD6BEKPFV7XF6VANC2H7XYAQHIXHP"
+      "address": "CA5JLPEVA3E5X7YEDVABMEM3TML33ZS3I6WL5NDBFIZZAXFYNZPBBWTO"
     },
     "perch-spending-limit": {
       "version": "0.1.2",
@@ -59,7 +59,7 @@ export const testnet: Deployment = {
       "bytes": 12571,
       "tier": 0,
       "pins": {},
-      "address": "CCVXXCAKMROSWAH6QKZ2PUMMH3QUUEUERJQ3CI4XMAWVOMTKKJHYSMTF"
+      "address": "CD3FGRDBG7L5KNJAOQZW5WWKK4E5CQ63DNC3W25B63WEIGYX25NQDN4K"
     },
     "perch-ed25519-verifier": {
       "version": "10.0.0",
@@ -68,7 +68,7 @@ export const testnet: Deployment = {
       "bytes": 1411,
       "tier": 0,
       "pins": {},
-      "address": "CA3WZODTJPP45D3IJDWRF2ZKHUJ7E2X5HB3GYM75KPIHWPSD6NRMQIUO"
+      "address": "CCKJXEVN6GS4NWDGK5PIPPQSVR4FBR3QSZLCIEYSOVYH2PA7BJLUIUOJ"
     },
     "perch-webauthn-verifier": {
       "version": "0.1.0",
@@ -77,7 +77,7 @@ export const testnet: Deployment = {
       "bytes": 11783,
       "tier": 0,
       "pins": {},
-      "address": "CBCCINHRMS3COAV5RHTCUASZLOEC52FCOBR3HMU4FKWJTAHWZTVFTHHY"
+      "address": "CAL7IEAJO7S3SJI4EXESMUNPOEYW6QNR3PQTO7AVHD75YGURSZ5CW27Z"
     },
     "perch-zk-pool": {
       "version": "0.1.1",
@@ -86,7 +86,7 @@ export const testnet: Deployment = {
       "bytes": 46179,
       "tier": 0,
       "pins": {},
-      "address": "CB46EOGM6FSSHO2TNKFWZF5AOIDROPNE6QW75XBKETX5IS757B25WK2Y"
+      "address": "CB3IOX2VW7C5VYKVQMNLQ5DPMNC5WSPEOVJSIRBZKXVHURGXBHII6EP7"
     },
     "perch-zk-adapter": {
       "version": "0.1.1",
@@ -95,40 +95,40 @@ export const testnet: Deployment = {
       "bytes": 68502,
       "tier": 0,
       "pins": {},
-      "address": "CBGN355IPW63XPNOSG4O3EZD46ASBXCM5W55PQHEZXJYAFZXN23BNAWC"
+      "address": "CDLOOCAYOLNIVLGD4ZT6CYCRN23SM7OPO7FOSDUASFPHNAW3VWBMY2WH"
     },
     "perch-recovery": {
-      "version": "0.1.1",
+      "version": "0.1.2",
       "wasm": "perch_recovery.wasm",
-      "sha256": "fb4425cf9e59ffc90122e34831614961ee65ebc0551671d1d0c9ae6ce4456afe",
-      "bytes": 67108,
+      "sha256": "d6e8bfc3b91f7c15b9738a3425f0c321f1badc0896e9a5f062e6f32646c895b0",
+      "bytes": 67119,
       "tier": 0,
       "pins": {},
-      "address": "CDIGZVWVXJT2PVDIAUKLX62LW7DNJBC6SZUSR6SLQ6MNICGCGZ6EEXPR"
+      "address": "CDBIZB3MP7ANOFKIYBRKFX4AODLRODCDZUWMMYVTCFAXA4W2OH6D6LV2"
     },
     "perch-account": {
-      "version": "0.3.1",
+      "version": "0.3.2",
       "wasm": "perch_account.wasm",
-      "sha256": "bbb30174bbd85a2956a2f6146a156769621254011a6bdcac707cf787ce7bcd52",
-      "bytes": 69269,
+      "sha256": "d3d4c28a01b37660c23ac03622b712608d2c0f853b634a597f3cd617e7b66df5",
+      "bytes": 70050,
       "tier": 1,
       "pins": {
-        "perch-doc-compiler": "e0f8aacd3ffba3e5ceb2373049319e62cb238d77280d1303e99074b68d6dfdad",
+        "perch-doc-compiler": "ccea12cd4b2f23d9bce07e3d9d3aaf93c43df79416b22a8c9a122d467b707853",
         "perch-interpreter": "2254f17dd722e5113caee901be96849c13e5a6853a6213d62473abe637ae33e1",
         "perch-spending-limit": "f2f0560ce501ab59144ed71a10349b30bcefaf344ca121c0bd9841577b83c2b7"
       }
     },
     "perch-account-factory": {
-      "version": "0.1.1",
+      "version": "0.1.2",
       "wasm": "perch_account_factory.wasm",
-      "sha256": "b71bd8881bd84798493e9088c30fbd21b9f397ed8cdada1a363e84cd53343a42",
+      "sha256": "f3b55f61a395768e428ad7728fbbddd1f61302666ecdd7ed4e8db8b98ac8d37c",
       "bytes": 4696,
       "tier": 2,
       "pins": {
-        "perch-account": "bbb30174bbd85a2956a2f6146a156769621254011a6bdcac707cf787ce7bcd52",
+        "perch-account": "d3d4c28a01b37660c23ac03622b712608d2c0f853b634a597f3cd617e7b66df5",
         "perch-webauthn-verifier": "9e9fbe7886d9bb149a6e3ee10de15954c57bbdf20f817ed94e1370c01b9c669e"
       },
-      "address": "CDO3IQAR7EF5NFGXK2VI2Q5XU244TDA2IGZUVXHQHOYHHEL3WEJD77OT"
+      "address": "CC2W6KK6VBAAE2QPZ7GOZMOLUJBMSKMB6A4W4ZOAPBVCMCITRNA7DW5E"
     }
   }
 }

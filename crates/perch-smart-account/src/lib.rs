@@ -1146,3 +1146,37 @@ macro_rules! impl_perch_smart_account {
         impl PerchSmartAccount for $ty {}
     };
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use soroban_sdk::{BytesN, Env};
+
+    // Folding the account id into the signed preimage (AUTH_ADDR_DOMAIN) is
+    // what makes an External signer's digest unique per account: two accounts
+    // sharing a key and a signature payload must still demand different
+    // digests, so a signature collected for one cannot authorize the other.
+    // The digest is also deterministic for a fixed account + payload. Its
+    // on-chain/off-chain agreement is pinned by
+    // integration-tests/tests/auth_vectors.rs; its end-to-end replay refusal
+    // by integration-tests/tests/auth_binding.rs.
+    #[test]
+    fn binds_signature_digest_to_the_account_id() {
+        let e = Env::default();
+        let payload = BytesN::from_array(&e, &[7u8; 32]);
+        let account_a = BytesN::from_array(&e, &[0xAA; 32]);
+        let account_b = BytesN::from_array(&e, &[0xBB; 32]);
+
+        let digest_a = bind_signature_payload(&e, &account_a, &payload);
+        let digest_b = bind_signature_payload(&e, &account_b, &payload);
+        assert_ne!(
+            digest_a, digest_b,
+            "a shared payload must not yield a shared digest across accounts"
+        );
+        assert_eq!(
+            digest_a,
+            bind_signature_payload(&e, &account_a, &payload),
+            "digest must be deterministic for a fixed account and payload"
+        );
+    }
+}

@@ -278,6 +278,10 @@ pub struct CompilerCapabilities {
 /// account's only admin rule, because an admin rule that could ever be
 /// dropped fails this check first.
 pub fn admin_survives(rules: &Vec<CompiledRule>) -> bool {
+    // A bounded self-admin rule is excluded (`valid_until.is_none()`): once its
+    // bound passes it can no longer authorize `apply_doc`, so a document whose
+    // only admin rule is bounded is a latent brick and is refused up front.
+    // Regression: integration-tests/tests/recovery_installability.rs.
     rules.iter().any(|r| {
         matches!(r.scope, RuleScope::SelfAdmin)
             && r.valid_until.is_none()

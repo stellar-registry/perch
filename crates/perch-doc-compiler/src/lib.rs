@@ -536,6 +536,7 @@ fn canonical_credentials(
         // a non-canonical spelling would bind bytes the installed (canonical)
         // credential ignores, and could hide a second signer that resolves to
         // the same physical key. CANON refuses non-canonical input.
+        // Regression: integration-tests/tests/key_canonicalization.rs.
         for i in 0..batch.len() {
             let declared = Bytes::try_from_val(e, &batch.get_unchecked(i))
                 .map_err(|_| DocCompilerError::KeyNotCanonicalizable)?;

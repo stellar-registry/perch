@@ -16,6 +16,7 @@
 # then publishes the same bytes in the same order.
 #
 # Usage: scripts/build-stack.sh --registry <C...> [--out <dir>] [--builder scaffold|contract]
+#                               [--provided-tier0 <dir>]
 #   --registry  the content-addressing registry id baked into the account and
 #               the factory as `stateless.id`
 #   --out       where the wasm and build.json land (default target/stack)
@@ -24,6 +25,15 @@
 #               `contract` (core `stellar contract build`: the same code
 #               without that metadata, so other hashes; what CI uses to run
 #               the release-stack suite on a PR's own source)
+#   --provided-tier0  a directory of already-published tier-0 wasm (named
+#               perch_<name>.wasm) to REUSE verbatim instead of building. A
+#               consumer pins the sha256 of the exact bytes on-chain, which a
+#               rebuild under a different toolchain would not reproduce
+#               (scaffold vs scaffold+optimize, unpinned rustc); so a deploy
+#               into a registry that already holds those names (the canonical
+#               constructorless registry) hands this script the fetched bytes
+#               for them, and the account/factory pin those. Tier-0 names with
+#               no file here are built as usual.
 #
 # build.json records each artifact's package, version, sha256, size, tier, and
 # the pins it was built against, plus the commit, builder, and toolchain.
@@ -33,12 +43,15 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out="$repo_root/target/stack"
 registry=""
 builder=scaffold
+provided=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --registry) registry="$2"; shift 2 ;;
         --out) out="$2"; shift 2 ;;
         --builder) builder="$2"; shift 2 ;;
-        -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --provided-tier0) provided="$2"; shift 2 ;;
+        # Print the leading comment block (minus the shebang) as help.
+        -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -61,10 +74,16 @@ mkdir -p "$out"
 artifacts='[]'
 
 build() { # package tier pins-json
-    local pkg="$1" tier="$2" pins="$3" file
-    echo "== tier $tier: $pkg" >&2
-    (cd "$repo_root" && stellar "$builder" build --package "$pkg" --out-dir "$out" >&2)
+    local pkg="$1" tier="$2" pins="$3" file provided_file
     file="$out/${pkg//-/_}.wasm"
+    provided_file="$provided/${pkg//-/_}.wasm"
+    if [ -n "$provided" ] && [ -s "$provided_file" ]; then
+        echo "== tier $tier: $pkg (reused $(basename "$provided_file"))" >&2
+        cp "$provided_file" "$file"
+    else
+        echo "== tier $tier: $pkg" >&2
+        (cd "$repo_root" && stellar "$builder" build --package "$pkg" --out-dir "$out" >&2)
+    fi
     [ -s "$file" ] || { echo "error: $file not produced" >&2; exit 1; }
     artifacts=$(jq -c --arg p "$pkg" --arg v "$(version_of "$pkg")" --arg f "$(basename "$file")" \
         --arg h "$(sha256 "$file")" --argjson s "$(wc -c <"$file" | tr -d ' ')" \

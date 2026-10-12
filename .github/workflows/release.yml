@@ -39,11 +39,14 @@ name: Release
 # factory) is deployed in pin order by scripts/deploy-stack.sh, which writes
 # the deployment manifest (deployments/<network>.json) every consumer's
 # build-time pins are fetched and verified from (scripts/fetch-infra-wasm.sh,
-# docs/deploy/README.md). Its contracts are tagged and version-tracked here
-# like the rest, but are not in the publish-plan allow-list: publishing them
-# to the canonical registry is a separate, deliberate step (see the
-# publish-plan comment). The account and the factory pin what they consume,
-# so their release always follows the publication of their tier-0 pins.
+# docs/deploy/README.md). Its recovery-specific contracts are NOT in the
+# publish-plan allow-list — the `deploy-stack` job below publishes them
+# (authored by the same smart account, signed by the same delegate) and reuses
+# the allow-listed tier-0 the constructorless jobs publish, because the account
+# and factory must pin the EXACT on-chain tier-0 bytes and a rebuild would not
+# reproduce them. That job is gated off (vars.PERCH_DEPLOY_STACK) until the
+# manager bootstraps each recovery-stack name, so merging ships their source
+# and version tracking without an on-chain publish before that is deliberate.
 #
 # All publish halves hang off `needs:` in the SAME run (gated on the
 # detect-releases `releases` output) instead of a tag/release trigger, so they
@@ -459,13 +462,12 @@ jobs:
           # The recovery stack (perch-recovery, perch-zk-pool,
           # perch-zk-adapter, perch-webauthn-verifier, perch-account-factory)
           # is deliberately NOT in this allow-list: it is tagged/versioned
-          # (CONTRACTS above) so its intra-workspace pins stay tracked, but
-          # publishing it to the canonical registry is a separate, deliberate
-          # decision. Until then scripts/deploy-stack.sh deploys it, in pin
-          # order, to its own registry (deployments/testnet.json). Adding
-          # these here also needs the manager's one-time initial publish of
-          # each new name, and the factory must publish after the account
-          # build it pins.
+          # (CONTRACTS above) so its intra-workspace pins stay tracked, but it
+          # is a build-time pin chain, not a contract-agnostic matrix. The
+          # `deploy-stack` job below publishes it to the canonical registry in
+          # pin order (reusing these allow-listed tier-0 bytes for the account's
+          # pins) and records the deployment manifest. That job stays gated off
+          # until the manager's one-time initial publish of each new name.
           ALLOW='["perch-interpreter","perch-doc-compiler","perch-ed25519-verifier","perch-spending-limit"]'
           if [ -n "$DISPATCH_TAG" ]; then
             # Strict allow-list regex, not a prefix glob: the tag and the package
@@ -565,3 +567,175 @@ jobs:
       # perch-ci: the account's ci-publish delegate (also the fee source).
       signing_key: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
       release_token: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Recovery-stack deploy ─────────────────────────────────────────────────
+  # The recovery stack is a build-time pin chain (docs/deploy/README.md), so it
+  # cannot be a contract-agnostic matrix like the constructorless publishes: the
+  # account and factory must be built against the EXACT tier-0 bytes on-chain,
+  # in pin order, and published in that order. scripts/deploy-stack.sh does this;
+  # this job runs its canonical, smart-account-authored mode.
+  #
+  # The account pins the compiler/interpreter/spending-limit. Those (and the
+  # ed25519 verifier) are the ALLOW-listed tier-0 the constructorless jobs above
+  # already published; a rebuild here would not reproduce their bytes (scaffold
+  # vs scaffold+optimize, unpinned rustc in the reusable build — see
+  # docs/deploy/README.md and design step 7), so the account would pin a hash
+  # the registry never deploy_stateless'd. The deploy therefore REUSES those
+  # published bytes (fetched by hash) and publishes only the recovery-specific
+  # names (webauthn verifier, ZK pool/adapter, controller) and the factory,
+  # authored by the perch-author smart account and signed by the CI delegate
+  # through the theahaco/stellar-cli fork — the same authority as the
+  # constructorless publishes.
+
+  # Did THIS run release a recovery-stack contract (the ones deploy-stack
+  # deploys)? Empty ⇒ deploy-stack skips.
+  deploy-plan:
+    needs: detect-releases
+    if: >-
+      !cancelled() && github.event_name == 'push' &&
+      needs.detect-releases.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      any: ${{ steps.plan.outputs.any }}
+    env:
+      RELEASES: ${{ needs.detect-releases.outputs.releases }}
+    steps:
+      - name: Any recovery-stack contract released?
+        id: plan
+        run: |
+          set -euo pipefail
+          # What deploy-stack deploys: the recovery-specific tier-0 (webauthn
+          # verifier, ZK pool/adapter, controller), the account, and the
+          # factory. The allow-list tier-0 (doc-compiler, interpreter,
+          # spending-limit, ed25519) are published by the constructorless jobs
+          # and REUSED by the deploy, not deployed here. A change to a reused
+          # tier-0 re-releases the account/factory (release-pr's paths_for
+          # cascade), so it still lands in this set.
+          DEPLOY_SET="perch-webauthn-verifier perch-recovery perch-zk-pool perch-zk-adapter perch-account perch-account-factory"
+          any=false
+          for c in $DEPLOY_SET; do
+            if jq -e --arg c "$c" 'any(.[]; .package_name == $c)' <<<"$RELEASES" >/dev/null; then
+              any=true; break
+            fi
+          done
+          echo "any=$any" >>"$GITHUB_OUTPUT"
+          if [ "$any" = true ]; then
+            echo "recovery-stack contract(s) released — deploy-stack will run" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "no recovery-stack contract released — deploy-stack skips" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+  # Deploy the recovery stack to the canonical registry, SA-authored, in pin
+  # order, and open a deploy(<network>) PR with the manifest + regenerated
+  # bindings a human merges (testnet; mainnet would add an environment-reviewer
+  # gate before this job — design step, not wired here).
+  #
+  # Gated to run only when vars.PERCH_DEPLOY_STACK == 'true'. The recovery-stack
+  # names are NOT yet in the canonical registry, and a managed registry refuses
+  # a new name without the manager's one-time initial publish (#12
+  # ManagerRequired). Until the manager bootstraps each name (docs/deploy/
+  # README.md "The testnet registry") and sets that variable, this job is
+  # skipped rather than failing every release — the same deliberate-decision
+  # split the publish-plan ALLOW list uses for shipping a contract's source
+  # before its first on-chain publish.
+  deploy-stack:
+    needs: [detect-releases, deploy-plan, constructorless-publish]
+    if: >-
+      !cancelled() &&
+      needs.deploy-plan.outputs.any == 'true' &&
+      vars.PERCH_DEPLOY_STACK == 'true' &&
+      (needs.constructorless-publish.result == 'success' ||
+       needs.constructorless-publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # commit the manifest + bindings onto the deploy branch
+      pull-requests: write # open the deploy(<network>) PR
+      id-token: write # build-provenance attestation
+      attestations: write
+    env:
+      STELLAR_NETWORK: testnet
+      STELLAR_RPC_URL: https://soroban-testnet.stellar.org
+      STELLAR_NETWORK_PASSPHRASE: "Test SDF Network ; September 2015"
+      # The ALLOW-listed tier-0 to reuse (published by the constructorless jobs,
+      # not rebuilt here). Kept in step with publish-plan's ALLOW list.
+      REUSE: "perch-doc-compiler perch-interpreter perch-spending-limit perch-ed25519-verifier"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
+        with:
+          toolchain: stable
+          targets: wasm32v1-none
+      # No dependency cache: this job hands the CI publish seed to `stellar`, so
+      # nothing a poisoned cache could inject may reach that build (same stance
+      # as the constructorless publishes and setup-stellar).
+      - name: Install the smart-account-signing stellar-cli (theahaco fork) and scaffold, checksummed
+        # Version-pinned AND integrity-checked: this job later hands `stellar`
+        # the CI publish seed, so a swapped release asset could exfiltrate it.
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/stellar.tgz \
+            "https://github.com/theahaco/stellar-cli/releases/download/v28.0.0-aha.0/stellar-cli-28.0.0-aha.0-x86_64-unknown-linux-gnu.tar.gz"
+          echo "580a2d469767028e575e1c57ccf55bc5a661c0ee4032fd52aaeabb9098943685  /tmp/stellar.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/stellar.tgz -C /usr/local/bin stellar
+          curl -fsSL -o /tmp/scaffold.tgz \
+            "https://github.com/AhaLabs/scaffold-stellar/releases/download/stellar-scaffold-cli-v0.0.27/stellar-scaffold-cli-v0.0.27-x86_64-unknown-linux-gnu.tar.gz"
+          echo "f24709de57e33155efd72547c9286b522d4360a379bde5af9eeb5519396f10cc  /tmp/scaffold.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/scaffold.tgz -C /usr/local/bin stellar-scaffold
+          stellar --version
+          stellar scaffold --version
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Deploy the stack (smart-account-authored, reusing the published tier-0)
+        # Secrets go through the environment, never argv: STELLAR_ACCOUNT is the
+        # source/fee delegate and STELLAR_SIGN_WITH_KEY signs the account's
+        # publish_hash authorization (the fork discovers its context rule). The
+        # author is the perch-author smart account; the registry is canonical.
+        env:
+          STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
+          STELLAR_SIGN_WITH_KEY: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
+          REGISTRY: ${{ vars.PERCH_REGISTRY_CONTRACT_ID }}
+          AUTHOR: ${{ vars.PERCH_AUTHOR_ADDRESS }}
+        run: |
+          set -euo pipefail
+          scripts/deploy-stack.sh --registry "$REGISTRY" --author "$AUTHOR" --reuse "$REUSE"
+      - name: Collect the freshly built wasm (not the reused tier-0) to attest
+        id: built
+        run: |
+          set -euo pipefail
+          paths=""
+          for pkg in $(jq -r '.artifacts[].package' target/stack/build.json); do
+            case " $REUSE " in *" $pkg "*) continue ;; esac
+            paths="${paths}target/stack/${pkg//-/_}.wasm"$'\n'
+          done
+          {
+            echo "paths<<EOF"
+            printf '%s' "$paths"
+            echo "EOF"
+          } >>"$GITHUB_OUTPUT"
+      - name: Attest build provenance for each deployed wasm
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: ${{ steps.built.outputs.paths }}
+      - name: Regenerate the deployment bindings (@stellar-registry/perch-contracts)
+        run: scripts/bindings-contracts.sh
+      - name: Open the deploy(testnet) manifest PR
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          branch: deploy/testnet
+          delete-branch: true
+          title: "deploy(testnet): recovery stack"
+          commit-message: "deploy(testnet): recovery stack @ ${{ github.sha }}"
+          add-paths: |
+            deployments/testnet.json
+            packages/perch-contracts/src
+          body: >
+            Automated by the `deploy-stack` job: the recovery stack deployed to
+            the canonical `constructorless` registry, smart-account-authored, in
+            pin order, from the tagged `main` commit ${{ github.sha }} (always in
+            `main`'s history, so this record survives any merge method). Merging
+            updates `deployments/testnet.json` and the regenerated
+            `@stellar-registry/perch-contracts` bindings, which flips consumers —
+            and CI's deployed-bytes checks — onto this deployment.

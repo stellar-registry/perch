@@ -5,11 +5,14 @@
 //! # One declaration for the representable limits
 //!
 //! The schema is a *host-side* projection of the authoritative wire contract
-//! that lives in `perch-ir` (`parse.rs` for shape, `validate.rs` for the
-//! representable format/range rules). Every limit the schema can express is
-//! taken from perch-ir — [`perch_ir::MAX_SIGNER_KEY_LEN`] and
-//! [`perch_ir::ACK_SENTINEL`] directly, the strkey/hex shapes behaviourally —
-//! so there is a single place each limit is declared. Two guards keep the
+//! in `perch-ir` (`parse.rs` for shape, `validate.rs` for the representable
+//! format/range rules) and the per-document caps in `perch-doc-compiler`. Every
+//! limit the schema can express is taken from its one declared source —
+//! [`perch_ir::MAX_SIGNER_KEY_LEN`] and [`perch_ir::ACK_SENTINEL`] directly, the
+//! strkey/hex shapes and the `m <= N` / `quorum <= count` / `limit` rules
+//! behaviourally, and the `perch_doc_compiler` caps (`MAX_DOC_SIGNERS`,
+//! `MAX_DOC_RULES`, `MAX_RULE_NAME_BYTES`) read straight from the constants — so
+//! there is a single place each limit is declared. Two guards keep the
 //! projection honest:
 //!
 //! - the **drift** test regenerates the committed artifact and fails if it
@@ -24,8 +27,11 @@
 //!
 //! This crate is host-only. It is a dependency of no deployable contract, uses
 //! `serde_json` only to assemble JSON off-chain, and never compiles to
-//! `wasm32`. perch-ir stays serde-free and float-free; nothing here changes
-//! that. See `docs/schema.md`.
+//! `wasm32`. It reads `perch-doc-compiler`'s caps with `default-features = false`
+//! (so none of that crate's on-chain parser/compiler code is pulled in), and
+//! because nothing on a contract's build graph depends on this crate, none of
+//! it reaches a wasm build. perch-ir stays serde-free and float-free; nothing
+//! here changes that. See `docs/schema.md`.
 
 use serde_json::{json, Value};
 
@@ -61,9 +67,75 @@ pub const SHA256_HEX_PATTERN: &str = "^[0-9a-f]{64}$";
 /// the even-length requirement `hex::decode` imposes, and the `{1,N}` bound is
 /// the decoded-length window `validate` checks — so the one perch-ir constant
 /// drives the schema limit.
+///
+/// The hex class is deliberately case-INSENSITIVE (`[0-9a-fA-F]`): perch-ir
+/// decodes the key with `hex::decode`, which accepts either case and dedupes
+/// physical keys on decoded bytes regardless of case (`validate.rs`). Pinning
+/// this to lowercase would reject keys the parser accepts — a canonical-form
+/// tightening that belongs to CANON v2, not this schema (see `docs/schema.md`).
 #[must_use]
 pub fn signer_key_pattern() -> String {
     format!("^([0-9a-fA-F]{{2}}){{1,{}}}$", perch_ir::MAX_SIGNER_KEY_LEN)
+}
+
+/// Rule names are capped at [`perch_doc_compiler::MAX_RULE_NAME_BYTES`] **bytes**
+/// by the compiler (OZ's context-rule name limit). JSON Schema's `maxLength`
+/// counts Unicode code points, not bytes, so a multi-byte character would let a
+/// code-point count slip past the byte cap. Restricting the name to ASCII makes
+/// one character exactly one byte, so `maxLength` then faithfully encodes the
+/// byte cap. This is the one place the schema is deliberately *stricter* than
+/// the compiler (a non-ASCII name under the byte cap is schema-rejected though
+/// the compiler would accept it); JSON Schema cannot express a UTF-8 byte cap
+/// directly, and failing closed on exotic names is the safe direction for a
+/// review/editing schema. See `docs/schema.md`.
+pub const RULE_NAME_PATTERN: &str = "^[\\x00-\\x7F]*$";
+
+/// The `cap.limit` pattern: a POSITIVE decimal integer as a string. perch-ir
+/// validates it with `cap.limit.parse::<i128>()` then rejects `v <= 0`, so the
+/// parser today accepts an optional leading `+` and leading zeros (an alternate
+/// spelling of the same value) and rejects `0`, a sign-minus, and any non-digit.
+/// This pattern matches that exactly:
+///
+/// - `\+?` — optional leading `+` (the parser accepts it; forbidding it is a
+///   canonical-form rule deferred to CANON v2, `docs/schema.md`);
+/// - `0*` — any run of leading zeros (likewise accepted today, deferred to v2);
+/// - `[1-9][0-9]{0,N-1}` — at least one significant non-zero digit, capping the
+///   SIGNIFICANT digits at `N` = `i128::MAX`'s decimal width. This rejects `0`
+///   and all-zero spellings (positivity, which perch-ir enforces) and any value
+///   with more significant digits than `i128::MAX` can hold (which the parser
+///   rejects as overflow), while leaving the *exact* `i128` upper bound — a
+///   39-digit value above `i128::MAX` — to perch-ir's `parse::<i128>()`.
+#[must_use]
+pub fn limit_pattern() -> String {
+    // The widest a positive i128 gets in decimal (39), computed so the bound is
+    // not a magic number.
+    let max_digits = i128::MAX.to_string().len();
+    format!("^\\+?0*[1-9][0-9]{{0,{}}}$", max_digits - 1)
+}
+
+/// The `if`/`then` chain encoding a referenced-count upper bound (`m <= N`,
+/// `quorum <= guardian count`) that JSON Schema cannot state as arithmetic.
+/// For each list length `len` in `1..=cap`, when the tagged object carries
+/// `list_field` with exactly `len` items, the bounded `bound_field` is
+/// constrained to `maximum: len`. A valid list never exceeds `cap`
+/// (`MAX_DOC_SIGNERS`), so the chain is complete for every document perch-ir
+/// accepts; a longer list is already perch-ir-invalid for other reasons and the
+/// chain simply adds no bound there. See `docs/schema.md`.
+fn count_bound_chain(list_field: &str, bound_field: &str, cap: u32) -> Value {
+    let rules: Vec<Value> = (1..=cap)
+        .map(|len| {
+            json!({
+                "if": {
+                    "required": [list_field, bound_field],
+                    "properties": { list_field: { "minItems": len, "maxItems": len } },
+                },
+                "then": {
+                    "properties": { bound_field: { "maximum": len } },
+                },
+            })
+        })
+        .collect();
+    Value::Array(rules)
 }
 
 /// A `u32` field, with an optional lower bound. `max` is always the `u32`
@@ -129,15 +201,20 @@ pub fn policy_schema() -> Value {
             "signers": {
                 "type": "array",
                 "items": { "$ref": "#/$defs/signerDecl" },
+                "maxItems": perch_doc_compiler::MAX_DOC_SIGNERS,
                 "description":
-                    "Declared signers that rules reference by id. Per-document count and \
-                     size caps (max signers, canonical bytes) are the compiler's \
-                     aggregate bounds, not this schema's — see `docs/schema.md`.",
+                    "Declared signers that rules reference by id. At most \
+                     MAX_DOC_SIGNERS (the compiler's per-document signer cap). The \
+                     canonical-byte budget is a separate aggregate bound the schema \
+                     cannot express — see `docs/schema.md`.",
             },
             "rules": {
                 "type": "array",
                 "items": { "$ref": "#/$defs/rule" },
-                "description": "The policy rules. Order is preserved and significant to the hash.",
+                "maxItems": perch_doc_compiler::MAX_DOC_RULES,
+                "description":
+                    "The policy rules. Order is preserved and significant to the hash. \
+                     At most MAX_DOC_RULES (the compiler's per-document rule cap).",
             },
             "recovery": {
                 "$ref": "#/$defs/recoveryConfig",
@@ -213,7 +290,17 @@ fn policy_defs() -> Value {
             "additionalProperties": false,
             "required": ["name", "scope", "principals"],
             "properties": {
-                "name": { "type": "string", "description": "Human-readable rule name. Uniqueness and the compiler's byte-length cap are enforced outside this schema." },
+                "name": {
+                    "type": "string",
+                    "pattern": RULE_NAME_PATTERN,
+                    "maxLength": perch_doc_compiler::MAX_RULE_NAME_BYTES,
+                    "description":
+                        "Human-readable rule name. Capped at MAX_RULE_NAME_BYTES bytes by \
+                         the compiler; the ASCII pattern makes one character one byte so \
+                         maxLength encodes that byte cap (a non-ASCII name is schema- \
+                         rejected — see `docs/schema.md`). Uniqueness across rules is a \
+                         semantic check (outside this schema).",
+                },
                 "scope": { "$ref": "#/$defs/scope" },
                 "principals": { "$ref": "#/$defs/principals" },
                 "functions": {
@@ -274,6 +361,12 @@ fn policy_defs() -> Value {
         "principals": {
             "description": "Who a rule authorizes, tagged by `type`.",
             "type": "object",
+            // `m <= N` for a threshold rule (its `m` at most its referenced
+            // signer count). Only a `threshold` object carries both `signers`
+            // and `m`, so the chain fires on no other variant. Enumerated up to
+            // MAX_DOC_SIGNERS — a threshold can reference at most that many
+            // declared signers, so this is complete for every valid document.
+            "allOf": count_bound_chain("signers", "m", perch_doc_compiler::MAX_DOC_SIGNERS),
             "oneOf": [
                 {
                     "title": "All (N-of-N)",
@@ -306,8 +399,10 @@ fn policy_defs() -> Value {
                             "description": "Declared signer ids the quorum draws from (the N).",
                         },
                         "m": u32_field(
-                            "How many of `signers` must authorize (the M). Must be at least 1; \
-                             the upper bound m <= N is a cross-reference check (outside this schema).",
+                            "How many of `signers` must authorize (the M). Must satisfy \
+                             1 <= m <= N, where N is this rule's referenced signer count; \
+                             the upper bound is encoded by the principals `allOf` if/then \
+                             chain (`docs/schema.md`).",
                             1,
                         ),
                     },
@@ -421,12 +516,16 @@ fn policy_defs() -> Value {
                 "token": contract_address("Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope when omitted; cap/scope agreement is a cross-reference check (outside this schema)."),
                 "limit": {
                     "type": "string",
-                    "pattern": "^[0-9]+$",
+                    "pattern": limit_pattern(),
                     "description":
                         "Maximum cumulative amount as a decimal string (a string, not a \
                          number, because an i128 amount does not fit a JSON number safely). \
-                         Must parse as a POSITIVE i128 — positivity and the i128 range are \
-                         semantic checks (outside this schema).",
+                         Must be a POSITIVE integer: the pattern rejects `0`, all-zero \
+                         spellings, a sign-minus, and any value with more significant \
+                         digits than an i128 can hold. A leading `+` and leading zeros are \
+                         accepted (the parser accepts them; a single canonical spelling is \
+                         CANON v2, `docs/schema.md`). Only the EXACT i128 upper bound \
+                         remains a semantic check in perch-ir's validator.",
                 },
                 "period-ledgers": u32_field("Rolling-window length in ledgers. Must be non-zero.", 1),
             },
@@ -473,6 +572,14 @@ fn policy_defs() -> Value {
                 "How a recovery attempt is authorized, tagged by `type`. `combined` requires \
                  BOTH a valid proof and a guardian quorum against the same statement.",
             "type": "object",
+            // `quorum <= guardian count` for the guardian-bearing modes
+            // (`guardian-only`, `combined`); `zk-only` carries neither field so
+            // the chain never fires on it. Guardians have no dedicated numeric
+            // cap constant (they are bounded only by the canonical-byte budget),
+            // so this enumerates to MAX_DOC_SIGNERS as a documented depth; a
+            // larger guardian set has `quorum <= count` checked by perch-ir's
+            // validator (`docs/schema.md`, deferred to CANON v2).
+            "allOf": count_bound_chain("guardians", "quorum", perch_doc_compiler::MAX_DOC_SIGNERS),
             "oneOf": [
                 {
                     "title": "guardian-only",
@@ -525,7 +632,7 @@ fn policy_defs() -> Value {
             "items": address("A guardian address (C- or G-address)."),
             "description": "The guardian set: independent principals (not document signers). Non-empty, no duplicates.",
         },
-        "quorum": u32_field("How many guardians must authorize. At least 1; the upper bound quorum <= guardian count is a cross-reference check (outside this schema).", 1),
+        "quorum": u32_field("How many guardians must authorize. Must satisfy 1 <= quorum <= guardian count; the upper bound is encoded by the recoveryMode `allOf` if/then chain, up to MAX_DOC_SIGNERS guardians (`docs/schema.md`).", 1),
         "zkAdapter": contract_address("The ZK adapter the controller calls (C-address)."),
         "zkPool": contract_address("The membership pool whose roots proofs must use (C-address)."),
         "circuitId": sha256_hex("sha256 of the verifier's verification key (64 lowercase hex)."),

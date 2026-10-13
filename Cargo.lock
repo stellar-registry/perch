@@ -1847,6 +1847,7 @@ name = "perch-schema"
 version = "0.1.1"
 dependencies = [
  "jsonschema",
+ "perch-doc-compiler",
  "perch-ir",
  "serde_json",
 ]

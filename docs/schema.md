@@ -52,20 +52,34 @@ framework; the wire format is hand-written in `parse.rs`/`canon.rs`).
 
 ## Single source of truth for the representable limits
 
-The schema is a host-side projection of the authoritative contract in
-`perch-ir` — `parse.rs` for shape and `validate.rs` for the representable
-format/range rules. Every limit the schema can express is taken from perch-ir:
-`MAX_SIGNER_KEY_LEN` and `ACK_SENTINEL` directly, the strkey/hex shapes
-behaviourally. Two guards keep them from silently diverging (the reason this
-work started — a tightened string-length rule that broke a fixture a single
-declared source would have caught):
+The schema is a host-side projection of the authoritative contracts. Each limit
+it encodes is taken from the one place that declares it:
+
+- **`perch-ir`** — `parse.rs` for shape and `validate.rs` for the representable
+  format/range rules. `MAX_SIGNER_KEY_LEN` and `ACK_SENTINEL` directly; the
+  strkey/hex shapes, the `m <= N` / guardian `quorum <= count` ranges, and the
+  `limit` positivity/overflow shape behaviourally.
+- **`perch-doc-compiler`** — the per-document caps `MAX_DOC_SIGNERS`,
+  `MAX_DOC_RULES`, and `MAX_RULE_NAME_BYTES`, which the generator reads directly
+  (they are plain `pub const`s; the generator depends on the crate with
+  `default-features = false`, so no on-chain parser/compiler code is pulled in,
+  and perch-schema is in no contract's build graph — nothing reaches a wasm
+  build).
+
+Two guards keep schema and source from silently diverging (the reason this work
+started — a tightened string-length rule that broke a fixture a single declared
+source would have caught):
 
 - `crates/perch-schema/tests/drift.rs` — the committed file equals the
   generator output (so tightening a constant without regenerating fails CI);
 - `crates/perch-schema/tests/limits_parity.rs` — each limit is checked against
-  perch-ir's own `from_json` + `validate` at its boundary, in both directions
-  (the sanctioned alternative to generating the numbers straight from the
-  constants: a test that fails when the validator and the schema disagree).
+  its source in both directions: behaviourally against perch-ir's own
+  `from_json` + `validate` where perch-ir owns the rule, and by constant
+  equality against the `perch-doc-compiler` caps where the compiler owns it (the
+  sanctioned alternative to generating the numbers straight from the constants:
+  a test that fails when the source and the schema disagree). The perch-js suite
+  (`test/schema-limits-parity.test.ts`) runs the same cap parity against
+  `checkLimits`, so the client-side check and the schema cannot disagree either.
 
 ## What the schema enforces
 
@@ -79,12 +93,24 @@ Structural shape and the representable data constraints:
 - `version` is exactly `1`; an explicit JSON `null` for an optional field is
   rejected (leave the key out);
 - **formats:** C-/G-address strkey shapes, 64-lowercase-hex digests, the signer
-  `key` hex window (1..=`MAX_SIGNER_KEY_LEN` bytes), the `ack` sentinel;
+  `key` hex window (1..=`MAX_SIGNER_KEY_LEN` bytes), the `ack` sentinel, and the
+  `cap.limit` positive-integer decimal string (rejects `0`, all-zero spellings,
+  a sign-minus, and any value wider than an `i128` — see the CANON v2 note
+  below for what it deliberately still accepts);
 - **ranges:** `u32` bounds, and the non-zero minimums perch-ir refuses at `0`
   (`not-after-ledger`, `m`, `period-ledgers`, `quorum`, the recovery
-  `*-ledgers` and `max-cancels`);
+  `*-ledgers` and `max-cancels`); the referenced-count bounds `m <= N`
+  (threshold) and guardian `quorum <= guardian count`, encoded as an `allOf`
+  `if`/`then` chain enumerated up to `MAX_DOC_SIGNERS`;
 - **collections:** non-empty and no-duplicate lists where perch-ir requires
-  them (`functions`, `string-in` values, principal/guardian/replaceable lists).
+  them (`functions`, `string-in` values, principal/guardian/replaceable lists);
+- **per-document caps the compiler enforces (`perch-doc-compiler`):** at most
+  `MAX_DOC_SIGNERS` signers and `MAX_DOC_RULES` rules (`maxItems`), and a rule
+  `name` at most `MAX_RULE_NAME_BYTES` bytes. Because JSON Schema's `maxLength`
+  counts code points, not bytes, the rule name is also constrained to ASCII so
+  one character is one byte — the single place the schema is intentionally
+  *stricter* than the compiler (a non-ASCII name within the byte cap is
+  schema-rejected; it fails closed, the safe direction for an editing schema).
 
 ## What stays outside the schema
 
@@ -98,17 +124,32 @@ substitute:
 - **Lexical / canonical (RFC 8785) encoding.** A schema-valid document is not
   necessarily in canonical form; only canonical bytes feed `doc_hash`. See
   `CANONICAL.md`.
-- **Cross-reference and semantic invariants.** `m <= N` and guardian
-  `quorum <= guardian count`; principal/replaceable references resolving to a
-  declared signer; cap token matching the contract scope; `commitment` being a
-  canonical BN254 field element (below the scalar modulus); `limit` parsing as a
-  positive `i128`; unique signer ids and rule names. These are perch-ir's
-  `validate` (and the compiler's lowering).
-- **Aggregate resource bounds.** The compiler's per-document caps —
-  `max_signers`, `max_rules`, `max_rule_name_bytes`, and the
-  `max_canonical_bytes` byte budget (not expressible as a schema keyword) — live
-  in `perch-doc-compiler::doc_limits()` and are mirrored client-side by
-  perch-js's `checkLimits`.
+- **Cross-reference and semantic invariants.** Principal/replaceable references
+  resolving to a declared signer; cap `token` matching the contract scope;
+  unique signer ids and rule names; `commitment` being a canonical BN254 field
+  element (below the scalar modulus); and the **exact** `i128` upper bound on
+  `cap.limit` (the schema caps the *digit width* but not the precise maximum
+  value). These are perch-ir's `validate` (and the compiler's lowering). The
+  `m <= N` and guardian `quorum <= count` ranges are now *mostly* encoded (see
+  above); they stay with the validator only for guardian sets larger than
+  `MAX_DOC_SIGNERS`, which the `if`/`then` chain does not enumerate (guardians
+  have no dedicated cap constant — a guardian-count cap would let the schema
+  cover them fully; recorded as CANON v2 follow-up).
+- **Aggregate byte budget.** The compiler's `max_canonical_bytes` — the size of
+  the *canonically-encoded* document, not a property of the parsed JSON tree —
+  is not expressible as a schema keyword. It lives in
+  `perch-doc-compiler::doc_limits()` and is mirrored client-side by perch-js's
+  `checkLimits`. (The other per-document caps — `max_signers`, `max_rules`,
+  `max_rule_name_bytes` — are now encoded by the schema; see above.)
+- **Canonical spelling (CANON v2).** The schema accepts everything today's
+  parser accepts, including non-canonical spellings of a valid value: a
+  `cap.limit` with leading zeros or a leading `+` (`007`, `+5`), and uppercase
+  hex in a signer `key` (perch-ir's `hex::decode` is case-insensitive there,
+  unlike the 64-lowercase-hex digest fields, which *are* pinned because the
+  parser requires that form). Rejecting these non-canonical spellings is a
+  stricter *canonical* profile deferred to CANON v2 — it becomes correct only
+  once the parser itself enforces one spelling, so that schema and parser stay
+  in agreement. See the Perch `DEFERRED.md` CANON v2 entry.
 - **Signatures and authorization.** Whether an invocation is actually
   authorized is `__check_auth` / OZ policy enforcement on-chain, nothing a
   document schema can state.
@@ -121,12 +162,21 @@ tags/variant shape, bad ranges/formats, empty/duplicate collections) against the
 schema with a real draft 2020-12 validator and compares the result with
 perch-ir's real parser + validator **at the applicable boundary**:
 
-| case kind | schema | perch-ir |
+| case kind | schema | perch-ir / compiler |
 | --- | --- | --- |
 | canonical fixture | accepts | parses + validates |
 | structural defect | rejects | parser rejects |
-| representable constraint | rejects | validator rejects (document still parses) |
+| representable constraint (incl. `m <= N`, `quorum <= count`, `limit` positivity) | rejects | validator rejects (document still parses) |
+| per-document cap (signer/rule count, rule-name bytes) | rejects | **validator accepts** — the cap is the *compiler's*, so the schema is the earlier gate; the constant is pinned in `limits_parity.rs` |
+| non-ASCII rule name within the byte cap | **rejects** | validator accepts — the one place the schema is deliberately stricter (byte cap via ASCII) |
 | cross-reference / semantic | **accepts** | validator rejects (documented gap) |
+
+The `m <= N` / `quorum <= count` and `limit`-positivity cases, previously in the
+last (documented-gap) row, now land in the "representable constraint" row —
+schema and validator reject together. The negative examples (unknown fields,
+missing fields, wrong tags/variant shape, bad ranges, over-cap collections) live
+in `testdata/schema/cases.json` plus the generated boundary cases in the Rust
+suite.
 
 The shared cases live in [`testdata/schema/cases.json`](../testdata/schema/cases.json)
 and are also run by the perch-js suite (`packages/perch-js/test/schema-conformance.test.ts`)
@@ -138,8 +188,12 @@ consume is held to the same contract.
 Generation adds nothing to any contract build (criterion 5). `perch-schema` is
 host-only: it is a dependency of no deployable contract, uses `serde_json` only
 to assemble JSON off-chain, and the `jsonschema` validator is a test-only
-dependency. perch-ir stays serde-free and float-free — nothing here changes
-what compiles to `wasm32`.
+dependency. It reads the compiler caps from `perch-doc-compiler` with
+`default-features = false`, so only that crate's plain `const`s and wire-type
+module are pulled in (its on-chain parser/compiler sit behind the `contract`
+feature) — and since nothing on any contract's build graph depends on
+`perch-schema`, none of this reaches a `wasm32` build regardless. perch-ir stays
+serde-free and float-free — nothing here changes what compiles to `wasm32`.
 
 ## Invocation tooling schema (deferred, with reasons)
 

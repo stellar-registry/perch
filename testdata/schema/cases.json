@@ -181,6 +181,34 @@
       "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "abc", "period-ledgers": 10 } }] }
     },
     {
+      "name": "constraint/cap-limit-zero",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "limit `0` is not positive. The schema's limit pattern requires a significant non-zero digit; the validator rejects (InvalidCapLimit, must be positive).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "0", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "constraint/cap-limit-overflow",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "limit has more significant digits than an i128 holds. The schema's pattern caps significant digits at i128::MAX's width; the validator rejects (i128 parse overflow).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "123456789012345678901234567890123456789012345", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "accept/cap-limit-leading-zeros",
+      "expect": "accept",
+      "category": "variant",
+      "note": "limit `007` is a non-canonical spelling of 7 the parser accepts today; the schema accepts it too (a single canonical spelling is CANON v2).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "007", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "accept/cap-limit-leading-plus",
+      "expect": "accept",
+      "category": "variant",
+      "note": "limit `+5` carries a leading plus the parser accepts today; the schema accepts it too (a single canonical spelling is CANON v2).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "+5", "period-ledgers": 10 } }] }
+    },
+    {
       "name": "constraint/recovery-commitment-wrong-length",
       "expect": "reject-constraint",
       "category": "bad-format",
@@ -204,6 +232,20 @@
       "category": "empty-collection",
       "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": ["GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH"], "quorum": 1 }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": [], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
     },
+    {
+      "name": "constraint/recovery-quorum-exceeds-count",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "quorum > guardian count (quorum=2, one guardian). The schema's recoveryMode if/then chain caps quorum at the guardian count; the validator also rejects (InvalidGuardianQuorum).",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": ["GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH"], "quorum": 2 }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+    {
+      "name": "constraint/recovery-commitment-uppercase",
+      "expect": "reject-constraint",
+      "category": "bad-format",
+      "note": "commitment is 64 hex but uppercase. perch-ir's is_sha256_hex requires lowercase; the schema pattern is [0-9a-f]. Both reject (this IS enforced today — not the CANON v2 case).",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "zk-only", "adapter": "CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ", "circuit-id": "21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb", "pool": "CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5", "enrollment-id": "6f0d1c2b3a49586776859483a2b1c0dfeefdfcfbfaf9f8f7f6f5f4f3f2f1f0e1", "commitment": "0A1B2C3D4E5F60718293A4B5C6D7E8F90112233445566778899AABBCCDDEEFF0" }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
 
     {
       "name": "semantic/duplicate-signer-id",
@@ -220,11 +262,18 @@
       "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["ghost"] } }] }
     },
     {
-      "name": "semantic/threshold-m-exceeds-n",
-      "expect": "accept-semantic-invalid",
-      "category": "cross-reference",
-      "note": "m > referenced signer count. The schema enforces only m >= 1; the validator rejects (InvalidThreshold).",
+      "name": "constraint/threshold-m-exceeds-n",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "m > referenced signer count (m=2, N=1). The schema's principals if/then chain caps m at N; the validator also rejects (InvalidThreshold).",
       "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "threshold", "signers": ["a"], "m": 2 } }] }
+    },
+    {
+      "name": "accept/threshold-m-equals-n",
+      "expect": "accept",
+      "category": "variant",
+      "note": "m == referenced signer count (m=2, N=2). At the boundary the chain admits it and the validator accepts.",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }, { "id": "b", "verifier": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG", "key": "cd" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "threshold", "signers": ["a", "b"], "m": 2 } }] }
     },
     {
       "name": "semantic/cap-token-mismatch",

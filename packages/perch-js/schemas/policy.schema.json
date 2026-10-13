@@ -139,8 +139,8 @@
       "description": "A cumulative spend cap over a rolling window. Lowers to OpenZeppelin's stateful `spending_limit` policy (perch itself is stateless).",
       "properties": {
         "limit": {
-          "description": "Maximum cumulative amount as a decimal string (a string, not a number, because an i128 amount does not fit a JSON number safely). Must parse as a POSITIVE i128 — positivity and the i128 range are semantic checks (outside this schema).",
-          "pattern": "^[0-9]+$",
+          "description": "Maximum cumulative amount as a decimal string (a string, not a number, because an i128 amount does not fit a JSON number safely). Must be a POSITIVE integer: the pattern rejects `0`, all-zero spellings, a sign-minus, and any value with more significant digits than an i128 can hold. A leading `+` and leading zeros are accepted (the parser accepts them; a single canonical spelling is CANON v2, `docs/schema.md`). Only the EXACT i128 upper bound remains a semantic check in perch-ir's validator.",
+          "pattern": "^\\+?0*[1-9][0-9]{0,38}$",
           "type": "string"
         },
         "period-ledgers": {
@@ -188,6 +188,176 @@
       "uniqueItems": true
     },
     "principals": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 1,
+                "minItems": 1
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 3
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 4,
+                "minItems": 4
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 5,
+                "minItems": 5
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 6,
+                "minItems": 6
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 6
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 7,
+                "minItems": 7
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 7
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 8,
+                "minItems": 8
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 8
+              }
+            }
+          }
+        }
+      ],
       "description": "Who a rule authorizes, tagged by `type`.",
       "oneOf": [
         {
@@ -217,7 +387,7 @@
           "additionalProperties": false,
           "properties": {
             "m": {
-              "description": "How many of `signers` must authorize (the M). Must be at least 1; the upper bound m <= N is a cross-reference check (outside this schema).",
+              "description": "How many of `signers` must authorize (the M). Must satisfy 1 <= m <= N, where N is this rule's referenced signer count; the upper bound is encoded by the principals `allOf` if/then chain (`docs/schema.md`).",
               "maximum": 4294967295,
               "minimum": 1,
               "type": "integer"
@@ -277,7 +447,7 @@
       "type": "object"
     },
     "quorum": {
-      "description": "How many guardians must authorize. At least 1; the upper bound quorum <= guardian count is a cross-reference check (outside this schema).",
+      "description": "How many guardians must authorize. Must satisfy 1 <= quorum <= guardian count; the upper bound is encoded by the recoveryMode `allOf` if/then chain, up to MAX_DOC_SIGNERS guardians (`docs/schema.md`).",
       "maximum": 4294967295,
       "minimum": 1,
       "type": "integer"
@@ -345,6 +515,176 @@
       "type": "object"
     },
     "recoveryMode": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 1,
+                "minItems": 1
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 3
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 4,
+                "minItems": 4
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 5,
+                "minItems": 5
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 6,
+                "minItems": 6
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 6
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 7,
+                "minItems": 7
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 7
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 8,
+                "minItems": 8
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 8
+              }
+            }
+          }
+        }
+      ],
       "description": "How a recovery attempt is authorized, tagged by `type`. `combined` requires BOTH a valid proof and a guardian quorum against the same statement.",
       "oneOf": [
         {
@@ -471,7 +811,9 @@
           "uniqueItems": true
         },
         "name": {
-          "description": "Human-readable rule name. Uniqueness and the compiler's byte-length cap are enforced outside this schema.",
+          "description": "Human-readable rule name. Capped at MAX_RULE_NAME_BYTES bytes by the compiler; the ASCII pattern makes one character one byte so maxLength encodes that byte cap (a non-ASCII name is schema- rejected — see `docs/schema.md`). Uniqueness across rules is a semantic check (outside this schema).",
+          "maxLength": 20,
+          "pattern": "^[\\x00-\\x7F]*$",
           "type": "string"
         },
         "not-after-ledger": {
@@ -637,17 +979,19 @@
       "description": "Optional account-recovery enrollment (reviewable configuration, never a recovery attempt). Omitted from the canonical form when absent, so a document that never enrolls recovery hashes exactly as before this field existed."
     },
     "rules": {
-      "description": "The policy rules. Order is preserved and significant to the hash.",
+      "description": "The policy rules. Order is preserved and significant to the hash. At most MAX_DOC_RULES (the compiler's per-document rule cap).",
       "items": {
         "$ref": "#/$defs/rule"
       },
+      "maxItems": 11,
       "type": "array"
     },
     "signers": {
-      "description": "Declared signers that rules reference by id. Per-document count and size caps (max signers, canonical bytes) are the compiler's aggregate bounds, not this schema's — see `docs/schema.md`.",
+      "description": "Declared signers that rules reference by id. At most MAX_DOC_SIGNERS (the compiler's per-document signer cap). The canonical-byte budget is a separate aggregate bound the schema cannot express — see `docs/schema.md`.",
       "items": {
         "$ref": "#/$defs/signerDecl"
       },
+      "maxItems": 8,
       "type": "array"
     },
     "version": {

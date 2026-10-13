@@ -167,6 +167,136 @@ fn signer_key_length_window_matches_the_validator() {
     );
 }
 
+const VALID_C: &str = "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN";
+
+/// A document with `n` distinct, valid external signers and one self-admin rule
+/// referencing the first. Each key is distinct hex so no `DuplicateSignerKey`
+/// fires (the count, not the key material, is what varies).
+fn doc_with_n_signers(n: u32) -> Value {
+    let signers: Vec<Value> = (0..n)
+        .map(|i| json!({ "id": format!("s{i}"), "verifier": VALID_C, "key": format!("{i:02x}") }))
+        .collect();
+    json!({
+        "version": 1,
+        "signers": signers,
+        "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["s0"] } }],
+    })
+}
+
+/// A document with one signer and `m` distinct-named self-admin rules.
+fn doc_with_n_rules(m: u32) -> Value {
+    let rules: Vec<Value> = (0..m)
+        .map(|i| json!({ "name": format!("r{i}"), "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }))
+        .collect();
+    json!({
+        "version": 1,
+        "signers": [{ "id": "a", "verifier": VALID_C, "key": "ab" }],
+        "rules": rules,
+    })
+}
+
+/// A document with one signer and one rule whose name is `len` ASCII bytes.
+fn doc_with_rule_name(len: usize) -> Value {
+    json!({
+        "version": 1,
+        "signers": [{ "id": "a", "verifier": VALID_C, "key": "ab" }],
+        "rules": [{ "name": "n".repeat(len), "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }],
+    })
+}
+
+#[test]
+fn aggregate_caps_are_a_schema_then_compiler_boundary() {
+    // Criterion 1 + 3 for the per-document caps. These are the COMPILER's caps
+    // (`perch-doc-compiler`), not perch-ir's: perch-ir's `validate` accepts an
+    // over-cap document (it is structurally and semantically fine); only the
+    // compiler's `DocTooLarge` refuses it. The schema now encodes the
+    // representable ones (maxItems / maxLength) so an editor catches them before
+    // compilation. So, uniquely, these cases are: schema REJECTS, yet perch-ir
+    // PARSES AND VALIDATES. The constant equality is asserted in limits_parity.
+    let v = validator();
+    let max_signers = perch_doc_compiler::MAX_DOC_SIGNERS;
+    let max_rules = perch_doc_compiler::MAX_DOC_RULES;
+    let max_name = perch_doc_compiler::MAX_RULE_NAME_BYTES as usize;
+
+    // Signers: at the cap both admit; one over, the schema rejects while
+    // perch-ir's validator still accepts (the cap is the compiler's).
+    let at = doc_with_n_signers(max_signers);
+    assert!(schema_accepts(&v, &at), "schema accepts signers at the cap");
+    assert!(
+        ir_outcome_of(&at).accepted,
+        "perch-ir accepts signers at the cap"
+    );
+    let over = doc_with_n_signers(max_signers + 1);
+    assert!(
+        !schema_accepts(&v, &over),
+        "schema rejects signers over the cap"
+    );
+    assert!(
+        ir_outcome_of(&over).accepted,
+        "perch-ir's validator still accepts an over-cap document — the cap is the compiler's",
+    );
+
+    // Rules: same shape.
+    let at = doc_with_n_rules(max_rules);
+    assert!(schema_accepts(&v, &at), "schema accepts rules at the cap");
+    assert!(
+        ir_outcome_of(&at).accepted,
+        "perch-ir accepts rules at the cap"
+    );
+    let over = doc_with_n_rules(max_rules + 1);
+    assert!(
+        !schema_accepts(&v, &over),
+        "schema rejects rules over the cap"
+    );
+    assert!(
+        ir_outcome_of(&over).accepted,
+        "perch-ir's validator still accepts an over-cap rule count",
+    );
+
+    // Rule name: at the byte cap (ASCII, so bytes == chars) both admit; one
+    // byte over, the schema rejects via maxLength while perch-ir still accepts.
+    let at = doc_with_rule_name(max_name);
+    assert!(
+        schema_accepts(&v, &at),
+        "schema accepts a rule name at the byte cap"
+    );
+    assert!(
+        ir_outcome_of(&at).accepted,
+        "perch-ir accepts a rule name at the byte cap"
+    );
+    let over = doc_with_rule_name(max_name + 1);
+    assert!(
+        !schema_accepts(&v, &over),
+        "schema rejects a rule name over the byte cap"
+    );
+    assert!(
+        ir_outcome_of(&over).accepted,
+        "perch-ir's validator still accepts an over-cap rule name",
+    );
+}
+
+#[test]
+fn non_ascii_rule_name_is_schema_stricter_than_the_validator() {
+    // The one place the schema is deliberately STRICTER than perch-ir/compiler:
+    // a non-ASCII rule name within the byte cap. JSON Schema's maxLength counts
+    // code points, so the schema requires ASCII to make maxLength a byte cap;
+    // the parser has no charset rule. Documented in docs/schema.md.
+    let v = validator();
+    let doc = json!({
+        "version": 1,
+        "signers": [{ "id": "a", "verifier": VALID_C, "key": "ab" }],
+        "rules": [{ "name": "café", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }],
+    });
+    assert!(
+        !schema_accepts(&v, &doc),
+        "schema rejects a non-ASCII rule name"
+    );
+    assert!(
+        ir_outcome_of(&doc).accepted,
+        "perch-ir accepts it (no charset rule) — the schema is intentionally stricter here",
+    );
+}
+
 #[test]
 fn duplicate_raw_keys_are_a_parser_only_rejection() {
     // Criterion 4: duplicate raw JSON keys are outside JSON Schema. A validator

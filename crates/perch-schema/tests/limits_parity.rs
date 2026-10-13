@@ -1,9 +1,23 @@
 //! Criterion 1 + the constraint source-of-truth: every limit the schema
-//! encodes is checked against perch-ir's own parser + validator, in both
-//! directions. If perch-ir tightens or loosens a representable rule (the brief's
-//! motivating example: a string-length rule in `validate.rs`) without the schema
-//! moving with it, one of these assertions fails — "a test that fails when
-//! perch-ir's validator constants and the schema disagree".
+//! encodes is checked against its single declared source, in both directions.
+//! If a limit tightens or loosens without the schema moving with it, one of
+//! these assertions fails — "a test that fails when the validator constants and
+//! the schema disagree".
+//!
+//! Two source boundaries:
+//!
+//! - **perch-ir's `validate`** (format/range/collection rules). Checked
+//!   behaviourally via `agree`: perch-ir's `from_json` + `validate` and the
+//!   schema accept/reject the same documents. This covers `m <= N`, guardian
+//!   `quorum <= count`, the `limit` positivity/overflow shape, and the hex
+//!   shapes (the brief's motivating example: a string-length rule in
+//!   `validate.rs`).
+//! - **the compiler's per-document caps** (`perch_doc_compiler`'s
+//!   `MAX_DOC_SIGNERS` / `MAX_DOC_RULES` / `MAX_RULE_NAME_BYTES`). These are the
+//!   compiler's, not perch-ir's, so they are checked by *constant equality*: the
+//!   generator reads the constant and the committed schema's keyword must equal
+//!   it. Over/under-cap behaviour (where perch-ir's validator still accepts) is
+//!   proved in `conformance.rs`.
 
 mod common;
 
@@ -183,6 +197,139 @@ fn sha256_hex_shape_matches_the_validator() {
         &recovery_doc_with_commitment(&canonical.to_ascii_uppercase()),
         false,
         "commitment-uppercase",
+    );
+}
+
+#[test]
+fn aggregate_caps_track_the_compiler_constants() {
+    // The compiler owns the per-document caps; the generator reads its
+    // constants, so the committed schema's keywords must equal them. A drift in
+    // either direction (the constant moves, or someone hand-edits the schema)
+    // fails here. This is the "constant" half of the source-of-truth guarantee
+    // for caps perch-ir's validator does not itself enforce.
+    let schema = perch_schema::policy_schema();
+
+    assert_eq!(
+        schema["properties"]["signers"]["maxItems"],
+        json!(perch_doc_compiler::MAX_DOC_SIGNERS),
+        "signers maxItems tracks MAX_DOC_SIGNERS",
+    );
+    assert_eq!(
+        schema["properties"]["rules"]["maxItems"],
+        json!(perch_doc_compiler::MAX_DOC_RULES),
+        "rules maxItems tracks MAX_DOC_RULES",
+    );
+    assert_eq!(
+        schema["$defs"]["rule"]["properties"]["name"]["maxLength"],
+        json!(perch_doc_compiler::MAX_RULE_NAME_BYTES),
+        "rule name maxLength tracks MAX_RULE_NAME_BYTES",
+    );
+    // The ASCII pattern is what makes that maxLength a byte cap (one char = one
+    // byte); pin it so the two cannot drift apart.
+    assert_eq!(
+        schema["$defs"]["rule"]["properties"]["name"]["pattern"],
+        json!(perch_schema::RULE_NAME_PATTERN),
+        "rule name pattern is the ASCII class",
+    );
+}
+
+#[test]
+fn threshold_m_upper_bound_matches_the_validator() {
+    let v = validator();
+    // Two declared signers so N can be 2. m in 1..=N accepted by both; m > N
+    // rejected by both (schema's if/then chain, validator's InvalidThreshold).
+    let doc = |m: u64| {
+        json!({
+            "version": 1,
+            "signers": [
+                { "id": "a", "verifier": VALID_C, "key": "ab" },
+                { "id": "b", "verifier": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG", "key": "cd" },
+            ],
+            "rules": [{
+                "name": "r",
+                "scope": { "type": "self-admin" },
+                "principals": { "type": "threshold", "signers": ["a", "b"], "m": m },
+            }],
+        })
+    };
+    agree(&v, &doc(1), true, "threshold-m1-of-2");
+    agree(&v, &doc(2), true, "threshold-m2-of-2");
+    agree(&v, &doc(3), false, "threshold-m3-of-2");
+}
+
+#[test]
+fn guardian_quorum_upper_bound_matches_the_validator() {
+    let v = validator();
+    // Two guardians so the count is 2. quorum in 1..=2 accepted by both;
+    // quorum > 2 rejected by both (schema's recoveryMode if/then chain,
+    // validator's InvalidGuardianQuorum).
+    let doc = |quorum: u64| {
+        json!({
+            "version": 1,
+            "signers": [{ "id": "admin", "verifier": VALID_C, "key": "ab" }],
+            "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }],
+            "recovery": {
+                "profile": "loss",
+                "mode": {
+                    "type": "guardian-only",
+                    // Two distinct, valid-shape addresses (a guardian may be a
+                    // C- or G-address); neither is the controller below.
+                    "guardians": [VALID_G, VALID_C],
+                    "quorum": quorum,
+                },
+                "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF",
+                "replaceable": ["admin"],
+                "delay-ledgers": 100,
+                "expiry-ledgers": 1000,
+                "max-cancels": 3,
+            },
+        })
+    };
+    agree(&v, &doc(1), true, "quorum-1-of-2");
+    agree(&v, &doc(2), true, "quorum-2-of-2");
+    agree(&v, &doc(3), false, "quorum-3-of-2");
+}
+
+#[test]
+fn cap_limit_pattern_matches_the_validator() {
+    // The generator's pattern is the one the schema ships.
+    let expected = perch_schema::limit_pattern();
+    let schema = perch_schema::policy_schema();
+    assert_eq!(
+        schema["$defs"]["capConstraint"]["properties"]["limit"]["pattern"],
+        json!(expected),
+        "schema limit pattern is the generator's",
+    );
+
+    // Behavioural, at perch-ir's `parse::<i128>()` + positivity boundary.
+    let v = validator();
+    let doc = |limit: &str| {
+        json!({
+            "version": 1,
+            "signers": [{ "id": "a", "verifier": VALID_C, "key": "ab" }],
+            "rules": [{
+                "name": "r",
+                "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" },
+                "principals": { "type": "all", "signers": ["a"] },
+                "cap": { "limit": limit, "period-ledgers": 10 },
+            }],
+        })
+    };
+    // Positive values, including the non-canonical spellings the parser accepts
+    // today (leading zeros, leading plus) — both accept (CANON v2 would reject
+    // the spellings; this schema does not).
+    agree(&v, &doc("5"), true, "limit-5");
+    agree(&v, &doc("007"), true, "limit-leading-zeros");
+    agree(&v, &doc("+5"), true, "limit-leading-plus");
+    // Not positive, or not an i128-width integer — both reject.
+    agree(&v, &doc("0"), false, "limit-zero");
+    agree(&v, &doc("-5"), false, "limit-negative");
+    agree(&v, &doc("abc"), false, "limit-non-numeric");
+    agree(
+        &v,
+        &doc("123456789012345678901234567890123456789012345"),
+        false,
+        "limit-overflow",
     );
 }
 

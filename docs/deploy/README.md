@@ -194,23 +194,37 @@ the factory deploys it by its pinned hash — so it needs no name binding.)
 
 Each needs the manager's one-time initial publish, authored by the perch-author
 account, at a version below the first CI release (so that CI publish is
-accepted as greater). The manager (`GA327GGW…`) is human-held; these are the
-**exact commands to run by hand** — never signed by CI or automation. Build
-the stack once for the wasm, then publish each name:
+accepted as greater). It must publish a **hash-distinct placeholder** wasm, not
+the real release bytes: the registry records each wasm hash once, so a second
+publish of an already-published hash is refused (`#11 HashAlreadyPublished`),
+and the later SA-authored CI release publishes exactly the real bytes — so
+bootstrapping the real bytes here would block that release. A benign trailing
+custom section keeps the wasm valid while changing its hash; the placeholder is
+only `publish_hash`'d (never `deploy_stateless`'d), so its bytes never run and
+only the name→author binding survives. The manager (`GA327GGW…`) is human-held;
+these are the **exact commands to run by hand** — never signed by CI or
+automation. Build the stack once for the wasm, then publish each name:
 
 ```sh
 REG=CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7    # constructorless
 AUTHOR=CDIFS3JDMVQBVANOSHEL6AUAKRYLFZFQQVX37QKQGJGQVQXQEHJCJ6PG  # perch-author SA
-MANAGER=<your stellar identity for GA327GGW…>                    # human-held manager
+MANAGER=perch-demo                                              # the manager key (GA327GGW…), human-held
 
 scripts/build-stack.sh --registry "$REG" --out target/stack
 
 for name in perch-webauthn-verifier perch-recovery perch-zk-pool \
             perch-zk-adapter perch-account-factory; do
-  wasm="target/stack/$(echo "$name" | tr - _).wasm"
-  hash=$(stellar contract upload --network testnet --source-account "$MANAGER" --wasm "$wasm")
+  real="target/stack/$(echo "$name" | tr - _).wasm"
+  # A hash-distinct PLACEHOLDER — the trailing custom section keeps the wasm
+  # valid but changes its hash, so CI's later publish of the real release bytes
+  # is not refused with #11 HashAlreadyPublished. Only publish_hash'd, never
+  # deployed, so these bytes never run.
+  ph="${real%.wasm}.bootstrap.wasm"
+  cp "$real" "$ph"; printf '\x00\x09\x08bootstrp' >> "$ph"
+  hash=$(stellar contract upload --network testnet --source-account "$MANAGER" --wasm "$ph")
   stellar contract invoke --network testnet --source-account "$MANAGER" --id "$REG" -- \
     publish_hash --wasm_name "$name" --author "$AUTHOR" --wasm_hash "$hash" --version 0.0.0
+  rm -f "$ph"
 done
 ```
 

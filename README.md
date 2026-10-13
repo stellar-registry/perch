@@ -22,6 +22,13 @@ const doc = policy()
 
 **Status: design phase.** See the [epic](https://github.com/stellar-registry/perch/issues/1) for the problem statement, design constraints, and roadmap.
 
+## Read the book
+
+Start with [The Perch Book](https://stellar-registry.github.io/perch/book/) for a
+guided introduction to the language, evaluation, and formalization. No programming
+languages or theorem-proving background is required. [Book sources and local
+build instructions](book/README.md) are included in this repository.
+
 ## Stateless policies (and what that excludes)
 
 Every perch constraint is a stateless predicate over a *single* invocation, this call's function and arguments. Perch holds no state, so it cannot express a **cumulative** limit (spend caps, rate limits, "N per day"). A numeric argument bound limits one call, not a running total, and a signer can call repeatedly to exceed any intended total. Cumulative caps require a stateful sibling policy, e.g. OpenZeppelin's `spending_limit`, attached to the same OZ context rule alongside perch's interpreter (OZ enforces every attached policy, so both must pass). Perch is the "what may be called" layer; cumulative accounting lives in a purpose-built stateful contract. See [#19](https://github.com/stellar-registry/perch/issues/19) for the compiler support that will lower a cap clause onto that sibling policy.

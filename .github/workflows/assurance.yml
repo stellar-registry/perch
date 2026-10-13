@@ -140,7 +140,13 @@ jobs:
           for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta recovery_canonical_roundtrip; do
             dict=()
             if [ -f "fuzz/dicts/$t.dict" ]; then dict=("-dict=fuzz/dicts/$t.dict"); fi
-            cargo +"$NIGHTLY" fuzz run -s none "$t" -- \
+            # Pin the build target to the host gnu triple. cargo-fuzz otherwise
+            # defaults `--target` to the triple it was *itself* built for, and
+            # the prebuilt cargo-fuzz release binary is musl-targeted -- the
+            # nightly toolchain only ships the gnu std, so an implicit musl
+            # build fails with "can't find crate for `core`". The gnu triple
+            # is what the former source-built (gnu) cargo-fuzz used implicitly.
+            cargo +"$NIGHTLY" fuzz run -s none --target x86_64-unknown-linux-gnu "$t" -- \
               -max_total_time="$SECONDS_PER_TARGET" "${dict[@]}"
           done
       - name: Save fuzz corpus

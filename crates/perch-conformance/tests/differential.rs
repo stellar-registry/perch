@@ -284,11 +284,15 @@ fn ref_pred(pred: &ArgPred, inv: &GInv, index: u32) -> Verdict {
         },
         ArgPred::StringPrefix(p) => match arg {
             GVal::Str(s) => {
-                if s.len() > MAX_STR || p.prefix.len() > MAX_STR {
+                if p.prefix.len() > MAX_STR {
+                    // An over-long prefix is unsatisfiable; perch-ir refuses it,
+                    // so a valid document never reaches here.
                     Verdict::Unknown
                 } else if p.prefix.len() > s.len() {
                     Verdict::False
                 } else {
+                    // Only the argument's first prefix-length bytes are read,
+                    // so the argument's own length is unbounded.
                     Verdict::from(s.as_bytes()[..p.prefix.len()] == *p.prefix.as_bytes())
                 }
             }

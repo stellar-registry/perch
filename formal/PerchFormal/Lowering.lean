@@ -84,7 +84,10 @@ def predSem (inp : Inputs) (i : Nat) : ArgPred → Verdict
       else .ofBool (vs.any fun c => c.length ≤ MAX_STR_ARG_LEN && c == s)
   | .stringPrefix p =>
     decodeTest inp i asStr fun s =>
-      if s.length > MAX_STR_ARG_LEN || p.length > MAX_STR_ARG_LEN then .U
+      -- Only the argument's first prefix-length bytes are read, so the
+      -- argument's own length is unbounded; an over-long prefix is
+      -- unsatisfiable.
+      if p.length > MAX_STR_ARG_LEN then .U
       else if p.length > s.length then .F
       else .ofBool (s.take p.length == p)
 

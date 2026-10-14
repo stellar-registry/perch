@@ -205,12 +205,14 @@ impl Encoder {
             }
             ArgPred::StringPrefix(p) => {
                 if p.prefix.len() > MAX_STR_ARG_LEN {
-                    // An over-long prefix constant fails closed on-chain.
+                    // An over-long prefix constant fails closed on-chain
+                    // (and perch-ir validation refuses it).
                     "false".to_string()
                 } else {
+                    // On-chain reads only the argument's first prefix-length
+                    // bytes, so the argument's own length is unbounded.
                     format!(
-                        "(and (= arg{i}_type {T_STR}) (<= (str.len arg{i}_str) {MAX_STR_ARG_LEN}) \
-                         (str.prefixof {} arg{i}_str))",
+                        "(and (= arg{i}_type {T_STR}) (str.prefixof {} arg{i}_str))",
                         smt_string(&p.prefix)
                     )
                 }

@@ -423,11 +423,11 @@ pub fn cases() -> Vec<Case> {
         ),
         case(
             "arg-str-prefix-overlong-arg",
-            "over-long argument fails closed under prefix too",
+            "over-long argument is still matched on its prefix: only the first prefix-length bytes are read, not the whole argument",
             vec![O::ArgStrPrefix(3, s("a"))],
             arg3_overlong,
             Ok(()),
-            Unknown,
+            True,
         ),
         case(
             "arg-str-prefix-overlong-prefix",

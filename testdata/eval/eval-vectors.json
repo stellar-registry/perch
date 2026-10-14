@@ -655,7 +655,7 @@
     },
     {
       "name": "arg-str-prefix-overlong-arg",
-      "pins": "over-long argument fails closed under prefix too",
+      "pins": "over-long argument is still matched on its prefix: only the first prefix-length bytes are read, not the whole argument",
       "program": { "version": 1, "ops": [
         {"op":"arg-str-prefix","i":3,"prefix":"a"}
       ] },
@@ -675,7 +675,7 @@
         "ledger": 100
       },
       "valid": true,
-      "verdict": "unknown"
+      "verdict": "true"
     },
     {
       "name": "arg-str-prefix-overlong-prefix",

@@ -136,7 +136,7 @@ Three signers, the same split as the constructorless publishes
 | Signer | Role |
 | --- | --- |
 | `perch-author` smart account (`vars.PERCH_AUTHOR_ADDRESS`, `CDIFS3JD…`) | **author** of every published name. The registry has no author transfer, so the binding is permanent. |
-| `ci-publish` delegate (`secrets.CI_PUBLISH_SECRET_KEY`) | signs the account's `publish_hash` authorization and pays the fees; a CAP-71 delegate rule, expiry-bounded. |
+| `ci-publish` delegate (`secrets.CI_PUBLISH_SECRET_KEY`, in the `testnet` environment) | signs the account's `publish_hash` authorization and pays the fees; a CAP-71 delegate rule, expiry-bounded. Where each secret lives: [`../testnet-deployment.md`](../testnet-deployment.md#secrets-and-environments). |
 | manager (`GA327GGW…`, human-held) | the **one-time initial publish of each new name** (`#12 ManagerRequired` otherwise), which binds that name's author. |
 
 Canonical mode mirrors `release.yml`'s constructorless publishes exactly:

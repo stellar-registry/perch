@@ -565,6 +565,10 @@ jobs:
       network: testnet
     secrets:
       # perch-ci: the account's ci-publish delegate (also the fee source).
+      # A job that calls a reusable workflow cannot take `environment:`, and the
+      # pinned registry-publish declares none, so this resolves the REPOSITORY
+      # secret, not the `testnet` environment's copy. It moves into the
+      # environment once registry-publish accepts an environment input.
       signing_key: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
       release_token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -628,8 +632,15 @@ jobs:
 
   # Deploy the recovery stack to the canonical registry, SA-authored, in pin
   # order, and open a deploy(<network>) PR with the manifest + regenerated
-  # bindings a human merges (testnet; mainnet would add an environment-reviewer
-  # gate before this job — design step, not wired here).
+  # bindings a human merges.
+  #
+  # Runs in the `testnet` GitHub Environment, so CI_PUBLISH_SECRET_KEY is read
+  # from that environment's secrets rather than the repository's. A mainnet
+  # deploy belongs in its own job under the `mainnet` environment (required
+  # reviewer, `main`-only branch policy) signing with its own delegate secret,
+  # CI_PUBLISH_MAINNET_SECRET_KEY, never this one. The job `if:` is evaluated
+  # before the environment is entered, so vars.PERCH_DEPLOY_STACK must stay a
+  # repository variable.
   #
   # Gated to run only when vars.PERCH_DEPLOY_STACK == 'true'. The recovery-stack
   # names are NOT yet in the canonical registry, and a managed registry refuses
@@ -648,6 +659,7 @@ jobs:
       (needs.constructorless-publish.result == 'success' ||
        needs.constructorless-publish.result == 'skipped')
     runs-on: ubuntu-latest
+    environment: testnet
     permissions:
       contents: write # commit the manifest + bindings onto the deploy branch
       pull-requests: write # open the deploy(<network>) PR

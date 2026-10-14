@@ -539,14 +539,16 @@ fi
 # ---------------------------------------------------------------------------
 # Summary — the values CI needs (GitHub environment vars/secrets)
 # ---------------------------------------------------------------------------
-log "Bootstrap complete. Record these in the GitHub 'testnet' environment:"
+log "Bootstrap complete. Record these in GitHub (docs/testnet-deployment.md, \"Secrets and environments\"):"
 cat <<EOF
+Repository variables:
   vars.PERCH_REGISTRY_CONTRACT_ID = $PERCH_SUB
   vars.PERCH_AUTHOR_ADDRESS       = $SA
   vars.PERCH_CI_RULE_ID           = $CI_RULE_ID
   vars.STELLAR_RPC_URL            = $RPC_URL
   vars.STELLAR_NETWORK_PASSPHRASE = $PASSPHRASE
-  secret PERCH_CI_KEY             = <the S... seed whose G-account is $CI_G>
+'testnet' environment secret (and repository secret, until registry-publish takes an environment):
+  secret CI_PUBLISH_SECRET_KEY    = <the S... seed whose G-account is $CI_G>
 
 Kept deliberately human-held (do NOT rotate):
   subregistry admin               = $DEPLOYER_G  (escape hatch: set_manager/upgrade)

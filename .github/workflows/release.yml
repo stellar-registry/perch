@@ -194,7 +194,7 @@ jobs:
           # crates/<contract>/Cargo.toml in a PR; on merge this tags + publishes
           # it. The constructorless allow-list in publish-plan decides which of
           # these actually publish on-chain (the rest just get a tag).
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory perch-admin-timelock"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           releases='[]'
@@ -324,9 +324,12 @@ jobs:
             # The factory pins the account wasm and the WebAuthn verifier, so
             # a change to either is a new factory.
             perch-account-factory) echo "perch-account-factory perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-webauthn-verifier";;
+            # Standalone leaf contract — links only soroban-sdk + soroban-sdk-tools
+            # (both external), so its scope is just its own crate tree.
+            perch-admin-timelock) echo "perch-admin-timelock";;
             *) echo "$1";;
           esac; }
-          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory"
+          CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory perch-admin-timelock"
           summary=""
           bumped=""
           for c in $CONTRACTS; do

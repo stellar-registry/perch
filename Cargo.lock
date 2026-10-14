@@ -1488,6 +1488,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "perch-admin-timelock"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+ "soroban-sdk-tools",
+]
+
+[[package]]
 name = "perch-analyze"
 version = "0.1.1"
 dependencies = [
@@ -1602,6 +1610,7 @@ dependencies = [
  "hex",
  "perch-account",
  "perch-account-factory",
+ "perch-admin-timelock",
  "perch-compile",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
@@ -1613,6 +1622,7 @@ dependencies = [
  "perch-registry-resolve",
  "perch-smart-account",
  "perch-spending-limit",
+ "perch-stateless-registry",
  "perch-testkit",
  "perch-webauthn-verifier",
  "perch-zk-pool",

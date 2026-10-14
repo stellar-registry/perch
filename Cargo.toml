@@ -30,6 +30,7 @@ members = [
     "crates/perch-zk-adapter",
     "crates/perch-webauthn-verifier",
     "crates/perch-account-factory",
+    "crates/perch-admin-timelock",
     "crates/perch-testnet",
 ]
 # Vendored third-party source, built only as a path dependency: not linted,

@@ -1,0 +1,27 @@
+[package]
+name = "perch-admin-timelock"
+description = "Owner-gated timelock: the admin multisig queues an admin call with a visible delay, then executes it after the delay or cancels it beforehand. The external-call analog of the perch account's schedule_upgrade/execute_upgrade/cancel_upgrade."
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# No cargo-manifest `publish = false`: release-plz's `release` command skips
+# manifest-unpublishable packages (no tag ever — the missing-4-tags bug of the
+# v0.1.0 release). crates.io publish is blocked workspace-wide in
+# release-plz.toml instead.
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+# scerr (sequentially-coded contract errors) + typed storage handles, the same
+# surface the account uses (crates/perch-smart-account).
+soroban-sdk-tools = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }

@@ -31,6 +31,8 @@ proptest = "1"
 perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
 perch-zk-prover = { version = "0.1.0", path = "../perch-zk-prover" }
 perch-account-factory = { version = "0.1.2", path = "../perch-account-factory" }
+perch-admin-timelock = { version = "0.1.0", path = "../perch-admin-timelock" }
+perch-stateless-registry = { version = "0.1.1", path = "../perch-stateless-registry" }
 sha2 = "0.10"
 stellar-accounts = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }

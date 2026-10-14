@@ -135,6 +135,11 @@ substitute:
   `MAX_DOC_SIGNERS`, which the `if`/`then` chain does not enumerate (guardians
   have no dedicated cap constant — a guardian-count cap would let the schema
   cover them fully; recorded as CANON v2 follow-up).
+- **Value checks the schema does not encode.** The CRC16 checksum of every
+  address strkey (the schema pins only the shape); each `functions` entry
+  being a Soroban `Symbol` (1–32 characters from `[a-zA-Z0-9_]`); and a
+  `string-prefix` prefix of at most `MAX_STRING_PRED_LEN` (256) bytes.
+  perch-ir's `validate` refuses each.
 - **Aggregate byte budget.** The compiler's `max_canonical_bytes` — the size of
   the *canonically-encoded* document, not a property of the parsed JSON tree —
   is not expressible as a schema keyword. It lives in

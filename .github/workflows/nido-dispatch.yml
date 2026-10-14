@@ -12,7 +12,7 @@ name: Notify Nido
 #
 # Authority: a token minted per run from the perch-nido-sync GitHub App
 # (installed on nidohq/nido), narrowed to contents:write on that one
-# repository, which is what the dispatches endpoint requires. The app id and
+# repository, which is what the dispatches endpoint requires. The client id and
 # private key are secrets of the `testnet` / `mainnet` environment matching
 # the manifest's network, so only a job bound to that environment can mint.
 #
@@ -150,19 +150,19 @@ jobs:
     steps:
       - name: Check the app secrets are configured
         env:
-          APP_ID: ${{ secrets.PERCH_NIDO_SYNC_APP_ID }}
+          CLIENT_ID: ${{ secrets.PERCH_NIDO_SYNC_CLIENT_ID }}
           PRIVATE_KEY: ${{ secrets.PERCH_NIDO_SYNC_PRIVATE_KEY }}
           NETWORK: ${{ matrix.network }}
         run: |
-          if [ -z "$APP_ID" ] || [ -z "$PRIVATE_KEY" ]; then
-            echo "::error::environment '$NETWORK' lacks PERCH_NIDO_SYNC_APP_ID / PERCH_NIDO_SYNC_PRIVATE_KEY; Nido was not notified (re-send with workflow_dispatch once set)"
+          if [ -z "$CLIENT_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::environment '$NETWORK' lacks PERCH_NIDO_SYNC_CLIENT_ID / PERCH_NIDO_SYNC_PRIVATE_KEY; Nido was not notified (re-send with workflow_dispatch once set)"
             exit 1
           fi
       - name: Mint a nidohq/nido token from the perch-nido-sync app
         id: token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.PERCH_NIDO_SYNC_APP_ID }}
+          client-id: ${{ secrets.PERCH_NIDO_SYNC_CLIENT_ID }}
           private-key: ${{ secrets.PERCH_NIDO_SYNC_PRIVATE_KEY }}
           owner: nidohq
           repositories: nido

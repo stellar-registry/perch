@@ -273,7 +273,7 @@ narrowed to `contents: write` on `nidohq/nido`, which the dispatches endpoint
 requires). Each environment (`testnet`, and `mainnet` before a mainnet
 manifest exists) needs two secrets:
 
-- `PERCH_NIDO_SYNC_APP_ID` — the app's numeric App ID
+- `PERCH_NIDO_SYNC_CLIENT_ID` — the app's Client ID (`Iv…`, from the app's settings page)
 - `PERCH_NIDO_SYNC_PRIVATE_KEY` — the app's PEM private key
 
 Without them the send step fails with an error naming the environment. To

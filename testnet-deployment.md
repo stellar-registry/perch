@@ -55,6 +55,39 @@ measured exercise. The canonical registries below are unchanged.
   Rotating requires that deployer key (human-held) and is a policy-hardening
   step, not a blocker for consuming the deployment.
 
+## Secrets and environments
+
+| Name | Kind | Where it lives | Read by |
+| --- | --- | --- | --- |
+| `CI_PUBLISH_SECRET_KEY` | secret | `testnet` environment, **and** the repository until the reusable `registry-publish` workflow accepts an environment | `deploy-stack` (from the environment); `constructorless-publish` (from the repository) |
+| `CI_PUBLISH_MAINNET_SECRET_KEY` | secret | `mainnet` environment only | nothing yet: reserved for a mainnet publish or deploy job |
+| `NPM_TOKEN` | secret | repository | `npm-publish` |
+| `PERCH_REGISTRY_CONTRACT_ID`, `PERCH_AUTHOR_ADDRESS`, `PERCH_DEPLOY_STACK` | variables | repository | `constructorless-publish` (`with:` inputs), `deploy-stack` (job `if:` and steps) |
+
+`CI_PUBLISH_SECRET_KEY` is the seed of the account's `ci-publish` delegate, so
+whoever can read it can publish as `perch-author` until the rule expires.
+`deploy-stack` declares `environment: testnet` and reads the environment's
+copy. `constructorless-publish` calls a reusable workflow; a job that does that
+cannot declare `environment:`, so it still reads the repository secret. The
+repository copy can be deleted only after `registry-publish` gains a job-level
+environment input and `release.yml` passes `testnet` to it.
+
+The variables stay at repository level: a job's `if:` is evaluated before its
+environment is entered, and a reusable-workflow caller has no environment, so
+neither would see an environment variable.
+
+The `testnet` environment has no protection rules, which is acceptable because
+the delegate is expiry- and fee-bounded. The `mainnet` environment requires a
+reviewer and allows only `main`. It holds a separate delegate key on its own
+context rule of the mainnet author account; the testnet key is never used on
+mainnet.
+
+**Open: renewal owner for the `ci-publish` rule.** The rule's `valid_until`
+is ledger 6999999. After that ledger every CI publish fails authorization until
+someone re-applies the delegate rule with a later `valid_until`, using the
+account's `admin` rule (human-held). No one is assigned to watch the expiry or
+renew it yet.
+
 ## Observations
 
 - **One registry.** An account bakes one registry id and derives its

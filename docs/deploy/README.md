@@ -232,6 +232,55 @@ Each name is then bound to the perch-author account, and every later version
 publishes with the delegate alone. Finally set `vars.PERCH_DEPLOY_STACK=true`
 so the `deploy-stack` job runs on the next release.
 
+### Notifying Nido (`nido-dispatch.yml`)
+
+When a change to `deployments/testnet.json` or `deployments/mainnet.json`
+lands on `main` (normally by merging a `deploy(<network>)` PR), the
+`Notify Nido` workflow sends a `repository_dispatch` to `nidohq/nido`, once
+per changed network. Nido's receiving workflow opens a repin PR; a Nido
+maintainer merges it, and Nido's factory redeploy follows that merge. Perch
+never deploys anything for Nido and never merges on its behalf.
+
+The event is `perch-deployed`. Its `client_payload` is the contract the
+receiver consumes:
+
+| Field | |
+| --- | --- |
+| `schema` | `1`. Bumped on any incompatible change; a receiver rejects a schema it does not know. |
+| `repository` | `stellar-registry/perch` |
+| `network` | `testnet` or `mainnet`; equals the manifest's own `network` field |
+| `perch_sha` | the 40-hex `main` commit the manifest was read at — the ref to repin to |
+| `manifest_path` | `deployments/<network>.json` |
+| `manifest_sha256` | sha256 of the manifest file's bytes at `perch_sha` |
+| `source_commit` | the manifest's `source.commit`: the commit the stack was built from |
+| `run_url` | the Perch workflow run that sent it |
+
+The payload carries no addresses or hashes beyond the manifest's own digest:
+the manifest is the one record. A receiver fetches
+`https://raw.githubusercontent.com/<repository>/<perch_sha>/<manifest_path>`,
+checks its sha256 against `manifest_sha256`, and reads everything else from
+it, still resolving each contract by name and hash (`fetch-infra-wasm.sh`),
+never by bare name. The same `perch_sha` can arrive more than once (a manual
+re-send), so a receiver keys its repin branch on `network` and updates an
+open PR rather than opening a second.
+
+The workflow plans in a job with no secrets, then sends from a job bound to
+the GitHub environment named after the network, which holds the
+`perch-nido-sync` GitHub App's credentials. That app is installed on
+`nidohq/nido` only, with **Contents: read & write** and **Pull requests: read
+& write** (the latter for the receiver; the dispatch itself mints a token
+narrowed to `contents: write` on `nidohq/nido`, which the dispatches endpoint
+requires). Each environment (`testnet`, and `mainnet` before a mainnet
+manifest exists) needs two secrets:
+
+- `PERCH_NIDO_SYNC_APP_ID` — the app's numeric App ID
+- `PERCH_NIDO_SYNC_PRIVATE_KEY` — the app's PEM private key
+
+Without them the send step fails with an error naming the environment. To
+re-send the manifest currently on `main` — after adding the secrets, or after
+a receiver failure — run the workflow by hand (`workflow_dispatch`, choosing
+the network).
+
 ## Simulating a recovery completion
 
 A completion is `apply_doc` of the attempt's target, authorized through the

@@ -1,0 +1,184 @@
+name: Notify Nido
+
+# When a deployment manifest (deployments/<network>.json) lands on main, tell
+# nidohq/nido so it can open a repin PR against the new deployment. Nido's
+# receiving workflow opens that PR; a Nido maintainer merges it, and Nido's
+# factory redeploy follows the merge. Nothing here deploys anything.
+#
+# The dispatch is a `repository_dispatch` with event_type `perch-deployed`.
+# Its client_payload is a versioned contract the Nido receiver consumes —
+# documented in docs/deploy/README.md "Notifying Nido". Change it only by
+# bumping `schema` there and here together.
+#
+# Authority: a token minted per run from the perch-nido-sync GitHub App
+# (installed on nidohq/nido), narrowed to contents:write on that one
+# repository, which is what the dispatches endpoint requires. The app id and
+# private key are secrets of the `testnet` / `mainnet` environment matching
+# the manifest's network, so only a job bound to that environment can mint.
+#
+# Split in two so the job that holds the key runs no repository code: `plan`
+# (no secrets) reads the manifests and builds each payload; `dispatch` only
+# mints the token and sends what `plan` computed.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - deployments/testnet.json
+      - deployments/mainnet.json
+  # Re-send the current manifest by hand, e.g. after the secrets were added or
+  # a Nido-side receiver failure. Runs only from main (enforced in `plan`).
+  workflow_dispatch:
+    inputs:
+      network:
+        description: Network whose manifest on main to re-send
+        required: true
+        type: choice
+        options: [testnet, mainnet]
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    if: github.repository == 'stellar-registry/perch'
+    permissions:
+      contents: read
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The push may carry several commits; diff the whole range.
+          fetch-depth: 0
+      - name: Find the changed network manifests and build each payload
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+          INPUT_NETWORK: ${{ inputs.network }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # A network is dispatched only if it has a GitHub environment of the
+          # same name holding the app secrets; keep in step with `on.push.paths`.
+          known="testnet mainnet"
+
+          if [ "$EVENT" = workflow_dispatch ]; then
+            if [ "$REF" != refs/heads/main ]; then
+              echo "::error::manual re-send runs only from main (got $REF)"
+              exit 1
+            fi
+            networks="$INPUT_NETWORK"
+          else
+            # A force-push or new branch has no usable `before`; fall back to
+            # the tip commit alone.
+            if [ -z "${BEFORE//0/}" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+              BEFORE="$SHA^"
+            fi
+            networks=""
+            for path in $(git diff --name-only "$BEFORE" "$SHA" -- deployments/); do
+              for net in $known; do
+                [ "$path" = "deployments/$net.json" ] && networks="$networks $net"
+              done
+            done
+          fi
+
+          targets="[]"
+          for net in $networks; do
+            path="deployments/$net.json"
+            if ! git cat-file -e "$SHA:$path" 2>/dev/null; then
+              if [ "$EVENT" = workflow_dispatch ]; then
+                echo "::error::$path does not exist at $SHA"
+                exit 1
+              fi
+              echo "::notice::$path was removed at $SHA; nothing to dispatch for $net"
+              continue
+            fi
+            manifest=$(git show "$SHA:$path")
+            # Refuse to announce a file that is not a manifest for this network:
+            # the receiver repins to whatever this names.
+            if ! jq -e --arg net "$net" \
+                '.schema == 1 and .network == $net and (.source.commit | test("^[0-9a-f]{40}$"))' \
+                <<<"$manifest" >/dev/null; then
+              echo "::error::$path at $SHA is not a schema-1 $net manifest with a source commit"
+              exit 1
+            fi
+            sha256=$(git show "$SHA:$path" | sha256sum | cut -d' ' -f1)
+            source_commit=$(jq -r '.source.commit' <<<"$manifest")
+            targets=$(jq -c \
+              --arg network "$net" --arg path "$path" --arg sha256 "$sha256" \
+              --arg source_commit "$source_commit" --arg repository "$REPOSITORY" \
+              --arg sha "$SHA" --arg run_url "$RUN_URL" \
+              '. + [{network: $network, payload: {
+                 schema: 1,
+                 repository: $repository,
+                 network: $network,
+                 perch_sha: $sha,
+                 manifest_path: $path,
+                 manifest_sha256: $sha256,
+                 source_commit: $source_commit,
+                 run_url: $run_url
+               }}]' <<<"$targets")
+            echo "$net: $path @ $SHA (sha256 $sha256)" >>"$GITHUB_STEP_SUMMARY"
+          done
+
+          if [ "$targets" = "[]" ]; then
+            echo "no network manifest changed — nothing to dispatch" >>"$GITHUB_STEP_SUMMARY"
+          fi
+          echo "targets=$targets" >>"$GITHUB_OUTPUT"
+
+  dispatch:
+    needs: plan
+    if: needs.plan.outputs.targets != '[]'
+    runs-on: ubuntu-latest
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.targets) }}
+    environment: ${{ matrix.network }}
+    # One dispatch in flight per network; a newer manifest supersedes a queued
+    # older one, and the receiver repins to the newest anyway.
+    concurrency:
+      group: nido-dispatch-${{ matrix.network }}
+      cancel-in-progress: false
+    steps:
+      - name: Check the app secrets are configured
+        env:
+          APP_ID: ${{ secrets.PERCH_NIDO_SYNC_APP_ID }}
+          PRIVATE_KEY: ${{ secrets.PERCH_NIDO_SYNC_PRIVATE_KEY }}
+          NETWORK: ${{ matrix.network }}
+        run: |
+          if [ -z "$APP_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::environment '$NETWORK' lacks PERCH_NIDO_SYNC_APP_ID / PERCH_NIDO_SYNC_PRIVATE_KEY; Nido was not notified (re-send with workflow_dispatch once set)"
+            exit 1
+          fi
+      - name: Mint a nidohq/nido token from the perch-nido-sync app
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.PERCH_NIDO_SYNC_APP_ID }}
+          private-key: ${{ secrets.PERCH_NIDO_SYNC_PRIVATE_KEY }}
+          owner: nidohq
+          repositories: nido
+          permission-contents: write
+      - name: Send the perch-deployed repository_dispatch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PAYLOAD: ${{ toJSON(matrix.payload) }}
+        run: |
+          set -euo pipefail
+          jq -n --argjson payload "$PAYLOAD" \
+            '{event_type: "perch-deployed", client_payload: $payload}' |
+            gh api --method POST repos/nidohq/nido/dispatches --input -
+          {
+            echo "sent \`perch-deployed\` to nidohq/nido:"
+            echo '```json'
+            jq . <<<"$PAYLOAD"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"

@@ -521,7 +521,7 @@ jobs:
       id-token: write
       contents: write
       attestations: write
-    uses: stellar-registry/actions/.github/workflows/contract-release.yml@470d61ccad7240f496497c66906a03e6540e8405 # main 2026-08
+    uses: stellar-registry/actions/.github/workflows/contract-release.yml@57bfdf4b96279a28961cb76a48ec4204300b5818 # main 2026-10-14
     with:
       package: ${{ matrix.package }}
       release_name: ${{ matrix.tag }}
@@ -552,7 +552,7 @@ jobs:
     permissions:
       contents: write
       id-token: write # gh attestation verify
-    uses: stellar-registry/actions/.github/workflows/registry-publish.yml@fcfebed27b865a8ddfe5439926a13ba9013ccef7 # main 2026-09
+    uses: stellar-registry/actions/.github/workflows/registry-publish.yml@57bfdf4b96279a28961cb76a48ec4204300b5818 # main 2026-10-14
     with:
       # The constructorless subregistry (unverified/perch/constructorless) id and
       # the perch-author-account smart account (C…). Repo/testnet vars.
@@ -563,6 +563,9 @@ jobs:
       release_tag: ${{ matrix.tag }}
       wasm_asset: ${{ matrix.package }}_v${{ matrix.version }}.wasm
       network: testnet
+      # The publish job runs in this environment, so the signing_key reference
+      # below resolves to its CI_PUBLISH_SECRET_KEY environment secret.
+      environment: testnet
     secrets:
       # perch-ci: the account's ci-publish delegate (also the fee source).
       signing_key: ${{ secrets.CI_PUBLISH_SECRET_KEY }}

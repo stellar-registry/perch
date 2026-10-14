@@ -1893,6 +1893,7 @@ dependencies = [
  "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",
+ "perch-program",
  "perch-recovery",
  "perch-smart-account",
  "perch-spending-limit",

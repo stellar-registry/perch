@@ -3,10 +3,20 @@
 //!
 //! - [`OracleAccount`] is the perch account with `apply_doc` swapped for the
 //!   full replace ([`perch_smart_account::testutils::apply_doc_full_replace`]).
-//!   Everything else (compile, revocation, recovery sync) is the same code.
+//!   Everything else (compile, revocation, recovery sync, and the desired
+//!   rule set the reconcile is handed, expiry drop included) is the same
+//!   code, so the oracle checks the reconcile only.
+//! - [`DocModel::expected_rules`] is the independent check: the rules a
+//!   document grants at the current ledger, computed from the model alone,
+//!   compared with [`live_rules`], the grant read back from OZ's context
+//!   rules and the parameters each attached policy holds. It shares no code
+//!   with the compiler or the account, so it catches what the oracle cannot.
 //! - [`DocModel`] is a generated policy document. [`DocModel::generate`]
 //!   draws one from bytes, so proptest (shrinking over bytes) and cargo-fuzz
-//!   share one generator.
+//!   share one generator. It reaches the document caps, draws signer lists
+//!   in any order, spells keys in either hex case and cap limits with
+//!   leading zeros or a sign, and [`DocModel::sequence`] advances the ledger
+//!   between documents past the rule expiries it draws.
 //! - [`DeltaWorld`] holds a delta account and an oracle account side by side
 //!   in one `Env`, with the shared infra, controller, verifier, and address
 //!   pools every generated document draws from.
@@ -22,6 +32,8 @@ use arbitrary::Unstructured;
 use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::{PerchDocCompiler, MAX_DOC_RULES, MAX_DOC_SIGNERS};
 use perch_interpreter::PerchInterpreter;
+use perch_interpreter::PerchInterpreterClient;
+use perch_program::Op;
 use perch_recovery::PerchRecovery;
 use perch_smart_account::testutils::{plan_doc, Mode, PlannedRule};
 use perch_smart_account::{infra, InstalledRule};
@@ -30,11 +42,12 @@ use soroban_sdk::testutils::EnvTestConfig;
 use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _};
 use soroban_sdk::xdr::{ContractEventBody, LedgerEntryData, LedgerKey, ScAddress, ScVal};
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::string::{String, ToString};
 use std::vec::Vec;
-use stellar_accounts::smart_account::Signer;
+use stellar_accounts::policies::spending_limit::get_spending_limit_data;
+use stellar_accounts::smart_account::{ContextRuleType, Signer};
 
 pub use oracle::{OracleAccount, OracleAccountClient};
 
@@ -157,7 +170,8 @@ pub struct RuleModel {
     /// `Some(m)`: an m-of-n threshold (interpreter `MinSigners`).
     pub threshold: Option<u32>,
     pub functions: Option<Vec<&'static str>>,
-    /// `not-after-ledger`, far in the future.
+    /// `not-after-ledger`: near the world's starting ledger (so a sequence
+    /// that advances the ledger passes it) or far in the future.
     pub not_after: Option<u32>,
     /// `(limit, period_ledgers)`; contract scopes only.
     pub cap: Option<(u32, u32)>,
@@ -174,6 +188,16 @@ pub struct RecoveryModel {
     pub max_cancels: u32,
 }
 
+/// How a document spells values that have more than one accepted spelling.
+/// Every spelling of a document compiles to the same rules.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Spelling {
+    /// External keys in uppercase hex.
+    pub upper_hex: bool,
+    /// Prepended to every cap limit: `""`, leading zeros, or a `+` sign.
+    pub limit_prefix: &'static str,
+}
+
 /// A generated policy document. `rules[0]` is always the policy-free
 /// self-admin rule `admin` (the anti-brick check needs one).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -181,19 +205,28 @@ pub struct DocModel {
     pub signers: Vec<SignerModel>,
     pub rules: Vec<RuleModel>,
     pub recovery: Option<RecoveryModel>,
+    pub spelling: Spelling,
 }
 
-/// The not-after ledgers a generated rule may carry (all far past any ledger
-/// a test reaches).
-const NOT_AFTER: [u32; 3] = [5_000_000, 6_000_000, 7_000_000];
+/// The not-after ledgers a generated rule may carry: just past the world's
+/// starting ledger (1,000, the last ledger a `1_001` rule is live at),
+/// within reach of [`ADVANCE`], and out of reach.
+const NOT_AFTER: [u32; 5] = [1_001, 1_050, 1_300, 2_000, 5_000_000];
+/// Ledgers a sequence advances before each document: none, or past some of
+/// the [`NOT_AFTER`] bounds, so rules expire between applies and documents
+/// carry bounds already past.
+const ADVANCE: [u32; 4] = [0, 0, 60, 400];
+/// Cap-limit spellings: canonical, leading zeros, or an explicit sign.
+const LIMIT_PREFIXES: [&str; 4] = ["", "0", "00", "+"];
 
 impl DocModel {
     /// Draw a valid document from `u`. Every draw is in range, so running
     /// out of bytes yields the smallest choices: proptest shrinks toward
     /// one-signer, admin-only documents.
     pub fn generate(u: &mut Unstructured) -> arbitrary::Result<DocModel> {
-        // Within the compiler's document caps, so every draw compiles.
-        let n_signers = u.int_in_range(1..=6usize.min(MAX_DOC_SIGNERS as usize))?;
+        // Up to the compiler's document caps, so every draw compiles and the
+        // caps themselves are reached.
+        let n_signers = u.int_in_range(1..=MAX_DOC_SIGNERS as usize)?;
         let mut keys: Vec<usize> = (0..KEY_POOL).collect();
         let mut signers = Vec::new();
         for id in SIGNER_IDS.iter().take(n_signers) {
@@ -215,7 +248,7 @@ impl DocModel {
             not_after: None,
             cap: None,
         }];
-        let n_rules = u.int_in_range(0..=6usize.min(MAX_DOC_RULES as usize - 1))?;
+        let n_rules = u.int_in_range(0..=MAX_DOC_RULES as usize - 1)?;
         let mut names: Vec<&'static str> = RULE_NAMES.to_vec();
         for _ in 0..n_rules {
             let name = names.remove(u.choose_index(names.len())?);
@@ -269,17 +302,92 @@ impl DocModel {
         } else {
             None
         };
+        let spelling = Spelling {
+            upper_hex: u.ratio(1, 3)?,
+            limit_prefix: u.choose(&LIMIT_PREFIXES)?,
+        };
         Ok(DocModel {
             signers,
             rules,
             recovery,
+            spelling,
         })
     }
 
-    /// A sequence of `1..=max` documents drawn from `u`.
-    pub fn sequence(u: &mut Unstructured, max: usize) -> arbitrary::Result<Vec<DocModel>> {
+    /// A sequence of `1..=max` documents drawn from `u`, each with the
+    /// ledgers to advance ([`DeltaWorld::advance`]) before it is applied.
+    pub fn sequence(u: &mut Unstructured, max: usize) -> arbitrary::Result<Vec<(u32, DocModel)>> {
         let n = u.int_in_range(1..=max)?;
-        (0..n).map(|_| DocModel::generate(u)).collect()
+        (0..n)
+            .map(|_| Ok((*u.choose(&ADVANCE)?, DocModel::generate(u)?)))
+            .collect()
+    }
+
+    /// The rules this document grants `account` at the current ledger,
+    /// rendered like [`live_rules`] and computed from the model alone (no
+    /// compiler or account code): a rule whose `not-after-ledger` has been
+    /// reached grants nothing; a rule's signers are a set; a threshold,
+    /// function list, or cap attaches the interpreter with an m-of-n floor
+    /// (n for `all`); a cap attaches the spending limit at the limit's
+    /// numeric value however it is spelled; recovery adds a zero-signer
+    /// self-scoped rule held by the controller.
+    pub fn expected_rules(&self, w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
+        let seq = w.env.ledger().sequence();
+        let mut out = BTreeSet::new();
+        for r in &self.rules {
+            if r.not_after.is_some_and(|n| n <= seq) {
+                continue;
+            }
+            let ctx = match r.scope {
+                None => account,
+                Some(n) => &w.scopes[n],
+            };
+            let signers: BTreeSet<String> = r
+                .signers
+                .iter()
+                .map(|i| match self.signers[*i].key {
+                    KeyModel::Delegated(k) => strkey(&w.keys[k]),
+                    KeyModel::External(k) => {
+                        format!("{}:{}", strkey(&w.verifier), external_key(k))
+                    }
+                })
+                .collect();
+            let mut policies = BTreeSet::new();
+            if r.threshold.is_some() || r.functions.is_some() || r.cap.is_some() {
+                let m = r.threshold.unwrap_or(r.signers.len() as u32);
+                let mut ops = soroban_sdk::Vec::new(&w.env);
+                ops.push_back(Op::MinSigners(m));
+                if let Some(f) = &r.functions {
+                    let mut syms = soroban_sdk::Vec::new(&w.env);
+                    for f in f {
+                        syms.push_back(soroban_sdk::Symbol::new(&w.env, f));
+                    }
+                    ops.push_back(Op::FnIn(syms));
+                }
+                ops.push_back(Op::All(1 + r.functions.is_some() as u32));
+                policies.insert(format!("interpreter:{ops:?}"));
+            }
+            if let Some((limit, period)) = r.cap {
+                policies.insert(format!("cap:{limit}/{period}"));
+            }
+            out.insert(rule_line(
+                r.name,
+                ctx,
+                r.not_after.map(|n| n - 1),
+                &signers,
+                &policies,
+            ));
+        }
+        if self.recovery.is_some() {
+            out.insert(rule_line(
+                "recovery",
+                account,
+                None,
+                &BTreeSet::new(),
+                &BTreeSet::from(["recovery".to_string()]),
+            ));
+        }
+        out
     }
 
     /// The document's JSON, with every address from `w`'s pools.
@@ -295,7 +403,11 @@ impl DocModel {
                     r#"{{"id":"{}","verifier":"{}","key":"{}"}}"#,
                     s.id,
                     strkey(&w.verifier),
-                    external_key(k)
+                    if self.spelling.upper_hex {
+                        external_key(k).to_uppercase()
+                    } else {
+                        external_key(k)
+                    }
                 ),
             })
             .collect();
@@ -363,7 +475,8 @@ impl DocModel {
         if let Some((limit, period)) = r.cap {
             let _ = write!(
                 out,
-                r#","cap":{{"limit":"{limit}","period-ledgers":{period}}}"#
+                r#","cap":{{"limit":"{}{limit}","period-ledgers":{period}}}"#,
+                self.spelling.limit_prefix
             );
         }
         out.push('}');
@@ -375,14 +488,107 @@ impl DocModel {
     }
 }
 
-/// A non-empty, sorted subset of `0..n` (`all` and `threshold` reject an
-/// empty list).
+/// A non-empty subset of `0..n` (`all` and `threshold` reject an empty
+/// list), in a drawn order: a rule's signers are a set, so their order in the
+/// document must not change what is granted. Out of bytes, the order is
+/// ascending.
 fn subset(u: &mut Unstructured, n: usize, non_empty: bool) -> arbitrary::Result<Vec<usize>> {
     let mut out: Vec<usize> = (0..n).filter(|_| u.ratio(1, 2).unwrap_or(false)).collect();
     if out.is_empty() && non_empty {
         out.push(u.choose_index(n)?);
     }
+    for i in (1..out.len()).rev() {
+        let j = i - u.int_in_range(0..=i)?;
+        out.swap(i, j);
+    }
     Ok(out)
+}
+
+/// One granted rule, as [`DocModel::expected_rules`] and [`live_rules`]
+/// render it.
+fn rule_line(
+    name: &str,
+    ctx: &Address,
+    valid_until: Option<u32>,
+    signers: &BTreeSet<String>,
+    policies: &BTreeSet<String>,
+) -> String {
+    format!(
+        "{name} @{} until={valid_until:?} signers={signers:?} policies={policies:?}",
+        strkey(ctx)
+    )
+}
+
+/// The rules `account` grants at the current ledger, read from where they
+/// are enforced rather than from the account's own records: every OZ context
+/// rule not yet expired, its signers, and what each attached policy holds
+/// for it (the interpreter's program, the spending limit's cap).
+pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
+    let client = PerchAccountClient::new(&w.env, account);
+    let interpreter = PerchInterpreterClient::new(&w.env, &w.interpreter);
+    let seq = w.env.ledger().sequence();
+    let count = client.get_context_rules_count();
+    let mut out = BTreeSet::new();
+    let (mut found, mut id) = (0, 0u32);
+    while found < count {
+        assert!(id < 100_000, "{count} context rules, not all found");
+        let rule = client.try_get_context_rule(&id);
+        id += 1;
+        let Ok(Ok(rule)) = rule else {
+            continue;
+        };
+        found += 1;
+        if rule.valid_until.is_some_and(|v| v < seq) {
+            continue;
+        }
+        let ctx = match &rule.context_type {
+            ContextRuleType::CallContract(a) => a.clone(),
+            other => panic!("unexpected context type {other:?}"),
+        };
+        let signers: BTreeSet<String> = rule
+            .signers
+            .iter()
+            .map(|s| match s {
+                Signer::Delegated(a) => strkey(&a),
+                Signer::External(v, key) => {
+                    let mut buf = std::vec![0u8; key.len() as usize];
+                    key.copy_into_slice(&mut buf);
+                    format!("{}:{}", strkey(&v), hex::encode(buf))
+                }
+            })
+            .collect();
+        let policies: BTreeSet<String> = rule
+            .policies
+            .iter()
+            .map(|p| {
+                if p == w.interpreter {
+                    match interpreter.get_program(account, &rule.id) {
+                        Some(i) => format!("interpreter:{:?}", i.program.ops),
+                        None => "interpreter:none".to_string(),
+                    }
+                } else if p == w.spending_limit {
+                    let data = w.env.as_contract(&w.spending_limit, || {
+                        get_spending_limit_data(&w.env, rule.id, account)
+                    });
+                    format!("cap:{}/{}", data.spending_limit, data.period_ledgers)
+                } else if p == w.controller {
+                    "recovery".to_string()
+                } else {
+                    strkey(&p)
+                }
+            })
+            .collect();
+        let mut name = std::vec![0u8; rule.name.len() as usize];
+        rule.name.copy_into_slice(&mut name);
+        out.insert(rule_line(
+            &String::from_utf8(name).unwrap(),
+            &ctx,
+            rule.valid_until,
+            &signers,
+            &policies,
+        ));
+    }
+    out
 }
 
 /// External key `n`: 32 bytes, distinct per `n`.
@@ -478,6 +684,12 @@ impl DeltaWorld {
             interpreter,
             spending_limit,
         }
+    }
+
+    /// Advance the ledger by `ledgers` (a [`DocModel::sequence`] step's
+    /// advance), once for both accounts.
+    pub fn advance(&self, ledgers: u32) {
+        self.env.ledger().with_mut(|l| l.sequence_number += ledgers);
     }
 
     /// Apply `doc` to `account` (either one). `Ok(doc_hash)` or the error,

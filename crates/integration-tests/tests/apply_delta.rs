@@ -74,6 +74,20 @@ fn apply_both(w: &DeltaWorld, d: &DocModel) {
         &storage_state(&w.env, &w.oracle, History::Keep),
         "delta vs full replace",
     );
+    // The oracle shares compile and the desired rule set with the delta;
+    // the model's own grant shares neither.
+    if delta.is_ok() {
+        assert_eq!(
+            live_rules(w, &w.delta),
+            d.expected_rules(w, &w.delta),
+            "the delta account's live rules vs the model's grant for {d:?}"
+        );
+        assert_eq!(
+            live_rules(w, &w.oracle),
+            d.expected_rules(w, &w.oracle),
+            "the full replace's live rules vs the model's grant for {d:?}"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -83,15 +97,17 @@ fn apply_both(w: &DeltaWorld, d: &DocModel) {
 proptest! {
     #![proptest_config(config(48))]
 
-    /// For any sequence of documents, the delta account and the
-    /// full-replace oracle accept and refuse the same documents and end every
-    /// step with identical normalized storage: rules, signers, policies and
-    /// their parameters, registries, the canonical applied document, and the
-    /// recovery wiring.
+    /// For any sequence of documents, with the ledger advancing between
+    /// them past rule expiries, the delta account and the full-replace
+    /// oracle accept and refuse the same documents and end every step with
+    /// identical normalized storage: rules, signers, policies and their
+    /// parameters, registries, the canonical applied document, and the
+    /// recovery wiring. Both grant exactly the rules the model computes.
     #[test]
     fn delta_apply_matches_full_replace(bytes in proptest::collection::vec(any::<u8>(), 0..2048)) {
         let w = DeltaWorld::new();
-        for d in DocModel::sequence(&mut Unstructured::new(&bytes), 5).unwrap() {
+        for (advance, d) in DocModel::sequence(&mut Unstructured::new(&bytes), 5).unwrap() {
+            w.advance(advance);
             apply_both(&w, &d);
         }
     }
@@ -428,6 +444,7 @@ fn doc(signers: std::vec::Vec<SignerModel>, rules: std::vec::Vec<RuleModel>) -> 
         signers,
         rules,
         recovery: None,
+        spelling: Spelling::default(),
     }
 }
 

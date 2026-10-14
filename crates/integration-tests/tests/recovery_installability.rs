@@ -24,7 +24,7 @@ use perch_account::PerchAccountError;
 use perch_doc_compiler::{admin_survives, CompiledRule, RuleScope};
 use perch_recovery::EvidenceDomain::Initiate;
 use perch_recovery_interface::RecoveryAction;
-use perch_testkit::delta::{DeltaWorld, DocModel, KeyModel, RuleModel, SignerModel};
+use perch_testkit::delta::{DeltaWorld, DocModel, KeyModel, RuleModel, SignerModel, Spelling};
 use perch_testkit::FIXTURE_NETWORK;
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{Bytes, Env, String, Vec};
@@ -320,6 +320,7 @@ fn delta_and_full_replace_agree_after_a_rule_expires() {
             rule("r1", Some(0), std::vec![1], Some(1_010)),
         ],
         recovery: None,
+        spelling: Spelling::default(),
     };
     assert!(w.apply(&w.delta, &a).is_ok());
     assert!(w.apply(&w.oracle, &a).is_ok());
@@ -353,6 +354,7 @@ fn an_expired_rule_edit_does_not_depend_on_the_reconcile_path() {
             rule("r1", Some(0), std::vec![1], Some(1_010)),
         ],
         recovery: None,
+        spelling: Spelling::default(),
     };
     let mut b = a.clone();
     b.rules[1].signers = std::vec![1, 2];

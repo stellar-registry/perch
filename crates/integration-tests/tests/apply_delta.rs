@@ -184,7 +184,8 @@ fn policy_set(r: &InstalledRule) -> BTreeSet<String> {
 
 fn same_content(a: &InstalledRule, b: &InstalledRule) -> bool {
     same_slot(a, b)
-        && signer_set(a) == signer_set(b)
+        // OZ keeps signer order, so a reorder is a change.
+        && a.signers == b.signers
         && policy_set(a) == policy_set(b)
         && a.valid_until == b.valid_until
 }
@@ -803,6 +804,27 @@ fn a_one_signer_rule_swaps_its_only_signer_in_place() {
         names(&events, &w.delta),
         sorted(&["signer_added", "signer_removed", "rule_edited"])
     );
+}
+
+#[test]
+fn reordering_a_rules_signers_gives_oz_and_the_record_the_new_order() {
+    // The same signer set in a new order: OZ's context rule keeps the order
+    // it was given, so the rule is edited in place (one signer swap, no
+    // signer added or removed) and both OZ and the record take the new
+    // order, as a full replace would.
+    let a = doc(delegated(3), std::vec![admin(&[0, 1, 2])]);
+    let b = doc(delegated(3), std::vec![admin(&[2, 0, 1])]);
+    let (w, events, before, after) = case(&a, &b);
+    let id = id_of(&after, "admin");
+    assert_eq!(id_of(&before, "admin"), id);
+    assert_eq!(names(&events, &w.delta), sorted(&["rule_edited"]));
+    let record = after.iter().find(|r| r.id == id).unwrap();
+    assert_ne!(
+        record.signers,
+        before.iter().find(|r| r.id == id).unwrap().signers
+    );
+    let oz = perch_account::PerchAccountClient::new(&w.env, &w.delta).get_context_rule(&id);
+    assert_eq!(oz.signers, record.signers);
 }
 
 /// `n` declared signers using keys `first..first + n` of the pool.

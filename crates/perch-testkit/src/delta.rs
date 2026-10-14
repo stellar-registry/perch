@@ -791,7 +791,9 @@ impl Ids {
         }
     }
 
-    fn named_list(&self, v: &ScVal, map: &BTreeMap<u32, String>) -> String {
+    /// The ids in `v` renamed through `map`; sorted unless `ordered`. OZ keeps a
+    /// rule's signers in the order it was given, so that order is compared.
+    fn named_list(&self, v: &ScVal, map: &BTreeMap<u32, String>, ordered: bool) -> String {
         let mut names: Vec<String> = match v {
             ScVal::Vec(Some(items)) => items
                 .iter()
@@ -802,7 +804,9 @@ impl Ids {
                 .collect(),
             other => std::vec![render(other, None)],
         };
-        names.sort();
+        if !ordered {
+            names.sort();
+        }
         format!("[{}]", names.join(","))
     }
 
@@ -817,8 +821,8 @@ impl Ids {
                         for e in m.0.iter() {
                             let f = render(&e.key, Some(me));
                             let v = match f.as_str() {
-                                "signer_ids" => self.named_list(&e.val, &self.signers),
-                                "policy_ids" => self.named_list(&e.val, &self.policies),
+                                "signer_ids" => self.named_list(&e.val, &self.signers, true),
+                                "policy_ids" => self.named_list(&e.val, &self.policies, false),
                                 _ => render(&e.val, Some(me)),
                             };
                             fields.push(format!("{f}={v}"));

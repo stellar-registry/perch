@@ -2,14 +2,14 @@ name: Release
 
 # Two chained halves:
 #
-#   1. `detect-releases` — on every push to main, tag any contract whose crate
-#      manifest `version` has no matching `<contract>-v<version>` tag yet (i.e.
-#      it was bumped in the merged PR). Releases are ON-CHAIN wasm publishes, not
-#      crates.io, so this is pure git — NO release-plz / `cargo package`, which
-#      couldn't resolve the workspace's git-only + intra-workspace path deps
-#      against the crates.io index and also packaged the immutable last-release
-#      tags as its diff baseline, wedging the pipeline. To release a contract,
-#      bump its version in a PR.
+#   1. `detect-releases` — once CI passes on a push to main, tag any contract
+#      whose crate manifest `version` has no matching `<contract>-v<version>`
+#      tag yet (i.e. it was bumped in the merged PR). Releases are ON-CHAIN
+#      wasm publishes, not crates.io, so this is pure git — NO release-plz /
+#      `cargo package`, which couldn't resolve the workspace's git-only +
+#      intra-workspace path deps against the crates.io index and also packaged
+#      the immutable last-release tags as its diff baseline, wedging the
+#      pipeline. To release a contract, bump its version in a PR.
 #   2. The infra publishes (`publish-plan` → `constructorless-build` →
 #      `constructorless-publish`) — a generic, contract-AGNOSTIC fan-out:
 #      whichever infra contracts this run released (the ALLOW list in
@@ -48,6 +48,18 @@ name: Release
 # manager bootstraps each recovery-stack name, so merging ships their source
 # and version tracking without an on-chain publish before that is deliberate.
 #
+# Nothing here runs on a raw push: this workflow fires when the CI workflow
+# completes, and the `ci-green` job lets the rest proceed only when CI passed
+# on a push to main and that commit is still main's tip (the reusable build
+# can only build the run's default-branch sha, so the tagged commit and the
+# built commit must be the same). Every job checks out the commit CI tested
+# (github.event.workflow_run.head_sha), never the default ref. A version bump
+# that lands on a commit whose CI fails is therefore never tagged — tagging is
+# the point of no return (detect-releases never re-tags a version) — and the
+# bump stays pending in the manifests until a later commit passes CI as main's
+# tip; that run tags and publishes it. The same holds for a commit main moved
+# past before its CI finished.
+#
 # All publish halves hang off `needs:` in the SAME run (gated on the
 # detect-releases `releases` output) instead of a tag/release trigger, so they
 # fire even though the tag was pushed with the default GITHUB_TOKEN — no GitHub
@@ -76,7 +88,13 @@ name: Release
 # `publish_tag` dispatch input (detect-releases never re-tags a version).
 
 on:
-  push:
+  # Release work starts only after CI finishes on main; ci-green checks the
+  # conclusion. `branches` filters on the CI run's head branch, which a pull
+  # request from a fork can also name `main`, so ci-green also requires a push
+  # event from this repository: no run here executes code a fork controls.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   # Recovery path — PUBLISH-ONLY: re-run the on-chain half against the
   # existing, already-attested release asset for the tag (e.g. after a
@@ -96,9 +114,9 @@ on:
 permissions: {}
 
 # Dispatch recovery runs get their own group: the shared group has ONE pending
-# slot, and a push landing while another push run is active would silently
+# slot, and a CI-gated run arriving while another one is active would silently
 # cancel a queued dispatch (cancel-in-progress only protects the RUNNING run).
-# A dispatch racing a push run is on-chain-safe: the fetch_hash preflight
+# A dispatch racing a CI-gated run is on-chain-safe: the fetch_hash preflight
 # skips a same-hash republish and refuses a different-hash one, and
 # deploy_stateless is idempotent.
 concurrency:
@@ -106,6 +124,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The gate every other job hangs off: CI concluded `success` on a push to
+  # main of this repository, and the commit it tested is the sha this run was
+  # given as the default-branch tip. When main moved on before CI finished,
+  # the newer commit's own CI run does the release instead.
+  ci-green:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions: {}
+    outputs:
+      go: ${{ steps.tip.outputs.go }}
+    steps:
+      - name: Is the commit CI tested still main's tip?
+        id: tip
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          TIP_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$HEAD_SHA" = "$TIP_SHA" ]; then
+            echo "go=true" >>"$GITHUB_OUTPUT"
+            echo "CI passed on $HEAD_SHA — releasing from it" >>"$GITHUB_STEP_SUMMARY"
+          else
+            echo "go=false" >>"$GITHUB_OUTPUT"
+            echo "CI passed on $HEAD_SHA, but main is now at $TIP_SHA — that commit's CI run releases any pending bump" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
   # Detect which contracts to release — WITHOUT release-plz or `cargo package`.
   # Perch never publishes to crates.io (releases are on-chain wasm publishes), so
   # release-plz's `cargo package --workspace` change-detection was a structural
@@ -118,7 +167,8 @@ jobs:
   # git, no packaging. Emits the same `releases` shape the publish halves consume,
   # so everything downstream is unchanged.
   detect-releases:
-    if: github.event_name == 'push'
+    needs: ci-green
+    if: needs.ci-green.outputs.go == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write # create + push the per-contract tags
@@ -131,9 +181,10 @@ jobs:
       # Default token + persisted credentials are enough to push a tag. Tags
       # pushed with GITHUB_TOKEN do NOT retrigger workflows, but the publish
       # halves below run via `needs:` in THIS same run, so no retrigger (and no
-      # GitHub App) is needed.
+      # GitHub App) is needed. The tags land on the commit CI tested.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0 # full tag history for the version-bump comparison
       - name: Detect released contracts (manifest version bumped past its tag)
         id: detect
@@ -216,7 +267,7 @@ jobs:
           } >>"$GITHUB_OUTPUT"
 
   # Version bumps + changelogs — git-cliff driven, NO cargo package. Companion to
-  # detect-releases (which tags on merge): on every push to main this computes
+  # detect-releases (which tags on merge): once CI passes on main, this computes
   # each contract's next version from its conventional commits (scoped to its
   # crate tree + the intra-workspace libs it embeds), bumps the manifest,
   # regenerates crates/<c>/CHANGELOG.md, and opens/updates one "chore: release"
@@ -226,7 +277,8 @@ jobs:
   # (The PR is opened with GITHUB_TOKEN, so its own CI checks don't run — the
   # bumps are mechanical; real CI ran on the feature PRs.)
   release-pr:
-    if: github.event_name == 'push'
+    needs: ci-green
+    if: needs.ci-green.outputs.go == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -234,6 +286,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0 # git-cliff needs full history + tags
       - name: Install git-cliff
         run: |
@@ -241,11 +294,11 @@ jobs:
           curl -fsSL https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-unknown-linux-gnu.tar.gz -o "$RUNNER_TEMP/gc.tar.gz"
           echo "bb40f68e752db1a32526c43e0108e8eff785f7c24c67024cffe1c316e034372975fd78c9af8e9a48148235aad15c9a103f1a5b490c282f1db09a7a793794b69f  $RUNNER_TEMP/gc.tar.gz" | sha512sum -c -
           tar -xz -C "$RUNNER_TEMP/gc" --strip-components=1 -f "$RUNNER_TEMP/gc.tar.gz"
-          echo "$RUNNER_TEMP/gc" >>"$GITHUB_PATH"
       - name: Compute version bumps + changelogs
         id: prep
         run: |
           set -uo pipefail
+          export PATH="$RUNNER_TEMP/gc:$PATH" # git-cliff, installed above
           # Each contract's changelog/version scope = its own crate tree + the
           # intra-workspace lib crates it embeds, so a lib change re-releases the
           # contract that ships it. Update these lists if a contract's perch deps
@@ -362,6 +415,8 @@ jobs:
         if: steps.prep.outputs.any == 'true'
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
+          # The checkout is a detached commit, so the PR's base must be named.
+          base: main
           branch: release/next
           delete-branch: true
           title: "chore: release"
@@ -383,12 +438,13 @@ jobs:
   # commits. Requires the NPM_TOKEN repo secret (an npm automation token that
   # can publish the @stellar-registry scope). If the secret is absent the
   # publish step fails and the job can be re-run after the secret is added —
-  # the tag and github.sha are unchanged on a re-run, so it publishes exactly
-  # the tagged commit.
+  # the tag and the CI-tested head sha are unchanged on a re-run, so it
+  # publishes exactly the tagged commit.
   npm-publish:
-    needs: detect-releases
+    needs: [ci-green, detect-releases]
     if: >-
-      !cancelled() && needs.detect-releases.outputs.npm_released == 'true'
+      !cancelled() && needs.ci-green.outputs.go == 'true' &&
+      needs.detect-releases.outputs.npm_released == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -403,6 +459,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       # No dependency cache in a publish job (zizmor cache-poisoning: nothing a
       # cache write could later inject into a signed publish).
@@ -436,11 +493,11 @@ jobs:
   # Which constructorless contracts did THIS run release (or was one passed by
   # hand)? Emit the publish matrix; empty ⇒ publish-constructorless skips.
   publish-plan:
-    needs: detect-releases
+    needs: [ci-green, detect-releases]
     if: >-
       !cancelled() && (
         (github.event_name == 'workflow_dispatch' && inputs.publish_tag != '') ||
-        (github.event_name == 'push' && needs.detect-releases.outputs.releases_created == 'true')
+        (needs.ci-green.outputs.go == 'true' && needs.detect-releases.outputs.releases_created == 'true')
       )
     runs-on: ubuntu-latest
     permissions: {}
@@ -507,13 +564,14 @@ jobs:
   # perch-deploy shim, no smart-account flags.
 
   # Attested build (scaffold build + optimize + GitHub release + provenance).
-  # Push-only: the reusable workflow has no ref input and builds this run's sha
-  # (the detect-releases-tagged commit); a dispatch republishes the existing asset.
+  # CI-gated runs only: the reusable workflow has no ref input and builds this
+  # run's github.sha, which ci-green requires to equal the CI-tested head sha
+  # detect-releases tagged; a dispatch republishes the existing asset.
   constructorless-build:
-    needs: publish-plan
+    needs: [ci-green, publish-plan]
     if: >-
-      !cancelled() && needs.publish-plan.outputs.any == 'true' &&
-      github.event_name == 'push'
+      !cancelled() && needs.ci-green.outputs.go == 'true' &&
+      needs.publish-plan.outputs.any == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.publish-plan.outputs.matrix) }}
@@ -532,14 +590,15 @@ jobs:
       release_token: ${{ secrets.GITHUB_TOKEN }}
 
   # On-chain publish via the reusable registry-publish (upload + smart-account-
-  # signed publish_hash + deploy_stateless), authored by the SA. On push it
-  # consumes the freshly attested asset; on dispatch it republishes the existing
-  # one (build is skipped by design).
+  # signed publish_hash + deploy_stateless), authored by the SA. On a CI-gated
+  # run it consumes the freshly attested asset; on dispatch it republishes the
+  # existing one (build is skipped by design).
   constructorless-publish:
-    needs: [publish-plan, constructorless-build]
+    needs: [ci-green, publish-plan, constructorless-build]
     if: >-
       !cancelled() && needs.publish-plan.outputs.any == 'true' && (
-        needs.constructorless-build.result == 'success' ||
+        (needs.ci-green.outputs.go == 'true' &&
+         needs.constructorless-build.result == 'success') ||
         (github.event_name == 'workflow_dispatch' &&
          needs.constructorless-build.result == 'skipped')
       )
@@ -590,9 +649,9 @@ jobs:
   # Did THIS run release a recovery-stack contract (the ones deploy-stack
   # deploys)? Empty ⇒ deploy-stack skips.
   deploy-plan:
-    needs: detect-releases
+    needs: [ci-green, detect-releases]
     if: >-
-      !cancelled() && github.event_name == 'push' &&
+      !cancelled() && needs.ci-green.outputs.go == 'true' &&
       needs.detect-releases.outputs.releases_created == 'true'
     runs-on: ubuntu-latest
     permissions: {}
@@ -640,9 +699,9 @@ jobs:
   # split the publish-plan ALLOW list uses for shipping a contract's source
   # before its first on-chain publish.
   deploy-stack:
-    needs: [detect-releases, deploy-plan, constructorless-publish]
+    needs: [ci-green, detect-releases, deploy-plan, constructorless-publish]
     if: >-
-      !cancelled() &&
+      !cancelled() && needs.ci-green.outputs.go == 'true' &&
       needs.deploy-plan.outputs.any == 'true' &&
       vars.PERCH_DEPLOY_STACK == 'true' &&
       (needs.constructorless-publish.result == 'success' ||
@@ -663,6 +722,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
         with:
@@ -724,18 +784,21 @@ jobs:
       - name: Open the deploy(testnet) manifest PR
         uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
         with:
+          # The checkout is a detached commit, so the PR's base must be named.
+          base: main
           branch: deploy/testnet
           delete-branch: true
           title: "deploy(testnet): recovery stack"
-          commit-message: "deploy(testnet): recovery stack @ ${{ github.sha }}"
+          commit-message: "deploy(testnet): recovery stack @ ${{ github.event.workflow_run.head_sha }}"
           add-paths: |
             deployments/testnet.json
             packages/perch-contracts/src
           body: >
             Automated by the `deploy-stack` job: the recovery stack deployed to
             the canonical `constructorless` registry, smart-account-authored, in
-            pin order, from the tagged `main` commit ${{ github.sha }} (always in
-            `main`'s history, so this record survives any merge method). Merging
+            pin order, from the tagged `main` commit
+            ${{ github.event.workflow_run.head_sha }} (always in `main`'s
+            history, so this record survives any merge method). Merging
             updates `deployments/testnet.json` and the regenerated
             `@stellar-registry/perch-contracts` bindings, which flips consumers —
             and CI's deployed-bytes checks — onto this deployment.

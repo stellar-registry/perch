@@ -83,14 +83,11 @@ fn gen_arg_pred(rng: &mut Rng) -> ArgPred {
             ArgPred::StringIn(StringInPred { values })
         }
         _ => ArgPred::StringPrefix(StringPrefixPred {
-            // Occasionally an over-long prefix: valid per perch-ir (no length
-            // limit), lowered verbatim, and must fail closed at eval time —
-            // exercises the prefix-side str_bytes failure path in leaf.rs.
-            prefix: if rng.chance(6) {
-                "x".repeat(257)
-            } else {
-                STRINGS[rng.below(STRINGS.len() as u32) as usize].into()
-            },
+            // perch-ir refuses a prefix longer than MAX_STRING_PRED_LEN (the
+            // interpreter could never evaluate it, so the whole predicate
+            // would be unsatisfiable), so valid documents carry only prefixes
+            // within the limit.
+            prefix: STRINGS[rng.below(STRINGS.len() as u32) as usize].into(),
         }),
     }
 }

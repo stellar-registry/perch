@@ -83,5 +83,5 @@ pub use doc::{
 pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{
     is_address_shape, is_contract_address_shape, validate, ValidationError, ACK_SENTINEL,
-    MAX_SIGNER_KEY_LEN,
+    MAX_SIGNER_KEY_LEN, MAX_STRING_PRED_LEN,
 };

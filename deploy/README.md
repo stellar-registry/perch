@@ -318,8 +318,8 @@ does.
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature with the call rebuilt from the posted statement), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
 | `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
 
-The last three are built, tested, and pack-checked in CI, but are not in
-`release.yml`'s `NPM_PACKAGES`. Listing one there publishes it on its next
-merge. Rust crates are never published to crates.io (`release-plz.toml`).
+All five are published to npm by `release.yml`'s `npm-publish` job: merging
+a bump of a package's manifest version (the release PR proposes one from its
+conventional commits) tags `<pkg>-v<version>` and publishes it. Rust crates are never published to crates.io (`release-plz.toml`).
 Hosting the indexer or the relay, with storage, routes, and schedules, is the
 operator's concern. Nido's hosted services are deployments of these packages.

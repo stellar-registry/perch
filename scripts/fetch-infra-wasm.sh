@@ -64,6 +64,27 @@ else
     derive() { node "$repo_root/dist/cli/derive-id.js" content "$registry" "$1" "$(m .network_passphrase)"; }
 fi
 
+# The RPC answers a fetch with an occasional 502, so a failed fetch is retried
+# with backoff (2/4/8/16s, STELLAR_FETCH_ATTEMPTS tries in all). Only the
+# network call is retried; a hash mismatch below still fails at once.
+fetch_retry() { # contract-name out-file stellar-contract-fetch-args...
+    local name="$1" out="$2" attempts="${STELLAR_FETCH_ATTEMPTS:-5}" try=1 delay=2 err
+    shift 2
+    err="$(mktemp)"
+    until stellar contract fetch "${net[@]}" "$@" --out-file "$out" 2>"$err"; do
+        rm -f "$out"
+        if [ "$try" -ge "$attempts" ]; then
+            echo "error: $name: fetch failed after $try attempts: $(tr -s '\n' ' ' <"$err")" >&2
+            rm -f "$err"
+            exit 1
+        fi
+        echo "warning: $name: fetch attempt $try/$attempts failed ($(tr -s '\n' ' ' <"$err")); retrying in ${delay}s" >&2
+        sleep "$delay"
+        try=$((try + 1)) delay=$((delay * 2))
+    done
+    rm -f "$err"
+}
+
 fetch() { # contract-name out-file
     local name="$1" out="$2" hash addr
     hash="$(jq -r --arg n "$name" '.contracts[$n].sha256 // empty' "$manifest")"
@@ -74,9 +95,9 @@ fetch() { # contract-name out-file
             echo "error: $name: $addr is not the content address of $hash under $registry" >&2
             exit 1
         }
-        stellar contract fetch "${net[@]}" --id "$addr" --out-file "$out"
+        fetch_retry "$name" "$out" --id "$addr"
     else
-        stellar contract fetch "${net[@]}" --wasm-hash "$hash" --out-file "$out"
+        fetch_retry "$name" "$out" --wasm-hash "$hash"
     fi
     [ "$(sha256 "$out")" = "$hash" ] || {
         echo "error: $name: fetched $(sha256 "$out"), manifest says $hash" >&2

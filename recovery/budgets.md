@@ -1,26 +1,20 @@
 # Recovery resource budgets
 
-**Status: stub.** This file lists what must be measured before the pool's
-release depth is chosen ([`spec.md`](spec.md) §14, D15), and the rule that
-chooses it. Workstream 2 fills in the measurements against the release
-circuit, adapter, verifier, pool, controller, and account. Every cell
-marked *TBD* is unmeasured. Do not read a number into it.
+The resource budgets every recovery transaction and client proof must meet,
+the rule that chooses the membership pool's depth from them
+([`spec.md`](spec.md) §14, D15), the results against them, and how the
+document caps (spec §7.5) were sized.
 
-## Reference points (not release measurements)
+Where each number lives:
 
-From Nido's `docs/recovery/stage3-measurements.md`. These are a prior
-circuit at depth 24 with an arity-15 `auth_hash`, measured on a high-end
-desktop:
-
-| Metric | Value |
-| --- | --- |
-| `verify_proof` CPU instructions (constructorless UltraHonk verifier, real Wasm metering) | 179 257 831 |
-| Network per-transaction instruction limit at that time (protocol 27) | 400 000 000 |
-| `bb prove` wall time, Apple M5 Max | ~68 ms |
-| Proof size / VK size / public inputs | 6 976 B / 1 888 B / 96 B |
-
-Every full-transaction cost, fee, browser number, and mobile number was
-left unmeasured there.
+- **ZK components and client proving** (adapter, pool, proof generation,
+  client downloads) and the network limits:
+  [`docs/zk/measurements.md`](../zk/measurements.md).
+- **Full transactions on testnet**, against the deployed wasm:
+  [`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md), from
+  the raw record `deployments/testnet-exercise.json`.
+- **Full transactions in process** (the release-stack suite), the document
+  cap sizing, and signer transitions: this file.
 
 ## What to record with every measurement
 
@@ -36,58 +30,53 @@ left unmeasured there.
 Per depth `D ∈ {24, 32}`, for one proof of any action. All actions share one
 circuit.
 
-| Workload | Reference device | Metric | D = 24 | D = 32 | Proposed budget |
-| --- | --- | --- | --- | --- | --- |
-| Witness fetch (indexer to path) | — | latency p95 | TBD | TBD | ≤ 2 s |
-| Witness generation | browser, mid-range phone | time p95 | TBD | TBD | ≤ 2 s |
-| Proof generation, bb.js in the browser | mid-range phone (named in results) | time p95 | TBD | TBD | ≤ 30 s |
-| Proof generation, bb.js in the browser | mid-range phone | peak memory | TBD | TBD | ≤ 1 GiB |
-| Proof generation, bb.js in the browser | mid-range laptop | time p95 | TBD | TBD | ≤ 10 s |
-| Proof generation, native `bb` | mid-range laptop | time p95 | TBD | TBD | ≤ 5 s |
-| Artifacts the client downloads (circuit, CRS slice, prover Wasm) | — | bytes | TBD | TBD | ≤ 50 MiB |
-| Proof size | — | bytes | TBD | TBD | fits the transaction-size budget below |
+| Workload | Reference device | Metric | Proposed budget |
+| --- | --- | --- | --- |
+| Witness fetch (indexer to path) | — | latency p95 | ≤ 2 s |
+| Witness generation | browser, mid-range phone | time p95 | ≤ 2 s |
+| Proof generation, bb.js in the browser | mid-range phone (named in results) | time p95 | ≤ 30 s |
+| Proof generation, bb.js in the browser | mid-range phone | peak memory | ≤ 1 GiB |
+| Proof generation, bb.js in the browser | mid-range laptop | time p95 | ≤ 10 s |
+| Proof generation, native `bb` | mid-range laptop | time p95 | ≤ 5 s |
+| Artifacts the client downloads (circuit, CRS slice, prover Wasm) | — | bytes | ≤ 50 MiB |
+| Proof size | — | bytes | fits the transaction-size budget below |
 
 ## 2. Full transactions (on-chain)
 
-Each row is the complete transaction, simulated and then submitted against
-the release Wasm on testnet under enforcing authorization (no mocked auth,
-no mock verifier). Each records CPU instructions, memory bytes, ledger
-read/write entries and bytes, transaction size, event bytes, resource fee,
-and inclusion latency.
+Each row is the complete transaction against the release Wasm under
+enforcing authorization, with real proofs and no mock verifier. Each
+records CPU instructions, memory, footprint entries, written entries, disk
+read bytes, write bytes, transaction size, event bytes, resource fee, and
+inclusion latency.
 
-| Transaction | Worst case to measure | Instructions | Memory | Read/write bytes | Tx size | Fee | Latency |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| Enroll ZK through `apply_doc` (compile, `rcv_sync` wiring checks, `rcv_insert`) | insertion that seals a tree and opens the next | TBD | TBD | TBD | TBD | TBD | TBD |
-| `begin_lost_key` (includes `derive_target`) | largest supported document | TBD | TBD | TBD | TBD | TBD | TBD |
-| `begin_compromise` (includes `derive_target` over the baseline) | largest supported document | TBD | TBD | TBD | TBD | TBD | TBD |
-| `publish_baseline` | largest supported document | TBD | TBD | TBD | TBD | TBD | TBD |
-| `submit_guardian` | promoting approval under `Protected` (includes `rcv_gate`) | TBD | TBD | TBD | TBD | TBD | TBD |
-| `submit_zk` (adapter, verifier, root check, nullifier) | promoting proof, `Combined` | TBD | TBD | TBD | TBD | TBD | TBD |
-| Completion `apply_doc` (recovery rule) | `Combined`, ZK rotation (pool insert), a pre-recovery document and a target both at the document caps with every slot differing (spec §7.5), every removed credential revoked | TBD | TBD | TBD | TBD | TBD | TBD |
-| Completion after rule churn | the row above, after many prior ordinary applies of a maximum-size document; must not grow with the number of past applies (#102 review, P1) | TBD | TBD | TBD | TBD | TBD | TBD |
-| Cancellation | `Combined` (both factors in the last transaction) | TBD | TBD | TBD | TBD | TBD | TBD |
-| `approve_change` | one guardian, `Reconfigure` or `Upgrade` | TBD | TBD | TBD | TBD | TBD | TBD |
-| `submit_zk_change` (adapter, verifier, root check) | `Reconfigure` or `Upgrade` | TBD | TBD | TBD | TBD | TBD | TBD |
-| `Protected` reconfiguration `apply_doc` | `Combined`: reading the recorded quorum and proof, a new enrollment insert, documents at the caps | TBD | TBD | TBD | TBD | TBD | TBD |
-| `Protected` `schedule_upgrade` | `Combined`, reading recorded approvals | TBD | TBD | TBD | TBD | TBD | TBD |
-| `execute_upgrade` (includes the `rcv_upgrade` epoch bump) | — | TBD | TBD | TBD | TBD | TBD | TBD |
-| `begin_*` after an attacker opened many collecting attempts | promotion with `invalidate_below` (must not grow with the number of siblings) | TBD | TBD | TBD | TBD | TBD | TBD |
-| Ordinary authorization overhead | `__check_auth` reading the freeze mirror and checking reserved names, versus plain `do_check_auth` | TBD | TBD | — | — | TBD | — |
+| Transaction | Worst case to measure |
+| --- | --- |
+| Enroll ZK through `apply_doc` (compile, `rcv_sync` wiring checks, `rcv_insert`) | insertion that seals a tree and opens the next |
+| `begin_lost_key` (includes `derive_target`) | largest supported document |
+| `begin_compromise` (includes `derive_target` over the baseline) | largest supported document |
+| `publish_baseline` | largest supported document |
+| `submit_guardian` | promoting approval under `Protected` (includes `rcv_gate`) |
+| `submit_zk` (adapter, verifier, root check, nullifier) | promoting proof, `Combined` |
+| Completion `apply_doc` (recovery rule) | `Combined`, ZK rotation (pool insert), a pre-recovery document and a target both at the document caps with every slot differing (spec §7.5), every removed credential revoked |
+| Completion after rule churn | the row above, after many prior ordinary applies of a maximum-size document; must not grow with the number of past applies |
+| Cancellation | `Combined` (both factors in the last transaction) |
+| `approve_change` | one guardian, `Reconfigure` or `Upgrade` |
+| `submit_zk_change` (adapter, verifier, root check) | `Reconfigure` or `Upgrade` |
+| `Protected` reconfiguration `apply_doc` | `Combined`: reading the recorded quorum and proof, a new enrollment insert, documents at the caps |
+| `Protected` `schedule_upgrade` | `Combined`, reading recorded approvals |
+| `execute_upgrade` (includes the `rcv_upgrade` epoch bump) | — |
+| Promotion after an attacker opened many collecting attempts | promotion with `invalidate_below` (must not grow with the number of siblings) |
+| Ordinary authorization overhead | `__check_auth` reading the freeze mirror and checking reserved names, versus plain `do_check_auth` |
 
-**Proposed budget for every row:** at most 75% of the network's
-per-transaction limit for instructions, memory, read bytes, write bytes,
-and transaction size. The headroom covers authorization growth (more
-guardians) and network limit changes. Workstream 4 applies the same 75% to
-the footprint entries (distinct keys, read-only plus read-write, of 400),
-written entries (the read-write keys, of 200), and contract-event bytes as
-well: each is a hard per-transaction limit. With OZ's per-item events,
-contract events were the one the caps hit first; the release suppresses
-them, and instructions and written entries bind instead. That tightens
-the rule; it relaxes nothing. The document caps (spec §7.5) are then set
-from the frontier where every completion and reconfiguration row stays
-within budget: see "Document caps" under Results
-(`perch_doc_compiler::MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 11,
-`MAX_DOC_CANONICAL_BYTES` = 8 192).
+**Budget for every row:** at most 75% of the network's per-transaction
+limit for instructions, memory, footprint entries (the transaction's
+distinct ledger keys, read-only plus read-write, of 400), written entries
+(the read-write keys, of 200), disk read bytes, write bytes, transaction
+size, and contract-event bytes. Each is a hard per-transaction limit. The
+headroom covers authorization growth (more guardians) and network limit
+changes. The document caps (spec §7.5) are set from the frontier where
+every completion and reconfiguration row stays within budget
+([Document caps](#document-caps)).
 
 ## 3. End-to-end latency
 
@@ -121,145 +110,158 @@ within budget: see "Document caps" under Results
    pass without recording the change here and having it reviewed.
 5. Rollover is required at either depth (§14.2); this rule never removes it.
 
-The proposed budgets above are proposals. Reviewers confirm or replace them
-before §5 runs, and the confirmed values are recorded here.
+The budgets above are the proposed values. The rule has been applied with
+them; no reviewed confirmation or replacement of them is recorded.
 
 ## Results
 
-Epic #99 Workstream 2's measurements and the rule's application are in
-[`docs/zk/measurements.md`](../zk/measurements.md) (2026-10-06, protocol
-29 limits, zero-knowledge proofs; the measured circuits' `circuit_id`s are
-in its generated "Circuit identities" table). In summary:
+### Status of every budget row
 
-- §1: native and single-threaded bb.js proving take 0.10 s and 0.82 s on a
-  desktop at D = 32. Client artifacts are 8.9 MB and the proof is 16.2 KB.
-  The reference phone and laptop are not yet measured.
-- §2, ZK components only: adapter `verify` is 136.9M instructions and
-  6.7 MB at D = 32 (134.7M at D = 24); `rcv_insert` sealing a tree is 43.8M
-  instructions and 2.2 KB written (34.8M at D = 24). The full-transaction
-  rows are the controller workstream's.
-- §5: every measured row is within budget at D = 32, so **D = 32**,
-  provisional on the open rows above. D = 24 stays buildable as the
-  fallback.
+States: **Measured** (within budget unless stated; the cell says where);
+**Required before launch** (unmeasured, and an input to the depth rule);
+**Unmeasured** (no result, and not an input to the depth rule).
 
-Workstream 4 measured the §2 full-transaction rows on testnet, against the
-deployed release wasm (`deployments/testnet.json`: stack commit `7ae915d` on
-`main`, the whole #99 stack: the quiet, reconciling `apply_doc` at caps 8 x
-11, WS2's ZK-flavor verifier, WS3's two-digest target binding, and the
-controller's own §3.4 check) under enforcing authorization with real
-proofs; see
-[`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md). Every
-row is within the 75% budget. The largest are `submit_zk` at 124.9M
-instructions (31.2%) and 18.2 KB of transaction (13.8%), `submit_zk_change`
-at 123.1M (30.8%), and the `Combined` completion with ZK rotation at 65.5M
-(16.4%). No row reaches 11% of the footprint (distinct keys) or 15% of the
-written-entry limit. Memory is not reported by the RPC; the release-stack
-suite meters it in-process on the same wasm, where every row is within
-budget at the caps (the largest, 25.4 MB, at 60.5%). Two rows are measured
-only in-process: an enrollment that seals a tree and `execute_upgrade`,
-whose seven-day delay testnet would need. The release-stack suite passes
-18 of 18 against the bytes fetched back from the deployment. The deployed
-adapter's `circuit_id()` is
+| Row | State | Result and evidence |
+| --- | --- | --- |
+| §1 witness fetch, latency p95 | Required before launch | No measurement. |
+| §1 witness generation | Measured on a desktop; reference phone required before launch | Within budget at both depths on a desktop (`nargo execute`): [measurements.md, Proving](../zk/measurements.md#proving). |
+| §1 bb.js proving, mid-range phone, time and peak memory | Required before launch | No phone measurement. |
+| §1 bb.js proving, mid-range laptop | Measured on a desktop; reference laptop required before launch | Within budget at both depths in desktop Chromium and Node, one thread: [measurements.md, Proving](../zk/measurements.md#proving). |
+| §1 native `bb` proving, mid-range laptop | Measured on a desktop; reference laptop required before launch | Within budget at both depths on a desktop: [measurements.md, Proving](../zk/measurements.md#proving). |
+| §1 client artifacts | Measured | Within budget at both depths: [measurements.md, Proving](../zk/measurements.md#proving). |
+| §1 proof size | Measured | Within the transaction-size budget: [measurements.md](../zk/measurements.md#on-chain-components-compiled-wasm-metered), "Evidence size". |
+| §2 enrollment through `apply_doc` | Measured: in process (at the caps, and sealing a tree) and on testnet | Within budget. Sealing a tree is in process only: a full tree takes 2^32 insertions. |
+| §2 `begin_lost_key`, `begin_compromise`, `publish_baseline` | Measured: in process (at the caps) and on testnet | Within budget. |
+| §2 `submit_guardian`, `submit_zk` (promoting) | Measured: in process and on testnet | Within budget. |
+| §2 completion `apply_doc` | Measured: in process (at the caps, every worst-case flow) and on testnet | Within budget. Binding row at the caps: [Document caps](#document-caps). |
+| §2 completion after rule churn | Measured without churn; bounded by construction | The reconcile reads only its installed-rule records, never historical rule ids ([implementation.md](implementation.md#delta-apply-spec-75)). `completion_cost_does_not_grow_with_policy_churn` (native contracts, in process) finds the same completion entry count after 1 and after 40 applies of one document near the rule cap; identical re-applies create no new rule ids, so the test does not itself produce churn. |
+| §2 cancellation, `approve_change`, `submit_zk_change` | Measured: in process and on testnet | Within budget. |
+| §2 `Protected` reconfiguration, `schedule_upgrade` | Measured: in process (reconfiguration at the caps) and on testnet | Within budget. |
+| §2 `execute_upgrade` | Measured in process only | Within budget. Not run on testnet: the upgrade delay is 120 960 ledgers. |
+| §2 promotion after many collecting attempts | Measured without siblings; bounded by construction | Promotion writes one `invalidate_below` value whatever the number of siblings (spec §6.3 T4); the promoting rows above are within budget. No run with many siblings. |
+| §2 ordinary authorization overhead | Measured on testnet (absolute cost) | Direct authorization and `execute` are within budget ([testnet-exercise.md](../deploy/testnet-exercise.md), "Against the budget"). The overhead versus plain `do_check_auth` is unmeasured. |
+| §2 disk read bytes, every row | Required before launch | Neither the release-stack suite nor the testnet exercise reports disk read bytes. |
+| §2 transaction size, every row | Measured on testnet | Within budget. The in-process suite does not meter transaction size. |
+| §2 memory, every row | Measured in process | Within budget. The RPC does not report memory, so testnet rows have none. |
+| §3 every flow | Unmeasured | No end-to-end p95. The testnet exercise reports single-transaction inclusion latency per row. |
+| §4 pool frontier, root → tree entry (with the pool's leaf and enrollment entries) | Measured | [measurements.md](../zk/measurements.md#on-chain-components-compiled-wasm-metered): rent per insertion and per year. |
+| §4 controller state, revoked set, nullifier records, recorded change approvals, `renew` fees | Unmeasured | The testnet exercise reports the total fees of enrollment and promotion, which are dominated by rent. |
+
+### Depth decision
+
+**D = 32.** Every measured §1 and §2 row is within budget at D = 32. The
+decision is provisional on the rows marked required before launch. Depth 24
+would save about 9M instructions per insertion (21%), about 2M per
+verification, and about 250 ms of single-threaded proving
+([measurements.md](../zk/measurements.md)), but no budget outcome depends on
+that saving, and it would cap each tree at 16.8M leaves instead of 4.3B,
+making rollover routine rather than exceptional. The depth-24 build stays
+buildable and tested as the fallback (`perch-zk-pool/tree-depth-24`,
+`perch-zk-adapter/tree-depth-24`, `circuits/perch_zk_recovery_d24`).
+Rollover is implemented and tested at both depths.
+
+### Testnet
+
+[`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md) holds
+the per-row figures ("Against the budget") and every transaction. Source:
+the stack deployed from commit `7ae915dc1ac6ae36cacf6db87794b056923d3b1f`
+([`deployments/testnet.json` at `bb746f9`](https://github.com/stellar-registry/perch/blob/bb746f9d03c593f0d5a2518c6900e00c938f95ec/deployments/testnet.json):
+builder `scaffold`, rustc 1.97.1, stellar
+27.0.0, scaffold 0.0.27), protocol-29 limits, enforcing authorization with
+real passkeys, G-account guardians, and real proofs over witnesses rebuilt
+from the deployed pool. Every row is within budget. The deployed adapter's
+`circuit_id()` is
 `9e39c41f4f35aad43e64b255dfe3ba13f10e8c9d36d6f56fce23c2d97c0a0b4a`, the
-`vk_sha256` in `circuits/manifest.json`. The open §1 rows (reference phone
-and laptop) remain open.
+`vk_sha256` of `perch_zk_recovery` in `circuits/manifest.json`. The
+release-stack suite passed 18 of 18 (every test but `cap_sweep`) against
+the bytes fetched back from that deployment, and CI reruns it on those
+bytes whenever the deployment's commit is in the branch's history.
 
-### Release stack, in process
+### In-process measurements (release-stack suite)
 
-Workstream 4, 2026-10-07: the release-stack suite on this branch's stack
-(`build-stack.sh --builder contract`), with WS2's ZK-flavor verifier, WS3's
-delta `apply_doc` on quiet OZ mutations with `reconcile_signers`, the 8 x 11
-caps, and the 64 KiB (adapter: 128 KiB) wasm stacks, real proofs, and
-enforcing authorization. The worst row of each §2 kind, as a share of the
-protocol-29 limits. Footprint is the transaction's distinct ledger keys,
-read-only plus read-write, which is what the network limits (400). Written
-entries are the read-write keys (200).
-`the_metered_footprint_is_the_simulated_transactions` checks the count
-against an RPC-style simulation of each binding `apply_doc`.
+`crates/integration-tests/tests/release_stack.rs` meters every flow in
+process on release wasm, with real proofs from the pinned nargo/bb, real
+passkey assertions, and enforcing authorization, and asserts each row
+within 75% of every limit it meters (instructions, memory, footprint,
+written entries, write bytes, events; not disk read bytes or transaction
+size). Footprint is the transaction's distinct ledger keys, read-only plus
+read-write, which is what the network limits (400); written entries are the
+read-write keys (200).
+`the_metered_footprint_is_the_simulated_transactions` checks both counts
+against an RPC-style simulation of every binding `apply_doc`.
+
+**Source of the figures below:** 2026-10-07, protocol-29 limits, the stack
+`scripts/build-stack.sh --builder contract` built from commit
+`8e59862f8fd5c8152faf2c76377262563df9053c` (branch
+`fm/perch-epic99-release-p8-archive-17f2c9c`; its contract code is identical
+to `704aa23f3cebe1e291f70385b4d55f704a30e994`), with the current reconciler,
+the 8 × 11 caps, and the small wasm stacks. That source does not include the
+configuration revision (its measured effect is
+[below](#configuration-revision)) or the controller's §3.4 check in
+`rcv_sync` (a comparison of the old and new ZK factor, not separately
+measured). CI's `release-stack-source` job runs the same assertions on
+every change to the current source.
+
+"At the caps" rows use the costliest document the caps admit
+([Document caps](#document-caps)). Percentages are of the protocol-29
+limits ([measurements.md, Network limits](../zk/measurements.md#network-limits)).
 
 | Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
 | Enroll `Combined` through `apply_doc`, at the caps | 197.2M (49.3%) | 14.6 MB | 91 | 63 | 51 144 | 888 |
+| Enrollment that seals a tree (small document) | 58.7M | 4.4 MB | 34 | 18 | 8 016 | 888 |
 | `begin_lost_key` / `begin_compromise`, at the caps | 134.8M (33.7%) | 5.4 MB | 25 | 2 | 2 176 | 248 |
 | `publish_baseline`, at the caps | 96.1M (24.0%) | 1.8 MB | 10 | 1 | 7 452 | 0 |
 | `submit_guardian` (promoting, sets the freeze) | 1.8M | 0.7 MB | 13 | 6 | 1 996 | 368 |
 | `submit_zk` (promoting, `Combined`, sets the freeze) | 119.2M (29.8%) | 5.7 MB | 17 | 5 | 2 284 | 368 |
-| Completion, at the caps (compromise, names kept, every program changed) | 294.5M (73.6%) | 19.8 MB (47.1%) | 116 | 99 | 53 160 | 3 228 (19.7%) |
-| Completion, at the caps (compromise, every rule renamed) | 251.6M (62.9%) | 24.9 MB (59.3%) | 157 (39.2%) | 141 (70.5%) | 56 532 (42.8%) | 3 228 |
-| Completion, at the caps (lost-key, every signer revoked) | 257.0M (64.2%) | 12.5 MB | 91 | 77 | 43 752 | 2 172 |
+| Thief's `apply_doc`, at the caps (every key swapped, every rule renamed) | 201.7M (50.4%) | 20.1 MB | 124 | 102 | 47 408 | 340 |
+| Thief's `apply_doc`, at the caps (names kept, every program changed) | 249.3M (62.3%) | 16.2 MB | 83 | 61 | 44 156 | 340 |
+| Compromise completion, at the caps, names kept, every program changed (binding) | 294.5M (73.6%) | 19.8 MB (47.1%) | 116 (29.0%) | 99 (49.5%) | 53 160 (40.2%) | 3 228 (19.7%) |
+| Compromise completion, at the caps, names kept, every program and cap changed | 276.2M (69.0%) | 25.4 MB (60.5%) | 155 (38.8%) | 137 (68.5%) | 56 260 | 3 228 |
+| Compromise completion, at the caps, names kept, every cap changed | 275.6M (68.9%) | 24.7 MB | 152 | 134 | 55 812 | 3 228 |
+| Compromise completion, at the caps, every rule renamed | 251.6M (62.9%) | 24.9 MB (59.3%) | 157 (39.2%) | 141 (70.5%) | 56 532 (42.8%) | 3 228 |
+| Compromise completion, at the caps, every rule kept by name | 259.6M (64.9%) | 13.2 MB | 99 | 85 | 44 852 | 3 228 |
+| Lost-key completion, at the caps (`Combined`, ZK rotation, every signer revoked) | 257.0M (64.2%) | 12.5 MB | 91 | 77 | 43 752 | 2 172 |
 | Cancellation (`Combined`, ZK last) | 118.6M (29.7%) | 5.4 MB | 16 | 5 | 2 132 | 332 |
 | `approve_change` | 0.9M | 0.3 MB | 8 | 2 | 392 | 192 |
 | `submit_zk_change` | 117.7M (29.4%) | 5.1 MB | 12 | 1 | 240 | 192 |
-| `Protected` reconfiguration `apply_doc`, at the caps | 257.5M (64.4%) | 23.1 MB | 141 | 114 | 51 592 | 888 |
+| `Protected` reconfiguration, at the caps, every rule edited | 257.5M (64.4%) | 12.9 MB | 83 | 60 | 39 960 | 888 |
+| `Protected` reconfiguration, at the caps, every rule replaced | 244.3M (61.1%) | 23.1 MB | 141 | 114 | 51 592 | 888 |
 | `Protected` `schedule_upgrade` | 6.3M | 1.2 MB | 13 | 2 | 1 116 | 196 |
 | `execute_upgrade` | 6.3M | 1.2 MB | 12 | 5 | 1 232 | 696 |
-| Enrollment that seals a tree (small document) | 58.7M | 4.4 MB | 34 | 18 | 8 016 | 888 |
 
-Every row is within 75% of every limit. Native proving (`nargo execute` +
-`bb prove`, 15 proofs on an Apple M-series desktop): 69 ms median witness,
-97 ms median and 117 ms maximum proof. The deployable adapter is 67 982
-bytes (`stellar scaffold build`; 52% of the 131 072-byte contract limit) and
-the pool 45 663: `docs/zk/measurements.md`'s 116 776 and 75 264 are plain
-`cargo build` sizes, without the CLI's spec shaking.
+Every row is within 75% of every metered limit.
+
+### Configuration revision
+
+The configuration revision adds one instance field, written by every
+`apply_doc` and executed upgrade, and 28 bytes to `DocApplied` (its
+`revision` field). The release-stack suite on stacks built from `704aa23`
+and from the source with the revision (`build-stack.sh --builder contract`,
+real proofs, the same toolchain), all eighteen measured rows:
+
+| Change per row | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- |
+| Every `apply_doc` (thieves, completions, enrollment, reconfigurations) | -0.29M to +0.21M | +5 to +8 KB | 0 | 0 | +28 | +28 bytes |
+| `begin_*`, `publish_baseline`, factory `create_passkey` | +0.02M to +0.15M | +4 to +89 KB | 0 | 0 | 0 | 0 |
+
+Every apply already writes the instance, so no row gains a footprint or
+written entry. Instructions move by at most 0.07% of the limit, in both
+directions. The binding rows stay binding: the reprogram thief's completion
+at 294.4M (73.6%), and written entries at 141 (70.5%, the renamed thief).
 
 ### Document caps
 
-Workstream 4, 2026-10-06, protocol-29 limits, the release-stack suite on the
-stack built from this branch's source (`build-stack.sh --builder contract`)
-with real proofs and enforcing authorization. The provisional caps (16
-signers, 16 rules, 8 192 bytes) did not hold: at them, a recovery
-completion exceeded two network limits outright.
-
-**The wasm stack.** Every contract linked rustc's default 1 MiB wasm stack,
-so each VM started with 17 pages (1 088 KiB) of linear memory, and the host
-charges that memory on every cross-contract call. A completion at the caps
-makes dozens of them (OZ canonicalizes each rule's signers through their
-verifier and installs and uninstalls each policy), so it took 107 MB of
-the 41.9 MB limit. Each stack contract now links a 64 KiB stack
-(`build.rs`, `-zstack-size=65536`; 2 pages). The same flows take about a
-quarter of the memory (the largest existing row: 17 MB to 4.5 MB), and
-every flow passes with real proofs. The stack is laid out first, so an
-overflow wraps below address 0 and traps instead of corrupting data. The
-UltraHonk verifier is the deepest code: the ZK-flavor verifier traps at
-32 KiB (the controller reports `ZkEvidenceRejected`, failing closed) and
-passes at 48 KiB, so the adapter links 128 KiB (3 pages), more than twice
-that, at one VM per ZK transaction. The verifier's stack use does not
-depend on its input, and the compiler's only input-driven recursion (JSON
-nesting) refuses cleanly at its depth limit on the 64 KiB stack.
-
-**With OZ's events, events bound.** OZ emits an event for every rule
-added, removed, or edited, for every signer registered, added to a rule, or
-removed from one, and for every policy installed or uninstalled. The
-controller emits one per revoked credential. `apply_doc` applies only the
-delta between documents (spec §7.5): rules are matched by name and scope,
-and each changed rule takes the cheaper of an in-place edit and a whole
-replacement. With OZ's events, contract events bound every frontier row:
-
-| Signers | 2 | 4 | 6 | 8 | 10 | 12 |
-| --- | --- | --- | --- | --- | --- | --- |
-| Most rules within budget | 11 | 10 | 8 (72.9%) | 6 | 5 | fewer than 5 |
-
-That allowed 6 signers and 8 rules. The release removes that limit in two
-steps, both from theahaco/stellar-contracts-OZ, the OZ fork this repo pins:
-
-- **Quiet mutations (OZ fork PR #4).** `apply_doc` makes every rule,
-  signer, and policy mutation through `_no_events` variants, and the
-  spending-limit policy installs and uninstalls quietly. The account emits
-  one `DocApplied` per application: `doc_hash` is its topic, and the
-  delta's counts are its data (rules added, removed, and edited in place;
-  signers and policies added and removed by the in-place edits; a rule
-  replaced whole is in no signer or policy count). `applied_doc` serves the
-  document, and `CredentialRevoked` is unchanged. Events drop to at most 31%
-  anywhere measured. With no events to price, the reconcile chooses each
-  rule's path by ledger writes, counted per OZ operation.
-- **One call per in-place signer change (OZ fork PR #5).** An in-place edit
-  changes a rule's signers in one `reconcile_signers_no_events`, instead of
-  a `remove_signer` per leaving signer and a `batch_add_signer`. The call
-  checks the final set as a whole (size, key sizes, canonical duplicates),
-  keeps the retained signers' registry ids, and writes the rule once. The
-  edit no longer needs room for old and new keys side by side. The cost
-  model prices it as one rule write plus each leaving and joining signer's
-  registry and lookup entries.
+**The caps are 8 declared signers, 11 document rules, 8 192 canonical
+bytes, and rule names of at most OZ's 20 bytes**
+(`perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES,
+MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}`). The generated recovery rule
+is additional to the 11. The `worst_case_*` tests in `release_stack.rs` run
+all eight worst-case flows at the compiled-in caps and assert each stays
+within budget, so lowering a limit or growing a flow's cost fails CI's
+`release-stack-source` job. Rerun `scripts/cap-sweep.py` after a change to
+the reconcile's cost model, OZ's mutations, the controller's or the
+policies' storage, or a network limit.
 
 **Worst cases.** A completion's cost depends on how its source and target
 differ, so the flows are the ones with the largest difference, every way
@@ -281,8 +283,9 @@ the diff can go:
 
 **Method.** `cap_sweep` (in `release_stack.rs`) runs those eight flows
 (`WORST_FLOWS`) over a document shape, and `scripts/cap-sweep.py` runs it
-over S,R shapes and tabulates the worst share of every limit. The shape is
-the costliest the caps admit:
+over signer and rule counts and tabulates the worst share of every limit.
+The shape is the costliest the caps admit:
+
 - every signer is a passkey (the longest key the stack's verifiers take),
   named by some rule, as many per rule as OZ allows;
 - every rule but `admin` and the owner's activity rule carries both
@@ -291,24 +294,16 @@ the costliest the caps admit:
   with a `string-in` argument constraint and rule names at OZ's 20-byte
   limit.
 
-**Footprint is counted as the network counts it**: the transaction's
-distinct ledger keys, read-only plus read-write, against 400. Written
-entries (the read-write keys) are a separate limit of 200. Until
-2026-10-07 the sweep added the two, which counted every read-write key
-twice and reported the footprint as binding when it never was.
-`the_metered_footprint_is_the_simulated_transactions` simulates every
-`apply_doc` of the binding flows at the caps the way RPC simulation runs
-it, and checks the metered footprint against the simulated read-only plus
-read-write keys, and the written entries against the read-write keys.
-`cap-sweep.py --simulate` does the same inside a sweep: 63 of 63 matched at
-6 and 14, 8 and 11, and 10 and 9.
+`cap-sweep.py --simulate` checks the metered footprint and written entries
+against an RPC-style simulation inside a sweep: 63 of 63 `apply_doc` calls
+matched at 6 signers and 14 rules, 8 and 11, and 10 and 9.
 
-The sweep ran on a stack built from this source with the compiler's caps
-raised (15 signers, OZ's per-rule maximum; 32 rules; 32 768 bytes). The
-same 33 shapes, padding, flows, and toolchain were also run on the two
-earlier designs: OZ's events, and quiet mutations with per-signer edits.
-For each signer count, the most rules within budget and the first row past
-it:
+**Frontier.** Source: 2026-10-07, a stack built from the archive branch's
+source with the current reconciler and the compiler's caps raised (15
+signers, OZ's per-rule maximum; 32 rules; 32 768 bytes); exact commit not
+recorded. For each signer count, the most rules within budget and the first
+row past it, as the worst share of each limit over the eight flows (bold:
+over 75%, or the caps):
 
 | Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -328,6 +323,7 @@ it:
 | 15 | 6 | 69.0% | 45.9% | 44.0% | **76.5%** | 40.3% | 31.0% |
 
 **What binds.**
+
 - **Instructions bind from 6 to 12 signers**, in the thief who keeps every
   name and changes every program.
 - **Memory binds at 2 and 4 signers.**
@@ -335,187 +331,85 @@ it:
   behind, in the renamed thief's completion: it replaces every rule whole,
   and each capped rule it replaces writes 6 entries (old and new rule,
   program, and spending window).
-- **The footprint is never above 44.0%.**
+- **The footprint is never above 44.0%; events never above 31.0%.**
 
-**The reprogram thief costs instructions because of the cost model.** The
-model prices only ledger writes. For a rule whose name is kept and whose
-program changed, the in-place edit writes fewer entries than a
-replacement: one `reconcile_signers` and a reinstall of the interpreter
-policy, against a removal and an addition. So the reconcile edits the rule
-in place. Each of those OZ calls re-reads the rule and its signers, and the
-in-place path costs more instructions. With per-signer edits, the
-in-place path writes more, so the same thief is replaced and instructions
-never bind (8 and 12, and 10 and 10, fit there). A model that also priced
-instructions would take the replacement for these rules, at the reparam
-rows' cost (72.2% at 8 and 12, 71.1% at 10 and 10). That would add a rule
-at 8 and at 10 signers. It is not needed at the caps and is not
-implemented: it would change the reviewed cost model, which the tests
-require to price exactly what runs.
+At the caps the worst share is instructions at 73.6%, in the reprogram
+thief's completion; written entries are at 70.5% (the renamed thief).
+Every shape up to the caps fits the 8 192-byte canonical cap. Other
+frontier points are 2 and 17, 4 and 16, 6 and 14, 10 and 9, 12 and 8, and
+15 and 5.
 
-**The caps are 8 signers, 11 rules, and 8 192 canonical bytes** (the
-captain's choice from this frontier). Every shape up to the caps fits the
-8 192-byte canonical cap. The worst share at the caps is instructions at
-73.6%, in the reprogram thief's completion; written entries are at 70.5%
-(the renamed thief). Other frontier points are 2 and 17, 4 and 16, 6 and
-14, 10 and 9, 12 and 8, and 15 and 5. Rerun `scripts/cap-sweep.py` after a
-change to the reconcile's cost model, OZ's mutations, the controller's or
-the policies' storage, or a network limit.
+**Why the reprogram thief binds on instructions.** The reconcile's cost
+model prices ledger writes only ([`implementation.md`](implementation.md#delta-apply-spec-75)).
+For a rule whose name is kept and whose program changed, the in-place edit
+writes fewer entries than a replacement (one `reconcile_signers` and a
+reinstall of the interpreter policy, against a removal and an addition), so
+the reconcile edits the rule in place. Each of those OZ calls re-reads the
+rule and its signers, so the in-place path costs more instructions than the
+replacement would.
 
-At the caps, the worst rows are:
+**Rule names.** The compiler refuses a rule name longer than OZ's 20-byte
+context-rule limit (`MAX_RULE_NAME_BYTES`), so a document that would fail
+at install never compiles; otherwise a published compromise baseline with
+such a name could never be restored. A rule cannot name more signers than
+OZ's per-rule 15 because the document cannot declare more than 8.
 
-| Row | Instructions | Memory | Footprint | Written | Write bytes | Events |
-| --- | --- | --- | --- | --- | --- | --- |
-| Enroll `Combined` through `apply_doc` | 197.2M (49.3%) | 14.6 MB | 91 | 63 | 51 144 | 888 |
-| `begin_lost_key` / `begin_compromise` | 134.8M (33.7%) | 5.4 MB | 25 | 2 | 2 176 | 248 |
-| Thief's `apply_doc` (every key swapped, every rule renamed) | 201.7M (50.4%) | 20.1 MB | 124 | 102 | 47 408 | 340 |
-| Thief's `apply_doc` (names kept, every program changed) | 249.3M (62.3%) | 16.2 MB | 83 | 61 | 44 156 | 340 |
-| Compromise completion, names kept, every program changed (binding) | 294.5M (73.6%) | 19.8 MB (47.1%) | 116 (29.0%) | 99 (49.5%) | 53 160 (40.2%) | 3 228 (19.7%) |
-| Compromise completion, names kept, every program and cap changed | 276.2M (69.0%) | 25.4 MB (60.5%) | 155 (38.8%) | 137 (68.5%) | 56 260 | 3 228 |
-| Compromise completion, names kept, every cap changed | 275.6M (68.9%) | 24.7 MB | 152 | 134 | 55 812 | 3 228 |
-| Compromise completion, every rule renamed | 251.6M (62.9%) | 24.9 MB (59.3%) | 157 (39.2%) | 141 (70.5%) | 56 532 (42.8%) | 3 228 |
-| Compromise completion, every rule kept by name | 259.6M (64.9%) | 13.2 MB | 99 | 85 | 44 852 | 3 228 |
-| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 257.0M (64.2%) | 12.5 MB | 91 | 77 | 43 752 | 2 172 |
-| `Protected` reconfiguration, every rule edited | 257.5M (64.4%) | 12.9 MB | 83 | 60 | 39 960 | 888 |
-| `Protected` reconfiguration, every rule replaced | 244.3M (61.1%) | 23.1 MB | 141 | 114 | 51 592 | 888 |
+**Assumption.** Signer keys are at most a passkey's (81 bytes of key data).
+A custom verifier with keys up to the 256 bytes the IR admits would grow
+every signer's registry entry and the write bytes, and needs its own
+measurement.
 
-**The configuration revision (#108)** adds one instance field, written by
-every `apply_doc` and executed upgrade, and 28 bytes to `DocApplied`
-(its `revision` field). The release-stack suite on stacks built from
-`704aa23` (with the controller's target binding) and from the change
-(`build-stack.sh --builder contract`, real proofs, the same toolchain), all
-eighteen measured rows:
+### Wasm stack
 
-| Change per row | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
-| --- | --- | --- | --- | --- | --- | --- |
-| Every `apply_doc` (thieves, completions, enrollment, reconfigurations) | -0.29M to +0.21M | +5 to +8 KB | 0 | 0 | +28 | +28 bytes |
-| `begin_*`, `publish_baseline`, factory `create_passkey` | +0.02M to +0.15M | +4 to +89 KB | 0 | 0 | 0 | 0 |
+Every stack contract links a 64 KiB wasm stack (`build.rs`,
+`-zstack-size=65536`; 2 pages), and the ZK adapter 128 KiB (3 pages). The
+host charges every cross-contract call's VM its whole initial linear
+memory, and rustc's default 1 MiB stack makes that 17 pages (1 088 KiB) per
+VM. A completion makes dozens of cross-contract calls (OZ canonicalizes
+each rule's signers through their verifier, and installs and uninstalls
+each policy). Measured in process on 2026-10-06: with the default stack a
+completion at the then-provisional caps of 16 signers and 16 rules took
+107 MB against the 41.9 MB limit, and on the same flows the 64 KiB stack
+takes about a quarter of the default's memory (the largest row then
+measured: 17 MB with the default, 4.5 MB with 64 KiB).
 
-Every apply already writes the instance, so no row gains a footprint or
-written entry. Instructions move by at most 0.07% of the limit, in both
-directions. The binding rows are unchanged: the reprogram thief's
-completion at 294.4M (73.6%), and written entries at 141 (70.5%, the
-renamed thief).
+The stack is laid out first, so an overflow wraps below address 0 and
+traps instead of corrupting data. The UltraHonk verifier is the deepest
+code: the ZK-flavor verifier traps at a 32 KiB stack (the controller then
+reports `ZkEvidenceRejected`, failing closed) and passes at 48 KiB, so the
+adapter links more than twice that, at one VM per ZK transaction. The
+verifier's stack use does not depend on its input, and the compiler's only
+input-driven recursion (JSON nesting) refuses cleanly at its depth limit on
+the 64 KiB stack.
 
-The `worst_case_*` tests in `release_stack.rs` run all eight flows at the
-compiled-in caps and assert each stays within budget, so lowering a limit
-or growing a flow's cost fails CI's `release-stack-source` job.
+### Signer transitions
 
-**Signer transitions, in release wasm.** `signer_transitions`
-(`release_stack.rs`) applies one document change per row to `pay`, a
-1-of-n rule (the interpreter policy), and to the spending cap in the
-capped row. It compares the release with the two earlier designs, all on
-WS3's batched-addition base (4d11470), on stacks built with the caps raised
-so the 15-signer rows run. In "full six-key rotation" every declared key
+`signer_transitions` (`release_stack.rs`) applies one document change per
+row to `pay`, a 1-of-n rule (the interpreter policy), and to the spending
+cap in the capped row. In "full six-key rotation" every declared key
 changes, the owner's (and so `admin`'s) too. Each cost is the whole
-`apply_doc`, compiling the document included.
+`apply_doc`, compiling the document included. The test asserts that the
+rule ends with exactly the target signers (a joining key acts, a leaving
+key cannot); it reports the path and the costs. Source: stacks built from
+the archive branch's source with the current reconciler and the compiler's
+caps raised so the 15-signer rows run (beyond the released 8-signer cap);
+exact commit not recorded.
 
-**CPU instructions**
+| Transition | Instructions | Memory | Footprint | Written entries | Events (bytes) | Path (rule id, spending window) |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| single addition | 23.08M | 2.41 MB | 27 | 12 | 340 | in place, id kept |
+| several additions | 25.75M | 2.48 MB | 31 | 16 | 340 | in place, id kept |
+| full six-key rotation | 30.40M | 3.02 MB | 50 | 37 | 340 | replaced, new id |
+| one swap in a six-key rule | 28.93M | 2.50 MB | 33 | 14 | 340 | in place, id kept |
+| five swaps in a six-key rule | 31.19M | 2.75 MB | 45 | 30 | 340 | in place, id kept |
+| shared signers | 28.44M | 2.48 MB | 29 | 12 | 340 | in place, id kept |
+| full rotation with an active spending cap | 34.02M | 3.13 MB | 49 | 35 | 340 | in place, id kept, window kept |
+| one swap at OZ's 15 | 54.87M | 2.82 MB | 51 | 14 | 340 | in place, id kept |
+| seven swaps at OZ's 15 | 58.84M | 3.30 MB | 69 | 38 | 340 | in place, id kept |
 
-| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
-| --- | ---: | ---: | ---: |
-| single addition | 22.51M | 22.36M | 23.08M |
-| several additions | 25.01M | 24.77M | 25.75M |
-| full six-key rotation | 30.81M | 30.36M | 30.40M |
-| one swap in a six-key rule | 28.21M | 28.03M | 28.93M |
-| five swaps in a six-key rule | 28.74M | 28.38M | 31.19M |
-| shared signers | 27.10M | 27.76M | 28.44M |
-| full rotation with an active spending cap | 32.54M | 32.07M | 34.02M |
-| one swap at OZ's 15 | 52.61M | 52.26M | 54.87M |
-| seven swaps at OZ's 15 | 57.04M | 56.24M | 58.84M |
-
-**Memory**
-
-| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
-| --- | ---: | ---: | ---: |
-| single addition | 2.42 MB | 2.40 MB | 2.41 MB |
-| several additions | 2.50 MB | 2.46 MB | 2.48 MB |
-| full six-key rotation | 3.11 MB | 3.03 MB | 3.02 MB |
-| one swap in a six-key rule | 2.54 MB | 2.50 MB | 2.50 MB |
-| five swaps in a six-key rule | 2.75 MB | 2.70 MB | 2.75 MB |
-| shared signers | 2.49 MB | 2.48 MB | 2.48 MB |
-| full rotation with an active spending cap | 3.68 MB | 3.61 MB | 3.13 MB |
-| one swap at OZ's 15 | 2.88 MB | 2.81 MB | 2.82 MB |
-| seven swaps at OZ's 15 | 3.45 MB | 3.34 MB | 3.30 MB |
-
-**Footprint entries (distinct keys)**
-
-| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
-| --- | ---: | ---: | ---: |
-| single addition | 27 | 27 | 27 |
-| several additions | 31 | 31 | 31 |
-| full six-key rotation | 50 | 50 | 50 |
-| one swap in a six-key rule | 33 | 33 | 33 |
-| five swaps in a six-key rule | 48 | 48 | 45 |
-| shared signers | 33 | 29 | 29 |
-| full rotation with an active spending cap | 57 | 57 | 49 |
-| one swap at OZ's 15 | 51 | 51 | 51 |
-| seven swaps at OZ's 15 | 69 | 69 | 69 |
-
-**Written entries**
-
-| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
-| --- | ---: | ---: | ---: |
-| single addition | 12 | 12 | 12 |
-| several additions | 16 | 16 | 16 |
-| full six-key rotation | 37 | 37 | 37 |
-| one swap in a six-key rule | 14 | 14 | 14 |
-| five swaps in a six-key rule | 33 | 33 | 30 |
-| shared signers | 16 | 12 | 12 |
-| full rotation with an active spending cap | 42 | 42 | 35 |
-| one swap at OZ's 15 | 14 | 14 | 14 |
-| seven swaps at OZ's 15 | 38 | 38 | 38 |
-
-**Event bytes**
-
-| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
-| --- | ---: | ---: | ---: |
-| single addition | 1,020 | 340 | 340 |
-| several additions | 1,812 | 340 | 340 |
-| full six-key rotation | 3,340 | 340 | 340 |
-| one swap in a six-key rule | 1,244 | 340 | 340 |
-| five swaps in a six-key rule | 2,720 | 340 | 340 |
-| shared signers | 844 | 340 | 340 |
-| full rotation with an active spending cap | 4,020 | 340 | 340 |
-| one swap at OZ's 15 | 1,244 | 340 | 340 |
-| seven swaps at OZ's 15 | 4,964 | 340 | 340 |
-
-**Path and what it preserved** (rule id, spending window)
-
-| Transition | OZ's events | Quiet, per-signer edits | Release (quiet + `reconcile_signers`) |
-| --- | --- | --- | --- |
-| single addition | in place, id kept | in place, id kept | in place, id kept |
-| several additions | in place, id kept | in place, id kept | in place, id kept |
-| full six-key rotation | replaced, new id | replaced, new id | replaced, new id |
-| one swap in a six-key rule | in place, id kept | in place, id kept | in place, id kept |
-| five swaps in a six-key rule | replaced, new id | replaced, new id | in place, id kept |
-| shared signers | replaced, new id | in place, id kept | in place, id kept |
-| full rotation with an active spending cap | replaced, new id, window reset | replaced, new id, window reset | in place, id kept, window kept |
-| one swap at OZ's 15 | in place, id kept | in place, id kept | in place, id kept |
-| seven swaps at OZ's 15 | in place, id kept | in place, id kept | in place, id kept |
-
-On all three designs the rule ends up with exactly the target signers: a
-joining key acts and a leaving key cannot. Retained signers keep their
-registry ids. `a_rejected_signer_transition_changes_nothing` passes. In
-it, a duplicate key (one passkey under a second credential id) and a budget
-running out at 25, 50, 75, and 95% of a full rotation leave every ledger
-entry unchanged.
-
-`reconcile_signers` keeps two more transitions in place than per-signer
-edits do: five swaps in a six-key rule, and the full rotation under an
-active spending cap. The capped rotation now keeps its rule id and its
-spending window, which a replacement reset (a key rotation also reset what
-the cap had counted). It costs 0.7 to 2.6M more instructions on small
-applies, where both designs edit in place. OZ's call reads the current
-signers back from the registry and re-checks duplicates over the whole set.
-At the caps, the flows that edit every rule in place are cheaper with it,
-because a rule's whole swap is one call.
-
-The compiler also refuses a rule name longer than OZ's 20-byte context-rule
-limit (`MAX_RULE_NAME_BYTES`). Before, such a document compiled and failed
-only at install, so a published compromise baseline with one could never be
-restored. A rule cannot name more signers than OZ's per-rule 15 because the
-document cannot declare more than 8.
-
-Assumption: signer keys are at most a passkey's (81 bytes of key data). A
-custom verifier with keys up to the 256 bytes the IR admits would grow every
-signer's registry entry and the write bytes, and needs its own measurement.
+Retained signers keep their registry ids. `reconcile_signers` reads the
+current signers back from the registry and re-checks duplicates over the
+whole set, which is most of an in-place edit's instruction cost.
+`a_rejected_signer_transition_changes_nothing` passes: a duplicate key (one
+passkey under a second credential id), and the budget running out at 25,
+50, 75, and 95% of a full rotation, leave every ledger entry unchanged.

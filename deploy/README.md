@@ -1,10 +1,11 @@
 # Deploying the perch stack
 
 How the perch contracts are built, published, and pinned to each other, and
-how a deployment is checked. This is workstream 4 of epic
-[#99](https://github.com/stellar-registry/perch/issues/99). The current
-testnet deployment is [`deployments/testnet.json`](../../deployments/testnet.json),
-and its measured exercise is [`testnet-exercise.md`](testnet-exercise.md).
+how a deployment is checked. The current testnet deployment is
+[`deployments/testnet.json`](../../deployments/testnet.json); its build
+provenance is recorded in the audit manifest
+([`audit-scope.md`](../audit-scope.md#deployment-provenance)), and its
+measured exercise is [`testnet-exercise.md`](testnet-exercise.md).
 
 ## Why order matters
 
@@ -21,11 +22,10 @@ contracts are resolved from a build-time-pinned wasm hash"). So:
 2. "the account uses compiler X" is only true if the bytes in the cache when
    the account was built are X's.
 
-[#95](https://github.com/stellar-registry/perch/issues/95) was the second
-point failing. `fetch-infra-wasm.sh` looked the compiler up through a
-name-salted deploy that nothing updated, so every build pinned the pre-cap
-v0.1.0 compiler, and `testnet_pins` only checked that the stale address was
-self-consistent.
+A lookup by name can return stale bytes without failing, and a check that
+an address is self-consistent does not catch it. So pins are fetched by the
+address and hash the manifest records, and checked against both
+(`fetch-infra-wasm.sh`, below).
 
 ## Tiers
 
@@ -45,16 +45,14 @@ account's applied document names them (`recovery.controller`, `adapter`,
 `pool`), and the controller checks the adapter's circuit and depth against
 the pool when a ZK factor is enrolled.
 
-Every stack contract links a 64 KiB wasm stack instead of rustc's 1 MiB
-default (its `build.rs`): the host charges each cross-contract call's VM its
-whole initial memory, and with the default a recovery completion at the
-document caps exceeded the network's memory limit
-([`budgets.md`](../recovery/budgets.md), "Document caps").
+Every stack contract links a 64 KiB wasm stack (128 KiB for the ZK
+adapter) instead of rustc's 1 MiB default (its `build.rs`): the host charges
+each cross-contract call's VM its whole initial memory, and with the default
+a recovery completion at the document caps exceeds the network's memory
+limit ([`budgets.md`](../recovery/budgets.md), "Document caps").
 
 The resolve macro's pins are build inputs cargo tracks: replacing a cached
 wasm rebuilds the consumer (`perch-registry-resolve-macro`, `pin_file`).
-Before, the macro read the file itself, and cargo kept the stale pin until
-something else invalidated the crate.
 
 ## The manifest
 
@@ -85,16 +83,17 @@ every consumer reads.
 
 CI's `rust` job runs `fetch-infra-wasm.sh --stack`, the workspace tests
 (including `testnet_pins`), `verify-deployment.sh`, and the release-stack
-suite against the deployed bytes when the deployment was built from a commit
-in the branch's history. Otherwise (a pull request below the deployment
-record, or a rebase), the deployed bytes run other contract code. Then the
-job pins this source's own build (`build-stack.sh --builder contract`), the
-workspace tests run against it without `testnet_pins`, and the deployed-bytes
-suite skips with a notice until the next deployment. The `release-stack-source` job builds the
-PR's own source in pin order (`build-stack.sh --builder contract`, against
-the manifest's registry) and runs the release-stack suite on those fresh
-bytes, so a change that only a rebuilt stack would break fails the PR. The
-`packages` job runs `check-packages.sh`.
+suite against the deployed bytes when the deployment's commit is an
+ancestor of the tested commit. Otherwise the deployed bytes may run other
+contract code: the job pins this source's own build (`build-stack.sh
+--builder contract`), the workspace tests run against it without
+`testnet_pins`, and the deployed-bytes suite skips with a notice.
+`verify-deployment.sh` checks the chain against the manifest either way.
+The `release-stack-source` job builds the tested source in pin order
+(`build-stack.sh --builder contract`, against the manifest's registry) and
+runs the release-stack suite on those fresh bytes, so a change that only a
+rebuilt stack would break fails CI. The `packages` job runs
+`check-packages.sh`.
 
 ## What is verified, and where
 
@@ -106,7 +105,7 @@ bytes, so a change that only a rebuilt stack would break fails the PR. The
 | Consumers resolve them | factory `account_wasm_hash()` and `webauthn_verifier()`, each account's code hash and `infra()`, adapter `circuit_id()`, adapter and pool depth |
 | A fresh build pins the deployment | `fetch-infra-wasm.sh` checks every fetched byte; `testnet_pins` checks what was compiled |
 | The deployed bytes behave as specified | `release_stack.rs` on the fetched bytes; `perch-testnet` on the chain |
-| The source reproduces them | rebuilding the stack from the deployment commit, in another directory, with the recorded toolchain gives every recorded hash ([`testnet-exercise.md`](testnet-exercise.md#reproducibility)) |
+| The source reproduces them | rebuilding the stack from the deployment commit, in another directory, with the recorded toolchain gives every hash the deployment built; in canonical mode, the reused tier-0 reproduce only through the attested release build (the current deployment's record: [`audit-scope.md`](../audit-scope.md#deployment-provenance)) |
 
 A registry name lookup is never the evidence: names only select what to
 fetch, and every fetched byte is checked against a hash the manifest
@@ -115,18 +114,33 @@ records.
 ## The canonical registry, and publishing the stack to it
 
 Perch has one canonical registry, `unverified/perch/constructorless`
-(`CDX2DMYM…PDA7`, `vars.PERCH_REGISTRY_CONTRACT_ID`). An account or factory
+(`CDX2DMYM…PDA7`, `vars.PERCH_REGISTRY_CONTRACT_ID`;
+[`../testnet-deployment.md`](../testnet-deployment.md)). An account or factory
 bakes one registry id and derives every infra address from it as
 `deployer(registry, sha256(wasm))`, so everything one consumer resolves must
-live in that one registry. (The `unverified/perch/stateless` registry, where
-the spending limit used to be published, is retired — it keeps
-`perch-spending-limit` 0.1.1 and earlier.)
+live in that one registry. The `unverified/perch/stateless` registry is
+retired: it keeps `perch-spending-limit` 0.1.1 and earlier, and nothing new is
+published there.
 
 `deploy-stack.sh` has two modes. A **rehearsal** deploys to its own fresh
 instance of the same registry wasm (`4b2d9ea4…`), with a throwaway key as
 admin, manager, and author — self-contained, so it builds and publishes its
 own bytes and the account pins exactly those. The **canonical** mode
 (`--registry <canonical> --author <smart account> --reuse …`) is what CI runs.
+
+The current deployment
+([`deployments/testnet.json`](../../deployments/testnet.json)) is canonical:
+`release.yml`'s `deploy-stack` job published it into the `constructorless`
+registry, reusing the four published tier-0 contracts.
+
+**The same version is different bytes in the two modes.** A rehearsal's
+interpreter, compiler, spending limit, and ed25519 verifier carry versions
+that `release.yml` also publishes canonically. `release.yml` builds them
+with stellar-registry/actions' attested release build, and `build-stack.sh`
+runs its own scaffold build, so the bytes differ. In an earlier rehearsal,
+interpreter 0.1.3 was `2254f17d…` against `e4d7fb8d…` canonically (observed
+2026-10-09). Resolve infra by the manifest's hash or address, never by
+`(name, version)` across registries.
 
 ### Authority
 
@@ -305,14 +319,15 @@ controller's own refusal.
 Testnet resets quarterly. After a reset, run `deploy-stack.sh` with a funded
 identity, then `scripts/bindings-contracts.sh` and `cargo run -p
 perch-testnet`, and commit the manifest, the bindings, and the exercise
-report. Every address changes. The hashes do not change unless the source
-does.
+report, and update the deployment provenance in
+[`audit-scope.md`](../audit-scope.md#deployment-provenance). Every address
+changes. The hashes do not change unless the source does.
 
 ## Packages
 
 | Package | Contents |
 | --- | --- |
-| `@stellar-registry/perch` (`packages/perch-js`) | PolicyDoc schemas, builder, canonical JSON, `doc_hash` |
+| `@stellar-registry/perch` (`packages/perch-js`) | PolicyDoc schemas, builder, canonical JSON and hashes, statement encodings, and the consumer interface ([`packages/perch-js/README.md`](../../packages/perch-js/README.md)) |
 | `@stellar-registry/perch-interpreter` | interpreter bindings |
 | `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer, serving witnesses from `PoolWitnessIndex` (one chunk of leaves per witness; node stores and a snapshot to resume) |
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature with the call rebuilt from the posted statement), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
@@ -321,6 +336,8 @@ does.
 
 All six are published to npm by `release.yml`'s `npm-publish` job: merging
 a bump of a package's manifest version (the release PR proposes one from its
-conventional commits) tags `<pkg>-v<version>` and publishes it. Rust crates are never published to crates.io (`release-plz.toml`).
-Hosting the indexer or the relay, with storage, routes, and schedules, is the
-operator's concern. Nido's hosted services are deployments of these packages.
+conventional commits) tags `<pkg>-v<version>` and publishes it with npm
+provenance. Rust crates are never published to crates.io; contract releases
+are on-chain wasm publishes (`release.yml`). Hosting the indexer or the
+relay, with storage, routes, and schedules, is the operator's concern. Nido's
+hosted services are deployments of these packages.

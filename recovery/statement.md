@@ -74,7 +74,11 @@ digest = b3007c86eb30a2caa76025a4cb3ae8623454922784a20e428531990bb079190f
 
 `config_hash = sha256("perch/recovery/config" || canonical JSON of the
 document's recovery member)`, where canonical JSON is `CANONICAL.md`'s.
-The doc compiler computes it (workstream 3), so it has no vector here yet.
+The doc compiler computes it. Its vectors are not in this file:
+`testdata/recovery/config-{guardian-only,zk-only,combined}.canonical.json`
+hold one recovery member per mode, and
+`crates/integration-tests/tests/config_hash.rs` checks the compiler's hash
+of each against `sha256` computed independently.
 
 ## Credential
 
@@ -126,6 +130,9 @@ modulus `0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001`:
 | `DOM_NULLIFIER` | `perch/recovery/zk/v2/nullifier` | `0280c3170f4abb8389838a5c280dbdac8bfd7c75fcb780a9485d93af553ab840` |
 | `DOM_AUTH` | `perch/recovery/zk/v2/auth` | `04e4c99c7477379c7e47c9380170e3fb1e7c565afe67dd56216df99861f1fb3c` |
 
-Poseidon2 outputs (`statement_hash`, leaves, nullifiers, roots) need the
-circuit and host Poseidon2 implementation (workstream 2) and have no
-vectors in this file yet.
+Poseidon2 outputs (`statement_hash`, leaves, nullifiers, roots) are not in
+this file. Their parity vectors are in
+`crates/perch-zk-primitives/src/test.rs` (`parity`) and
+`circuits/perch_zk/src/tests.nr` (`parity_vectors`), described in
+[`../zk/circuit.md`](../zk/circuit.md); `testdata/zk/` holds real proofs
+with their public inputs.

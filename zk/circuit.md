@@ -1,7 +1,11 @@
 # The recovery circuit
 
 `circuits/perch_zk/src/lib.nr` holds the relation; `perch_zk_recovery`
-instantiates it at depth 32, `perch_zk_recovery_d24` at depth 24.
+instantiates it at depth 32 (the release build), `perch_zk_recovery_d24` at
+depth 24 (the fallback). The normative statement of the circuit is
+[`docs/recovery/spec.md`](../recovery/spec.md) §13.3 (D14); this file
+covers its encodings, the implementations that must agree with it, and its
+fixtures.
 
 ## Relation
 
@@ -31,20 +35,47 @@ private: `secret`, `acct_*`, `enr_*`, `digest_*`, `leaf_index`, and
 - An empty slot is the field element `0`, and an empty subtree at level `i` is
   `ZERO_HASHES[i]` (`zero[i+1] = H(zero[i], zero[i])`). Interior nodes carry
   no domain tag. Leaves are 6-input hashes under `DOM_BIND`, and Poseidon2's
-  length-encoded IV keeps 2-input and 6-input hashes apart in any case.
+  length-encoded IV keeps 2-input and 6-input hashes apart in any case
+  (`hash_arity_is_domain_separated`).
 - The account and enrollment id feed all three of leaf, nullifier, and
   statement hash. A leaf enrolled for one account or enrollment id therefore
   cannot back a statement checked against another
   (`statement_for_another_account_fails`,
   `statement_for_another_enrollment_fails`).
 - The nullifier depends only on `(account, enrollment_id, secret)`, so it is
-  the same for every tree and every pool. Re-enrolling the same secret under
-  the same id cannot mint a second nullifier, and the pool refuses that
-  re-enrollment anyway.
+  the same for every tree, every pool, and every action. Re-enrolling the
+  same secret under the same id cannot mint a second nullifier, and the pool
+  refuses that re-enrollment anyway. The controller records it as spent for
+  that account only when a completion consumes the credential (spec §11).
 
 The domain constants are `BE(sha256("perch/recovery/zk/v2/<name>")) mod r`
 for `leaf`, `bind`, `nullifier`, and `auth`. They and the 16/16 split are
 defined once in `perch-recovery-interface::zk`, which tests the derivation.
+The `v2` labels keep these tags distinct from the `v1` tags of Nido's
+earlier recovery circuit, so no `v1` proof, leaf, or nullifier is valid
+here (spec §13.3).
+
+## Parameters
+
+| | `perch_zk_recovery` |
+| --- | --- |
+| Toolchain | nargo 1.0.0-beta.9, bb 0.87.0 (the audited verifier's target) |
+| Verifier | NethermindEth's OpenZeppelin-audited UltraHonk verifier (non-ZK), plus Perch's `UltraKeccakZKFlavor` delta, which is not audited ([`README.md`](README.md#open-release-criteria)) |
+| Proof flavor | zero-knowledge (`bb prove --zk`, bb.js `keccakZK`) |
+| Depth | 32; 24 as a buildable fallback |
+| Leaf binding | `H(DOM_BIND, acct, enrollment_id, inner)` |
+| Nullifier | `H(DOM_NULLIFIER, acct, enrollment_id, secret)` |
+| Authorization | arity-7 `statement_hash` over account, enrollment, and the statement digest; independent of the statement's layout |
+| Timing | none in-circuit; ledger counts live in the statement |
+| Domain tags | `perch/recovery/zk/v2/*` |
+| Poseidon2 dependency | vendored by path (`circuits/vendor/poseidon`), checksummed |
+| Proof / VK size | 16,224 B / 1,760 B |
+| Circuit size | about 5,700 gates at depth 32 and 4,400 at depth 24, which bb pads to 2^14 and 2^13 (the VK's `log_circuit_size`); exact counts in [`measurements.md`](measurements.md#circuit-identities) |
+
+The release circuit pads to `log_circuit_size` 14. The verifier's
+fold-commitment padding convention (`vendor/ultrahonk-soroban-verifier/src/utils.rs`)
+is accompanied by a comment confirming it only at `log_circuit_size` 12 and 13;
+confirming it at 14 for the release VK is an open verifier-review item.
 
 ## Three implementations, one set of vectors
 
@@ -55,39 +86,14 @@ defined once in `perch-recovery-interface::zk`, which tests the derivation.
 | bb.js `poseidon2Hash` | `packages/perch-zk` | `packages/perch-zk/test/parity.test.ts` |
 
 All three assert identical outputs for the same inputs, at every arity the
-relation uses (2, 6, 7) and for the depth-32 empty root. On top of that, every
-fixture's public inputs are recomputed from its enrollment history by the Rust
-tests and by the TS tests, and both must match the public inputs bb committed
-the proof to.
+relation uses (2, 6, 7) and for the depth-32 empty root, plus the
+known-answer vector `hash2(1, 2)` (`0x038682aa…d7383`) that Nido's earlier
+Poseidon2 tests also pin. On top of that, every fixture's public inputs are
+recomputed from its enrollment history by the Rust tests and by the TS
+tests, and both must match the public inputs bb committed the proof to.
 
-## Compatibility with Nido's circuits
+## Cross-prover and on-chain evidence
 
-Nido shipped `circuits/zk_recovery` (M1) and `circuits/zk_recovery_doc` (the
-document-recovery adaptation). This circuit reuses their shape: a Poseidon2
-Merkle membership proof with an account-bound leaf, a secret-derived
-nullifier, and an authorization hash, with the same three public inputs. It
-does not reuse their artifacts, and nothing assumes they still verify.
-
-| | Nido `zk_recovery_doc` | Perch `perch_zk_recovery` |
-| --- | --- | --- |
-| Toolchain | nargo 1.0.0-beta.18, bb 3.0.0-nightly.20260102 | nargo 1.0.0-beta.9, bb 0.87.0 (the audited verifier's target) |
-| Verifier | unaudited bb 3 fork, non-ZK | NethermindEth, OpenZeppelin-audited (non-ZK), plus perch's `UltraKeccakZKFlavor` delta (not yet audited; [`README.md`](README.md)) |
-| Proof flavor | non-ZK (no witness hiding) | zero-knowledge (`bb prove --zk`, bb.js `keccakZK`) |
-| Depth | 24 | 32 (24 as a buildable fallback) |
-| Leaf binding | `H(DOM_BIND, acct, inner)` | `H(DOM_BIND, acct, enrollment_id, inner)` |
-| Nullifier | `H(DOM_NULL, acct, secret)` | `H(DOM_NULLIFIER, acct, enrollment_id, secret)` |
-| Authorization | arity-15 `auth_hash` over the raw statement fields, so the circuit encodes the statement layout | arity-7 `statement_hash` over account, enrollment, and the statement digest; layout-independent |
-| Timing | seconds (`timelock_secs`) | none in-circuit; ledger counts live in the statement |
-| Domain tags | `nido` v1 constants | `perch/recovery/zk/v2/*` (no v1 proof, leaf, or nullifier is valid here) |
-| Poseidon2 dependency | git tag | vendored by path, checksummed |
-| Proof / VK size | 6,976 B / 1,888 B | 16,224 B / 1,760 B |
-| Circuit size | n/a | about 5,700 gates at depth 32 and 4,400 at depth 24, which bb pads to 2^14 and 2^13 (the VK's `log_circuit_size`); exact counts in [`measurements.md`](measurements.md) |
-
-What demonstrates compatibility, and not just similarity:
-
-- **Poseidon2.** The parity vectors above, plus Nido's own
-  `hash2(1, 2)` vector, which this circuit reproduces unchanged
-  (`0x038682aa…d7383`).
 - **Proving.** bb.js 0.87.0 in Node and the bb 0.87.0 CLI prove the same
   statement in the same flavor, with the same verification key. Each accepts
   the other's proofs, and the adapter verifies a committed bb.js proof

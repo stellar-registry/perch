@@ -1,12 +1,11 @@
 # The membership pool
 
-`crates/perch-zk-pool` is the pool a ZK recovery proof shows membership in,
-implementing `docs/recovery/spec.md` §14.
-It replaces the pool half of Nido's old combined `contracts/zk-recovery`
-contract. That contract was constructor-configured, held an upgradeable admin
-key, and gave a configured factory authority to enroll any account. This pool
-has none of those: no constructor, no admin, no upgrade entry point, and no
-factory. It also holds no recovery state machine, which is the controller's.
+`crates/perch-zk-pool` is the pool a ZK recovery proof shows membership in.
+It implements [`docs/recovery/spec.md`](../recovery/spec.md) §14 (D15). It
+has no constructor, no admin, no upgrade entry point, and no factory
+authority, and it holds no recovery state machine: attempts, evidence, and
+nullifiers are the controller's (spec §11). Its behavior is a pure function
+of its wasm hash.
 
 ## Entry points
 
@@ -34,8 +33,9 @@ configuration names the enrollment id its ZK factor accepts. A second leaf
 under that id, with a secret someone else knows, would satisfy the ZK factor
 without the enrolled secret, and would give the credential a second
 nullifier. The account refuses this (spec §3.4), and the pool refuses it
-again, as `MembershipPoolInterface::rcv_insert` specifies. The record that enforces the rule,
-`Enrollment(account, id)`, is also how a client finds its leaf.
+again (spec §14.2, `MembershipPoolInterface::rcv_insert`). The record that
+enforces the rule, `Enrollment(account, id)`, is also how a client finds its
+leaf.
 
 ## Capacity, rollover, and tree identification
 
@@ -62,7 +62,7 @@ The pool keeps a `Root(tree_id, root)` entry for every root produced by an
 insertion, paid for by the inserter. `is_known_root(tree_id, root)` is true
 exactly when that entry exists (spec §14.1). A match also extends the entry's
 TTL to the network maximum, so a root a recovery relies on stays live. The
-adapter's `verify` therefore writes that one TTL extension, paid for by the
+adapter's `verify` therefore causes that one TTL extension, paid for by the
 submitter.
 
 - **Every historical root stays acceptable.** Trees are append-only, so an
@@ -78,7 +78,7 @@ submitter.
   Witnesses for a sealed tree can be computed once and cached
   (`earlier_tree`).
 - **An empty tree's root** is never accepted. No insertion produced it, so no
-  leaf could be proven under it.
+  leaf could be proven under it (`empty_and_unopened_trees_accept_no_root`).
 
 ## Storage layout
 
@@ -116,15 +116,16 @@ materializes a tree: `IncrementalTree` and `PoolWitnessIndex`, in
   the tree is not full. The work per witness is constant, however large the
   tree.
 
-Leaves come from either source:
+Leaves come from either source (spec §14.3):
 
-- **Contract storage.** `leaves(tree_id, start, count)` pages (64 at a time),
-  or `Leaf(id, index)` entries read directly with `getLedgerEntries`. This
-  does not depend on how long an RPC provider retains events. That is why the
-  pool pays for one `Leaf` entry per insertion.
+- **Contract storage.** `leaves(tree_id, start, count)` pages (at most 64 at
+  a time), or `Leaf(id, index)` entries read directly with
+  `getLedgerEntries`. This does not depend on how long an RPC provider
+  retains events, which is why the pool pays for one `Leaf` entry per
+  insertion.
 - **Events.** `LeafInserted { account, tree_id, enrollment_id, index, leaf,
   root }` for every insertion, which the reusable indexer persists and
-  replays (spec §14.3). RPC providers keep events only briefly.
+  replays. RPC providers keep events only briefly.
 
 `enrollment(account, enrollment_id)` gives a client its own leaf's position.
 `tree(tree_id).root` and `is_known_root` let a client check its rebuilt tree
@@ -149,20 +150,30 @@ Every write extends the entries it touches to the network's maximum TTL
 (`max_entry_ttl`, 3,110,400 ledgers, about 180 days). `is_known_root` also
 renews the root entry it confirms, so a check keeps alive the root it relies
 on. Entries that nothing touches expire. A sealed tree's leaves and roots and
-the enrollment records of idle accounts are the typical case. For those,
-`renew_tree`, `renew_root`, `renew_leaves`, and `renew_enrollment` are
-permissionless, extend only, and can be called by anyone: a wallet, a
-keeper, or the account itself. A prover whose root entry has been archived
-restores it, or proves against a newer root.
+the enrollment records of idle accounts are the typical case. For those, the
+renewal entry points are permissionless and extend only; anyone can call
+them (a wallet, a keeper, or the account itself):
+
+- `renew_tree(id)`: the tree's state, its latest root, and the
+  current-tree pointer;
+- `renew_root(id, root)`: one historical root a prover relies on;
+- `renew_leaves(id, start, count)`: a page of leaves;
+- `renew_enrollment(account, enrollment_id)`: the enrollment record and its
+  leaf.
+
+`renew_extends_every_entry_a_witness_needs` pins these. A prover whose root
+entry has been archived restores it, or proves against a newer root.
 
 Expiry is not loss. A persistent entry past its TTL is archived. The host
 never reads an archived entry as absent; any access restores it first,
-through the transaction footprint's automatic restoration since protocol 23,
-or explicitly with `RestoreFootprint`. An archived tree therefore resumes
-where it stopped. It is never silently restarted at index 0, and its old
-roots stay provable. `archived_tree_is_restored_not_reset` archives a tree's
-state, root entry, leaf, and enrollment record, then shows that the next
-insertion lands at index 1 and the earlier root still verifies.
+through the transaction footprint's automatic restoration (protocol 23 and
+later), or explicitly with `RestoreFootprint`. An archived tree therefore
+resumes where it stopped. It is never silently restarted at index 0, and its
+old roots stay provable. `archived_tree_is_restored_not_reset` archives a
+tree's state, root entry, leaf, and enrollment record in the test host
+(which emulates automatic restoration), then shows that the next insertion
+lands at index 1 and the earlier root still verifies. The testnet exercise
+does not include archival or restoration.
 
 ## Testing without 2^32 inserts
 
@@ -172,15 +183,16 @@ to fill trees, roll over repeatedly, and check that sealed trees' roots
 survive (`full_tree_is_sealed_and_keeps_its_roots`). The real depth-32
 boundary is reached by writing a `TreeState` one slot short of full, with an
 all-empty frontier, and filling the last slot through the real `rcv_insert`
-entry point. The resulting root is checked against an independent
-computation, the next insertion lands in tree 1, and a real proof for that
-last slot verifies after rollover (`earlier_tree`). Roots are also checked
-against a from-scratch level-by-level recomputation, not the frontier
-algorithm itself (`roots_match_an_independent_recomputation`).
+entry point (`depth_32_boundary_fills_the_last_slot_and_rolls_over`). The
+resulting root is checked against an independent computation, the next
+insertion lands in tree 1, and a real proof for that last slot verifies
+after rollover (`earlier_tree`). Roots are also checked against a
+from-scratch level-by-level recomputation, not the frontier algorithm itself
+(`roots_match_an_independent_recomputation`).
 
 ## Costs
 
-See [`measurements.md`](measurements.md). A typical insertion at depth 32 is
-about 43.5M instructions (10.9% of the transaction limit) and writes five
-entries. Three of the five are new: `Root`, `Leaf`, and `Enrollment`. Those
-three dominate the fee, through rent.
+Insertion costs, rent per insertion and per year, and the share each stored
+entry adds are in [`measurements.md`](measurements.md#on-chain-components-compiled-wasm-metered).
+Rent for the three entries a typical insertion creates (`Root`, `Leaf`, and
+`Enrollment`) dominates its fee.

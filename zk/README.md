@@ -3,11 +3,12 @@
 This is Perch's one supported zero-knowledge recovery backend: a Noir circuit
 proved with UltraHonk, a membership pool that accounts enroll into, and the
 adapter a recovery controller cross-calls to check a proof. It implements the
-ZK half of [`docs/recovery/spec.md`](../recovery/spec.md) ("ZK adapter
-boundary", "Membership pool") against the interfaces in
-`crates/perch-recovery-interface`. The controller that reserves and spends
-nullifiers, checks evidence freshness, and runs attempts is not here. It
-lives in the recovery controller.
+ZK half of [`docs/recovery/spec.md`](../recovery/spec.md) (§13 "ZK adapter
+boundary", §14 "Membership pool") against the interfaces in
+`crates/perch-recovery-interface`. Nullifier state, evidence freshness, and
+attempts are not here: the recovery controller (`crates/perch-recovery`)
+records each account's spent nullifiers, and a ZK proof is accepted only if
+its nullifier is unspent for that account (spec §11).
 
 | Piece | Where | What it is |
 | --- | --- | --- |
@@ -15,37 +16,46 @@ lives in the recovery controller.
 | Primitives | `crates/perch-zk-primitives` | Host-side Poseidon2 for every formula the circuit proves |
 | Pool | `crates/perch-zk-pool` | Deployable membership pool: invoker-only insertion, depth-32 trees, rollover, every historical root acceptable |
 | Adapter | `crates/perch-zk-adapter` | Deployable `ZkAdapterInterface`: root check against the enrolled pool, statement binding, embedded zero-knowledge UltraHonk verifier and VK |
-| Verifier library | `vendor/ultrahonk-soroban-verifier` | NethermindEth's audited (non-ZK) UltraHonk verifier, plus perch's `UltraKeccakZKFlavor` delta |
+| Verifier library | `vendor/ultrahonk-soroban-verifier` | NethermindEth's audited (non-ZK) UltraHonk verifier, plus Perch's `UltraKeccakZKFlavor` delta |
 | Native prover | `crates/perch-zk-prover` | Incremental witness index over pool leaves, circuit inputs, nargo/bb driver, and the `perch-zk-fixtures` tool |
 | Browser/Node prover | `packages/perch-zk` | The same in TypeScript (`PoolWitnessIndex` for indexers), proving with bb.js |
 | Fixtures | `testdata/zk/` | One real ZK proof per scenario, with the enrollment history to rebuild its pool; for `lost_key`, also a bb.js proof and a non-ZK proof the adapter must refuse |
 | Manifest | `circuits/manifest.json` | Hashes of every source, artifact, VK, and fixture proof, plus the toolchain |
 
-Further reading: [`circuit.md`](circuit.md) (the relation, its encodings, and
-compatibility with Nido's circuits), [`pool.md`](pool.md) (storage, rollover,
-root retention, witnesses, renewal), and
-[`measurements.md`](measurements.md) (proving and on-chain costs, budgets, and
-the depth decision).
+Further reading: [`circuit.md`](circuit.md) (the relation, its encodings,
+and its fixtures), [`pool.md`](pool.md) (storage, rollover, root retention,
+witnesses, renewal), and [`measurements.md`](measurements.md) (proving and
+on-chain component costs, and the circuit identities). The budgets, the
+results against them, and the depth decision are in
+[`docs/recovery/budgets.md`](../recovery/budgets.md#results).
 
 ## Open release criteria
 
-These must close before this stack is released. Each is tracked in the PR.
-
 1. **Delta audit of the ZK verifier.** Witness hiding is provided: proofs are
    Barretenberg's zero-knowledge flavor, `UltraKeccakZKFlavor`, and the adapter
-   refuses any other (see "Which verifier" below). The audited upstream
-   verifier implements only the non-ZK flavor, so perch added the ZK flavor as
-   a delta: one new file, `vendor/ultrahonk-soroban-verifier/src/zk.rs`, plus
-   visibility-only changes to four audited files. The vendored README and
+   refuses any other (see [Which verifier](#which-verifier)). The audited
+   upstream verifier implements only the non-ZK flavor, so Perch added the ZK
+   flavor as a delta: one new file, `vendor/ultrahonk-soroban-verifier/src/zk.rs`,
+   plus visibility-only changes to four audited files. The vendored README and
    NOTICE list every change, and `crates/perch-zk-adapter/tests/vendor.rs`
-   enforces that nothing else changed. **That delta is not audited.** An
-   audit of it (ideally upstreamed to NethermindEth) must close before
-   release.
+   enforces that nothing else changed. **That delta is not audited.** It is
+   in the audit scope ([`docs/audit-scope.md`](../audit-scope.md)), and its
+   audit must close before release.
 2. **Client proving on reference devices.** `budgets.md` §1 sets budgets for
    a mid-range phone and laptop. Only desktop numbers exist
-   ([`measurements.md`](measurements.md)).
-3. **Full-transaction measurements.** These belong to the controller and
-   account workstream (`budgets.md` §2).
+   ([`measurements.md`](measurements.md#proving)); the reference-device rows
+   are required before launch
+   ([`budgets.md`](../recovery/budgets.md#results)).
+
+The full-transaction measurements are substantially complete but not
+finished: every recovery transaction is measured in process on the release
+wasm and on testnet against the deployed wasm, and every measured row is
+within budget. Rows still open before launch are disk read bytes (every row),
+§3 end-to-end latency, and the §4 controller-state and `renew`-fee rows; a few
+rows (completion after rule churn, promotion with many siblings) are bounded
+by construction rather than measured.
+[`budgets.md`](../recovery/budgets.md#results) is the authoritative release
+checklist, and its status column lists each outstanding row.
 
 ## How a proof is checked
 
@@ -58,24 +68,28 @@ controller ──verify(statement, binding, evidence)──▶ adapter
    │ evidence:  tree id, root, nullifier, proof       │ 5. pool.is_known_root(tree_id, root) ──▶ enrolled pool
    │                                                  │ 6. ZK UltraHonk verify(root ‖ nullifier ‖ statement_hash)
    ▼                                                  ▼
-nullifier bookkeeping, freshness, attempts         Ok(()) or a ZkAdapterError; no state written
+nullifier unspent for this account (§11),          Ok(()) or a ZkAdapterError; no state written
+freshness, attempts
 ```
 
-The checks run in that order, and the first failure is the error returned.
-Everything before step 5 is local, so a malformed or mismatched submission
-never reaches the pool. `verify` does not compare tree depths. The adapter
-only exposes `tree_depth()`, and the controller compares it with the pool's
-`depth()` when a ZK factor is enrolled.
+The checks run in that order, and the first failure is the error returned;
+spec §13.2 names each check's `ZkAdapterError`. Everything before step 5 is
+local, so a malformed or mismatched submission never reaches the pool.
+`verify` does not compare tree depths. The adapter only exposes
+`tree_depth()`, and the controller compares it with the pool's `depth()`
+when a ZK factor is enrolled or changed (spec §3.4). The controller reports
+any adapter error as `RecoveryError::ZkEvidenceRejected`, then refuses a
+nullifier this account has spent (`NullifierSpent`).
 
 `verify` writes no contract state, but it has one ledger effect. When step 5
 matches, the pool's `is_known_root` extends that `Root` entry's TTL, so a
 root a recovery relies on stays live. The submitter pays for that extension,
 and a simulation of `verify` must carry the entry in its read-write
 footprint. Nothing else changes; `verification_only_extends_the_matched_roots_ttl`
-in the adapter's tests pins this. The adapter's and pool's contract doc
-strings still say "writes nothing" and omit the TTL extension. Correcting
-them changes the wasm, so that waits for the next adapter and pool wasm
-change.
+in the adapter's tests pins this. The adapter's `verify` doc string says it
+"writes nothing", and neither it nor the pool's `is_known_root` doc string
+mentions the TTL extension. Both doc strings are part of the deployed
+wasm's contract spec.
 
 The circuit's public inputs are `root`, `nullifier`, and
 `statement_hash = H(DOM_AUTH, account, enrollment_id, digest)`, where `digest`
@@ -97,32 +111,30 @@ The adapter's `circuit_id()` is `sha256` of its compiled-in verification key.
 A configuration names it in its ZK binding, and the adapter refuses any
 binding that names another circuit.
 
-**The verifier is compiled into the adapter** instead of being a second
-contract the adapter calls. The public-input layout belongs to the VK, so a
-new circuit means a new adapter anyway, and an embedded verifier leaves no
-address to pin or misconfigure. The raw verifier is still exported as
-`verify_proof(public_inputs, proof)`, `ProofVerifierInterface`, with the same
-ABI and error codes as Nido's `nido-recovery-verifier`. Nothing in Perch calls
-it: the controller uses `verify`. It is stateless, but it is still audited
-surface with caller-chosen public inputs. Removing it changes the wasm, so
-that is deferred to the next adapter wasm change, unless a consumer of
-Nido's raw-verifier ABI appears first.
+**The verifier is compiled into the adapter**, not a second contract the
+adapter calls. The public-input layout belongs to the VK, so a new circuit
+means a new adapter anyway, and an embedded verifier leaves no address to
+pin or misconfigure. The adapter also exports the raw verifier as
+`verify_proof(public_inputs, proof)`, implementing
+`ProofVerifierInterface` (spec §13.2). Nothing in Perch calls it: the
+controller uses `verify`. It is stateless, but it is audited surface that
+accepts caller-chosen public inputs.
 
-## Which verifier, and why the toolchain changed
+## Which verifier
 
-Nido's working stack proves with nargo 1.0.0-beta.18 and bb
-3.0.0-nightly.20260102. Its verifier is `theahaco/rs-soroban-ultrahonk`'s
-`feat/bb3-nozk-verifier` branch, a port to bb 3's proof format that no one
-has audited. The upstream verifier,
+The verifier is
 [NethermindEth/rs-soroban-ultrahonk](https://github.com/NethermindEth/rs-soroban-ultrahonk),
-has since gone through an internal review and an OpenZeppelin audit. Its
-fixes include G1 point validation and canonical encodings at parse time,
-constrained Gemini padding, and public-input canonicality. The audited line
-targets bb 0.87.0 and nargo 1.0.0-beta.9, but only the *non-zero-knowledge*
-`UltraKeccakFlavor`. A non-ZK proof carries witness-dependent protocol
-messages, so it does not hide the enrolled secret. The same secret backs
-cancellation, reconfiguration, and upgrade proofs until a completion consumes
-it, so recovery needs witness hiding.
+vendored at the commit recorded in `vendor/ultrahonk-soroban-verifier`
+(`UPSTREAM.sha256`, the vendored README). It has had an internal review and
+an OpenZeppelin audit, whose fixes include G1 point validation and
+canonical encodings at parse time, constrained Gemini padding, and
+public-input canonicality. The audited line targets bb 0.87.0 and nargo
+1.0.0-beta.9, which is why Perch pins that toolchain, but implements only
+the *non-zero-knowledge* `UltraKeccakFlavor`. A non-ZK proof carries
+witness-dependent protocol messages, so it does not hide the enrolled
+secret. The same secret backs cancellation, reconfiguration, and upgrade
+proofs until a completion spends its nullifier, so recovery needs witness
+hiding.
 
 Perch therefore vendors the audited verifier and adds Barretenberg's
 zero-knowledge flavor, `UltraKeccakZKFlavor`, as a delta on top of it.
@@ -140,28 +152,32 @@ check:
   source it follows. `crates/perch-zk-adapter/tests/vendor.rs` reverses
   exactly those edits and requires upstream's bytes, as recorded in
   `UPSTREAM.sha256` and checked against the pinned GitHub commit.
-- **The circuit, verification key, `circuit_id`, fixtures layout, and
-  toolchain are unchanged.** The ZK and non-ZK flavors share one VK
+- **The ZK and non-ZK flavors share one circuit and one verification key**
   (`bb write_vk` takes no `--zk`), so the circuit ids in
-  [`measurements.md`](measurements.md) did not move. Proofs come from
-  `bb prove --zk` natively and bb.js `{ keccakZK: true }` in browsers.
+  [`measurements.md`](measurements.md#circuit-identities) name both. Proofs
+  come from `bb prove --zk` natively and bb.js `{ keccakZK: true }` in
+  browsers.
 - **The adapter accepts only ZK proofs.** A valid non-ZK proof of the same
   statement is refused (`testdata/zk/lost_key/proof.non-zk`).
 
-The consequences are measured in [`measurements.md`](measurements.md):
+Consequences ([`measurements.md`](measurements.md) has the figures):
 
-- Proofs are 16,224 bytes, 507 field elements. bb 0.87.0 pads to 28 sumcheck
-  rounds. Non-ZK proofs were 14,592 bytes, and Nido's bb 3 proofs 6,976.
-- `verify_proof` costs about 131M instructions, a third of a transaction.
-  The non-ZK verifier cost 91M, and Nido's 179M. Most of the increase
-  is the consistency check, about 2,000 field operations over a 256-element
-  subgroup.
+- A ZK proof is 16,224 bytes, 507 field elements; bb 0.87.0 pads every proof
+  to 28 sumcheck rounds.
+- `verify_proof` costs about a third of a transaction's instructions. Most
+  of the ZK flavor's cost over the non-ZK one is the consistency check,
+  about 2,000 field operations over a 256-element subgroup.
 - Proofs are randomized: two proofs of one witness differ, and both verify.
-  Proof bytes are therefore no identifier (they never were, per the
-  upstream README); the nullifier is.
-- Proofs from any other bb version do not verify. They fail at the pairing
-  check, not at parse time. `scripts/zk-toolchain.sh`, the prover crate, and
-  the TS package all refuse other versions.
+  Proof bytes are therefore no identifier (per the upstream README); the
+  nullifier is.
+- A proof is checked against the embedded verification key and relation, not
+  against a version number. A malformed or wrong-length proof is refused at the
+  parsing and structural checks; a structurally valid but incompatible proof is
+  refused at a later verification step, not necessarily the final pairing. The
+  verifier reads no version.
+  Separately, `scripts/zk-toolchain.sh`, the prover crate, and the TS package
+  pin bb to the tested version and refuse others, so Perch's own tooling never
+  produces a proof under another version.
 
 ## Reproducing the artifacts
 
@@ -200,31 +216,52 @@ verifier on every CI run.
 
 The deployable wasm's hash depends on the Rust toolchain that builds it. The
 repository's `rust-toolchain.toml` tracks `stable`, so the wasm hash is
-recorded per release build rather than in `circuits/manifest.json`.
+recorded per release build (`deployments/testnet.json` for the testnet
+deployment) rather than in `circuits/manifest.json`.
 
 ## What is tested, and how
 
-All proofs in the tests are real zero-knowledge proofs from the pinned
-toolchain, verified by the adapter's ZK verifier against a real pool. No
-verifier or pool is mocked.
-Only `rcv_insert`'s account authorization is mocked, and only in the adapter's
-tests. The pool's own tests exercise real authorization rules.
+All proofs in the adapter's tests are real zero-knowledge proofs from the
+pinned toolchain, verified by the adapter's ZK verifier against a real pool.
+No verifier or pool is mocked. `rcv_insert`'s account authorization is
+mocked in the adapter's tests and in most of the pool's;
+`insertion_requires_the_accounts_own_authorization` checks, with targeted
+mock authorizations, that only the account itself can insert. The account
+side of the rule (it never signs a reserved `rcv_*` name, spec §15) is
+tested under enforcing authorization in `crates/integration-tests`.
 
 - **Every ZK action**: `LostKey`, `Compromise`, `Cancel`,
   `Reconfigure(Set)`, `Reconfigure(Remove)`, and `Upgrade` each have a
-  fixture proof over the statement the controller builds. Each verifies, and
-  none verifies as any other (`crates/perch-zk-adapter/src/test.rs`).
+  fixture proof over a synthetic statement built by
+  `crates/perch-zk-prover/src/bin/fixtures.rs` (not the controller). Each
+  verifies, and none verifies as any other
+  (`crates/perch-zk-adapter/src/test.rs`). End-to-end proofs over statements
+  the controller actually builds are the `release_stack` tests.
 - **Mismatches**: changing any statement field (network, controller, epoch,
   configuration hash, delay, expiry, validity bound, attempt, source, target,
   replacements), the account, the enrollment id, the nullifier, the tree id,
-  or the pool refuses the evidence. So do a fabricated or evicted root, a
-  non-canonical root or nullifier, a malformed proof, a tampered proof, and a
-  binding for another circuit.
+  or the pool refuses the evidence. So do a fabricated or unknown root (one the
+  tree never had — roots are never evicted; every historical root stays valid,
+  §14.3), a non-canonical root or nullifier, a malformed proof, a tampered
+  proof, and a binding for another circuit.
 - **Replay**: evidence cannot be redirected to another attempt, action,
   configuration, or epoch, because the statement binds them. A replay of
   identical evidence for the identical statement passes the adapter, which
-  keeps no state by design. The controller refuses it through nullifier reservation and
-  attempt consumption, and its own tests must cover that with these fixtures.
+  keeps no state by design. The controller refuses it: an attempt counts
+  one initiation proof and one cancellation proof (`AlreadyCounted`); an
+  authorized attempt accepts no initiation evidence
+  (`AttemptNotCollecting`); a completion spends the nullifier for that
+  account, so any later proof carrying it is refused (`NullifierSpent`);
+  and every completion and configuration change bumps the epoch, which
+  kills older statements. No nullifier is reserved or released: several
+  live attempts may carry the same unspent nullifier, and only a
+  completion changes its state (spec §11). `release_stack.rs`
+  (`zk_lost_key_recovery_with_real_proofs_across_a_rollover`) replays real
+  evidence through the real controller; `recovery.rs`
+  (`nullifiers_are_never_reserved_or_released`,
+  `a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment`,
+  `one_accounts_completion_never_spends_anothers_nullifier`) pins the
+  nullifier rules with a statement-bound mock adapter.
 - **Pool boundaries** without 2^32 inserts: the Merkle code is parameterized
   by depth and driven to fill and roll over at depth 2. The real depth-32 last
   slot (index 2^32 − 1, every path bit set) is reached by synthesizing the
@@ -252,44 +289,43 @@ tests. The pool's own tests exercise real authorization rules.
     each Libra commitment's opening;
   - the constants are bb's.
 
-## Interface notes for the rest of the epic
+## Interface notes
 
-These crates implement `perch-recovery-interface` and spec §13–§14 as they
-stand on `fm/perch-epic99-spec-p5`. `perch-zk-pool` is driven through the
-interface's own `MembershipPoolClient` in its tests. A few points go beyond
-the spec or differ from its prose:
+These crates implement `perch-recovery-interface` and spec §13–§14.
+`perch-zk-pool` is driven through the interface's own `MembershipPoolClient`
+in its tests.
 
-- **Pool-side one leaf per `(account, enrollment_id)`.** The pool refuses a
-  repeat (`EnrollmentIdTaken`), as `MembershipPoolInterface::rcv_insert` now
-  specifies, in addition to the account's own refusal (spec §3.4). A second
-  leaf under an adopted id would satisfy the ZK factor with someone else's
-  secret and give the credential a second nullifier. The record that
-  enforces the rule is also the client's lookup of its own leaf.
-- **On-chain leaves.** Spec §14.3 sources witnesses from `LeafInserted`
-  events via a persisting indexer. The pool also stores each leaf, so a
+- **One leaf per `(account, enrollment_id)`** (spec §14.2,
+  `EnrollmentIdTaken`), in addition to the account's own refusal (spec
+  §3.4). A second leaf under an adopted id would satisfy the ZK factor with
+  someone else's secret and give the credential a second nullifier. The
+  record that enforces the rule, `Enrollment(account, id)`, is also the
+  client's lookup of its own leaf.
+- **Stored leaves** (spec §14.3). Every leaf is a persistent entry, so a
   witness for any tree, sealed ones included, can be rebuilt from contract
-  storage alone (`leaves` pages) if every indexer is lost. That is one more
-  persistent entry per insertion; dropping it is a one-line change if the
-  rent is not worth it (see [`measurements.md`](measurements.md)).
-- **Adapter topology.** Spec §13 describes the adapter calling a separately
-  deployed, build-pinned verifier. Here the verifier is compiled into the
-  adapter, and the same contract also exports `verify_proof` for
-  `ProofVerifierInterface` callers. Both interfaces are implemented exactly
-  as specified. The difference is one deployable and no verifier address to
+  storage alone (`leaves` pages) if every indexer is lost. It costs about a
+  third of an insertion's rent
+  ([`measurements.md`](measurements.md#on-chain-components-compiled-wasm-metered)).
+- **Adapter topology** (spec §13.2). The verifier and VK are compiled into
+  the adapter, which also exports `verify_proof` for
+  `ProofVerifierInterface` callers: one deployable, no verifier address to
   pin.
 - **Genesis insertion.** `rcv_insert` is invoker-only, so a factory cannot
   insert for a new account. Enrollment happens in the account's own
-  `apply_doc`, as spec §14.2 describes.
+  `apply_doc` (spec §14.2).
 - **Release pipeline.** `perch-zk-pool` and `perch-zk-adapter` are in both
   `release.yml` `CONTRACTS` lists with `paths_for()` scopes. The adapter's
   scope includes `vendor/ultrahonk-soroban-verifier`. Both are therefore
-  tagged and version-tracked, but they stay out of `publish-plan`'s `ALLOW`
-  list until on-chain publishing is enabled deliberately (`AGENTS.md`).
-  `packages/perch-zk` is a new npm package without an `NPM_PACKAGES` entry
-  yet.
-- **Not here.** The controller (nullifier reservation and spending, evidence
-  freshness, attempts) and the account (`apply_doc` wiring of `rcv_insert`,
-  the `tree_depth`/`depth` check, refusing reserved names) are the controller
-  workstream's. Its tests should replay these fixtures through the real
-  controller, including a replay of identical evidence, which the adapter
-  alone cannot refuse.
+  tagged and version-tracked, but they are not in `publish-plan`'s `ALLOW`
+  list, so `release.yml`'s per-contract publish leg skips them. Its
+  `deploy-stack` job publishes them into the canonical registry with the
+  rest of the recovery stack, in pin order (`deployments/testnet.json`).
+  `packages/perch-zk` is published to npm as `@stellar-registry/perch-zk`
+  (`NPM_PACKAGES`).
+- **Where the rest lives.** The controller (`crates/perch-recovery`) keeps
+  per-account spent-nullifier records, checks evidence freshness, runs
+  attempts, and compares the adapter's `tree_depth()` with the pool's
+  `depth()` in `rcv_sync`. The account (`crates/perch-smart-account`) wires
+  `rcv_insert` into `apply_doc` and refuses reserved names. A replay of
+  identical evidence, which the adapter alone cannot refuse, is refused by
+  the controller ([What is tested](#what-is-tested-and-how)).

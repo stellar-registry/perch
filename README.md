@@ -71,11 +71,14 @@ packages/
   perch-interpreter-js/  interpreter contract client bindings, published to npm as
                       @stellar-registry/perch-interpreter (generated from the wasm;
                       regen via `just bindings-interpreter-js`)
-  perch-zk/           ZK recovery proof helpers: commitments, witnesses, bb.js proving,
-                      and a trust-free pool indexer (`@stellar-registry/perch-zk/indexer`)
-  perch-relay/        store-and-forward relay for signed guardian approvals
+  perch-zk/           ZK recovery proof helpers, published to npm as @stellar-registry/perch-zk:
+                      commitments, witnesses, bb.js proving, and a trust-free pool
+                      indexer (`@stellar-registry/perch-zk/indexer`)
+  perch-relay/        store-and-forward relay for signed guardian approvals, published to
+                      npm as @stellar-registry/perch-relay
   perch-contracts/    stack contract bindings generated from the deployed wasm, plus the
-                      deployment manifests (regen via scripts/bindings-contracts.sh)
+                      deployment manifests, published to npm as
+                      @stellar-registry/perch-contracts (regen via scripts/bindings-contracts.sh)
 circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
                       artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
 vendor/               vendored audited UltraHonk verifier plus perch's ZK-flavor delta

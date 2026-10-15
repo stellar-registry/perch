@@ -259,8 +259,9 @@ jobs:
 
   # The release workflow's version-bump scoping (scripts/release-deps.py:
   # what re-releases a contract besides its crate trees, and that every
-  # paths_for() list covers the crates its contract links) and the stack
-  # builder's dirty check (scripts/source-dirty.sh), with release.yml's
+  # paths_for() list covers the crates its contract links), that its npm
+  # lists name every package under packages/, and the stack builder's dirty
+  # check (scripts/source-dirty.sh), with release.yml's
   # pinned git-cliff.
   release-scripts:
     runs-on: ubuntu-latest

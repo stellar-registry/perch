@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Tests for the release and build-provenance scripts: what a contract's
 release scope covers (scripts/release-deps.py, used by release.yml's
-release-pr job) and what a stack build records as dirty
-(scripts/source-dirty.sh, used by scripts/build-stack.sh).
+release-pr job), that release.yml publishes every npm package under
+packages/ with a manifest that installs from the registry, and what a stack
+build records as dirty (scripts/source-dirty.sh, used by
+scripts/build-stack.sh).
 
   python3 scripts/test-release-scripts.py
 
@@ -10,6 +12,7 @@ The git-cliff tests need `git-cliff` on PATH (CI installs the release job's
 pinned build); without it they are skipped unless PERCH_REQUIRE_GIT_CLIFF=1.
 """
 
+import json
 import os
 import re
 import shutil
@@ -325,6 +328,36 @@ _, ext, _ = rd.Tree("HEAD").closure({contract!r})
 print(" ".join(sorted({{n for n, _, _ in ext}})))
 """], REPO).stdout.split()
             self.assertIn("soroban-sdk", tree, contract)
+
+
+def npm_lists():
+    return re.findall(r'^ *NPM_PACKAGES="([^"]*)"', release_yml(), re.M)
+
+
+class NpmScope(unittest.TestCase):
+    """The workflow's npm package lists against packages/."""
+
+    def test_both_lists_name_every_package(self):
+        lists = npm_lists()
+        self.assertEqual(len(lists), 2)
+        on_disk = sorted(os.listdir(os.path.join(REPO, "packages")))
+        for listed in lists:
+            self.assertEqual(sorted(listed.split()), on_disk)
+
+    def test_every_package_installs_from_the_registry(self):
+        for pkg in npm_lists()[0].split():
+            with open(os.path.join(REPO, "packages", pkg, "package.json")) as f:
+                manifest = json.load(f)
+            self.assertTrue(manifest["name"].startswith("@stellar-registry/"), pkg)
+            self.assertEqual(manifest.get("publishConfig", {}).get("access"), "public", pkg)
+            self.assertEqual(manifest["repository"]["url"], "https://github.com/stellar-registry/perch", pkg)
+            self.assertEqual(manifest["repository"]["directory"], f"packages/{pkg}", pkg)
+            for field in ("dependencies", "peerDependencies", "optionalDependencies"):
+                for dep, spec in manifest.get(field, {}).items():
+                    self.assertFalse(
+                        re.match(r"(file|link|workspace|git\+?\w*):|\.{0,2}/", spec),
+                        f"{pkg} {field} {dep}@{spec} does not resolve from the registry",
+                    )
 
 
 class SourceDirty(unittest.TestCase):

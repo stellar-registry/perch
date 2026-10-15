@@ -30,9 +30,11 @@ name: Release
 #
 # A third, off-chain leg — `npm-publish` — mirrors the same convention for
 # the TypeScript packages: detect-releases also tags `<pkg>-v<version>` when a
-# packages/<pkg> manifest version was bumped in the merged PR (perch-js →
+# packages/<pkg> manifest version has no tag yet (perch-js →
 # @stellar-registry/perch, perch-interpreter-js →
-# @stellar-registry/perch-interpreter), and the npm-publish matrix job then
+# @stellar-registry/perch-interpreter, perch-zk → @stellar-registry/perch-zk,
+# perch-relay → @stellar-registry/perch-relay, perch-contracts →
+# @stellar-registry/perch-contracts), and the npm-publish matrix job then
 # publishes each released package to npm (NPM_TOKEN secret).
 #
 # The recovery stack (verifiers, ZK pool and adapter, controller, account,
@@ -232,10 +234,14 @@ jobs:
         id: npm
         run: |
           set -euo pipefail
-          # packages/perch-zk, perch-relay, and perch-contracts are built,
-          # tested, and pack-checked in CI but deliberately not listed:
-          # adding one here publishes it to npm on its next merge.
-          NPM_PACKAGES="perch-js perch-interpreter-js"
+          # Every package under packages/ (scripts/test-release-scripts.py
+          # checks this list against the directory and against release-pr's).
+          # A package added here with no tag yet publishes its manifest
+          # version on the next merge, and that merge must touch
+          # packages/<pkg>/: release-pr's git-cliff (--include-path) ignores a
+          # tag on a commit outside the path, so it would never see the
+          # release and would re-propose the package's whole history.
+          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts"
           npm_releases='[]'
           for p in $NPM_PACKAGES; do
             ver=$(jq -r .version "packages/$p/package.json")
@@ -382,12 +388,11 @@ jobs:
           fi
           # The npm packages ride the same convention: tag-pattern <pkg>-v*,
           # scoped to packages/<pkg>. Bump via `npm version` so
-          # package-lock.json stays in sync with the manifest.
-          npm_name() { case "$1" in
-            perch-js) echo "@stellar-registry/perch";;
-            perch-interpreter-js) echo "@stellar-registry/perch-interpreter";;
-          esac; }
-          for p in perch-js perch-interpreter-js; do
+          # package-lock.json stays in sync with the manifest. A package with
+          # no tag yet gets no bump here (git-cliff has no release to bump
+          # from); detect-releases tags and publishes its manifest version.
+          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts"
+          for p in $NPM_PACKAGES; do
             next_tag=$(git cliff --config cliff.toml --tag-pattern "$p-v.*" --include-path "packages/$p/**" --bumped-version 2>/dev/null) || true
             next_ver=${next_tag#"$p"-v}
             cur=$(jq -r .version "packages/$p/package.json")
@@ -396,7 +401,7 @@ jobs:
             [ "$(printf '%s\n%s\n' "$cur" "$next_ver" | sort -V | tail -1)" = "$next_ver" ] || continue
             npm version "$next_ver" --no-git-tag-version --prefix "packages/$p" >/dev/null
             git cliff --config cliff.toml --tag-pattern "$p-v.*" --include-path "packages/$p/**" --bump -o "packages/$p/CHANGELOG.md" 2>/dev/null
-            summary="${summary}- \`$p\` (npm \`$(npm_name "$p")\`): $cur -> $next_ver"$'\n'
+            summary="${summary}- \`$p\` (npm \`$(jq -r .name "packages/$p/package.json")\`): $cur -> $next_ver"$'\n'
             echo "bump $p: $cur -> $next_ver"
           done
           if [ -n "$summary" ]; then echo "any=true" >>"$GITHUB_OUTPUT"; else echo "any=false" >>"$GITHUB_OUTPUT"; fi

@@ -120,9 +120,6 @@ jobs:
         uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
           tool: cargo-fuzz@0.13.2
-      # apply_doc_delta builds the smart account, which reads the pinned infra
-      # wasm at build time.
-      - uses: ./.github/actions/fetch-infra-wasm
       # The parser target starts from the golden documents (recovery-enrolled
       # ones included) and the grammar's keys and tags, so it reaches every
       # shape without having to discover the key names byte by byte.

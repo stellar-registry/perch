@@ -2,9 +2,10 @@
 """Tests for the release and build-provenance scripts: what a contract's
 release scope covers (scripts/release-deps.py, used by release.yml's
 release-pr job), that release.yml publishes every npm package under
-packages/ with a manifest that installs from the registry, and what a stack
+packages/ with a manifest that installs from the registry, what a stack
 build records as dirty (scripts/source-dirty.sh, used by
-scripts/build-stack.sh).
+scripts/build-stack.sh), and the committed build-time pins' drift check
+(scripts/check-pins.sh).
 
   python3 scripts/test-release-scripts.py
 
@@ -15,6 +16,7 @@ pinned build); without it they are skipped unless PERCH_REQUIRE_GIT_CLIFF=1.
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -24,6 +26,7 @@ import unittest
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RELEASE_DEPS = os.path.join(REPO, "scripts", "release-deps.py")
 SOURCE_DIRTY = os.path.join(REPO, "scripts", "source-dirty.sh")
+CHECK_PINS = os.path.join(REPO, "scripts", "check-pins.sh")
 RELEASE_YML = os.path.join(REPO, ".github", "workflows", "release.yml")
 GIT_CLIFF = shutil.which("git-cliff")
 
@@ -284,6 +287,23 @@ class ReleaseDeps(unittest.TestCase):
         self.assertIn("## [0.1.1]", changelog)
         self.assertIn("Oz-accounts 0.7.1 (git aaaaaaaaaaaa) -> 0.7.1 (git bbbbbbbbbbbb)", changelog)
 
+    @unittest.skipUnless(GIT_CLIFF or os.environ.get("PERCH_REQUIRE_GIT_CLIFF"), "git-cliff not on PATH")
+    def test_a_pin_refresh_is_no_release(self):
+        # The deploy(<network>) commit rewrites the contract's committed
+        # build-time pins after a release built new bytes: release.yml's
+        # `pins` exclusion keeps it from releasing the contract again.
+        shutil.copy(os.path.join(REPO, "cliff.toml"), os.path.join(self.repo.dir, ".git", "cliff.toml"))
+        run(["git", "tag", "contract-v0.1.0"], self.repo.dir)
+        self.repo.write("crates/contract/wasm/stateless.id", "C2")
+        self.repo.write("crates/contract/wasm/dep.sha256", "bb\n")
+        self.repo.write("deployments/testnet.json", "{}\n")
+        self.repo.commit("deploy(testnet): recovery stack")
+        scope = [a for d in self.repo.deps("scope", "contract") for a in ("--include-path", f"{d}/**")]
+        pins = shlex.split(re.search(r"^ *pins=\((.*)\)$", release_yml(), re.M).group(1))
+        cliff = [GIT_CLIFF or "git-cliff", "--config", ".git/cliff.toml", "--tag-pattern", "contract-v.*", *scope]
+        self.assertEqual(run([*cliff, "--bumped-version"], self.repo.dir).stdout.strip(), "contract-v0.1.1")
+        self.assertEqual(run([*cliff, *pins, "--bumped-version"], self.repo.dir).stdout.strip(), "contract-v0.1.0")
+
 
 def release_yml():
     with open(RELEASE_YML) as f:
@@ -450,6 +470,67 @@ class SourceDirty(unittest.TestCase):
         self.repo.write("target/stack/build.json", "{}\n")
         self.repo.write("crates/a/wasm/pin.wasm", "bytes\n")
         self.assertEqual(self.dirty(), "false")
+
+    def test_the_committed_pins_are_not(self):
+        # build-stack.sh rewrites them for the build it records.
+        self.repo.write("crates/b/wasm/stateless.id", "C1")
+        self.repo.write("crates/b/wasm/dep.sha256", "aa\n")
+        self.repo.commit("pins")
+        self.repo.write("crates/b/wasm/stateless.id", "C2")
+        self.repo.write("crates/b/wasm/dep.sha256", "bb\n")
+        self.repo.write("crates/b/wasm/new.sha256", "cc\n")
+        self.assertEqual(self.dirty(), "false")
+        self.repo.write("crates/b/wasm/README.md", "edited\n")
+        self.assertEqual(self.dirty(), "true")
+
+
+class CheckPins(unittest.TestCase):
+    MANIFEST = {
+        "registry": {"id": "CREG"},
+        "contracts": {"dep": {"sha256": "aa"}, "acct": {"sha256": "bb"}},
+    }
+
+    def setUp(self):
+        self.repo = Repo()
+        self.repo.write("deployments/testnet.json", json.dumps(self.MANIFEST))
+        self.repo.write("crates/a/wasm/stateless.id", "CREG")
+        self.repo.write("crates/a/wasm/dep.sha256", "aa\n")
+        self.repo.write("crates/b/wasm/stateless.id", "CREG")
+        self.repo.write("crates/b/wasm/acct.sha256", "bb\n")
+        os.makedirs(os.path.join(self.repo.dir, "scripts"))
+        shutil.copy(CHECK_PINS, os.path.join(self.repo.dir, "scripts"))
+
+    def tearDown(self):
+        self.repo.cleanup()
+
+    def check(self):
+        return run(["scripts/check-pins.sh"], self.repo.dir, check=False)
+
+    def test_pins_matching_the_manifest_pass(self):
+        out = self.check()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("4 pins match testnet.json", out.stderr)
+
+    def test_a_drifted_hash_fails(self):
+        self.repo.write("crates/b/wasm/acct.sha256", "cc\n")
+        out = self.check()
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("crates/b/wasm/acct.sha256 is 'cc'", out.stderr)
+
+    def test_a_drifted_registry_fails(self):
+        self.repo.write("crates/a/wasm/stateless.id", "COTHER")
+        self.assertNotEqual(self.check().returncode, 0)
+
+    def test_a_pin_the_manifest_lacks_fails(self):
+        self.repo.write("crates/a/wasm/gone.sha256", "dd\n")
+        out = self.check()
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("<not in the manifest>", out.stderr)
+
+    def test_no_pins_fails(self):
+        for d in ("a", "b"):
+            shutil.rmtree(os.path.join(self.repo.dir, "crates", d))
+        self.assertNotEqual(self.check().returncode, 0)
 
 
 if __name__ == "__main__":

@@ -334,6 +334,11 @@ jobs:
             *) echo "$1";;
           esac; }
           CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-stateless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory"
+          # The committed build-time pins (crates/*/wasm/) move only after a
+          # source change that already bumped the contract, in the
+          # deploy(<network>) commit recording that deployment: never a
+          # release of their own.
+          pins=(--exclude-path "crates/*/wasm/**")
           summary=""
           bumped=""
           for c in $CONTRACTS; do
@@ -356,7 +361,7 @@ jobs:
             [ -z "$deps_out" ] || mapfile -t deps <<<"$deps_out"
             # feat -> minor, fix -> patch; pre-1.0 breaking stays minor (cliff.toml).
             # Returns the crate's current version when nothing is releasable.
-            next_tag=$(git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" "${deps[@]}" --bumped-version 2>/dev/null) || true
+            next_tag=$(git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" "${pins[@]}" "${deps[@]}" --bumped-version 2>/dev/null) || true
             next_ver=${next_tag#"$c"-v}
             cur=$(grep -m1 '^version = "' "crates/$c/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')
             [ -n "$next_ver" ] || continue
@@ -365,7 +370,7 @@ jobs:
             # already tagged this version on the release-PR merge push).
             [ "$(printf '%s\n%s\n' "$cur" "$next_ver" | sort -V | tail -1)" = "$next_ver" ] || continue
             sed -i "s|^version = \"[^\"]*\"|version = \"$next_ver\"|" "crates/$c/Cargo.toml"
-            git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" "${deps[@]}" --bump -o "crates/$c/CHANGELOG.md" 2>/dev/null
+            git cliff --config cliff.toml --tag-pattern "$c-v.*" "${inc[@]}" "${pins[@]}" "${deps[@]}" --bump -o "crates/$c/CHANGELOG.md" 2>/dev/null
             summary="${summary}- \`$c\`: $cur -> $next_ver"$'\n'
             echo "bump $c: $cur -> $next_ver"
             bumped="${bumped}$c=$next_ver"$'\n'
@@ -840,6 +845,8 @@ jobs:
           commit-message: "deploy(testnet): recovery stack @ ${{ github.event.workflow_run.head_sha }}"
           add-paths: |
             deployments/testnet.json
+            crates/perch-smart-account/wasm
+            crates/perch-account-factory/wasm
             packages/perch-contracts/src
           body: >
             Automated by the `deploy-stack` job: the recovery stack deployed to
@@ -847,6 +854,7 @@ jobs:
             pin order, from the tagged `main` commit
             ${{ github.event.workflow_run.head_sha }} (always in `main`'s
             history, so this record survives any merge method). Merging
-            updates `deployments/testnet.json` and the regenerated
+            updates `deployments/testnet.json`, the account's and factory's
+            committed build-time pins, and the regenerated
             `@stellar-registry/perch-contracts` bindings, which flips consumers —
             and CI's deployed-bytes checks — onto this deployment.

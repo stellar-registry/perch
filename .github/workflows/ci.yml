@@ -34,11 +34,11 @@ jobs:
         run: cargo metadata --locked --format-version 1 >/dev/null
       # z3 backs the perch-analyze SMT tests (they skip loudly when absent).
       - run: sudo apt-get update && sudo apt-get install -y z3
-      # The account and the factory pin their dependencies to the sha256 of
-      # the deployed wasm, read at build time from their git-ignored wasm/
-      # caches. Fetch them, hash- and address-checked, from
-      # deployments/testnet.json before anything compiles them; the deployed
-      # stack lands in target/stack for the release-stack suite below.
+      # The account and the factory build from their committed pins
+      # (crates/*/wasm/); some tests also load the pinned wasm bytes. Fetch
+      # them, hash- and address-checked, from deployments/testnet.json; the
+      # deployed stack lands in target/stack for the release-stack suite
+      # below.
       - uses: ./.github/actions/fetch-infra-wasm
         with:
           stack: target/stack
@@ -151,6 +151,32 @@ jobs:
           eval "$(scripts/zk-toolchain.sh)"
           cargo test -p perch-integration-tests --test release_stack -- --ignored --test-threads 2 \
             --skip cap_sweep
+
+  # The account and the factory build from a plain checkout: their build-time
+  # pins (crates/*/wasm/stateless.id and *.sha256) are committed, so a cargo
+  # git dependency on perch builds with no fetch script and no network. The
+  # pins must equal deployments/testnet.json, and perch-smart-account,
+  # perch-account, and perch-account-factory, depended on by git rev, must
+  # build offline from cargo's clean checkout, to the same wasm as this
+  # checkout.
+  committed-pins:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Committed pins match deployments/testnet.json
+        run: scripts/check-pins.sh
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # v1
+        with:
+          toolchain: stable
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: ./.github/actions/setup-stellar
+      - name: Build perch as a git dependency, without fetching
+        run: scripts/check-git-dep.sh --compare --out target/git-dep
 
   # Flux refinement verification of perch-program (nidohq/soroban-flux).
   # Runs under flux's pinned nightly; the deploy/test toolchain stays stable.

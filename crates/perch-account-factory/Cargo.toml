@@ -20,7 +20,7 @@ doctest = false
 soroban-sdk = { workspace = true }
 stellar-accounts = { workspace = true }
 # Build-time pins: the account wasm hash and the WebAuthn verifier's
-# content address, both from this crate's git-ignored `wasm/` cache.
+# content address, both from this crate's committed `wasm/` pins.
 perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }
 
 [dev-dependencies]

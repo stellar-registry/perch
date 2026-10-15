@@ -14,8 +14,8 @@ arbitrary = { version = "1", features = ["derive"] }
 perch-program = { path = "../crates/perch-program" }
 perch-ir = { path = "../crates/perch-ir" }
 soroban-sdk = { version = "27.0.2", features = ["testutils"] }
-# The delta-apply oracle harness (needs the fetched infra wasm cache, like any
-# build of the account: scripts/fetch-infra-wasm.sh). On macOS the instrumented
+# The delta-apply oracle harness (builds the account from its committed pins).
+# On macOS the instrumented
 # stellar-accounts dylib links only with
 # RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup".
 perch-testkit = { path = "../crates/perch-testkit" }

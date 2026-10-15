@@ -2,7 +2,7 @@
 //! one wasm, pinned at build time.
 //!
 //! - **Pinned.** The account wasm hash and the WebAuthn verifier's content
-//!   address are baked in from this crate's `wasm/` cache when it is built
+//!   address are baked in from this crate's committed `wasm/` pins when it is built
 //!   (see [`pins`]). Publishing a newer account or verifier never changes what
 //!   an existing factory deploys: a new account build is a new factory, at a
 //!   new address.
@@ -26,12 +26,12 @@ use stellar_accounts::smart_account::Signer;
 pub const VERSION: u32 = 1;
 
 /// What the factory deploys and the passkey verifier it names, both pinned
-/// from the git-ignored `wasm/` cache at build time.
+/// from the committed `wasm/` pins at build time.
 pub mod pins {
     perch_registry_resolve::registry_contract! {
         mod: account,
         wasm_name: "perch-account",
-        wasm_file: "wasm/perch-account.wasm",
+        hash_file: "wasm/perch-account.sha256",
     }
     perch_registry_resolve::registry_contract!(perch_webauthn_verifier);
 }

@@ -93,7 +93,8 @@ build() { # package tier pins-json
 
 hash_of() { jq -r --arg p "$1" '.[] | select(.package == $p) | .sha256' <<<"$artifacts"; }
 
-# Copy the pinned wasm into a consumer's cache and set `staged` to the pins.
+# Copy the pinned wasm into a consumer's pin directory, write its committed
+# `.sha256` pin, and set `staged` to the pins.
 # Not in a command substitution, so a failed copy stops the build under
 # `set -e` instead of leaving the previous pin behind.
 staged='{}'
@@ -105,6 +106,7 @@ stage() { # crate-dir packages...
     staged='{}'
     for p in "$@"; do
         cp "$out/${p//-/_}.wasm" "$dir/$p.wasm"
+        hash_of "$p" >"$dir/$p.sha256"
         staged=$(jq -c --arg p "$p" --arg h "$(hash_of "$p")" '. + {($p): $h}' <<<"$staged")
     done
 }

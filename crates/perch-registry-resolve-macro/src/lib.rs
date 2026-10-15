@@ -18,7 +18,7 @@ use syn::{
 ///
 /// ```ignore
 /// // Name-only (positional), like `import_contract_client!`:
-/// registry_contract!(perch_interpreter);   // wasm "perch-interpreter", pin = sha256(wasm/…)
+/// registry_contract!(perch_interpreter);   // wasm "perch-interpreter", pin = wasm/….sha256
 ///
 /// // Keyed, e.g. a compile-time-pinned hash literal:
 /// registry_contract! {
@@ -38,9 +38,10 @@ pub fn registry_contract(input: TokenStream) -> TokenStream {
 /// `deployer(registry, salt).deployed_address()`; they differ only in the salt.
 enum Mode {
     /// Content-addressed: `salt == wasm_hash`. `WasmName` names the published
-    /// wasm; the hash is pinned — from a compile-time literal (`hash:`) or the
-    /// sha256 of a local wasm file (`wasm_file:`, computed at build time) — or,
-    /// when neither is given, fetched at call time (runtime). This is how a
+    /// wasm; the hash is pinned — from a compile-time literal (`hash:`), a
+    /// local file holding it as hex (`hash_file:`), or the sha256 of a local
+    /// wasm file (`wasm_file:`, computed at build time) — or, when none is
+    /// given, fetched at call time (runtime). This is how a
     /// stateless singleton (compiler, interpreter) is resolved from the registry
     /// it was `deploy_stateless`'d in.
     Content {
@@ -51,12 +52,12 @@ enum Mode {
         /// `address(env)` takes no `registry` arg. When `None` (keyed forms),
         /// `address(env, registry)` takes it explicitly.
         registry_id_file: Option<String>,
-        /// The local wasm the pin was hashed from (name-only and `wasm_file:`
-        /// forms), relative to the invoking crate. The expansion
-        /// `include_bytes!`s it so cargo rebuilds the crate when the file
-        /// changes: rustc records `include_bytes!` inputs in its dep-info, while
-        /// the macro's own read is invisible to cargo and would leave a stale
-        /// pin compiled in after a refetch.
+        /// The local file the pin was read from (the name-only form's
+        /// `.sha256`, or a `hash_file:`/`wasm_file:`), relative to the invoking
+        /// crate. The expansion `include_bytes!`s it so cargo rebuilds the
+        /// crate when the file changes: rustc records `include_bytes!` inputs
+        /// in its dep-info, while the macro's own read is invisible to cargo
+        /// and would leave a stale pin compiled in after a refetch.
         pin_file: Option<String>,
     },
     /// Name-salted: `salt == sha256(normalized_name)` — the base registry
@@ -82,8 +83,8 @@ impl Parse for RegistrySpec {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         // Name-only form, à la `import_contract_client!`: a bare wasm name (ident
         // or string literal, optional channel prefix + `@version`). The module is
-        // derived from the name, and the pin is the sha256 of the wasm looked up
-        // at `wasm/<leaf>.wasm`. The keyed `{ mod: … }` form always leads with the
+        // derived from the name, and the pin is the hex sha256 read from
+        // `wasm/<leaf>.sha256`. The keyed `{ mod: … }` form always leads with the
         // `mod` keyword, so its absence selects this form.
         if !input.peek(Token![mod]) {
             return parse_named(input);
@@ -95,6 +96,7 @@ impl Parse for RegistrySpec {
         let mut client: Option<Path> = None;
         let mut hash: Option<[u8; 32]> = None;
         let mut wasm_file: Option<LitStr> = None;
+        let mut hash_file: Option<LitStr> = None;
 
         while !input.is_empty() {
             // `mod` is a keyword, so parse the key with `parse_any`.
@@ -139,12 +141,18 @@ impl Parse for RegistrySpec {
                     }
                     wasm_file = Some(input.parse()?);
                 }
+                "hash_file" => {
+                    if hash_file.is_some() {
+                        return Err(syn::Error::new(key.span(), "duplicate `hash_file`"));
+                    }
+                    hash_file = Some(input.parse()?);
+                }
                 other => {
                     return Err(syn::Error::new(
                         key.span(),
                         format!(
                             "unknown key `{other}`; expected one of `mod`, `wasm_name`, \
-                             `deploy_name`, `client`, `hash`, `wasm_file`"
+                             `deploy_name`, `client`, `hash`, `hash_file`, `wasm_file`"
                         ),
                     ));
                 }
@@ -162,8 +170,8 @@ impl Parse for RegistrySpec {
         let module = module.ok_or_else(|| syn::Error::new(span, "missing required key `mod`"))?;
 
         // Exactly one salt source: content-addressed (`wasm_name`) XOR
-        // name-salted (`deploy_name`). `hash:`/`wasm_file:` only apply to the
-        // former, and are themselves mutually exclusive.
+        // name-salted (`deploy_name`). `hash:`/`hash_file:`/`wasm_file:` only
+        // apply to the former, and are themselves mutually exclusive.
         let mode = match (wasm_name, deploy_name) {
             (Some(_), Some(d)) => {
                 return Err(syn::Error::new(
@@ -178,32 +186,13 @@ impl Parse for RegistrySpec {
                      `deploy_name` (name-salted)",
                 ))
             }
-            (Some(wasm_name), None) => {
-                let hash =
-                    match (hash, &wasm_file) {
-                        (Some(_), Some(f)) => return Err(syn::Error::new(
-                            f.span(),
-                            "`hash` and `wasm_file` are mutually exclusive — a pin comes from one \
-                             or the other",
-                        )),
-                        // `wasm_file:` — hash a local wasm at build time (its sha256
-                        // is the content-address salt). A missing file is a build
-                        // error telling you to fetch it.
-                        (None, Some(f)) => Some(hash_wasm_at(&f.value(), f.span())?),
-                        (h, None) => h,
-                    };
-                Mode::Content {
-                    wasm_name,
-                    hash,
-                    registry_id_file: None,
-                    pin_file: wasm_file.map(|f| f.value()),
-                }
-            }
+            (Some(wasm_name), None) => content_mode(wasm_name, hash, hash_file, wasm_file, span)?,
             (None, Some(deploy_name)) => {
-                if hash.is_some() || wasm_file.is_some() {
+                if hash.is_some() || hash_file.is_some() || wasm_file.is_some() {
                     return Err(syn::Error::new(
                         deploy_name.span(),
-                        "`hash`/`wasm_file` are only valid with `wasm_name` (content-addressed mode)",
+                        "`hash`/`hash_file`/`wasm_file` are only valid with `wasm_name` \
+                         (content-addressed mode)",
                     ));
                 }
                 Mode::Named {
@@ -220,13 +209,44 @@ impl Parse for RegistrySpec {
     }
 }
 
+/// The keyed form's content-addressed mode. At most one pin source: a `hash:`
+/// literal, a `hash_file:` holding it as hex, or a `wasm_file:` to hash (a
+/// missing file is a build error naming it). None selects runtime mode.
+fn content_mode(
+    wasm_name: LitStr,
+    hash: Option<[u8; 32]>,
+    hash_file: Option<LitStr>,
+    wasm_file: Option<LitStr>,
+    span: proc_macro2::Span,
+) -> syn::Result<Mode> {
+    let (hash, pin_file) = match (hash, hash_file, wasm_file) {
+        (hash, None, None) => (hash, None),
+        (None, Some(f), None) => (Some(read_hash_at(&f.value(), f.span())?), Some(f.value())),
+        (None, None, Some(f)) => (Some(hash_wasm_at(&f.value(), f.span())?), Some(f.value())),
+        _ => {
+            return Err(syn::Error::new(
+                span,
+                "`hash`, `hash_file`, and `wasm_file` are mutually exclusive — a pin comes \
+                 from one of them",
+            ))
+        }
+    };
+    Ok(Mode::Content {
+        wasm_name,
+        hash,
+        registry_id_file: None,
+        pin_file,
+    })
+}
+
 /// Parse the name-only `registry_contract!(<name>)` form, à la
 /// `import_contract_client!`. `<name>` is either a **bare ident** matching the
 /// crate (`perch_doc_compiler`) — the module is that ident and the wasm/registry
 /// name is it with `_`→`-` — or a **string literal** (`"perch-doc-compiler"`,
 /// optional channel prefix and `@version`) — the module is the leaf with
-/// `-`→`_`. The pin is the sha256 of the wasm at `wasm/<leaf>[_<version>].wasm`
-/// (relative to the crate), which must exist — fetch it first.
+/// `-`→`_`. The pin is the hex sha256 in `wasm/<leaf>[_<version>].sha256`
+/// (relative to the crate), which must exist. Perch commits these files, so a
+/// plain checkout (a cargo git dependency included) builds without fetching.
 fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
     // (registry/wasm name, version, module ident string, span)
     let (name_part, version, mod_name, span) = if input.peek(LitStr) {
@@ -261,22 +281,54 @@ fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
         .map_err(|_| syn::Error::new(span, format!("{mod_name:?} is not a valid module name")))?;
     let leaf = name_part.rsplit('/').next().unwrap_or(&name_part);
     let file = match &version {
-        Some(v) => format!("wasm/{leaf}_{}.wasm", v.replace('.', "_")),
-        None => format!("wasm/{leaf}.wasm"),
+        Some(v) => format!("wasm/{leaf}_{}.sha256", v.replace('.', "_")),
+        None => format!("wasm/{leaf}.sha256"),
     };
-    let hash = hash_wasm_at(&file, span)?;
+    let hash = read_hash_at(&file, span)?;
     Ok(RegistrySpec {
         module,
         mode: Mode::Content {
             wasm_name: LitStr::new(&name_part, span),
             hash: Some(hash),
             // The name-only form bakes the deployer registry too (from the
-            // fetched id file), so `address(env)` needs no `registry` arg.
+            // id file beside the hash), so `address(env)` needs no `registry` arg.
             registry_id_file: Some("wasm/stateless.id".to_string()),
             pin_file: Some(file),
         },
         client: None,
     })
+}
+
+/// Resolve `rel` against the invoking crate's `CARGO_MANIFEST_DIR`.
+fn manifest_path(rel: &str, span: proc_macro2::Span) -> syn::Result<std::path::PathBuf> {
+    let manifest = std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
+        syn::Error::new(
+            span,
+            "CARGO_MANIFEST_DIR unset — cannot resolve the pin path",
+        )
+    })?;
+    Ok(std::path::Path::new(&manifest).join(rel))
+}
+
+/// Read a pinned wasm hash — 64 hex chars, surrounding whitespace ignored —
+/// from a local file at macro-expansion (build) time. `rel` is relative to the
+/// invoking crate's `CARGO_MANIFEST_DIR`. A missing or malformed file is a
+/// **build error** naming it; nothing is fetched.
+fn read_hash_at(rel: &str, span: proc_macro2::Span) -> syn::Result<[u8; 32]> {
+    let path = manifest_path(rel, span)?;
+    let text = std::fs::read_to_string(&path).map_err(|e| {
+        syn::Error::new(
+            span,
+            format!(
+                "wasm hash pin {rel:?} not found ({e}).\n\
+                 Write the published wasm's sha256 (hex) to {path} — e.g. run\n\
+                 `scripts/fetch-infra-wasm.sh`.",
+                path = path.display(),
+            ),
+        )
+    })?;
+    decode_hash(text.trim())
+        .map_err(|why| syn::Error::new(span, format!("wasm hash pin {rel:?}: {why}")))
 }
 
 /// Read a local wasm file at macro-expansion (build) time and return its sha256 —
@@ -286,13 +338,7 @@ fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
 /// disk (fetch it first) rather than silently reaching the network.
 fn hash_wasm_at(rel: &str, span: proc_macro2::Span) -> syn::Result<[u8; 32]> {
     use sha2::{Digest, Sha256};
-    let manifest = std::env::var("CARGO_MANIFEST_DIR").map_err(|_| {
-        syn::Error::new(
-            span,
-            "CARGO_MANIFEST_DIR unset — cannot resolve the wasm path",
-        )
-    })?;
-    let path = std::path::Path::new(&manifest).join(rel);
+    let path = manifest_path(rel, span)?;
     let bytes = std::fs::read(&path).map_err(|e| {
         syn::Error::new(
             span,
@@ -310,24 +356,23 @@ fn hash_wasm_at(rel: &str, span: proc_macro2::Span) -> syn::Result<[u8; 32]> {
 
 /// Decode a `hash:` literal (64 hex chars, optional `0x` prefix) to 32 bytes.
 fn parse_hash(lit: &LitStr) -> syn::Result<[u8; 32]> {
-    let raw = lit.value();
-    let hex = raw.strip_prefix("0x").unwrap_or(&raw);
+    decode_hash(&lit.value()).map_err(|why| syn::Error::new(lit.span(), format!("`hash` {why}")))
+}
+
+/// Decode 64 hex chars (optional `0x` prefix) to 32 bytes.
+fn decode_hash(raw: &str) -> Result<[u8; 32], String> {
+    let hex = raw.strip_prefix("0x").unwrap_or(raw);
     if hex.len() != 64 {
-        return Err(syn::Error::new(
-            lit.span(),
-            format!(
-                "`hash` must be 32 bytes (64 hex chars), got {} chars",
-                hex.len()
-            ),
+        return Err(format!(
+            "must be 32 bytes (64 hex chars), got {} chars",
+            hex.len()
         ));
     }
     let mut out = [0u8; 32];
     let bytes = hex.as_bytes();
     for (i, slot) in out.iter_mut().enumerate() {
-        let hi = hex_val(bytes[2 * i])
-            .ok_or_else(|| syn::Error::new(lit.span(), "`hash` contains a non-hex character"))?;
-        let lo = hex_val(bytes[2 * i + 1])
-            .ok_or_else(|| syn::Error::new(lit.span(), "`hash` contains a non-hex character"))?;
+        let hi = hex_val(bytes[2 * i]).ok_or("contains a non-hex character")?;
+        let lo = hex_val(bytes[2 * i + 1]).ok_or("contains a non-hex character")?;
         *slot = (hi << 4) | lo;
     }
     Ok(out)
@@ -451,7 +496,7 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
             }
         };
         let derive_impl = if let Some(id_file) = registry_id_file {
-            // Name-only form: the deployer registry id is baked from the fetched
+            // Name-only form: the deployer registry id is baked from the pinned
             // id file at build time, so `address(env)` needs no `registry` arg.
             quote! {
                 /// Derive this contract's address — pure, offline. The deployer

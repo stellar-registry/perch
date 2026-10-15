@@ -72,6 +72,13 @@ registry_contract! {
     hash: "33d12fec8f6f3ddf2eb0ec76ee9a75a9e37d1fa20af35908d90d278af8264311",
 }
 
+// Pinned from a file holding the hash as hex (how perch commits its pins).
+registry_contract! {
+    mod: hash_file,
+    wasm_name: "fixture",
+    hash_file: "tests/fixtures/deployable_wasm.sha256",
+}
+
 // Name-salted mode: salt = sha256(normalized name). Resolves a *named* deploy
 // (e.g. a subregistry) from its PARENT registry — how the account derives the
 // stateless subregistry from the pinned perch registry.
@@ -163,6 +170,17 @@ fn address_only_matches_pinned_derivation() {
         pinned::address(&env, &registry)
     );
     assert_eq!(address_only::WASM_HASH, pinned::WASM_HASH);
+}
+
+#[test]
+fn hash_file_pins_the_hash_it_holds() {
+    let env = Env::default();
+    let registry = Address::generate(&env);
+    assert_eq!(hash_file::WASM_HASH, pinned::WASM_HASH);
+    assert_eq!(
+        hash_file::address(&env, &registry),
+        pinned::address(&env, &registry)
+    );
 }
 
 #[test]

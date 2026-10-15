@@ -84,6 +84,5 @@ because the ZK adapter compiles them in.
 
 ## Not included
 
-Perch's Rust crates are not here. A project that links them (as path
-dependencies, or through the pin caches `scripts/fetch-infra-wasm.sh` fills in
-a checkout) still needs the repository.
+Perch's Rust crates are not here. A project that links them (as git or path
+dependencies) still needs the repository.

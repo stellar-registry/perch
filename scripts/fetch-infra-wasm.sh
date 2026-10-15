@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
-# Populate the git-ignored build-time pin caches from a deployment manifest
+# Populate the build-time pin directories from a deployment manifest
 # (deployments/<network>.json, written by scripts/deploy-stack.sh):
 #
-#   crates/perch-smart-account/wasm/    stateless.id, perch-doc-compiler.wasm,
-#                                       perch-interpreter.wasm,
-#                                       perch-spending-limit.wasm
-#   crates/perch-account-factory/wasm/  stateless.id, perch-account.wasm,
-#                                       perch-webauthn-verifier.wasm
+#   crates/perch-smart-account/wasm/    stateless.id, perch-doc-compiler,
+#                                       perch-interpreter, perch-spending-limit
+#   crates/perch-account-factory/wasm/  stateless.id, perch-account,
+#                                       perch-webauthn-verifier
+#
+# Each name gets <name>.wasm (git-ignored; only tests read the bytes) and
+# <name>.sha256 (committed, with stateless.id: all a build reads, so a plain
+# checkout builds without this script). scripts/check-pins.sh checks the
+# committed pins against the manifest offline.
 #
 # Each wasm is fetched from the chain by the exact address (or, for the
 # account, the exact wasm hash) the manifest records, and refused unless
@@ -39,7 +43,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --manifest) manifest="$2"; shift 2 ;;
         --stack) stack="$2"; shift 2 ;;
-        -h|--help) sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) awk 'NR>1 && /^#/{sub(/^# ?/,""); print; next} NR>1{exit}' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -112,7 +116,10 @@ pin() { # crate names...
     shift
     mkdir -p "$dir"
     printf '%s' "$registry" >"$dir/stateless.id"
-    for name in "$@"; do fetch "$name" "$dir/$name.wasm"; done
+    for name in "$@"; do
+        fetch "$name" "$dir/$name.wasm"
+        sha256 "$dir/$name.wasm" >"$dir/$name.sha256"
+    done
 }
 
 if $checkout; then

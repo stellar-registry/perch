@@ -60,9 +60,10 @@ before that's a deliberate decision — see `perch-recovery`'s introduction
 
 `perch-smart-account`'s `infra` module (`perch_registry_resolve::registry_contract!`)
 derives the doc-compiler/interpreter/spending-limit addresses as
-`deployer(stateless_registry_id, sha256(pinned_wasm_bytes))`, where the wasm
-bytes are fetched into the build tree (`scripts/fetch-infra-wasm.sh`) and
-baked into the *consuming* contract's own wasm at compile time — there is no
+`deployer(stateless_registry_id, pinned_wasm_hash)`, where the registry id and
+hashes are committed under `crates/*/wasm/` (refreshed by
+`scripts/fetch-infra-wasm.sh`) and baked into the *consuming* contract's own
+wasm at compile time — there is no
 constructor argument or storage slot naming these addresses, and no way to
 repoint them post-deploy. Two consequences that are easy to miss:
 

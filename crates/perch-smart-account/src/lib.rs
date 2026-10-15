@@ -54,9 +54,8 @@ pub use stellar_accounts;
 /// The registry the infra was `deploy_stateless`'d from — the content-addressed
 /// deployer the infra derive their address from: the deployment manifest's
 /// `registry.id` (`deployments/<network>.json`). Its id is **not hardcoded in
-/// source**: `scripts/fetch-infra-wasm.sh` (or `scripts/build-stack.sh`) writes it
-/// into the git-ignored `wasm/stateless.id`, which is `include_str!`'d here. A
-/// missing file is a build error — fetch it first.
+/// source**: it is the committed `wasm/stateless.id`, `include_str!`'d here,
+/// which `scripts/fetch-infra-wasm.sh` (or `scripts/build-stack.sh`) rewrites.
 pub fn stateless_registry(env: &Env) -> Address {
     Address::from_str(env, include_str!("../wasm/stateless.id").trim())
 }
@@ -65,8 +64,8 @@ pub fn stateless_registry(env: &Env) -> Address {
 /// `import_contract_client!`. Each `infra::<name>::address(env)` derives
 /// `deployer(stateless_id, sha256(wasm))` fully offline, with **both** the
 /// stateless registry id (from `wasm/stateless.id`) and the wasm hash (from
-/// `wasm/<name>.wasm`) baked at build time from the fetched, git-ignored cache
-/// (`scripts/fetch-infra-wasm.sh`; a missing file is a build error). Pinned ⇒ a
+/// `wasm/<name>.sha256`) baked at build time from the committed pins
+/// (`wasm/README.md`; a missing file is a build error). Pinned ⇒ a
 /// registry republish can't change a deployed account's behavior (`installed ==
 /// reviewed`), and only the names live in source. Grouped in a module so the
 /// derived names don't collide with the `perch_doc_compiler` crate.

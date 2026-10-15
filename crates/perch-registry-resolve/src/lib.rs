@@ -35,9 +35,9 @@
 //! // Name-only mode — the ergonomic default, like `import_contract_client!`. A
 //! // bare ident matching the crate (or a "hyphenated-string", optional channel
 //! // prefix + `@version`) generates a same-named module. It bakes, at build time,
-//! // both the wasm hash (sha256 of `wasm/<name>.wasm`) and the deployer registry
+//! // both the wasm hash (hex in `wasm/<name>.sha256`) and the deployer registry
 //! // id (`wasm/stateless.id`), so `address(env)` takes NO registry arg. Missing
-//! // files are build errors — fetch them first. Group in a module if the derived
+//! // files are build errors. Group in a module if the derived
 //! // name would collide with the like-named crate:
 //! mod infra {
 //!     registry_contract!(perch_doc_compiler); // wasm "perch-doc-compiler"
@@ -102,8 +102,9 @@
 //! Two forms. **Name-only** (positional): `registry_contract!(<name>)` where
 //! `<name>` is a bare ident (module = the ident, wasm name = it with `_`→`-`) or a
 //! string literal (module = leaf with `-`→`_`, optional channel prefix +
-//! `@version`). It pins the wasm hash to `sha256(wasm/<leaf>.wasm)` AND bakes the
-//! deployer registry id from `wasm/stateless.id`, both at build time — so
+//! `@version`). It pins the wasm hash read from `wasm/<leaf>.sha256` (64 hex
+//! chars) AND bakes the deployer registry id from `wasm/stateless.id`, both at
+//! build time — so
 //! `address(env)` takes no `registry` arg and no `client()` is generated. **Keyed**
 //! (`{ … }`), whose `address(env, registry)` takes the registry explicitly — the
 //! fields below:
@@ -124,12 +125,18 @@
 //!   linked) — e.g. an interpreter used solely as a policy-map key.
 //! - `hash:` — optional; **content-addressed only** — 64-hex-char string
 //!   (optional `0x` prefix). A compile-time-pinned wasm hash.
-//! - `wasm_file:` — optional; **content-addressed only**; mutually exclusive with
-//!   `hash:` — path (relative to the invoking crate's `CARGO_MANIFEST_DIR`) to a
-//!   local `.wasm`. The macro reads it at build time and pins `sha256(bytes)` (the
-//!   content-address salt). A missing file is a build error naming it, so the pin
-//!   comes from a wasm you have on disk — fetch it first. Present `hash:`/`wasm_file:`
-//!   selects **pinned mode**; both absent selects **runtime mode** (call-time `fetch_hash`).
+//! - `hash_file:` — optional; **content-addressed only** — path (relative to the
+//!   invoking crate's `CARGO_MANIFEST_DIR`) to a file holding the hash as 64 hex
+//!   chars (surrounding whitespace ignored). Read at build time; a missing or
+//!   malformed file is a build error naming it.
+//! - `wasm_file:` — optional; **content-addressed only** — path (relative to the
+//!   invoking crate's `CARGO_MANIFEST_DIR`) to a local `.wasm`. The macro reads
+//!   it at build time and pins `sha256(bytes)` (the content-address salt). A
+//!   missing file is a build error naming it, so the pin comes from a wasm you
+//!   have on disk — fetch it first.
+//!
+//! `hash:`, `hash_file:`, and `wasm_file:` are mutually exclusive; any one
+//! selects **pinned mode**, none selects **runtime mode** (call-time `fetch_hash`).
 //!
 //! [`CompileConfig::interpreter_wasm_hash`]: https://github.com/stellar-registry/perch
 //! [`Env::get_contract_id`]: soroban_sdk::Env

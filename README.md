@@ -107,11 +107,17 @@ packages/
                       under schemas/ (see docs/schema.md)
   perch-interpreter-js/  @stellar-registry/perch-interpreter: interpreter client
                       bindings (generated from the wasm; `just bindings-interpreter-js`)
-  perch-zk/           ZK recovery proof helpers: commitments, witnesses, bb.js proving,
-                      and a trust-free pool indexer (`@stellar-registry/perch-zk/indexer`)
-  perch-relay/        store-and-forward relay for signed guardian approvals
-  perch-contracts/    stack contract bindings generated from the deployed wasm, plus
-                      the deployment manifests (regen via scripts/bindings-contracts.sh)
+  perch-zk/           @stellar-registry/perch-zk: ZK recovery proof helpers (commitments,
+                      witnesses, bb.js proving) and a trust-free pool indexer
+                      (`@stellar-registry/perch-zk/indexer`)
+  perch-relay/        @stellar-registry/perch-relay: store-and-forward relay for signed
+                      guardian approvals
+  perch-contracts/    @stellar-registry/perch-contracts: stack contract bindings generated
+                      from the deployed wasm, plus the deployment manifests (regen via
+                      scripts/bindings-contracts.sh)
+  perch-artifacts/    @stellar-registry/perch-artifacts: deployments/, circuits/, test
+                      vectors, document and program limits, fetch-infra-wasm.sh and
+                      zk-toolchain.sh as files, copied at build time
 circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
                       artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
 vendor/               vendored audited UltraHonk verifier plus perch's ZK-flavor delta
@@ -156,7 +162,8 @@ interpreter, the doc compiler, the ed25519 verifier, and the spending limit
 to the canonical registry, authored by the perch author account
 ([`docs/testnet-deployment.md`](./docs/testnet-deployment.md)). The
 recovery stack (all ten contracts in the manifest) is deployed in pin order
-by `scripts/deploy-stack.sh` into its own registry instance;
+into the same registry by `release.yml`'s `deploy-stack` job
+(`scripts/deploy-stack.sh`), which reuses those four published contracts;
 [`docs/deploy/`](./docs/deploy/README.md) covers the build order, the
 manifest, and how a deployment is verified.
 

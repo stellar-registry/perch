@@ -1,0 +1,5 @@
+# Copied from the repository at build time (tools/stage.mjs, sources.json).
+/deployments/
+/circuits/
+/vectors/
+/scripts/

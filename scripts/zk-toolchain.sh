@@ -8,14 +8,24 @@
 #   eval "$(scripts/zk-toolchain.sh)"
 #   cargo run -p perch-zk-prover --bin perch-zk-fixtures -- check
 #
-# Override the install directory with PERCH_ZK_TOOLCHAIN_DIR.
+# Override the install directory with PERCH_ZK_TOOLCHAIN_DIR. The npm package
+# @stellar-registry/perch-artifacts ships this script as `perch-zk-toolchain`;
+# there the default is ./target/zk-toolchain under the working directory.
 set -euo pipefail
+
+case "${1:-}" in
+  -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  "") ;;
+  *) echo "zk-toolchain: unknown option: $1" >&2; exit 1 ;;
+esac
 
 NOIR_VERSION="1.0.0-beta.9"
 BB_VERSION="0.87.0"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-dir="${PERCH_ZK_TOOLCHAIN_DIR:-$repo_root/target/zk-toolchain}"
+default_dir="$repo_root/target/zk-toolchain"
+[ -f "$repo_root/Cargo.toml" ] || default_dir="$PWD/target/zk-toolchain" # the npm package
+dir="${PERCH_ZK_TOOLCHAIN_DIR:-$default_dir}"
 
 case "$(uname -s)-$(uname -m)" in
   Darwin-arm64)

@@ -4,16 +4,20 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [0.1.3] - 2026-10-09
+## [0.1.4] - 2026-10-15
 
 ### 🐛 Bug Fixes
 
-- *(deps)* Stellar-accounts 0.7.1 (git 82002206b1da) -> 0.7.1 (git 33726766a1fd)
+- *(perch-program)* Match a string prefix against an argument of any length
+- *(deps)* Getrandom 0.2.17 -> 0.2.17, 0.3.4
+
+## [0.1.3] - 2026-10-09
 
 ### 💼 Other
 
 - One controller and the shared account capabilities (epic #99 WS3) (#102)
 - New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
+- Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
 
 ## [0.1.2] - 2026-09-04
 

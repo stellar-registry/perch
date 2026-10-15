@@ -165,7 +165,8 @@ Rollover is implemented and tested at both depths.
 [`docs/deploy/testnet-exercise.md`](../deploy/testnet-exercise.md) holds
 the per-row figures ("Against the budget") and every transaction. Source:
 the stack deployed from commit `7ae915dc1ac6ae36cacf6db87794b056923d3b1f`
-(`deployments/testnet.json`: builder `scaffold`, rustc 1.97.1, stellar
+([`deployments/testnet.json` at `bb746f9`](https://github.com/stellar-registry/perch/blob/bb746f9d03c593f0d5a2518c6900e00c938f95ec/deployments/testnet.json):
+builder `scaffold`, rustc 1.97.1, stellar
 27.0.0, scaffold 0.0.27), protocol-29 limits, enforcing authorization with
 real passkeys, G-account guardians, and real proofs over witnesses rebuilt
 from the deployed pool. Every row is within budget. The deployed adapter's

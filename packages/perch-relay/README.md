@@ -7,6 +7,11 @@ evidence) with their own wallet and posts it here. Whoever is recovering, or
 any relayer, collects the entries and submits the transactions, paying the
 fee, so a guardian needs neither funds nor an RPC connection.
 
+```sh
+npm install @stellar-registry/perch-relay
+npx perch-relay --help   # or serve it from your own process via /node
+```
+
 The relay stores public, signed data only and is never trusted: an entry
 that is not a valid approval fails on-chain whatever the relay says. It
 checks that an entry carries address credentials (plain, V2, or CAP-0071
@@ -90,5 +95,4 @@ attempt ([`docs/deploy/testnet-exercise.md`](../../docs/deploy/testnet-exercise.
 
 Admission by simulation costs one RPC call per post. Rate limiting, the KV
 namespace, routes, and retention belong to the operator; Nido's hosted relay
-is one deployment of this package. The package is not published to npm;
-operators use it from this repository.
+is one deployment of this package.

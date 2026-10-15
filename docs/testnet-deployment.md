@@ -5,10 +5,12 @@ author account that `scripts/bootstrap-testnet.sh` creates and
 `.github/workflows/release.yml` publishes into. It is an operational
 reference outside the audit reading order. The audited recovery-stack
 deployment is [`deployments/testnet.json`](../deployments/testnet.json),
-deployed by `scripts/deploy-stack.sh` into its own registry instance
+deployed by `release.yml`'s `deploy-stack` job into the `constructorless`
+registry listed below and authored by the perch author account
 ([`deploy/README.md`](deploy/README.md),
-[`audit-scope.md`](audit-scope.md#deployment-provenance)). No account built
-against that manifest resolves anything listed here.
+[`audit-scope.md`](audit-scope.md#deployment-provenance)). An account built
+against that manifest resolves its infra through that registry and nothing
+else listed here.
 
 The table was last verified read-only on 2026-09-08, with the probes
 `bootstrap-testnet.sh` uses (`stellar registry fetch-contract-id` /

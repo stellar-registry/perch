@@ -30,9 +30,12 @@ name: Release
 #
 # A third, off-chain leg — `npm-publish` — mirrors the same convention for
 # the TypeScript packages: detect-releases also tags `<pkg>-v<version>` when a
-# packages/<pkg> manifest version was bumped in the merged PR (perch-js →
+# packages/<pkg> manifest version has no tag yet (perch-js →
 # @stellar-registry/perch, perch-interpreter-js →
-# @stellar-registry/perch-interpreter), and the npm-publish matrix job then
+# @stellar-registry/perch-interpreter, perch-zk → @stellar-registry/perch-zk,
+# perch-relay → @stellar-registry/perch-relay, perch-contracts →
+# @stellar-registry/perch-contracts, perch-artifacts →
+# @stellar-registry/perch-artifacts), and the npm-publish matrix job then
 # publishes each released package to npm (NPM_TOKEN secret).
 #
 # The recovery stack (verifiers, ZK pool and adapter, controller, account,
@@ -232,10 +235,14 @@ jobs:
         id: npm
         run: |
           set -euo pipefail
-          # packages/perch-zk, perch-relay, and perch-contracts are built,
-          # tested, and pack-checked in CI but deliberately not listed:
-          # adding one here publishes it to npm on its next merge.
-          NPM_PACKAGES="perch-js perch-interpreter-js"
+          # Every package under packages/ (scripts/test-release-scripts.py
+          # checks this list against the directory and against release-pr's).
+          # A package added here with no tag yet publishes its manifest
+          # version on the next merge, and that merge must touch
+          # packages/<pkg>/: release-pr's git-cliff (--include-path) ignores a
+          # tag on a commit outside the path, so it would never see the
+          # release and would re-propose the package's whole history.
+          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts perch-artifacts"
           npm_releases='[]'
           for p in $NPM_PACKAGES; do
             ver=$(jq -r .version "packages/$p/package.json")
@@ -379,24 +386,50 @@ jobs:
                 echo "synced pin: $f -> $name $ver"
               done
             done <<<"$bumped"
+            # Carry the new member versions into Cargo.lock in the same
+            # commit. A lock left at the old versions is rewritten by the
+            # next cargo build, which dirties every checkout of the release
+            # (nido's vendor/perch drift check fails on it) and fails CI's
+            # `--locked` gate. `--workspace` touches only workspace members;
+            # the guard below fails the job if anything else moved.
+            cargo update --workspace || { echo "::error::cargo update --workspace failed"; exit 1; }
+            if git diff -U0 Cargo.lock | grep -E '^[-+]' | grep -vE '^(---|\+\+\+) ' | grep -vqE '^[-+]version = "'; then
+              echo "::error::refreshing Cargo.lock changed more than workspace member versions"
+              git diff Cargo.lock
+              exit 1
+            fi
+            cargo metadata --locked --format-version 1 >/dev/null || { echo "::error::Cargo.lock still stale after the refresh"; exit 1; }
           fi
           # The npm packages ride the same convention: tag-pattern <pkg>-v*,
-          # scoped to packages/<pkg>. Bump via `npm version` so
-          # package-lock.json stays in sync with the manifest.
-          npm_name() { case "$1" in
-            perch-js) echo "@stellar-registry/perch";;
-            perch-interpreter-js) echo "@stellar-registry/perch-interpreter";;
+          # scoped to packages/<pkg> plus the repository files the package
+          # ships. Bump via `npm version` so package-lock.json stays in sync
+          # with the manifest. A package with no tag yet gets no bump here
+          # (git-cliff has no release to bump from); detect-releases tags and
+          # publishes its manifest version.
+          npm_paths_for() { case "$1" in
+            # perch-artifacts copies these at build time
+            # (packages/perch-artifacts/sources.json, which
+            # scripts/test-release-scripts.py checks this list against).
+            # Its constants.json is generated into packages/perch-artifacts/
+            # by a test that fails while stale, so a changed limit moves it.
+            perch-artifacts) echo "packages/perch-artifacts deployments circuits testdata/auth/auth-vectors.json testdata/auth/diagnostic-events.json testdata/recovery/statement-v2.json testdata/rule-hashes.json testdata/eval/eval-vectors.json scripts/fetch-infra-wasm.sh scripts/zk-toolchain.sh";;
+            *) echo "packages/$1";;
           esac; }
-          for p in perch-js perch-interpreter-js; do
-            next_tag=$(git cliff --config cliff.toml --tag-pattern "$p-v.*" --include-path "packages/$p/**" --bumped-version 2>/dev/null) || true
+          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts perch-artifacts"
+          for p in $NPM_PACKAGES; do
+            inc=()
+            for d in $(npm_paths_for "$p"); do
+              if [ -d "$d" ]; then inc+=(--include-path "$d/**"); else inc+=(--include-path "$d"); fi
+            done
+            next_tag=$(git cliff --config cliff.toml --tag-pattern "$p-v.*" "${inc[@]}" --bumped-version 2>/dev/null) || true
             next_ver=${next_tag#"$p"-v}
             cur=$(jq -r .version "packages/$p/package.json")
             [ -n "$next_ver" ] || continue
             [ "$next_ver" != "$cur" ] || continue
             [ "$(printf '%s\n%s\n' "$cur" "$next_ver" | sort -V | tail -1)" = "$next_ver" ] || continue
             npm version "$next_ver" --no-git-tag-version --prefix "packages/$p" >/dev/null
-            git cliff --config cliff.toml --tag-pattern "$p-v.*" --include-path "packages/$p/**" --bump -o "packages/$p/CHANGELOG.md" 2>/dev/null
-            summary="${summary}- \`$p\` (npm \`$(npm_name "$p")\`): $cur -> $next_ver"$'\n'
+            git cliff --config cliff.toml --tag-pattern "$p-v.*" "${inc[@]}" --bump -o "packages/$p/CHANGELOG.md" 2>/dev/null
+            summary="${summary}- \`$p\` (npm \`$(jq -r .name "packages/$p/package.json")\`): $cur -> $next_ver"$'\n'
             echo "bump $p: $cur -> $next_ver"
           done
           if [ -n "$summary" ]; then echo "any=true" >>"$GITHUB_OUTPUT"; else echo "any=false" >>"$GITHUB_OUTPUT"; fi

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Tests for the release and build-provenance scripts: what a contract's
 release scope covers (scripts/release-deps.py, used by release.yml's
-release-pr job) and what a stack build records as dirty
-(scripts/source-dirty.sh, used by scripts/build-stack.sh).
+release-pr job), that release.yml publishes every npm package under
+packages/ with a manifest that installs from the registry, and what a stack
+build records as dirty (scripts/source-dirty.sh, used by
+scripts/build-stack.sh).
 
   python3 scripts/test-release-scripts.py
 
@@ -10,6 +12,7 @@ The git-cliff tests need `git-cliff` on PATH (CI installs the release job's
 pinned build); without it they are skipped unless PERCH_REQUIRE_GIT_CLIFF=1.
 """
 
+import json
 import os
 import re
 import shutil
@@ -325,6 +328,82 @@ _, ext, _ = rd.Tree("HEAD").closure({contract!r})
 print(" ".join(sorted({{n for n, _, _ in ext}})))
 """], REPO).stdout.split()
             self.assertIn("soroban-sdk", tree, contract)
+
+
+def npm_lists():
+    return re.findall(r'^ *NPM_PACKAGES="([^"]*)"', release_yml(), re.M)
+
+
+def npm_paths_for(pkg, cwd=REPO):
+    """release.yml's `npm_paths_for()` for `pkg`, as the git-cliff
+    --include-path arguments release-pr builds from it in `cwd`."""
+    fn = re.search(r"^ *(npm_paths_for\(\) \{ case .*?esac; \})", release_yml(), re.S | re.M).group(1)
+    paths = run(["bash", "-c", f'{fn}\nnpm_paths_for "$1"', "_", pkg], cwd).stdout.split()
+    return paths, [a for d in paths for a in ("--include-path", f"{d}/**" if os.path.isdir(os.path.join(cwd, d)) else d)]
+
+
+class NpmScope(unittest.TestCase):
+    """The workflow's npm package lists against packages/."""
+
+    def test_both_lists_name_every_package(self):
+        lists = npm_lists()
+        self.assertEqual(len(lists), 2)
+        on_disk = sorted(os.listdir(os.path.join(REPO, "packages")))
+        for listed in lists:
+            self.assertEqual(sorted(listed.split()), on_disk)
+
+    def test_every_package_installs_from_the_registry(self):
+        for pkg in npm_lists()[0].split():
+            with open(os.path.join(REPO, "packages", pkg, "package.json")) as f:
+                manifest = json.load(f)
+            self.assertTrue(manifest["name"].startswith("@stellar-registry/"), pkg)
+            self.assertEqual(manifest.get("publishConfig", {}).get("access"), "public", pkg)
+            self.assertEqual(manifest["repository"]["url"], "https://github.com/stellar-registry/perch", pkg)
+            self.assertEqual(manifest["repository"]["directory"], f"packages/{pkg}", pkg)
+            for field in ("dependencies", "peerDependencies", "optionalDependencies"):
+                for dep, spec in manifest.get(field, {}).items():
+                    self.assertFalse(
+                        re.match(r"(file|link|workspace|git\+?\w*):|\.{0,2}/", spec),
+                        f"{pkg} {field} {dep}@{spec} does not resolve from the registry",
+                    )
+
+
+    def test_every_package_is_scoped_to_what_it_ships(self):
+        # A package that copies repository files at build time
+        # (packages/<pkg>/sources.json) re-releases when one of them changes.
+        for pkg in npm_lists()[0].split():
+            want = {f"packages/{pkg}"}
+            sources = os.path.join(REPO, "packages", pkg, "sources.json")
+            if os.path.exists(sources):
+                with open(sources) as f:
+                    want |= set(json.load(f).values())
+            paths, _ = npm_paths_for(pkg)
+            self.assertEqual(sorted(paths), sorted(want), pkg)
+            for d in paths:
+                self.assertTrue(os.path.exists(os.path.join(REPO, d)), f"{pkg} scope names missing {d}")
+
+    @unittest.skipUnless(GIT_CLIFF or os.environ.get("PERCH_REQUIRE_GIT_CLIFF"), "git-cliff not on PATH")
+    def test_git_cliff_bumps_a_package_when_a_file_it_ships_changes(self):
+        repo = Repo()
+        self.addCleanup(repo.cleanup)
+        shutil.copy(os.path.join(REPO, "cliff.toml"), os.path.join(repo.dir, ".git", "cliff.toml"))
+        repo.write("packages/perch-artifacts/package.json", "{}")
+        repo.write("deployments/testnet.json", "{}")
+        repo.write("testdata/rule-hashes.json", "{}")
+        repo.write("testdata/other.json", "{}")
+        repo.commit("feat: initial")
+        run(["git", "tag", "perch-artifacts-v0.1.0"], repo.dir)
+        _, inc = npm_paths_for("perch-artifacts", repo.dir)
+        cliff = [GIT_CLIFF or "git-cliff", "--config", ".git/cliff.toml", "--tag-pattern", "perch-artifacts-v.*", *inc, "--bumped-version"]
+        repo.write("testdata/other.json", '{"a": 1}')
+        repo.commit("fix: a vector the package does not ship")
+        self.assertEqual(run(cliff, repo.dir).stdout.strip(), "perch-artifacts-v0.1.0")
+        repo.write("testdata/rule-hashes.json", '{"a": 1}')
+        repo.commit("fix: a shipped vector")
+        self.assertEqual(run(cliff, repo.dir).stdout.strip(), "perch-artifacts-v0.1.1")
+        repo.write("deployments/testnet.json", '{"a": 1}')
+        repo.commit("feat: redeploy")
+        self.assertEqual(run(cliff, repo.dir).stdout.strip(), "perch-artifacts-v0.2.0")
 
 
 class SourceDirty(unittest.TestCase):

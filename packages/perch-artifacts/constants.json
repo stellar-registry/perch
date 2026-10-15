@@ -1,0 +1,14 @@
+{
+  "comment": "Written by crates/integration-tests/tests/artifact_constants.rs (PERCH_BLESS=1) from the crates' own constants.",
+  "doc_compiler": {
+    "MAX_DOC_CANONICAL_BYTES": 8192,
+    "MAX_DOC_RULES": 11,
+    "MAX_DOC_SIGNERS": 8,
+    "MAX_RULE_NAME_BYTES": 20
+  },
+  "program": {
+    "MAX_PROGRAM_LEN": 256,
+    "MAX_STACK_DEPTH": 128,
+    "PROGRAM_VERSION": 1
+  }
+}

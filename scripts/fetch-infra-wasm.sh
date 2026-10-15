@@ -25,6 +25,11 @@
 #
 # Requires the Stellar CLI. After a redeploy, run
 # `cargo test -p perch-integration-tests --test testnet_pins`.
+#
+# The npm package @stellar-registry/perch-artifacts ships this script as
+# `perch-fetch-infra-wasm`, beside a copy of deployments/. There is no crate
+# tree to pin there, so it needs --stack, fills only that, and checks content
+# addresses with the package's own perch-derive-id.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -34,11 +39,15 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --manifest) manifest="$2"; shift 2 ;;
         --stack) stack="$2"; shift 2 ;;
-        -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
 [ -f "$manifest" ] || { echo "error: no manifest at $manifest" >&2; exit 1; }
+# A perch checkout has the crates to pin; the npm package does not.
+checkout=false
+[ -f "$repo_root/Cargo.toml" ] && checkout=true
+$checkout || [ -n "$stack" ] || { echo "error: outside a perch checkout there are no pin caches to fill; pass --stack <dir>" >&2; exit 1; }
 command -v stellar >/dev/null || { echo "error: 'stellar' CLI not found." >&2; exit 1; }
 command -v jq >/dev/null || { echo "error: jq not found" >&2; exit 1; }
 
@@ -48,8 +57,12 @@ registry="$(m .registry.id)"
 [[ "$registry" =~ ^C[A-Z2-7]{55}$ ]] || { echo "error: bad registry id '$registry'" >&2; exit 1; }
 
 sha256() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
-(cd "$repo_root" && cargo build -q -p perch-derive-id)
-derive() { "$repo_root/target/debug/perch-derive-id" content "$registry" "$1" "$(m .network_passphrase)"; }
+if $checkout; then
+    (cd "$repo_root" && cargo build -q -p perch-derive-id)
+    derive() { "$repo_root/target/debug/perch-derive-id" content "$registry" "$1" "$(m .network_passphrase)"; }
+else
+    derive() { node "$repo_root/dist/cli/derive-id.js" content "$registry" "$1" "$(m .network_passphrase)"; }
+fi
 
 fetch() { # contract-name out-file
     local name="$1" out="$2" hash addr
@@ -81,9 +94,11 @@ pin() { # crate names...
     for name in "$@"; do fetch "$name" "$dir/$name.wasm"; done
 }
 
-echo "fetching pins from $(basename "$manifest") (registry $registry) ..." >&2
-pin perch-smart-account perch-doc-compiler perch-interpreter perch-spending-limit
-pin perch-account-factory perch-account perch-webauthn-verifier
+if $checkout; then
+    echo "fetching pins from $(basename "$manifest") (registry $registry) ..." >&2
+    pin perch-smart-account perch-doc-compiler perch-interpreter perch-spending-limit
+    pin perch-account-factory perch-account perch-webauthn-verifier
+fi
 
 if [ -n "$stack" ]; then
     mkdir -p "$stack"

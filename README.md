@@ -79,6 +79,9 @@ packages/
   perch-contracts/    stack contract bindings generated from the deployed wasm, plus the
                       deployment manifests, published to npm as
                       @stellar-registry/perch-contracts (regen via scripts/bindings-contracts.sh)
+  perch-artifacts/    deployments/, circuits/, test vectors, document and program limits,
+                      fetch-infra-wasm.sh and zk-toolchain.sh as files, copied at build
+                      time, published to npm as @stellar-registry/perch-artifacts
 circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
                       artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
 vendor/               vendored audited UltraHonk verifier plus perch's ZK-flavor delta

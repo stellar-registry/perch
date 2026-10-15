@@ -238,8 +238,10 @@ jobs:
         # surface, perch-interpreter-js the interpreter contract bindings,
         # perch-zk the ZK recovery proof helpers and pool indexer (proves with
         # bb.js in-test), perch-relay the guardian-approval relay,
-        # perch-contracts the stack bindings generated from the deployment.
-        package: [perch-js, perch-interpreter-js, perch-zk, perch-relay, perch-contracts]
+        # perch-contracts the stack bindings generated from the deployment,
+        # perch-artifacts the deployment manifests, circuits, vectors, and
+        # limits as files (checked byte for byte against their sources).
+        package: [perch-js, perch-interpreter-js, perch-zk, perch-relay, perch-contracts, perch-artifacts]
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
@@ -283,8 +285,9 @@ jobs:
           PERCH_REQUIRE_GIT_CLIFF: "1"
 
   # Every npm package as `npm publish` would ship it: packed, installed from
-  # the tarball into an empty project, every entry point imported. Nothing
-  # is published.
+  # the tarball into an empty project, every entry point imported, every
+  # command run, and perch-artifacts' files compared with their sources.
+  # Nothing is published.
   packages:
     runs-on: ubuntu-latest
     permissions:

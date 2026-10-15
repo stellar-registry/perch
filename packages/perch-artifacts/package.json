@@ -1,0 +1,55 @@
+{
+  "name": "@stellar-registry/perch-artifacts",
+  "version": "0.1.0",
+  "description": "Perch's consumable artifacts as files: deployment manifests, the Noir ZK recovery circuits and their manifest, test vectors, document and program limits, and the scripts that fetch the deployed wasm and install the pinned ZK toolchain",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "perch-derive-id": "./dist/cli/derive-id.js",
+    "perch-fetch-infra-wasm": "./dist/cli/fetch-infra-wasm.js",
+    "perch-zk-toolchain": "./dist/cli/zk-toolchain.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./constants.json": "./constants.json",
+    "./deployments/*": "./deployments/*",
+    "./circuits/*": "./circuits/*",
+    "./vectors/*": "./vectors/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "constants.json",
+    "deployments",
+    "circuits",
+    "vectors",
+    "scripts",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node tools/stage.mjs",
+    "prepare": "npm run build",
+    "prepack": "npm run build",
+    "test": "vitest run",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stellar-registry/perch",
+    "directory": "packages/perch-artifacts"
+  }
+}

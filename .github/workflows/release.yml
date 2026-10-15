@@ -34,7 +34,8 @@ name: Release
 # @stellar-registry/perch, perch-interpreter-js →
 # @stellar-registry/perch-interpreter, perch-zk → @stellar-registry/perch-zk,
 # perch-relay → @stellar-registry/perch-relay, perch-contracts →
-# @stellar-registry/perch-contracts), and the npm-publish matrix job then
+# @stellar-registry/perch-contracts, perch-artifacts →
+# @stellar-registry/perch-artifacts), and the npm-publish matrix job then
 # publishes each released package to npm (NPM_TOKEN secret).
 #
 # The recovery stack (verifiers, ZK pool and adapter, controller, account,
@@ -241,7 +242,7 @@ jobs:
           # packages/<pkg>/: release-pr's git-cliff (--include-path) ignores a
           # tag on a commit outside the path, so it would never see the
           # release and would re-propose the package's whole history.
-          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts"
+          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts perch-artifacts"
           npm_releases='[]'
           for p in $NPM_PACKAGES; do
             ver=$(jq -r .version "packages/$p/package.json")
@@ -387,20 +388,34 @@ jobs:
             done <<<"$bumped"
           fi
           # The npm packages ride the same convention: tag-pattern <pkg>-v*,
-          # scoped to packages/<pkg>. Bump via `npm version` so
-          # package-lock.json stays in sync with the manifest. A package with
-          # no tag yet gets no bump here (git-cliff has no release to bump
-          # from); detect-releases tags and publishes its manifest version.
-          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts"
+          # scoped to packages/<pkg> plus the repository files the package
+          # ships. Bump via `npm version` so package-lock.json stays in sync
+          # with the manifest. A package with no tag yet gets no bump here
+          # (git-cliff has no release to bump from); detect-releases tags and
+          # publishes its manifest version.
+          npm_paths_for() { case "$1" in
+            # perch-artifacts copies these at build time
+            # (packages/perch-artifacts/sources.json, which
+            # scripts/test-release-scripts.py checks this list against).
+            # Its constants.json is generated into packages/perch-artifacts/
+            # by a test that fails while stale, so a changed limit moves it.
+            perch-artifacts) echo "packages/perch-artifacts deployments circuits testdata/auth/auth-vectors.json testdata/auth/diagnostic-events.json testdata/recovery/statement-v2.json testdata/rule-hashes.json testdata/eval/eval-vectors.json scripts/fetch-infra-wasm.sh scripts/zk-toolchain.sh";;
+            *) echo "packages/$1";;
+          esac; }
+          NPM_PACKAGES="perch-js perch-interpreter-js perch-zk perch-relay perch-contracts perch-artifacts"
           for p in $NPM_PACKAGES; do
-            next_tag=$(git cliff --config cliff.toml --tag-pattern "$p-v.*" --include-path "packages/$p/**" --bumped-version 2>/dev/null) || true
+            inc=()
+            for d in $(npm_paths_for "$p"); do
+              if [ -d "$d" ]; then inc+=(--include-path "$d/**"); else inc+=(--include-path "$d"); fi
+            done
+            next_tag=$(git cliff --config cliff.toml --tag-pattern "$p-v.*" "${inc[@]}" --bumped-version 2>/dev/null) || true
             next_ver=${next_tag#"$p"-v}
             cur=$(jq -r .version "packages/$p/package.json")
             [ -n "$next_ver" ] || continue
             [ "$next_ver" != "$cur" ] || continue
             [ "$(printf '%s\n%s\n' "$cur" "$next_ver" | sort -V | tail -1)" = "$next_ver" ] || continue
             npm version "$next_ver" --no-git-tag-version --prefix "packages/$p" >/dev/null
-            git cliff --config cliff.toml --tag-pattern "$p-v.*" --include-path "packages/$p/**" --bump -o "packages/$p/CHANGELOG.md" 2>/dev/null
+            git cliff --config cliff.toml --tag-pattern "$p-v.*" "${inc[@]}" --bump -o "packages/$p/CHANGELOG.md" 2>/dev/null
             summary="${summary}- \`$p\` (npm \`$(jq -r .name "packages/$p/package.json")\`): $cur -> $next_ver"$'\n'
             echo "bump $p: $cur -> $next_ver"
           done

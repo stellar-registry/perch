@@ -317,11 +317,11 @@ in its tests.
   `release.yml` `CONTRACTS` lists with `paths_for()` scopes. The adapter's
   scope includes `vendor/ultrahonk-soroban-verifier`. Both are therefore
   tagged and version-tracked, but they are not in `publish-plan`'s `ALLOW`
-  list, so `release.yml` does not publish them to the canonical registry
-  (`AGENTS.md`); the testnet deployment publishes them into its own registry
-  instance (`deployments/testnet.json`). `packages/perch-zk` is not published
-  to npm: it has no `NPM_PACKAGES` entry
-  ([`DEFERRED.md`](../DEFERRED.md#npm-publishing-of-perch-zk-and-the-contract-clients)).
+  list, so `release.yml`'s per-contract publish leg skips them. Its
+  `deploy-stack` job publishes them into the canonical registry with the
+  rest of the recovery stack, in pin order (`deployments/testnet.json`).
+  `packages/perch-zk` is published to npm as `@stellar-registry/perch-zk`
+  (`NPM_PACKAGES`).
 - **Where the rest lives.** The controller (`crates/perch-recovery`) keeps
   per-account spent-nullifier records, checks evidence freshness, runs
   attempts, and compares the adapter's `tree_depth()` with the pool's

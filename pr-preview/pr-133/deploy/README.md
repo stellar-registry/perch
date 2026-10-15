@@ -105,7 +105,7 @@ rebuilt stack would break fails CI. The `packages` job runs
 | Consumers resolve them | factory `account_wasm_hash()` and `webauthn_verifier()`, each account's code hash and `infra()`, adapter `circuit_id()`, adapter and pool depth |
 | A fresh build pins the deployment | `fetch-infra-wasm.sh` checks every fetched byte; `testnet_pins` checks what was compiled |
 | The deployed bytes behave as specified | `release_stack.rs` on the fetched bytes; `perch-testnet` on the chain |
-| The source reproduces them | rebuilding the stack from the deployment commit, in another directory, with the recorded toolchain gives every recorded hash (the current deployment's record: [`audit-scope.md`](../audit-scope.md#deployment-provenance)) |
+| The source reproduces them | rebuilding the stack from the deployment commit, in another directory, with the recorded toolchain gives every hash the deployment built; in canonical mode, the reused tier-0 reproduce only through the attested release build (the current deployment's record: [`audit-scope.md`](../audit-scope.md#deployment-provenance)) |
 
 A registry name lookup is never the evidence: names only select what to
 fetch, and every fetched byte is checked against a hash the manifest
@@ -128,16 +128,19 @@ admin, manager, and author — self-contained, so it builds and publishes its
 own bytes and the account pins exactly those. The **canonical** mode
 (`--registry <canonical> --author <smart account> --reuse …`) is what CI runs.
 
-**The same version is different bytes in the two registries.** The current
-deployment ([`deployments/testnet.json`](../../deployments/testnet.json)) is a
-rehearsal in its own registry instance. Its interpreter, compiler, spending
-limit, and ed25519 verifier carry versions that `release.yml` also publishes
-canonically, but `release.yml` builds through
-stellar-registry/actions' attested release build and `build-stack.sh` runs its
-own scaffold build, so the bytes differ (interpreter 0.1.3 is `2254f17d…` in
-the deployment and `e4d7fb8d…` canonically, as observed on 2026-10-09).
-Resolve infra by the manifest's hash or address, never by `(name, version)`
-across registries.
+The current deployment
+([`deployments/testnet.json`](../../deployments/testnet.json)) is canonical:
+`release.yml`'s `deploy-stack` job published it into the `constructorless`
+registry, reusing the four published tier-0 contracts.
+
+**The same version is different bytes in the two modes.** A rehearsal's
+interpreter, compiler, spending limit, and ed25519 verifier carry versions
+that `release.yml` also publishes canonically. `release.yml` builds them
+with stellar-registry/actions' attested release build, and `build-stack.sh`
+runs its own scaffold build, so the bytes differ. In an earlier rehearsal,
+interpreter 0.1.3 was `2254f17d…` against `e4d7fb8d…` canonically (observed
+2026-10-09). Resolve infra by the manifest's hash or address, never by
+`(name, version)` across registries.
 
 ### Authority
 
@@ -329,12 +332,12 @@ changes. The hashes do not change unless the source does.
 | `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer, serving witnesses from `PoolWitnessIndex` (one chunk of leaves per witness; node stores and a snapshot to resume) |
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature with the call rebuilt from the posted statement), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
 | `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
+| `@stellar-registry/perch-artifacts` | the deployment manifests, Noir circuits and their manifest, test vectors, and document and program limits as files; `perch-fetch-infra-wasm --stack` and `perch-zk-toolchain` run the repository's scripts against them. Changing a shipped file re-releases it |
 
-The last three are built, tested, and pack-checked in CI, but are not in
-`release.yml`'s `NPM_PACKAGES`, so they are unpublished
-([`DEFERRED.md`](../DEFERRED.md#npm-publishing-of-perch-zk-and-the-contract-clients)).
-Listing one there publishes it on its next merge. Rust crates are never
-published to crates.io; contract releases are on-chain wasm publishes
-(`release.yml`). Hosting the indexer or the relay, with storage, routes, and
-schedules, is the operator's concern. Nido's hosted services are deployments
-of these packages.
+All six are published to npm by `release.yml`'s `npm-publish` job: merging
+a bump of a package's manifest version (the release PR proposes one from its
+conventional commits) tags `<pkg>-v<version>` and publishes it with npm
+provenance. Rust crates are never published to crates.io; contract releases
+are on-chain wasm publishes (`release.yml`). Hosting the indexer or the
+relay, with storage, routes, and schedules, is the operator's concern. Nido's
+hosted services are deployments of these packages.

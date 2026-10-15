@@ -36,11 +36,11 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 
 | Field | Manifest field | Value in the manifest at this commit |
 | --- | --- | --- |
-| Build commit | `source.commit`, `source.dirty` | `7b164b6ea99119569c9ceacdf2860713212f00a9`, clean tree |
+| Build commit | `source.commit`, `source.dirty` | `4e7ae8044b761c7e7ee8b82d3dd5d135f9905fd5`, the release commit on `main`; `dirty: true` (below) |
 | Network, channel | `network_passphrase`, `channel` | testnet (`Test SDF Network ; September 2015`), `beta` |
-| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-12T17:27:53Z, from ledger 5160473 |
-| Build toolchain | `toolchain` | rustc 1.97.1 (8bab26f4f 2026-07-14), stellar 27.0.0, scaffold 0.0.27 (`builder`: `scaffold`) |
-| Registry instance | `registry.id`, `registry.wasm_hash` | `CAR2DSSOBJB76GGD6MAAKWUK36Y7I7O3NDWTN7HTIRV5I3XZ27U3ZBVZ`, an instance of the canonical registry's Wasm |
+| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-15T06:43:23Z, from ledger 5204567 |
+| Build toolchain | `toolchain` | rustc 1.99.0 (b940084d7 2026-09-28), stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork), scaffold 0.0.27 (`builder`: `scaffold`) |
+| Registry | `registry.id`, `registry.wasm_hash` | `CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7`, the canonical `constructorless` registry ([`testnet-deployment.md`](testnet-deployment.md)) |
 | ZK circuit | `zk.circuit_id`, `zk.tree_depth` | the circuit in `circuits/manifest.json`, tree depth 32 |
 | Contracts | `contracts.<name>.version`, `.sha256`, `.address`, `.pins` | the ten below |
 
@@ -53,40 +53,54 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 A redeploy rewrites the manifest, and the third column of the first table
 changes with it.
 
-**Reproduction record.** On 2026-10-14, on a macOS arm64 host with the
-manifest's toolchain, a `git archive` export of `7b164b6` at another path,
-built by `scripts/build-stack.sh` with the manifest's builder and
-`registry.id`, reproduced all ten `contracts.<name>.sha256` values. Take
-`registry.id` from this commit's manifest, not the export's: the export's
-own `deployments/testnet.json` names the previous deployment's registry, and
-the account and the factory bake the registry id, so building against it
-gives other account and factory hashes. Other hosts and toolchains have not been
-checked; `stellar scaffold build` optimizes with the wasm-opt its own version
-ships.
+**How these bytes were built.** `release.yml`'s `deploy-stack` job made
+this deployment in canonical mode
+([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)).
+It did not rebuild the doc compiler, the interpreter, the spending limit, or
+the ed25519 verifier. It reused the bytes the registry already serves for
+them, which `release.yml`'s attested release build produced. It built the
+other six with `scripts/build-stack.sh` on a GitHub-hosted Linux runner,
+using the manifest's toolchain, and attested each one's build provenance.
+`source.dirty` is `true`: when it built, the job's checkout had uncommitted
+changes in an input `scripts/source-dirty.sh` checks. The manifest does not
+record which input changed.
+
+**Reproduction record.** No reproduction of this manifest's hashes has been
+recorded. Because the tree was dirty, rebuilding `4e7ae80` is not
+guaranteed to give the six built hashes. The four reused contracts come
+from the attested release build, not from `build-stack.sh`, so rebuilding
+them with `build-stack.sh` gives other bytes
+([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)).
+The previous deployment (build commit `7b164b6`, clean tree, manifest
+[`deployments/testnet.json` at `845c49a`](https://github.com/stellar-registry/perch/blob/845c49a376c08aeeed9f5d3c63356b753dc617f4/deployments/testnet.json))
+was reproduced in full on 2026-10-14. On a macOS arm64 host with that
+manifest's toolchain, `scripts/build-stack.sh` built a `git archive` export
+of `7b164b6` against that manifest's `registry.id` and reproduced all ten
+hashes.
 
 **Relating the deployment to the reviewed source.** `verify-deployment.sh`
 applies to the manifest's hashes only. The [testnet
-exercise](deploy/testnet-exercise.md) is evidence for the previous
-deployment (build commit `7ae915d`). Six of its contracts have the same hash
-in the current deployment: the interpreter, the spending limit, both
-verifiers, the ZK pool, and the ZK adapter. The doc compiler, the recovery
-controller, the account, and the factory have new hashes that no testnet
-exercise has run. To carry the deployment evidence to the reviewed commit,
-rebuild the stack there with `scripts/build-stack.sh --registry <registry
-id>` and the recorded toolchain, and compare each hash with the manifest;
-the handoff records the result. A contract whose hash differs is covered by
-source review and in-process tests, not by the deployment evidence.
+exercise](deploy/testnet-exercise.md) is evidence for an earlier deployment
+(build commit `7ae915d`). None of that deployment's contract hashes appear
+in the current deployment, so no testnet exercise has run the current
+bytes. To relate the deployment to the reviewed commit, rebuild the stack
+there with `scripts/build-stack.sh --registry <registry id>` and the
+recorded toolchain, and compare each built hash with the manifest; the
+handoff records the result. For the four reused contracts, compare against
+the attested release build of their tagged versions instead. Source review
+and in-process tests cover any contract whose hash differs; the deployment
+evidence does not.
 
 ### Toolchains and locked inputs
 
 | Input | Pin | Where |
 | --- | --- | --- |
-| Rust | channel `stable`, target `wasm32v1-none`. **Not version-pinned**: reproducing the deployed hashes needs the recorded rustc 1.97.1 | `rust-toolchain.toml` |
+| Rust | channel `stable`, target `wasm32v1-none`. **Not version-pinned**: reproducing the deployed hashes needs the recorded rustc 1.99.0 | `rust-toolchain.toml` |
 | Release profile | `opt-level = "z"`, `overflow-checks = true`, `panic = "abort"`, `lto = true`, `codegen-units = 1` | `Cargo.toml` `[profile.release]` |
 | Wasm stack | 64 KiB per contract, 128 KiB for the ZK adapter (an overflow traps) | `crates/*/build.rs` |
 | Soroban | `soroban-sdk` 27.0.6, `soroban-env-host` 27.0.1 (test host), `soroban-poseidon` 27.0.0 | `Cargo.lock` |
 | OpenZeppelin accounts | `stellar-accounts` 0.7.1 at theahaco/stellar-contracts-OZ `33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` | `Cargo.toml`, `Cargo.lock` |
-| Stellar CLI | deployment build: stellar 27.0.0, scaffold 0.0.27 (manifest `toolchain`); CI: stellar-cli 27.1.0, SHA-256-checked | `.github/actions/setup-stellar` |
+| Stellar CLI | deployment build: stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork) and scaffold 0.0.27, SHA-256-checked by `release.yml`'s `deploy-stack` (manifest `toolchain`); CI: stellar-cli 27.1.0, SHA-256-checked | `.github/workflows/release.yml`, `.github/actions/setup-stellar` |
 | ZK proving | nargo 1.0.0-beta.9, bb 0.87.0, every download SHA-256-pinned per platform; proofs are `UltraKeccakZKFlavor` | `scripts/zk-toolchain.sh`, `circuits/manifest.json` |
 | ZK proving (JS) | `@noir-lang/noir_js` 1.0.0-beta.9, `@aztec/bb.js` 0.87.0, exact versions | `packages/perch-zk/package.json` |
 | UltraHonk verifier base | NethermindEth/rs-soroban-ultrahonk `c2160987260284c656ffbdad8344210fc162b177` | `vendor/ultrahonk-soroban-verifier/NOTICE`, `UPSTREAM.sha256` |
@@ -96,12 +110,15 @@ source review and in-process tests, not by the deployment evidence.
 
 | npm package | Path | Manifest version | Published |
 | --- | --- | --- | --- |
-| `@stellar-registry/perch` | `packages/perch-js` | 0.3.2 | Yes (`release.yml` `NPM_PACKAGES`, `npm publish --provenance`). 0.3.2 (2026-10-10) contains the consumer interface; this source differs from it in `src/apply.ts`, `src/auth.ts`, and `src/snapshot.ts`, and adds `schemas/policy.schema.json`, so no published release equals this source. |
-| `@stellar-registry/perch-interpreter` | `packages/perch-interpreter-js` | 0.1.0 | Yes (0.1.0, 2026-09-09) |
-| `@stellar-registry/perch-zk` | `packages/perch-zk` | 0.1.0 | No ([deferred](DEFERRED.md#npm-publishing-of-perch-zk-and-the-contract-clients)) |
-| `@stellar-registry/perch-contracts` | `packages/perch-contracts` | 0.1.0 | No ([deferred](DEFERRED.md#npm-publishing-of-perch-zk-and-the-contract-clients)) |
-| `@stellar-registry/perch-relay` | `packages/perch-relay` | 0.1.0 | No |
+| `@stellar-registry/perch` | `packages/perch-js` | 0.4.0 | 0.4.0 (2026-10-15), from tag `perch-js-v0.4.0`; `src/` there equals this source |
+| `@stellar-registry/perch-interpreter` | `packages/perch-interpreter-js` | 0.1.0 | 0.1.0 (2026-09-09) |
+| `@stellar-registry/perch-zk` | `packages/perch-zk` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-zk-v0.1.0`; `src/` there equals this source |
+| `@stellar-registry/perch-relay` | `packages/perch-relay` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-relay-v0.1.0`; `src/` there equals this source |
+| `@stellar-registry/perch-contracts` | `packages/perch-contracts` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-contracts-v0.1.0`, which predates the current deployment: its bindings and manifest name the previous one, so it differs from this source |
+| `@stellar-registry/perch-artifacts` | `packages/perch-artifacts` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-artifacts-v0.1.0`, which predates the current deployment: its `deployments/testnet.json` is the previous one, so it differs from this source |
 
+`release.yml`'s `npm-publish` job publishes each package, with
+`npm publish --provenance`, when a merge bumps its manifest version.
 This repository records no npm integrity hashes; a consumer's lockfile does.
 The audit reviews the package source at the reviewed commit. A consumer
 that resolves a published version instead must show it equal to that source
@@ -371,7 +388,7 @@ Each is stated in full where linked.
     deployment verification.
 
 The [testnet exercise](deploy/testnet-exercise.md) is an evidence report
-for the previous deployment, not part of the reading order.
+for an earlier deployment, not part of the reading order.
 
 ## Deferred until after the audit
 
@@ -380,9 +397,8 @@ identity, canonical value spellings, the PolicyDoc JSON Schema's strict
 profile and out-of-schema checks, a versioned policy backend and larger
 limits, revision-bound ordinary signatures, stable numeric rule ids,
 persistent spending budgets, additional formal models, the OZ fork pull
-requests, npm publishing of `perch-zk` and the contract clients, completion
-input-byte binding, and contract-admin governance behind a multisig and
-timelock.
+requests, completion input-byte binding, and contract-admin governance
+behind a multisig and timelock.
 
 [Completion input-byte binding](DEFERRED.md#completion-input-byte-binding)
 affects authorization: a leftover completion marker lets an `apply_doc`

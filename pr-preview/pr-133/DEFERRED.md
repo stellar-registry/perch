@@ -391,37 +391,6 @@ deployment and manifest, and an account upgrade for deployed accounts.
 and [#5](https://github.com/theahaco/stellar-contracts-OZ/pull/5), stacked
 on [#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3).
 
-## npm publishing of perch-zk and the contract clients
-
-**Deferred:** publishing `@stellar-registry/perch-zk` and the contract
-clients, `@stellar-registry/perch-contracts`, to npm.
-
-**Current behaviour:** both packages are built, tested, and pack-checked in
-CI (`scripts/check-packages.sh`), and neither is in `release.yml`'s
-`NPM_PACKAGES`, so neither is published. Consumers use them from the
-repository at the audited commit (Nido consumes `perch-zk` as an npm
-workspace from its `vendor/perch` submodule). Each `perch-contracts` module
-exports `WASM_SHA256`, and the package's tests fail if it, or the bundled
-`testnet` manifest, differs from `deployments/testnet.json`.
-`@stellar-registry/perch-relay` is unpublished on the same terms. The
-published packages are listed in
-[`audit-scope.md`](audit-scope.md#packages).
-
-**Why it is safe to defer:** consumers run the audited source, and no
-published artifact is trusted in its place.
-
-**Exit criterion and follow-up review:** listing a package in
-`NPM_PACKAGES` publishes it, with npm provenance, from the next merge at
-which its manifest version has no release tag. Before a consumer switches from the repository to a published version, show
-that the tarball's code and artifacts equal the audited source's (the
-packaging rule above): for `perch-zk`, its circuit artifacts match
-`circuits/manifest.json`; for `perch-contracts`, every `WASM_SHA256` equals
-the deployment manifest. Review any difference as a code change.
-
-**Owner:** Perch (publishing) and each consumer (switching).
-
-**Tracking:** none yet.
-
 ## Completion input-byte binding
 
 **Deferred:** requiring a recovery completion's `apply_doc` to carry the

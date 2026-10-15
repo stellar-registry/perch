@@ -5,8 +5,8 @@ the stack built from commit `7ae915dc1ac6` and deployed 2026-10-09, whose
 manifest is
 [`deployments/testnet.json` at `bb746f9`](https://github.com/stellar-registry/perch/blob/bb746f9d03c593f0d5a2518c6900e00c938f95ec/deployments/testnet.json).
 The current [`deployments/testnet.json`](../../deployments/testnet.json)
-records a later deployment that this report does not cover; the audit
-manifest lists which contract hashes the two share
+records a later deployment that this report does not cover and that shares
+no contract hash with it
 ([`audit-scope.md`](../audit-scope.md#deployment-provenance)). This report is
 not part of the audit reading order
 ([`audit-scope.md`](../audit-scope.md#reading-order)). Everything from

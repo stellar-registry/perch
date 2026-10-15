@@ -1,6 +1,6 @@
 {
   "name": "@stellar-registry/perch-interpreter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript client bindings for the perch interpreter contract (install/uninstall/enforce + get_program/program_version reads)",
   "license": "Apache-2.0",
   "type": "module",

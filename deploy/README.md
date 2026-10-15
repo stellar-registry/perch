@@ -11,16 +11,17 @@ measured exercise is [`testnet-exercise.md`](testnet-exercise.md).
 
 Consumers pin their dependencies when they are **built**, not when they are
 deployed. The account derives the compiler, interpreter, and spending-limit
-addresses as `deployer(registry, sha256(wasm))` from bytes in its
-git-ignored `wasm/` cache (`perch_registry_resolve::registry_contract!`). The
-factory pins the account wasm hash and the WebAuthn verifier the same way.
+addresses as `deployer(registry, sha256(wasm))` from the registry id and
+hashes committed in its `wasm/` directory
+(`perch_registry_resolve::registry_contract!`). The factory pins the account
+wasm hash and the WebAuthn verifier the same way.
 Nothing can repoint a deployed account or factory (AGENTS.md, "Infra
 contracts are resolved from a build-time-pinned wasm hash"). So:
 
 1. a dependency must exist, as exact bytes, before anything that pins it is
    built; and
-2. "the account uses compiler X" is only true if the bytes in the cache when
-   the account was built are X's.
+2. "the account uses compiler X" is only true if the pinned hash when the
+   account was built is X's.
 
 A lookup by name can return stale bytes without failing, and a check that
 an address is self-consistent does not catch it. So pins are fetched by the
@@ -71,10 +72,12 @@ every consumer reads.
 
 | Command | Does |
 | --- | --- |
-| `scripts/build-stack.sh --registry <id>` | Builds tier 0, stages its wasm and `<id>` as the account's pins, builds the account, stages it and the WebAuthn verifier as the factory's pins, builds the factory. `target/stack/build.json` records every hash and the pins each consumer was built against. Deployments build with `stellar scaffold build`; `--builder contract` uses core `stellar contract build`, the same code without scaffold's metadata. It overwrites the account's and factory's pin caches: run `fetch-infra-wasm.sh` afterwards to pin the deployment again. |
+| `scripts/build-stack.sh --registry <id>` | Builds tier 0, stages its wasm and `<id>` as the account's pins, builds the account, stages it and the WebAuthn verifier as the factory's pins, builds the factory. `target/stack/build.json` records every hash and the pins each consumer was built against. Deployments build with `stellar scaffold build`; `--builder contract` uses core `stellar contract build`, the same code without scaffold's metadata. It overwrites the account's and factory's committed pins: run `fetch-infra-wasm.sh` (or `git checkout crates/*/wasm`) afterwards to pin the deployment again, unless this build is the new deployment. |
 | `scripts/deploy-stack.sh --source <identity>` | Deploys a new instance of the registry wasm the network's perch registries already run, runs `build-stack.sh` against it, then publishes tier 0 and the factory (upload with hash check, `publish_hash`, `deploy_stateless`, derived-address and code-hash checks), installs the account, writes the manifest, and runs `verify-deployment.sh`. Idempotent. `--registry` publishes into an existing registry instead. `--author <C…>` binds every name to a smart account and signs its authorization through the `theahaco/stellar-cli` fork (source/fee stays the delegate). `--reuse "<names>"` fetches those already-published tier-0 by hash and pins them instead of rebuilding — the canonical path (see [The canonical registry](#the-canonical-registry-and-publishing-the-stack-to-it)). |
 | `scripts/verify-deployment.sh` | Read-only, by hash and address only: the registry's code; each contract at its content address, running its recorded wasm, served by the registry for its name and version; the account installed; the manifest's recorded pins equal to the deployed hashes; and what consumers resolve on-chain, from the factory's `account_wasm_hash`/`webauthn_verifier`, the adapter's `circuit_id`/`tree_depth` against the pool's `depth`, to the code hash and `infra()` of every account the exercise report lists. A report from another stack commit is skipped with a notice. |
-| `scripts/fetch-infra-wasm.sh` | Fills the account and factory pin caches from the manifest. Each wasm is fetched by its recorded address (the account by its hash) and refused unless its sha256 and content address match. `--stack <dir>` fetches every deployed artifact with a `build.json`. |
+| `scripts/fetch-infra-wasm.sh` | Fetches the account's and factory's pinned wasm from the manifest and rewrites their committed pins (`stateless.id`, `<name>.sha256`). Each wasm is fetched by its recorded address (the account by its hash) and refused unless its sha256 and content address match. `--stack <dir>` fetches every deployed artifact with a `build.json`. |
+| `scripts/check-pins.sh` | Offline: the committed pins equal the manifest's registry id and hashes. A new deployment commits its pins with its manifest. |
+| `scripts/check-git-dep.sh --compare` | Builds the account, the factory, and `perch-smart-account` as cargo git dependencies from cargo's clean checkout, offline and without fetching, and requires the same wasm as this checkout. |
 | `cargo test -p perch-integration-tests --test testnet_pins` | The pins actually compiled into the account and the factory equal the manifest's. |
 | `cargo test -p perch-integration-tests --test release_stack -- --ignored` | Every recovery flow through the stack's wasm, with real proofs (`PERCH_STACK_DIR`, default `target/stack`). |
 | `cargo run -p perch-testnet` | The same flows on the deployed contracts (see [`testnet-exercise.md`](testnet-exercise.md)). |

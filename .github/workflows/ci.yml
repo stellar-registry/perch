@@ -27,6 +27,11 @@ jobs:
           targets: wasm32v1-none
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Before any step can rewrite it: a Cargo.lock that disagrees with the
+      # manifests (a version bump without the lock refresh) is a failure, not
+      # something the build silently fixes in this checkout only.
+      - name: Cargo.lock matches the manifests
+        run: cargo metadata --locked --format-version 1 >/dev/null
       # z3 backs the perch-analyze SMT tests (they skip loudly when absent).
       - run: sudo apt-get update && sudo apt-get install -y z3
       # The account and the factory pin their dependencies to the sha256 of
@@ -73,7 +78,7 @@ jobs:
           scripts/build-stack.sh --builder contract \
             --registry "$(jq -r .registry.id deployments/testnet.json)" --out target/source-stack
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - name: cargo test --workspace
         env:
           STATE: ${{ steps.deployment.outputs.state }}
@@ -81,13 +86,13 @@ jobs:
           case "$STATE" in
             # Fresh source build: its pins no longer match the (foreign)
             # manifest, so skip the manifest pin check.
-            foreign) cargo test --workspace -- --skip consumers_pin_the_deployment_manifest ;;
+            foreign) cargo test --locked --workspace -- --skip consumers_pin_the_deployment_manifest ;;
             # Deployed bytes are older than this source: skip the one
             # deployed-bytes behavioral test (it would run HEAD's expectations
             # against older bytes); the manifest pin check still holds.
-            stale) cargo test --workspace -- --skip a_new_passkey_account_applies_a_document_signed_by_its_passkey ;;
+            stale) cargo test --locked --workspace -- --skip a_new_passkey_account_applies_a_document_signed_by_its_passkey ;;
             # Deployed bytes match this source: every check is a hard gate.
-            current) cargo test --workspace ;;
+            current) cargo test --locked --workspace ;;
           esac
       # The manifest against the chain: every contract at its content address
       # running its recorded wasm, and what the factory, adapter, pool, and

@@ -386,6 +386,19 @@ jobs:
                 echo "synced pin: $f -> $name $ver"
               done
             done <<<"$bumped"
+            # Carry the new member versions into Cargo.lock in the same
+            # commit. A lock left at the old versions is rewritten by the
+            # next cargo build, which dirties every checkout of the release
+            # (nido's vendor/perch drift check fails on it) and fails CI's
+            # `--locked` gate. `--workspace` touches only workspace members;
+            # the guard below fails the job if anything else moved.
+            cargo update --workspace || { echo "::error::cargo update --workspace failed"; exit 1; }
+            if git diff -U0 Cargo.lock | grep -E '^[-+]' | grep -vE '^(---|\+\+\+) ' | grep -vqE '^[-+]version = "'; then
+              echo "::error::refreshing Cargo.lock changed more than workspace member versions"
+              git diff Cargo.lock
+              exit 1
+            fi
+            cargo metadata --locked --format-version 1 >/dev/null || { echo "::error::Cargo.lock still stale after the refresh"; exit 1; }
           fi
           # The npm packages ride the same convention: tag-pattern <pkg>-v*,
           # scoped to packages/<pkg> plus the repository files the package

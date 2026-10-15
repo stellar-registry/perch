@@ -317,8 +317,9 @@ does.
 | `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer, serving witnesses from `PoolWitnessIndex` (one chunk of leaves per witness; node stores and a snapshot to resume) |
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature with the call rebuilt from the posted statement), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
 | `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
+| `@stellar-registry/perch-artifacts` | the deployment manifests, Noir circuits and their manifest, test vectors, and document and program limits as files; `perch-fetch-infra-wasm --stack` and `perch-zk-toolchain` run the repository's scripts against them. Changing a shipped file re-releases it |
 
-All five are published to npm by `release.yml`'s `npm-publish` job: merging
+All six are published to npm by `release.yml`'s `npm-publish` job: merging
 a bump of a package's manifest version (the release PR proposes one from its
 conventional commits) tags `<pkg>-v<version>` and publishes it. Rust crates are never published to crates.io (`release-plz.toml`).
 Hosting the indexer or the relay, with storage, routes, and schedules, is the

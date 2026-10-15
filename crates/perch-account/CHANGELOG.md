@@ -4,6 +4,15 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.3] - 2026-10-15
+
+### 🐛 Bug Fixes
+
+- *(perch-ir)* Refuse documents the compiler would trap on or could never enforce
+- *(perch-program)* Match a string prefix against an argument of any length
+- *(perch-smart-account)* Treat a signer reorder as a rule change in delta apply
+- *(deps)* Getrandom 0.2.17 -> 0.2.17, 0.3.4
+
 ## [0.3.2] - 2026-10-12
 
 ### 🐛 Bug Fixes

@@ -34,7 +34,7 @@ perch-ir = { workspace = true }
 # A direct path dep (not `workspace = true`) so that `default-features = false`
 # is honored. Host-only: perch-schema is in no contract's build graph, so this
 # adds nothing to any wasm build (criterion 5).
-perch-doc-compiler = { version = "0.3.2", path = "../perch-doc-compiler", default-features = false }
+perch-doc-compiler = { version = "0.3.3", path = "../perch-doc-compiler", default-features = false }
 # Host-only JSON assembly. Its default Map is a sorted BTreeMap, so the emitted
 # schema is byte-deterministic regardless of assembly order (the drift check
 # relies on this).
@@ -50,4 +50,4 @@ perch-ir = { workspace = true }
 # The parity tests assert the schema's caps equal the compiler's constants
 # directly (an integration test is a separate crate, so it needs its own view
 # of the constant). Same host-only, default-features-off dep as above.
-perch-doc-compiler = { version = "0.3.2", path = "../perch-doc-compiler", default-features = false }
+perch-doc-compiler = { version = "0.3.3", path = "../perch-doc-compiler", default-features = false }

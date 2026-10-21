@@ -154,7 +154,7 @@ backend needs no integration review with the core paths it touches
 | Generated contract clients | `packages/perch-contracts`, `packages/perch-interpreter-js` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Guardian-approval relay | `packages/perch-relay` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Deployment and release execution | `scripts/deploy-stack.sh`, `scripts/derive-id.py`, `scripts/bindings-contracts.sh`, `scripts/bootstrap-testnet.sh`, `.github/workflows/release.yml`, `crates/perch-deploy`, `crates/perch-derive-id` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
-| Registry contract | Wasm `4b2d9ea4…` (manifest `registry`), built from `crates/perch-stateless-registry` at an unrecorded commit | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
+| Registry contract | Wasm `4b2d9ea4…` (manifest `registry`), built from `crates/perch-stateless-registry` (since renamed `crates/perch-constructorless-registry`) at an unrecorded commit | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 
 ## Perch core
 
@@ -308,7 +308,8 @@ checked by hash. They are not reviewed line by line.
   by hash against the manifest, and the manifest's hashes are reproducible
   from source ([Deployment provenance](#deployment-provenance)).
 - **The registry contract** (Wasm `4b2d9ea4…`): a
-  `crates/perch-stateless-registry` build the canonical registries run;
+  `crates/perch-stateless-registry` build (the crate is now
+  `crates/perch-constructorless-registry`) the canonical registries run;
   `deploy-stack.sh` publishes into the instance `registry.path` derives and
   never deploys or rebuilds one, and this repository does not record which
   commit built it. Its `deploy_stateless` places code

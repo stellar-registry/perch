@@ -429,7 +429,7 @@ the release path then needs there:
 ```text
 root                deployer(GAMPJROH…, sha256("2026-04-24T13:41:00"))   exists on both networks
 ├─ perch            root.deploy("registry", <root's version>, "perch", …)   testnet CBZGS6DZ…, mainnet CCDXWLV6…
-│  └─ constructorless   perch.deploy("perch-stateless-registry", "0.1.0", "constructorless", …)
+│  └─ constructorless   perch.deploy("perch-constructorless-registry", "0.1.0", "constructorless", …)
 │                       testnet CDZGU4AI…, mainnet CC236AK2…
 │     ├─ compiler, interpreter, spending limit, ed25519 verifier at deployer(constructorless, wasm hash)
 │     └─ every other stack name, bound to the perch author
@@ -442,10 +442,10 @@ The same code runs on both networks. `--network` chooses only the RPC and
 the passphrase. Every address is derived (`derive-id.py chain`, `name`,
 `content`), the script asserts the perch, constructorless and nido ids
 above, and it reads the root's registry version and manager and each
-registry's admin and manager from the chain. Hashes and versions come from
-`deployments/testnet.json`, checked against the account's committed pins.
-Every wasm the script uploads, publishes or deploys must hash to its pin and
-then carry an attestation ([Attested wasm](#attested-wasm)).
+registry's admin and manager from the chain. The tier-0 hashes and versions
+come from `deployments/testnet.json`, checked against the account's committed
+pins. Every wasm the script uploads, publishes or deploys must hash to its pin,
+where it has one, and then carry an attestation ([Attested wasm](#attested-wasm)).
 
 Every step is a dry run unless `--send` is given: it simulates from the
 source's address and loads no secret. Mainnet `--send` also needs
@@ -460,7 +460,7 @@ scripts/bootstrap-registry.sh --network mainnet --source <root manager> create-r
 scripts/bootstrap-registry.sh --network mainnet --source <root manager> create-registry --name nido
 # Then the rest; each command is a dry run until --send (and, on mainnet, --i-mean-mainnet).
 scripts/bootstrap-registry.sh --network mainnet --source <registries' manager> \
-  --account-wasm perch-account-v<X.Y.Z> --stateless-wasm perch-stateless-registry-v<X.Y.Z> \
+  --account-wasm perch-account-v<X.Y.Z> --constructorless-wasm perch-constructorless-registry-v<X.Y.Z> \
   --admin-key <G> --ci-key <G> --ci-expiry-ledger <N> all
 ```
 
@@ -468,7 +468,7 @@ scripts/bootstrap-registry.sh --network mainnet --source <registries' manager> \
 
 The script takes only bytes that GitHub's build provenance traces to the
 release build of this repository's main. After the sha256 check against its
-pin, each wasm must pass, dry runs included:
+pin, where it has one, each wasm must pass, dry runs included:
 
 ```sh
 gh attestation verify <wasm> --owner stellar-registry \
@@ -481,23 +481,26 @@ and the verified certificate's source repository must be
 `--repo stellar-registry/perch` alone also requires the signing workflow to
 live in stellar-registry/perch, and `contract-release.yml` lives in
 stellar-registry/actions, so it fails on every release. The script checks a
-wasm only when a step would upload, publish or deploy it; a step the chain
-already shows as done needs no bytes.
+tier-0 wasm only when a step would upload, publish or deploy it; a step the
+chain already shows as done needs no bytes. The registry and the account have
+no pin, so every run reads their bytes for their hashes.
 
 | wasm | bytes from | pin |
 | --- | --- | --- |
 | the four tier-0 | their GitHub release assets | `deployments/testnet.json` and the account's committed pins |
-| `perch-stateless-registry` | `--stateless-wasm`: a file, or a release tag (`perch-stateless-registry-vX.Y.Z`) whose asset is downloaded; by default fetched from testnet by hash | the testnet registry code, `4b2d9ea4…` |
+| `perch-constructorless-registry` | `--constructorless-wasm`: a file, or a release tag (`perch-constructorless-registry-vX.Y.Z`) whose asset is downloaded, published at the tag's version (this checkout's for a file) | none: `constructorless` must run exactly these bytes. `deployments/testnet.json`'s registry code, `4b2d9ea4…`, is the code testnet's earlier `CDX2DMYM…` runs, built before the rename as `perch-stateless-registry`; this crate does not rebuild it |
 | `perch-account` | `--account-wasm`: a file, or a release tag (`perch-account-vX.Y.Z`) | none: the authors' `infra()` check confirms it resolves this network's tier-0 |
 
 A wasm with no attestation is refused unless `--allow-unattested <name>`
 names it. That flag is repeatable, prints a warning for each name and each
 wasm it lets through, and is refused with `--network mainnet`. Without
 `--account-wasm` the script builds the account from this checkout, and only
-with `--allow-unattested perch-account`.
+with `--allow-unattested perch-account`; likewise the registry without
+`--constructorless-wasm`, only with `--allow-unattested
+perch-constructorless-registry`.
 
 The tier-0 releases already carry attestations. `perch-account` and
-`perch-stateless-registry` get theirs from `release.yml`'s `attested_build`
+`perch-constructorless-registry` get theirs from `release.yml`'s `attested_build`
 dispatch input. The `attested-plan`, `attested-build` and `attested-summary`
 jobs build them from main through the same pinned `contract-release.yml`
 as the tier-0, each as a GitHub release of its existing
@@ -511,10 +514,9 @@ and a tag that already has a release. The job never creates a tag, because
 detect-releases would then skip that version. The run's summary lists each
 asset's sha256, whether its attestation verifies, and whether it equals
 the recorded hash: the account against the factory's committed pin and
-`deployments/testnet.json`, the stateless registry against `4b2d9ea4…`. A
-mismatch is reported, never failed on. The bootstrap still requires the
-stateless registry to hash to `4b2d9ea4…`, so an attested build of other
-bytes is usable only after that pin moves.
+`deployments/testnet.json`. A mismatch is reported, never failed on. Nothing
+records the registry's hash: the bootstrap deploys the attested asset it is
+given.
 
 The order:
 
@@ -525,7 +527,7 @@ The order:
    `gh workflow run release.yml --ref main -f attested_build=both`, and read
    its summary.
 3. Bootstrap with the tags:
-   `--account-wasm perch-account-v<X.Y.Z> --stateless-wasm perch-stateless-registry-v<X.Y.Z>`,
+   `--account-wasm perch-account-v<X.Y.Z> --constructorless-wasm perch-constructorless-registry-v<X.Y.Z>`,
    testnet first, mainnet later.
 
 ### Order, and who signs
@@ -533,9 +535,9 @@ The order:
 | # | Step | Call | Signed by |
 | --- | --- | --- | --- |
 | 1 | `create-registry --name perch`, `--name nido` | `root.deploy("registry", <root's version>, name, owner, [admin, manager, root], None)`, simulated to the derived id first. Refused while the root's manager is a contract: then the name is created through that manager's governance | the root's manager |
-| 2 | `code` (and `all`) | upload the stateless registry and the account code, if the network lacks them | the source |
-| 3 | `publish-stateless` | `perch.publish_hash("perch-stateless-registry", <perch author>, 4b2d9ea4…, "0.1.0")` | perch's manager |
-| 4 | `constructorless` | `perch.deploy("perch-stateless-registry", "0.1.0", "constructorless", owner, [admin, manager, root], None)`: a named deploy with no `deployer`, so it lands at `deployer(perch, sha256("constructorless"))` | perch's manager |
+| 2 | `code` (and `all`) | upload the constructorless registry and the account code, if the network lacks them | the source |
+| 3 | `publish-constructorless` | `perch.publish_hash("perch-constructorless-registry", <perch author>, <its hash>, "0.1.0")` | perch's manager |
+| 4 | `constructorless` | `perch.deploy("perch-constructorless-registry", "0.1.0", "constructorless", owner, [admin, manager, root], None)`: a named deploy with no `deployer`, so it lands at `deployer(perch, sha256("constructorless"))` | perch's manager |
 | 5 | `seed` | upload the four tier-0 if missing; `constructorless.publish_hash(name, <perch author>, <released hash>, <released version>)` for each, then `deploy_stateless` (permissionless) | constructorless's manager |
 | 6 | `create-author --project perch` | deploy the account with an `External(ed25519 verifier, admin key)` admin, check its `infra()` resolves in constructorless, then `apply_doc` with `admin`, `ci-publish` (scoped to constructorless, until `--ci-expiry-ledger`) and `admin-registry` | the source deploys; the admin key signs `apply_doc` |
 | 7 | `names --project perch` | `publish_hash(name, <perch author>, sha256("perch-bootstrap:<name>"), "0.0.0")` for every other name `deployments/testnet.json` deploys ([#142](https://github.com/stellar-registry/perch/issues/142)); refused until step 6 is on chain | constructorless's manager |
@@ -605,19 +607,19 @@ real publish of each name is not refused as `#11 HashAlreadyPublished`.
 | --- | --- | --- |
 | the root's manager | a contract (Stellar Registry governance): `perch` and `nido` were created by its proposals, and `create-registry` refuses | a plain key: `create-registry` signs `root.deploy` directly |
 | `perch`'s code | the root's registry 0.7.0 | the root's registry 0.6.3 |
-| code to upload | the account only; the stateless registry's code is archived, and the constructorless deploy restores it | the stateless registry, the account, and the four tier-0 |
+| code to upload | the constructorless registry and the account | the constructorless registry, the account, and the four tier-0 |
 | early check | while `deployments/pending-registry.json` declares the migration, each document is compiled on the same compiler bytes in the recorded registry before `seed` | none: nothing runs there yet |
 
-### Costs and funding (simulated 2026-10-20)
+### Costs and funding (testnet simulated 2026-10-21, mainnet 2026-10-20)
 
 | | testnet | mainnet |
 | --- | --- | --- |
 | `perch`, `nido` | governance proposals | 0.10 XLM each |
-| stateless registry upload (23,746 B) | on chain | 31.72 XLM |
-| account upload (69,480 B, once for both authors) | 43.27 XLM | 86.95 XLM |
+| constructorless registry upload (23,561 B; mainnet simulated for the earlier 23,746 B) | 16.45 XLM | 31.72 XLM |
+| account upload (69,480 B, once for both authors) | 45.14 XLM | 86.95 XLM |
 | tier-0 uploads (109,362 + 17,127 + 12,627 + 1,467 B) | on chain | 155.30 + 20.25 + 13.69 + 2.96 = 192.20 XLM |
-| uploads in total | 43.27 XLM | 310.87 XLM |
-| charged in a full rehearsal (below) | 64.11 XLM in 22 transactions: 54.75 to the source, 9.36 to the admin key for both `apply_doc`s | 273.68 XLM in 29 transactions: 272.02 to the source, 1.66 to the admin key |
+| uploads in total | 61.59 XLM | 310.87 XLM |
+| charged in a full rehearsal (below) | 67.38 XLM in 23 transactions: 57.62 to the source, 9.76 to the admin key for both `apply_doc`s | 273.68 XLM in 29 transactions: 272.02 to the source, 1.66 to the admin key |
 
 - **The source** pays the uploads, every publish and deploy, and the
   reserves of the entries they create. On mainnet that is more than 300 XLM
@@ -644,10 +646,10 @@ dry rerun of `all` finds nothing left to do. It also checks the fork's
 report: it passed, no envelope carries a signature the real network would
 accept, and it lists exactly the overrides the run made.
 
-`--account-wasm` and `--stateless-wasm` pass through to the bootstrap.
+`--account-wasm` and `--constructorless-wasm` pass through to the bootstrap.
 Without them the rehearsal uses the release of this checkout's version of
 each, if it exists. Otherwise a testnet rehearsal passes `--allow-unattested`
-for that wasm and builds the account from this checkout. A mainnet
+for that wasm and builds it from this checkout. A mainnet
 rehearsal stops instead, because mainnet takes only attested wasm.
 
 ```sh

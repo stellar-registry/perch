@@ -413,6 +413,12 @@ workflow by hand (`workflow_dispatch` from `main`, choosing the network). It
 re-sends that network's manifest in the latest perch-artifacts release, with
 the same registry checks. If the publish itself failed, re-run the release
 run's failed jobs instead: `npm-publish` and `notify-nido` re-run together.
+A re-run replays that run's workflow file, so when the publish failed on a
+bug since fixed on `main`, dispatch `release.yml` from `main` with
+`npm_publish_tag` set to the existing tag (e.g. `perch-artifacts-v0.2.0`): it
+re-packs the package from the tagged commit, publishes it through the same
+`npm` environment, and, for a perch-artifacts tag, then notifies Nido. It
+never creates a tag.
 
 ## Bootstrapping a network's registry chain
 

@@ -508,9 +508,15 @@ as the tier-0, each as a GitHub release of its existing
 publish nothing to any registry, run in no environment, and read no secret
 except the release token. `attested-plan` refuses a dispatch from any ref
 but main, a version detect-releases has not tagged yet, a tag whose commit
-has build inputs (`crates`, `vendor`, `circuits`, `Cargo.toml`,
-`Cargo.lock`, `rust-toolchain.toml`, `.cargo`) that differ from main's tip,
-and a tag that already has a release. The job never creates a tag, because
+differs from main's tip in anything that package builds from, and a tag
+that already has a release. What a package builds from is
+`scripts/release-deps.py inputs`: the directory of every path package it
+links, any file outside them its sources `include_bytes!`, the
+`Cargo.lock` entries of every package it links, the root `Cargo.toml`
+tables it builds with (`[profile]`, `[patch]`, `[workspace.package]`, the
+`[workspace.dependencies]` entries it inherits), `rust-toolchain.toml` and
+`.cargo/config`. A version bump of a crate it does not link does not block
+its tag. The job never creates a tag, because
 detect-releases would then skip that version. The run's summary lists each
 asset's sha256, whether its attestation verifies, and whether it equals
 the recorded hash: the account against the factory's committed pin and

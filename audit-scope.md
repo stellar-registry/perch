@@ -153,7 +153,7 @@ backend needs no integration review with the core paths it touches
 | Artifact selection | `scripts/fetch-infra-wasm.sh`, `scripts/build-stack.sh`, `scripts/verify-deployment.sh`, `.github/actions/fetch-infra-wasm`, `testnet_pins` | Explicit dependency review |
 | Generated contract clients | `packages/perch-contracts`, `packages/perch-interpreter-js` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Guardian-approval relay | `packages/perch-relay` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
-| Deployment and release execution | `scripts/deploy-stack.sh`, `scripts/bindings-contracts.sh`, `scripts/bootstrap-testnet.sh`, `.github/workflows/release.yml`, `crates/perch-deploy`, `crates/perch-derive-id` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
+| Deployment and release execution | `scripts/deploy-stack.sh`, `scripts/derive-id.py`, `scripts/bindings-contracts.sh`, `scripts/bootstrap-testnet.sh`, `.github/workflows/release.yml`, `crates/perch-deploy`, `crates/perch-derive-id` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Registry contract | Wasm `4b2d9ea4…` (manifest `registry`), built from `crates/perch-stateless-registry` at an unrecorded commit | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 
 ## Perch core
@@ -302,15 +302,16 @@ checked by hash. They are not reviewed line by line.
   guardian's slot from displacement. An operator (Nido's hosted relay)
   reviews its own deployment.
 - **Deployment and release execution** (`scripts/deploy-stack.sh`,
-  `bindings-contracts.sh`, `bootstrap-testnet.sh`,
+  `derive-id.py`, `bindings-contracts.sh`, `bootstrap-testnet.sh`,
   `.github/workflows/`, `crates/perch-deploy`, `crates/perch-derive-id`):
   they choose what is deployed and published. The deployed bytes are checked
   by hash against the manifest, and the manifest's hashes are reproducible
   from source ([Deployment provenance](#deployment-provenance)).
 - **The registry contract** (Wasm `4b2d9ea4…`): a
-  `crates/perch-stateless-registry` build that `deploy-stack.sh` reuses by
-  hash from the canonical registry instead of rebuilding; this repository
-  does not record which commit built it. Its `deploy_stateless` places code
+  `crates/perch-stateless-registry` build the canonical registries run;
+  `deploy-stack.sh` publishes into the instance `registry.path` derives and
+  never deploys or rebuilds one, and this repository does not record which
+  commit built it. Its `deploy_stateless` places code
   at the content addresses the account and factory derive.
   `verify-deployment.sh` checks that each address runs its recorded Wasm,
   and that check must pass for each new deployment before it is used.
@@ -329,7 +330,6 @@ the generated paths in GitHub diffs.
 
 | Path | Produced by | Checked by |
 | --- | --- | --- |
-| `**/test_snapshots/**` | `cargo test` (test-host snapshots) | regenerated on every run |
 | `Cargo.lock`, `**/package-lock.json` | cargo, npm | `--locked` builds, `npm ci` |
 | `packages/perch-contracts/src/**` | `scripts/bindings-contracts.sh` from the deployed Wasm | `packages/perch-contracts/test` (`WASM_SHA256` equals the manifest's) |
 | `deployments/**` | `scripts/deploy-stack.sh`, `cargo run -p perch-testnet` | `scripts/verify-deployment.sh`, `testnet_pins` |

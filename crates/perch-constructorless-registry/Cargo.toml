@@ -1,7 +1,7 @@
 [package]
 name = "perch-constructorless-registry"
 description = "Managed constructorless subregistry: content-addressed deploy (salt = wasm_hash, no constructor arguments). Composed from the imported registry contracttraits."
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true

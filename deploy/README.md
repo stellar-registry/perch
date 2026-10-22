@@ -279,6 +279,22 @@ Each name is then bound to the perch-author account, and every later version
 publishes with the delegate alone. Finally set `vars.PERCH_DEPLOY_STACK=true`
 so the `deploy-stack` jobs run on the next release.
 
+`perch-mldsa-verifier` is allow-listed too, but the script does not bind it:
+it takes its names from the tier-0 an author's `apply_doc` needs and from the
+deployment manifest, and the ML-DSA verifier is in neither. So before its
+first release publishes into a registry, the manager binds the name there by
+hand, the way `names` binds a stack name:
+
+```sh
+stellar contract invoke --id <registry> --network <network> --source-account <manager> -- \
+  publish_hash --wasm_name perch-mldsa-verifier --author <perch author> \
+  --wasm_hash "$(printf %s perch-bootstrap:perch-mldsa-verifier | shasum -a 256 | cut -d' ' -f1)" \
+  --version 0.0.0
+```
+
+A release that publishes first fails that leg with `#12 ManagerRequired`; its
+tag stays, and a `publish_tag` dispatch publishes it once the name is bound.
+
 ### Registry migration
 
 `deployments/pending-registry.json` records, per network, a move the source
@@ -693,7 +709,7 @@ environment's reviewer approves. A dispatch is a dry run unless
 
 | Input | |
 | --- | --- |
-| `publish_tags` | release tags of allow-listed contracts (`perch-interpreter`, `perch-doc-compiler`, `perch-ed25519-verifier`, `perch-spending-limit`), separated by spaces |
+| `publish_tags` | release tags of allow-listed contracts (`perch-interpreter`, `perch-doc-compiler`, `perch-ed25519-verifier`, `perch-spending-limit`, `perch-mldsa-verifier`), separated by spaces |
 | `stack_tag` | the release tag of a recovery-stack contract; mainnet gets the stack the testnet deployment from its commit runs |
 | `dry_run` | default on: run every check, simulate each transaction a real run would send, and print it with its fee; submit nothing and open no PR |
 
@@ -765,7 +781,8 @@ None of this exists yet, so no mainnet job can publish today:
    ([One-time manager bootstrap](#one-time-manager-bootstrap)).
 
    Items 1 to 3 are `scripts/bootstrap-registry.sh --network mainnet`
-   ([Bootstrapping a network's registry chain](#bootstrapping-a-networks-registry-chain)).
+   ([Bootstrapping a network's registry chain](#bootstrapping-a-networks-registry-chain)),
+   except `perch-mldsa-verifier`'s binding, which the manager makes by hand.
 4. The Nido app secrets in the `mainnet` environment
    ([Notifying Nido](#notifying-nido-nido-dispatchyml)).
 

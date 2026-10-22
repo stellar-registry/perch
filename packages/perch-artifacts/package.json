@@ -1,6 +1,6 @@
 {
   "name": "@stellar-registry/perch-artifacts",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Perch's consumable artifacts as files: deployment manifests, the Noir ZK recovery circuits and their manifest, test vectors, document and program limits, and the scripts that fetch the deployed wasm and install the pinned ZK toolchain",
   "license": "Apache-2.0",
   "type": "module",

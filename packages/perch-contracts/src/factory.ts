@@ -5,7 +5,7 @@
 // deployments/testnet.json. Regenerate with scripts/bindings-contracts.sh.
 
 /** sha256 of the wasm these bindings were generated from. */
-export const WASM_SHA256 = "e6628c9ee09d613bfc8385cf6c0fd64fd22c6038169ac6948dbb1a57529d9d1d";
+export const WASM_SHA256 = "6b434991d983063c92a47ba1573514f46e5c2ecb184d8c654af60a637ccd3fc2";
 
 import { Buffer } from "buffer";
 import { Address } from "@stellar/stellar-sdk";
@@ -52,13 +52,15 @@ export interface Client {
   /**
    * Construct and simulate a create transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
    * Deploy an account whose constructor installs `admin_signers` as its
-   * admin rule. Permissionless. Fails if that account already exists.
+   * admin rule, at [`Self::address_of`], and emit `AccountCreated`.
+   * Permissionless. Fails if that account already exists.
    */
   create: ({salt, admin_signers}: {salt: Buffer, admin_signers: Array<Signer>}, options?: MethodOptions) => Promise<AssembledTransaction<string>>
 
   /**
    * Construct and simulate a version transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
-   * See [`VERSION`].
+   * The factory's interface version ([`VERSION`]). A new version is a
+   * new wasm and a new address.
    */
   version: (options?: MethodOptions) => Promise<AssembledTransaction<u32>>
 
@@ -120,8 +122,8 @@ export class Client extends ContractClient {
   constructor(public readonly options: ContractClientOptions) {
     super(
       new ContractSpec([ "AAAABQAAAC5FbWl0dGVkIGZvciBldmVyeSBhY2NvdW50IHRoZSBmYWN0b3J5IGNyZWF0ZXMuAAAAAAAAAAAADkFjY291bnRDcmVhdGVkAAAAAAABAAAAD2FjY291bnRfY3JlYXRlZAAAAAADAAAAAAAAAAdhY2NvdW50AAAAABMAAAABAAAAAAAAAARzYWx0AAAD7gAAACAAAAAAAAAAAAAAAA1hZG1pbl9zaWduZXJzAAAAAAAD6gAAB9AAAAAGU2lnbmVyAAAAAAAAAAAAAg==",
-        "AAAAAAAAAIVEZXBsb3kgYW4gYWNjb3VudCB3aG9zZSBjb25zdHJ1Y3RvciBpbnN0YWxscyBgYWRtaW5fc2lnbmVyc2AgYXMgaXRzCmFkbWluIHJ1bGUuIFBlcm1pc3Npb25sZXNzLiBGYWlscyBpZiB0aGF0IGFjY291bnQgYWxyZWFkeSBleGlzdHMuAAAAAAAABmNyZWF0ZQAAAAAAAgAAAAAAAAAEc2FsdAAAA+4AAAAgAAAAAAAAAA1hZG1pbl9zaWduZXJzAAAAAAAD6gAAB9AAAAAGU2lnbmVyAAAAAAABAAAAEw==",
-        "AAAAAAAAABBTZWUgW2BWRVJTSU9OYF0uAAAAB3ZlcnNpb24AAAAAAAAAAAEAAAAE",
+        "AAAAAAAAALlEZXBsb3kgYW4gYWNjb3VudCB3aG9zZSBjb25zdHJ1Y3RvciBpbnN0YWxscyBgYWRtaW5fc2lnbmVyc2AgYXMgaXRzCmFkbWluIHJ1bGUsIGF0IFtgU2VsZjo6YWRkcmVzc19vZmBdLCBhbmQgZW1pdCBgQWNjb3VudENyZWF0ZWRgLgpQZXJtaXNzaW9ubGVzcy4gRmFpbHMgaWYgdGhhdCBhY2NvdW50IGFscmVhZHkgZXhpc3RzLgAAAAAAAAZjcmVhdGUAAAAAAAIAAAAAAAAABHNhbHQAAAPuAAAAIAAAAAAAAAANYWRtaW5fc2lnbmVycwAAAAAAA+oAAAfQAAAABlNpZ25lcgAAAAAAAQAAABM=",
+        "AAAAAAAAAF1UaGUgZmFjdG9yeSdzIGludGVyZmFjZSB2ZXJzaW9uIChbYFZFUlNJT05gXSkuIEEgbmV3IHZlcnNpb24gaXMgYQpuZXcgd2FzbSBhbmQgYSBuZXcgYWRkcmVzcy4AAAAAAAAHdmVyc2lvbgAAAAAAAAAAAQAAAAQ=",
         "AAAAAAAAAERUaGUgYWRkcmVzcyBbYFNlbGY6OmNyZWF0ZWBdIGRlcGxveXMgZm9yIGBzYWx0YCBhbmQgYGFkbWluX3NpZ25lcnNgLgAAAAphZGRyZXNzX29mAAAAAAACAAAAAAAAAARzYWx0AAAD7gAAACAAAAAAAAAADWFkbWluX3NpZ25lcnMAAAAAAAPqAAAH0AAAAAZTaWduZXIAAAAAAAEAAAAT",
         "AAAAAAAAAFhEZXBsb3kgYW4gYWNjb3VudCBhZG1pbmlzdGVyZWQgYnkgb25lIHBhc3NrZXksIHZlcmlmaWVkIGJ5IHRoZSBwaW5uZWQKV2ViQXV0aG4gdmVyaWZpZXIuAAAADmNyZWF0ZV9wYXNza2V5AAAAAAACAAAAAAAAAARzYWx0AAAD7gAAACAAAAAAAAAACGtleV9kYXRhAAAADgAAAAEAAAAT",
         "AAAAAAAAAI9UaGUgYWRtaW4gc2lnbmVyIFtgU2VsZjo6Y3JlYXRlX3Bhc3NrZXlgXSBpbnN0YWxscyBmb3IgYGtleV9kYXRhYAoodGhlIDY1LWJ5dGUgc2VjcDI1NnIxIHB1YmxpYyBrZXksIG9wdGlvbmFsbHkgZm9sbG93ZWQgYnkgdGhlCmNyZWRlbnRpYWwgaWQpLgAAAAAOcGFzc2tleV9zaWduZXIAAAAAAAEAAAAAAAAACGtleV9kYXRhAAAADgAAAAEAAAfQAAAABlNpZ25lcgAA",

@@ -5,7 +5,7 @@
 // deployments/testnet.json. Regenerate with scripts/bindings-contracts.sh.
 
 /** sha256 of the wasm these bindings were generated from. */
-export const WASM_SHA256 = "40afca349927b7f5fa8c90187af91bdb4c9bdced97993b5033c32aa028fa542d";
+export const WASM_SHA256 = "f2e1dfce8c496be6d318045bc5a24ac5eb799ada837f92e8032ec953f1994230";
 
 import { Buffer } from "buffer";
 import { Address } from "@stellar/stellar-sdk";
@@ -107,6 +107,7 @@ export interface Client {
 
   /**
    * Construct and simulate a batch_canonicalize_key transaction. Returns an `AssembledTransaction` object which will have a `result` field containing the result of the simulation. If this transaction changes contract state, you will need to call `signAndSend()` on the returned object.
+   * [`Self::canonicalize_key`] for each key, in input order.
    */
   batch_canonicalize_key: ({key_data}: {key_data: Array<Buffer>}, options?: MethodOptions) => Promise<AssembledTransaction<Array<Buffer>>>
 
@@ -130,7 +131,7 @@ export class Client extends ContractClient {
     super(
       new ContractSpec([ "AAAAAAAAAL9XaGV0aGVyIGBzaWdfZGF0YWAgKFhEUiBgV2ViQXV0aG5TaWdEYXRhYCkgaXMgYSB2YWxpZCBhc3NlcnRpb24gb3Zlcgpgc2lnbmF0dXJlX3BheWxvYWRgIGJ5IHRoZSBrZXkgaW4gYGtleV9kYXRhYC4gTWFsZm9ybWVkIGRhdGEgdHJhcHMKcmF0aGVyIHRoYW4gcmV0dXJuaW5nIGBmYWxzZWAsIGxpa2UgT1oncyB2ZXJpZmllciBkb2VzLgAAAAAGdmVyaWZ5AAAAAAADAAAAAAAAABFzaWduYXR1cmVfcGF5bG9hZAAAAAAAAA4AAAAAAAAACGtleV9kYXRhAAAADgAAAAAAAAAIc2lnX2RhdGEAAAAOAAAAAQAAAAE=",
         "AAAAAAAAAJ1UaGUgNjUtYnl0ZSBwdWJsaWMga2V5LCB3aXRob3V0IGFueSBjcmVkZW50aWFsLWlkIHN1ZmZpeDogdGhlCmlkZW50aXR5IE9aIHVzZXMgdG8gZGV0ZWN0IGR1cGxpY2F0ZSBzaWduZXJzLCBhbmQgdGhlIGNvbXBpbGVyIHVzZXMgdG8KZmluZ2VycHJpbnQgY3JlZGVudGlhbHMuAAAAAAAAEGNhbm9uaWNhbGl6ZV9rZXkAAAABAAAAAAAAAAhrZXlfZGF0YQAAAA4AAAABAAAADg==",
-        "AAAAAAAAAAAAAAAWYmF0Y2hfY2Fub25pY2FsaXplX2tleQAAAAAAAQAAAAAAAAAIa2V5X2RhdGEAAAPqAAAADgAAAAEAAAPqAAAADg==",
+        "AAAAAAAAADhbYFNlbGY6OmNhbm9uaWNhbGl6ZV9rZXlgXSBmb3IgZWFjaCBrZXksIGluIGlucHV0IG9yZGVyLgAAABZiYXRjaF9jYW5vbmljYWxpemVfa2V5AAAAAAABAAAAAAAAAAhrZXlfZGF0YQAAA+oAAAAOAAAAAQAAA+oAAAAO",
         "AAAABAAAADFFcnJvciB0eXBlcyBmb3IgV2ViQXV0aG4gdmVyaWZpY2F0aW9uIG9wZXJhdGlvbnMuAAAAAAAAAAAAAA1XZWJBdXRobkVycm9yAAAAAAAACgAAADlUaGUgc2lnbmF0dXJlIHBheWxvYWQgaXMgaW52YWxpZCBvciBoYXMgaW5jb3JyZWN0IGZvcm1hdC4AAAAAAAAXU2lnbmF0dXJlUGF5bG9hZEludmFsaWQAAAAMJgAAADNUaGUgY2xpZW50IGRhdGEgZXhjZWVkcyB0aGUgbWF4aW11bSBhbGxvd2VkIGxlbmd0aC4AAAAAEUNsaWVudERhdGFUb29Mb25nAAAAAAAMJwAAACZGYWlsZWQgdG8gcGFyc2UgSlNPTiBmcm9tIGNsaWVudCBkYXRhLgAAAAAADkpzb25QYXJzZUVycm9yAAAAAAwoAAAANFRoZSB0eXBlIGZpZWxkIGluIGNsaWVudCBkYXRhIGlzIG5vdCAid2ViYXV0aG4uZ2V0Ii4AAAAQVHlwZUZpZWxkSW52YWxpZAAADCkAAAA7VGhlIGNoYWxsZW5nZSBpbiBjbGllbnQgZGF0YSBkb2VzIG5vdCBtYXRjaCBleHBlY3RlZCB2YWx1ZS4AAAAAEENoYWxsZW5nZUludmFsaWQAAAwqAAAANlRoZSBhdXRoZW50aWNhdG9yIGRhdGEgZm9ybWF0IGlzIGludmFsaWQgb3IgdG9vIHNob3J0LgAAAAAAFUF1dGhEYXRhRm9ybWF0SW52YWxpZAAAAAAADCsAAAA8VGhlIFVzZXIgUHJlc2VudCAoVVApIGJpdCBpcyBub3Qgc2V0IGluIGF1dGhlbnRpY2F0b3IgZmxhZ3MuAAAAEFByZXNlbnRCaXROb3RTZXQAAAwsAAAAPVRoZSBVc2VyIFZlcmlmaWVkIChVVikgYml0IGlzIG5vdCBzZXQgaW4gYXV0aGVudGljYXRvciBmbGFncy4AAAAAAAARVmVyaWZpZWRCaXROb3RTZXQAAAAAAAwtAAAAP0ludmFsaWQgcmVsYXRpb25zaGlwIGJldHdlZW4gQmFja3VwIEVsaWdpYmlsaXR5IGFuZCBTdGF0ZSBiaXRzLgAAAAAfQmFja3VwRWxpZ2liaWxpdHlBbmRTdGF0ZU5vdFNldAAAAAwuAAAAQlRoZSBwcm92aWRlZCBrZXkgZGF0YSBkb2VzIG5vdCBjb250YWluIGEgdmFsaWQgNjUtYnl0ZSBwdWJsaWMga2V5LgAAAAAADktleURhdGFJbnZhbGlkAAAAAAwv" ]),
       options
     )

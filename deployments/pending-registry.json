@@ -1,8 +1,1 @@
-{
-  "testnet": {
-    "recorded": "CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7",
-    "derived": "CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM",
-    "reason": "testnet.json records the stack in unverified/perch/constructorless; this source derives perch/constructorless under the testnet root, which the testnet dry run of the mainnet layout creates. Delete this entry in the deploy(testnet) commit that records the stack there.",
-    "publish_to": "derived"
-  }
-}
+{}

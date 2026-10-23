@@ -214,7 +214,7 @@ pub fn policy_schema() -> Value {
                 "maxItems": perch_doc_compiler::MAX_DOC_RULES,
                 "description":
                     "The policy rules. Order is preserved and significant to the hash. \
-                     At most MAX_DOC_RULES (the compiler's per-document rule cap).",
+                     At most MAX_DOC_RULES source rules; cross-token caps count twice toward the compiler's installed-rule cap.",
             },
             "recovery": {
                 "$ref": "#/$defs/recoveryConfig",
@@ -513,7 +513,25 @@ fn policy_defs() -> Value {
             "additionalProperties": false,
             "required": ["limit", "period-ledgers"],
             "properties": {
-                "token": contract_address("Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope when omitted; cap/scope agreement is a cross-reference check (outside this schema)."),
+                "recipient": {
+                    "description": "Cross-token caps only. Omitted means the scope contract. Transfers can also be called directly, independently of the scope call.",
+                    "oneOf": [
+                        {
+                            "type": "object", "additionalProperties": false,
+                            "required": ["type", "address"],
+                            "properties": {
+                                "type": { "const": "address-eq" },
+                                "address": address("The allowed transfer recipient (C- or G-address)."),
+                            },
+                        },
+                        {
+                            "type": "object", "additionalProperties": false,
+                            "required": ["type"],
+                            "properties": { "type": { "const": "any" } },
+                        },
+                    ],
+                },
+                "token": contract_address("Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope. A different token produces a separate capped transfer rule."),
                 "limit": {
                     "type": "string",
                     "pattern": limit_pattern(),

@@ -149,15 +149,20 @@ pub enum LowerError {
 
 /// Lower a validated document. Precondition: `perch_ir::validate(doc).is_ok()`.
 pub fn compile(env: &Env, doc: &PolicyDoc, cfg: &CompileConfig) -> Result<Plan, LowerError> {
-    let mut rules = Vec::with_capacity(doc.rules.len());
+    let mut rules = Vec::with_capacity(doc.compiled_rule_count());
     let mut any_interpreter = false;
 
     for rule in &doc.rules {
-        let lowered = lower_rule(env, doc, rule)?;
-        if lowered.install.is_some() {
+        if let Some((call, transfer)) = rule.split_cross_token_cap() {
+            let provenance = rule_hash_onchain(env, rule);
+            rules.push(lower_rule(env, doc, &call, Some(&provenance))?);
+            rules.push(lower_rule(env, doc, &transfer, Some(&provenance))?);
             any_interpreter = true;
+        } else {
+            let lowered = lower_rule(env, doc, rule, None)?;
+            any_interpreter |= lowered.install.is_some();
+            rules.push(lowered);
         }
-        rules.push(lowered);
     }
 
     Ok(Plan {
@@ -166,7 +171,12 @@ pub fn compile(env: &Env, doc: &PolicyDoc, cfg: &CompileConfig) -> Result<Plan, 
     })
 }
 
-fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, LowerError> {
+fn lower_rule(
+    env: &Env,
+    doc: &PolicyDoc,
+    rule: &Rule,
+    provenance: Option<&BytesN<32>>,
+) -> Result<LoweredRule, LowerError> {
     let scope = match &rule.scope {
         Scope::Contract(c) => ScopeSpec::Contract(c.address.clone()),
         Scope::SelfAdmin(_) => ScopeSpec::SelfAdmin,
@@ -240,7 +250,9 @@ fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, Lo
         // `doc_hash` name; the interpreter's type is unchanged).
         Some(InstallParams {
             program,
-            doc_hash: rule_hash_onchain(env, rule),
+            doc_hash: provenance
+                .cloned()
+                .unwrap_or_else(|| rule_hash_onchain(env, rule)),
         })
     };
 

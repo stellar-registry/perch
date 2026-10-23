@@ -340,6 +340,16 @@ fn cap_to_cv(cap: &CapConstraint) -> Cv<'_> {
     if let Some(token) = &cap.token {
         o.push(("token", Cv::Str(token)));
     }
+    if let Some(recipient) = &cap.recipient {
+        let value = match recipient {
+            crate::CapRecipient::Any => Cv::Obj(vec![("type", Cv::Str("any"))]),
+            crate::CapRecipient::AddressEq(p) => Cv::Obj(vec![
+                ("type", Cv::Str("address-eq")),
+                ("address", Cv::Str(&p.address)),
+            ]),
+        };
+        o.push(("recipient", value));
+    }
     // `limit` is a decimal *string* in the model (an i128 does not fit a JSON
     // number safely; see `CapConstraint`), so it canonicalizes as a string.
     o.push(("limit", Cv::Str(&cap.limit)));

@@ -288,6 +288,18 @@ fn smt_string(s: &str) -> String {
 pub fn encode_doc_warnings(doc: &PolicyDoc) -> Vec<String> {
     let mut out = Vec::new();
     for rule in &doc.rules {
+        if rule.cap.is_some()
+            && rule.cross_token_cap().is_none()
+            && !rule
+                .functions
+                .as_ref()
+                .is_some_and(|f| f.len() == 1 && f[0] == "transfer")
+        {
+            out.push(format!(
+                "rule `{}`: same-token spending_limit requires exactly [transfer]; other functions fail with #3223",
+                rule.name
+            ));
+        }
         for c in rule.args.iter().flatten() {
             let texts: Vec<&String> = match &c.pred {
                 ArgPred::StringIn(p) => p.values.iter().collect(),
@@ -308,6 +320,17 @@ pub fn encode_doc_warnings(doc: &PolicyDoc) -> Vec<String> {
     out
 }
 
+/// Expand the same effective rules as the compiler, retaining source names.
+fn effective_rules(doc: &PolicyDoc) -> Vec<Rule> {
+    doc.rules
+        .iter()
+        .flat_map(|r| match r.split_cross_token_cap() {
+            Some((call, transfer)) => vec![call, transfer],
+            None => vec![r.clone()],
+        })
+        .collect()
+}
+
 // --- checks --------------------------------------------------------------------
 
 /// Liveness of one rule.
@@ -321,7 +344,7 @@ pub struct RuleLiveness {
 /// rule dead (it can never yield a definite allow).
 #[must_use]
 pub fn dead_rules(doc: &PolicyDoc) -> Vec<RuleLiveness> {
-    doc.rules
+    effective_rules(doc)
         .iter()
         .map(|rule| {
             let mut enc = Encoder::new();
@@ -354,7 +377,7 @@ pub struct OnlyCallsViolation {
 #[must_use]
 pub fn only_calls(doc: &PolicyDoc, contract: &str, allowed: &[String]) -> Vec<OnlyCallsViolation> {
     let mut violations = Vec::new();
-    for rule in &doc.rules {
+    for rule in &effective_rules(doc) {
         let on_target = matches!(&rule.scope, Scope::Contract(c) if c.address == contract);
         if !on_target {
             continue;
@@ -387,7 +410,7 @@ pub fn only_calls(doc: &PolicyDoc, contract: &str, allowed: &[String]) -> Vec<On
 #[must_use]
 pub fn can_call(doc: &PolicyDoc, function: &str) -> Vec<RuleLiveness> {
     let mut out = Vec::new();
-    for rule in &doc.rules {
+    for rule in &effective_rules(doc) {
         if !matches!(&rule.scope, Scope::Contract(_)) {
             continue;
         }
@@ -433,19 +456,23 @@ pub enum WideningFinding {
 #[must_use]
 pub fn narrows(parent: &PolicyDoc, child: &PolicyDoc) -> Vec<WideningFinding> {
     let mut findings = Vec::new();
-    for crule in &child.rules {
-        let Some(prule) = parent.rules.iter().find(|r| r.name == crule.name) else {
-            findings.push(WideningFinding::AddedRule {
-                rule: crule.name.clone(),
+    let parent_rules = effective_rules(parent);
+    for crule in &effective_rules(child) {
+        let Some(prule) = parent_rules
+            .iter()
+            .find(|r| r.name == crule.name && r.scope == crule.scope)
+        else {
+            findings.push(if parent_rules.iter().any(|r| r.name == crule.name) {
+                WideningFinding::ScopeChanged {
+                    rule: crule.name.clone(),
+                }
+            } else {
+                WideningFinding::AddedRule {
+                    rule: crule.name.clone(),
+                }
             });
             continue;
         };
-        if prule.scope != crule.scope {
-            findings.push(WideningFinding::ScopeChanged {
-                rule: crule.name.clone(),
-            });
-            continue;
-        }
 
         // Program semantics: child-allows ∧ ¬parent-allows must be unsat.
         let mut enc = Encoder::new();
@@ -487,7 +514,7 @@ pub fn narrows(parent: &PolicyDoc, child: &PolicyDoc) -> Vec<WideningFinding> {
             (Some(p), Some(c)) => {
                 let plimit = p.limit.parse::<i128>().unwrap_or(i128::MAX);
                 let climit = c.limit.parse::<i128>().unwrap_or(i128::MAX);
-                p.token != c.token || climit > plimit || c.period_ledgers < p.period_ledgers
+                climit > plimit || c.period_ledgers < p.period_ledgers
             }
             (None, _) => false,
         };

@@ -409,6 +409,7 @@ fn cap_lowers_to_a_spending_limit_spec_beside_the_interpreter() {
     let env = Env::default();
     let mut doc = perch_ir::from_json(&fixture()).expect("parse");
     doc.rules[1].cap = Some(perch_ir::CapConstraint {
+        recipient: None,
         token: Some(REGISTRY.to_string()),
         limit: "10000000".to_string(),
         period_ledgers: 17_280,
@@ -441,6 +442,7 @@ fn cap_forces_the_interpreter_even_when_otherwise_constraint_free() {
     doc.rules[1].functions = None;
     doc.rules[1].args = None;
     doc.rules[1].cap = Some(perch_ir::CapConstraint {
+        recipient: None,
         token: None, // denominate in the scope contract
         limit: "5".to_string(),
         period_ledgers: 100,
@@ -582,4 +584,65 @@ fn delegated_signer_lowers_to_signer_spec_delegated() {
     ));
     // The activation gate must accept its own lowering.
     verify_plan_matches_doc(&env, &doc, &plan).expect("plan matches doc");
+}
+
+#[test]
+fn cross_token_caps_lower_adjacent_rules_with_shared_source_provenance() {
+    let env = Env::default();
+    let mut doc =
+        perch_ir::from_json(include_str!("../../../testdata/cross-token-cap.json")).unwrap();
+    for recipient in [
+        None,
+        Some(perch_ir::CapRecipient::Any),
+        doc.rules[1].cap.as_ref().unwrap().recipient.clone(),
+    ] {
+        doc.rules[1].cap.as_mut().unwrap().recipient = recipient.clone();
+        let plan = compile(&env, &doc, &cfg(&env)).unwrap();
+        verify_plan_matches_doc(&env, &doc, &plan).unwrap();
+        assert_eq!(plan.rules.len(), 3);
+        let call = &plan.rules[1];
+        let transfer = &plan.rules[2];
+        assert_eq!(call.name, transfer.name);
+        assert_eq!(call.signers, transfer.signers);
+        assert_eq!(call.valid_until, transfer.valid_until);
+        assert_eq!(call.scope, ScopeSpec::Contract(REGISTRY.into()));
+        assert_eq!(
+            transfer.scope,
+            ScopeSpec::Contract(doc.rules[1].cap.as_ref().unwrap().token.clone().unwrap())
+        );
+        assert!(call.cap.is_none());
+        assert_eq!(transfer.cap.as_ref().unwrap().limit, 2);
+        assert_eq!(transfer.cap.as_ref().unwrap().period_ledgers, 1000);
+        for rule in [call, transfer] {
+            assert_eq!(
+                rule.install.as_ref().unwrap().doc_hash,
+                rule_hash_onchain(&env, &doc.rules[1])
+            );
+        }
+        let ops = &call.install.as_ref().unwrap().program.ops;
+        assert_eq!(
+            ops.get(1).unwrap(),
+            Op::FnIn(vec![&env, Symbol::new(&env, "guess")])
+        );
+        assert_eq!(ops.get(2).unwrap(), Op::ArgAddrIsSelf(0));
+        let ops = &transfer.install.as_ref().unwrap().program.ops;
+        assert_eq!(
+            ops.get(1).unwrap(),
+            Op::FnIn(vec![&env, Symbol::new(&env, "transfer")])
+        );
+        match recipient {
+            Some(perch_ir::CapRecipient::Any) => assert_eq!(ops.len(), 3),
+            _ => {
+                let address = match recipient {
+                    Some(perch_ir::CapRecipient::AddressEq(p)) => p.address,
+                    _ => REGISTRY.into(),
+                };
+                assert_eq!(ops.len(), 4);
+                assert_eq!(
+                    ops.get(2).unwrap(),
+                    Op::ArgAddrEq(1, Address::from_str(&env, &address))
+                );
+            }
+        }
+    }
 }

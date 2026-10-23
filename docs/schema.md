@@ -105,7 +105,7 @@ Structural shape and the representable data constraints:
 - **collections:** non-empty and no-duplicate lists where perch-ir requires
   them (`functions`, `string-in` values, principal/guardian/replaceable lists);
 - **per-document caps the compiler enforces (`perch-doc-compiler`):** at most
-  `MAX_DOC_SIGNERS` signers and `MAX_DOC_RULES` rules (`maxItems`), and a rule
+  `MAX_DOC_SIGNERS` signers and `MAX_DOC_RULES` source rules (`maxItems`), and a rule
   `name` at most `MAX_RULE_NAME_BYTES` bytes. Because JSON Schema's `maxLength`
   counts code points, not bytes, the rule name is also constrained to ASCII so
   one character is one byte — the single place the schema is intentionally
@@ -125,7 +125,8 @@ substitute:
   necessarily in canonical form; only canonical bytes feed `doc_hash`. See
   `CANONICAL.md`.
 - **Cross-reference and semantic invariants.** Principal/replaceable references
-  resolving to a declared signer; cap `token` matching the contract scope;
+  resolving to a declared signer; cross-token cap function restrictions and
+  recipient eligibility;
   unique signer ids and rule names; `commitment` being a canonical BN254 field
   element (below the scalar modulus); and the **exact** `i128` upper bound on
   `cap.limit` (the schema caps the *digit width* but not the precise maximum
@@ -144,8 +145,9 @@ substitute:
   the *canonically-encoded* document, not a property of the parsed JSON tree —
   is not expressible as a schema keyword. It lives in
   `perch-doc-compiler::doc_limits()` and is mirrored client-side by perch-js's
-  `checkLimits`. (The other per-document caps — `max_signers`, `max_rules`,
-  `max_rule_name_bytes` — are now encoded by the schema; see above.)
+  `checkLimits`. Installed-rule counting also lives there: each cross-token
+  cap produces two rules, while the schema's `maxItems` only bounds source
+  rules. Signer counts and rule-name byte bounds are encoded by the schema.
 - **Canonical spelling (CANON v2).** The schema accepts everything today's
   parser accepts, including non-canonical spellings of a valid value: a
   `cap.limit` with leading zeros or a leading `+` (`007`, `+5`), and uppercase

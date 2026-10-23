@@ -150,13 +150,14 @@ pub struct CompiledRule {
     /// cumulative cap the stateless interpreter cannot express. The applier
     /// resolves the policy's content-addressed address and keys it into the
     /// rule's policy map beside the interpreter; the tracked token is the
-    /// rule's `Contract` scope (validation pins `token == scope`).
+    /// compiled rule's `Contract` scope, including a cross-token transfer rule.
     pub cap: Vec<CompiledCap>,
 }
 
 /// A cumulative spend cap lowered to OZ `spending_limit`'s install params
 /// (`SpendingLimitAccountParams`). The tracked token is the rule's scope
-/// contract, so it is not carried here.
+/// contract, so it is not carried here. For a cross-token cap this is the
+/// generated transfer rule, not the source document rule's scope.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompiledCap {
@@ -183,7 +184,8 @@ pub struct CompiledDoc {
     /// keys canonicalized by their verifier. What revocation compares
     /// (spec §8).
     pub fingerprints: Vec<BytesN<32>>,
-    /// One compiled rule per document rule, in the submitted order.
+    /// In document order; a cross-token cap produces adjacent scope and
+    /// transfer rules with the same name and source rule hash.
     pub rules: Vec<CompiledRule>,
     /// The compiled `recovery` member: zero or one entries (a `Vec` for the
     /// same reason as [`CompiledRule::install`]). Present ⇒ the document
@@ -231,6 +233,7 @@ pub enum DocLimits {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FlatDocLimits {
     pub max_signers: u32,
+    /// Maximum compiled document rules; each cross-token cap counts twice.
     pub max_rules: u32,
     pub max_canonical_bytes: u32,
     pub max_rule_name_bytes: u32,
@@ -456,7 +459,7 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
     }
 
     if doc.signers.len() > MAX_DOC_SIGNERS as usize
-        || doc.rules.len() > MAX_DOC_RULES as usize
+        || doc.compiled_rule_count() > MAX_DOC_RULES as usize
         || doc
             .rules
             .iter()

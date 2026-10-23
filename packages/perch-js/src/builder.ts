@@ -8,6 +8,7 @@ import {
   ACK_SENTINEL,
   parsePolicyDoc,
   type ArgPred,
+  type CapRecipient,
   type PolicyDoc,
   type Rule,
   type SignerDecl,
@@ -51,6 +52,9 @@ export interface CapSpec {
   /** Token contract (C-strkey) the cap is denominated in; defaults to the
    *  rule's scope contract (the scope must then be a `contract` scope). */
   token?: string;
+  /** Cross-token transfer recipient; defaults to the scope contract.
+   * `any` permits direct transfers to anyone up to the cap. */
+  recipient?: CapRecipient;
   /** Maximum cumulative amount over the window. A decimal string or bigint —
    *  never a JS number, because the canonical form carries the limit as an
    *  i128-as-string (see CANONICAL.md / perch-ir's CapConstraint). */
@@ -106,11 +110,12 @@ export class RuleBuilder {
   }
   /** Cumulative spend cap over a rolling window. Perch itself is stateless, so
    *  the compiler lowers this to a stateful sibling policy (OZ
-   *  `spending_limit`) attached to the same context rule alongside the
-   *  interpreter — both must pass. */
-  cap({ token, limit, periodLedgers }: CapSpec): this {
+   *  `spending_limit`). A different token produces a scope rule plus a capped
+   *  transfer rule; transfers are independent of the scope call. */
+  cap({ token, recipient, limit, periodLedgers }: CapSpec): this {
     this._cap = {
       ...(token !== undefined ? { token } : {}),
+      ...(recipient !== undefined ? { recipient } : {}),
       limit: typeof limit === 'bigint' ? limit.toString() : limit,
       'period-ledgers': periodLedgers,
     };

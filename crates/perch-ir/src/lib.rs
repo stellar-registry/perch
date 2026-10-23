@@ -76,9 +76,10 @@ pub use canon::{
 pub use canon::{doc_hash, doc_hash_hex, rule_hash};
 pub use doc::{
     AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, BaselineCommitment, CapConstraint,
-    ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig, RecoveryMode,
-    RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
-    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred, ZkFactor,
+    CapRecipient, ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig,
+    RecoveryMode, RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals,
+    SignerDecl, SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred,
+    ZkFactor,
 };
 pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{

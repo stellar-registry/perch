@@ -225,3 +225,14 @@ compiler is authoritative; `checkLimits` checks only its caps.
 ## License
 
 Apache-2.0
+
+## Cross-token caps
+
+A contract-scoped rule can cap a different token with
+`.cap({ token, limit: 20_000_000n, periodLedgers: 17_280 })`. It lowers to the
+scope rule plus a capped `transfer` rule restricted to the scope as recipient.
+Set `recipient: { type: 'address-eq', address: treasury }` for a treasury, or
+`recipient: { type: 'any' }` to permit any recipient. Transfers can also be
+called directly, independently of the scope call. `compiledRuleCount` and
+`checkLimits` count both installed rules. See [cross-token caps](../../docs/cross-token-caps.md)
+for validation, rule selection, updates and the compiler/account rollout.

@@ -1,0 +1,13 @@
+{
+  "name": "perch-zk-browser-bench",
+  "private": true,
+  "type": "module",
+  "description": "Real-browser proving benchmark for @stellar-registry/perch-zk (not published)",
+  "scripts": {
+    "bench": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "vite": "^7.1.0"
+  }
+}

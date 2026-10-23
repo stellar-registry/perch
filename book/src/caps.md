@@ -23,6 +23,8 @@ The token defaults to the rule's scope contract. If explicitly specified, it mus
 
 The document describes a rolling-window cap, while the exact accounting and reset behavior belongs to the deployed sibling implementation. Review that implementation and its supported token operations when designing a spending policy. The interpreter's stateless proof does not establish accounting correctness.
 
+Document updates also matter. An in-place rule edit preserves a policy's state when its install parameters are unchanged. Changing the cap's parameters reinstalls the spending limit, and replacing the rule reinstalls every policy; both start an empty spending window. The account's cost model chooses between editing and replacing a changed rule, so a cap is not a persistent budget across document changes. See the [current spending-budget limitation](https://github.com/stellar-registry/perch/blob/main/docs/DEFERRED.md#persistent-spending-budgets-across-replacements).
+
 ## Why this boundary exists
 
 Imagine two histories that end with identical invocation inputs: one account has spent nothing, the other has exhausted its allowance. A stateless function sees the same input in both cases and must return the same result. Enforcing a different decision requires additional state.

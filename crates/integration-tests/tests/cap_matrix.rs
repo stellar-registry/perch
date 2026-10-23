@@ -15,9 +15,7 @@ use soroban_sdk::{
     contract, crypto::Hash, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString,
     Symbol, Val,
 };
-use stellar_accounts::smart_account::{
-    add_context_rule, do_check_auth, AuthPayload, ContextRuleType, Signer,
-};
+use stellar_accounts::smart_account::{add_context_rule, AuthPayload, ContextRuleType, Signer};
 
 use perch_testkit::auth_digest;
 
@@ -69,6 +67,7 @@ fn cap_doc(pubkey_hex: &str) -> perch_ir::PolicyDoc {
                 period_ledgers: PERIOD_LEDGERS,
             }),
         }],
+        recovery: None,
     }
 }
 
@@ -156,7 +155,7 @@ fn payload_hash(env: &Env) -> Hash<32> {
 
 fn signed_payload(w: &World) -> AuthPayload {
     let ids = vec![&w.env, w.rule_id];
-    let digest = auth_digest(&w.env, &payload_hash(&w.env).to_bytes(), &ids);
+    let digest = auth_digest(&w.env, &w.account, &payload_hash(&w.env).to_bytes(), &ids);
     let sig = w.signing_key.sign(&digest).to_bytes();
     let signer = Signer::External(w.verifier.clone(), w.pubkey.clone().into());
     let signers: Map<Signer, Bytes> = map![&w.env, (signer, Bytes::from_array(&w.env, &sig))];
@@ -189,7 +188,9 @@ fn run(w: &World, amount: i128) -> Result<(), ()> {
     let contexts = vec![&w.env, transfer_ctx(w, amount)];
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         w.env.as_contract(&w.account, || {
-            do_check_auth(&w.env, &hash, &payload, &contexts).unwrap();
+            // Via the account's `check_auth` so the signer-signed digest is the
+            // address-bound one; `check_auth` wraps OZ's `do_check_auth`.
+            perch_smart_account::check_auth(&w.env, &hash, &payload, &contexts).unwrap();
         });
     }));
     r.map_err(|_| ())

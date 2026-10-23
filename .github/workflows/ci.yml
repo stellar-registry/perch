@@ -28,24 +28,193 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+          # The release-stack step asks whether the deployment's source
+          # commit is in this branch's history.
+          fetch-depth: 0
+      # Pinned to the v1 tag on master, whose history is never rewritten; the
+      # `stable` branch is regenerated, which orphans any commit pinned on it.
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
+          toolchain: stable
           targets: wasm32v1-none
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # Before any step can rewrite it: a Cargo.lock that disagrees with the
+      # manifests (a version bump without the lock refresh) is a failure, not
+      # something the build silently fixes in this checkout only.
+      - name: Cargo.lock matches the manifests
+        run: cargo metadata --locked --format-version 1 >/dev/null
       # z3 backs the perch-analyze SMT tests (they skip loudly when absent).
       - run: sudo apt-get update && sudo apt-get install -y z3
-      # The account pins its infra to the sha256 of the deployed wasm, read at
-      # build time from crates/perch-smart-account/wasm/*.wasm (git-ignored). Fetch
-      # them from the deployment before anything compiles the account.
+      # The account and the factory build from their committed pins
+      # (crates/*/wasm/); some tests also load the pinned wasm bytes. Fetch
+      # them, hash- and address-checked, from deployments/testnet.json; the
+      # deployed stack lands in target/stack for the release-stack suite
+      # below.
       - uses: ./.github/actions/fetch-infra-wasm
+        with:
+          stack: target/stack
+      # Classify the recorded deployment against this source, three ways, so a
+      # deployment that is merely behind this branch's contracts reads as a
+      # non-blocking "redeploy" signal, not as a regression (scripts/deployment-state.sh):
+      #   foreign  deployed commit not in this history (a rebased PR, or a
+      #            squash-merged main that dropped the deploy commit): pin this
+      #            source's own build; the deployed-bytes checks skip.
+      #   stale    an ancestor, but a deployable contract's source changed
+      #            since: the deployed bytes are older than this source, so the
+      #            deployed-bytes *behavioral* suite is skipped and a
+      #            non-blocking notice is emitted. The manifest self-checks
+      #            (testnet_pins, verify-deployment.sh) still run.
+      #   current  an ancestor and every contract tree is byte-identical: the
+      #            deployed-bytes behavioral suite is a hard gate.
+      # release-stack-source below always gates HEAD's own fresh bytes, so
+      # demoting the deployed-bytes suite under stale/foreign loses no safety.
+      - name: Classify the deployment against this source
+        id: deployment
+        run: |
+          deployed="$(jq -r .source.commit deployments/testnet.json)"
+          state="$(scripts/deployment-state.sh)"
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          case "$state" in
+            foreign)
+              echo "::notice::deployments/testnet.json was built from $deployed, outside this branch's history: pinning this source's build; deployed-bytes checks skip until the next deployment" ;;
+            stale)
+              changed="$(scripts/deployment-state.sh --changed | paste -sd, -)"
+              echo "::warning::deployment behind: contract sources changed since $deployed ($changed); the deployed-bytes behavioral suite is skipped — redeploy to re-gate it" ;;
+            current)
+              echo "::notice::deployment $deployed matches this source: the deployed-bytes behavioral suite runs as a hard gate" ;;
+          esac
+      - name: Pin this source's build
+        if: steps.deployment.outputs.state == 'foreign'
+        run: |
+          scripts/build-stack.sh --builder contract \
+            --network-passphrase "$(jq -r .network_passphrase deployments/testnet.json)" \
+            --out target/source-stack
       - run: cargo fmt --all --check
-      - run: cargo clippy --workspace --all-targets -- -D warnings
-      - run: cargo test --workspace
+      - run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: cargo test --workspace
+        env:
+          STATE: ${{ steps.deployment.outputs.state }}
+        run: |
+          case "$STATE" in
+            # Fresh source build: its pins no longer match the (foreign)
+            # manifest, so skip the manifest pin check.
+            foreign) cargo test --locked --workspace -- --skip consumers_pin_the_deployment_manifest ;;
+            # Deployed bytes are older than this source: skip the factory
+            # tests that run the deployed account wasm against this source's
+            # infra (HEAD's expectations against older bytes; during a
+            # pending registry migration the deployed account also derives
+            # the old registry); the manifest pin check still holds.
+            stale) cargo test --locked --workspace -- \
+                     --skip a_new_passkey_account_applies_a_document_signed_by_its_passkey \
+                     --skip a_passkey_account_lands_at_its_predicted_address_with_the_passkey_as_admin ;;
+            # Deployed bytes match this source: every check is a hard gate.
+            current) cargo test --locked --workspace ;;
+          esac
+      # The manifest against the chain: every contract at its content address
+      # running its recorded wasm, and what the factory, adapter, pool, and
+      # exercised accounts actually resolve.
+      - run: scripts/verify-deployment.sh
+      # Every recovery flow through the deployed bytes, with real proofs from
+      # the pinned nargo/bb under enforcing authorization — the deployed-bytes
+      # behavioral suite. A hard gate only when the deployment is `current`
+      # (every deployable contract's source byte-identical to the deployed
+      # commit's); a `stale` or `foreign` deployment runs other contract code
+      # than this source describes, so this is skipped (release-stack-source
+      # runs the suite on this source's fresh bytes, and verify-deployment.sh
+      # above still checks the chain against the manifest).
+      - name: Release stack with real proofs
+        if: steps.deployment.outputs.state == 'current'
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo test -p perch-integration-tests --test release_stack -- --ignored --test-threads 2 \
+            --skip cap_sweep
       # Wasm leg of the conformance vectors: the compiled artifact must agree
       # with the vectors under the soroban host (rustc/LLVM/wasmi in the loop).
       - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release
       - run: cargo test -p perch-conformance --test wasm_leg -- --ignored
+      # The ML-DSA verifier verifies in guest wasm, so its cost is its own
+      # code: the release wasm's metered instructions and memory, within the
+      # budget rule, and a stack sized to it (crates/perch-mldsa-verifier/build.rs).
+      - run: stellar contract build --package perch-mldsa-verifier
+      - run: cargo test -p perch-mldsa-verifier --test costs -- --ignored --nocapture
+
+  # The PR's own source as a deployment of it would run: every contract built
+  # in pin order by scripts/build-stack.sh (tier 0, then the account against
+  # tier 0's hashes, then the factory against the account's), then every
+  # recovery flow through those fresh bytes with real proofs. The rust job
+  # above checks the deployed bytes; this one catches a change that only a
+  # rebuilt stack would break.
+  release-stack-source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: ./.github/actions/setup-stellar
+      # Core `stellar contract build`: the deployed builds' code without
+      # scaffold's name/version metadata. The registry is the one the
+      # committed registry path derives on testnet, so every address is where
+      # a deployment would put it. The suite also runs the one built account
+      # and factory under several networks.
+      - name: Build the stack from source in pin order
+        run: |
+          scripts/build-stack.sh --builder contract \
+            --network-passphrase "$(jq -r .network_passphrase deployments/testnet.json)" \
+            --out target/source-stack
+      - name: Release stack with real proofs, on the fresh wasm
+        env:
+          PERCH_STACK_DIR: target/source-stack
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo test -p perch-integration-tests --test release_stack -- --ignored --test-threads 2 \
+            --skip cap_sweep
+
+  # The account and the factory build from a plain checkout: their build-time
+  # pins (crates/*/wasm/registry.path and *.sha256) are committed, so a cargo
+  # git dependency on perch builds with no fetch script and no network. The
+  # pins must equal deployments/testnet.json (its registry the one the path
+  # derives, or a migration deployments/pending-registry.json declares), the
+  # release scripts' derivation must be the account's own, and
+  # perch-smart-account,
+  # perch-account, and perch-account-factory, depended on by git rev, must
+  # build offline from cargo's clean checkout, to the same wasm as this
+  # checkout.
+  committed-pins:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Committed pins match deployments/testnet.json
+        run: scripts/check-pins.sh
+      # The release scripts derive contract ids in Python
+      # (scripts/derive-id.py), with no toolchain; the account derives them
+      # in Rust (crates/perch-derive-id runs its compiled-in derivation). They
+      # must agree on every network and on every address a deployment
+      # records, or the release path would compute addresses the account
+      # never resolves.
+      - name: The release scripts derive what the account derives
+        run: |
+          cargo build --locked -q -p perch-derive-id
+          PERCH_RUST_DERIVE_ID=target/debug/perch-derive-id python3 scripts/test-release-scripts.py DeriveId
+      - uses: ./.github/actions/setup-stellar
+      - name: Build perch as a git dependency, without fetching
+        run: scripts/check-git-dep.sh --compare --out target/git-dep
 
   # Flux refinement verification of perch-program (nidohq/soroban-flux).
   # Runs under flux's pinned nightly; the deploy/test toolchain stays stable.
@@ -135,8 +304,13 @@ jobs:
       fail-fast: false
       matrix:
         # One leg per npm package (see packages/): perch-js is the PolicyDoc
-        # surface, perch-interpreter-js the interpreter contract bindings.
-        package: [perch-js, perch-interpreter-js]
+        # surface, perch-interpreter-js the interpreter contract bindings,
+        # perch-zk the ZK recovery proof helpers and pool indexer (proves with
+        # bb.js in-test), perch-relay the guardian-approval relay,
+        # perch-contracts the stack bindings generated from the deployment,
+        # perch-artifacts the deployment manifests, circuits, vectors, and
+        # limits as files (checked byte for byte against their sources).
+        package: [perch-js, perch-interpreter-js, perch-zk, perch-relay, perch-contracts, perch-artifacts]
     defaults:
       run:
         working-directory: packages/${{ matrix.package }}
@@ -159,6 +333,82 @@ jobs:
       - name: Check book teaching models
         if: matrix.package == 'perch-js'
         run: node --test ../../book/tests/*.test.cjs
+
+  # The release workflow's version-bump scoping (scripts/release-deps.py:
+  # what re-releases a contract besides its crate trees, and that every
+  # paths_for() list covers the crates its contract links), that its npm
+  # lists name every package under packages/, and the stack builder's dirty
+  # check (scripts/source-dirty.sh), with release.yml's
+  # pinned git-cliff.
+  release-scripts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install git-cliff
+        run: |
+          mkdir -p "$RUNNER_TEMP/gc"
+          curl -fsSL https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-unknown-linux-gnu.tar.gz -o "$RUNNER_TEMP/gc.tar.gz"
+          echo "bb40f68e752db1a32526c43e0108e8eff785f7c24c67024cffe1c316e034372975fd78c9af8e9a48148235aad15c9a103f1a5b490c282f1db09a7a793794b69f  $RUNNER_TEMP/gc.tar.gz" | sha512sum -c -
+          tar -xz -C "$RUNNER_TEMP/gc" --strip-components=1 -f "$RUNNER_TEMP/gc.tar.gz"
+          echo "$RUNNER_TEMP/gc" >>"$GITHUB_PATH"
+      - run: python3 scripts/test-release-scripts.py
+        env:
+          PERCH_REQUIRE_GIT_CLIFF: "1"
+
+  # Every npm package as `npm publish` would ship it: packed, installed from
+  # the tarball into an empty project, every entry point imported, every
+  # command run, and perch-artifacts' files compared with their sources.
+  # Nothing is published.
+  packages:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: scripts/check-packages.sh
+
+  # ZK recovery: the circuit's own tests, a byte-for-byte rebuild of every
+  # committed artifact (ACIR, VKs, proof fixtures, manifest) with the pinned
+  # toolchain, and the metered on-chain costs of the compiled pool/adapter.
+  zk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No toolchain action: rustup installs the channel and the wasm32v1-none
+      # target from rust-toolchain.toml on first use.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # scripts/zk-toolchain.sh installs the pinned nargo/bb under target/
+      # (checksummed) on first use and prints NARGO/BB; later calls are no-ops.
+      - name: Circuit tests
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cd circuits && "$NARGO" test --workspace
+      - name: Artifacts reproduce, and committed ZK proofs verify
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- check
+      - name: Metered costs within the per-transaction limits
+        run: |
+          eval "$(scripts/zk-toolchain.sh)"
+          cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- bench 1
+          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter
+          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter \
+            --features perch-zk-pool/tree-depth-24,perch-zk-adapter/tree-depth-24 \
+            --target-dir target/zk-d24
+          cargo test -q -p perch-zk-adapter --test costs -- --ignored --nocapture --test-threads 1
 
   zizmor:
     runs-on: ubuntu-latest

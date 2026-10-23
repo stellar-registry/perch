@@ -93,7 +93,9 @@ The model represents already-decoded values with explicit failure cases. It does
 
 Suppose an emitter turns documents into canonical text, and a parser can always recover the original modeled document from that text. Two distinct documents cannot then emit the same text: parsing it would have to recover two different originals. That is the idea behind `pDoc_rt` and `emitDoc_injective`.
 
-This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. It also requires attention to the model's domain. The current `CPrincipals` model includes `all` and `selfAuth`, **but not `threshold`**. The canonical model does include cap fields. Do not extend the injectivity theorem to threshold documents without extending the model and proof.
+This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. The current `CPrincipals` model includes `all`, `threshold`, and `selfAuth`. The canonical model covers every document shape, including cap fields and the optional recovery configuration. This coverage concerns the bytes that identify a document; it does not prove threshold signer selection or recovery execution.
+
+The model also proves uniqueness and separation of the preimages used for `config_hash` and `rule_hash`: one identifies a recovery configuration, the other one rule's text. Shared fixtures and tests connect those modeled bytes to Rust and TypeScript. The recovery controller, account authorization, and delta installation remain outside these proofs; the [formal README](https://github.com/stellar-registry/perch/blob/main/formal/README.md) lists the exact statements and assumptions.
 
 The [next chapter](assurance.md) explains how these mathematical results connect to the shipped implementation.
 

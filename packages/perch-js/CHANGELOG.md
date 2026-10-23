@@ -4,6 +4,31 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.4.1] - 2026-10-21
+
+### 📚 Documentation
+
+- Audit documentation for the recovery stack and policy language (#133)
+
+## [0.4.0] - 2026-10-15
+
+### 🚀 Features
+
+- Versioned JSON Schema for PolicyDoc (#120)
+
+## [0.3.2] - 2026-10-10
+
+### 💼 Other
+
+- One controller and the shared account capabilities (epic #99 WS3) (#102)
+- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
+
+## [0.3.0] - 2026-09-24
+
+### 🚀 Features
+
+- *(recovery)* Stage 4 — recovery schema, shared controller, compiler + client support
+
 ## [0.2.0] - 2026-09-09
 
 ### 🚀 Features

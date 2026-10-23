@@ -1,0 +1,11 @@
+{
+  "deployments": "deployments",
+  "circuits": "circuits",
+  "vectors/auth-vectors.json": "testdata/auth/auth-vectors.json",
+  "vectors/diagnostic-events.json": "testdata/auth/diagnostic-events.json",
+  "vectors/statement-v2.json": "testdata/recovery/statement-v2.json",
+  "vectors/rule-hashes.json": "testdata/rule-hashes.json",
+  "vectors/eval-vectors.json": "testdata/eval/eval-vectors.json",
+  "scripts/fetch-infra-wasm.sh": "scripts/fetch-infra-wasm.sh",
+  "scripts/zk-toolchain.sh": "scripts/zk-toolchain.sh"
+}

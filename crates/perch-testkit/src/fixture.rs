@@ -6,7 +6,7 @@
 //! upstream layout change is fixed once, not per test file.
 
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{contract, contractimpl, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Vec};
 use std::fs;
 use std::path::PathBuf;
 use stellar_accounts::verifiers::Verifier;
@@ -48,11 +48,15 @@ pub fn ci_publish_doc_hash(env: &Env) -> BytesN<32> {
     )
 }
 
-/// The digest `do_check_auth` binds and the verifier checks:
-/// `sha256(payload || rule_ids.to_xdr())`. THE reference copy — it byte-matches
-/// OZ `do_check_auth`'s preimage.
-pub fn auth_digest(env: &Env, payload: &BytesN<32>, ids: &Vec<u32>) -> [u8; 32] {
-    let mut preimage = payload.to_bytes();
+/// The digest a Perch account's `check_auth` makes an `External` signer
+/// authenticate against: `sha256(bound_payload || rule_ids.to_xdr())`, where
+/// `bound_payload = sha256(AUTH_ADDR_DOMAIN || account_id || payload)` folds
+/// the account's own address in (the `addr_oz_v1` scheme). THE reference copy;
+/// `integration-tests/tests/auth_vectors.rs` pins it against the digest the
+/// on-chain `check_auth` actually hands a verifier.
+pub fn auth_digest(env: &Env, account: &Address, payload: &BytesN<32>, ids: &Vec<u32>) -> [u8; 32] {
+    let bound = perch_smart_account::bind_signature_payload_for_account(env, account, payload);
+    let mut preimage = Bytes::from_array(env, &bound.to_array());
     preimage.append(&ids.clone().to_xdr(env));
     env.crypto().sha256(&preimage).to_array()
 }

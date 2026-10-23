@@ -1,4 +1,4 @@
-//! `perch-testkit` — one-call bootstrap of the perch registry + stateless infra
+//! `perch-testkit` — one-call bootstrap of the perch registry + constructorless infra
 //! + account for tests.
 //!
 //! Every perch e2e suite used to re-implement a `struct World`/`fn setup()` to
@@ -14,7 +14,8 @@
 //!     .build();
 //!
 //! let doc = soroban_sdk::Bytes::from_slice(&w.env, perch_testkit::fixture().as_bytes());
-//! let _hash = w.account_client().apply_doc(&doc, &w.compiler, &w.interpreter);
+//! // `approval_valid_until` matters only to a `Protected` reconfiguration.
+//! let _hash = w.account_client().apply_doc(&doc, &0, &None);
 //! ```
 //!
 //! # Modes
@@ -34,10 +35,12 @@
 //!
 //! [`Env`]: soroban_sdk::Env
 
+pub mod delta;
 pub mod faithful;
 pub mod fixture;
 pub mod manifest;
 pub mod native;
+pub mod passkey;
 
 pub use fixture::{
     auth_digest, ci_publish_doc_hash, fixture, AnyKeyVerifier, CI_PUBLISH_DOC_HASH,

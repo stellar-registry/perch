@@ -4,6 +4,70 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.5.1] - 2026-10-22
+
+### 📚 Documentation
+
+- *(contracts)* Correct and complete the contract interface docs
+
+## [0.5.0] - 2026-10-21
+
+### 🚜 Refactor
+
+- [**breaking**] Rename the stateless registry to constructorless (#151)
+
+## [0.4.0] - 2026-10-21
+
+### 🚀 Features
+
+- *(perch-registry-resolve)* [**breaking**] Derive the infra registry from the Stellar Registry root; release-path hardening (#146)
+
+### 📚 Documentation
+
+- Audit documentation for the recovery stack and policy language (#133)
+
+## [0.3.3] - 2026-10-15
+
+### 🐛 Bug Fixes
+
+- *(perch-ir)* Refuse documents the compiler would trap on or could never enforce
+- *(perch-program)* Match a string prefix against an argument of any length
+- *(perch-smart-account)* Treat a signer reorder as a rule change in delta apply
+
+## [0.3.2] - 2026-10-12
+
+### 🐛 Bug Fixes
+
+- *(smart-account)* Bind external signer authorization to the account
+- *(doc-compiler)* Refuse non-canonical webauthn keys
+- *(recovery)* Keep recovery targets installable
+
+## [0.3.1] - 2026-10-09
+
+### 💼 Other
+
+- Authoritative spec, one recovery statement, and the ZK adapter interface (epic #99 WS1) (#100)
+- One controller and the shared account capabilities (epic #99 WS3) (#102)
+- OZ materialization layer: quiet OZ mutations, reconcile_signers, OZ fork re-pin, caps 8x11 (epic #99, split from #103) (#111)
+- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
+- Recovery canonicalization assurance and an honest coverage statement (epic #99) (#104)
+- Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
+
+## [0.3.0] - 2026-09-24
+
+### 🚀 Features
+
+- *(recovery)* Stage 4 — recovery schema, shared controller, compiler + client support
+
+### 🐛 Bug Fixes
+
+- *(doc-compiler)* Unblock 0.2.0 cap-capable release, republish as 0.2.1 (#79)
+- *(recovery)* Close review-surfaced auth/timing gaps; reframe docs as standalone
+
+### 🚜 Refactor
+
+- *(recovery)* Convert 0-or-1 Vec fields to Option where the SDK allows it
+
 ## [0.2.0] - 2026-09-09
 
 ### 🚀 Features

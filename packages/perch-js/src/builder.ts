@@ -134,10 +134,99 @@ export class RuleBuilder {
   }
 }
 
+/** The zero-knowledge factor of a {@link RecoveryModeSpec}, mirroring
+ *  perch-ir's `ZkFactor`. Every field is required. */
+export interface ZkFactorSpec {
+  /** The ZK adapter the controller calls (C-strkey). It pins its proof
+   *  verifier at build time. */
+  adapter: string;
+  /** `sha256` of the verifier's verification key, 64 lowercase hex chars. */
+  circuitId: string;
+  /** The membership pool (C-strkey) whose roots proofs must use. */
+  pool: string;
+  /** 32 random bytes naming the enrolled credential, 64 lowercase hex chars.
+   *  An account never enrolls the same id twice. */
+  enrollmentId: string;
+  /** The credential's inner commitment `Poseidon2(DOM_LEAF, secret)`, 64
+   *  lowercase hex chars encoding a canonical BN254 field element. */
+  commitment: string;
+}
+
+/** How a recovery attempt is authorized, camelCase like the other builder
+ *  inputs; {@link PolicyBuilder.recovery} maps it onto the kebab-case,
+ *  type-tagged wire shape. Guardian-only carries no ZK field to leave unset,
+ *  and zk-only carries no guardian field — mirroring perch-ir's
+ *  `RecoveryMode` enum, so guardian-only recovery needs no ZK machinery. */
+export type RecoveryModeSpec =
+  | { kind: 'guardian-only'; guardians: string[]; quorum: number }
+  | ({ kind: 'zk-only' } & ZkFactorSpec)
+  | ({ kind: 'combined'; guardians: string[]; quorum: number } & ZkFactorSpec);
+
+/** Opt-in account-recovery enrollment, camelCase like the other builder
+ *  inputs; {@link PolicyBuilder.recovery} maps it onto perch-ir's
+ *  `RecoveryConfig` wire shape. See `docs/recovery/` for the full design —
+ *  this is reviewable configuration, never the recovery attempt itself. */
+export interface RecoverySpec {
+  profile: 'loss' | 'protected';
+  mode: RecoveryModeSpec;
+  /** The adopted recovery-controller instance's address (C-strkey). */
+  controller: string;
+  /** Canonical `doc_hash` of the previously-approved baseline document
+   *  suspected-compromise recovery restores. Omit to restrict enrollment to
+   *  lost-key recovery only. */
+  baseline?: { docHash: string };
+  /** Declared signer ids (`doc.signers[].id`) a recovery attempt may replace.
+   *  Must be non-empty. */
+  replaceable: string[];
+  delayLedgers: number;
+  expiryLedgers: number;
+  maxCancels: number;
+}
+
+export function recoverySpecToWire(spec: RecoverySpec): Record<string, unknown> {
+  return {
+    profile: spec.profile,
+    mode: recoveryModeToWire(spec.mode),
+    controller: spec.controller,
+    ...(spec.baseline !== undefined ? { baseline: { 'doc-hash': spec.baseline.docHash } } : {}),
+    replaceable: spec.replaceable,
+    'delay-ledgers': spec.delayLedgers,
+    'expiry-ledgers': spec.expiryLedgers,
+    'max-cancels': spec.maxCancels,
+  };
+}
+
+function recoveryModeToWire(mode: RecoveryModeSpec): Record<string, unknown> {
+  switch (mode.kind) {
+    case 'guardian-only':
+      return { type: 'guardian-only', guardians: mode.guardians, quorum: mode.quorum };
+    case 'zk-only':
+      return { type: 'zk-only', ...zkFactorToWire(mode) };
+    case 'combined':
+      return {
+        type: 'combined',
+        guardians: mode.guardians,
+        quorum: mode.quorum,
+        ...zkFactorToWire(mode),
+      };
+  }
+}
+
+function zkFactorToWire(zk: ZkFactorSpec): Record<string, unknown> {
+  return {
+    adapter: zk.adapter,
+    'circuit-id': zk.circuitId,
+    pool: zk.pool,
+    'enrollment-id': zk.enrollmentId,
+    commitment: zk.commitment,
+  };
+}
+
 export class PolicyBuilder {
   private _network?: string;
   private readonly _signers: SignerDecl[] = [];
   private readonly _rules: RuleBuilder[] = [];
+  private _recovery?: Record<string, unknown>;
 
   network(name: string): this {
     this._network = name;
@@ -157,6 +246,11 @@ export class PolicyBuilder {
     this._rules.push(rb);
     return this;
   }
+  /** Enroll opt-in account recovery. See {@link RecoverySpec}. */
+  recovery(spec: RecoverySpec): this {
+    this._recovery = recoverySpecToWire(spec);
+    return this;
+  }
 
   /** Assemble and validate the document (throws on any schema violation). */
   build(): PolicyDoc {
@@ -166,6 +260,7 @@ export class PolicyBuilder {
       rules: this._rules.map((r) => r.toWire()),
     };
     if (this._network !== undefined) doc.network = this._network;
+    if (this._recovery !== undefined) doc.recovery = this._recovery;
     return parsePolicyDoc(doc);
   }
 }

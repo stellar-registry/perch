@@ -1,0 +1,3 @@
+[workspace]
+members = ["perch_zk", "perch_zk_recovery", "perch_zk_recovery_d24"]
+default-member = "perch_zk_recovery"

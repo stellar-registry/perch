@@ -1,0 +1,24 @@
+[package]
+name = "perch-recovery-interface"
+description = "The one recovery statement, its canonical encoding, and the ZK adapter / membership-pool interfaces the recovery controller calls"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+doctest = false
+
+# A plain library: no `#[contract]` lives here, so linking it into the
+# controller, the ZK adapter, the pool, and the account never collides
+# exported entry points, and none of those deployables has to depend on
+# another deployable's crate to agree on the statement (no circular
+# build-time pins — see docs/recovery/spec.md §16).
+[dependencies]
+soroban-sdk = { workspace = true }
+soroban-sdk-tools = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+hex = "0.4"
+serde_json = "1"

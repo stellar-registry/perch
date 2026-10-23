@@ -13,7 +13,7 @@ use soroban_sdk::{
     Symbol, Val,
 };
 use stellar_accounts::smart_account::{
-    add_context_rule, do_check_auth, remove_context_rule, AuthPayload, ContextRuleType, Signer,
+    add_context_rule, remove_context_rule, AuthPayload, ContextRuleType, Signer,
 };
 
 use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY as REGISTRY};
@@ -89,7 +89,7 @@ fn setup(valid_until: Option<u32>) -> World {
 /// A signed auth payload from the ci key for `rule_id`.
 fn signed_payload(w: &World, payload: &Hash<32>) -> AuthPayload {
     let ids = vec![&w.env, w.rule_id];
-    let digest = auth_digest(&w.env, &payload.to_bytes(), &ids);
+    let digest = auth_digest(&w.env, &w.account, &payload.to_bytes(), &ids);
     let sig = w.signing_key.sign(&digest).to_bytes();
     let sig_bytes = Bytes::from_array(&w.env, &sig);
     let signer = Signer::External(w.verifier.clone(), w.pubkey.clone().into());
@@ -126,7 +126,10 @@ fn run(w: &World, payload: &AuthPayload, ctx: Context) -> Result<(), ()> {
     let contexts = vec![&w.env, ctx];
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         w.env.as_contract(&w.account, || {
-            do_check_auth(&w.env, &hash, payload, &contexts).unwrap();
+            // The account's own `check_auth` (which binds the digest to the
+            // account address) around OZ's `do_check_auth`, so rule selection
+            // runs against the address-bound digest the signer actually signed.
+            perch_smart_account::check_auth(&w.env, &hash, payload, &contexts).unwrap();
         });
     }));
     r.map_err(|_| ())

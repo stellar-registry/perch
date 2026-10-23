@@ -1,0 +1,35 @@
+name: Set up the smart-account-signing Stellar CLI
+description: >
+  Install the pinned, checksummed theahaco/stellar-cli fork (signs a smart
+  account's authorization by discovering its on-chain context rule) and,
+  optionally, the pinned, checksummed stellar-scaffold plugin.
+inputs:
+  scaffold:
+    description: "Also install stellar-scaffold (needed only to build the stack)."
+    required: false
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - name: Install the stellar-cli fork
+      shell: bash
+      # Version-pinned AND integrity-checked: the deploy-stack publish job
+      # hands this `stellar` the CI publish seed, so a swapped release asset
+      # could exfiltrate it.
+      run: |
+        set -euo pipefail
+        curl -fsSL -o /tmp/stellar.tgz \
+          "https://github.com/theahaco/stellar-cli/releases/download/v28.0.0-aha.0/stellar-cli-28.0.0-aha.0-x86_64-unknown-linux-gnu.tar.gz"
+        echo "580a2d469767028e575e1c57ccf55bc5a661c0ee4032fd52aaeabb9098943685  /tmp/stellar.tgz" | sha256sum -c -
+        sudo tar -xzf /tmp/stellar.tgz -C /usr/local/bin stellar
+        stellar --version
+    - name: Install stellar-scaffold
+      if: inputs.scaffold == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL -o /tmp/scaffold.tgz \
+          "https://github.com/AhaLabs/scaffold-stellar/releases/download/stellar-scaffold-cli-v0.0.27/stellar-scaffold-cli-v0.0.27-x86_64-unknown-linux-gnu.tar.gz"
+        echo "f24709de57e33155efd72547c9286b522d4360a379bde5af9eeb5519396f10cc  /tmp/scaffold.tgz" | sha256sum -c -
+        sudo tar -xzf /tmp/scaffold.tgz -C /usr/local/bin stellar-scaffold
+        stellar scaffold --version

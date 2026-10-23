@@ -8,9 +8,10 @@
 //! Also asserts the plan-shape invariants on every generated document:
 //! INV-1 (an interpreter-attached rule denies zero-signature auth), INV-2
 //! (constraint-free + cap-free rules lower policy-free), the
-//! `not_after_ledger → valid_until = X-1` boundary, and that the on-chain
-//! `doc_hash` (host sha256 over canonical bytes) equals the std-side
-//! `perch_ir::doc_hash` (sha2 crate) — two hash paths, one identity.
+//! `not_after_ledger → valid_until = X-1` boundary, and that each program's
+//! provenance (host sha256 over the domain-prefixed canonical rule bytes)
+//! equals the std-side `perch_ir::rule_hash` (sha2 crate) — two hash paths,
+//! one identity.
 //!
 //! Randomness is fixed-seed splitmix64, per the security-core convention.
 
@@ -82,14 +83,11 @@ fn gen_arg_pred(rng: &mut Rng) -> ArgPred {
             ArgPred::StringIn(StringInPred { values })
         }
         _ => ArgPred::StringPrefix(StringPrefixPred {
-            // Occasionally an over-long prefix: valid per perch-ir (no length
-            // limit), lowered verbatim, and must fail closed at eval time —
-            // exercises the prefix-side str_bytes failure path in leaf.rs.
-            prefix: if rng.chance(6) {
-                "x".repeat(257)
-            } else {
-                STRINGS[rng.below(STRINGS.len() as u32) as usize].into()
-            },
+            // perch-ir refuses a prefix longer than MAX_STRING_PRED_LEN (the
+            // interpreter could never evaluate it, so the whole predicate
+            // would be unsatisfiable), so valid documents carry only prefixes
+            // within the limit.
+            prefix: STRINGS[rng.below(STRINGS.len() as u32) as usize].into(),
         }),
     }
 }
@@ -223,6 +221,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
         },
         signers,
         rules,
+        recovery: None,
     }
 }
 
@@ -285,11 +284,15 @@ fn ref_pred(pred: &ArgPred, inv: &GInv, index: u32) -> Verdict {
         },
         ArgPred::StringPrefix(p) => match arg {
             GVal::Str(s) => {
-                if s.len() > MAX_STR || p.prefix.len() > MAX_STR {
+                if p.prefix.len() > MAX_STR {
+                    // An over-long prefix is unsatisfiable; perch-ir refuses it,
+                    // so a valid document never reaches here.
                     Verdict::Unknown
                 } else if p.prefix.len() > s.len() {
                     Verdict::False
                 } else {
+                    // Only the argument's first prefix-length bytes are read,
+                    // so the argument's own length is unbounded.
                     Verdict::from(s.as_bytes()[..p.prefix.len()] == *p.prefix.as_bytes())
                 }
             }
@@ -405,9 +408,6 @@ fn compiled_programs_agree_with_the_doc_level_reference() {
         let plan = compile(&env, &doc, &cfg).expect("valid documents must lower");
         assert_eq!(plan.rules.len(), doc.rules.len());
 
-        // Two hash paths, one identity: host sha256 (compile) == sha2 (std).
-        let std_hash = perch_ir::doc_hash(&doc);
-
         for (rule, lowered) in doc.rules.iter().zip(plan.rules.iter()) {
             // Expiry boundary: dead at X ⇒ valid through X-1.
             assert_eq!(
@@ -435,10 +435,11 @@ fn compiled_programs_agree_with_the_doc_level_reference() {
                 continue;
             };
             lowered_rules += 1;
+            // Two hash paths, one identity: host sha256 (compile) == sha2 (std).
             assert_eq!(
                 install.doc_hash.to_array(),
-                std_hash,
-                "on-chain doc_hash diverged from perch_ir::doc_hash"
+                perch_ir::rule_hash(rule),
+                "on-chain rule hash diverged from perch_ir::rule_hash"
             );
             rpn::validate(&install.program).expect("compiled programs always validate");
 

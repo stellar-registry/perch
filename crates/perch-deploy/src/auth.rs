@@ -31,6 +31,31 @@ pub fn oz_auth_digest(signature_payload: &[u8; 32], rule_ids: &[u32]) -> Result<
     Ok(Sha256::digest(&preimage).into())
 }
 
+/// Domain tag binding an account's digest to its own address. MUST match
+/// `perch_smart_account::AUTH_ADDR_DOMAIN`; pinned against the account's
+/// on-chain `check_auth` by `integration-tests/tests/auth_vectors.rs`.
+pub const AUTH_ADDR_DOMAIN: &[u8] = b"perch/account/auth-addr-v1";
+
+/// The digest an `External` signer of a Perch account signs (the `addr_oz_v1`
+/// scheme): the host `signature_payload` is first folded together with the
+/// account's own 32-byte contract id —
+/// `bound = sha256(AUTH_ADDR_DOMAIN || account_id || signature_payload)` — and
+/// then OZ's rule-id binding is layered on top. The address fold stops a
+/// signature made for one account from authorizing another that shares the key
+/// and rule ids. (`Signer::Delegated` signers do not use this digest.)
+pub fn perch_auth_digest(
+    account_id: &[u8; 32],
+    signature_payload: &[u8; 32],
+    rule_ids: &[u32],
+) -> Result<[u8; 32]> {
+    let mut preimage = Vec::with_capacity(AUTH_ADDR_DOMAIN.len() + 64);
+    preimage.extend_from_slice(AUTH_ADDR_DOMAIN);
+    preimage.extend_from_slice(account_id);
+    preimage.extend_from_slice(signature_payload);
+    let bound: [u8; 32] = Sha256::digest(&preimage).into();
+    oz_auth_digest(&bound, rule_ids)
+}
+
 /// The `Signer::External(verifier, key)` ScVal. `key` is raw public-key bytes
 /// (32 for ed25519; other verifiers may use longer encodings).
 pub fn external_signer(verifier: &str, key: &[u8]) -> Result<ScVal> {
@@ -185,8 +210,10 @@ fn g_address(strkey: &str) -> Result<ScAddress> {
 }
 
 /// Sign an address-credential auth entry in place: set the expiration (the
-/// simulation nonce is kept), compute payload → OZ digest → raw ed25519
-/// signature, and install the AuthPayload ScVal as the credential signature.
+/// simulation nonce is kept), compute payload → account-bound digest → raw
+/// ed25519 signature, and install the AuthPayload ScVal as the credential
+/// signature. The digest binds the account's own address ([`perch_auth_digest`]),
+/// so the signature authorizes only this account's entry.
 pub fn sign_auth_entry(
     entry: &mut SorobanAuthorizationEntry,
     passphrase: &str,
@@ -199,6 +226,9 @@ pub fn sign_auth_entry(
     let SorobanCredentials::Address(creds) = &mut entry.credentials else {
         bail!("cannot sign a source-account credential entry");
     };
+    let ScAddress::Contract(stellar_xdr::ContractId(Hash(account_id))) = creds.address else {
+        bail!("cannot sign for a non-contract account address");
+    };
     creds.signature_expiration_ledger = signature_expiration_ledger;
     let payload = signature_payload(
         passphrase,
@@ -206,7 +236,7 @@ pub fn sign_auth_entry(
         signature_expiration_ledger,
         &invocation,
     )?;
-    let digest = oz_auth_digest(&payload, &[rule_id])?;
+    let digest = perch_auth_digest(&account_id, &payload, &[rule_id])?;
     let sig = key.signing.sign(&digest).to_bytes();
     creds.signature = auth_payload_scval(verifier, &key.public, &sig, rule_id)?;
     Ok(())

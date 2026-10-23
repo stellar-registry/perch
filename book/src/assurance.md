@@ -36,14 +36,14 @@ At the model level, we rely on Lean's kernel and on choosing the right specifica
 
 The most useful review question is concrete: “Could this evidence detect the failure I am worried about?” An expiry boundary test helps with an off-by-one translation. The stateless lowering theorem cannot settle whether a spending-limit reset is correct.
 
-The [formalization chapter](formalization.md) records the threshold and canonical-model coverage gaps. The [verification plan](https://github.com/stellar-registry/perch/blob/main/docs/verification/PLAN.md) contains both completed work and future work; consult source declarations and CI jobs when determining current coverage, rather than treating every roadmap item as delivered.
+The [formalization chapter](formalization.md) distinguishes canonicalization coverage, including threshold and recovery fields, from the unproved account authorization and recovery behavior. The [verification coverage](https://github.com/stellar-registry/perch/blob/main/docs/verification/PLAN.md) records what is proved, differentially tested, and tested only. Consult source declarations and CI jobs for the exact scope; [deferred work](https://github.com/stellar-registry/perch/blob/main/docs/DEFERRED.md) tracks remaining limitations.
 
 ## Reproduce the evidence
 
 From the repository root, the existing commands are:
 
 ```sh
-just formal             # Lean build: checks the proofs; needs elan/lake
+just formal             # Lean build and axiom audit; needs elan/lake
 just drt                # Rust and Lean replay of shared vectors
 just conformance-wasm   # compiled Wasm replay; needs wasm32v1-none
 ```

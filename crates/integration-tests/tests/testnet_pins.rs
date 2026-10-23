@@ -1,75 +1,131 @@
-//! Guards the **account's actual shipped pins** — the build-time-resolved
-//! `stateless_registry()` id and the `infra::*` modules whose hashes are the
-//! sha256 of the fetched `crates/perch-smart-account/wasm/*.wasm` — against the
-//! live testnet deployment. Binds testnet's network id and asserts (a) the
-//! resolved `stateless_registry()` equals `name-salt(perch registry, "stateless")`
-//! and (b) the pinned wasm hashes derive the exact content-addressed ids live on
-//! testnet. So if the fetched wasm/id is a version that isn't deployed (or drifts),
-//! CI fails here.
-use perch_registry_resolve::registry_contract;
-use perch_smart_account::{infra, stateless_registry};
+//! Guards the build-time pins every consumer **actually compiled in** against
+//! the deployment manifest (`deployments/testnet.json`):
+//!
+//! - the account's and the factory's registry paths
+//!   (`crates/*/wasm/registry.path`) are the same, and on the manifest's
+//!   network they derive the manifest's registry, or the registry a declared
+//!   pending migration names (below);
+//! - the account's `infra::*` modules (hashes = sha256 of the fetched
+//!   `crates/perch-smart-account/wasm/*.wasm`) derive the manifest's
+//!   compiler, interpreter, and spending-limit hashes' content addresses
+//!   under that registry;
+//! - the factory's pinned account wasm hash is the manifest's, and its
+//!   WebAuthn verifier the manifest's hash under that registry;
+//! - every manifest address is the content address of its recorded hash.
+//!
+//! **Pending migration.** When the source derives another registry than the
+//! manifest records, `deployments/pending-registry.json` must declare exactly
+//! that pair for the manifest's network: the source has moved to a layout no
+//! deployment has created yet. The test then checks every hash against the
+//! manifest and every derived address against the declared registry, and
+//! says so. An undeclared mismatch fails, and so does a declaration the
+//! manifest has already caught up with.
+//!
+//! `scripts/fetch-infra-wasm.sh` checks the fetched bytes against the chain
+//! and `scripts/verify-deployment.sh` checks the manifest against the chain;
+//! this test closes the loop on what was compiled. `scripts/check-pins.sh`
+//! applies the same rule offline.
+use perch_account_factory::pins;
+use perch_smart_account::{constructorless_registry, infra};
 use soroban_sdk::testutils::Ledger;
-use soroban_sdk::{Address, Bytes, Env};
+use soroban_sdk::{Address, Bytes, BytesN, Env};
 
-/// The perch registry (`unverified/perch`) on testnet — used to cross-check the
-/// pinned stateless id against `name-salt(perch registry, "stateless")`.
-const PERCH_REGISTRY: &str = "CASB2M4JQSGP3QHFBGK5U6DGJXJX34GX37C2JFBU73LKKDXXNNIZHCP7";
+const MANIFEST: &str = include_str!("../../../deployments/testnet.json");
+const PENDING: &str = include_str!("../../../deployments/pending-registry.json");
 
-// The stateless subregistry by name-salt, and the verifier (content-addressed but
-// not resolved by the account — docs name it directly), pinned here to guard the
-// live ids.
-registry_contract! {
-    mod: stateless,
-    deploy_name: "stateless",
-}
-registry_contract! {
-    mod: verifier,
-    wasm_name: "perch-ed25519-verifier",
-    client: perch_ed25519_verifier::PerchEd25519VerifierClient,
-    hash: "6ddf7cadcb85059cffa5b127f994490ee560f8a46b2bb437975fbe5bd0cc7de4",
+fn hash(m: &serde_json::Value, name: &str) -> [u8; 32] {
+    let hex = m["contracts"][name]["sha256"].as_str().expect(name);
+    hex::decode(hex).unwrap().try_into().unwrap()
 }
 
 #[test]
-fn account_pins_derive_the_deployed_testnet_addresses() {
+fn consumers_pin_the_deployment_manifest() {
+    let m: serde_json::Value = serde_json::from_str(MANIFEST).expect("manifest");
+    let pending: serde_json::Value = serde_json::from_str(PENDING).expect("pending-registry.json");
     let env = Env::default();
-    // Bind to Stellar testnet's network id — address derivation is a function of
-    // (network_id, registry, salt=wasm_hash).
     let net = env
         .crypto()
         .sha256(&Bytes::from_slice(
             &env,
-            b"Test SDF Network ; September 2015",
+            m["network_passphrase"].as_str().unwrap().as_bytes(),
         ))
         .to_array();
     env.ledger().with_mut(|l| l.network_id = net);
 
-    // The account resolves the stateless registry id by name at build time;
-    // cross-check it is exactly the name-salt derivation from the perch registry.
-    let stateless = stateless_registry(&env);
-    let perch_registry = Address::from_str(&env, PERCH_REGISTRY);
-    assert_eq!(stateless, stateless::address(&env, &perch_registry));
+    let recorded = Address::from_str(&env, m["registry"]["id"].as_str().unwrap());
+    let address =
+        |name: &str| Address::from_str(&env, m["contracts"][name]["address"].as_str().expect(name));
+    let content = |registry: &Address, name: &str| {
+        env.deployer()
+            .with_address(registry.clone(), BytesN::from_array(&env, &hash(&m, name)))
+            .deployed_address()
+    };
+    for (name, c) in m["contracts"].as_object().unwrap() {
+        if c.get("address").is_none() {
+            continue;
+        }
+        assert_eq!(
+            content(&recorded, name),
+            address(name),
+            "{name} is not at its content address"
+        );
+    }
 
-    // The account's *actual* pinned compiler + interpreter (hashes = sha256 of
-    // the fetched `wasm/*.wasm`) derive the live ids.
+    // Both crates derive the same registry from the same path.
+    assert_eq!(
+        (
+            infra::perch_doc_compiler::ROOT_DEPLOYER,
+            infra::perch_doc_compiler::ROOT_SALT,
+            infra::perch_doc_compiler::REGISTRY_PATH.as_slice(),
+        ),
+        (
+            pins::perch_webauthn_verifier::ROOT_DEPLOYER,
+            pins::perch_webauthn_verifier::ROOT_SALT,
+            pins::perch_webauthn_verifier::REGISTRY_PATH.as_slice(),
+        )
+    );
+    let derived = constructorless_registry(&env);
+    assert_eq!(pins::perch_webauthn_verifier::registry(&env), derived);
+
+    let network = m["network"].as_str().unwrap();
+    let declared = &pending[network];
+    if derived == recorded {
+        assert!(
+            declared.is_null(),
+            "{network}.json now records the derived registry: delete the {network} entry \
+             from deployments/pending-registry.json"
+        );
+    } else {
+        let strkey = |k: &str| declared[k].as_str().map(|s| Address::from_str(&env, s));
+        assert!(
+            strkey("recorded") == Some(recorded.clone())
+                && strkey("derived") == Some(derived.clone()),
+            "the source derives another registry than {network}.json records, and \
+             deployments/pending-registry.json does not declare that migration"
+        );
+        println!(
+            "pending registry migration on {network}: {network}.json records {}, this source \
+             derives {}; checking the pins against the derived registry",
+            m["registry"]["id"].as_str().unwrap(),
+            declared["derived"].as_str().unwrap(),
+        );
+    }
+
     assert_eq!(
         infra::perch_doc_compiler::address(&env),
-        Address::from_str(
-            &env,
-            "CCUU7RYG23ZBZZCKS2PPSZ2GJIBTBYXF47GZCYG5PUBN54Z7AKQBF2SY"
-        ),
+        content(&derived, "perch-doc-compiler")
     );
     assert_eq!(
         infra::perch_interpreter::address(&env),
-        Address::from_str(
-            &env,
-            "CBYWKTO6IALDRI7LQM2IBHK7SDKXKO5JTMJCVQVKEI4XMJ724ZVJI2YM"
-        ),
+        content(&derived, "perch-interpreter")
     );
     assert_eq!(
-        verifier::address(&env, &stateless),
-        Address::from_str(
-            &env,
-            "CBVCTXCSF4HJJCQLLIM543CH5MJW3A2MMZ2T35GSCSN6QSC6BGSDJNNY"
-        ),
+        infra::perch_spending_limit::address(&env),
+        content(&derived, "perch-spending-limit")
+    );
+    assert_eq!(pins::account::WASM_HASH, hash(&m, "perch-account"));
+    assert_eq!(
+        pins::perch_webauthn_verifier::address(&env),
+        content(&derived, "perch-webauthn-verifier")
     );
 }

@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/perch-ir",
+    "crates/perch-schema",
     "crates/perch-program",
     "crates/perch-interpreter",
     "crates/perch-compile",
@@ -12,17 +13,30 @@ members = [
     "crates/perch-conformance",
     "crates/perch-analyze",
     "crates/perch-ed25519-verifier",
+    "crates/perch-mldsa-verifier",
     "crates/perch-spending-limit",
     "crates/perch-doc-compiler",
     "crates/perch-smart-account",
     "crates/perch-account",
     "crates/perch-deploy",
     "crates/perch-derive-id",
-    "crates/perch-stateless-registry",
+    "crates/perch-constructorless-registry",
     "crates/perch-registry-resolve-macro",
     "crates/perch-registry-resolve",
     "crates/perch-testkit",
+    "crates/perch-recovery",
+    "crates/perch-recovery-interface",
+    "crates/perch-zk-primitives",
+    "crates/perch-zk-pool",
+    "crates/perch-zk-prover",
+    "crates/perch-zk-adapter",
+    "crates/perch-webauthn-verifier",
+    "crates/perch-account-factory",
+    "crates/perch-testnet",
 ]
+# Vendored third-party source, built only as a path dependency: not linted,
+# tested, or released with the workspace. See vendor/*/NOTICE.
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.1"
@@ -40,7 +54,12 @@ soroban-sdk-tools = "0.1.3"
 # single AddressWithDelegates auth entry) instead of a separate
 # require_auth_for_args entry per delegate. Fork main == upstream fbfde38.
 # Re-pin to upstream OpenZeppelin/stellar-contracts once the patch lands there.
-stellar-accounts = { version = "0.7.1", git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "82002206b1da48167091f33fe2ecfc97ce915857", package = "stellar-accounts" }
+# Pinned to theahaco/stellar-contracts-OZ PR #5 (head 3372676, stacked on
+# PR #4, both on cap-71-delegate-auth): PR #4 adds `*_no_events` variants of
+# every rule, signer, and policy mutation (apply_doc emits one DocApplied
+# instead), and PR #5 adds `reconcile_signers[_no_events]` (one call per
+# in-place signer change). Re-pin when they merge into the fork.
+stellar-accounts = { version = "0.7.1", git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9", package = "stellar-accounts" }
 
 perch-ir = { version = "0.1.1", path = "crates/perch-ir" }
 perch-program = { version = "0.1.1", path = "crates/perch-program" }
@@ -54,6 +73,16 @@ perch-program = { version = "0.1.1", path = "crates/perch-program" }
 # soroban-flux blocked the entire release pipeline. 0.1.0 was cut from the
 # same source the git rev pinned, so builds stay byte-identical.
 soroban-flux = "0.1.0"
+
+# ML-DSA (FIPS 204) verification in guest wasm, for perch-mldsa-verifier: pure
+# Rust, no_std, no allocation. Unaudited. Verification needs no randomness, so
+# the OS RNG feature stays off; only the ML-DSA-65 parameter set is compiled.
+fips204 = { version = "0.4.6", default-features = false, features = ["ml-dsa-65"] }
+
+# Poseidon2 on the Soroban host (`poseidon2_permutation` host function). Must
+# stay byte-identical to noir-lang/poseidon v0.2.0, which the recovery circuit
+# uses: crates/perch-zk-primitives pins both sides to shared vectors.
+soroban-poseidon = "27.0.0"
 
 [profile.release]
 opt-level = "z"

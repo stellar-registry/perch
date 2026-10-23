@@ -104,7 +104,7 @@ fn payload_hash(env: &Env) -> BytesN<32> {
 
 fn signed_payload(w: &World, key: &SigningKey, pubkey: &BytesN<32>, rule_id: u32) -> AuthPayload {
     let ids = vec![&w.env, rule_id];
-    let digest = auth_digest(&w.env, &payload_hash(&w.env), &ids);
+    let digest = auth_digest(&w.env, &w.account, &payload_hash(&w.env), &ids);
     let sig = key.sign(&digest).to_bytes();
     let signer = Signer::External(w.verifier.clone(), pubkey.clone().into());
     let signers: Map<Signer, Bytes> = map![&w.env, (signer, Bytes::from_array(&w.env, &sig))];

@@ -6,15 +6,7 @@
 //! else — and eventually all of this — is the stock `stellar` CLI. Key
 //! material comes ONLY from PERCH_ADMIN_KEY / PERCH_CI_KEY env variables.
 
-mod apply;
-mod auth;
-mod compose;
-mod keys;
-mod publish;
-mod rpc;
-mod scv;
-mod tx;
-mod verify;
+use perch_deploy::{apply, compose, publish, rpc, verify};
 
 use std::path::PathBuf;
 
@@ -54,7 +46,8 @@ enum Cmd {
     },
     /// Apply a policy document whole: submit its JSON bytes to the account's
     /// `apply_doc` in one transaction, signed by PERCH_ADMIN_KEY selecting
-    /// rule 0. The account verifies and swaps the entire rule set atomically.
+    /// the `admin` rule, at the revision it was read at. The account
+    /// verifies and swaps the entire rule set atomically.
     Apply {
         #[arg(long)]
         account: String,

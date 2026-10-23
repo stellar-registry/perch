@@ -6,11 +6,14 @@ OpenZeppelin `Policy` that evaluates compiled perch constraint programs
 on-chain. This is the client surface a consumer wallet needs to manage
 programs on a smart account:
 
-- `install` / `uninstall` — attach or detach a compiled program
-  (`InstallParams`: the `RpnProgram` plus the `doc_hash` of the source
-  PolicyDoc) for one `(account, rule)`.
-- `get_program` — read back the stored `InstallParams`, exposing `doc_hash` so
-  lift/diff can check provenance against the reviewed document.
+- `install` / `uninstall` — attach or detach a compiled program for one
+  `(account, rule)`. `InstallParams` is the `RpnProgram` plus its
+  provenance: the field named `doc_hash` holds the `rule_hash` of the rule
+  the program was compiled from (`CANONICAL.md`, "Fragment hashes"), not a
+  whole document's hash. A Perch account calls these from `apply_doc`; the
+  account's own authorization is required.
+- `get_program` — read back the stored `InstallParams`, so a client can
+  check a program's provenance against the reviewed rule's `rule_hash`.
 - `program_version` — the program wire-format version this interpreter
   evaluates (unknown versions are rejected at install time, fail closed).
 - `enforce` — the OZ policy hook itself (normally invoked by the smart
@@ -32,13 +35,17 @@ const stored = await interpreter.get_program({
 ```
 
 Interpreter addresses are deliberately **not** baked into this package:
-resolve them from the content-addressed registry pins (see
-[`docs/testnet-deployment.md`](../../docs/testnet-deployment.md) for the
-verified canonical testnet deployment).
+resolve them from the content-addressed registry pins. A Perch account
+reports the interpreter it pins in its `infra()` view; the recovery-stack
+deployment's addresses are in
+[`deployments/testnet.json`](../../deployments/testnet.json), and the
+release pipeline's canonical registry in
+[`docs/testnet-deployment.md`](../../docs/testnet-deployment.md).
 
 The sibling package [`@stellar-registry/perch`](../perch-js) is the off-chain
-half: PolicyDoc schema, canonical JSON + `doc_hash`, and the builder. This
-package is the on-chain client half; the two meet at `InstallParams.doc_hash`.
+half: PolicyDoc schema, canonical JSON and hashes (including `ruleHash`),
+and the builder. This package is the on-chain client half; the two meet at
+the provenance hash in `InstallParams`.
 
 ## Generated code
 
@@ -52,6 +59,10 @@ just bindings-interpreter-js
 
 then review the diff and rerun the suite. The tests assert the embedded
 `ContractSpec` against the frozen golden XDR vectors in
-[`testdata/golden/`](../../testdata/golden) (the TS leg of the three-way wire
-harness, issue #3): values encoded through these bindings must reproduce the
-`#[contracttype]` bytes the Rust suite pins, byte for byte.
+[`testdata/golden/`](../../testdata/golden/README.md) (the TypeScript
+check): the two program fixtures encoded through these bindings must
+reproduce the `#[contracttype]` bytes the Rust suite pins, byte for byte.
+
+The doc comments in `src/index.ts` come from the contract's embedded spec
+and still describe the provenance field as the source document's
+`doc_hash`; the description above is the current behaviour.

@@ -1,0 +1,97 @@
+# Changelog
+
+All notable changes to this component are documented here. Contract versions
+are the on-chain wasm publishes and `perch-js` versions are the npm releases of
+`@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
+
+## [0.3.1] - 2026-10-22
+
+### 📚 Documentation
+
+- *(contracts)* Correct and complete the contract interface docs
+
+## [0.3.0] - 2026-10-21
+
+### 🚜 Refactor
+
+- [**breaking**] Rename the stateless registry to constructorless (#151)
+
+## [0.2.0] - 2026-10-21
+
+### 🚀 Features
+
+- *(perch-registry-resolve)* [**breaking**] Derive the infra registry from the Stellar Registry root; release-path hardening (#146)
+
+### 📚 Documentation
+
+- Audit documentation for the recovery stack and policy language (#133)
+
+## [0.1.3] - 2026-10-15
+
+### 🐛 Bug Fixes
+
+- *(perch-ir)* Refuse documents the compiler would trap on or could never enforce
+- *(perch-program)* Match a string prefix against an argument of any length
+- *(perch-smart-account)* Treat a signer reorder as a rule change in delta apply
+
+## [0.1.2] - 2026-10-12
+
+### 🐛 Bug Fixes
+
+- *(smart-account)* Bind external signer authorization to the account
+- *(doc-compiler)* Refuse non-canonical webauthn keys
+- *(recovery)* Keep recovery targets installable
+
+## [0.1.1] - 2026-10-09
+
+### 💼 Other
+
+- Recovery canonicalization assurance and an honest coverage statement (epic #99) (#104)
+- Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
+
+## [0.1.0] - 2026-10-09
+
+### 🚀 Features
+
+- Canonical-form spec + CANON_VERSION; own the escaper, not the serializer (#19) (#29)
+- *(perch-compile)* Static analysis over a compiled Plan (#19) (#24)
+- *(perch-compile)* Fail-closed activation — verify doc_hash before attach (#25)
+- *(perch-ir,perch-compile)* Cumulative-cap clause lowering to OZ spending_limit (#26)
+- *(perch-compile)* Monotone attenuation, enforced by reachable_calls (#28)
+- *(perch-program)* Flux-verified evaluator core (#32)
+- *(registry-resolve)* Pin the resolver macro to the testnet infra deployment (#47)
+- *(ir,compile)* Native M-of-N via Principals::Threshold → MinSigners(m) (#52)
+- *(spending-limit)* Wire cap composition through apply_doc (#54)
+- Interpreter TS bindings (@stellar-registry/perch-interpreter) + perch-js threshold/cap parity (#77)
+- *(recovery)* Stage 4 — recovery schema, shared controller, compiler + client support
+
+### 🐛 Bug Fixes
+
+- *(release)* Verify the reusable signer + publish-only dispatch + tag all six contracts (#59)
+- *(release)* Version the six release-tracked contracts independently (#69)
+- *(doc-compiler)* Unblock 0.2.0 cap-capable release, republish as 0.2.1 (#79)
+- *(recovery)* Close review-surfaced auth/timing gaps; reframe docs as standalone
+
+### 🚜 Refactor
+
+- *(recovery)* Convert 0-or-1 Vec fields to Option where the SDK allows it
+
+### 📚 Documentation
+
+- *(perch-ir)* Mark policies stateless — a per-call bound is not a spend cap (#21)
+- Strip AI-writing tells from markdown (#61)
+
+### 🧪 Testing
+
+- *(perch-program)* Pin the decidable-fragment invariant of v1 (#19) (#23)
+
+### 💼 Other
+
+- Wire-format benchmark — freeze postfix as v1 (#2) (#14)
+- The `admin-root` rule → `admin` (closes #50) (#51)
+- Authoritative spec, one recovery statement, and the ZK adapter interface (epic #99 WS1) (#100)
+- One controller and the shared account capabilities (epic #99 WS3) (#102)
+- OZ materialization layer: quiet OZ mutations, reconcile_signers, OZ fork re-pin, caps 8x11 (epic #99, split from #103) (#111)
+- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
+
+

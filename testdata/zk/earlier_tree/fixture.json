@@ -1,0 +1,39 @@
+{
+  "description": "Lost-key initiation evidence for a leaf in the last slot (index 2^32-1) of a full depth-32 tree, proved after the pool rolled over to tree 1.",
+  "pool_id": "0xc6d3820a1f47a48e83e109b49a8949248d2a9fe39602387b0068a377e9093c5c",
+  "account_id": "0x2f55f804e95d6a81c9409dc2ea908b6d6c87d0881f8db9ed238a75deec804d21",
+  "enrollment_id": "0x2b68379f50f7afcd99f335de81057eb4e0c9e534bbd4b78692e16fddc2b68c23",
+  "statement": {
+    "network_passphrase": "Test SDF Network ; September 2015",
+    "account_id": "0x2f55f804e95d6a81c9409dc2ea908b6d6c87d0881f8db9ed238a75deec804d21",
+    "controller_id": "0xd2ab8d41bd56feed2802ec950d99591222eed271261e4001b407ae6458a8a123",
+    "epoch": 3,
+    "config_hash": "0xba481f11749d4f1a2ff92d9cd30603a09419dd7253a944a7be23c8e46bf4e39f",
+    "delay_ledgers": 120960,
+    "expiry_ledgers": 241920,
+    "valid_until_ledger": 2000000,
+    "subject": {
+      "LostKey": {
+        "attempt_id": 3,
+        "source_doc_hash": "0x7ee763822bf85b0239cd21029607305c53e23cdd5c62f9647ce9904b4297cfdb",
+        "target_doc_hash": "0x44264b188b6186a9c14371c77287c682e6eab57c549c57cfd46e8d8565bfb89e",
+        "replacements_hash": "0x6d0b5ea975dfb81d37c4fd70a7e82bd68518f2b89aff13362629ae40b11cd110"
+      }
+    }
+  },
+  "digest": "0x552cfe6c4df381a48664f0a2835e89ab02cd2c25b7876d59fe9fd1df6dfbba57",
+  "tree_id": 0,
+  "synthetic_prefix": 4294967295,
+  "enrollments": [
+    {
+      "account_id": "0x2f55f804e95d6a81c9409dc2ea908b6d6c87d0881f8db9ed238a75deec804d21",
+      "enrollment_id": "0x2b68379f50f7afcd99f335de81057eb4e0c9e534bbd4b78692e16fddc2b68c23",
+      "commitment": "0x2cd66bdbf730727946a4d745d9f654de5d0aae1f43e3eda984d1601512dcf336"
+    }
+  ],
+  "leaf_index": 4294967295,
+  "secret": "0x0787c09e29339f17e2daa425de916d5e8472ab7eb14eb2b95dfe434ffd2072c8",
+  "root": "0x26bfd67c78462d79e9c4e38474d7f5dc476fa2effe1217a70bbe922f502906e2",
+  "nullifier": "0x06e2681c8720a76b03b287cf6212a4cad256f80761ccf4ed2008938c9f18f86d",
+  "statement_hash": "0x13fd6674a350429c07c0b801195c45d534cb6794a1f1485c574b16aa775f7e42"
+}

@@ -84,6 +84,7 @@ pub fn base_doc() -> PolicyDoc {
         network: None,
         signers: vec![signer("admin", WEBAUTHN_VERIFIER, ADMIN_KEY_HEX)],
         rules: vec![rule("admin", Scope::self_admin(), &["admin"])],
+        recovery: None,
     }
 }
 

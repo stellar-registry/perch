@@ -10,6 +10,7 @@ This is a compact map of document format 1. Examples in the earlier chapters exp
 | `network` | Optional string in the schema; matching network passphrase required by the on-chain doc compiler |
 | `signers` | Signer declarations, each with a unique local `id` |
 | `rules` | Named authorization rules, with unique names |
+| `recovery` | Optional account-recovery configuration; see the [recovery specification](https://github.com/stellar-registry/perch/blob/main/docs/recovery/spec.md) for profiles, modes, and enrollment requirements |
 
 ## Rule fields
 

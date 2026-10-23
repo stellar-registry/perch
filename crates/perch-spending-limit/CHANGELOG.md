@@ -1,33 +1,31 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this component are documented here. Contract versions
+are the on-chain wasm publishes and `perch-js` versions are the npm releases of
+`@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.1.4] - 2026-10-22
 
-## [Unreleased]
+### 📚 Documentation
 
-## [0.1.1](https://github.com/stellar-registry/perch/releases/tag/perch-spending-limit-v0.1.1) - 2026-08-25
+- *(contracts)* Correct and complete the contract interface docs
 
-### Added
+## [0.1.2] - 2026-10-09
 
-- *(ir,compile)* native M-of-N via Principals::Threshold → MinSigners(m) ([#52](https://github.com/stellar-registry/perch/pull/52))
+### 💼 Other
 
-### Fixed
+- OZ materialization layer: quiet OZ mutations, reconcile_signers, OZ fork re-pin, caps 8x11 (epic #99, split from #103) (#111)
+- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
+- Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
 
-- *(release)* version the six release-tracked contracts independently ([#69](https://github.com/stellar-registry/perch/pull/69))
+## [0.1.1] - 2026-08-25
 
-### Other
+### 🚀 Features
 
-- release v0.1.0 ([#57](https://github.com/stellar-registry/perch/pull/57))
-- *(release)* build, attest, and publish perch-spending-limit to the stateless registry ([#55](https://github.com/stellar-registry/perch/pull/55))
+- *(ir,compile)* Native M-of-N via Principals::Threshold → MinSigners(m) (#52)
 
-## [0.1.0](https://github.com/stellar-registry/perch/releases/tag/perch-spending-limit-v0.1.0) - 2026-08-24
+### 🐛 Bug Fixes
 
-### Added
+- *(release)* Version the six release-tracked contracts independently (#69)
 
-- *(ir,compile)* native M-of-N via Principals::Threshold → MinSigners(m) ([#52](https://github.com/stellar-registry/perch/pull/52))
 
-### Other
-
-- *(release)* build, attest, and publish perch-spending-limit to the stateless registry ([#55](https://github.com/stellar-registry/perch/pull/55))

@@ -55,7 +55,7 @@ pub struct Submitted {
     pub ledger: u32,
 }
 
-fn build_tx(source_pubkey: [u8; 32], seq: i64, spec: &InvokeSpec) -> Result<Transaction> {
+pub fn build_tx(source_pubkey: [u8; 32], seq: i64, spec: &InvokeSpec) -> Result<Transaction> {
     let op = Operation {
         source_account: None,
         body: OperationBody::InvokeHostFunction(InvokeHostFunctionOp {
@@ -78,7 +78,7 @@ fn build_tx(source_pubkey: [u8; 32], seq: i64, spec: &InvokeSpec) -> Result<Tran
     })
 }
 
-fn set_auth(tx: &mut Transaction, auth: Vec<SorobanAuthorizationEntry>) -> Result<()> {
+pub fn set_auth(tx: &mut Transaction, auth: Vec<SorobanAuthorizationEntry>) -> Result<()> {
     let ops = tx.operations.to_vec();
     let mut op = ops.into_iter().next().context("transaction has no op")?;
     let OperationBody::InvokeHostFunction(ref mut ihf) = op.body else {
@@ -89,7 +89,7 @@ fn set_auth(tx: &mut Transaction, auth: Vec<SorobanAuthorizationEntry>) -> Resul
     Ok(())
 }
 
-fn envelope_b64(tx: &Transaction) -> Result<String> {
+pub fn envelope_b64(tx: &Transaction) -> Result<String> {
     let envelope = TransactionEnvelope::Tx(TransactionV1Envelope {
         tx: tx.clone(),
         signatures: Default::default(),
@@ -100,7 +100,11 @@ fn envelope_b64(tx: &Transaction) -> Result<String> {
 /// Sign the envelope with the fee payer. Returns (envelope base64, tx hash hex)
 /// — the hash is sha256 of the TransactionSignaturePayload, i.e. the network's
 /// transaction id.
-fn sign_envelope(tx: &Transaction, passphrase: &str, payer: &SeedKey) -> Result<(String, String)> {
+pub fn sign_envelope(
+    tx: &Transaction,
+    passphrase: &str,
+    payer: &SeedKey,
+) -> Result<(String, String)> {
     let payload = TransactionSignaturePayload {
         network_id: stellar_xdr::Hash(auth::network_id(passphrase)),
         tagged_transaction: TransactionSignaturePayloadTaggedTransaction::Tx(tx.clone()),
@@ -229,7 +233,7 @@ pub fn run_signed(
 /// Sign a fully-prepared tx (fee + soroban data already set), send it, and poll
 /// to SUCCESS. Shared by the smart-account invoke flow (`run_signed`) and the
 /// plain wasm upload (`run_upload`).
-fn submit(rpc: &Rpc, tx: &Transaction, passphrase: &str, payer: &SeedKey) -> Result<Submitted> {
+pub fn submit(rpc: &Rpc, tx: &Transaction, passphrase: &str, payer: &SeedKey) -> Result<Submitted> {
     let (envelope, local_hash) = sign_envelope(tx, passphrase, payer)?;
     let hash = rpc.send(&envelope)?;
     if hash != local_hash {
@@ -239,7 +243,7 @@ fn submit(rpc: &Rpc, tx: &Transaction, passphrase: &str, payer: &SeedKey) -> Res
     let deadline = Instant::now() + Duration::from_secs(60);
     loop {
         match rpc.get_transaction(&hash)? {
-            TxStatus::Success { ledger } => {
+            TxStatus::Success { ledger, .. } => {
                 return Ok(Submitted {
                     tx_hash: hash,
                     ledger,

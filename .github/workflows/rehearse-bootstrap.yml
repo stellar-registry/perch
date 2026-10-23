@@ -1,0 +1,70 @@
+name: Rehearse bootstrap
+
+# scripts/bootstrap-registry.sh with --send, end to end, against a soroban-sim
+# fork of testnet and of mainnet (scripts/rehearse-bootstrap.sh): throwaway
+# keys stand in for every real signer, every transaction is validated and
+# applied on the local fork, and nothing reaches either network. No secret
+# is used. The fork reads the live public RPC, so a run reflects the chains
+# as they are now; keep this out of the required checks.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/bootstrap-registry.sh
+      - scripts/rehearse-bootstrap.sh
+      - scripts/derive-id.py
+      - crates/perch-smart-account/wasm/registry.path
+      - crates/perch-account-factory/wasm/registry.path
+      - .github/workflows/rehearse-bootstrap.yml
+
+permissions: {}
+
+concurrency:
+  group: rehearse-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rehearse:
+    name: Rehearse (${{ matrix.network }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        network: [testnet, mainnet]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # No toolchain action: rustup installs the channel and the wasm32v1-none
+      # target from rust-toolchain.toml on first use.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: ./.github/actions/setup-stellar
+      - name: soroban-sim commit
+        id: sim
+        run: echo "rev=$(sed -n 's/^SOROBAN_SIM_REV=\([0-9a-f]*\).*/\1/p' scripts/rehearse-bootstrap.sh)" >>"$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/soroban-sim/${{ steps.sim.outputs.rev }}
+          key: soroban-sim-${{ runner.os }}-${{ steps.sim.outputs.rev }}
+      - name: Rehearse the bootstrap on a ${{ matrix.network }} fork
+        env:
+          NETWORK: ${{ matrix.network }}
+          # Read-only: `gh attestation verify` looks up each wasm's public
+          # attestations. A mainnet rehearsal needs the attested
+          # perch-account and perch-constructorless-registry releases of this
+          # checkout's versions (docs/deploy/README.md).
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/rehearse-bootstrap.sh --network "$NETWORK"
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rehearse-bootstrap-${{ matrix.network }}
+          path: |
+            target/rehearse-bootstrap/${{ matrix.network }}
+            !target/rehearse-bootstrap/${{ matrix.network }}/stellar-config
+            !target/rehearse-bootstrap/${{ matrix.network }}/stellar-data
+          if-no-files-found: ignore

@@ -15,9 +15,10 @@
 //!
 //! This crate is a thin, deployable wrapper: it forwards the three `Policy`
 //! lifecycle methods to [`stellar_accounts::policies::spending_limit`], adding no
-//! logic of its own. It is a content-addressed stateless singleton like the
-//! interpreter and doc-compiler — one deployed instance is multi-tenant-safe
-//! because `spending_limit` keys all state by `(smart_account, context_rule_id)`.
+//! logic of its own. Like the interpreter and doc-compiler it is a
+//! constructorless, content-addressed singleton: one deployed instance serves
+//! every account, because `spending_limit` keys all state by
+//! `(smart_account, context_rule_id)`.
 //!
 //! The cap's parameters ([`SpendingLimitAccountParams`]) are `spending_limit`
 //! (the cumulative i128 ceiling) and `period_ledgers` (the rolling window). The
@@ -45,8 +46,10 @@ impl Policy for PerchSpendingLimit {
     /// Enforce the rolling-window cap: reads the transfer amount from the
     /// invoked `transfer(from, to, amount)` context, adds it to the running
     /// total for `(smart_account, rule)`, and panics if the window's cumulative
-    /// spend would exceed `spending_limit`. Must be authorized by the account
-    /// (the wrapped call does `smart_account.require_auth()`).
+    /// spend would exceed `spending_limit`. Also panics on any other call, a
+    /// negative or undecodable amount, or an empty `authenticated_signers`; a
+    /// zero-amount transfer passes and is not recorded. Requires the account's
+    /// authorization (`smart_account.require_auth()`).
     fn enforce(
         e: &Env,
         context: Context,
@@ -65,19 +68,21 @@ impl Policy for PerchSpendingLimit {
 
     /// Initialize the cap for `(smart_account, rule)`: validate the params
     /// (`spending_limit > 0`, `period_ledgers > 0`, rule scoped to a contract)
-    /// and store the empty spending window.
+    /// and store the empty spending window. Panics if a cap is already
+    /// installed for the rule. Requires the account's authorization.
     fn install(
         e: &Env,
         install_params: Self::AccountParams,
         context_rule: ContextRule,
         smart_account: Address,
     ) {
-        spending_limit::install(e, &install_params, &context_rule, &smart_account)
+        spending_limit::install_no_events(e, &install_params, &context_rule, &smart_account)
     }
 
-    /// Remove the cap's state for `(smart_account, rule)`.
+    /// Remove the cap's state for `(smart_account, rule)`. Panics if none is
+    /// installed. Requires the account's authorization.
     fn uninstall(e: &Env, context_rule: ContextRule, smart_account: Address) {
-        spending_limit::uninstall(e, &context_rule, &smart_account)
+        spending_limit::uninstall_no_events(e, &context_rule, &smart_account)
     }
 }
 

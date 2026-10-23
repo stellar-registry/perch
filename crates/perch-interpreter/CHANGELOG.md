@@ -1,7 +1,34 @@
 # Changelog
 
-All notable changes to this contract are documented here. Versions are the
-on-chain wasm publishes; the format follows [Keep a Changelog](https://keepachangelog.com).
+All notable changes to this component are documented here. Contract versions
+are the on-chain wasm publishes and `perch-js` versions are the npm releases of
+`@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
+
+## [0.1.6] - 2026-10-22
+
+### 📚 Documentation
+
+- *(contracts)* Correct and complete the contract interface docs
+
+## [0.1.5] - 2026-10-21
+
+### 📚 Documentation
+
+- Audit documentation for the recovery stack and policy language (#133)
+
+## [0.1.4] - 2026-10-15
+
+### 🐛 Bug Fixes
+
+- *(perch-program)* Match a string prefix against an argument of any length
+
+## [0.1.3] - 2026-10-09
+
+### 💼 Other
+
+- One controller and the shared account capabilities (epic #99 WS3) (#102)
+- New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
+- Pre-redeploy contract changes (controller enforces spec §3.4; held contract doc fixes) (#116)
 
 ## [0.1.2] - 2026-09-04
 

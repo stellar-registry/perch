@@ -1,22 +1,38 @@
-# Heavy assurance passes that don't belong on the PR path: coverage-guided
-# fuzzing, mutation testing, and branch coverage of the security core.
-# Weekly + on demand. Findings here are bugs to fix or tests to add, not
-# merge gates (yet) — see docs/verification/PLAN.md phase 0.
+# Heavy assurance passes that don't belong on every PR: the Lean model,
+# coverage-guided fuzzing, mutation testing, branch coverage, and Komet.
+# Weekly + on demand, all jobs. A PR that touches what the Lean model or the
+# fuzz targets cover (the paths below) runs only the formal job and a short
+# fuzz pass. Findings here are bugs to fix or tests to add, not merge gates
+# (yet) — see docs/verification/PLAN.md phase 0.
 name: Assurance
 
 on:
   schedule:
     - cron: "17 6 * * 1"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "formal/**"
+      - "fuzz/**"
+      - "komet/**"
+      - "crates/perch-ir/**"
+      - "testdata/*.canonical.json"
+      - "testdata/recovery/*.canonical.json"
+      - ".github/workflows/assurance.yml"
 
 permissions: {}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   # The Lean 4 formal model (formal/): checks every theorem, then replays the
-  # frozen eval-semantics vectors through the model. Heavy (elan install +
-  # `lake build`), so it runs here on the weekly/on-demand assurance path
-  # rather than on every PR — the rust job (crates/perch-conformance) already
-  # replays the same vectors through the real evaluator on each PR.
+  # frozen eval-semantics vectors and the Rust-emitted canonical fixtures
+  # through the model. Heavy (elan install + `lake build`), so it runs on the
+  # weekly/on-demand path and on PRs touching the paths above, rather than on
+  # every PR — the rust job (crates/perch-conformance) already replays the
+  # same vectors through the real evaluator on each PR.
   formal:
     runs-on: ubuntu-latest
     permissions:
@@ -46,12 +62,28 @@ jobs:
         working-directory: formal
         run: |
           ! grep -rnE '\b(sorry|admit|axiom)\b' PerchFormal PerchFormal.lean Main.lean
+      # The grep sees only source text. This checks what every PerchFormal
+      # declaration actually depends on: nothing beyond propext,
+      # Classical.choice and Quot.sound (a sorry shows up as sorryAx).
+      - name: Audit axioms
+        working-directory: formal
+        run: lake env lean CheckAxioms.lean
+      # Whole documents first (canonical_json), then recovery members on their
+      # own (recovery_canonical_json, the config_hash text). Keep in sync with
+      # the justfile's drt recipe.
       - name: Replay conformance vectors + canonical fixtures through the model
         working-directory: formal
         run: |
           lake exe drt ../testdata/eval/eval-vectors.json \
             ../testdata/ci-publish.canonical.json \
-            ../testdata/ci-publish-delegated.canonical.json
+            ../testdata/ci-publish-delegated.canonical.json \
+            ../testdata/ci-publish-threshold.canonical.json \
+            ../testdata/ci-publish-recovery.canonical.json \
+            ../testdata/ci-publish-recovery-combined.canonical.json \
+            --recovery \
+            ../testdata/recovery/config-guardian-only.canonical.json \
+            ../testdata/recovery/config-zk-only.canonical.json \
+            ../testdata/recovery/config-combined.canonical.json
 
   fuzz:
     runs-on: ubuntu-latest
@@ -63,7 +95,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: nightly-2026-02-05
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -79,13 +111,40 @@ jobs:
           key: fuzz-corpus-${{ github.run_id }}
           restore-keys: |
             fuzz-corpus-
-      - run: cargo install cargo-fuzz --locked
+      # cargo-fuzz isn't in the install-action manifest, so it falls back to
+      # cargo-binstall and fetches the project's official prebuilt release
+      # binary instead of compiling from source. Pinned to the version the
+      # unpinned `cargo install` resolved to, so this changes the install
+      # method, not the tool version.
+      - name: Install cargo-fuzz (prebuilt release binary)
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-fuzz@0.13.2
+      # The parser target starts from the golden documents (recovery-enrolled
+      # ones included) and the grammar's keys and tags, so it reaches every
+      # shape without having to discover the key names byte by byte.
+      - name: Seed the parser corpus
+        run: |
+          mkdir -p fuzz/corpus/ir_parse_roundtrip
+          cp testdata/ci-publish*.json fuzz/corpus/ir_parse_roundtrip/
       # -s none: ASan fails to link soroban-sdk's rlib, and the targets are
       # pure safe Rust — the findings of interest are panics and divergence.
+      # PRs get a short pass; the weekly/dispatch runs fuzz longer.
       - name: Fuzz each target
+        env:
+          SECONDS_PER_TARGET: ${{ github.event_name == 'pull_request' && '60' || '300' }}
         run: |
-          for t in eval_fail_closed ir_parse_roundtrip; do
-            cargo +"$NIGHTLY" fuzz run -s none "$t" -- -max_total_time=300
+          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta recovery_canonical_roundtrip; do
+            dict=()
+            if [ -f "fuzz/dicts/$t.dict" ]; then dict=("-dict=fuzz/dicts/$t.dict"); fi
+            # Pin the build target to the host gnu triple. cargo-fuzz otherwise
+            # defaults `--target` to the triple it was *itself* built for, and
+            # the prebuilt cargo-fuzz release binary is musl-targeted -- the
+            # nightly toolchain only ships the gnu std, so an implicit musl
+            # build fails with "can't find crate for `core`". The gnu triple
+            # is what the former source-built (gnu) cargo-fuzz used implicitly.
+            cargo +"$NIGHTLY" fuzz run -s none --target x86_64-unknown-linux-gnu "$t" -- \
+              -max_total_time="$SECONDS_PER_TARGET" "${dict[@]}"
           done
       - name: Save fuzz corpus
         if: always()
@@ -101,6 +160,7 @@ jobs:
           path: fuzz/artifacts
 
   mutants:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # Burn-in: surviving mutants are missing-test findings, not merge blockers.
     continue-on-error: true
@@ -110,9 +170,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo install cargo-mutants --locked
+      # install-action pulls the prebuilt, checksum-verified cargo-mutants
+      # release binary (no compile-from-source). Pinned to the version the
+      # unpinned `cargo install` resolved to.
+      - name: Install cargo-mutants (prebuilt release binary)
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-mutants@27.1.0
       # .cargo/mutants.toml sets test_workspace = true, so every mutant faces
       # the conformance vectors + differential suite, not just in-package tests.
       - run: cargo mutants -p perch-program -p perch-compile -p perch-ir
@@ -124,6 +192,7 @@ jobs:
           path: mutants.out
 
   coverage:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -132,12 +201,18 @@ jobs:
         with:
           persist-credentials: false
       # --branch coverage requires a nightly toolchain; reuse the flux pin.
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
           toolchain: nightly-2026-02-05
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo install cargo-llvm-cov --locked
+      # install-action pulls the prebuilt, checksum-verified cargo-llvm-cov
+      # release binary (no compile-from-source). Pinned to the version the
+      # unpinned `cargo install` resolved to.
+      - name: Install cargo-llvm-cov (prebuilt release binary)
+        uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
+        with:
+          tool: cargo-llvm-cov@0.9.1
       - run: cargo +nightly-2026-02-05 llvm-cov -p perch-program -p perch-compile -p perch-ir -p perch-conformance --branch
 
   # Komet (Runtime Verification, K framework): fuzz + symbolic execution of the
@@ -152,6 +227,7 @@ jobs:
   # is needed). Burn-in: continue-on-error while the soroban-sdk 27 contract is
   # confirmed to run under semantics whose examples pin sdk 22.
   komet:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -160,8 +236,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
+          toolchain: stable
           targets: wasm32v1-none
       - name: Install Nix
         uses: cachix/install-nix-action@754537aaedb35f72ab11a60cc162c49ef3016495 # v31.2.0

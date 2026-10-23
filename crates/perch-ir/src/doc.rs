@@ -36,6 +36,12 @@ pub struct PolicyDoc {
     pub signers: Vec<SignerDecl>,
     /// The policy rules. Order is preserved and significant to the hash.
     pub rules: Vec<Rule>,
+    /// Opt-in account-recovery enrollment: restoring access after key loss, or
+    /// an approved baseline after suspected admin compromise. Omitted from the
+    /// canonical form when `None`, so a document that never enrolls recovery
+    /// hashes exactly as it did before this field existed (see `CANONICAL.md`
+    /// and the `ci-publish-recovery` conformance vector).
+    pub recovery: Option<RecoveryConfig>,
 }
 
 /// A declared signer: an id local to the document plus how it authenticates.
@@ -327,4 +333,120 @@ pub struct StringPrefixPred {
 pub struct U32EqPred {
     /// The exact u32 value the argument must equal.
     pub value: u32,
+}
+
+/// Opt-in account-recovery enrollment. This is *reviewable configuration* —
+/// who may recover this account and how — never the recovery attempt itself.
+/// The authoritative semantics are `docs/recovery/spec.md`.
+///
+/// The whole document's `doc_hash` covers every field here. The recovery
+/// controller separately identifies the configuration by `config_hash`, the
+/// hash of this member's canonical text alone (spec §3.2), so rotating a
+/// signer's key elsewhere in the document is not a reconfiguration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecoveryConfig {
+    /// Who may change this configuration, and what the account may do while
+    /// an attempt is authorized (spec D1, D4).
+    pub profile: RecoveryProfile,
+    /// How a recovery attempt is evidenced: guardians, ZK, or both against
+    /// the same statement. A `guardian-only` document has no ZK-shaped field
+    /// anywhere to leave unset.
+    pub mode: RecoveryMode,
+    /// The recovery controller instance this account has adopted (a
+    /// constructorless, immutable contract's address, C-address strkey).
+    /// Adopting a different instance is a reconfiguration.
+    pub controller: String,
+    /// Commitment to the baseline document compromise recovery restores.
+    /// `None` restricts the account to lost-key recovery.
+    pub baseline: Option<BaselineCommitment>,
+    /// Which declared signer ids (`doc.signers[].id`) a recovery attempt may
+    /// replace. Must be non-empty and reference declared signers.
+    pub replaceable: Vec<String>,
+    /// Ledgers between an attempt becoming authorized and becoming
+    /// completable: the window to notice and cancel. Must be non-zero.
+    pub delay_ledgers: u32,
+    /// The evidence window of a collecting attempt, the completion window of
+    /// an authorized one, and the furthest a reconfiguration or upgrade
+    /// approval may reach (spec §4, §6.2). Must be non-zero.
+    pub expiry_ledgers: u32,
+    /// Cap on evidence-based cancellations of authorized attempts, bounding a
+    /// cancel-then-reattempt war between holders of the cancelling factor.
+    /// A `Loss` owner's cancellation is never counted. Must be non-zero.
+    pub max_cancels: u32,
+}
+
+/// Routine recovery-configuration change authority for a [`RecoveryConfig`].
+/// Orthogonal to [`RecoveryMode`]: any mode may pair with either profile.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryProfile {
+    /// The owner may reconfigure or remove recovery alone, may cancel any
+    /// attempt, and keeps ordinary activity while an attempt is authorized.
+    Loss,
+    /// Reconfiguration, removal, and upgrades also need the currently
+    /// enrolled condition, and the account is frozen while an attempt is
+    /// authorized.
+    Protected,
+}
+
+/// How a recovery attempt is authorized. Tagged with `"type"`:
+/// `"guardian-only"`, `"zk-only"`, or `"combined"`. Combined requires *both*
+/// factors against the same statement, never either alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecoveryMode {
+    /// Guardian quorum only. No ZK secret, Merkle membership, or proof
+    /// generation is involved anywhere in this mode.
+    GuardianOnly(GuardianSet),
+    /// Zero-knowledge proof only.
+    ZkOnly(ZkFactor),
+    /// Both a valid proof and guardian quorum, over the same statement.
+    Combined(GuardianSet, ZkFactor),
+}
+
+/// An M-of-N guardian quorum: independent principals (not document signers)
+/// that approve a recovery statement by their own on-chain authorization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GuardianSet {
+    /// Guardian addresses (G- or C-address strkey). Must be non-empty and
+    /// contain no address twice.
+    pub guardians: Vec<String>,
+    /// How many of `guardians` must authorize. Must satisfy
+    /// `1 <= quorum <= guardians.len()`.
+    pub quorum: u32,
+}
+
+/// The zero-knowledge factor of a [`RecoveryMode`] (spec §3.1). Every field
+/// is part of the reviewed configuration text, so `config_hash` binds the
+/// commitment as well as the contracts that check proofs against it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZkFactor {
+    /// The ZK adapter the controller calls (C-address strkey). It pins its
+    /// proof verifier at build time.
+    pub adapter: String,
+    /// `sha256` of the verifier's verification key, as 64 lowercase hex
+    /// characters. The adapter refuses any other circuit.
+    pub circuit_id: String,
+    /// The membership pool (C-address strkey) whose roots proofs must use.
+    pub pool: String,
+    /// 32 random bytes naming the enrolled credential, as 64 lowercase hex
+    /// characters. Bound into the credential's leaf and nullifier; an
+    /// account never enrolls the same id twice.
+    pub enrollment_id: String,
+    /// The credential's inner commitment `Poseidon2(DOM_LEAF, secret)`, as 64
+    /// lowercase hex characters encoding a canonical BN254 field element.
+    pub commitment: String,
+}
+
+/// Commitment to a policy document that compromise recovery restores (with
+/// designated credentials replaced).
+///
+/// A pointer to a *different* document's identity, never the enclosing
+/// document's own hash, so the commitment cannot contain itself. The
+/// baseline's own `recovery` member is ignored when it is restored (spec
+/// §3.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BaselineCommitment {
+    /// Canonical `doc_hash` (lowercase hex) of the baseline document.
+    /// Declared, reviewer-checked data: the chain enforces only that the
+    /// approved configuration names it, not that it was ever applied.
+    pub doc_hash: String,
 }

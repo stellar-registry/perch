@@ -1,0 +1,28 @@
+[package]
+name = "perch-mldsa-verifier"
+description = "Deployable ML-DSA-65 (FIPS 204, post-quantum) signature verifier for OZ smart-account external signers"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+# No cargo-manifest `publish = false`: release-plz's `release` command skips
+# manifest-unpublishable packages (no tag ever). crates.io publish is blocked
+# workspace-wide in release-plz.toml instead.
+
+[package.metadata.stellar]
+cargo_inherit = true
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+stellar-accounts = { workspace = true }
+fips204 = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# The test vectors (NIST ACVP, @noble/post-quantum) are JSON with hex fields.
+hex = "0.4"
+serde_json = "1"

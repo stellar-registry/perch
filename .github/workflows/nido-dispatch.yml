@@ -1,0 +1,146 @@
+name: Notify Nido
+
+# When a @stellar-registry/perch-artifacts release ships a changed deployment
+# manifest (deployments/<network>.json), tell nidohq/nido so it can open a
+# repin PR against the new deployment and the package version carrying it.
+# Nido's receiving workflow opens that PR; a Nido maintainer merges it, and
+# Nido's factory redeploy follows the merge. Nothing here deploys anything.
+#
+# Ordering: release.yml's `notify-nido` job calls this after its npm-publish,
+# with the perch-artifacts tag that run published. A deploy(<network>) PR
+# bumps perch-artifacts (release.yml's deploy-stack-record), so merging it publishes
+# the package and only then dispatches. A manifest that lands without a bump
+# is announced by the next perch-artifacts release, never before. `plan`
+# checks the registry serves that version, built from the tagged commit,
+# with provenance, carrying the manifest's exact bytes, before anything is
+# sent.
+#
+# The dispatch is a `repository_dispatch` with event_type `perch-deployed`.
+# Its client_payload is a versioned contract the Nido receiver consumes —
+# documented in docs/deploy/README.md "Notifying Nido". Change it only by
+# bumping `schema` there and here together.
+#
+# Authority: a token minted per run from the perch-nido-sync GitHub App
+# (installed on nidohq/nido), narrowed to contents:write on that one
+# repository, which is what the dispatches endpoint requires. The client id and
+# private key are secrets of the `testnet` / `mainnet` environment matching
+# the manifest's network, so only a job bound to that environment can mint.
+#
+# Split in two so the job that holds the key runs no repository code: `plan`
+# (no secrets) reads the manifests, checks the package, and builds each
+# payload (scripts/nido-dispatch-plan.sh); `dispatch` only mints the token and
+# sends what `plan` computed.
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: The perch-artifacts-v<version> tag the calling release run published
+        required: true
+        type: string
+  # Re-send by hand, e.g. after the secrets were added or a Nido-side receiver
+  # failure: the network's manifest in the latest perch-artifacts release.
+  # Runs only from main (enforced in `plan`).
+  workflow_dispatch:
+    inputs:
+      network:
+        description: Network whose manifest in the latest perch-artifacts release to re-send
+        required: true
+        type: choice
+        options: [testnet, mainnet]
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    if: github.repository == 'stellar-registry/perch'
+    permissions:
+      contents: read
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # Every perch-artifacts tag, to find the release before this one.
+          fetch-depth: 0
+      - name: Find the manifests the release changed, check the package, and build each payload
+        id: plan
+        env:
+          REF: ${{ github.ref }}
+          TAG: ${{ inputs.tag }}
+          INPUT_NETWORK: ${{ inputs.network }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          # By the tag, not the event: a release.yml npm_publish_tag dispatch
+          # calls this with a tag, and the caller's event is workflow_dispatch.
+          if [ -z "$TAG" ]; then
+            if [ "$REF" != refs/heads/main ]; then
+              echo "::error::manual re-send runs only from main (got $REF)"
+              exit 1
+            fi
+            set -- resend "$INPUT_NETWORK"
+          else
+            set -- release "$TAG"
+          fi
+          if ! targets=$(scripts/nido-dispatch-plan.sh "$@" 2>"$RUNNER_TEMP/plan.log"); then
+            cat "$RUNNER_TEMP/plan.log" >&2
+            echo "::error::$(tail -1 "$RUNNER_TEMP/plan.log")"
+            exit 1
+          fi
+          cat "$RUNNER_TEMP/plan.log" >>"$GITHUB_STEP_SUMMARY"
+          echo "targets=$targets" >>"$GITHUB_OUTPUT"
+
+  dispatch:
+    needs: plan
+    if: needs.plan.outputs.targets != '[]'
+    runs-on: ubuntu-latest
+    permissions: {}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.targets) }}
+    environment: ${{ matrix.network }}
+    # One dispatch in flight per network; a newer manifest supersedes a queued
+    # older one, and the receiver repins to the newest anyway.
+    concurrency:
+      group: nido-dispatch-${{ matrix.network }}
+      cancel-in-progress: false
+    steps:
+      - name: Check the app secrets are configured
+        env:
+          CLIENT_ID: ${{ secrets.PERCH_NIDO_SYNC_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.PERCH_NIDO_SYNC_PRIVATE_KEY }}
+          NETWORK: ${{ matrix.network }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::environment '$NETWORK' lacks PERCH_NIDO_SYNC_CLIENT_ID / PERCH_NIDO_SYNC_PRIVATE_KEY; Nido was not notified (re-send with workflow_dispatch once set)"
+            exit 1
+          fi
+      - name: Mint a nidohq/nido token from the perch-nido-sync app
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.PERCH_NIDO_SYNC_CLIENT_ID }}
+          private-key: ${{ secrets.PERCH_NIDO_SYNC_PRIVATE_KEY }}
+          owner: nidohq
+          repositories: nido
+          permission-contents: write
+      - name: Send the perch-deployed repository_dispatch
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          PAYLOAD: ${{ toJSON(matrix.payload) }}
+        run: |
+          set -euo pipefail
+          jq -n --argjson payload "$PAYLOAD" \
+            '{event_type: "perch-deployed", client_payload: $payload}' |
+            gh api --method POST repos/nidohq/nido/dispatches --input -
+          {
+            echo "sent \`perch-deployed\` to nidohq/nido:"
+            echo '```json'
+            jq . <<<"$PAYLOAD"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"

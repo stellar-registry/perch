@@ -72,6 +72,83 @@ describe('fluent builder', () => {
     expect(doc.rules[0]!.cap).toEqual({ token: REGISTRY, limit: '25', 'period-ledgers': 100 });
   });
 
+  it('.recovery() reproduces the ci-publish-recovery fixture (guardian-only) byte-for-byte', () => {
+    const doc = policy()
+      .network('Test SDF Network ; September 2015')
+      .signer('admin', external(WEBAUTHN_VERIFIER, ADMIN_KEY))
+      .signer('ci', external(ED25519_VERIFIER, CI_KEY))
+      .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
+      .rule('ci-publish', (r) =>
+        r
+          .callContract(REGISTRY)
+          .signedBy('ci')
+          .func('publish', 'publish_hash')
+          .arg(1, isSelf())
+          .notAfter(55000000),
+      )
+      .recovery({
+        profile: 'protected',
+        mode: {
+          kind: 'guardian-only',
+          guardians: [
+            'GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH',
+            'GASP3KHU7JDP23WQINN5DDWC6BYMJ4MFBRLXBPGRAS3EX726YY67JISR',
+            'GDWF3WL7PYYUOLQBRMP5V5I62QU73U4KCGN2CLJDW74LPCXWY3YAUVQZ',
+          ],
+          quorum: 2,
+        },
+        controller: 'CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF',
+        baseline: { docHash: '27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98' },
+        replaceable: ['admin'],
+        delayLedgers: 17280,
+        expiryLedgers: 120960,
+        maxCancels: 3,
+      })
+      .build();
+
+    expect(docHash(doc)).toBe('d348912f20a15189922d12a06e00a68498bef4f16c8c7e2eeaa919dae9d060b0');
+  });
+
+  it('.recovery() with a combined mode reproduces the ci-publish-recovery-combined fixture', () => {
+    const doc = policy()
+      .network('Test SDF Network ; September 2015')
+      .signer('admin', external(WEBAUTHN_VERIFIER, ADMIN_KEY))
+      .signer('ci', external(ED25519_VERIFIER, CI_KEY))
+      .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
+      .rule('ci-publish', (r) =>
+        r
+          .callContract(REGISTRY)
+          .signedBy('ci')
+          .func('publish', 'publish_hash')
+          .arg(1, isSelf())
+          .notAfter(55000000),
+      )
+      .recovery({
+        profile: 'loss',
+        mode: {
+          kind: 'combined',
+          guardians: [
+            'GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH',
+            'GASP3KHU7JDP23WQINN5DDWC6BYMJ4MFBRLXBPGRAS3EX726YY67JISR',
+          ],
+          quorum: 1,
+          adapter: 'CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ',
+          circuitId: '21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb',
+          pool: 'CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5',
+          enrollmentId: '6f0d1c2b3a49586776859483a2b1c0dfeefdfcfbfaf9f8f7f6f5f4f3f2f1f0e1',
+          commitment: '0a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0',
+        },
+        controller: 'CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF',
+        replaceable: ['admin'],
+        delayLedgers: 17280,
+        expiryLedgers: 120960,
+        maxCancels: 3,
+      })
+      .build();
+
+    expect(docHash(doc)).toBe('91ca693d888c0f77ad354e92a6a91cc316e202448b65637e2c59ecc3edf6f63c');
+  });
+
   it('throws on build() when a rule has no scope', () => {
     expect(() =>
       policy()

@@ -1,0 +1,25 @@
+Vendored third-party dependency
+===============================
+
+  Library:  poseidon (Noir)
+  Upstream: https://github.com/noir-lang/poseidon
+  Tag:      v0.2.0
+  Commit:   4bc50d88dd8d94a00a95730fd76501e676417abf
+  License:  Apache License 2.0 (see LICENSE)
+
+Copied verbatim from NethermindEth/rs-soroban-ultrahonk@c2160987
+(circuits/vendor/poseidon), which vendors the commit above unmodified; it is
+also byte-identical to a fresh nargo checkout of the v0.2.0 tag. Only the
+upstream repository's build/CI scaffolding is omitted (none of it is compiled
+by nargo).
+
+Why vendored: a git dependency names a mutable tag, and nargo has no `rev`
+key and writes no lockfile, so a rebuild could fetch different library
+source from unchanged repository source and produce a different ACIR and
+verification key (OpenZeppelin's audit of the verifier repository, finding
+N-06). A path dependency freezes the source in the repository.
+
+CHECKSUMS.sha256 pins every vendored file;
+crates/perch-zk-adapter/tests/vendor.rs fails on any drift. Changing this
+library changes the verification key of circuits/perch_zk_recovery (and
+_d24): regenerate with `just zk-artifacts` and redeploy the adapter.

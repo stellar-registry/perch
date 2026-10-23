@@ -5,7 +5,7 @@
 //!
 //! The compiler and interpreter are registered at exactly the content addresses
 //! the account's `apply_doc` resolves them to: each infra address is
-//! `deployer(stateless_registry, pinned_wasm_hash)`, and the infra type is
+//! `deployer(constructorless_registry, pinned_wasm_hash)`, and the infra type is
 //! registered there. Resolution is pinned (offline, no `fetch_hash` XCC), so
 //! native mode needs no registry contract, no mock, and no wasm artifact — just
 //! the same derivation the account uses. See [`crate::faithful`] for the phase-2
@@ -15,7 +15,7 @@ use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use perch_interpreter::{PerchInterpreter, PerchInterpreterClient};
-use perch_smart_account::{infra, stateless_registry};
+use perch_smart_account::{constructorless_registry, infra};
 use perch_spending_limit::PerchSpendingLimit;
 use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Vec};
@@ -25,7 +25,7 @@ use crate::fixture::{self, AnyKeyVerifier, FIXTURE_VERIFIERS};
 use crate::Bootstrap;
 
 /// Register the compiler + interpreter types at the content addresses the
-/// account derives — `deployer(stateless, pinned_hash)` — under the
+/// account derives — `deployer(constructorless, pinned_hash)` — under the
 /// CURRENTLY bound network. Derivation is network-dependent, so this runs after
 /// the network is bound, and again if a test rebinds the ledger (see
 /// [`World::reregister_infra_for_current_network`]).
@@ -42,17 +42,19 @@ fn register_infra_at_derived(env: &Env) -> (Address, Address) {
     (compiler_addr, interpreter_addr)
 }
 
-/// A fully wired unit-`Env` world: the account, the three stateless infra
+/// A fully wired unit-`Env` world: the account, the three constructorless infra
 /// contracts, their addresses, and the admin signer set. Typed clients are
 /// handed out by accessor methods (each clones the cheap `Rc`-backed `Env`, so
 /// there is no self-borrow).
 pub struct World {
     /// The unit host every contract shares.
     pub env: Env,
-    /// The `stateless` subregistry address the account content-addresses its
-    /// infra off (`deployer(stateless, hash)`). Native mode deploys no contract there —
-    /// resolution is a pure offline derivation — but the field is populated for
-    /// parity with [`crate::faithful`] mode, which puts the real registry here.
+    /// The registry the account content-addresses its infra off
+    /// (`deployer(registry, hash)`, the registry its `registry.path` derives
+    /// on the bound network). Native
+    /// mode deploys no contract there — resolution is a pure offline
+    /// derivation — but the field is populated for parity with
+    /// [`crate::faithful`] mode, which puts the real registry here.
     pub registry: Option<Address>,
     /// The stateless doc-compiler (`compile_doc`).
     pub compiler: Address,
@@ -104,7 +106,7 @@ impl World {
 ///
 /// The compiler + interpreter live at content-addressed derivations rather than
 /// sequential `register()` ids, so their addresses (and any snapshot that embeds
-/// them) are a function of the derived `stateless` id, the pinned infra
+/// them) are a function of the derived `constructorless` id, the pinned infra
 /// hashes, and the fixture network — stable across runs, but not the old
 /// sequential ids.
 pub(crate) fn build(cfg: Bootstrap) -> World {
@@ -121,7 +123,7 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
     }
 
     // Register the compiler + interpreter at the content addresses `apply_doc`
-    // derives — `deployer(stateless, pinned_hash)` — so the zero-arg
+    // derives — `deployer(constructorless, pinned_hash)` — so the zero-arg
     // `apply_doc(doc)` resolves to exactly these, offline, with no registry
     // contract. Network-dependent, so it runs after the network bind above.
     let (compiler, interpreter) = register_infra_at_derived(&env);
@@ -139,7 +141,7 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
     ];
     let account = env.register(PerchAccount, (admin_signers.clone(),));
 
-    let registry = stateless_registry(&env);
+    let registry = constructorless_registry(&env);
     World {
         env,
         registry: Some(registry),

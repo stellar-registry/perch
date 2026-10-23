@@ -5,7 +5,7 @@ fuzzes and symbolically executes Soroban contracts against a mechanized
 Soroban + WebAssembly (KWasm) semantics written in the K framework. Running
 perch's evaluator under it gives a correctness check whose trusted base is the
 K semantics rather than rustc/LLVM + wasmi, a stack independent of every other
-leg of the verification plan (see `../docs/verification/PLAN.md`, phase 3).
+check ([`../docs/verification/PLAN.md`](../docs/verification/PLAN.md#coverage-today)).
 
 This directory is a self-contained Soroban contract (its own cargo workspace,
 like `../fuzz`) whose `test_` methods are boolean properties over
@@ -23,22 +23,21 @@ discharges them symbolically over the entire `u32` domain, the all-inputs
 guarantee the fixed conformance vectors (`../testdata/eval/`) cannot give on
 their own.
 
-## Status
+## In CI
 
 **Fuzzing runs in CI.** The `komet` job in `.github/workflows/assurance.yml`
-(weekly + `workflow_dispatch`) installs Komet from Nix pinned to release
-v0.1.88 and pulls the whole prebuilt closure (K, the haskell backend, and
-the bundled Soroban semantics) from RV's public `k-framework` Cachix cache.
-Nothing compiles from source and no separate `komet-kdist build` step is
-needed. The job then builds the contract with `cargo`, strips the DataCount section
-(next paragraph), and runs `komet test --wasm …`. Verified green: all three
-properties pass 50/50 examples, executing the real evaluator bytecode under the
-K semantics.
+(weekly + `workflow_dispatch`, not on pull requests) installs Komet from Nix
+pinned to release v0.1.88 and pulls the whole prebuilt closure (K, the
+haskell backend, and the bundled Soroban semantics) from RV's public
+`k-framework` Cachix cache. Nothing compiles from source and no separate
+`komet-kdist build` step is needed. The job then builds the contract with
+`cargo`, strips the DataCount section (next section), and runs `komet test
+--wasm …`, executing the real evaluator bytecode under the K semantics.
 
 **`komet prove run` (symbolic) is local-only.** It is the stronger check, a
-proof for every `u32`, but takes well over CI's 30-minute budget on these
-properties. CI runs the fuzzer; the symbolic proof is a documented local
-command (below). This is a performance limit of symbolic execution, not a gap
+proof for every `u32`, but takes well over 30 minutes on these properties,
+too long for the CI job. CI runs the fuzzer; the symbolic proof is a
+documented local command (below). This is a performance limit of symbolic execution, not a gap
 in what the properties assert.
 
 ### Two soroban-sdk-27 compatibility fixes the CI job applies

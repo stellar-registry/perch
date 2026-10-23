@@ -2,7 +2,7 @@
 //!
 //! The derivation under test is pure SDK: `address(env, registry)` must equal
 //! `env.deployer().with_address(registry, wasm_hash).deployed_address()`, which
-//! is what the registry uses when it actually deploys a stateless singleton with
+//! is what the registry uses when it actually deploys a constructorless singleton with
 //! `salt == wasm_hash`. We prove that against a real `deploy_v2` (pinned mode)
 //! and against a real cross-contract `fetch_hash` (runtime mode).
 
@@ -72,9 +72,16 @@ registry_contract! {
     hash: "33d12fec8f6f3ddf2eb0ec76ee9a75a9e37d1fa20af35908d90d278af8264311",
 }
 
+// Pinned from a file holding the hash as hex (how perch commits its pins).
+registry_contract! {
+    mod: hash_file,
+    wasm_name: "fixture",
+    hash_file: "tests/fixtures/deployable_wasm.sha256",
+}
+
 // Name-salted mode: salt = sha256(normalized name). Resolves a *named* deploy
 // (e.g. a subregistry) from its PARENT registry — how the account derives the
-// stateless subregistry from the pinned perch registry.
+// constructorless subregistry from the pinned perch registry.
 registry_contract! {
     mod: named,
     deploy_name: "fixture",
@@ -142,7 +149,7 @@ fn pinned_address_matches_actual_deployment() {
     );
 
     // Deploy it with salt == wasm hash and deployer == registry, exactly as the
-    // registry deploys a stateless singleton.
+    // registry deploys a constructorless singleton.
     let deployed = env
         .deployer()
         .with_address(registry.clone(), wasm_hash.clone())
@@ -163,6 +170,17 @@ fn address_only_matches_pinned_derivation() {
         pinned::address(&env, &registry)
     );
     assert_eq!(address_only::WASM_HASH, pinned::WASM_HASH);
+}
+
+#[test]
+fn hash_file_pins_the_hash_it_holds() {
+    let env = Env::default();
+    let registry = Address::generate(&env);
+    assert_eq!(hash_file::WASM_HASH, pinned::WASM_HASH);
+    assert_eq!(
+        hash_file::address(&env, &registry),
+        pinned::address(&env, &registry)
+    );
 }
 
 #[test]

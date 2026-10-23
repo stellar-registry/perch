@@ -57,20 +57,24 @@ pub enum Op {
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RpnProgram {
+    /// The wire-format version; only [`PROGRAM_VERSION`] validates.
     pub version: u32,
+    /// The ops, evaluated left to right.
     pub ops: Vec<Op>,
 }
 
 /// What the compiler stores in the interpreter for one `(account, rule)`: the
-/// program plus the `doc_hash` of the source PolicyDoc. Sharing this
-/// `#[contracttype]` between the compiler and the interpreter is what keeps
-/// install params from ever being a hand-built `ScVal` — both sides encode and
-/// decode through exactly these types. `doc_hash` binds the on-chain program to
-/// the reviewed document (provenance for lift/diff).
+/// program plus the provenance hash of the rule it was compiled from. Sharing
+/// this `#[contracttype]` between the compiler and the interpreter is what
+/// keeps install params from ever being a hand-built `ScVal` — both sides
+/// encode and decode through exactly these types.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InstallParams {
     pub program: RpnProgram,
+    /// The source rule's `perch_ir::rule_hash`, not the whole document's
+    /// hash (the field keeps its original name). It binds the on-chain
+    /// program to the reviewed rule (provenance for lift/diff).
     pub doc_hash: soroban_sdk::BytesN<32>,
 }
 

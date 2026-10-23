@@ -2,7 +2,7 @@
 //!
 //! Where [`crate::native`] registers the contract *types* and hand-wires their
 //! addresses, faithful mode `contractimport!`s the real `registry.wasm`,
-//! `publish`es the three stateless helpers (doc-compiler, interpreter,
+//! `publish`es the three constructorless helpers (doc-compiler, interpreter,
 //! verifier) into it, and `deploy_stateless`es them so their addresses are
 //! genuinely *resolved* from `registry_id + wasm_hash` — exercising the
 //! wasm-hash-as-salt derivation and the resolver macro's runtime mode against

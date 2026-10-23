@@ -32,6 +32,40 @@ bindings-interpreter-js:
     rm -rf "$out"
     echo "regenerated $dst"
 
+# Regenerate the committed PolicyDoc JSON Schema (draft 2020-12) from perch-ir's
+# constants. The artifact is packages/perch-js/schemas/policy.schema.json,
+# shipped in the @stellar-registry/perch npm package. It is generated, never
+# hand-edited; CI fails on drift (perch-schema's drift test under
+# `cargo test --workspace`). See docs/schema.md.
+schema:
+    cargo run -q -p perch-schema --bin perch-schema-gen -- --write
+
+# Build the ZK recovery pool and adapter wasm, plus the depth-24 fallback build
+# of both under target/zk-d24/ (for the depth comparison in docs/zk/).
+zk-wasm:
+    cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter
+    cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter \
+      --features perch-zk-pool/tree-depth-24,perch-zk-adapter/tree-depth-24 \
+      --target-dir target/zk-d24
+
+# Regenerate (or `just zk-artifacts check`) the circuit artifacts, VKs, proof
+# fixtures, and circuits/manifest.json. Installs the pinned nargo/bb under
+# target/zk-toolchain/ first; never touches a global nargo or bb.
+zk-artifacts mode="generate":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval "$(scripts/zk-toolchain.sh)"
+    cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- {{mode}}
+
+# Measure proving (native bb, both depths) and on-chain costs (metered wasm,
+# both depths) for docs/zk/measurements.md.
+zk-bench runs="7": zk-wasm
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval "$(scripts/zk-toolchain.sh)"
+    cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- bench {{runs}}
+    cargo test -q -p perch-zk-adapter --test costs -- --ignored --nocapture --test-threads 1
+
 check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
@@ -48,20 +82,31 @@ bench-build:
 bench: bench-build
     cargo test -p perch-bench --test metered -- --ignored --nocapture
 
-# Build the Lean 4 formal model and check every theorem (formal/). Setup:
+# Build the Lean 4 formal model, check every theorem, and audit that nothing
+# depends on more than Lean's standard axioms (formal/). Setup:
 # `curl -sSf https://elan.lean-lang.org/elan-init.sh | sh` — elan then picks
 # the pinned toolchain from formal/lean-toolchain automatically.
 formal:
-    cd formal && lake build
+    cd formal && lake build && lake env lean CheckAxioms.lean
 
+# Keep the fixture list below in sync with .github/workflows/assurance.yml.
 # Differential conformance: run the frozen eval vectors through the real Rust
-# evaluator AND the proved Lean model. Green = spec, implementation, and model
-# agree on every case.
+# evaluator AND the proved Lean model, and round-trip the Rust-emitted
+# canonical fixtures (whole documents, then recovery members after
+# `--recovery`) through the model's verified parser. Green = spec,
+# implementation, and model agree on every case.
 drt: formal
     cargo test -p perch-conformance
     cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
       ../testdata/ci-publish.canonical.json \
-      ../testdata/ci-publish-delegated.canonical.json
+      ../testdata/ci-publish-delegated.canonical.json \
+      ../testdata/ci-publish-threshold.canonical.json \
+      ../testdata/ci-publish-recovery.canonical.json \
+      ../testdata/ci-publish-recovery-combined.canonical.json \
+      --recovery \
+      ../testdata/recovery/config-guardian-only.canonical.json \
+      ../testdata/recovery/config-zk-only.canonical.json \
+      ../testdata/recovery/config-combined.canonical.json
 
 # Per-policy SMT prover (needs z3, e.g. `brew install z3`): dead rules,
 # intent conformance, semantic attenuation. Example:
@@ -78,12 +123,14 @@ conformance-wasm:
 
 # Coverage-guided fuzzing of a target in fuzz/fuzz_targets/ (default: the
 # evaluator's fail-closed totality). Setup: `cargo install cargo-fuzz` and a
-# nightly toolchain (the flux pin below works: nightly-2026-02-05).
+# nightly toolchain (the flux pin below works: nightly-2026-02-05). A target's
+# fuzz/dicts/<target>.dict, if any, is passed with -dict.
 # `-s none`: ASan fails to link soroban-sdk's rlib ("initializer pointer has
 # no target"), and these targets are pure safe Rust — panic/divergence
 # detection is the point, not memory errors.
 fuzz target="eval_fail_closed" time="60":
-    cargo +nightly-2026-02-05 fuzz run -s none {{target}} -- -max_total_time={{time}}
+    cargo +nightly-2026-02-05 fuzz run -s none {{target}} -- -max_total_time={{time}} \
+      {{ if path_exists("fuzz/dicts/" + target + ".dict") == "true" { "-dict=fuzz/dicts/" + target + ".dict" } else { "" } }}
 
 # Mutation testing over the security core: seeds small semantic bugs and
 # checks the suite kills them — measures whether the golden vectors + property

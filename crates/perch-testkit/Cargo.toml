@@ -1,6 +1,6 @@
 [package]
 name = "perch-testkit"
-description = "One-call bootstrap of the perch registry + stateless infra + account for tests"
+description = "One-call bootstrap of the perch registry + constructorless infra + account for tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,12 +15,21 @@ doctest = false
 # worlds, and it is consumed exclusively as a dev-dependency (never shipped).
 soroban-sdk = { workspace = true, features = ["testutils"] }
 stellar-accounts = { workspace = true }
-perch-account = { version = "0.2.0", path = "../perch-account" }
-perch-doc-compiler = { version = "0.2.0", path = "../perch-doc-compiler" }
-perch-interpreter = { version = "0.1.1", path = "../perch-interpreter" }
-perch-ed25519-verifier = { version = "0.1.1", path = "../perch-ed25519-verifier" }
-perch-spending-limit = { version = "0.1.1", path = "../perch-spending-limit" }
+perch-account = { version = "0.5.1", path = "../perch-account" }
+perch-doc-compiler = { version = "0.3.5", path = "../perch-doc-compiler" }
+perch-interpreter = { version = "0.1.6", path = "../perch-interpreter" }
+perch-program = { workspace = true }
+perch-ed25519-verifier = { version = "10.0.2", path = "../perch-ed25519-verifier" }
+perch-spending-limit = { version = "0.1.4", path = "../perch-spending-limit" }
 # The pinned infra-resolution modules (`registry_pins`), so native mode registers
 # the infra at exactly the content addresses the account derives.
-perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }
+perch-smart-account = { version = "0.1.1", path = "../perch-smart-account", features = ["testutils"] }
+# The controller generated recovery documents adopt (`delta`).
+perch-recovery = { version = "0.1.5", path = "../perch-recovery" }
+# Shared document generator for proptest and cargo-fuzz (`delta`).
+arbitrary = "1"
 hex = "0.4"
+# The software passkey (`passkey`): WebAuthn assertions over secp256r1.
+p256 = { version = "0.13", features = ["ecdsa"] }
+sha2 = "0.10"
+base64 = "0.22"

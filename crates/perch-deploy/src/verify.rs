@@ -2,15 +2,21 @@
 //! compose output. The headline check is a single read — the account's
 //! `applied_doc_hash` must equal the compose `doc_hash` (installed ==
 //! reviewed). Then every composed rule must exist on chain, matched **by
-//! name** (rule ids are assigned at apply time and shift across re-applies),
-//! with the matching context type; every interpreter-attached rule's stored
-//! program must carry the doc_hash; and the on-chain rule count must equal
-//! the document's exactly — `apply_doc` replaces the whole set, so a leftover
-//! rule is a detected mismatch, not a mystery. Everything runs through
-//! simulation — no keys, no writes.
+//! name** in the account's `configuration()` snapshot (rule ids are
+//! assigned when a rule is added and kept while it is edited in place), with
+//! the matching context type. Every
+//! interpreter-attached rule's stored program must equal the composed one,
+//! whose provenance is the hash of that rule in the applied document
+//! (`perch_ir::rule_hash`), and every policy-free rule must have no program
+//! at all, so no program from an earlier document survives under a live
+//! rule. The on-chain rule count must equal the document's exactly —
+//! `apply_doc` brings the rule set to the document's, so a leftover rule is a
+//! detected mismatch, not a mystery. Every read must belong to the
+//! snapshot's configuration revision, which is read again at the end.
+//! Everything runs through simulation — no keys, no writes.
 
 use anyhow::{bail, Context, Result};
-use stellar_xdr::{ScMap, ScVal};
+use stellar_xdr::{Limits, ReadXdr, ScMap, ScVal};
 
 use crate::compose::{parse_hash32, ComposeOutput, RuleEntry};
 use crate::rpc::Rpc;
@@ -30,34 +36,41 @@ fn fmt_id(id: Option<u32>) -> String {
     id.map_or_else(|| "—".to_string(), |i| i.to_string())
 }
 
-/// Probe rule ids upward until all `count` live rules are found. Ids are
-/// sparse after `apply_doc` replaces the set; the ceiling bounds the scan.
-fn scan_rules(rpc: &Rpc, account: &str) -> Result<Vec<(u32, ScMap)>> {
-    let count = match simulate_read(rpc, account, "get_context_rules_count", vec![])? {
-        ReadOutcome::Value(ScVal::U32(n)) => n,
-        ReadOutcome::Value(other) => bail!("get_context_rules_count returned {other:?}"),
-        ReadOutcome::ContractError { message, .. } => {
-            bail!("get_context_rules_count trapped: {message}")
-        }
+/// The account's configuration snapshot (`configuration()`): its revision
+/// and every installed rule with its OZ id, read at one ledger. Rules are
+/// found by name in it, never by probing ids.
+pub(crate) fn read_configuration(rpc: &Rpc, account: &str) -> Result<(u64, Vec<(u32, ScMap)>)> {
+    let m = match simulate_read(rpc, account, "configuration", vec![])? {
+        ReadOutcome::Value(ScVal::Map(Some(m))) => m,
+        ReadOutcome::Value(other) => bail!("configuration returned {other:?}"),
+        ReadOutcome::ContractError { message, .. } => bail!("configuration trapped: {message}"),
     };
-    let ceiling = count.saturating_mul(8).saturating_add(64);
+    let Some(ScVal::U64(revision)) = scv::map_get(&m, "revision") else {
+        bail!("configuration has no revision");
+    };
+    let Some(ScVal::Vec(Some(rules))) = scv::map_get(&m, "rules") else {
+        bail!("configuration has no rules");
+    };
     let mut found = Vec::new();
-    let mut id = 0u32;
-    while (found.len() as u32) < count && id < ceiling {
-        if let ReadOutcome::Value(ScVal::Map(Some(m))) =
-            simulate_read(rpc, account, "get_context_rule", vec![ScVal::U32(id)])?
-        {
-            found.push((id, m));
-        }
-        id += 1;
+    for rule in rules.iter() {
+        let ScVal::Map(Some(r)) = rule else {
+            bail!("configuration rule is not a map: {rule:?}");
+        };
+        let Some(ScVal::U32(id)) = scv::map_get(r, "id") else {
+            bail!("configuration rule has no id");
+        };
+        found.push((*id, r.clone()));
     }
-    if (found.len() as u32) < count {
-        bail!(
-            "found only {} of {count} rules within the id probe ceiling {ceiling}",
-            found.len()
-        );
+    Ok((*revision, found))
+}
+
+/// The account's configuration revision (`revision()`).
+fn read_revision(rpc: &Rpc, account: &str) -> Result<u64> {
+    match simulate_read(rpc, account, "revision", vec![])? {
+        ReadOutcome::Value(ScVal::U64(r)) => Ok(r),
+        ReadOutcome::Value(other) => bail!("revision returned {other:?}"),
+        ReadOutcome::ContractError { message, .. } => bail!("revision trapped: {message}"),
     }
-    Ok(found)
 }
 
 /// The applied document hash stored by `apply_doc` (`Option<BytesN<32>>`:
@@ -80,11 +93,14 @@ fn check_applied_hash(rpc: &Rpc, account: &str, doc_hash_hex: &str) -> Result<Ro
     })
 }
 
+/// The program stored for `rule_id` must be exactly `expected` (the composed
+/// `InstallParams`: the program and its rule-hash provenance), or absent when
+/// the rule is policy-free.
 fn check_program(
     rpc: &Rpc,
     account: &str,
     interpreter: &str,
-    doc_hash_hex: &str,
+    expected: Option<&ScVal>,
     name: &str,
     rule_id: u32,
 ) -> Result<Row> {
@@ -99,15 +115,12 @@ fn check_program(
             Some(format!("get_program trapped: {message}"))
         }
         // Option<InstallParams>: None encodes as Void.
-        ReadOutcome::Value(ScVal::Void) => Some("no program installed".to_string()),
-        ReadOutcome::Value(ScVal::Map(Some(m))) => {
-            let want = scv::bytes(&parse_hash32(doc_hash_hex).context("compose doc_hash")?)?;
-            if scv::map_get(&m, "doc_hash") == Some(&want) {
-                None
-            } else {
-                Some("doc_hash mismatch".to_string())
-            }
-        }
+        ReadOutcome::Value(ScVal::Void) => expected.map(|_| "no program installed".to_string()),
+        ReadOutcome::Value(found @ ScVal::Map(Some(_))) => match expected {
+            None => Some("a program is installed for a policy-free rule".to_string()),
+            Some(want) if *want == found => None,
+            Some(_) => Some("program or rule-hash provenance differs".to_string()),
+        },
         ReadOutcome::Value(other) => Some(format!("unexpected shape: {other:?}")),
     };
     Ok(Row {
@@ -172,34 +185,37 @@ pub fn run(
         );
     }
 
+    // Every read below must belong to the snapshot's revision: it is
+    // checked again once they are done.
+    let (revision, onchain) = read_configuration(rpc, account)?;
     let mut rows = vec![check_applied_hash(rpc, account, &compose.doc_hash)?];
 
-    let onchain = scan_rules(rpc, account)?;
     for expected in compose.genesis_rule.iter().chain(compose.apply.iter()) {
         let (row, rule_id) = check_rule(&onchain, expected)?;
         rows.push(row);
-        if expected.install.is_some() {
-            rows.push(match rule_id {
-                Some(id) => check_program(
-                    rpc,
-                    account,
-                    interpreter,
-                    &compose.doc_hash,
-                    &expected.name,
-                    id,
-                )?,
-                None => Row {
-                    rule_id: None,
-                    name: expected.name.clone(),
-                    check: "program hash",
-                    mismatch: Some("rule missing; program unchecked".to_string()),
-                },
-            });
-        }
+        let want = match &expected.install {
+            Some(install) => Some(
+                ScVal::from_xdr_base64(&install.scval_base64, Limits::none())
+                    .context("compose install params")?,
+            ),
+            None => None,
+        };
+        rows.push(match rule_id {
+            Some(id) => {
+                check_program(rpc, account, interpreter, want.as_ref(), &expected.name, id)?
+            }
+            None => Row {
+                rule_id: None,
+                name: expected.name.clone(),
+                check: "program hash",
+                mismatch: Some("rule missing; program unchecked".to_string()),
+            },
+        });
     }
 
-    // apply_doc replaces the whole set: the document's rules are exactly the
-    // account's rules. A count mismatch means a leftover or a missing rule.
+    // apply_doc brings the rule set to the document's: the document's rules
+    // are exactly the account's rules. A count mismatch means a leftover or a
+    // missing rule.
     let expected_rules = usize::from(compose.genesis_rule.is_some()) + compose.apply.len();
     rows.push(Row {
         rule_id: None,
@@ -209,6 +225,12 @@ pub fn run(
             .then(|| format!("on-chain {} != document {}", onchain.len(), expected_rules)),
     });
 
+    let after = read_revision(rpc, account)?;
+    if after != revision {
+        bail!("the account changed while it was read (revision {revision} -> {after}); rerun");
+    }
+
+    println!("revision {revision}");
     println!("{:<6} {:<24} {:<14} status", "rule", "name", "check");
     for row in &rows {
         println!(

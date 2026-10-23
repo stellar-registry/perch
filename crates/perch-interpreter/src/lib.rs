@@ -3,10 +3,10 @@
 //! `Policy` trait by evaluating a stored constraint program.
 //!
 //! This is the entire policy-evaluation surface of perch — there is no
-//! per-policy codegen anywhere. (The workspace's other deployables,
-//! `perch-account` and `perch-ed25519-verifier`, are thin OZ compositions with
-//! no policy logic.) One immutable instance per network; the address is
-//! derived from the registry id and this contract's wasm hash.
+//! per-policy codegen anywhere. (The cumulative spend cap is OZ's
+//! `spending_limit`, deployed as `perch-spending-limit`.) One immutable,
+//! constructorless instance per network; the address is derived from the
+//! registry id and this contract's wasm hash.
 //!
 //! ## Security contract
 //! - **Multi-tenant auth (C1):** `smart_account` is an *argument* to the Policy
@@ -31,10 +31,11 @@
 //! that fails structural `validate` ([`Error::InvalidProgram`]), refuses to
 //! overwrite an existing attachment ([`Error::AlreadyInstalled`], so the
 //! current policy stays in force), and requires the account's own auth. It
-//! stores each rule's `doc_hash` for provenance but cannot recompute it
-//! on-chain — the source document never reaches the interpreter — so a client
-//! verifies `doc_hash` against the reviewed document *before* attaching, via
-//! `perch_compile::verify_plan_matches_doc`. Together these are perch's
+//! stores each program's provenance (the `doc_hash` field, which holds the
+//! hash of the rule the program was compiled from, `perch_ir::rule_hash`) but
+//! cannot recompute it on-chain — the source document never reaches the
+//! interpreter — so a client verifies it against the reviewed document
+//! *before* attaching, via `perch_compile::verify_plan_matches_doc`. Together these are perch's
 //! OPA-style activation: an attachment is either hash-verified against a
 //! reviewed document or refused, never silently swapped.
 //!
@@ -85,8 +86,9 @@ impl PerchInterpreter {
     }
 
     /// The install params stored for one `(account, rule)`, or `None`.
-    /// Exposes `doc_hash` so lift/diff can check provenance against the
-    /// reviewed document rather than guess from the lowered rule.
+    /// Exposes `doc_hash` (the source rule's `rule_hash`) so lift/diff can
+    /// check provenance against the reviewed document rather than guess from
+    /// the lowered rule.
     ///
     /// Deliberately unauthenticated (unlike the C1-gated entry points):
     /// programs are ledger state and readable over RPC by anyone, so gating
@@ -106,6 +108,10 @@ impl PerchInterpreter {
 impl Policy for PerchInterpreter {
     type AccountParams = InstallParams;
 
+    /// Authorize one context for `(smart_account, context_rule.id)`: panics
+    /// `Denied` unless at least one signer authenticated and the installed
+    /// program evaluates to `True` for this call, and `NotInstalled` when no
+    /// program is installed. Requires the account's authorization.
     fn enforce(
         env: &Env,
         context: Context,
@@ -145,6 +151,10 @@ impl Policy for PerchInterpreter {
         }
     }
 
+    /// Store `install_params` for `(smart_account, context_rule.id)`. Panics
+    /// `AlreadyInstalled` if a program is already stored there and
+    /// `InvalidProgram` if the program fails structural validation. Requires
+    /// the account's authorization.
     fn install(
         env: &Env,
         install_params: Self::AccountParams,
@@ -168,6 +178,8 @@ impl Policy for PerchInterpreter {
             .extend_ttl(&key, TTL_THRESHOLD, EXTEND_AMOUNT);
     }
 
+    /// Remove the program for `(smart_account, context_rule.id)`. Panics
+    /// `NotInstalled` if there is none. Requires the account's authorization.
     fn uninstall(env: &Env, context_rule: ContextRule, smart_account: Address) {
         smart_account.require_auth();
 

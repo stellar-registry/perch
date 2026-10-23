@@ -1,6 +1,6 @@
 [package]
 name = "perch-derive-id"
-description = "Offline: derive deployer(parent, sha256(name)) contract ids for the infra fetch script"
+description = "Offline: derive content-addressed (salt = wasm hash) and name-salted registry contract ids for the deploy and fetch scripts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,3 +15,6 @@ path = "src/main.rs"
 # testutils gives a std `Env` whose `deployer().deployed_address()` is the exact
 # on-chain contract-id derivation, so the derived ids match the chain.
 soroban-sdk = { workspace = true, features = ["testutils"] }
+# `registry` mode reports the registry the account source derives, from the
+# same compiled-in derivation the account runs.
+perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }

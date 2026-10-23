@@ -1,8 +1,8 @@
 # What perch can enforce, as a theorem
 
 Perch's constraint on itself, that every predicate is stateless and ranges over a *single*
-invocation, is usually presented as a design choice (see the README's "Stateless policies"
-section). Enforceability theory makes it a theorem-shaped boundary. It tells us exactly which
+invocation, is usually presented as a design choice (see the README's "Stateless predicates
+and cumulative caps" section). Enforceability theory makes it a theorem-shaped boundary. It tells us exactly which
 policies a perch-style monitor *can* enforce, and proves the ones it can't need something
 strictly stronger.
 
@@ -61,9 +61,12 @@ monitor can't decide, at the price of precision, never of soundness.
 - **Ordering / protocol rules.** "Configure before use" and "no publish after revoke-request"
   need state again (typestate-flavored safety).
 - **Liveness / availability.** No execution monitor, stateful or not, can enforce "the
-  account can always recover" (Schneider). Perch addresses the adjacent risk structurally
-  instead. INV-2 lowers constraint-free admin rules policy-free, so an interpreter deny-bug
-  cannot brick the admin path. That is a design mitigation, not a monitored property.
+  account can always recover" (Schneider). Perch addresses the adjacent risks structurally
+  instead. INV-2 lowers a constraint-free `all` rule (no functions, arguments, or cap)
+  policy-free, so an interpreter deny-bug cannot brick such an admin path. Account recovery
+  ([`../recovery/spec.md`](../recovery/spec.md)) is ordinary stateful contract logic in a
+  controller outside the interpreter. Both are design mitigations, not monitored
+  properties.
 - **Result-dependent policies.** Predicates over what the call *returned*. The monitor runs
   before effects; only suppression/insertion monitors (Bauer–Ligatti–Walker *edit automata*,
   IJIS 2005) can act there, and a `__check_auth` hook has no insertion power.
@@ -77,7 +80,8 @@ an observed clock, not control over it.
 
 ## Why this matters for the proofs
 
-The verification plan ([PLAN.md](./PLAN.md)) states its theorems against a model whose
+The Lean model ([`formal/README.md`](../../formal/README.md); coverage in
+[PLAN.md](./PLAN.md)) states its evaluator and lowering theorems against a model whose
 semantic domain is a single invocation. This note is the license for that. By the claim above,
 modeling one invocation at a time loses nothing the artifact can enforce. Conversely, any
 future feature that smuggles state into the interpreter (a counter, a nonce, a seen-set)

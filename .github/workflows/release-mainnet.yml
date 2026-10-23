@@ -1,0 +1,449 @@
+name: Release (mainnet)
+
+# Publish released perch contracts to mainnet, by hand. Nothing reaches
+# mainnet from a release merge: release.yml tags, builds, and attests every
+# release and publishes it to testnet and npm, and this workflow runs only
+# when someone dispatches it from main. It publishes tags release.yml already
+# created, as the bytes they were released as, and only after the `mainnet`
+# environment's reviewer approves:
+#
+#   mainnet-publish        each allow-listed tag's attested release asset
+#                          (release.yml's contract-release build), checked
+#                          against its attestation for the tag's commit, then
+#                          uploaded, publish_hash'd, and deploy_stateless'd.
+#   mainnet-deploy-stack   the recovery stack, as the exact bytes the testnet
+#                          deployment from the stack tag's commit runs. Nothing
+#                          is rebuilt: the account and the factory derive their
+#                          registry from crates/*/wasm/registry.path under the
+#                          ledger's network id, so one build serves every
+#                          network. Each wasm is fetched from testnet by the
+#                          hash that deployment recorded, and must carry its
+#                          attestation, before anything is published.
+#
+# Nothing here compiles, and no job hands another an artifact to publish.
+# The mainnet registry is computed, not configured: the one this checkout's
+# account and factory derive on mainnet from crates/*/wasm/registry.path
+# (perch/constructorless directly under the Stellar Registry root), with its
+# root. Every job that reads the mainnet delegate runs in the `mainnet`
+# environment (required reviewer, main-only) and reads only that
+# environment's CI_PUBLISH_MAINNET_SECRET_KEY and PERCH_MAINNET_AUTHOR_ADDRESS,
+# which have no defaults; scripts/mainnet-settings.sh checks them, and the
+# registry, on-chain first.
+#
+# dry_run (the default) runs every check, then simulates each transaction a
+# real run would send and prints it with its fee; nothing is submitted and no
+# PR opens. In a combined dry run (publish tags and a stack tag together) the
+# stack's plan reports each reused tier-0 the publish has not yet put on
+# mainnet instead of simulating around it.
+# docs/deploy/README.md ("Mainnet") has the settings and the order to run it in.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_tags:
+        description: "Released tags of ALLOW-listed contracts to publish to the mainnet registry, space-separated, e.g. perch-interpreter-v0.1.4 perch-doc-compiler-v0.3.3"
+        required: false
+        type: string
+      stack_tag:
+        description: "Released tag of a recovery-stack contract; the stack is built from its commit and deployed to the mainnet registry, e.g. perch-account-factory-v0.1.3"
+        required: false
+        type: string
+      dry_run:
+        description: "Simulate and print every transaction and its fee, submit nothing. Clear to publish."
+        required: false
+        default: true
+        type: boolean
+
+permissions: {}
+
+# One mainnet release at a time: every run signs with the same delegate.
+concurrency:
+  group: release-mainnet
+  cancel-in-progress: false
+
+jobs:
+  # Resolve the dispatch to released commits, from git alone, and derive the
+  # mainnet registry. No key, no environment.
+  mainnet-plan:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      (inputs.publish_tags != '' || inputs.stack_tag != '')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # the tags and main's history
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      publish_any: ${{ steps.plan.outputs.publish_any }}
+      stack_any: ${{ steps.plan.outputs.stack_any }}
+      stack_tag: ${{ steps.plan.outputs.stack_tag }}
+      stack_commit: ${{ steps.plan.outputs.stack_commit }}
+      testnet_manifest_commit: ${{ steps.plan.outputs.testnet_manifest_commit }}
+    env:
+      # Kept in step with release.yml's publish-plan ALLOW, deploy-plan
+      # DEPLOY_SET, and deploy-stack jobs' REUSE (scripts/test-release-scripts.py
+      # checks).
+      MAINNET_ALLOW: "perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-mldsa-verifier"
+      MAINNET_STACK: "perch-webauthn-verifier perch-recovery perch-zk-pool perch-zk-adapter perch-account perch-account-factory"
+      REUSE: "perch-doc-compiler perch-interpreter perch-spending-limit perch-ed25519-verifier"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # every tag, and main's history of deployments/testnet.json
+      - name: Resolve the tags to released commits on main
+        id: plan
+        env:
+          REF: ${{ github.ref }}
+          PUBLISH_TAGS: ${{ inputs.publish_tags }}
+          STACK_TAG: ${{ inputs.stack_tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          [ "$REF" = refs/heads/main ] || { echo "::error::dispatch a mainnet release from main, not $REF"; exit 1; }
+          plan=$(scripts/mainnet-plan.sh --main "$GITHUB_SHA" --allow "$MAINNET_ALLOW" \
+            --stack-set "$MAINNET_STACK" --reuse "$REUSE" --publish "$PUBLISH_TAGS" --stack "$STACK_TAG")
+          # The registry every mainnet job publishes into: the one the
+          # committed crates/*/wasm/registry.path derives there, by the
+          # account's own derivation (scripts/derive-id.py).
+          registry=$(scripts/derive-id.py registry "Public Global Stellar Network ; September 2015")
+          {
+            echo "publish=$(jq -c .publish <<<"$plan")"
+            echo "publish_any=$(jq -r '.publish | length > 0' <<<"$plan")"
+            echo "stack_any=$(jq -r '.stack != null' <<<"$plan")"
+            echo "stack_tag=$(jq -r '.stack.tag // ""' <<<"$plan")"
+            echo "stack_commit=$(jq -r '.stack.commit // ""' <<<"$plan")"
+            echo "testnet_manifest_commit=$(jq -r '.stack.testnet_manifest_commit // ""' <<<"$plan")"
+          } >>"$GITHUB_OUTPUT"
+          {
+            echo "### Mainnet release plan ($([ "$DRY_RUN" = true ] && echo "dry run: nothing is submitted" || echo "PUBLISHES to mainnet"))"
+            echo "registry (crates/*/wasm/registry.path): \`$registry\`"
+            jq -r '.publish[] | "- publish `\(.tag)` (\(.commit))"' <<<"$plan"
+            jq -r 'if .stack then "- deploy the recovery stack from `\(.stack.tag)` (\(.stack.commit)), as the testnet deployment recorded at \(.stack.testnet_manifest_commit)" else empty end' <<<"$plan"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  # Publish each tag's attested release asset to the mainnet registry,
+  # authored by the mainnet perch-author account and signed by its mainnet
+  # delegate. One job, not a matrix: the legs would share the delegate's
+  # sequence number, and each one would wait for its own approval.
+  mainnet-publish:
+    needs: mainnet-plan
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      needs.mainnet-plan.outputs.publish_any == 'true'
+    runs-on: ubuntu-latest
+    environment: mainnet
+    permissions:
+      contents: read # the release assets
+      attestations: read # gh attestation verify
+    env:
+      STELLAR_NETWORK: mainnet
+      STELLAR_RPC_URL: https://mainnet.sorobanrpc.com
+      STELLAR_NETWORK_PASSPHRASE: "Public Global Stellar Network ; September 2015"
+      # The mainnet environment's variable. No default: unset, it fails
+      # scripts/mainnet-settings.sh.
+      AUTHOR: ${{ vars.PERCH_MAINNET_AUTHOR_ADDRESS }}
+      PUBLISH: ${{ needs.mainnet-plan.outputs.publish }}
+    steps:
+      # main's tip, for the pinned stellar-cli fork and the scripts. Nothing
+      # here compiles, and the wasm comes from the releases, not this tree.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-stellar-fork
+      # The registry registry.path derives on mainnet, its root, and the
+      # author, each checked on-chain.
+      - name: Check the mainnet settings
+        id: settings
+        run: scripts/mainnet-settings.sh >>"$GITHUB_OUTPUT"
+      # Exactly the bytes each tag was released as: the release's asset, and
+      # its build attestation must name the tag's commit on main. The check
+      # refuses any other bytes.
+      - name: Fetch and verify each tag's attested release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          while read -r row; do
+            pkg=$(jq -r .package <<<"$row") ver=$(jq -r .version <<<"$row")
+            tag=$(jq -r .tag <<<"$row") commit=$(jq -r .commit <<<"$row")
+            asset="${pkg}_v${ver}.wasm"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir dist
+            test -s "dist/$asset" || { echo "::error::release $tag has no $asset"; exit 1; }
+            gh attestation verify "dist/$asset" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow stellar-registry/actions/.github/workflows/contract-release.yml \
+              --source-ref refs/heads/main --source-digest "$commit"
+            binver=$(stellar contract info meta --wasm "dist/$asset" | sed -n 's/^ • binver: \(.*\)$/\1/p')
+            [ "$binver" = "$ver" ] || { echo "::error::$asset carries binver '$binver', the tag is $ver"; exit 1; }
+            echo "$tag: $(sha256sum "dist/$asset" | cut -d' ' -f1)"
+          done < <(jq -c '.[]' <<<"$PUBLISH")
+      # The delegate is only the simulation source here: every transaction is
+      # built unsigned and simulated for its fee (scripts/publish-wasm.sh
+      # --plan), and nothing is sent.
+      - name: Simulate each publish (dry run, submits nothing)
+        if: inputs.dry_run
+        env:
+          STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_MAINNET_SECRET_KEY }}
+          REGISTRY: ${{ steps.settings.outputs.registry }}
+        run: |
+          set -euo pipefail
+          : >receipts.jsonl
+          while read -r row; do
+            pkg=$(jq -r .package <<<"$row") ver=$(jq -r .version <<<"$row")
+            scripts/publish-wasm.sh --plan --registry "$REGISTRY" --author "$AUTHOR" \
+              --name "$pkg" --version "$ver" --wasm "dist/${pkg}_v${ver}.wasm" >>receipts.jsonl
+          done < <(jq -c '.[]' <<<"$PUBLISH")
+      # Secrets go through the environment, never argv: STELLAR_ACCOUNT is the
+      # source/fee delegate and STELLAR_SIGN_WITH_KEY signs the author's
+      # publish_hash authorization (the fork discovers its context rule).
+      - name: Publish and deploy each wasm (smart-account-authored)
+        if: ${{ !inputs.dry_run }}
+        env:
+          STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_MAINNET_SECRET_KEY }}
+          STELLAR_SIGN_WITH_KEY: ${{ secrets.CI_PUBLISH_MAINNET_SECRET_KEY }}
+          REGISTRY: ${{ steps.settings.outputs.registry }}
+        run: |
+          set -euo pipefail
+          : >receipts.jsonl
+          while read -r row; do
+            pkg=$(jq -r .package <<<"$row") ver=$(jq -r .version <<<"$row")
+            scripts/publish-wasm.sh --registry "$REGISTRY" --author "$AUTHOR" \
+              --name "$pkg" --version "$ver" --wasm "dist/${pkg}_v${ver}.wasm" >>receipts.jsonl
+          done < <(jq -c '.[]' <<<"$PUBLISH")
+      - name: Summarize
+        if: ${{ !cancelled() && hashFiles('receipts.jsonl') != '' }}
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          REGISTRY: ${{ steps.settings.outputs.registry }}
+          REGISTRY_PATH: ${{ steps.settings.outputs.registry_path }}
+        run: |
+          {
+            echo "### Mainnet publish to $REGISTRY ($REGISTRY_PATH)$([ "$DRY_RUN" = true ] && echo ": dry run, nothing submitted")"
+            scripts/publish-wasm.sh --summary receipts.jsonl
+          } >>"$GITHUB_STEP_SUMMARY"
+      # A failed run keeps the receipts of what it did publish.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !cancelled() && !inputs.dry_run && hashFiles('receipts.jsonl') != '' }}
+        with:
+          name: mainnet-publish-receipts
+          path: receipts.jsonl
+          if-no-files-found: error
+          retention-days: 90
+
+  # Attach each mainnet publish receipt to its release, beside the testnet
+  # one (publish-receipt.json). No secret.
+  mainnet-publish-record:
+    needs: [mainnet-plan, mainnet-publish]
+    if: >-
+      github.event_name == 'workflow_dispatch' && !inputs.dry_run &&
+      needs.mainnet-publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # upload the receipt to each release
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mainnet-publish-receipts
+      - name: Attach publish-receipt-mainnet.json to each release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH: ${{ needs.mainnet-plan.outputs.publish }}
+        run: |
+          set -euo pipefail
+          while read -r row; do
+            pkg=$(jq -r .package <<<"$row") ver=$(jq -r .version <<<"$row") tag=$(jq -r .tag <<<"$row")
+            jq -c --arg n "$pkg" --arg v "$ver" 'select(.name == $n and .version == $v) | . + {network: "mainnet"}' \
+              receipts.jsonl >publish-receipt-mainnet.json
+            [ -s publish-receipt-mainnet.json ] || { echo "::error::no receipt for $tag"; exit 1; }
+            gh release upload "$tag" publish-receipt-mainnet.json --clobber --repo "$GITHUB_REPOSITORY"
+          done < <(jq -c '.[]' <<<"$PUBLISH")
+
+  # Deploy the recovery stack to the mainnet registry in pin order, or with
+  # dry_run simulate every transaction that would send. The stack is the
+  # exact wasm the testnet deployment from the stack commit runs: this job
+  # fetches each one from testnet by the hash that deployment recorded,
+  # checks its attestation, and computes every address itself. It takes no
+  # artifact from another job, and nothing in it compiles.
+  mainnet-deploy-stack:
+    needs: [mainnet-plan, mainnet-publish]
+    if: >-
+      !cancelled() && github.event_name == 'workflow_dispatch' &&
+      needs.mainnet-plan.outputs.stack_any == 'true' &&
+      (needs.mainnet-publish.result == 'success' || needs.mainnet-publish.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: mainnet
+    permissions:
+      contents: read # main's history: the testnet manifest
+      attestations: read # gh attestation verify
+    env:
+      STELLAR_NETWORK: mainnet
+      STELLAR_RPC_URL: https://mainnet.sorobanrpc.com
+      STELLAR_NETWORK_PASSPHRASE: "Public Global Stellar Network ; September 2015"
+      AUTHOR: ${{ vars.PERCH_MAINNET_AUTHOR_ADDRESS }}
+      # Published to the mainnet registry by mainnet-publish from their
+      # release assets; deploy-stack.sh checks it serves these hashes.
+      REUSE: "perch-doc-compiler perch-interpreter perch-spending-limit perch-ed25519-verifier"
+      STACK_COMMIT: ${{ needs.mainnet-plan.outputs.stack_commit }}
+      TESTNET_MANIFEST_COMMIT: ${{ needs.mainnet-plan.outputs.testnet_manifest_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the testnet manifest at TESTNET_MANIFEST_COMMIT
+      - uses: ./.github/actions/setup-stellar-fork
+      - name: Check the mainnet settings
+        id: settings
+        run: scripts/mainnet-settings.sh >>"$GITHUB_OUTPUT"
+      # That deployment's account and factory must be this source's one
+      # build for every network: it records the registry the committed
+      # registry.path derives on its network. An earlier deployment's account
+      # compiled in its network's registry and never runs on mainnet. Each
+      # wasm is fetched by the address or hash the manifest records and
+      # refused unless its sha256 is the recorded one. build.json keeps the
+      # zk circuit that deployment recorded, so the mainnet record names the
+      # circuit these bytes compile in, not this checkout's.
+      - name: Fetch the testnet deployment's wasm by hash
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/stack-manifest.json"
+          git show "$TESTNET_MANIFEST_COMMIT:deployments/testnet.json" >"$manifest"
+          [ "$(jq -r .source.commit "$manifest")" = "$STACK_COMMIT" ] \
+            || { echo "::error::deployments/testnet.json at $TESTNET_MANIFEST_COMMIT was not built from $STACK_COMMIT"; exit 1; }
+          recorded=$(jq -r .registry.id "$manifest")
+          derived=$(scripts/derive-id.py registry "$(jq -r .network_passphrase "$manifest")")
+          [ "$recorded" = "$derived" ] || {
+            echo "::error::the testnet deployment from $STACK_COMMIT records registry $recorded, but crates/*/wasm/registry.path derives $derived there: its account and factory predate one build for every network"
+            exit 1
+          }
+          scripts/fetch-infra-wasm.sh --manifest "$manifest" --stack target/stack
+      # Every wasm this run deploys, not just the tier-0: each must be the
+      # bytes that testnet deployment's attest job attested for the stack
+      # commit on main. The reused tier-0 were checked against their own
+      # release attestation when mainnet-publish published them, and
+      # deploy-stack.sh requires the registry to serve exactly these hashes.
+      - name: Check each wasm carries the testnet release's attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for pkg in $(jq -r '.artifacts[].package' target/stack/build.json); do
+            case " $REUSE " in *" $pkg "*) continue ;; esac
+            wasm="target/stack/${pkg//-/_}.wasm"
+            gh attestation verify "$wasm" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --source-ref refs/heads/main --source-digest "$STACK_COMMIT"
+            echo "$pkg: $(sha256sum "$wasm" | cut -d' ' -f1)"
+          done
+      # In deploy-stack.sh's order: tier 0 (a reused one reports as reused,
+      # or as not yet published), the account (install only), the factory.
+      # The delegate is only the simulation source.
+      - name: Simulate the deploy (dry run, submits nothing)
+        if: inputs.dry_run
+        env:
+          STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_MAINNET_SECRET_KEY }}
+        run: scripts/deploy-stack.sh --plan --author "$AUTHOR" --reuse "$REUSE"
+      - name: Publish the stack (smart-account-authored, reusing the mainnet tier-0)
+        if: ${{ !inputs.dry_run }}
+        env:
+          STELLAR_ACCOUNT: ${{ secrets.CI_PUBLISH_MAINNET_SECRET_KEY }}
+          STELLAR_SIGN_WITH_KEY: ${{ secrets.CI_PUBLISH_MAINNET_SECRET_KEY }}
+        run: scripts/deploy-stack.sh --author "$AUTHOR" --reuse "$REUSE"
+      - name: Summarize
+        if: ${{ !cancelled() && hashFiles('target/stack/receipts.jsonl') != '' }}
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+          REGISTRY: ${{ steps.settings.outputs.registry }}
+          REGISTRY_PATH: ${{ steps.settings.outputs.registry_path }}
+        run: |
+          {
+            echo "### Mainnet stack deploy to $REGISTRY ($REGISTRY_PATH)$([ "$DRY_RUN" = true ] && echo ": dry run, nothing submitted")"
+            scripts/publish-wasm.sh --summary target/stack/receipts.jsonl
+          } >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ !inputs.dry_run }}
+        with:
+          name: mainnet-deploy-stack-manifest
+          path: deployments/mainnet.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # Verify the deployment, bump perch-artifacts, and open the deploy(mainnet)
+  # PR, as release.yml's deploy-stack-record does for testnet. No secret,
+  # nothing compiles, and nothing to attest: every wasm is a testnet-attested
+  # build. The PR records deployments/mainnet.json and the perch-artifacts
+  # release that ships it; the committed hash pins (crates/*/wasm) are the
+  # same bytes on both networks, so they need no change.
+  mainnet-deploy-stack-record:
+    needs: [mainnet-plan, mainnet-deploy-stack]
+    if: >-
+      !cancelled() && github.event_name == 'workflow_dispatch' && !inputs.dry_run &&
+      needs.mainnet-deploy-stack.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # commit the manifest onto the deploy branch
+      pull-requests: write # open the deploy(mainnet) PR
+    env:
+      STELLAR_NETWORK: mainnet
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # git-cliff needs full history + tags (perch-artifacts bump)
+      - name: Install git-cliff (bumps perch-artifacts below)
+        run: |
+          mkdir -p "$RUNNER_TEMP/gc"
+          curl -fsSL https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-unknown-linux-gnu.tar.gz -o "$RUNNER_TEMP/gc.tar.gz"
+          echo "bb40f68e752db1a32526c43e0108e8eff785f7c24c67024cffe1c316e034372975fd78c9af8e9a48148235aad15c9a103f1a5b490c282f1db09a7a793794b69f  $RUNNER_TEMP/gc.tar.gz" | sha512sum -c -
+          tar -xz -C "$RUNNER_TEMP/gc" --strip-components=1 -f "$RUNNER_TEMP/gc.tar.gz"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mainnet-deploy-stack-manifest
+          path: ${{ runner.temp }}/stack-manifest
+      - name: Take only the manifest from the artifact
+        run: |
+          set -euo pipefail
+          f="$RUNNER_TEMP/stack-manifest/mainnet.json"
+          [ -f "$f" ] && [ ! -L "$f" ] || { echo "::error::the artifact has no regular file mainnet.json"; exit 1; }
+          cp -- "$f" deployments/mainnet.json
+      - uses: ./.github/actions/setup-stellar-fork
+      # Also checks the manifest records the registry this source derives on
+      # mainnet (scripts/manifest-registry.sh): mainnet has no pending
+      # migration (deployments/pending-registry.json).
+      - name: Verify the deployment against the chain
+        run: |
+          set -euo pipefail
+          scripts/manifest-registry.sh --manifest deployments/mainnet.json | grep -q '^current ' \
+            || { echo "::error::deployments/mainnet.json does not record the derived mainnet registry"; exit 1; }
+          scripts/verify-deployment.sh --manifest deployments/mainnet.json
+      - name: Bump @stellar-registry/perch-artifacts for the new deployment record
+        env:
+          MESSAGE: "deploy(mainnet): recovery stack @ ${{ needs.mainnet-plan.outputs.stack_commit }}"
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/gc:$PATH" # git-cliff, installed above
+          scripts/deploy-record-bump.sh deployments/mainnet.json "$MESSAGE"
+      - name: Open the deploy(mainnet) manifest PR
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7
+        with:
+          base: main
+          branch: deploy/mainnet
+          delete-branch: true
+          title: "deploy(mainnet): recovery stack"
+          commit-message: "deploy(mainnet): recovery stack @ ${{ needs.mainnet-plan.outputs.stack_commit }}"
+          add-paths: |
+            deployments/mainnet.json
+            packages/perch-artifacts/package.json
+            packages/perch-artifacts/package-lock.json
+            packages/perch-artifacts/CHANGELOG.md
+          body: >
+            Automated by the `mainnet-deploy-stack` jobs, dispatched by hand: the
+            recovery stack deployed to the mainnet registry,
+            smart-account-authored, in pin order, built from
+            `${{ needs.mainnet-plan.outputs.stack_tag }}`
+            (${{ needs.mainnet-plan.outputs.stack_commit }}, on `main`). Merging
+            adds `deployments/mainnet.json` and bumps
+            `@stellar-registry/perch-artifacts` (version and changelog, from the
+            release tooling), so the merge publishes a package carrying this
+            manifest before Nido is notified. The committed build-time pins and
+            the `@stellar-registry/perch-contracts` bindings stay on the testnet
+            deployment.

@@ -1,0 +1,21 @@
+name: Set up the Stellar CLI
+description: >
+  Install the pinned, checksummed Stellar CLI (core only: contract fetch,
+  info, invoke, upload, bindings).
+runs:
+  using: composite
+  steps:
+    - name: Install Stellar CLI
+      shell: bash
+      # Version-pinned AND integrity-checked: the release publish job later
+      # hands the `stellar` binary the CI signing seed — an unverified
+      # curl|tar there would let a swapped release asset exfiltrate the key.
+      run: |
+        if ! command -v stellar >/dev/null; then
+          v=27.1.0
+          sha=9915fe63753d7154c26bb9e6410cf1d1ff9727a9b378e663c2790ab7a266af94
+          curl -fsSL -o /tmp/stellar.tar.gz \
+            "https://github.com/stellar/stellar-cli/releases/download/v${v}/stellar-cli-${v}-x86_64-unknown-linux-gnu.tar.gz"
+          echo "$sha  /tmp/stellar.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/stellar.tar.gz -C /usr/local/bin stellar
+        fi

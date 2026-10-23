@@ -5,7 +5,9 @@
 //! Requires `z3` on PATH; skips (loudly) when absent so local dev without z3
 //! stays unblocked. CI installs z3, so these always run there.
 
-use perch_analyze::{can_call, dead_rules, narrows, only_calls, z3_available, Z3Verdict};
+use perch_analyze::{
+    can_call, dead_rules, narrows, only_calls, run_z3, z3_available, Encoder, Z3Verdict,
+};
 use perch_ir::PolicyDoc;
 
 fn fixture(name: &str) -> PolicyDoc {
@@ -127,6 +129,50 @@ fn overlong_string_in_rule_is_provably_dead() {
         .expect("interpreter attached");
     // Coarse analyzer: over-approximates to live; SMT proves dead.
     assert!(perch_compile::can_ever_authorize(&install.program));
+}
+
+/// A `string-prefix` rule authorizes an argument of any length that starts
+/// with the prefix (on-chain reads only the first prefix-length bytes), while
+/// a `string-in` rule never authorizes an argument over the on-chain cap.
+#[test]
+fn string_prefix_rule_authorizes_an_argument_of_any_length() {
+    if skip() {
+        return;
+    }
+    let rule_with = |pred: &str| {
+        doc(&format!(
+            r#"{{
+              "version": 1,
+              "signers": [{{ "id": "ci", "verifier": "{VERIFIER}", "key": "0102" }}],
+              "rules": [{{
+                "name": "r",
+                "scope": {{ "type": "contract", "address": "{REGISTRY}" }},
+                "principals": {{ "type": "all", "signers": ["ci"] }},
+                "args": [{{ "index": 0, "pred": {pred} }}]
+              }}]
+            }}"#
+        ))
+    };
+    // A concrete argument well over the cap that starts with the prefix.
+    let long_arg = format!("perch:{}", "a".repeat(300));
+    let allows_long_arg = |d: &PolicyDoc| {
+        let mut enc = Encoder::new();
+        let allow = enc.rule_allows(&d.rules[0]);
+        run_z3(&format!(
+            "{}(assert {allow})\n(assert (= arg0_str \"{long_arg}\"))\n(check-sat)\n",
+            enc.declarations()
+        ))
+    };
+    let prefix = rule_with(r#"{ "type": "string-prefix", "prefix": "perch:" }"#);
+    assert!(
+        matches!(allows_long_arg(&prefix), Z3Verdict::Sat(_)),
+        "a string-prefix rule must authorize a long argument with the prefix"
+    );
+    let set = rule_with(r#"{ "type": "string-in", "values": ["perch:"] }"#);
+    assert!(
+        matches!(allows_long_arg(&set), Z3Verdict::Unsat),
+        "a string-in rule must never authorize an over-long argument"
+    );
 }
 
 /// Narrowing: function-subset narrows; adding a function, loosening an arg

@@ -1,0 +1,300 @@
+{
+  "$comment": "Shared conformance cases for the PolicyDoc JSON Schema. Consumed by crates/perch-schema/tests/conformance.rs (schema vs perch-ir's real parser+validator) and packages/perch-js/test/schema-conformance.test.ts (schema via ajv vs the zod surface). `expect` values: accept = schema-valid AND perch-ir accepts (parse + validate); reject-structural = perch-ir's PARSER rejects AND the schema rejects; reject-constraint = perch-ir's VALIDATOR rejects a representable format/range/collection rule AND the schema rejects; accept-semantic-invalid = the schema accepts but perch-ir's validator rejects a non-representable cross-reference/semantic rule (a documented boundary, docs/schema.md). Length-boundary, duplicate-raw-key, and canonical-encoding cases live in the Rust test, where their inputs are generated. Addresses/keys reuse the committed canonical fixtures' real values.",
+  "cases": [
+    { "name": "canonical/ci-publish", "expect": "accept", "category": "canonical-fixture", "file": "ci-publish.json" },
+    { "name": "canonical/ci-publish-delegated", "expect": "accept", "category": "canonical-fixture", "file": "ci-publish-delegated.json" },
+    { "name": "canonical/ci-publish-threshold", "expect": "accept", "category": "canonical-fixture", "file": "ci-publish-threshold.json" },
+    { "name": "canonical/ci-publish-recovery", "expect": "accept", "category": "canonical-fixture", "file": "ci-publish-recovery.json" },
+    { "name": "canonical/ci-publish-recovery-combined", "expect": "accept", "category": "canonical-fixture", "file": "ci-publish-recovery-combined.json" },
+
+    {
+      "name": "accept/minimal-external-signer",
+      "expect": "accept",
+      "category": "minimal",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "accept/delegated-signer",
+      "expect": "accept",
+      "category": "minimal",
+      "doc": { "version": 1, "signers": [{ "id": "a", "address": "GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "accept/self-authenticating-rule",
+      "expect": "accept",
+      "category": "variant",
+      "note": "No document signer signs; an external policy authenticates. The ack sentinel must be verbatim and install-param-hex may be empty.",
+      "doc": { "version": 1, "signers": [], "rules": [{ "name": "open", "scope": { "type": "self-admin" }, "principals": { "type": "self-authenticating", "policy": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL", "install-param-hex": "", "ack": "this-policy-authenticates-or-anyone-can-fire-this-rule" } }] }
+    },
+
+    {
+      "name": "structural/unknown-top-level-field",
+      "expect": "reject-structural",
+      "category": "unknown-field",
+      "doc": { "version": 1, "bogus": true, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/unknown-field-in-rule",
+      "expect": "reject-structural",
+      "category": "unknown-field",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] }, "bogus": 1 }] }
+    },
+    {
+      "name": "structural/missing-rule-name",
+      "expect": "reject-structural",
+      "category": "missing-field",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/unknown-scope-tag",
+      "expect": "reject-structural",
+      "category": "wrong-tag",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "nope" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/unknown-principals-tag",
+      "expect": "reject-structural",
+      "category": "wrong-tag",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "nope", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/unknown-predicate-tag",
+      "expect": "reject-structural",
+      "category": "wrong-tag",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] }, "args": [{ "index": 0, "pred": { "type": "nope" } }] }] }
+    },
+    {
+      "name": "structural/signer-mixed-shape",
+      "expect": "reject-structural",
+      "category": "variant-shape",
+      "note": "A signer carrying both delegated `address` and external `verifier`/`key` matches neither strict shape.",
+      "doc": { "version": 1, "signers": [{ "id": "a", "address": "GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/version-wrong-type",
+      "expect": "reject-structural",
+      "category": "wrong-type",
+      "doc": { "version": "1", "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/version-not-one",
+      "expect": "reject-structural",
+      "category": "wrong-version",
+      "doc": { "version": 2, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/functions-explicit-null",
+      "expect": "reject-structural",
+      "category": "null-rejection",
+      "note": "An explicit null (vs an omitted key) is rejected: functions=null would otherwise read as `all functions`.",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] }, "functions": null }] }
+    },
+    {
+      "name": "structural/self-admin-extra-field",
+      "expect": "reject-structural",
+      "category": "variant-shape",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/threshold-missing-m",
+      "expect": "reject-structural",
+      "category": "missing-field",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "threshold", "signers": ["a"] } }] }
+    },
+    {
+      "name": "structural/recovery-unknown-field",
+      "expect": "reject-structural",
+      "category": "unknown-field",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": ["GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH"], "quorum": 1 }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3, "bogus": 1 } }
+    },
+    {
+      "name": "structural/guardian-only-carrying-zk-field",
+      "expect": "reject-structural",
+      "category": "variant-shape",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": ["GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH"], "quorum": 1, "adapter": "CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ" }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+    {
+      "name": "structural/zk-only-missing-adapter",
+      "expect": "reject-structural",
+      "category": "missing-field",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "zk-only", "circuit-id": "21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb", "pool": "CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5", "enrollment-id": "6f0d1c2b3a49586776859483a2b1c0dfeefdfcfbfaf9f8f7f6f5f4f3f2f1f0e1", "commitment": "0a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff0" }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+
+    {
+      "name": "constraint/bad-verifier-strkey",
+      "expect": "reject-constraint",
+      "category": "bad-format",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CSHORT", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "constraint/signer-key-odd-hex",
+      "expect": "reject-constraint",
+      "category": "bad-format",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "abc" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "constraint/not-after-ledger-zero",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] }, "not-after-ledger": 0 }] }
+    },
+    {
+      "name": "constraint/threshold-m-zero",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "threshold", "signers": ["a"], "m": 0 } }] }
+    },
+    {
+      "name": "constraint/empty-functions-list",
+      "expect": "reject-constraint",
+      "category": "empty-collection",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] }, "functions": [] }] }
+    },
+    {
+      "name": "constraint/empty-all-signers",
+      "expect": "reject-constraint",
+      "category": "empty-collection",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": [] } }] }
+    },
+    {
+      "name": "constraint/duplicate-function",
+      "expect": "reject-constraint",
+      "category": "duplicate-item",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] }, "functions": ["publish", "publish"] }] }
+    },
+    {
+      "name": "constraint/string-in-empty-values",
+      "expect": "reject-constraint",
+      "category": "empty-collection",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] }, "args": [{ "index": 0, "pred": { "type": "string-in", "values": [] } }] }] }
+    },
+    {
+      "name": "constraint/cap-period-zero",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "100", "period-ledgers": 0 } }] }
+    },
+    {
+      "name": "constraint/cap-limit-non-numeric",
+      "expect": "reject-constraint",
+      "category": "bad-format",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "abc", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "constraint/cap-limit-zero",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "limit `0` is not positive. The schema's limit pattern requires a significant non-zero digit; the validator rejects (InvalidCapLimit, must be positive).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "0", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "constraint/cap-limit-overflow",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "limit has more significant digits than an i128 holds. The schema's pattern caps significant digits at i128::MAX's width; the validator rejects (i128 parse overflow).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "123456789012345678901234567890123456789012345", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "accept/cap-limit-leading-zeros",
+      "expect": "accept",
+      "category": "variant",
+      "note": "limit `007` is a non-canonical spelling of 7 the parser accepts today; the schema accepts it too (a single canonical spelling is CANON v2).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "007", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "accept/cap-limit-leading-plus",
+      "expect": "accept",
+      "category": "variant",
+      "note": "limit `+5` carries a leading plus the parser accepts today; the schema accepts it too (a single canonical spelling is CANON v2).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "limit": "+5", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "constraint/recovery-commitment-wrong-length",
+      "expect": "reject-constraint",
+      "category": "bad-format",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "zk-only", "adapter": "CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ", "circuit-id": "21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb", "pool": "CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5", "enrollment-id": "6f0d1c2b3a49586776859483a2b1c0dfeefdfcfbfaf9f8f7f6f5f4f3f2f1f0e1", "commitment": "0a1b2c3d4e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff" }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+    {
+      "name": "constraint/recovery-empty-guardians",
+      "expect": "reject-constraint",
+      "category": "empty-collection",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": [], "quorum": 1 }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+    {
+      "name": "constraint/recovery-quorum-zero",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": ["GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH"], "quorum": 0 }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+    {
+      "name": "constraint/recovery-empty-replaceable",
+      "expect": "reject-constraint",
+      "category": "empty-collection",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": ["GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH"], "quorum": 1 }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": [], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+    {
+      "name": "constraint/recovery-quorum-exceeds-count",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "quorum > guardian count (quorum=2, one guardian). The schema's recoveryMode if/then chain caps quorum at the guardian count; the validator also rejects (InvalidGuardianQuorum).",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "guardian-only", "guardians": ["GALZMP2YGMVP6N57D2E6YVKMK3AONEOSC3F2RAXPOAKRIQVTSHJOOBVH"], "quorum": 2 }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+    {
+      "name": "constraint/recovery-commitment-uppercase",
+      "expect": "reject-constraint",
+      "category": "bad-format",
+      "note": "commitment is 64 hex but uppercase. perch-ir's is_sha256_hex requires lowercase; the schema pattern is [0-9a-f]. Both reject (this IS enforced today — not the CANON v2 case).",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "zk-only", "adapter": "CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ", "circuit-id": "21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb", "pool": "CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5", "enrollment-id": "6f0d1c2b3a49586776859483a2b1c0dfeefdfcfbfaf9f8f7f6f5f4f3f2f1f0e1", "commitment": "0A1B2C3D4E5F60718293A4B5C6D7E8F90112233445566778899AABBCCDDEEFF0" }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    },
+
+    {
+      "name": "semantic/duplicate-signer-id",
+      "expect": "accept-semantic-invalid",
+      "category": "cross-reference",
+      "note": "Two signers share an id. Structurally fine; perch-ir's validator rejects (DuplicateSignerId).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }, { "id": "a", "verifier": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG", "key": "cd" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "semantic/unknown-signer-reference",
+      "expect": "accept-semantic-invalid",
+      "category": "cross-reference",
+      "note": "A principal references an undeclared signer id. The schema cannot see the declared set; the validator rejects (UnknownSignerRef).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["ghost"] } }] }
+    },
+    {
+      "name": "constraint/threshold-m-exceeds-n",
+      "expect": "reject-constraint",
+      "category": "bad-range",
+      "note": "m > referenced signer count (m=2, N=1). The schema's principals if/then chain caps m at N; the validator also rejects (InvalidThreshold).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "threshold", "signers": ["a"], "m": 2 } }] }
+    },
+    {
+      "name": "accept/threshold-m-equals-n",
+      "expect": "accept",
+      "category": "variant",
+      "note": "m == referenced signer count (m=2, N=2). At the boundary the chain admits it and the validator accepts.",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }, { "id": "b", "verifier": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG", "key": "cd" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "threshold", "signers": ["a", "b"], "m": 2 } }] }
+    },
+    {
+      "name": "semantic/cap-token-mismatch",
+      "expect": "accept-semantic-invalid",
+      "category": "cross-reference",
+      "note": "cap.token differs from the rule's contract scope. The schema shapes each independently; the validator rejects (CapTokenMismatch).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "contract", "address": "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL" }, "principals": { "type": "all", "signers": ["a"] }, "cap": { "token": "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG", "limit": "100", "period-ledgers": 10 } }] }
+    },
+    {
+      "name": "semantic/duplicate-rule-name",
+      "expect": "accept-semantic-invalid",
+      "category": "cross-reference",
+      "note": "Two rules share a name. Structurally fine; the validator rejects (DuplicateRuleName).",
+      "doc": { "version": 1, "signers": [{ "id": "a", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }, { "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }] }
+    },
+    {
+      "name": "semantic/commitment-at-bn254-modulus",
+      "expect": "accept-semantic-invalid",
+      "category": "semantic-range",
+      "note": "commitment is 64 lowercase hex (schema-valid) but equals the BN254 scalar modulus, a non-canonical field element the validator rejects (InvalidCommitment).",
+      "doc": { "version": 1, "signers": [{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "ab" }], "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["admin"] } }], "recovery": { "profile": "loss", "mode": { "type": "zk-only", "adapter": "CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ", "circuit-id": "21d53d237ccdb61c57f0b128d9efaf6d96b844b224c2c19a973eaf7b5ee18bbb", "pool": "CDGGTZJDHAPV3S5LD36GAETRHWZ6ASCEZ5YRH7O5JOK3WXW55RRHOLL5", "enrollment-id": "6f0d1c2b3a49586776859483a2b1c0dfeefdfcfbfaf9f8f7f6f5f4f3f2f1f0e1", "commitment": "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001" }, "controller": "CC5QACNC45UM2FLTKPXD2TME7647YHUPF4PGHQBFRP26PHHDQ6LWAPBF", "replaceable": ["admin"], "delay-ledgers": 100, "expiry-ledgers": 1000, "max-cancels": 3 } }
+    }
+  ]
+}

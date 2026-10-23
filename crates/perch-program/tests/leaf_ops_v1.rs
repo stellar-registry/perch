@@ -120,6 +120,28 @@ fn arg_str_prefix_allow_deny_and_too_long() {
 }
 
 #[test]
+fn arg_str_prefix_matches_argument_longer_than_buffer() {
+    let f = Fixture::new();
+    let pfx = String::from_str(&f.env, "perch:");
+    let long_match = format!("perch:{}", "a".repeat(400));
+    let long_miss = format!("other:{}", "a".repeat(400));
+    assert_eq!(
+        f.leaf(
+            Op::ArgStrPrefix(0, pfx.clone()),
+            &f.ctx(vec![&f.env, s(&f.env, &long_match)])
+        ),
+        Verdict::True
+    );
+    assert_eq!(
+        f.leaf(
+            Op::ArgStrPrefix(0, pfx),
+            &f.ctx(vec![&f.env, s(&f.env, &long_miss)])
+        ),
+        Verdict::False
+    );
+}
+
+#[test]
 fn arg_str_prefix_missing_arg_is_unknown() {
     let f = Fixture::new();
     let pfx = String::from_str(&f.env, "x");

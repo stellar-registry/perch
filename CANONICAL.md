@@ -9,15 +9,10 @@ anything written later.
 
 This document is the authoritative definition of those bytes. It is normative;
 the code implements it, not the other way around. Implementations **must not**
-delegate canonicalization to a language JSON serializer whose output could drift
-between versions (`serde_json`, `JSON.stringify`, …). They implement the rules
-below directly, and the shared conformance vector pins the result.
-
-> Why not "just use the serializer's output"? Because serializer output is not a
-> stable contract. Biscuit shipped its signed format over protobuf and
-> discovered protobuf encoding is not deterministic; it had to move to an
-> explicit, versioned byte layout. Perch avoids that trap by defining the bytes
-> here and never depending on a serializer being canonical.
+delegate canonicalization to a language JSON serializer (`serde_json`,
+`JSON.stringify`, …), whose output is not a stable contract and can drift
+between versions. They implement the rules below directly, and the shared
+conformance vector pins the result.
 
 ## Version
 
@@ -32,22 +27,12 @@ explicit, greppable, reviewable event. **Any change here is a breaking change** 
 bump `CANON_VERSION`, re-freeze the conformance vectors, and be treated as a new
 format, never a silent hash drift.
 
-## Codec decision: JSON (JCS), not CBOR
+## Encoding
 
 The canonical form is JSON per RFC 8785 (JSON Canonicalization Scheme),
-restricted to the subset a `PolicyDoc` can produce (below). DAG-CBOR was
-considered (it is what UCAN uses, because CBOR defines deterministic
-map-key ordering) and rejected for v1:
-
-- A `PolicyDoc` is a human-authored, human-reviewed artifact. JSON stays
-  diffable in a PR and readable in a wallet prompt; a binary codec does not.
-- The parity guarantee CBOR would buy, byte-identical output across languages,
-  is already met. `perch-ir` (Rust) and `perch-js` (TypeScript) reproduce
-  the same canonical bytes and `doc_hash` for the shared `ci-publish` fixture,
-  proven in CI on both sides.
-
-Revisit only if a future value type makes JSON canonicalization painful
-(e.g. arbitrary-precision or binary fields). If so, that is a
+restricted to the subset a `PolicyDoc` can produce (below), so a document
+stays readable in review and in a wallet prompt. A value type this subset
+cannot carry (arbitrary precision, binary fields) would be a
 `CANON_VERSION` bump, per above.
 
 ## The bytes
@@ -115,6 +100,57 @@ current model. **`null` never appears.** An absent optional field is omitted
 from its object entirely, not serialized as `null`. Encountering `null` while
 canonicalizing is malformed input and fails closed.
 
+## Fragment hashes
+
+`doc_hash` identifies a whole document. Two other hashes identify one
+**fragment** of it: the exact bytes that member contributes to the
+document's canonical serialization above, cut out unchanged and hashed
+under a domain tag of its own.
+
+| Hash | Fragment `F` | Preimage | Used by |
+| --- | --- | --- | --- |
+| `rule_hash` | one element of the top-level `rules` array, without the separating commas | `"perch/rule" ‖ F` | interpreter program provenance: an installed program carries its rule's `rule_hash` (in the `InstallParams` field named `doc_hash`), so editing one rule leaves every other rule's install parameters unchanged and a delta `apply_doc` reinstalls only what changed (`docs/recovery/spec.md` §3.2, §7.5) |
+| `config_hash` | the value of the top-level `recovery` member | `"perch/recovery/config" ‖ F` | recovery configuration identity (`docs/recovery/spec.md` §3.2) |
+
+Both are `SHA-256` of the preimage. The tags are ASCII and are part of the
+preimage. `doc_hash` is unchanged: still untagged `SHA-256` of the whole
+canonical document.
+
+**Domain separation.**
+
+- A canonical document starts with `{`, and every tag starts with `perch/`,
+  so no fragment preimage equals a document preimage.
+- Neither tag is a prefix of the other, and neither is a prefix of the
+  recovery statement's tags (`perch/recovery/statement`, …;
+  `docs/recovery/statement.md`). Different fragment kinds therefore never
+  share a preimage.
+
+The Lean model (`formal/`) proves both preimages injective and the
+separations between document, `rule_hash`, and `config_hash` preimages
+(`rulePreimage_injective`, `configPreimage_injective`,
+`rulePreimage_ne_emitDoc`, `configPreimage_ne_emitDoc`,
+`rulePreimage_ne_configPreimage`). It does not model the statement tags.
+
+**What a rule hash covers.** A `rule_hash` covers the rule's own text,
+signer *ids* included. It does not cover the signers' credentials, which
+live in the document's `signers` member. The same rule text in two
+documents therefore has the same `rule_hash` (see the `admin` rule across
+the vectors below). A program's `rule_hash` says which rule text it was
+compiled from; it does not identify the document. Only `doc_hash` does.
+
+Fragment hashes are definitions over the bytes above, not new
+canonicalization rules, so they do not change `CANON_VERSION`. Changing a
+tag or the fragment boundaries is a breaking change to every recorded
+value, and must be treated like one.
+
+Code:
+
+- Rust, on-chain: `perch_recovery_interface::fragment::rule_hash` and
+  `perch_recovery_interface::config::config_hash`; the doc compiler computes
+  both from the canonical bytes it already emits. Rust, native:
+  `perch_ir::rule_hash`.
+- TypeScript: `ruleHash` and `configHash` in `perch-js`.
+
 ## Conformance
 
 The shared vector lives in `testdata/`:
@@ -123,11 +159,25 @@ The shared vector lives in `testdata/`:
 - `ci-publish.canonical.json`: its canonical bytes, exactly as defined above.
 - `ci-publish.doc-hash`: `27cb38ef07bd8e4f86f07bef4d9272c070c2d9f05063d4c1ad1d4769b1d74a98`.
 
+Fragment hashes have their own vector, `testdata/rule-hashes.json`. An
+independent script (`scripts/rule-hash-vectors.py`) generates it by cutting
+each rule's bytes out of the committed `ci-publish{,-delegated,-threshold}`
+canonical files. `crates/perch-recovery-interface/tests/vectors.rs` asserts
+that those bytes are exactly each fixture's `rules` array and that every
+`rule_hash` matches. For `ci-publish`:
+
+- `admin` rule: `a23e499eb6906e76a489ae7b901d11245b18119bf9f7299c42932016a02e4ecf`
+- `ci-publish` rule: `fbd758674683fdbafa01f927b76cef5f79c86448b440177296709b3073f7751e`
+
 Both suites assert, against these files, that canonicalization is byte-identical
 and the hash matches:
 
 - Rust: `crates/perch-ir/tests/fixture.rs`
 - TypeScript: `packages/perch-js/test/parity.test.ts`
+
+The Lean model (`formal/`) parses and re-emits it, and the other
+`testdata/*.canonical.json` fixtures, byte-identically with a verified inverse
+of its own canonical emitter (`just drt`), and proves that emitter injective.
 
 A change to any byte of `ci-publish.canonical.json` or `ci-publish.doc-hash` is,
 by definition, a canonical-form break; see **Version** above.

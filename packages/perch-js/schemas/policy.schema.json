@@ -1,0 +1,1009 @@
+{
+  "$defs": {
+    "argConstraint": {
+      "additionalProperties": false,
+      "description": "A constraint on one call argument.",
+      "properties": {
+        "index": {
+          "description": "Zero-based argument index. Unique within a rule's args (a semantic check).",
+          "maximum": 4294967295,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pred": {
+          "$ref": "#/$defs/argPred"
+        }
+      },
+      "required": [
+        "index",
+        "pred"
+      ],
+      "type": "object"
+    },
+    "argPred": {
+      "description": "A stateless predicate over a single call argument (never a running total across calls), tagged by `type`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "The argument must be the smart account's own address.",
+          "properties": {
+            "type": {
+              "const": "is-self"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "is-self",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "description": "The address (C- or G-address) the argument must equal.",
+              "pattern": "^[CG][A-Z2-7]{55}$",
+              "type": "string"
+            },
+            "type": {
+              "const": "address-eq"
+            }
+          },
+          "required": [
+            "type",
+            "address"
+          ],
+          "title": "address-eq",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "string-in"
+            },
+            "values": {
+              "description": "The allowed string values (non-empty, no duplicates).",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "type",
+            "values"
+          ],
+          "title": "string-in",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "prefix": {
+              "description": "The required string prefix.",
+              "type": "string"
+            },
+            "type": {
+              "const": "string-prefix"
+            }
+          },
+          "required": [
+            "type",
+            "prefix"
+          ],
+          "title": "string-prefix",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "type": {
+              "const": "u32-eq"
+            },
+            "value": {
+              "description": "The exact u32 value the argument must equal.",
+              "maximum": 4294967295,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "value"
+          ],
+          "title": "u32-eq",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    },
+    "baselineCommitment": {
+      "additionalProperties": false,
+      "properties": {
+        "doc-hash": {
+          "description": "Canonical doc_hash (64 lowercase hex) of the baseline document.",
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "doc-hash"
+      ],
+      "type": "object"
+    },
+    "capConstraint": {
+      "additionalProperties": false,
+      "description": "A cumulative spend cap over a rolling window. Lowers to OpenZeppelin's stateful `spending_limit` policy (perch itself is stateless).",
+      "properties": {
+        "limit": {
+          "description": "Maximum cumulative amount as a decimal string (a string, not a number, because an i128 amount does not fit a JSON number safely). Must be a POSITIVE integer: the pattern rejects `0`, all-zero spellings, a sign-minus, and any value with more significant digits than an i128 can hold. A leading `+` and leading zeros are accepted (the parser accepts them; a single canonical spelling is CANON v2, `docs/schema.md`). Only the EXACT i128 upper bound remains a semantic check in perch-ir's validator.",
+          "pattern": "^\\+?0*[1-9][0-9]{0,38}$",
+          "type": "string"
+        },
+        "period-ledgers": {
+          "description": "Rolling-window length in ledgers. Must be non-zero.",
+          "maximum": 4294967295,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "token": {
+          "description": "Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope when omitted; cap/scope agreement is a cross-reference check (outside this schema).",
+          "pattern": "^C[A-Z2-7]{55}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "limit",
+        "period-ledgers"
+      ],
+      "type": "object"
+    },
+    "circuitId": {
+      "description": "sha256 of the verifier's verification key (64 lowercase hex).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "commitment": {
+      "description": "The credential's inner commitment (64 lowercase hex). That it encodes a CANONICAL BN254 field element (below the scalar modulus) is a semantic range check enforced by perch-ir's validator, outside this schema.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "enrollmentId": {
+      "description": "32 random bytes naming the enrolled credential (64 lowercase hex).",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "guardians": {
+      "description": "The guardian set: independent principals (not document signers). Non-empty, no duplicates.",
+      "items": {
+        "description": "A guardian address (C- or G-address).",
+        "pattern": "^[CG][A-Z2-7]{55}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "principals": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 1,
+                "minItems": 1
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 3
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 4,
+                "minItems": 4
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 5,
+                "minItems": 5
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 6,
+                "minItems": 6
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 6
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 7,
+                "minItems": 7
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 7
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 8,
+                "minItems": 8
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 8
+              }
+            }
+          }
+        }
+      ],
+      "description": "Who a rule authorizes, tagged by `type`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "signers": {
+              "description": "Declared signer ids, all of which must authorize. That each id is declared is a cross-reference check (outside this schema).",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "type": {
+              "const": "all"
+            }
+          },
+          "required": [
+            "type",
+            "signers"
+          ],
+          "title": "All (N-of-N)",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "m": {
+              "description": "How many of `signers` must authorize (the M). Must satisfy 1 <= m <= N, where N is this rule's referenced signer count; the upper bound is encoded by the principals `allOf` if/then chain (`docs/schema.md`).",
+              "maximum": 4294967295,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "signers": {
+              "description": "Declared signer ids the quorum draws from (the N).",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array",
+              "uniqueItems": true
+            },
+            "type": {
+              "const": "threshold"
+            }
+          },
+          "required": [
+            "type",
+            "signers",
+            "m"
+          ],
+          "title": "Threshold (M-of-N)",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "ack": {
+              "const": "this-policy-authenticates-or-anyone-can-fire-this-rule",
+              "description": "Acknowledgement that this rule carries no signature check of its own. Must equal the sentinel verbatim or validation fails."
+            },
+            "install-param-hex": {
+              "description": "Hex-encoded install parameter passed to the policy (may be empty).",
+              "pattern": "^([0-9a-fA-F]{2})*$",
+              "type": "string"
+            },
+            "policy": {
+              "description": "Policy contract (C-address) that authenticates invocations.",
+              "pattern": "^C[A-Z2-7]{55}$",
+              "type": "string"
+            },
+            "type": {
+              "const": "self-authenticating"
+            }
+          },
+          "required": [
+            "type",
+            "policy",
+            "install-param-hex",
+            "ack"
+          ],
+          "title": "Self-authenticating (no signature check)",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    },
+    "quorum": {
+      "description": "How many guardians must authorize. Must satisfy 1 <= quorum <= guardian count; the upper bound is encoded by the recoveryMode `allOf` if/then chain, up to MAX_DOC_SIGNERS guardians (`docs/schema.md`).",
+      "maximum": 4294967295,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "recoveryConfig": {
+      "additionalProperties": false,
+      "description": "Opt-in account-recovery enrollment — who may recover this account and how. Reviewable configuration only, never the recovery attempt itself (see `docs/recovery/spec.md`).",
+      "properties": {
+        "baseline": {
+          "$ref": "#/$defs/baselineCommitment",
+          "description": "Commitment to the baseline document compromise recovery restores. Omit to restrict the account to lost-key recovery."
+        },
+        "controller": {
+          "description": "The adopted recovery controller instance (C-address).",
+          "pattern": "^C[A-Z2-7]{55}$",
+          "type": "string"
+        },
+        "delay-ledgers": {
+          "description": "Ledgers between an attempt becoming authorized and completable. Must be non-zero.",
+          "maximum": 4294967295,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expiry-ledgers": {
+          "description": "Evidence/completion window and the furthest a reconfiguration or upgrade approval may reach. Must be non-zero.",
+          "maximum": 4294967295,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max-cancels": {
+          "description": "Cap on evidence-based cancellations of authorized attempts. Must be non-zero.",
+          "maximum": 4294967295,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "mode": {
+          "$ref": "#/$defs/recoveryMode"
+        },
+        "profile": {
+          "description": "`loss`: the owner may reconfigure/remove recovery and cancel any attempt alone, keeping activity while an attempt is authorized. `protected`: reconfiguration/removal/upgrades also need the enrolled condition, and the account freezes while an attempt is authorized.",
+          "enum": [
+            "loss",
+            "protected"
+          ]
+        },
+        "replaceable": {
+          "description": "Declared signer ids a recovery attempt may replace (non-empty, no duplicates). That each id is declared is a cross-reference check (outside this schema).",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "profile",
+        "mode",
+        "controller",
+        "replaceable",
+        "delay-ledgers",
+        "expiry-ledgers",
+        "max-cancels"
+      ],
+      "type": "object"
+    },
+    "recoveryMode": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 1,
+                "minItems": 1
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 2,
+                "minItems": 2
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 3,
+                "minItems": 3
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 3
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 4,
+                "minItems": 4
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 4
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 5,
+                "minItems": 5
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 5
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 6,
+                "minItems": 6
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 6
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 7,
+                "minItems": 7
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 7
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "guardians": {
+                "maxItems": 8,
+                "minItems": 8
+              }
+            },
+            "required": [
+              "guardians",
+              "quorum"
+            ]
+          },
+          "then": {
+            "properties": {
+              "quorum": {
+                "maximum": 8
+              }
+            }
+          }
+        }
+      ],
+      "description": "How a recovery attempt is authorized, tagged by `type`. `combined` requires BOTH a valid proof and a guardian quorum against the same statement.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "guardians": {
+              "$ref": "#/$defs/guardians"
+            },
+            "quorum": {
+              "$ref": "#/$defs/quorum"
+            },
+            "type": {
+              "const": "guardian-only"
+            }
+          },
+          "required": [
+            "type",
+            "guardians",
+            "quorum"
+          ],
+          "title": "guardian-only",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {
+              "$ref": "#/$defs/zkAdapter"
+            },
+            "circuit-id": {
+              "$ref": "#/$defs/circuitId"
+            },
+            "commitment": {
+              "$ref": "#/$defs/commitment"
+            },
+            "enrollment-id": {
+              "$ref": "#/$defs/enrollmentId"
+            },
+            "pool": {
+              "$ref": "#/$defs/zkPool"
+            },
+            "type": {
+              "const": "zk-only"
+            }
+          },
+          "required": [
+            "type",
+            "adapter",
+            "circuit-id",
+            "pool",
+            "enrollment-id",
+            "commitment"
+          ],
+          "title": "zk-only",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "adapter": {
+              "$ref": "#/$defs/zkAdapter"
+            },
+            "circuit-id": {
+              "$ref": "#/$defs/circuitId"
+            },
+            "commitment": {
+              "$ref": "#/$defs/commitment"
+            },
+            "enrollment-id": {
+              "$ref": "#/$defs/enrollmentId"
+            },
+            "guardians": {
+              "$ref": "#/$defs/guardians"
+            },
+            "pool": {
+              "$ref": "#/$defs/zkPool"
+            },
+            "quorum": {
+              "$ref": "#/$defs/quorum"
+            },
+            "type": {
+              "const": "combined"
+            }
+          },
+          "required": [
+            "type",
+            "guardians",
+            "quorum",
+            "adapter",
+            "circuit-id",
+            "pool",
+            "enrollment-id",
+            "commitment"
+          ],
+          "title": "combined",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    },
+    "rule": {
+      "additionalProperties": false,
+      "description": "A single policy rule: who (`principals`) may do what (`functions`, `args`) where (`scope`) until when (`not-after-ledger`), with an optional cumulative spend `cap`.",
+      "properties": {
+        "args": {
+          "description": "Constraints on call arguments, keyed by index. Omit for unconstrained; an explicit empty list or null is rejected. Argument-index uniqueness is a semantic check (outside this schema).",
+          "items": {
+            "$ref": "#/$defs/argConstraint"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "cap": {
+          "$ref": "#/$defs/capConstraint"
+        },
+        "functions": {
+          "description": "Allowlist of function names. Omit the field for `all functions`; an explicit empty list is rejected as ambiguous, and an explicit null is rejected (it would silently authorize every function).",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "name": {
+          "description": "Human-readable rule name. Capped at MAX_RULE_NAME_BYTES bytes by the compiler; the ASCII pattern makes one character one byte so maxLength encodes that byte cap (a non-ASCII name is schema- rejected — see `docs/schema.md`). Uniqueness across rules is a semantic check (outside this schema).",
+          "maxLength": 20,
+          "pattern": "^[\\x00-\\x7F]*$",
+          "type": "string"
+        },
+        "not-after-ledger": {
+          "description": "Ledger SEQUENCE (not a Unix timestamp) at or after which the rule stops authorizing. Must be non-zero; omit for no expiry.",
+          "maximum": 4294967295,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "principals": {
+          "$ref": "#/$defs/principals"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        }
+      },
+      "required": [
+        "name",
+        "scope",
+        "principals"
+      ],
+      "type": "object"
+    },
+    "scope": {
+      "description": "Where a rule applies, tagged by `type`.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "description": "The contract (C-address) the rule scopes to.",
+              "pattern": "^C[A-Z2-7]{55}$",
+              "type": "string"
+            },
+            "type": {
+              "const": "contract"
+            }
+          },
+          "required": [
+            "type",
+            "address"
+          ],
+          "title": "Contract scope",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Administrative operations on the smart account itself (signer/rule changes, upgrades).",
+          "properties": {
+            "type": {
+              "const": "self-admin"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "title": "Self-admin scope",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    },
+    "signerDecl": {
+      "description": "A declared signer: a document-local id plus how it authenticates. The method is discriminated by field shape, not a `type` tag — `verifier`+`key` is an external signer checked by a verifier contract, `address` is a CAP-0071 delegated address. A mixed or incomplete shape matches neither and fails closed.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "description": "Document-local id rules reference. Uniqueness is a semantic check (outside this schema).",
+              "type": "string"
+            },
+            "key": {
+              "description": "Hex-encoded key material, opaque to perch. Decoded length must be 1..=MAX_SIGNER_KEY_LEN bytes (the pattern encodes that window and the even-length hex requirement).",
+              "pattern": "^([0-9a-fA-F]{2}){1,256}$",
+              "type": "string"
+            },
+            "verifier": {
+              "description": "Verifier contract (C-address) that checks this signer's signatures.",
+              "pattern": "^C[A-Z2-7]{55}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "verifier",
+            "key"
+          ],
+          "title": "External signer",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "address": {
+              "description": "Delegate address (G… account or C… contract) the host authenticates via CAP-0071.",
+              "pattern": "^[CG][A-Z2-7]{55}$",
+              "type": "string"
+            },
+            "id": {
+              "description": "Document-local id rules reference.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "address"
+          ],
+          "title": "Delegated signer",
+          "type": "object"
+        }
+      ],
+      "type": "object"
+    },
+    "zkAdapter": {
+      "description": "The ZK adapter the controller calls (C-address).",
+      "pattern": "^C[A-Z2-7]{55}$",
+      "type": "string"
+    },
+    "zkPool": {
+      "description": "The membership pool whose roots proofs must use (C-address).",
+      "pattern": "^C[A-Z2-7]{55}$",
+      "type": "string"
+    }
+  },
+  "$id": "https://unpkg.com/@stellar-registry/perch/schemas/policy.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The reviewable artifact at the center of perch: a smart account's signers, rules, scopes, constraints, and optional recovery enrollment. This schema describes document format `version: 1` as perch-ir's strict parser (`from_json`) accepts it and its validator (`validate`) accepts the representable rules. Schema-valid is NOT the same as authorized or canonically encoded: duplicate raw keys, canonical (RFC 8785) encoding, cross-reference and semantic invariants, aggregate resource bounds, signatures, and authorization are all enforced elsewhere — see `docs/schema.md`.",
+  "examples": [
+    {
+      "network": "Test SDF Network ; September 2015",
+      "rules": [
+        {
+          "name": "admin",
+          "principals": {
+            "signers": [
+              "admin"
+            ],
+            "type": "all"
+          },
+          "scope": {
+            "type": "self-admin"
+          }
+        }
+      ],
+      "signers": [
+        {
+          "id": "admin",
+          "key": "045e2a7589b73c19d5341cf12ac0c5f6c45c298d4c20002c794daadafdb83f35f5be23963648d7aaccf5e273803f2fec7a8f0eb4d4845c9b89a972b4a09298b17e",
+          "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN"
+        }
+      ],
+      "version": 1
+    }
+  ],
+  "properties": {
+    "network": {
+      "description": "Optional network identifier (a passphrase or short name). Omitted from the canonical form when absent; an explicit JSON null is rejected, so leave the key out rather than setting it null.",
+      "type": "string"
+    },
+    "recovery": {
+      "$ref": "#/$defs/recoveryConfig",
+      "description": "Optional account-recovery enrollment (reviewable configuration, never a recovery attempt). Omitted from the canonical form when absent, so a document that never enrolls recovery hashes exactly as before this field existed."
+    },
+    "rules": {
+      "description": "The policy rules. Order is preserved and significant to the hash. At most MAX_DOC_RULES (the compiler's per-document rule cap).",
+      "items": {
+        "$ref": "#/$defs/rule"
+      },
+      "maxItems": 11,
+      "type": "array"
+    },
+    "signers": {
+      "description": "Declared signers that rules reference by id. At most MAX_DOC_SIGNERS (the compiler's per-document signer cap). The canonical-byte budget is a separate aggregate bound the schema cannot express — see `docs/schema.md`.",
+      "items": {
+        "$ref": "#/$defs/signerDecl"
+      },
+      "maxItems": 8,
+      "type": "array"
+    },
+    "version": {
+      "const": 1,
+      "description": "Document format version. The only supported value is 1; perch-ir rejects anything else before looking at the rest of the document. A future wire format gets a new document version and a new schema (versioning policy: `docs/schema.md`)."
+    }
+  },
+  "required": [
+    "version",
+    "signers",
+    "rules"
+  ],
+  "title": "Perch Policy Document",
+  "type": "object"
+}

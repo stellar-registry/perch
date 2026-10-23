@@ -35,7 +35,7 @@ pub struct Publish {
     pub author: Author,
 }
 
-/// Deploy a published wasm. For the stateless helpers this is content-addressed
+/// Deploy a published wasm. For the constructorless helpers this is content-addressed
 /// (`salt = wasm_hash`), so it is idempotent and permissionless. Testnet
 /// phases 1 and 4.
 #[derive(Clone, Debug)]

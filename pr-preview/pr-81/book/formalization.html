@@ -249,13 +249,15 @@
 <p><code>DocRule</code> contains a signer count, optional function names, and argument predicates. Scope selection, expiry, cumulative accounting, and account installation are outside this lowering statement. It also does not model threshold signer selection end to end. Passing the right threshold count into a modeled program is not a proof of the Rust compiler's complete threshold path.</p>
 <h2 id="canonicalization-why-an-inverse-proves-uniqueness"><a class="header" href="#canonicalization-why-an-inverse-proves-uniqueness">Canonicalization: why an inverse proves uniqueness</a></h2>
 <p>Suppose an emitter turns documents into canonical text, and a parser can always recover the original modeled document from that text. Two distinct documents cannot then emit the same text: parsing it would have to recover two different originals. That is the idea behind <code>pDoc_rt</code> and <code>emitDoc_injective</code>.</p>
-<p>This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. It also requires attention to the model's domain. The current <code>CPrincipals</code> model includes <code>all</code> and <code>selfAuth</code>, <strong>but not <code>threshold</code></strong>. The canonical model does include cap fields. Do not extend the injectivity theorem to threshold documents without extending the model and proof.</p>
+<p>This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. The current <code>CPrincipals</code> model includes <code>all</code>, <code>threshold</code>, and <code>selfAuth</code>. The canonical model covers every document shape, including cap fields and the optional recovery configuration. This coverage concerns the bytes that identify a document; it does not prove threshold signer selection or recovery execution.</p>
+<p>The model also proves uniqueness and separation of the preimages used for <code>config_hash</code> and <code>rule_hash</code>: one identifies a recovery configuration, the other one rule's text. Shared fixtures and tests connect those modeled bytes to Rust and TypeScript. The recovery controller, account authorization, and delta installation remain outside these proofs; the <a href="https://github.com/stellar-registry/perch/blob/main/formal/README.md">formal README</a> lists the exact statements and assumptions.</p>
 <p>The <a href="assurance.html">next chapter</a> explains how these mathematical results connect to the shipped implementation.</p>
 <p><strong>Exercise:</strong> Does <code>lowering_preserves</code> prove that the release pipeline has the right permissions?</p>
 <details>
 <summary>Reveal the answer</summary>
 <p>No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.</p>
 </details>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

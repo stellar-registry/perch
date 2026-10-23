@@ -480,6 +480,7 @@ console.log(docHash(doc));
 <p>The limit is a positive <code>i128</code> amount encoded as a decimal <strong>string</strong>, avoiding unsafe JSON numeric precision. Interpret it in the token's base units, not automatically as ten million whole tokens. The period is a nonzero number of ledgers. It is not a wall-clock day.</p>
 <p>The token defaults to the rule's scope contract. If explicitly specified, it must equal that contract; caps on <code>self-admin</code> are invalid. The sibling meters the scoped token, so naming a different token would be misleading.</p>
 <p>The document describes a rolling-window cap, while the exact accounting and reset behavior belongs to the deployed sibling implementation. Review that implementation and its supported token operations when designing a spending policy. The interpreter's stateless proof does not establish accounting correctness.</p>
+<p>Document updates also matter. An in-place rule edit preserves a policy's state when its install parameters are unchanged. Changing the cap's parameters reinstalls the spending limit, and replacing the rule reinstalls every policy; both start an empty spending window. The account's cost model chooses between editing and replacing a changed rule, so a cap is not a persistent budget across document changes. See the <a href="https://github.com/stellar-registry/perch/blob/main/docs/DEFERRED.md#persistent-spending-budgets-across-replacements">current spending-budget limitation</a>.</p>
 <h2 id="why-this-boundary-exists"><a class="header" href="#why-this-boundary-exists">Why this boundary exists</a></h2>
 <p>Imagine two histories that end with identical invocation inputs: one account has spent nothing, the other has exhausted its allowance. A stateless function sees the same input in both cases and must return the same result. Enforcing a different decision requires additional state.</p>
 <p>This is the central intuition behind the repository's <a href="https://github.com/stellar-registry/perch/blob/main/docs/verification/THEORY.md">enforceability discussion</a>. It explains why adding more per-call comparisons would not create a cumulative limit.</p>
@@ -487,7 +488,8 @@ console.log(docHash(doc));
 <details>
 <summary>Reveal the answer</summary>
 <p>No. Multiple individually permitted calls can exceed the total. Use cumulative accounting, and check every alternative route that could authorize spending.</p>
-</details><div style="break-before: page; page-break-before: always;"></div><h1 id="how-a-call-is-evaluated"><a class="header" href="#how-a-call-is-evaluated">How a call is evaluated</a></h1>
+</details>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="how-a-call-is-evaluated"><a class="header" href="#how-a-call-is-evaluated">How a call is evaluated</a></h1>
 <p>The compiler translates a policy into account rules and, when necessary, a small interpreter program. This translation is called <strong>lowering</strong>: representing the same intended checks in a form closer to the execution machinery.</p>
 <p>The account framework selects the relevant context and matched signers. Scope and expiry are enforced through account rules. The interpreter checks the program's signer floor, function restrictions, and argument predicates. Stateful caps run in a sibling policy.</p>
 <h2 id="three-answers-instead-of-two"><a class="header" href="#three-answers-instead-of-two">Three answers instead of two</a></h2>
@@ -661,13 +663,15 @@ All(3)
 <p><code>DocRule</code> contains a signer count, optional function names, and argument predicates. Scope selection, expiry, cumulative accounting, and account installation are outside this lowering statement. It also does not model threshold signer selection end to end. Passing the right threshold count into a modeled program is not a proof of the Rust compiler's complete threshold path.</p>
 <h2 id="canonicalization-why-an-inverse-proves-uniqueness"><a class="header" href="#canonicalization-why-an-inverse-proves-uniqueness">Canonicalization: why an inverse proves uniqueness</a></h2>
 <p>Suppose an emitter turns documents into canonical text, and a parser can always recover the original modeled document from that text. Two distinct documents cannot then emit the same text: parsing it would have to recover two different originals. That is the idea behind <code>pDoc_rt</code> and <code>emitDoc_injective</code>.</p>
-<p>This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. It also requires attention to the model's domain. The current <code>CPrincipals</code> model includes <code>all</code> and <code>selfAuth</code>, <strong>but not <code>threshold</code></strong>. The canonical model does include cap fields. Do not extend the injectivity theorem to threshold documents without extending the model and proof.</p>
+<p>This proves uniqueness of the modeled canonical representation, not that SHA-256 can never collide. The current <code>CPrincipals</code> model includes <code>all</code>, <code>threshold</code>, and <code>selfAuth</code>. The canonical model covers every document shape, including cap fields and the optional recovery configuration. This coverage concerns the bytes that identify a document; it does not prove threshold signer selection or recovery execution.</p>
+<p>The model also proves uniqueness and separation of the preimages used for <code>config_hash</code> and <code>rule_hash</code>: one identifies a recovery configuration, the other one rule's text. Shared fixtures and tests connect those modeled bytes to Rust and TypeScript. The recovery controller, account authorization, and delta installation remain outside these proofs; the <a href="https://github.com/stellar-registry/perch/blob/main/formal/README.md">formal README</a> lists the exact statements and assumptions.</p>
 <p>The <a href="assurance.html">next chapter</a> explains how these mathematical results connect to the shipped implementation.</p>
 <p><strong>Exercise:</strong> Does <code>lowering_preserves</code> prove that the release pipeline has the right permissions?</p>
 <details>
 <summary>Reveal the answer</summary>
 <p>No. It proves agreement between two modeled meanings under its assumptions. A faithfully compiled policy can still grant more authority than its author intended.</p>
-</details><div style="break-before: page; page-break-before: always;"></div><h1 id="from-proofs-to-implementation-the-evidence-boundary"><a class="header" href="#from-proofs-to-implementation-the-evidence-boundary">From proofs to implementation: the evidence boundary</a></h1>
+</details>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="from-proofs-to-implementation-the-evidence-boundary"><a class="header" href="#from-proofs-to-implementation-the-evidence-boundary">From proofs to implementation: the evidence boundary</a></h1>
 <p>“The policy is verified” is incomplete unless it says which property, which representation, and which assumptions. Perch combines several kinds of evidence; they should not be mistaken for one end-to-end theorem about every deployed contract.</p>
 <h2 id="follow-the-chain"><a class="header" href="#follow-the-chain">Follow the chain</a></h2>
 <pre><code class="language-text">Policy document → Rust compiler → account rules + interpreter program
@@ -694,10 +698,10 @@ Lean outputs ↔ Rust outputs ↔ Wasm outputs             (tested on cases)
 <h2 id="what-remains-trusted"><a class="header" href="#what-remains-trusted">What remains trusted</a></h2>
 <p>At the model level, we rely on Lean's kernel and on choosing the right specification. Connecting model behavior to production still relies on test harnesses, Rust compilation, and runtime behavior. Actual authorization additionally depends on Soroban, the account framework, verifier contracts, deployed contract identities, and any stateful sibling. Hash-based document identity relies on SHA-256's collision resistance.</p>
 <p>The most useful review question is concrete: “Could this evidence detect the failure I am worried about?” An expiry boundary test helps with an off-by-one translation. The stateless lowering theorem cannot settle whether a spending-limit reset is correct.</p>
-<p>The <a href="formalization.html">formalization chapter</a> records the threshold and canonical-model coverage gaps. The <a href="https://github.com/stellar-registry/perch/blob/main/docs/verification/PLAN.md">verification plan</a> contains both completed work and future work; consult source declarations and CI jobs when determining current coverage, rather than treating every roadmap item as delivered.</p>
+<p>The <a href="formalization.html">formalization chapter</a> distinguishes canonicalization coverage, including threshold and recovery fields, from the unproved account authorization and recovery behavior. The <a href="https://github.com/stellar-registry/perch/blob/main/docs/verification/PLAN.md">verification coverage</a> records what is proved, differentially tested, and tested only. Consult source declarations and CI jobs for the exact scope; <a href="https://github.com/stellar-registry/perch/blob/main/docs/DEFERRED.md">deferred work</a> tracks remaining limitations.</p>
 <h2 id="reproduce-the-evidence"><a class="header" href="#reproduce-the-evidence">Reproduce the evidence</a></h2>
 <p>From the repository root, the existing commands are:</p>
-<pre><code class="language-sh">just formal             # Lean build: checks the proofs; needs elan/lake
+<pre><code class="language-sh">just formal             # Lean build and axiom audit; needs elan/lake
 just drt                # Rust and Lean replay of shared vectors
 just conformance-wasm   # compiled Wasm replay; needs wasm32v1-none
 </code></pre>
@@ -735,6 +739,7 @@ cargo run -q -p perch-analyze -- narrows \
 <tr><td><code>network</code></td><td>Optional string in the schema; matching network passphrase required by the on-chain doc compiler</td></tr>
 <tr><td><code>signers</code></td><td>Signer declarations, each with a unique local <code>id</code></td></tr>
 <tr><td><code>rules</code></td><td>Named authorization rules, with unique names</td></tr>
+<tr><td><code>recovery</code></td><td>Optional account-recovery configuration; see the <a href="https://github.com/stellar-registry/perch/blob/main/docs/recovery/spec.md">recovery specification</a> for profiles, modes, and enrollment requirements</td></tr>
 </tbody></table>
 </div>
 <h2 id="rule-fields"><a class="header" href="#rule-fields">Rule fields</a></h2>

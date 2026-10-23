@@ -7,6 +7,7 @@ dist/
 fuzz/corpus/
 fuzz/artifacts/
 fuzz/coverage/
+docs/book/
 # soroban-sdk test-host ledger snapshots: written by every `cargo test`, never
 # compared, and full of contract ids derived from the pinned infra wasm.
 test_snapshots/

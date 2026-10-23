@@ -32,6 +32,13 @@ security audit:
 - [`docs/DEFERRED.md`](./docs/DEFERRED.md): work deferred until after the
   audit, with the current behaviour each item leaves in place.
 
+## Read the book
+
+Start with [The Perch Book](https://stellar-registry.github.io/perch/book/) for a
+guided introduction to the language, evaluation, and formalization. No programming
+languages or theorem-proving background is required. [Book sources and local
+build instructions](book/README.md) are included in this repository.
+
 ## Stateless predicates and cumulative caps
 
 Every interpreter constraint is a stateless predicate over a *single*

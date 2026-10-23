@@ -1,0 +1,38 @@
+/* Inherit mdBook's theme palette so all five themes remain readable. */
+.perch-lab {
+  margin: 2rem 0; padding: 1.6rem; border: 1px solid var(--table-border-color);
+  border-radius: .6rem; background: var(--quote-bg); color: var(--fg);
+}
+.perch-lab h3 { margin-top: 0; }
+.perch-lab fieldset { min-width: 0; border: 0; padding: 0; margin: 1.2rem 0; }
+.perch-lab legend { font-weight: 700; margin-bottom: .8rem; }
+.lab-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2rem; }
+.lab-grid label { display: flex; flex-direction: column; gap: .5rem; }
+.perch-lab select, .perch-lab input[type=number], .perch-lab button {
+  box-sizing: border-box; max-width: 100%; min-height: 44px; font: inherit;
+  color: var(--fg); background: var(--bg); border: 1px solid var(--icons);
+  border-radius: .3rem; padding: .6rem .8rem;
+}
+.perch-lab select, .perch-lab input[type=number] { width: 100%; }
+.perch-lab input[type=checkbox], .perch-lab input[type=radio] { width: 1.1em; height: 1.1em; flex-shrink: 0; }
+.lab-checkbox, .lab-choice { display: flex; align-items: baseline; gap: .7rem; padding: .7rem 0; cursor: pointer; }
+.lab-buttons { display: flex; flex-wrap: wrap; gap: .7rem; margin: 1rem 0; }
+.perch-lab button { cursor: pointer; }
+.perch-lab button:disabled, .perch-lab select:disabled { opacity: .5; cursor: default; }
+.perch-lab :focus-visible, details summary:focus-visible { outline: 3px solid var(--links); outline-offset: 3px; }
+.lab-result { padding: 1rem; border-left: 4px solid var(--links); background: var(--bg); }
+.lab-result:empty { display: none; }
+.lab-checks { padding-left: 1.8rem; }
+.lab-checks li { margin: .7rem 0; }
+.lab-stack { font-family: var(--mono-font); overflow-wrap: anywhere; }
+.perch-lab pre { overflow-x: auto; }
+.perch-lab details { margin: 1rem 0; }
+details summary { cursor: pointer; padding: .7rem 0; font-weight: 600; }
+.perch-lab[data-ready] > .lab-fallback { display: none; }
+@media (max-width: 600px) { .lab-grid { grid-template-columns: 1fr; } .perch-lab { padding: 1rem; } }
+@media print {
+  .lab-interactive { display: none; }
+  .perch-lab[data-ready] > .lab-fallback { display: block; }
+  details > :not(summary) { display: block !important; }
+  details { break-inside: avoid; }
+}

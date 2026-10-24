@@ -91,22 +91,25 @@ fn recipient_requires_a_cross_token_cap_and_a_valid_address() {
 
 #[test]
 fn generated_transfer_cannot_target_the_documents_zk_contracts() {
-    let mut d = perch_ir::from_json(include_str!(
+    let base = perch_ir::from_json(include_str!(
         "../../../testdata/ci-publish-recovery-combined.json"
     ))
     .unwrap();
-    let pool = match &d.recovery.as_ref().unwrap().mode {
-        perch_ir::RecoveryMode::Combined(_, zk) => zk.pool.clone(),
+    let zk = match &base.recovery.as_ref().unwrap().mode {
+        perch_ir::RecoveryMode::Combined(_, zk) => zk.clone(),
         _ => unreachable!(),
     };
-    let mut r = doc().rules.remove(1);
-    r.cap.as_mut().unwrap().token = Some(pool.clone());
-    d.rules.push(r);
-    assert_rejects(
-        &d,
-        &ValidationError::RuleScopedToRecoveryContract {
-            rule: "game".into(),
-            address: pool,
-        },
-    );
+    for contract in [zk.adapter, zk.pool] {
+        let mut d = base.clone();
+        let mut r = doc().rules.remove(1);
+        r.cap.as_mut().unwrap().token = Some(contract.clone());
+        d.rules.push(r);
+        assert_rejects(
+            &d,
+            &ValidationError::RuleScopedToRecoveryContract {
+                rule: "game".into(),
+                address: contract,
+            },
+        );
+    }
 }

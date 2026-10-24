@@ -122,7 +122,8 @@ the release-stack suite, and the testnet exercise cover them.
   outside the program. T6 is stated over the program semantics, and the
   expiry boundary is pinned by vectors and compile tests.
 - Cumulative caps (`cap`) lower to the stateful OZ `spending_limit` beside
-  the interpreter. They are outside the stateless model by construction
+  the interpreter, on the rule itself or, for a cap on another token, on a
+  generated transfer rule. They are outside the stateless model by construction
   ([`THEORY.md`](./THEORY.md) explains why this boundary is a theorem).
 
 ## Not established

@@ -196,6 +196,14 @@ rehearse() {
         '{account: $a, xlm: 100, label: $l}')" >/dev/null
     labels+=("fork_setBalance: fund the admin key for apply_doc")
 
+    # An author the base chain already has keeps its code and the tier-0 it
+    # was built against: the bootstrap checks it, it deploys no other.
+    local project prior=()
+    for project in perch nido; do
+        prior+=("$(stellar ledger entry fetch contract-data "${net[@]}" --contract "$("$DERIVE" name "$role" "$project-author" "$passphrase")" \
+            --instance --output json </dev/null 2>/dev/null | jq -r '.entries[0].val.contract_data.val.contract_instance.executable.wasm // empty')")
+    done
+
     local expiry flags
     expiry=$(( $(rpc getLatestLedger '{}' | jq -r .sequence) + 518400 ))
     flags=(--network "$network" --source "$role" --admin-key "$admin_g" --ci-key "$ci_g" --ci-expiry-ledger "$expiry")
@@ -245,7 +253,7 @@ rehearse() {
         check "root.fetch_contract_id(nido)" "$(read_call "$root" fetch_contract_id --contract-name nido)" "$nido"
         check "perch.fetch_contract_id(constructorless)" "$(read_call "$perch" fetch_contract_id --contract-name constructorless)" "$constructorless"
         check "constructorless runs perch-constructorless-registry" "$(executable "$constructorless")" "$(sha256_file "$registry_file")"
-        local n v h at project author reg pins
+        local n v h at author reg pins a resolved i=0
         for n in perch-doc-compiler perch-interpreter perch-spending-limit perch-ed25519-verifier; do
             v="$(jq -r --arg n "$n" '.contracts[$n].version' "$MANIFEST")"
             h="$(jq -r --arg n "$n" '.contracts[$n].sha256' "$MANIFEST")"
@@ -256,14 +264,27 @@ rehearse() {
         for project in perch nido; do
             author="$("$DERIVE" name "$role" "$project-author" "$passphrase")"
             if [ "$project" = perch ]; then reg="$constructorless"; else reg="$nido"; fi
-            check "$project author $author runs" "$(executable "$author")" "$account_hash"
             pins="$(stellar contract invoke "${net[@]}" --id "$author" --source-account "$role_source" --send=no -- infra </dev/null 2>/dev/null |
                 jq -c '{doc_compiler, interpreter, spending_limit}' 2>/dev/null || true)"
-            check "$project author infra()" "$pins" "$(jq -cn \
+            if [ -n "${prior[$i]}" ]; then
+                check "$project author $author runs (as before)" "$(executable "$author")" "${prior[$i]}"
+                resolved=no
+                if [ -n "$pins" ]; then
+                    resolved=yes
+                    for a in $(jq -r '.[]' <<<"$pins"); do
+                        [ "$("$DERIVE" content "$constructorless" "$(executable "$a")" "$passphrase" 2>/dev/null)" = "$a" ] || resolved=no
+                    done
+                fi
+                check "$project author infra() in constructorless" "$resolved" yes
+            else
+                check "$project author $author runs" "$(executable "$author")" "$account_hash"
+                check "$project author infra()" "$pins" "$(jq -cn \
                 --arg c "$("$DERIVE" content "$constructorless" "$(jq -r '.contracts["perch-doc-compiler"].sha256' "$MANIFEST")" "$passphrase")" \
                 --arg i "$("$DERIVE" content "$constructorless" "$(jq -r '.contracts["perch-interpreter"].sha256' "$MANIFEST")" "$passphrase")" \
                 --arg s "$("$DERIVE" content "$constructorless" "$(jq -r '.contracts["perch-spending-limit"].sha256' "$MANIFEST")" "$passphrase")" \
                 '{doc_compiler: $c, interpreter: $i, spending_limit: $s}')"
+            fi
+            i=$((i + 1))
             check "$project author ci-publish scoped to $reg" "$(has_ci_publish "$author" "$reg")" yes
         done
         for n in $(jq -r '.contracts | to_entries[] | select(.value.address) | .key' "$MANIFEST"); do

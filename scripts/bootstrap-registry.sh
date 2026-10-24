@@ -736,15 +736,28 @@ author_scoped() { # author registry
 }
 
 # A deployed author must resolve its infra in this network's constructorless:
-# an account built from another registry.path or other pins never would.
-check_infra() { # author
-    local want got
+# an account built from another registry.path never would. One this run
+# deploys must resolve the seeded tier-0. One deployed earlier keeps the
+# tier-0 it was built against until its own delayed upgrade, so each of its
+# infra addresses need only be the content address, in constructorless, of
+# the code it runs.
+check_infra() { # author fresh(0|1)
+    local want got a h
     want="$(jq -cn --arg c "$COMPILER" --arg i "$(content "$CONSTRUCTORLESS" "$(hash_of_seeded perch-interpreter)")" \
         --arg s "$(content "$CONSTRUCTORLESS" "$(hash_of_seeded perch-spending-limit)")" \
         '{doc_compiler: $c, interpreter: $i, spending_limit: $s}')"
     got="$(simulate "$1" infra | jq -c '{doc_compiler, interpreter, spending_limit}' 2>/dev/null || true)"
-    [ "$got" = "$want" ] || die "$1 resolves its infra at ${got:-nothing}, not $want in $CONSTRUCTORLESS"
-    log "$1 resolves its infra in $CONSTRUCTORLESS"
+    if [ "$got" = "$want" ]; then
+        log "$1 resolves its infra in $CONSTRUCTORLESS"
+        return
+    fi
+    [ "$2" = 0 ] && [ -n "$got" ] || die "$1 resolves its infra at ${got:-nothing}, not $want in $CONSTRUCTORLESS"
+    for a in $(jq -r '.[]' <<<"$got"); do
+        h="$(executable_of "$a")"
+        [ -n "$h" ] && [ "$(content "$CONSTRUCTORLESS" "$h")" = "$a" ] ||
+            die "$1 resolves its infra at $got: $a is not a contract constructorless $CONSTRUCTORLESS deployed"
+    done
+    warn "$1 resolves earlier tier-0 in $CONSTRUCTORLESS ($got), not the seeded $want: it predates them"
 }
 
 cmd_create_author() {
@@ -755,9 +768,11 @@ cmd_create_author() {
 
     # 1. The account: a design-A perch-account, deployed directly (the factory
     #    is itself deploy_stateless'd into constructorless later).
+    local fresh=0
     if instance_exists "$author"; then
         log "$project author already exists, running $(executable_of "$author")"
     else
+        fresh=1
         account_wasm
         wasm="$WASM"
         hash="$(sha256_file "$wasm")"
@@ -793,7 +808,7 @@ cmd_create_author() {
             plan "(the deploy is simulated once the code is on $NETWORK)"
         fi
     fi
-    if instance_exists "$author"; then check_infra "$author"; fi
+    if instance_exists "$author"; then check_infra "$author" "$fresh"; fi
 
     # 2. Its document. apply_doc compiles through the account's own compiler,
     #    deployer(constructorless, compiler hash), which `seed` puts there.

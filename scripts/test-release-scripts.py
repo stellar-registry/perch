@@ -2762,6 +2762,23 @@ shutil.copy(src, args[args.index("-o") + 1])
         self.assertIn("building perch-constructorless-registry from this checkout", out.stderr)
         self.assertIn("UNATTESTED: perch-constructorless-registry " + hashlib.sha256(built).hexdigest(), out.stderr)
 
+    def test_an_existing_author_may_resolve_earlier_tier0_in_constructorless(self):
+        t = PASSPHRASES["testnet"]
+        old = {k: hashlib.sha256(self.wasm("old " + k)).hexdigest() for k in self.state["infra"]}
+        at = {k: run(["python3", DERIVE_ID, "content", self.constructorless, h, t], REPO).stdout.strip() for k, h in old.items()}
+        self.state["infra"] = at
+        self.state["contracts"].update({at[k]: old[k] for k in at})
+        self.save()
+        out = self.bootstrap()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("resolves earlier tier-0 in " + self.constructorless, out.stderr)
+        # An address constructorless never deployed is refused.
+        self.state["contracts"][at["interpreter"]] = old["doc_compiler"]
+        self.save()
+        out = self.bootstrap()
+        self.assertNotEqual(out.returncode, 0, out.stderr)
+        self.assertIn(at["interpreter"] + " is not a contract constructorless", out.stderr)
+
     def test_a_tier0_still_to_seed_is_downloaded_and_verified(self):
         n = "perch-interpreter"
         del self.state["contracts"][self.at[n]]

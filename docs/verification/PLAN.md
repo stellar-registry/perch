@@ -13,7 +13,7 @@ the canonical-form proofs are about are defined in
 | # | Target | Statement | Status |
 |---|--------|-----------|--------|
 | (a) | **Evaluator soundness** | `perch-program`'s fail-closed evaluation implements the canonical semantics exactly | Proved of the Lean model (T1–T4); tied to the Rust evaluator and a Wasm build of it by shared vectors |
-| (b) | **Lowering preservation** | `perch-compile` emits programs that admit exactly the invocations the source rule admits | Proved of the model's lowering (T6); tied to Rust by the vectors and the compile→eval differential suite |
+| (b) | **Lowering preservation** | `perch-compile` emits programs that admit exactly the invocations the source rule admits | Proved of the model's lowering (T6), per program; tied to Rust by the vectors and the compile→eval differential suite. A cross-token cap's rule lowers to two programs, each covered; that the pair together grants exactly the rule (split soundness) is tested, not proved ([Not established](#not-established)) |
 | (c) | **Per-policy properties** | A given document admits only intended invocations (dead rules, intent conformance, attenuation) | `perch-analyze` (SMT, z3), per document |
 | (d) | **Artifact-level guarantees** | (a)–(c) hold of the shipped Wasm, not only the Rust source | Partial: the vectors replay through a Wasm contract wrapping the same evaluator entry points (`perch-bench-rpn`), and Komet checks three properties of the evaluator compiled to Wasm; neither is the deployed interpreter binary |
 
@@ -130,6 +130,14 @@ the release-stack suite, and the testnet exercise cover them.
 These are not done; none is relied on by a current claim. Further formal
 models are deferred ([`DEFERRED.md`](../DEFERRED.md#additional-formal-models)).
 
+- Split soundness for cross-token caps
+  ([`cross-token-caps.md`](../cross-token-caps.md)): the installed scope and
+  transfer rules together grant exactly what the source rule means, and
+  every token context they authorize is a capped `transfer`. The model's
+  rule (`DocRule`, `formal/PerchFormal/Lowering.lean`) has no scope or cap,
+  so T6 covers each program but not the split. The compile→eval
+  differential suite and the delta-apply model test it against independent
+  expansions of the rule.
 - T9, monotonicity of attenuation: tightening a bound (a subset `FnIn` or
   `StrIn`, an earlier `notAfter`) never admits a previously denied
   invocation. `attenuation::is_narrowing` and `perch-analyze narrows` check

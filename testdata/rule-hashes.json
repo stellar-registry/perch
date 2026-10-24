@@ -55,6 +55,24 @@
           "rule_hash": "31aadebaa66e92c82d6efd28e1ad8c1ba8f35c425eb1352dc22f61bc415384f9"
         }
       ]
+    },
+    {
+      "fixture": "testdata/cross-token-cap.canonical.json",
+      "doc_hash": "97f5d076c1611ab10c2a1c5efa2c46d9858e6c4ec9100ca3df8e8aac967f8961",
+      "rules": [
+        {
+          "index": 0,
+          "name": "admin",
+          "canonical": "{\"name\":\"admin\",\"principals\":{\"signers\":[\"admin\"],\"type\":\"all\"},\"scope\":{\"type\":\"self-admin\"}}",
+          "rule_hash": "a23e499eb6906e76a489ae7b901d11245b18119bf9f7299c42932016a02e4ecf"
+        },
+        {
+          "index": 1,
+          "name": "game",
+          "canonical": "{\"args\":[{\"index\":0,\"pred\":{\"type\":\"is-self\"}}],\"cap\":{\"limit\":\"2\",\"period-ledgers\":1000,\"recipient\":{\"address\":\"CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN\",\"type\":\"address-eq\"},\"token\":\"CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG\"},\"functions\":[\"guess\"],\"name\":\"game\",\"not-after-ledger\":55000000,\"principals\":{\"signers\":[\"ci\"],\"type\":\"all\"},\"scope\":{\"address\":\"CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL\",\"type\":\"contract\"}}",
+          "rule_hash": "c55eb8a701b689267c579231632712f8433a871fa5cbca873608b759e7e756c1"
+        }
+      ]
     }
   ]
 }

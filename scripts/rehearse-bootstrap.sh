@@ -25,17 +25,15 @@
 #      by a signer the real network knows, and exactly this run's overrides.
 #
 # Usage: scripts/rehearse-bootstrap.sh [--network testnet|mainnet] [--out DIR]
-#            [--account-wasm F|TAG] [--constructorless-wasm F|TAG]
+#            [--account-wasm F|TAG|build] [--constructorless-wasm F|TAG|build]
 #   --network  one network (default: testnet, then mainnet)
 #   --out      where each network's report and logs land
 #              (default target/rehearse-bootstrap/<network>)
 #   --account-wasm, --constructorless-wasm   passed to the bootstrap. Without
-#              one, the release of this checkout's version
-#              (perch-account-vX.Y.Z, perch-constructorless-registry-vX.Y.Z)
-#              when it exists; otherwise a testnet rehearsal passes
-#              --allow-unattested for that wasm (then built from this
-#              checkout), and a mainnet one stops: mainnet takes only attested
-#              wasm.
+#              one, the bootstrap uses the bytes the testnet deployment runs
+#              (deployments/testnet.json). `build` builds that wasm from this
+#              checkout, and a testnet rehearsal then passes --allow-unattested
+#              for it; mainnet takes only attested wasm.
 # Env: SOROBAN_SIM, a soroban-sim binary built from SOROBAN_SIM_REV below;
 #      otherwise the script installs that commit under target/soroban-sim/.
 #
@@ -85,28 +83,24 @@ fi
 
 # --- the wasm the bootstrap is given ---------------------------------------------
 
-# This checkout's version's release tag, when that release has its asset.
-released_tag() { # crate
-    local v
-    v="$(grep -m1 '^version = "' "$REPO/crates/$1/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')"
-    curl -fsIL -o /dev/null "https://github.com/stellar-registry/perch/releases/download/$1-v$v/$1_v$v.wasm" 2>/dev/null &&
-        echo "$1-v$v"
-}
-[ -n "$account_wasm" ] || account_wasm="$(released_tag perch-account || true)"
-[ -n "$registry_wasm" ] || registry_wasm="$(released_tag perch-constructorless-registry || true)"
 # The bytes the authors and constructorless must run: the file, the release
-# asset the bootstrap downloads, or its build of this checkout.
-given_file() { # option-value build-file
+# asset the bootstrap downloads, its build of this checkout, or by default the
+# testnet deployment's, which it fetches by hash.
+given_file() { # option-value build-file name testnet-hash
     if [ -f "$1" ]; then
         echo "$1"
+    elif [ "$1" = build ]; then
+        echo "$REPO/target/bootstrap-registry/$2"
     elif [ -n "$1" ]; then
         echo "$REPO/target/bootstrap-registry/wasm/$1.wasm"
     else
-        echo "$REPO/target/bootstrap-registry/$2"
+        echo "$REPO/target/bootstrap-registry/wasm/$3-$4.wasm"
     fi
 }
-account_file="$(given_file "$account_wasm" account/perch_account.wasm)"
-registry_file="$(given_file "$registry_wasm" registry/perch_constructorless_registry.wasm)"
+account_file="$(given_file "$account_wasm" account/perch_account.wasm perch-account \
+    "$(jq -r '.contracts["perch-account"].sha256' "$MANIFEST")")"
+registry_file="$(given_file "$registry_wasm" registry/perch_constructorless_registry.wasm perch-constructorless-registry \
+    "$(jq -r .registry.wasm_hash "$MANIFEST")")"
 
 # --- one network ---------------------------------------------------------------
 
@@ -120,13 +114,12 @@ rehearse() {
     local w opt flag name wasm_flags=()
     for w in "account_wasm --account-wasm perch-account" "registry_wasm --constructorless-wasm perch-constructorless-registry"; do
         read -r opt flag name <<<"$w"
-        if [ -n "${!opt}" ]; then
-            wasm_flags+=("$flag" "${!opt}")
-        elif [ "$network" = testnet ]; then
-            log "$network: no attested $name release yet: rehearsing with --allow-unattested $name"
+        [ -n "${!opt}" ] || continue
+        wasm_flags+=("$flag" "${!opt}")
+        if [ "${!opt}" = build ]; then
+            [ "$network" = testnet ] || die "$network: $flag build is unattested, and mainnet takes only attested wasm"
+            log "$network: $flag build: rehearsing with --allow-unattested $name"
             wasm_flags+=(--allow-unattested "$name")
-        else
-            die "$network: no attested $name release of this checkout's version: pass $flag <file or $name-vX.Y.Z> (mainnet takes only attested wasm)"
         fi
     done
     rm -rf "$out"

@@ -72,12 +72,6 @@ name: Release
 # tip; that run tags and publishes it. The same holds for a commit main moved
 # past before its CI finished.
 #
-# A third dispatch-only path, `attested-plan` → `attested-build` →
-# `attested-summary`, builds and attests perch-account and
-# perch-constructorless-registry from main as GitHub release assets, for
-# scripts/bootstrap-registry.sh, which takes only attested wasm. It publishes
-# nothing to any registry.
-#
 # Mainnet is not published from here. Every job in this file targets testnet
 # or npm and runs as described above; mainnet publishes only when someone
 # dispatches release-mainnet.yml by hand, from main, with tags this workflow
@@ -137,15 +131,6 @@ on:
         description: "Existing tag of an ALLOW-listed contract to (re)publish to the testnet registry publish-plan computes, e.g. perch-spending-limit-v0.1.2"
         required: false
         type: string
-      # Separate from publish_tag: build and attest, from main, the two wasm a
-      # registry bootstrap needs that no automatic release builds
-      # (attested-plan below). No registry publish.
-      attested_build:
-        description: "Build and attest from main, as GitHub release assets of their existing tags, for scripts/bootstrap-registry.sh (no registry publish)"
-        required: false
-        type: choice
-        default: none
-        options: [none, both, perch-account, perch-constructorless-registry]
       # npm's publish-only recovery: re-pack an existing <pkg>-v<version> tag
       # from its tagged commit and publish it through npm-pack/npm-publish
       # (npm-recovery-plan below). A failed run's own "Re-run failed jobs"
@@ -879,163 +864,6 @@ jobs:
       # (docs/deploy/README.md "Release-path settings" has the check).
       signing_key: ${{ secrets.CI_PUBLISH_SECRET_KEY }}
       release_token: ${{ secrets.GITHUB_TOKEN }}
-
-  # ── Attested builds for a registry bootstrap ──────────────────────────────
-  # scripts/bootstrap-registry.sh uses only wasm that `gh attestation verify`
-  # traces to contract-release.yml building stellar-registry/perch's
-  # refs/heads/main. The tier-0 releases above carry that. perch-account and
-  # perch-constructorless-registry are tagged but never built here, so a manual
-  # dispatch from main (attested_build) builds them through the same pinned
-  # reusable workflow as GitHub release assets: tag `<name>-v<version>`, asset
-  # `<name>_v<version>.wasm`, like the tier-0. Nothing goes to any registry,
-  # and no secret beyond the release token is read.
-  #
-  # The tag must already exist (detect-releases tags every version of both)
-  # and sit on the commit built, or on one where everything the package
-  # builds from is the same (scripts/release-deps.py inputs), so a release's
-  # asset is always a build of its tag's source. A dispatch never
-  # creates a tag: detect-releases would then skip that version.
-  attested-plan:
-    if: github.event_name == 'workflow_dispatch' && inputs.attested_build != 'none'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read # the crate versions, their tags, and existing releases
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0 # the tags, and the commits they name
-          persist-credentials: false
-      - name: Which tags to build, from this commit
-        id: plan
-        env:
-          BUILD: ${{ inputs.attested_build }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # The reusable build checks out this run's sha, and the bootstrap
-          # requires an attestation whose source ref is main.
-          if [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo "::error::dispatch attested_build from main, not $GITHUB_REF"
-            exit 1
-          fi
-          case "$BUILD" in
-            both) packages="perch-account perch-constructorless-registry" ;;
-            perch-account|perch-constructorless-registry) packages="$BUILD" ;;
-            *) echo "::error::unexpected attested_build '$BUILD'"; exit 1 ;;
-          esac
-          matrix='[]'
-          for p in $packages; do
-            ver=$(grep -m1 '^version = "' "crates/$p/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')
-            if ! [[ "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "::error::unexpected $p version: '$ver'"
-              exit 1
-            fi
-            tag="$p-v$ver"
-            if ! at=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
-              echo "::error::$tag is not tagged yet: detect-releases tags it once the version bump passes CI as main's tip; dispatch after that"
-              exit 1
-            fi
-            # Only what this package builds from (scripts/release-deps.py
-            # inputs): another crate's version bump since the tag is not a
-            # reason to refuse.
-            if [ "$at" != "$GITHUB_SHA" ]; then
-              if ! changed=$(python3 scripts/release-deps.py inputs "$p" "$at" "$GITHUB_SHA"); then
-                echo "::error::could not compare $p's build inputs on $at and $GITHUB_SHA"
-                exit 1
-              fi
-              if [ -n "$changed" ]; then
-                echo "::error::$tag is on $at, whose build inputs differ from $GITHUB_SHA for $p ($(paste -sd ';' - <<<"$changed")): release a new $p version (the release PR, or a bump) and dispatch once main's tip has its tag"
-                exit 1
-              fi
-            fi
-            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "::error::$tag already has a GitHub release; its asset is what the bootstrap downloads"
-              exit 1
-            fi
-            matrix=$(jq -c --arg p "$p" --arg t "$tag" --arg v "$ver" '. + [{package: $p, tag: $t, version: $v}]' <<<"$matrix")
-            echo "- building $tag from $GITHUB_SHA (tag on $at)" >>"$GITHUB_STEP_SUMMARY"
-          done
-          echo "matrix={\"include\":$matrix}" >>"$GITHUB_OUTPUT"
-
-  # The reusable build, as constructorless-build runs it (same pin): scaffold
-  # build, optimize, a GitHub release on the existing tag, and its provenance
-  # attestation. No registry-publish follows.
-  attested-build:
-    needs: attested-plan
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.attested-plan.outputs.matrix) }}
-    permissions:
-      id-token: write # the provenance attestation's signing certificate
-      contents: write # the GitHub release on the existing tag
-      attestations: write # store the attestation
-    # FOLLOW-UP: see constructorless-build; this pin moves with that one.
-    uses: stellar-registry/actions/.github/workflows/contract-release.yml@57bfdf4b96279a28961cb76a48ec4204300b5818 # main 2026-10-14
-    with:
-      package: ${{ matrix.package }}
-      release_name: ${{ matrix.tag }}
-      release_description: >-
-        Attested build of ${{ matrix.package }} from main, for
-        scripts/bootstrap-registry.sh (--account-wasm or --constructorless-wasm
-        with this tag). Not published to any registry.
-    secrets:
-      release_token: ${{ secrets.GITHUB_TOKEN }}
-
-  # Each asset's sha256 against what the repository records, for the captain
-  # to judge: a mismatch is reported, never failed on. perch-account against
-  # the factory's committed pin and deployments/testnet.json. Nothing records
-  # the constructorless registry's code: the bootstrap deploys the attested
-  # asset itself.
-  attested-summary:
-    needs: [attested-plan, attested-build]
-    if: ${{ !cancelled() && needs.attested-plan.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read # the pins, and the release assets
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - name: Compare each asset with the recorded hashes
-        env:
-          MATRIX: ${{ needs.attested-plan.outputs.matrix }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          same() { if [ "$1" = "$2" ]; then echo "equal"; else echo "**differs** (\`${2:-none}\`)"; fi; }
-          {
-            echo "### Attested builds"
-            echo "| asset | sha256 | attestation | recorded |"
-            echo "| --- | --- | --- | --- |"
-          } >>"$GITHUB_STEP_SUMMARY"
-          jq -r '.include[] | "\(.package) \(.tag) \(.version)"' <<<"$MATRIX" | while read -r p tag ver; do
-            asset="${p}_v${ver}.wasm"
-            dir="$RUNNER_TEMP/$tag"
-            if ! gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern "$asset" --dir "$dir" 2>/dev/null; then
-              echo "| $tag/$asset | none: the build made no release | | |" >>"$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            sha=$(sha256sum "$dir/$asset" | cut -d' ' -f1)
-            if gh attestation verify "$dir/$asset" --repo "$GITHUB_REPOSITORY" \
-              --signer-workflow stellar-registry/actions/.github/workflows/contract-release.yml \
-              --source-ref refs/heads/main >/dev/null 2>&1; then
-              verified="verifies"
-            else
-              verified="**does not verify**"
-            fi
-            case "$p" in
-              perch-account)
-                recorded="committed pin $(same "$sha" "$(tr -d '[:space:]' <crates/perch-account-factory/wasm/perch-account.sha256)"),"
-                recorded="$recorded testnet.json $(same "$sha" "$(jq -r '.contracts["perch-account"].sha256 // empty' deployments/testnet.json)")" ;;
-              perch-constructorless-registry)
-                recorded="none: the bootstrap deploys this asset" ;;
-            esac
-            echo "| $tag/$asset | \`$sha\` | $verified | $recorded |" >>"$GITHUB_STEP_SUMMARY"
-          done
 
   # ── Recovery-stack deploy ─────────────────────────────────────────────────
   # The recovery stack is a build-time pin chain (docs/deploy/README.md), so it

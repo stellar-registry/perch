@@ -136,7 +136,7 @@
     },
     "capConstraint": {
       "additionalProperties": false,
-      "description": "A cumulative spend cap over a rolling window. Lowers to OpenZeppelin's stateful `spending_limit` policy (perch itself is stateless).",
+      "description": "A cumulative spend cap over a rolling window. Lowers to OpenZeppelin's stateful `spending_limit` policy (perch itself is stateless), which meters `transfer` on the cap's token.",
       "properties": {
         "limit": {
           "description": "Maximum cumulative amount as a decimal string (a string, not a number, because an i128 amount does not fit a JSON number safely). Must be a POSITIVE integer: the pattern rejects `0`, all-zero spellings, a sign-minus, and any value with more significant digits than an i128 can hold. A leading `+` and leading zeros are accepted (the parser accepts them; a single canonical spelling is CANON v2, `docs/schema.md`). Only the EXACT i128 upper bound remains a semantic check in perch-ir's validator.",
@@ -150,13 +150,13 @@
           "type": "integer"
         },
         "recipient": {
-          "description": "Cross-token caps only. Omitted means the scope contract. Transfers can also be called directly, independently of the scope call.",
+          "description": "Cross-token caps only. Omitted means the scope contract; `any` permits any recipient. Transfers can also be called directly, independently of the scope call.",
           "oneOf": [
             {
               "additionalProperties": false,
               "properties": {
                 "address": {
-                  "description": "The allowed transfer recipient (C- or G-address).",
+                  "description": "The allowed transfer recipient (C- or G-address). A muxed recipient never matches.",
                   "pattern": "^[CG][A-Z2-7]{55}$",
                   "type": "string"
                 },
@@ -185,7 +185,7 @@
           ]
         },
         "token": {
-          "description": "Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope. A different token produces a separate capped transfer rule.",
+          "description": "Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope. A different token produces a separate capped transfer rule, and the rule must then list its functions, none of them token-moving (`docs/cross-token-caps.md`; a cross-reference check outside this schema).",
           "pattern": "^C[A-Z2-7]{55}$",
           "type": "string"
         }

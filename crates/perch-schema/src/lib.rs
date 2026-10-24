@@ -508,20 +508,21 @@ fn policy_defs() -> Value {
         "capConstraint": {
             "description":
                 "A cumulative spend cap over a rolling window. Lowers to OpenZeppelin's \
-                 stateful `spending_limit` policy (perch itself is stateless).",
+                 stateful `spending_limit` policy (perch itself is stateless), which \
+                 meters `transfer` on the cap's token.",
             "type": "object",
             "additionalProperties": false,
             "required": ["limit", "period-ledgers"],
             "properties": {
                 "recipient": {
-                    "description": "Cross-token caps only. Omitted means the scope contract. Transfers can also be called directly, independently of the scope call.",
+                    "description": "Cross-token caps only. Omitted means the scope contract; `any` permits any recipient. Transfers can also be called directly, independently of the scope call.",
                     "oneOf": [
                         {
                             "type": "object", "additionalProperties": false,
                             "required": ["type", "address"],
                             "properties": {
                                 "type": { "const": "address-eq" },
-                                "address": address("The allowed transfer recipient (C- or G-address)."),
+                                "address": address("The allowed transfer recipient (C- or G-address). A muxed recipient never matches."),
                             },
                         },
                         {
@@ -531,7 +532,7 @@ fn policy_defs() -> Value {
                         },
                     ],
                 },
-                "token": contract_address("Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope. A different token produces a separate capped transfer rule."),
+                "token": contract_address("Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope. A different token produces a separate capped transfer rule, and the rule must then list its functions, none of them token-moving (`docs/cross-token-caps.md`; a cross-reference check outside this schema)."),
                 "limit": {
                     "type": "string",
                     "pattern": limit_pattern(),

@@ -111,7 +111,9 @@ export class RuleBuilder {
   /** Cumulative spend cap over a rolling window. Perch itself is stateless, so
    *  the compiler lowers this to a stateful sibling policy (OZ
    *  `spending_limit`). A different token produces a scope rule plus a capped
-   *  transfer rule; transfers are independent of the scope call. */
+   *  transfer rule; transfers are independent of the scope call. Such a rule
+   *  must list its functions, none of them token-moving: the compiler refuses
+   *  it otherwise (perch-js does not check). */
   cap({ token, recipient, limit, periodLedgers }: CapSpec): this {
     this._cap = {
       ...(token !== undefined ? { token } : {}),

@@ -41,7 +41,8 @@ export function decodeDocLimits(raw: unknown): FlatDocLimits {
 
 /**
  * Refuse a document the compiler would refuse with `DocTooLarge`: more
- * declared signers or rules than the caps, a rule name longer than the cap
+ * declared signers or installed rules than the caps (a cross-token cap
+ * installs two, {@link compiledRuleCount}), a rule name longer than the cap
  * in UTF-8 bytes, or canonical bytes over the cap. Throws {@link OverLimits}
  * naming the first limit exceeded, in the compiler's order.
  */

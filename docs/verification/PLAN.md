@@ -47,7 +47,7 @@ Every hash claim holds up to a SHA-256 collision.
 | Link | Evidence | Runs |
 |---|---|---|
 | Lean evaluator ↔ Rust `rpn::eval` | the 72 hand-authored `testdata/eval/` vectors, replayed by `perch-conformance`, the Lean model (`just drt`), and the evaluator compiled to Wasm (`perch-bench-rpn`, `just conformance-wasm`); the compile→eval differential suite (400 random documents × 16 invocations, fixed seed); the `eval_fail_closed` fuzz target | every pull request (Rust and Wasm legs); `formal` job (Lean leg) |
-| Lean canonicalizer ↔ Rust `canon.rs` | `drt` parses and re-emits every `testdata/*.canonical.json` document and the three `testdata/recovery/config-*.canonical.json` members; the `ir_parse_roundtrip` and `recovery_canonical_roundtrip` fuzz targets | `formal` and `fuzz` jobs |
+| Lean canonicalizer ↔ Rust `canon.rs` | `drt` parses and re-emits every `testdata/*.canonical.json` document and every `testdata/recovery/*.canonical.json` member (globbed, so a new fixture cannot skip the model); the `ir_parse_roundtrip` and `recovery_canonical_roundtrip` fuzz targets | `formal` and `fuzz` jobs |
 | T8 ↔ the code that computes `config_hash` and `rule_hash` | `config_hash.rs`, `release_stack.rs`, `testdata/rule-hashes.json` with `vectors.rs` and `fragment_hashes.rs` ([`formal/README.md`](../../formal/README.md#what-ties-the-model-to-the-shipped-code)) | every pull request |
 | Rust ↔ TypeScript canonical form and hashes | `packages/perch-js/test/parity.test.ts`; `test/fragment.test.ts` pins `ruleHash` and `configHash` to the Rust values | every pull request |
 | `rpn::eval` Wasm under K semantics | Komet, three properties, 50 fuzz examples each; symbolic `komet prove run` locally only ([`komet/README.md`](../../komet/README.md)) | weekly, on dispatch |

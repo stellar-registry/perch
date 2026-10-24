@@ -5,6 +5,11 @@
 //! `CANONICAL.md` / the `ArgPred` docs — it never looks at `Op` or the
 //! compiler, so a lowering bug and a reference bug cannot cancel out.
 //!
+//! A rule whose cap names a token other than its scope installs two slots
+//! (`docs/cross-token-caps.md`): the scope slot, uncapped, and a capped
+//! transfer slot on the token. The reference expands such a rule itself, from
+//! that document, and never calls perch-ir's split.
+//!
 //! Also asserts the plan-shape invariants on every generated document:
 //! INV-1 (an interpreter-attached rule denies zero-signature auth), INV-2
 //! (constraint-free + cap-free rules lower policy-free), the
@@ -15,10 +20,10 @@
 //!
 //! Randomness is fixed-seed splitmix64, per the security-core convention.
 
-use perch_compile::{compile, CompileConfig};
+use perch_compile::{compile, CompileConfig, ScopeSpec};
 use perch_ir::{
-    validate, AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, CapConstraint, PolicyDoc,
-    Principals, Rule, Scope, SignerDecl, SignerMethod, StringInPred, StringPrefixPred,
+    validate, AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, CapConstraint, CapRecipient,
+    PolicyDoc, Principals, Rule, Scope, SignerDecl, SignerMethod, StringInPred, StringPrefixPred,
     ThresholdPrincipals, U32EqPred,
 };
 use perch_program::{rpn, EvalInputs, Verdict};
@@ -31,6 +36,11 @@ const CONTRACT_C: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2
 const VERIFIER_A: &str = "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN";
 const VERIFIER_B: &str = "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG";
 const DELEGATE_G: &str = "GA327GGWT6747B57DRWJJ3SWBVIQ354TTDRHR76CVAWO6OBPZ4Z57YGA";
+/// A cross-token cap's token: any contract other than the scope.
+const TOKEN_T: &str = "CBIRQ266AYZMRM4XFEUR4CHXLIZVHSCK7HWX674P37V4BLTREEH35OHZ";
+/// Address arguments an invocation may carry: the predicates' addresses, the
+/// scope (a cross-token transfer's default recipient), and a G-address.
+const ADDRS: [&str; 4] = [VERIFIER_A, VERIFIER_B, CONTRACT_C, DELEGATE_G];
 
 // --- deterministic PRNG (splitmix64) -----------------------------------------
 
@@ -55,6 +65,8 @@ impl Rng {
 // --- document generator (valid by construction, then validate()-checked) -----
 
 const FN_NAMES: [&str; 4] = ["publish", "publish_hash", "transfer", "set_admin"];
+/// A cross-token scope must list its functions, none of them token-moving.
+const SCOPE_FNS: [&str; 2] = ["publish", "publish_hash"];
 const STRINGS: [&str; 4] = ["alpha", "beta", "release", "r"];
 
 fn gen_arg_pred(rng: &mut Rng) -> ArgPred {
@@ -183,15 +195,48 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
             }
         };
 
-        // A cap is only generated on contract-scoped rules, its token equal to
-        // the scope (validation requires token == scope, since OZ meters the
-        // rule's CallContract token). It forces the interpreter on even for a
-        // constraint-free rule (INV-2's cap-free proviso).
-        let cap = if contract_scope && rng.chance(5) {
+        // A cap is only generated on contract-scoped rules. A same-token cap
+        // (token omitted or equal to the scope) forces the interpreter on even
+        // for a constraint-free rule (INV-2's cap-free proviso). A cross-token
+        // cap needs an explicit, non-token-moving function list and may name
+        // a recipient.
+        let mut functions = functions;
+        let cap = if contract_scope && rng.chance(4) {
+            let cross = rng.chance(2);
+            let recipient = if cross {
+                match rng.below(4) {
+                    0 => None,
+                    1 => Some(CapRecipient::Any),
+                    2 => Some(CapRecipient::AddressEq(AddressEqPred {
+                        address: VERIFIER_A.into(),
+                    })),
+                    _ => Some(CapRecipient::AddressEq(AddressEqPred {
+                        address: DELEGATE_G.into(),
+                    })),
+                }
+            } else {
+                None
+            };
+            if cross {
+                let mut fns: Vec<String> = Vec::new();
+                for _ in 0..=rng.below(2) {
+                    fns.push(SCOPE_FNS[rng.below(SCOPE_FNS.len() as u32) as usize].into());
+                }
+                fns.sort();
+                fns.dedup();
+                functions = Some(fns);
+            }
             Some(CapConstraint {
-                token: Some(CONTRACT_C.into()),
-                limit: "1000000".into(),
-                period_ledgers: 17280,
+                recipient,
+                token: if cross {
+                    Some(TOKEN_T.into())
+                } else if rng.chance(2) {
+                    Some(CONTRACT_C.into())
+                } else {
+                    None
+                },
+                limit: (1 + rng.below(1_000_000)).to_string(),
+                period_ledgers: 1 + rng.below(17280),
             })
         } else {
             None
@@ -301,18 +346,22 @@ fn ref_pred(pred: &ArgPred, inv: &GInv, index: u32) -> Verdict {
     }
 }
 
+/// The INV-1 signer floor of a rule's principals.
+fn signer_floor(rule: &Rule) -> u32 {
+    match &rule.principals {
+        Principals::All(all) => all.signers.len().max(1) as u32,
+        Principals::Threshold(t) => t.m.max(1),
+        Principals::SelfAuthenticating(_) => unreachable!("generator never emits these"),
+    }
+}
+
 /// The reference verdict of one *interpreter-attached* rule for one invocation:
 /// the Kleene conjunction of the signer floor, the function allowlist, and the
 /// argument predicates — the doc-level meaning of the rule's program. Expiry is
 /// deliberately absent: `not_after_ledger` lowers to OZ `valid_until`, outside
 /// the program.
 fn ref_rule(rule: &Rule, inv: &GInv) -> Verdict {
-    let n = match &rule.principals {
-        Principals::All(all) => all.signers.len().max(1) as u32,
-        Principals::Threshold(t) => t.m.max(1),
-        Principals::SelfAuthenticating(_) => unreachable!("generator never emits these"),
-    };
-    let mut v = Verdict::from(inv.signer_count >= n);
+    let mut v = Verdict::from(inv.signer_count >= signer_floor(rule));
     if let Some(fns) = &rule.functions {
         v = v.and(if inv.contract_ctx {
             Verdict::from(fns.iter().any(|f| f == inv.fn_name))
@@ -328,17 +377,83 @@ fn ref_rule(rule: &Rule, inv: &GInv) -> Verdict {
     v
 }
 
+/// The reference verdict of a cross-token cap's transfer slot: the rule's
+/// signer floor, `transfer`, and the recipient at SEP-41 argument 1 (`None`:
+/// any recipient).
+fn ref_transfer(rule: &Rule, recipient: Option<&str>, inv: &GInv) -> Verdict {
+    let mut v = Verdict::from(inv.signer_count >= signer_floor(rule));
+    v = v.and(if inv.contract_ctx {
+        Verdict::from(inv.fn_name == "transfer")
+    } else {
+        Verdict::Unknown
+    });
+    if let Some(r) = recipient {
+        let pred = ArgPred::AddressEq(AddressEqPred { address: r.into() });
+        v = v.and(ref_pred(&pred, inv, 1));
+    }
+    v
+}
+
+/// What one installed slot must authorize.
+enum RefProgram<'a> {
+    /// The rule's own constraints ([`ref_rule`]).
+    Rule,
+    /// A cross-token transfer to this recipient (`None`: any).
+    Transfer(Option<&'a str>),
+}
+
+/// One installed slot, by reference: its OZ scope (`None`: self-admin),
+/// whether the spending limit attaches to it, and its program.
+struct RefSlot<'a> {
+    scope: Option<&'a str>,
+    capped: bool,
+    program: RefProgram<'a>,
+}
+
+/// The slots a rule installs, in order (`docs/cross-token-caps.md`): one, or
+/// for a cap on a token other than the scope, the uncapped scope slot followed
+/// by the capped transfer slot on the token, which defaults its recipient to
+/// the scope.
+fn ref_slots(rule: &Rule) -> Vec<RefSlot<'_>> {
+    let scope = match &rule.scope {
+        Scope::Contract(c) => Some(c.address.as_str()),
+        Scope::SelfAdmin(_) => None,
+    };
+    match (&rule.cap, scope) {
+        (Some(cap), Some(s)) if cap.token.as_deref().is_some_and(|t| t != s) => {
+            let recipient = match &cap.recipient {
+                None => Some(s),
+                Some(CapRecipient::Any) => None,
+                Some(CapRecipient::AddressEq(p)) => Some(p.address.as_str()),
+            };
+            vec![
+                RefSlot {
+                    scope,
+                    capped: false,
+                    program: RefProgram::Rule,
+                },
+                RefSlot {
+                    scope: cap.token.as_deref(),
+                    capped: true,
+                    program: RefProgram::Transfer(recipient),
+                },
+            ]
+        }
+        _ => vec![RefSlot {
+            scope,
+            capped: rule.cap.is_some(),
+            program: RefProgram::Rule,
+        }],
+    }
+}
+
 // --- invocation generator -----------------------------------------------------
 
 fn gen_val(rng: &mut Rng) -> GVal {
     match rng.below(8) {
         0 => GVal::U32(rng.below(3)),
         1 => GVal::SelfAddr,
-        2 => GVal::Addr(if rng.chance(2) {
-            VERIFIER_A
-        } else {
-            VERIFIER_B
-        }),
+        2 => GVal::Addr(ADDRS[rng.below(ADDRS.len() as u32) as usize]),
         3 => GVal::Sym("kind"),
         4 => GVal::Str(STRINGS[rng.below(STRINGS.len() as u32) as usize].into()),
         5 => GVal::Str("x".repeat(if rng.chance(2) { 256 } else { 257 })),
@@ -353,6 +468,26 @@ fn gen_inv(rng: &mut Rng) -> GInv {
         contract_ctx: !rng.chance(8),
         fn_name: FN_NAMES[rng.below(FN_NAMES.len() as u32) as usize],
         args: (0..n_args).map(|_| gen_val(rng)).collect(),
+        signer_count: rng.below(5),
+    }
+}
+
+/// Half the time a SEP-41 `transfer(from, to, amount)` from the account to
+/// one of [`ADDRS`] or the account itself, so a transfer slot's recipient is
+/// reached often; otherwise an arbitrary invocation.
+fn gen_transfer_inv(rng: &mut Rng) -> GInv {
+    if rng.chance(2) {
+        return gen_inv(rng);
+    }
+    let to = if rng.chance(5) {
+        GVal::SelfAddr
+    } else {
+        GVal::Addr(ADDRS[rng.below(ADDRS.len() as u32) as usize])
+    };
+    GInv {
+        contract_ctx: true,
+        fn_name: "transfer",
+        args: vec![GVal::SelfAddr, to, GVal::I128(1)],
         signer_count: rng.below(5),
     }
 }
@@ -393,12 +528,13 @@ fn compiled_programs_agree_with_the_doc_level_reference() {
     let mut rng = Rng(0xD1FF_0000_C0DE_0001);
 
     let mut lowered_rules = 0u32;
+    let mut transfer_slots = 0u32;
+    let mut transfers_allowed = 0u32;
     for doc_idx in 0..400 {
         // Fresh env per document: the test env meters host work and a single
         // budget cannot carry the whole run.
         let env = Env::default();
         let self_addr = Address::generate(&env);
-        let target = Address::from_str(&env, CONTRACT_C);
         let cfg = CompileConfig {
             interpreter_wasm_hash: BytesN::from_array(&env, &[7u8; 32]),
         };
@@ -406,81 +542,146 @@ fn compiled_programs_agree_with_the_doc_level_reference() {
         validate(&doc).expect("generator must produce valid documents");
 
         let plan = compile(&env, &doc, &cfg).expect("valid documents must lower");
-        assert_eq!(plan.rules.len(), doc.rules.len());
 
-        for (rule, lowered) in doc.rules.iter().zip(plan.rules.iter()) {
-            // Expiry boundary: dead at X ⇒ valid through X-1.
-            assert_eq!(
-                lowered.valid_until,
-                rule.not_after_ledger.map(|x| x - 1),
-                "rule `{}`: valid_until must be not_after_ledger - 1",
-                rule.name
-            );
+        // Walk the plan with a cursor: a rule installs one or two slots.
+        let mut cursor = 0;
+        for rule in &doc.rules {
+            let slots = ref_slots(rule);
+            let pair = slots.len() == 2;
+            for slot in slots {
+                let lowered = plan
+                    .rules
+                    .get(cursor)
+                    .unwrap_or_else(|| panic!("rule `{}`: missing an installed slot", rule.name));
+                cursor += 1;
 
-            // INV-2 (+ cap proviso): policy-free iff it is a bare `all` rule —
-            // N-of-N, constraint-free, and cap-free. A `threshold` rule always
-            // attaches the interpreter so `MinSigners(m)` is the quorum.
-            let constraint_free = matches!(rule.principals, Principals::All(_))
-                && rule.functions.is_none()
-                && rule.args.is_none()
-                && rule.cap.is_none();
-            assert_eq!(
-                lowered.install.is_none(),
-                constraint_free,
-                "rule `{}`: interpreter attachment disagrees with INV-2",
-                rule.name
-            );
+                // Every slot keeps the source rule's name and expiry boundary:
+                // dead at X ⇒ valid through X-1.
+                assert_eq!(lowered.name, rule.name);
+                assert_eq!(
+                    lowered.valid_until,
+                    rule.not_after_ledger.map(|x| x - 1),
+                    "rule `{}`: valid_until must be not_after_ledger - 1",
+                    rule.name
+                );
+                assert_eq!(
+                    lowered.scope,
+                    match slot.scope {
+                        Some(a) => ScopeSpec::Contract(a.into()),
+                        None => ScopeSpec::SelfAdmin,
+                    },
+                    "rule `{}`: slot scope",
+                    rule.name
+                );
+                if pair && slot.capped {
+                    assert_eq!(
+                        lowered.signers,
+                        plan.rules[cursor - 2].signers,
+                        "rule `{}`: both slots share the principals",
+                        rule.name
+                    );
+                }
 
-            let Some(install) = &lowered.install else {
-                continue;
-            };
-            lowered_rules += 1;
-            // Two hash paths, one identity: host sha256 (compile) == sha2 (std).
-            assert_eq!(
-                install.doc_hash.to_array(),
-                perch_ir::rule_hash(rule),
-                "on-chain rule hash diverged from perch_ir::rule_hash"
-            );
-            rpn::validate(&install.program).expect("compiled programs always validate");
+                // The spending limit attaches to exactly the capped slot, with
+                // the rule's own parameters.
+                match (&lowered.cap, slot.capped) {
+                    (None, false) => {}
+                    (Some(c), true) => {
+                        let cap = rule.cap.as_ref().unwrap();
+                        assert_eq!(c.limit, cap.limit.parse::<i128>().unwrap());
+                        assert_eq!(c.period_ledgers, cap.period_ledgers);
+                    }
+                    (got, _) => panic!(
+                        "rule `{}`: spending limit {got:?} on a slot that should{} carry one",
+                        rule.name,
+                        if slot.capped { "" } else { " not" }
+                    ),
+                }
 
-            for _ in 0..16 {
-                let inv = gen_inv(&mut rng);
-                let ctx = soroban_context(&env, &inv, &self_addr, &target);
+                // INV-2 (+ cap proviso): policy-free iff it is a bare `all` rule —
+                // N-of-N, constraint-free, and cap-free. A `threshold` rule always
+                // attaches the interpreter so `MinSigners(m)` is the quorum, and a
+                // transfer slot always restricts its function.
+                let constraint_free = matches!(slot.program, RefProgram::Rule)
+                    && matches!(rule.principals, Principals::All(_))
+                    && rule.functions.is_none()
+                    && rule.args.is_none()
+                    && !slot.capped;
+                assert_eq!(
+                    lowered.install.is_none(),
+                    constraint_free,
+                    "rule `{}`: interpreter attachment disagrees with INV-2",
+                    rule.name
+                );
+
+                let Some(install) = &lowered.install else {
+                    continue;
+                };
+                lowered_rules += 1;
+                // Two hash paths, one identity: host sha256 (compile) == sha2
+                // (std). Both slots of a pair carry the source rule's hash.
+                assert_eq!(
+                    install.doc_hash.to_array(),
+                    perch_ir::rule_hash(rule),
+                    "on-chain rule hash diverged from perch_ir::rule_hash"
+                );
+                rpn::validate(&install.program).expect("compiled programs always validate");
+
+                let target = Address::from_str(&env, slot.scope.unwrap_or(CONTRACT_C));
+                let transfer = matches!(slot.program, RefProgram::Transfer(_));
+                transfer_slots += u32::from(transfer);
+                for _ in 0..16 {
+                    let inv = if transfer {
+                        gen_transfer_inv(&mut rng)
+                    } else {
+                        gen_inv(&mut rng)
+                    };
+                    let ctx = soroban_context(&env, &inv, &self_addr, &target);
+                    let inputs = EvalInputs {
+                        context: &ctx,
+                        signer_count: inv.signer_count,
+                        self_addr: &self_addr,
+                    };
+                    let got = rpn::eval(&env, &install.program, &inputs);
+                    let want = match slot.program {
+                        RefProgram::Rule => ref_rule(rule, &inv),
+                        RefProgram::Transfer(recipient) => ref_transfer(rule, recipient, &inv),
+                    };
+                    assert_eq!(
+                        got, want,
+                        "rule `{}` diverged from the reference on {:?}",
+                        rule.name, inv
+                    );
+                    transfers_allowed += u32::from(transfer && got == Verdict::True);
+                }
+
+                // INV-1: zero authenticated signers can never authorize.
+                let inv0 = GInv {
+                    signer_count: 0,
+                    ..gen_transfer_inv(&mut rng)
+                };
+                let ctx = soroban_context(&env, &inv0, &self_addr, &target);
                 let inputs = EvalInputs {
                     context: &ctx,
-                    signer_count: inv.signer_count,
+                    signer_count: 0,
                     self_addr: &self_addr,
                 };
-                let got = rpn::eval(&env, &install.program, &inputs);
-                let want = ref_rule(rule, &inv);
-                assert_eq!(
-                    got, want,
-                    "rule `{}` diverged from the reference on {:?}",
-                    rule.name, inv
+                assert_ne!(
+                    rpn::eval(&env, &install.program, &inputs),
+                    Verdict::True,
+                    "rule `{}` authorized a zero-signature invocation (INV-1 violated)",
+                    rule.name
                 );
             }
-
-            // INV-1: zero authenticated signers can never authorize.
-            let inv0 = GInv {
-                signer_count: 0,
-                ..gen_inv(&mut rng)
-            };
-            let ctx = soroban_context(&env, &inv0, &self_addr, &target);
-            let inputs = EvalInputs {
-                context: &ctx,
-                signer_count: 0,
-                self_addr: &self_addr,
-            };
-            assert_ne!(
-                rpn::eval(&env, &install.program, &inputs),
-                Verdict::True,
-                "rule `{}` authorized a zero-signature invocation (INV-1 violated)",
-                rule.name
-            );
         }
+        assert_eq!(cursor, plan.rules.len(), "the plan installs extra slots");
     }
     assert!(
         lowered_rules > 200,
         "generator must exercise a healthy number of interpreter-attached rules, got {lowered_rules}"
+    );
+    assert!(
+        transfer_slots > 30 && transfers_allowed > 30,
+        "generator must exercise cross-token transfer slots, got {transfer_slots} slots and {transfers_allowed} allowed transfers"
     );
 }

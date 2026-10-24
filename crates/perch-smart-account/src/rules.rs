@@ -75,7 +75,7 @@ pub struct DeltaSummary {
 pub struct InstalledRule {
     /// The OZ context-rule id.
     pub id: u32,
-    /// The zero-signer recovery rule. Document rules are matched by name;
+    /// The zero-signer recovery rule. Document rules match by (name, scope);
     /// the recovery rule by this flag, so a document rule that happens to be
     /// named `recovery` is never confused with it.
     pub recovery: bool,
@@ -194,7 +194,7 @@ fn document_rule(e: &Env, rule: &CompiledRule) -> (InstalledRule, Vec<Val>) {
     // address — resolved offline like the interpreter, never admin-supplied. OZ
     // enforces every attached policy (AND): the interpreter's per-call program
     // AND the rolling cap must pass. The metered token is this rule's
-    // `CallContract` scope (validation pins `token == scope`).
+    // `CallContract` scope (the compiler expands cross-token caps first).
     if let Some(cap) = rule.cap.first() {
         let cap = SpendingLimitAccountParams {
             spending_limit: cap.spending_limit,

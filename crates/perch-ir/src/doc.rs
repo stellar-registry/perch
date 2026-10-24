@@ -112,9 +112,9 @@ pub struct Rule {
     /// from the canonical form when `None`.
     pub not_after_ledger: Option<u32>,
     /// If present, a cumulative spend cap over a rolling window, enforced by a
-    /// stateful sibling policy (OZ `spending_limit`) attached alongside the
-    /// interpreter — perch itself is stateless (see the crate-level "Stateless,
-    /// per-invocation semantics" section). Omitted from the canonical form when
+    /// stateful sibling policy (OZ `spending_limit`). It meters token transfers;
+    /// a different `cap.token` emits a separate transfer rule (see
+    /// [`CapConstraint`]). Perch's interpreter is stateless. Omitted from the canonical form when
     /// `None`, so documents without a cap hash exactly as before this field
     /// existed.
     pub cap: Option<CapConstraint>,
@@ -124,15 +124,22 @@ pub struct Rule {
 ///
 /// Perch is stateless (an [`ArgPred`] bounds a single call, never a running
 /// total), so a cumulative cap cannot live in the interpreter. It lowers to OZ's
-/// `spending_limit` policy, attached to the same OZ context rule alongside
-/// perch's interpreter; OZ enforces every attached policy (AND), so both the
-/// per-call constraints and the cumulative cap must pass.
+/// `spending_limit` policy, which meters only `transfer` on its context's token.
+/// If `token` differs from the contract scope, the compiler emits an uncapped
+/// scope rule followed by a capped token-transfer rule. Both share the source
+/// name, principals and expiry. The transfer may be called directly: it is not
+/// tied to the scope call. Allowance-based flows need explicit rules.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CapConstraint {
     /// The token contract (C-address strkey) the cap is denominated in. If
     /// omitted, the rule's scope contract is used (the scope must then be a
     /// `contract` scope). Omitted from the canonical form when `None`.
     pub token: Option<String>,
+    /// Cross-token transfer recipient. Omitted means the scope contract;
+    /// `Any` permits any recipient. Invalid on a same-token cap. The address
+    /// constraint checks SEP-41 argument 1; muxed recipients fail that check.
+    /// Omitted from canonical JSON when absent, preserving existing hashes.
+    pub recipient: Option<CapRecipient>,
     /// Maximum cumulative amount over the window, as a decimal string. A string,
     /// not a number, because the canonical form carries only `u32` numbers (see
     /// `CANONICAL.md`) and an `i128` amount does not fit a JSON number safely.
@@ -140,6 +147,73 @@ pub struct CapConstraint {
     pub limit: String,
     /// Rolling-window length in ledgers. Must be non-zero.
     pub period_ledgers: u32,
+}
+
+/// A cross-token cap's recipient, tagged by `type` in JSON.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CapRecipient {
+    /// Transfer only to this C- or G-address.
+    AddressEq(AddressEqPred),
+    /// No recipient constraint.
+    Any,
+}
+
+impl Rule {
+    /// The scope and cap when this rule expands to two installed rules.
+    #[must_use]
+    pub fn cross_token_cap(&self) -> Option<(&ContractScope, &CapConstraint)> {
+        match (&self.scope, &self.cap) {
+            (Scope::Contract(scope), Some(cap))
+                if cap
+                    .token
+                    .as_ref()
+                    .is_some_and(|token| token != &scope.address) =>
+            {
+                Some((scope, cap))
+            }
+            _ => None,
+        }
+    }
+
+    /// Effective scope and transfer rules for compilation and analysis.
+    /// Provenance must still be computed from `self`, not these synthetic rules.
+    /// Call only after validation, which restricts the uncapped scope functions.
+    #[must_use]
+    pub fn split_cross_token_cap(&self) -> Option<(Rule, Rule)> {
+        let (scope, cap) = self.cross_token_cap()?;
+        let mut call = self.clone();
+        call.cap = None;
+        let mut transfer = self.clone();
+        transfer.scope = Scope::contract(cap.token.as_ref()?);
+        transfer.functions = Some(alloc::vec!["transfer".into()]);
+        let recipient = match &cap.recipient {
+            None => Some(&scope.address),
+            Some(CapRecipient::AddressEq(p)) => Some(&p.address),
+            Some(CapRecipient::Any) => None,
+        };
+        transfer.args = recipient.map(|address| {
+            alloc::vec![ArgConstraint {
+                index: 1,
+                pred: ArgPred::AddressEq(AddressEqPred {
+                    address: address.clone()
+                }),
+            }]
+        });
+        transfer.cap.as_mut()?.recipient = None;
+        Some((call, transfer))
+    }
+}
+
+impl PolicyDoc {
+    /// Installed document rules, including cross-token pairs (not the separate
+    /// recovery rule). This is the count bounded by `DocLimits::V1.max_rules`.
+    #[must_use]
+    pub fn compiled_rule_count(&self) -> usize {
+        self.rules
+            .iter()
+            .map(|r| 1 + usize::from(r.cross_token_cap().is_some()))
+            .sum()
+    }
 }
 
 /// Where a rule applies. Tagged with `"type"`: `"contract"` or `"self-admin"`.

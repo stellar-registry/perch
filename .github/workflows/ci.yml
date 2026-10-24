@@ -117,6 +117,10 @@ jobs:
           eval "$(scripts/zk-toolchain.sh)"
           cargo test -p perch-integration-tests --test release_stack -- --ignored --test-threads 2 \
             --skip cap_sweep
+      # Cross-token caps in the real no_std compiler: compile/apply the pair
+      # and enforce recipient + cumulative cap through the unchanged account.
+      - run: stellar contract build --package perch-doc-compiler
+      - run: cargo test --locked -p perch-integration-tests --test cross_token_cap -- --ignored
       # Wasm leg of the conformance vectors: the compiled artifact must agree
       # with the vectors under the soroban host (rustc/LLVM/wasmi in the loop).
       - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release

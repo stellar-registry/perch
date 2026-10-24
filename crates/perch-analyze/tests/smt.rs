@@ -260,3 +260,78 @@ fn narrows_catches_semantic_widening() {
         .iter()
         .any(|f| matches!(f, perch_analyze::WideningFinding::ExpiryExtended { .. })));
 }
+
+#[test]
+fn cross_token_recipient_changes_and_added_transfers_are_widening() {
+    if skip() {
+        return;
+    }
+    let mut parent = fixture("cross-token-cap.json");
+    parent.rules[1].cap.as_mut().unwrap().recipient = None;
+    for recipient in [
+        perch_ir::CapRecipient::Any,
+        perch_ir::CapRecipient::AddressEq(perch_ir::AddressEqPred {
+            address: VERIFIER.into(),
+        }),
+    ] {
+        let mut child = parent.clone();
+        child.rules[1].cap.as_mut().unwrap().recipient = Some(recipient);
+        assert!(narrows(&parent, &child)
+            .iter()
+            .any(|f| matches!(f, perch_analyze::WideningFinding::SemanticWidening { .. })));
+    }
+    let mut explicit = parent.clone();
+    explicit.rules[1].cap.as_mut().unwrap().recipient =
+        Some(perch_ir::CapRecipient::AddressEq(perch_ir::AddressEqPred {
+            address: REGISTRY.into(),
+        }));
+    assert!(narrows(&parent, &explicit).is_empty());
+    let mut any = parent.clone();
+    any.rules[1].cap.as_mut().unwrap().recipient = Some(perch_ir::CapRecipient::Any);
+    assert!(narrows(&any, &parent).is_empty());
+    let mut no_cap = parent.clone();
+    no_cap.rules[1].cap = None;
+    assert!(
+        !narrows(&no_cap, &parent).is_empty(),
+        "adding a transfer slot grants authority"
+    );
+    assert!(
+        narrows(&parent, &no_cap).is_empty(),
+        "removing the transfer slot narrows"
+    );
+}
+
+#[test]
+fn intent_analysis_sees_the_generated_token_transfer() {
+    if skip() {
+        return;
+    }
+    let doc = fixture("cross-token-cap.json");
+    let token = doc.rules[1].cap.as_ref().unwrap().token.as_ref().unwrap();
+    assert!(!only_calls(&doc, token, &["guess".into()]).is_empty());
+    assert!(only_calls(&doc, token, &["transfer".into()]).is_empty());
+    assert!(can_call(&doc, "transfer")
+        .iter()
+        .any(|v| matches!(v.verdict, Z3Verdict::Sat(_))));
+}
+
+#[test]
+fn same_token_cap_warning_requires_exactly_transfer() {
+    let mut doc = fixture("cross-token-cap.json");
+    assert!(perch_analyze::encode_doc_warnings(&doc).is_empty());
+    let r = &mut doc.rules[1];
+    r.cap.as_mut().unwrap().token = None;
+    r.cap.as_mut().unwrap().recipient = None;
+    for fns in [
+        None,
+        Some(vec!["guess".into()]),
+        Some(vec!["guess".into(), "transfer".into()]),
+    ] {
+        doc.rules[1].functions = fns;
+        assert!(perch_analyze::encode_doc_warnings(&doc)
+            .iter()
+            .any(|w| w.contains("#3223")));
+    }
+    doc.rules[1].functions = Some(vec!["transfer".into()]);
+    assert!(perch_analyze::encode_doc_warnings(&doc).is_empty());
+}

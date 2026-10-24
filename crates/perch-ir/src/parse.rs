@@ -513,16 +513,40 @@ fn cap_from_value<N: AsRef<str>, S: AsRef<str>>(
     v: &Value<N, S>,
 ) -> Result<CapConstraint, ParseError> {
     let obj = as_object(v, "cap")?;
-    deny_unknown(obj, &["token", "limit", "period-ledgers"])?;
+    deny_unknown(obj, &["token", "recipient", "limit", "period-ledgers"])?;
     let token = match opt_field(obj, "token")? {
         Some(v) => Some(as_str(v, "cap token")?),
         None => None,
     };
     Ok(CapConstraint {
         token,
+        recipient: opt_field(obj, "recipient")?
+            .map(cap_recipient_from_value)
+            .transpose()?,
         limit: as_str(req_field(obj, "limit")?, "cap limit")?,
         period_ledgers: as_u32(req_field(obj, "period-ledgers")?, "period-ledgers")?,
     })
+}
+
+fn cap_recipient_from_value<N: AsRef<str>, S: AsRef<str>>(
+    v: &Value<N, S>,
+) -> Result<crate::CapRecipient, ParseError> {
+    let obj = as_object(v, "cap recipient")?;
+    match as_str(req_field(obj, "type")?, "recipient type")?.as_str() {
+        "any" => {
+            deny_unknown(obj, &["type"])?;
+            Ok(crate::CapRecipient::Any)
+        }
+        "address-eq" => {
+            deny_unknown(obj, &["type", "address"])?;
+            Ok(crate::CapRecipient::AddressEq(AddressEqPred {
+                address: as_str(req_field(obj, "address")?, "recipient address")?,
+            }))
+        }
+        other => Err(json_err(format!(
+            "unknown variant `{other}` for cap recipient"
+        ))),
+    }
 }
 
 // --- recovery configuration ---------------------------------------------------

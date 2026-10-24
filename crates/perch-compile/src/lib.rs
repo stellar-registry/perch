@@ -83,7 +83,8 @@ pub enum SignerSpec {
 }
 
 /// A cumulative spend cap lowered from a rule's `cap`. The applier attaches OZ's
-/// `spending_limit` policy to the same context rule with these parameters
+/// `spending_limit` policy to the lowered rule carrying it (for a cap on
+/// another token, the generated transfer rule) with these parameters
 /// (`SpendingLimitAccountParams { spending_limit: limit, period_ledgers }`,
 /// pinned to `token`). perch-compile stays free of the OZ policy types — the
 /// applier maps this spec onto them.

@@ -54,8 +54,10 @@
 //! within the per-call bound, and drains any intended total — the exact drain
 //! passkey-kit documents for a per-transfer limit without a cumulative one. A
 //! cumulative cap requires a *stateful* sibling policy — e.g. OpenZeppelin's
-//! `spending_limit` — attached to the same OZ context rule alongside perch's
-//! interpreter, where OZ enforces every attached policy (AND). Perch stays the
+//! `spending_limit` — attached to an OZ context rule alongside perch's
+//! interpreter (the rule's own, or for a cap on another token a generated
+//! `transfer` rule; see [`CapConstraint`]), where OZ enforces every attached
+//! policy (AND). Perch stays the
 //! stateless "what may be called" layer; cumulative accounting lives in a
 //! purpose-built stateful contract, never here.
 //!

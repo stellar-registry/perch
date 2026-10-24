@@ -18,6 +18,12 @@
 //!   `perch_compile::attenuation` cannot see, plus expiry extensions and cap
 //!   loosening (checked structurally).
 //!
+//! Every check runs over the rules a document installs: a rule with a cap on
+//! another token as its scope rule and its capped `transfer` rule on the
+//! token, both under the source rule's name (`docs/cross-token-caps.md`).
+//! [`narrows`] matches rules by name and scope, so a recipient change is a
+//! semantic widening or narrowing of the transfer rule.
+//!
 //! The encoding is decidable (booleans, bounded integers, and z3's string
 //! theory restricted to equality/prefix/length over literals). Soundness
 //! assumptions, stated once:

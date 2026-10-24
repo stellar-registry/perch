@@ -42,8 +42,9 @@ use perch_recovery_interface::config;
 use soroban_sdk::{contract, contractimpl, IntoVal, Map, TryFromVal, Val};
 
 /// Document caps (`docs/recovery/spec.md` §7.5): the compiler refuses a
-/// document with more declared signers, more rules, or longer canonical
-/// bytes than these, on every `compile_doc` and `derive_target`. They bound
+/// document with more declared signers, more installed document rules (a
+/// cross-token cap installs two), or longer canonical bytes than these, on
+/// every `compile_doc` and `derive_target`. They bound
 /// the worst-case recovery completion (every removed credential revoked,
 /// every rule replaced or edited by `apply_doc`'s diff). Sized against the
 /// measured budget

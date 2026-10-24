@@ -25,17 +25,15 @@
 #      by a signer the real network knows, and exactly this run's overrides.
 #
 # Usage: scripts/rehearse-bootstrap.sh [--network testnet|mainnet] [--out DIR]
-#            [--account-wasm F|TAG] [--constructorless-wasm F|TAG]
+#            [--account-wasm F|TAG|build] [--constructorless-wasm F|TAG|build]
 #   --network  one network (default: testnet, then mainnet)
 #   --out      where each network's report and logs land
 #              (default target/rehearse-bootstrap/<network>)
 #   --account-wasm, --constructorless-wasm   passed to the bootstrap. Without
-#              one, the release of this checkout's version
-#              (perch-account-vX.Y.Z, perch-constructorless-registry-vX.Y.Z)
-#              when it exists; otherwise a testnet rehearsal passes
-#              --allow-unattested for that wasm (then built from this
-#              checkout), and a mainnet one stops: mainnet takes only attested
-#              wasm.
+#              one, the bootstrap uses the bytes the testnet deployment runs
+#              (deployments/testnet.json). `build` builds that wasm from this
+#              checkout, and a testnet rehearsal then passes --allow-unattested
+#              for it; mainnet takes only attested wasm.
 # Env: SOROBAN_SIM, a soroban-sim binary built from SOROBAN_SIM_REV below;
 #      otherwise the script installs that commit under target/soroban-sim/.
 #
@@ -85,28 +83,24 @@ fi
 
 # --- the wasm the bootstrap is given ---------------------------------------------
 
-# This checkout's version's release tag, when that release has its asset.
-released_tag() { # crate
-    local v
-    v="$(grep -m1 '^version = "' "$REPO/crates/$1/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')"
-    curl -fsIL -o /dev/null "https://github.com/stellar-registry/perch/releases/download/$1-v$v/$1_v$v.wasm" 2>/dev/null &&
-        echo "$1-v$v"
-}
-[ -n "$account_wasm" ] || account_wasm="$(released_tag perch-account || true)"
-[ -n "$registry_wasm" ] || registry_wasm="$(released_tag perch-constructorless-registry || true)"
 # The bytes the authors and constructorless must run: the file, the release
-# asset the bootstrap downloads, or its build of this checkout.
-given_file() { # option-value build-file
+# asset the bootstrap downloads, its build of this checkout, or by default the
+# testnet deployment's, which it fetches by hash.
+given_file() { # option-value build-file name testnet-hash
     if [ -f "$1" ]; then
         echo "$1"
+    elif [ "$1" = build ]; then
+        echo "$REPO/target/bootstrap-registry/$2"
     elif [ -n "$1" ]; then
         echo "$REPO/target/bootstrap-registry/wasm/$1.wasm"
     else
-        echo "$REPO/target/bootstrap-registry/$2"
+        echo "$REPO/target/bootstrap-registry/wasm/$3-$4.wasm"
     fi
 }
-account_file="$(given_file "$account_wasm" account/perch_account.wasm)"
-registry_file="$(given_file "$registry_wasm" registry/perch_constructorless_registry.wasm)"
+account_file="$(given_file "$account_wasm" account/perch_account.wasm perch-account \
+    "$(jq -r '.contracts["perch-account"].sha256' "$MANIFEST")")"
+registry_file="$(given_file "$registry_wasm" registry/perch_constructorless_registry.wasm perch-constructorless-registry \
+    "$(jq -r .registry.wasm_hash "$MANIFEST")")"
 
 # --- one network ---------------------------------------------------------------
 
@@ -120,13 +114,12 @@ rehearse() {
     local w opt flag name wasm_flags=()
     for w in "account_wasm --account-wasm perch-account" "registry_wasm --constructorless-wasm perch-constructorless-registry"; do
         read -r opt flag name <<<"$w"
-        if [ -n "${!opt}" ]; then
-            wasm_flags+=("$flag" "${!opt}")
-        elif [ "$network" = testnet ]; then
-            log "$network: no attested $name release yet: rehearsing with --allow-unattested $name"
+        [ -n "${!opt}" ] || continue
+        wasm_flags+=("$flag" "${!opt}")
+        if [ "${!opt}" = build ]; then
+            [ "$network" = testnet ] || die "$network: $flag build is unattested, and mainnet takes only attested wasm"
+            log "$network: $flag build: rehearsing with --allow-unattested $name"
             wasm_flags+=(--allow-unattested "$name")
-        else
-            die "$network: no attested $name release of this checkout's version: pass $flag <file or $name-vX.Y.Z> (mainnet takes only attested wasm)"
         fi
     done
     rm -rf "$out"
@@ -203,6 +196,14 @@ rehearse() {
         '{account: $a, xlm: 100, label: $l}')" >/dev/null
     labels+=("fork_setBalance: fund the admin key for apply_doc")
 
+    # An author the base chain already has keeps its code and the tier-0 it
+    # was built against: the bootstrap checks it, it deploys no other.
+    local project prior=()
+    for project in perch nido; do
+        prior+=("$(stellar ledger entry fetch contract-data "${net[@]}" --contract "$("$DERIVE" name "$role" "$project-author" "$passphrase")" \
+            --instance --output json </dev/null 2>/dev/null | jq -r '.entries[0].val.contract_data.val.contract_instance.executable.wasm // empty')")
+    done
+
     local expiry flags
     expiry=$(( $(rpc getLatestLedger '{}' | jq -r .sequence) + 518400 ))
     flags=(--network "$network" --source "$role" --admin-key "$admin_g" --ci-key "$ci_g" --ci-expiry-ledger "$expiry")
@@ -252,7 +253,7 @@ rehearse() {
         check "root.fetch_contract_id(nido)" "$(read_call "$root" fetch_contract_id --contract-name nido)" "$nido"
         check "perch.fetch_contract_id(constructorless)" "$(read_call "$perch" fetch_contract_id --contract-name constructorless)" "$constructorless"
         check "constructorless runs perch-constructorless-registry" "$(executable "$constructorless")" "$(sha256_file "$registry_file")"
-        local n v h at project author reg pins
+        local n v h at author reg pins a resolved i=0
         for n in perch-doc-compiler perch-interpreter perch-spending-limit perch-ed25519-verifier; do
             v="$(jq -r --arg n "$n" '.contracts[$n].version' "$MANIFEST")"
             h="$(jq -r --arg n "$n" '.contracts[$n].sha256' "$MANIFEST")"
@@ -263,14 +264,27 @@ rehearse() {
         for project in perch nido; do
             author="$("$DERIVE" name "$role" "$project-author" "$passphrase")"
             if [ "$project" = perch ]; then reg="$constructorless"; else reg="$nido"; fi
-            check "$project author $author runs" "$(executable "$author")" "$account_hash"
             pins="$(stellar contract invoke "${net[@]}" --id "$author" --source-account "$role_source" --send=no -- infra </dev/null 2>/dev/null |
                 jq -c '{doc_compiler, interpreter, spending_limit}' 2>/dev/null || true)"
-            check "$project author infra()" "$pins" "$(jq -cn \
+            if [ -n "${prior[$i]}" ]; then
+                check "$project author $author runs (as before)" "$(executable "$author")" "${prior[$i]}"
+                resolved=no
+                if [ -n "$pins" ]; then
+                    resolved=yes
+                    for a in $(jq -r '.[]' <<<"$pins"); do
+                        [ "$("$DERIVE" content "$constructorless" "$(executable "$a")" "$passphrase" 2>/dev/null)" = "$a" ] || resolved=no
+                    done
+                fi
+                check "$project author infra() in constructorless" "$resolved" yes
+            else
+                check "$project author $author runs" "$(executable "$author")" "$account_hash"
+                check "$project author infra()" "$pins" "$(jq -cn \
                 --arg c "$("$DERIVE" content "$constructorless" "$(jq -r '.contracts["perch-doc-compiler"].sha256' "$MANIFEST")" "$passphrase")" \
                 --arg i "$("$DERIVE" content "$constructorless" "$(jq -r '.contracts["perch-interpreter"].sha256' "$MANIFEST")" "$passphrase")" \
                 --arg s "$("$DERIVE" content "$constructorless" "$(jq -r '.contracts["perch-spending-limit"].sha256' "$MANIFEST")" "$passphrase")" \
                 '{doc_compiler: $c, interpreter: $i, spending_limit: $s}')"
+            fi
+            i=$((i + 1))
             check "$project author ci-publish scoped to $reg" "$(has_ci_publish "$author" "$reg")" yes
         done
         for n in $(jq -r '.contracts | to_entries[] | select(.value.address) | .key' "$MANIFEST"); do

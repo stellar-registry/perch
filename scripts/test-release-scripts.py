@@ -12,8 +12,8 @@ settings, which released commits a mainnet dispatch may publish
 (scripts/mainnet-plan.sh), what a mainnet publish sends and that its plan
 sends nothing (scripts/publish-wasm.sh), what a stack deploy sends and
 records (scripts/deploy-stack.sh), that a registry bootstrap fails on a
-refused submission and uses only attested wasm (scripts/bootstrap-registry.sh),
-the attested_build dispatch of release.yml, that npm-publish passes its
+refused submission and uses only attested wasm, by default the testnet
+deployment's (scripts/bootstrap-registry.sh), that npm-publish passes its
 tarball to npm as a file and the npm_publish_tag dispatch, the contract-id derivation the release
 scripts share (scripts/derive-id.py) and the registry each network publishes
 into (scripts/registry-target.sh), the deploy-record perch-artifacts bump
@@ -393,8 +393,8 @@ def contract_lists():
 
 
 class BuildInputs(unittest.TestCase):
-    """release-deps.py inputs: what attested-plan compares between a tag's
-    commit and the commit it builds, for one package."""
+    """release-deps.py inputs: what changed between two commits in what one
+    package builds from."""
 
     def setUp(self):
         self.repo = Repo()
@@ -1319,190 +1319,10 @@ class MainnetJobs(unittest.TestCase):
         self.assertEqual(len(reuse), 1, reuse)
 
 
-ATTESTED_JOBS = ("attested-plan", "attested-build", "attested-summary")
-
-
 def step_script(job, name):
     """The `run:` script of a job's step called `name`, dedented."""
     step = next(st for st in steps(job) if st.startswith("name: " + name))
     return textwrap.dedent(step.split("run: |\n", 1)[1])
-
-
-class AttestedBuild(unittest.TestCase):
-    """release.yml's attested_build dispatch: perch-account and
-    perch-constructorless-registry built and attested from main by the tier-0's
-    reusable workflow, as release assets of their existing tags, and nothing
-    else of the workflow changed by it."""
-
-    FAKE_GH = r"""#!/usr/bin/env python3
-import os, sys
-args = sys.argv[1:]
-if args[:2] != ["release", "view"]:
-    sys.exit("unexpected gh " + " ".join(args))
-sys.exit(0 if args[2] in os.environ.get("FAKE_RELEASED", "").split() else "release not found")
-"""
-
-    def test_only_a_dispatch_from_main_with_the_input_runs_it(self):
-        jobs = release_jobs()
-        cond = job_if(jobs["attested-plan"])
-        self.assertIn("github.event_name == 'workflow_dispatch'", cond)
-        self.assertIn("inputs.attested_build != 'none'", cond)
-        self.assertRegex(release_yml(), r"(?m)^      attested_build:\n(?:        .*\n)*?        default: none\n")
-        for name in ATTESTED_JOBS[1:]:
-            with self.subTest(job=name):
-                self.assertIn("attested-plan", job_needs(jobs[name]))
-
-    def test_no_automatic_job_depends_on_it(self):
-        for name, job in release_jobs().items():
-            if name in ATTESTED_JOBS:
-                continue
-            with self.subTest(job=name):
-                self.assertNotIn("attested_build", code(job))
-                self.assertFalse(set(job_needs(job)) & set(ATTESTED_JOBS))
-
-    def test_it_builds_with_the_tier0_reusable_workflow_and_publishes_nothing(self):
-        jobs = release_jobs()
-        uses = lambda job: re.search(r"(?m)^    uses: (\S+)", job).group(1)
-        self.assertEqual(uses(jobs["attested-build"]), uses(jobs["constructorless-build"]))
-        self.assertTrue(uses(jobs["attested-build"]).startswith(
-            "stellar-registry/actions/.github/workflows/contract-release.yml@"))
-        for name in ATTESTED_JOBS:
-            body = code(jobs[name])
-            with self.subTest(job=name):
-                self.assertNotIn("registry-publish", body)
-                self.assertNotIn("environment:", body)
-                self.assertNotIn("vars.", body)
-                self.assertEqual(set(re.findall(r"secrets\.([A-Za-z0-9_]+)", body)) - {"GITHUB_TOKEN"}, set())
-
-    def workspace(self, other="0.1.0", ext_a="1.0.0", ext_b="1.0.0", ext_c="1.0.0"):
-        """The two packages and an unrelated crate: perch-account links the
-        path crate perch-lib and ext-a, the registry links ext-b, and
-        perch-other (linked by neither) links ext-c."""
-        self.repo.write("Cargo.toml", '[workspace]\nmembers = ["crates/*"]\n\n[profile.release]\nopt-level = "z"\n')
-        crates = {"perch-account": ("0.4.0", ['perch-lib = { version = "0.1.0", path = "../perch-lib" }', 'ext-a = "1"'],
-                                    ["ext-a", "perch-lib"]),
-                  "perch-lib": ("0.1.0", [], []),
-                  "perch-constructorless-registry": ("0.1.3", ['ext-b = "1"'], ["ext-b"]),
-                  "perch-other": (other, ['ext-c = "1"'], ["ext-c"])}
-        lock = ["version = 3"]
-        for c, (v, deps, locked) in crates.items():
-            self.repo.write(f"crates/{c}/Cargo.toml",
-                            f'[package]\nname = "{c}"\nversion = "{v}"\n\n[dependencies]\n' + "".join(d + "\n" for d in deps))
-            lock.append(f'[[package]]\nname = "{c}"\nversion = "{v}"\ndependencies = {json.dumps(locked)}')
-        for n, v in (("ext-a", ext_a), ("ext-b", ext_b), ("ext-c", ext_c)):
-            lock.append(f'[[package]]\nname = "{n}"\nversion = "{v}"\n'
-                        'source = "registry+https://github.com/rust-lang/crates.io-index"')
-        self.repo.write("Cargo.lock", "\n\n".join(lock) + "\n")
-
-    def setUp(self):
-        self.repo = Repo()
-        self.addCleanup(self.repo.cleanup)
-        self.workspace()
-        os.makedirs(os.path.join(self.repo.dir, "scripts"))
-        shutil.copy(RELEASE_DEPS, os.path.join(self.repo.dir, "scripts", "release-deps.py"))
-        self.repo.write("docs/a.md", "a\n")
-        self.repo.commit("feat: contracts")
-        bin_dir = os.path.join(self.repo.dir, ".bin")
-        os.makedirs(bin_dir)
-        with open(os.path.join(bin_dir, "gh"), "w") as f:
-            f.write(self.FAKE_GH)
-        os.chmod(os.path.join(bin_dir, "gh"), 0o755)
-        self.path = bin_dir + os.pathsep + os.environ["PATH"]
-        self.script = step_script(release_jobs()["attested-plan"], "Which tags to build")
-
-    def tag(self, *tags):
-        for t in tags:
-            run(["git", "tag", t], self.repo.dir)
-
-    def plan(self, build="both", ref="refs/heads/main", released=""):
-        out = os.path.join(self.repo.dir, ".out")
-        open(out, "w").close()
-        sha = run(["git", "rev-parse", "HEAD"], self.repo.dir).stdout.strip()
-        env = {**os.environ, "PATH": self.path, "BUILD": build, "GITHUB_REF": ref, "GITHUB_SHA": sha,
-               "GITHUB_OUTPUT": out, "GITHUB_STEP_SUMMARY": os.devnull, "GITHUB_REPOSITORY": "o/r",
-               "GH_TOKEN": "", "FAKE_RELEASED": released}
-        r = subprocess.run(["bash", "-c", self.script], cwd=self.repo.dir, env=env, capture_output=True, text=True)
-        with open(out) as f:
-            m = re.search(r"^matrix=(.*)$", f.read(), re.M)
-        return r, (json.loads(m.group(1))["include"] if m else None)
-
-    def test_both_tags_on_the_commit_built(self):
-        self.tag("perch-account-v0.4.0", "perch-constructorless-registry-v0.1.3")
-        r, matrix = self.plan()
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(matrix, [
-            {"package": "perch-account", "tag": "perch-account-v0.4.0", "version": "0.4.0"},
-            {"package": "perch-constructorless-registry", "tag": "perch-constructorless-registry-v0.1.3", "version": "0.1.3"}])
-        r, matrix = self.plan("perch-account")
-        self.assertEqual([m["tag"] for m in matrix], ["perch-account-v0.4.0"])
-
-    def test_only_from_main(self):
-        self.tag("perch-account-v0.4.0", "perch-constructorless-registry-v0.1.3")
-        r, matrix = self.plan(ref="refs/heads/feature")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("dispatch attested_build from main", r.stdout)
-        self.assertIsNone(matrix)
-
-    def test_a_version_not_yet_tagged_is_refused(self):
-        self.tag("perch-account-v0.4.0")
-        r, matrix = self.plan()
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("perch-constructorless-registry-v0.1.3 is not tagged yet", r.stdout)
-        self.assertIsNone(matrix)
-        self.assertEqual(run(["git", "tag", "-l", "perch-constructorless-registry-*"], self.repo.dir).stdout, "")
-
-    def behind(self, change, message="change"):
-        """Tag both versions, then commit `change` on top: the plan for each
-        package, as (returncode, stdout)."""
-        self.tag("perch-account-v0.4.0", "perch-constructorless-registry-v0.1.3")
-        change()
-        self.repo.commit(message)
-        return {p: self.plan(p)[0] for p in ("perch-account", "perch-constructorless-registry")}
-
-    def test_an_unlinked_crates_version_bump_does_not_block(self):
-        # A release commit that bumps only another crate (fb26f9c for the
-        # registry's tag on ada73bb).
-        for p, r in self.behind(lambda: self.workspace(other="0.2.0"), "chore: release").items():
-            with self.subTest(package=p):
-                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-
-    def test_a_change_in_the_package_or_a_path_dependency_blocks(self):
-        plans = self.behind(lambda: self.repo.write("crates/perch-lib/src/lib.rs", "// changed\n"))
-        self.assertNotEqual(plans["perch-account"].returncode, 0)
-        self.assertIn("build inputs differ", plans["perch-account"].stdout)
-        self.assertIn("crates/perch-lib/ changed", plans["perch-account"].stdout)
-        self.assertEqual(plans["perch-constructorless-registry"].returncode, 0, plans["perch-constructorless-registry"].stdout)
-
-    def test_a_lock_change_in_the_closure_blocks_and_one_outside_does_not(self):
-        plans = self.behind(lambda: self.workspace(ext_b="1.1.0"))
-        self.assertNotEqual(plans["perch-constructorless-registry"].returncode, 0)
-        self.assertIn("Cargo.lock ext-b 1.1.0", plans["perch-constructorless-registry"].stdout)
-        self.assertEqual(plans["perch-account"].returncode, 0, plans["perch-account"].stdout)
-
-    def test_a_lock_change_outside_both_closures_does_not_block(self):
-        for p, r in self.behind(lambda: self.workspace(ext_c="2.0.0")).items():
-            with self.subTest(package=p):
-                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-
-    def test_a_tag_behind_main_is_built_only_when_its_build_inputs_match(self):
-        self.tag("perch-account-v0.4.0", "perch-constructorless-registry-v0.1.3")
-        self.repo.write("docs/a.md", "b\n")
-        self.repo.commit("docs: only")
-        r, matrix = self.plan()
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(len(matrix), 2)
-        self.repo.write("crates/perch-account/src/lib.rs", "// changed\n")
-        self.repo.commit("feat: account change")
-        r, matrix = self.plan("perch-account")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("perch-account-v0.4.0 is on", r.stdout)
-        self.assertIn("build inputs differ", r.stdout)
-
-    def test_a_tag_that_already_has_a_release_is_refused(self):
-        self.tag("perch-account-v0.4.0", "perch-constructorless-registry-v0.1.3")
-        r, matrix = self.plan(released="perch-constructorless-registry-v0.1.3")
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("perch-constructorless-registry-v0.1.3 already has a GitHub release", r.stdout)
 
 
 def npm_package_arg():
@@ -2520,13 +2340,17 @@ class DeployStack(unittest.TestCase):
         self.assertEqual(self.sent(), [])
 
 
+CONTRACT_RELEASE = "stellar-registry/actions/.github/workflows/contract-release.yml"
+
+
 @unittest.skipUnless(shutil.which("jq"), "jq not on PATH")
 class BootstrapRegistry(unittest.TestCase):
     """scripts/bootstrap-registry.sh all, in a copy of the checkout whose
     pins name synthetic wasm, against a fake `stellar` whose ledger has every
     step done but the perch names, and which refuses every submission: --send
-    fails at the first refused one. A fake `gh` attests only the hashes in
-    FAKE_ATTESTED, and a fake `curl` serves release assets from a directory."""
+    fails at the first refused one. It serves testnet's code from a directory.
+    A fake `gh` attests only the hashes in FAKE_ATTESTED, signed by
+    FAKE_SIGNER, and a fake `curl` serves release assets from a directory."""
 
     TIER0 = ("perch-doc-compiler", "perch-interpreter", "perch-spending-limit", "perch-ed25519-verifier")
 
@@ -2548,6 +2372,15 @@ elif args[:4] == ["ledger", "entry", "fetch", "contract-code"]:
 elif args[:2] == ["contract", "build"] and opt("--package") == "perch-constructorless-registry":
     with open(os.path.join(opt("--out-dir"), "perch_constructorless_registry.wasm"), "wb") as f:
         f.write(b"\0asm\1\0\0\0built " + opt("--package").encode())
+elif args[:2] == ["contract", "fetch"]:
+    src = os.path.join(os.environ["FAKE_TESTNET"], opt("--wasm-hash") + ".wasm")
+    if not os.path.isfile(src):
+        sys.exit("error: no code " + opt("--wasm-hash"))
+    shutil.copy(src, opt("--out-file"))
+elif args[:3] == ["contract", "info", "meta"]:
+    import hashlib
+    with open(opt("--wasm"), "rb") as f:
+        print(" • binver: " + state["binver"].get(hashlib.sha256(f.read()).hexdigest(), ""))
 elif args[:2] == ["tx", "simulate"]:
     sys.stdin.read(); print("SIMULATED")
 elif args[:2] == ["tx", "decode"]:
@@ -2594,7 +2427,8 @@ else:
 """
 
     # `gh attestation verify <file> ...`: a verified build of FAKE_SOURCE's
-    # main when the file's hash is in FAKE_ATTESTED.
+    # main when the file's hash is in FAKE_ATTESTED and the signer asked for
+    # is FAKE_SIGNER.
     FAKE_GH = r"""#!/usr/bin/env python3
 import hashlib, json, os, sys
 args = sys.argv[1:]
@@ -2604,7 +2438,8 @@ if args[:2] != ["attestation", "verify"]:
     sys.exit("unexpected gh " + " ".join(args))
 with open(args[2], "rb") as f:
     digest = hashlib.sha256(f.read()).hexdigest()
-if digest not in os.environ.get("FAKE_ATTESTED", "").split():
+signer = args[args.index("--signer-workflow") + 1]
+if digest not in os.environ.get("FAKE_ATTESTED", "").split() or signer != os.environ["FAKE_SIGNER"]:
     sys.exit("Error: failed to fetch attestations for subject: sha256:" + digest)
 print(json.dumps([{"verificationResult": {"signature": {"certificate": {
     "sourceRepositoryURI": os.environ.get("FAKE_SOURCE", "https://github.com/stellar-registry/perch"),
@@ -2654,6 +2489,8 @@ shutil.copy(src, args[args.index("-o") + 1])
         manifest_file = os.path.join(self.checkout, "deployments", "testnet.json")
         with open(manifest_file) as f:
             manifest = json.load(f)
+        manifest["contracts"]["perch-account"]["sha256"] = self.hash["perch-account"]
+        manifest["registry"]["wasm_hash"] = self.hash["perch-constructorless-registry"]
         for n in self.TIER0:
             manifest["contracts"][n]["sha256"] = self.hash[n]
             pin = os.path.join(self.checkout, "crates", "perch-smart-account", "wasm", n + ".sha256")
@@ -2672,6 +2509,12 @@ shutil.copy(src, args[args.index("-o") + 1])
         self.registry = os.path.join(self.dir, "perch_constructorless_registry.wasm")
         for path, n in ((self.account, "perch-account"), (self.registry, "perch-constructorless-registry")):
             with open(path, "wb") as f:
+                f.write(self.wasm(n))
+        # The code testnet runs, by hash: the account and the registry.
+        self.testnet = os.path.join(self.dir, "testnet")
+        os.makedirs(self.testnet)
+        for n in ("perch-account", "perch-constructorless-registry"):
+            with open(os.path.join(self.testnet, self.hash[n] + ".wasm"), "wb") as f:
                 f.write(self.wasm(n))
 
         t = PASSPHRASES["testnet"]
@@ -2692,6 +2535,7 @@ shutil.copy(src, args[args.index("-o") + 1])
             "infra": {"doc_compiler": self.at["perch-doc-compiler"], "interpreter": self.at["perch-interpreter"],
                       "spending_limit": self.at["perch-spending-limit"]},
             "rules": {author: [{"name": "ci-publish", "context_type": {"CallContract": constructorless}}]},
+            "binver": {self.hash["perch-constructorless-registry"]: self.registry_version},
         }
         self.state_file = os.path.join(self.dir, "state.json")
         self.save()
@@ -2702,8 +2546,9 @@ shutil.copy(src, args[args.index("-o") + 1])
             open(log, "w").close()
         self.env = {**os.environ, "PATH": bin_dir + os.pathsep + os.environ["PATH"],
                     "FAKE_STATE": self.state_file, "FAKE_LOG": self.log_file, "FAKE_GH_LOG": self.gh_log,
-                    "FAKE_CURL_LOG": self.curl_log, "FAKE_RELEASES": self.releases,
-                    "FAKE_ATTESTED": " ".join(self.hash.values()), "STELLAR_RPC_URL": "http://127.0.0.1:9"}
+                    "FAKE_CURL_LOG": self.curl_log, "FAKE_RELEASES": self.releases, "FAKE_TESTNET": self.testnet,
+                    "FAKE_ATTESTED": " ".join(self.hash.values()), "FAKE_SIGNER": CONTRACT_RELEASE,
+                    "STELLAR_RPC_URL": "http://127.0.0.1:9"}
 
     def release(self, name, version, data):
         d = os.path.join(self.releases, f"{name}-v{version}")
@@ -2724,6 +2569,11 @@ shutil.copy(src, args[args.index("-o") + 1])
         return subprocess.run([os.path.join(self.checkout, "scripts", "bootstrap-registry.sh"), "--network", network,
                                "--source", self.source, *acct, *reg, "--no-nido", "all", *extra],
                               capture_output=True, text=True, env=self.env)
+
+    def fetched(self):
+        """The hash of each `stellar contract fetch` from testnet."""
+        with open(self.log_file) as f:
+            return [c[c.index("--wasm-hash") + 1] for c in map(json.loads, f) if c[:2] == ["contract", "fetch"]]
 
     def submissions(self):
         with open(self.log_file) as f:
@@ -2762,7 +2612,7 @@ shutil.copy(src, args[args.index("-o") + 1])
             args = json.loads(f.readline())
         self.assertEqual(dict(zip(args[3::2], args[4::2])), {
             "--owner": "stellar-registry",
-            "--signer-workflow": "stellar-registry/actions/.github/workflows/contract-release.yml",
+            "--signer-workflow": CONTRACT_RELEASE,
             "--source-ref": "refs/heads/main", "--format": "json"})
         self.assertIn("perch-account " + self.hash["perch-account"] + " is attested", out.stderr)
         self.assertIn("perch-constructorless-registry " + self.hash["perch-constructorless-registry"] + " is attested", out.stderr)
@@ -2813,10 +2663,48 @@ shutil.copy(src, args[args.index("-o") + 1])
         self.assertEqual(self.verified(), [])
         self.assertEqual(self.submissions(), [])
 
-    def test_building_the_account_needs_allow_unattested(self):
+    def test_by_default_the_account_and_the_registry_are_the_testnet_deployments(self):
+        out = self.bootstrap(account=False, registry=False)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("all done", out.stderr)
+        self.assertEqual(self.fetched(), [self.hash["perch-constructorless-registry"], self.hash["perch-account"]])
+        self.assertEqual(self.verified(), [self.hash["perch-constructorless-registry"], self.hash["perch-account"]])
+
+    def test_the_testnet_deployments_account_carries_its_deploy_stack_attestation(self):
+        self.env["FAKE_SIGNER"] = "stellar-registry/perch/.github/workflows/release.yml"
+        out = self.bootstrap(account=False, registry=False)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("perch-account " + self.hash["perch-account"]
+                      + " is attested: built by stellar-registry/perch/.github/workflows/release.yml", out.stderr)
+        self.env["FAKE_SIGNER"] = "stellar-registry/perch/.github/workflows/other.yml"
+        out = self.bootstrap(account=False, registry=False)
+        self.assertNotEqual(out.returncode, 0, out.stderr)
+        self.assertIn("has no attestation", out.stderr)
+
+    def test_testnet_bytes_that_are_not_the_recorded_hash_stop(self):
+        with open(os.path.join(self.testnet, self.hash["perch-account"] + ".wasm"), "wb") as f:
+            f.write(self.wasm("something else"))
         out = self.bootstrap(account=False)
         self.assertNotEqual(out.returncode, 0, out.stderr)
-        self.assertIn("no --account-wasm", out.stderr)
+        self.assertIn("perch-account is not " + self.hash["perch-account"], out.stderr)
+        self.assertNotIn(self.hash["perch-account"], self.verified())
+
+    def test_a_testnet_deployment_in_another_registry_is_refused(self):
+        manifest_file = os.path.join(self.checkout, "deployments", "testnet.json")
+        with open(manifest_file) as f:
+            manifest = json.load(f)
+        manifest["registry"]["id"] = self.perch
+        with open(manifest_file, "w") as f:
+            json.dump(manifest, f)
+        out = self.bootstrap(account=False)
+        self.assertNotEqual(out.returncode, 0, out.stderr)
+        self.assertIn("but registry.path derives " + self.constructorless + " on testnet", out.stderr)
+        self.assertEqual(self.fetched(), [])
+
+    def test_building_the_account_needs_allow_unattested(self):
+        out = self.bootstrap("--account-wasm", "build", account=False)
+        self.assertNotEqual(out.returncode, 0, out.stderr)
+        self.assertIn("--account-wasm build: only off mainnet, with --allow-unattested perch-account", out.stderr)
         self.assertNotIn("building perch-account", out.stderr)
 
     def test_an_account_release_tag_downloads_its_asset(self):
@@ -2829,14 +2717,15 @@ shutil.copy(src, args[args.index("-o") + 1])
 
     def test_a_missing_release_or_a_wrong_tag_stops(self):
         for value, says in (("perch-account-v1.2.3", "could not download perch-account-v1.2.3"),
-                            ("perch-recovery-v1.2.3", "neither a file nor a perch-account-vX.Y.Z release tag")):
+                            ("perch-recovery-v1.2.3", "neither a file, a perch-account-vX.Y.Z release tag nor build")):
             out = self.bootstrap("--account-wasm", value, account=False)
             self.assertNotEqual(out.returncode, 0, out.stderr)
             self.assertIn(says, out.stderr)
         self.assertNotIn(self.hash["perch-account"], self.verified())
 
-    def test_a_registry_release_tag_is_downloaded_verified_and_published_at_its_version(self):
+    def test_a_registry_release_tag_is_downloaded_verified_and_published_at_its_binver(self):
         del self.state["published"][self.perch]
+        self.state["binver"][self.hash["perch-constructorless-registry"]] = "9.9.9"
         self.save()
         out = self.bootstrap("--constructorless-wasm", "perch-constructorless-registry-v9.9.9", registry=False)
         self.assertEqual(out.returncode, 0, out.stderr)
@@ -2851,23 +2740,44 @@ shutil.copy(src, args[args.index("-o") + 1])
         other = hashlib.sha256(self.wasm("something else")).hexdigest()
         self.release("perch-constructorless-registry", "9.9.10", self.wasm("something else"))
         self.env["FAKE_ATTESTED"] += " " + other
+        self.state["binver"][other] = "9.9.10"
+        self.save()
         out = self.bootstrap("--constructorless-wasm", "perch-constructorless-registry-v9.9.10", registry=False)
         self.assertNotEqual(out.returncode, 0, out.stderr)
         self.assertIn("constructorless does not run " + other, out.stderr)
 
     def test_building_the_registry_needs_allow_unattested(self):
-        out = self.bootstrap(registry=False)
+        out = self.bootstrap("--constructorless-wasm", "build", registry=False)
         self.assertNotEqual(out.returncode, 0, out.stderr)
-        self.assertIn("no --constructorless-wasm", out.stderr)
+        self.assertIn("--constructorless-wasm build: only off mainnet", out.stderr)
         self.assertNotIn("building perch-constructorless-registry", out.stderr)
         built = b"\0asm\1\0\0\0built perch-constructorless-registry"
         self.state["contracts"][self.constructorless] = hashlib.sha256(built).hexdigest()
         self.state["published"][self.perch] = {}
+        self.state["binver"][hashlib.sha256(built).hexdigest()] = self.registry_version
         self.save()
-        out = self.bootstrap("--allow-unattested", "perch-constructorless-registry", registry=False)
+        out = self.bootstrap("--constructorless-wasm", "build", "--allow-unattested", "perch-constructorless-registry",
+                             registry=False)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("building perch-constructorless-registry from this checkout", out.stderr)
         self.assertIn("UNATTESTED: perch-constructorless-registry " + hashlib.sha256(built).hexdigest(), out.stderr)
+
+    def test_an_existing_author_may_resolve_earlier_tier0_in_constructorless(self):
+        t = PASSPHRASES["testnet"]
+        old = {k: hashlib.sha256(self.wasm("old " + k)).hexdigest() for k in self.state["infra"]}
+        at = {k: run(["python3", DERIVE_ID, "content", self.constructorless, h, t], REPO).stdout.strip() for k, h in old.items()}
+        self.state["infra"] = at
+        self.state["contracts"].update({at[k]: old[k] for k in at})
+        self.save()
+        out = self.bootstrap()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("resolves earlier tier-0 in " + self.constructorless, out.stderr)
+        # An address constructorless never deployed is refused.
+        self.state["contracts"][at["interpreter"]] = old["doc_compiler"]
+        self.save()
+        out = self.bootstrap()
+        self.assertNotEqual(out.returncode, 0, out.stderr)
+        self.assertIn(at["interpreter"] + " is not a contract constructorless", out.stderr)
 
     def test_a_tier0_still_to_seed_is_downloaded_and_verified(self):
         n = "perch-interpreter"

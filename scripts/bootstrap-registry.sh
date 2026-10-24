@@ -44,18 +44,17 @@
 #                      this script cannot sign
 #   --ci-key G         the authors' ci-publish delegate (required with --send)
 #   --ci-expiry-ledger N   ci-publish's not-after-ledger (required with --send)
-#   --account-wasm F|TAG   the perch-account wasm: a file, or a release tag
-#                      (perch-account-vX.Y.Z) whose asset is downloaded. Without
-#                      it the account is built from this checkout (`stellar
-#                      contract build --package perch-account`), which only
+#   --account-wasm F|TAG|build   the perch-account wasm. Default: the bytes
+#                      the testnet deployment runs (deployments/testnet.json's
+#                      perch-account), fetched from testnet by hash. Otherwise a
+#                      file, a release tag (perch-account-vX.Y.Z) whose asset is
+#                      downloaded, or `build`: this checkout (`stellar contract
+#                      build --package perch-account`), which only
 #                      --allow-unattested perch-account permits
-#   --constructorless-wasm F|TAG   the perch-constructorless-registry wasm: a
-#                      file, or a release tag
-#                      (perch-constructorless-registry-vX.Y.Z) whose asset is
-#                      downloaded; published at the tag's version, or at this
-#                      checkout's for a file. Without it the registry is built
-#                      from this checkout, which only --allow-unattested
-#                      perch-constructorless-registry permits
+#   --constructorless-wasm F|TAG|build   the perch-constructorless-registry
+#                      wasm, likewise: by default the code testnet's
+#                      constructorless runs (deployments/testnet.json's
+#                      registry.wasm_hash). Published at its binver
 #   --allow-unattested NAME   use NAME's wasm although no attestation verifies
 #                      it (repeatable; refused with --network mainnet)
 #   --nido-names "a b" names bound to the nido author (default "nido-factory nido-name-registry")
@@ -64,11 +63,13 @@
 #   --i-mean-mainnet   required with --network mainnet --send
 #
 # Every wasm a step uploads, publishes or deploys, dry runs included, must
-# first hash to its pin and then pass `gh attestation verify`: built by
-# stellar-registry/actions' contract-release.yml from stellar-registry/perch's
-# refs/heads/main (docs/deploy/README.md, "Bootstrapping a network's registry
-# chain"). The tier-0 come from their releases; --account-wasm and
-# --constructorless-wasm take a release tag for the other two.
+# first hash to its pin and then pass `gh attestation verify`: built from
+# stellar-registry/perch's refs/heads/main by stellar-registry/actions'
+# contract-release.yml (a release asset) or by release.yml's deploy-stack
+# (a testnet deployment) (docs/deploy/README.md, "Bootstrapping a network's
+# registry chain"). The tier-0 come from their releases; the account and the
+# registry from the testnet deployment, unless --account-wasm and
+# --constructorless-wasm say otherwise.
 #
 # Env: STELLAR_RPC_URL overrides the network's RPC (a rehearsal points it at a
 # soroban-sim fork: scripts/rehearse-bootstrap.sh). PERCH_ADMIN_KEY, the admin
@@ -164,19 +165,11 @@ fi
 # --- what the repository pins ----------------------------------------------------
 
 # perch-constructorless-registry: the code every constructorless runs. Like
-# the account, no hash is committed for it: its bytes are main's attested
-# build (--constructorless-wasm), and registry_wasm below reads the hash from
-# them. (deployments/testnet.json's registry code is what testnet's earlier
-# chain runs, built before the rename as perch-stateless-registry; this crate
-# cannot rebuild those bytes.) Published at the release tag's version, or this
-# checkout's.
+# the account, no hash is committed for it: by default its bytes are what
+# testnet's constructorless runs, and registry_wasm below reads the hash and
+# the version (binver) from them.
 REGISTRY_NAME=perch-constructorless-registry
-if [[ "$REGISTRY_WASM" =~ ^$REGISTRY_NAME-v([0-9]+\.[0-9]+\.[0-9]+)$ ]] && [ ! -f "$REGISTRY_WASM" ]; then
-    REGISTRY_VERSION="${BASH_REMATCH[1]}"
-else
-    REGISTRY_VERSION="$(grep -m1 '^version = "' "$REPO/crates/$REGISTRY_NAME/Cargo.toml" | sed 's/^version = "\(.*\)"/\1/')"
-fi
-REGISTRY_HASH=""
+REGISTRY_HASH="" REGISTRY_VERSION=""
 BOOTSTRAP_VERSION=0.0.0   # sorts below every real release (stellar-registry/perch#142)
 
 # The tier-0 an author's apply_doc reaches: the three the account pins, and
@@ -295,39 +288,47 @@ hash_in() { # registry name [version]
 
 # --- the wasm this run uses ---------------------------------------------------
 
-# What every wasm must be attested by: the release workflow's build
-# (contract-release.yml, the same signer the tier-0 releases carry) of
-# stellar-registry/perch's main. The source repository is read from the
-# verified certificate: `--repo stellar-registry/perch` alone would also demand
-# a signer workflow in that repository, and the signer lives in
-# stellar-registry/actions.
+# What every wasm must be attested by: a build of stellar-registry/perch's
+# main by one of its two release builders: contract-release.yml, which the
+# release assets carry (the tier-0), or release.yml's deploy-stack-attest,
+# which every testnet stack deployment carries (the account), as
+# release-mainnet.yml's stack job requires. The source repository is read from
+# the verified certificate: `--repo stellar-registry/perch` alone would also
+# demand a signer workflow in that repository, and contract-release.yml lives
+# in stellar-registry/actions.
 ATTEST_OWNER=stellar-registry
 ATTEST_SOURCE=https://github.com/stellar-registry/perch
-ATTEST_SIGNER=stellar-registry/actions/.github/workflows/contract-release.yml
+ATTEST_SIGNERS=(stellar-registry/actions/.github/workflows/contract-release.yml
+    stellar-registry/perch/.github/workflows/release.yml)
 ATTEST_REF=refs/heads/main
 ATTESTED=" "
 
 # Require a wasm's attestation, once per hash. Called in this shell, never in
 # a command substitution, so its die ends the run even under `all`'s `||`.
 attest() { # name file
-    local h out commit=""
+    local h out why="" commit="" signer
     h="$(sha256_file "$2")"
     [[ "$ATTESTED" != *" $h "* ]] || return 0
-    if out="$(gh attestation verify "$2" --owner "$ATTEST_OWNER" --signer-workflow "$ATTEST_SIGNER" \
-        --source-ref "$ATTEST_REF" --format json </dev/null 2>&1)"; then
-        commit="$(jq -r --arg s "$ATTEST_SOURCE" --arg r "$ATTEST_REF" 'first(.[].verificationResult.signature.certificate
-            | select(.sourceRepositoryURI == $s and .sourceRepositoryRef == $r) | .sourceRepositoryDigest) // empty' \
-            <<<"$out" 2>/dev/null || true)"
-        [ -n "$commit" ] || out="verified, but not as a build of $ATTEST_SOURCE $ATTEST_REF"
-    fi
+    # The first signer that verifies it as a build of main; otherwise why not.
+    for signer in "${ATTEST_SIGNERS[@]}"; do
+        if out="$(gh attestation verify "$2" --owner "$ATTEST_OWNER" --signer-workflow "$signer" \
+            --source-ref "$ATTEST_REF" --format json </dev/null 2>&1)"; then
+            commit="$(jq -r --arg s "$ATTEST_SOURCE" --arg r "$ATTEST_REF" 'first(.[].verificationResult.signature.certificate
+                | select(.sourceRepositoryURI == $s and .sourceRepositoryRef == $r) | .sourceRepositoryDigest) // empty' \
+                <<<"$out" 2>/dev/null || true)"
+            [ -z "$commit" ] || break
+            why="$signer verified it, but not as a build of $ATTEST_SOURCE $ATTEST_REF"
+        fi
+        [ -n "$why" ] || why="$(grep -v '^[[:space:]]*$' <<<"$out" | tail -n 1)"
+    done
     if [ -n "$commit" ]; then
-        log "$1 $h is attested: built by $ATTEST_SIGNER from ${ATTEST_SOURCE#https://github.com/}@$commit"
+        log "$1 $h is attested: built by $signer from ${ATTEST_SOURCE#https://github.com/}@$commit"
     elif [[ "$ALLOW_UNATTESTED" == *" $1 "* ]]; then
-        warn "UNATTESTED: $1 $h ($2) has no attestation from $ATTEST_SIGNER on $ATTEST_SOURCE $ATTEST_REF"
+        warn "UNATTESTED: $1 $h ($2) has no attestation from ${ATTEST_SIGNERS[*]} on $ATTEST_SOURCE $ATTEST_REF"
         warn "UNATTESTED: using it anyway because --allow-unattested $1"
     else
-        die "$1 $h ($2) has no attestation from $ATTEST_SIGNER on $ATTEST_SOURCE $ATTEST_REF: $(grep -v '^[[:space:]]*$' <<<"$out" | tail -n 1)
-       use its release asset (--account-wasm perch-account-vX.Y.Z, --constructorless-wasm $REGISTRY_NAME-vX.Y.Z),
+        die "$1 $h ($2) has no attestation from ${ATTEST_SIGNERS[*]} on $ATTEST_SOURCE $ATTEST_REF: $why
+       leave out --account-wasm/--constructorless-wasm to use the testnet deployment's bytes, pass an attested release tag,
        or, off mainnet, --allow-unattested $1"
     fi
     ATTESTED="$ATTESTED$h "
@@ -339,9 +340,40 @@ release_asset() { # name version out-file
     curl -fsSL --retry 3 -o "$3.tmp" "$RELEASES/$1-v$2/$1_v$2.wasm" && mv "$3.tmp" "$3"
 }
 
-# --account-wasm or --constructorless-wasm: a file, or a release tag of that name.
-option_wasm() { # name option value -> WASM
-    if [ -f "$3" ]; then
+# The testnet deployment the account and the registry come from by default. Its
+# registry must be the one registry.path derives on testnet: an older
+# deployment's account resolves its infra elsewhere.
+testnet_hash() { # name -> the hash deployments/testnet.json records for it
+    local derived recorded
+    derived="$("$DERIVE" registry "$(jq -r .network_passphrase "$MANIFEST")")"
+    recorded="$(jq -r .registry.id "$MANIFEST")"
+    [ "$recorded" = "$derived" ] ||
+        die "$MANIFEST records registry $recorded, but registry.path derives $derived on testnet: pass --account-wasm and --constructorless-wasm"
+    if [ "$1" = "$REGISTRY_NAME" ]; then
+        jq -r '.registry.wasm_hash // empty' "$MANIFEST"
+    else
+        jq -r --arg n "$1" '.contracts[$n].sha256 // empty' "$MANIFEST"
+    fi
+}
+testnet_wasm() { # hash out-file
+    log "fetching $1 from testnet (the deployment $MANIFEST records)"
+    rm -f "$2"
+    stellar contract fetch --rpc-url "$(jq -r .rpc_url "$MANIFEST")" \
+        --network-passphrase "$(jq -r .network_passphrase "$MANIFEST")" \
+        --wasm-hash "$1" --out-file "$2.tmp" </dev/null >/dev/null 2>&1 && mv "$2.tmp" "$2"
+}
+
+# --account-wasm or --constructorless-wasm: the testnet deployment's bytes
+# (empty), a file, a release tag of that name, or `build`.
+option_wasm() { # name option value -> WASM, or empty for `build`
+    local h
+    if [ -z "$3" ]; then
+        h="$(testnet_hash "$1")"
+        [ -n "$h" ] || die "$MANIFEST records no $1"
+        wasm_file "$1" "$h"
+    elif [ "$3" = build ]; then
+        WASM=""
+    elif [ -f "$3" ]; then
         [ -s "$3" ] || die "$2 $3 is empty"
         WASM="$3"
     elif [[ "$3" =~ ^$1-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
@@ -349,12 +381,12 @@ option_wasm() { # name option value -> WASM
         release_asset "$1" "${BASH_REMATCH[1]}" "$WASM" || true
         [ -s "$WASM" ] || die "could not download $3's $1_v${BASH_REMATCH[1]}.wasm"
     else
-        die "$2 $3 is neither a file nor a $1-vX.Y.Z release tag"
+        die "$2 $3 is neither a file, a $1-vX.Y.Z release tag nor build"
     fi
 }
 
 # Wasm bytes by hash into WASM, sha256 checked, then attested: the seeded
-# tier-0 from their release assets.
+# tier-0 from their release assets, anything else from testnet.
 WASM=""
 wasm_file() { # name hash -> WASM
     local f="$WASM_DIR/$1-$2.wasm" row n v h
@@ -364,6 +396,7 @@ wasm_file() { # name hash -> WASM
             [ "$n" = "$1" ] || continue
             release_asset "$1" "$v" "$f" || true
         done
+        [ -f "$f" ] || testnet_wasm "$2" "$f" || true
     fi
     [ -f "$f" ] || die "no source for $1 $2"
     [ "$(sha256_file "$f")" = "$2" ] || { rm -f "$f"; die "$1 is not $2"; }
@@ -371,18 +404,18 @@ wasm_file() { # name hash -> WASM
     WASM="$f"
 }
 
-# The registry wasm into WASM and its hash into REGISTRY_HASH, attested:
-# --constructorless-wasm, or, only with --allow-unattested
+# The registry wasm into WASM, its hash into REGISTRY_HASH and its binver into
+# REGISTRY_VERSION, attested: --constructorless-wasm (by default the testnet
+# deployment's), or, with `build` and only with --allow-unattested
 # perch-constructorless-registry, built once from this checkout.
 REGISTRY_FILE=""
-registry_wasm() { # -> WASM, REGISTRY_HASH
+registry_wasm() { # -> WASM, REGISTRY_HASH, REGISTRY_VERSION
     if [ -z "$REGISTRY_FILE" ]; then
-        if [ -n "$REGISTRY_WASM" ]; then
-            option_wasm "$REGISTRY_NAME" --constructorless-wasm "$REGISTRY_WASM"
-            REGISTRY_FILE="$WASM"
-        else
+        option_wasm "$REGISTRY_NAME" --constructorless-wasm "$REGISTRY_WASM"
+        REGISTRY_FILE="$WASM"
+        if [ -z "$REGISTRY_FILE" ]; then
             [[ "$ALLOW_UNATTESTED" == *" $REGISTRY_NAME "* ]] ||
-                die "no --constructorless-wasm: pass the attested release (--constructorless-wasm $REGISTRY_NAME-vX.Y.Z), or, off mainnet, --allow-unattested $REGISTRY_NAME to build it from this checkout"
+                die "--constructorless-wasm build: only off mainnet, with --allow-unattested $REGISTRY_NAME"
             log "building $REGISTRY_NAME from this checkout (stellar contract build)"
             mkdir -p "$WORK/registry"
             (cd "$REPO" && stellar contract build --package "$REGISTRY_NAME" --out-dir "$WORK/registry") \
@@ -391,23 +424,26 @@ registry_wasm() { # -> WASM, REGISTRY_HASH
         fi
         attest "$REGISTRY_NAME" "$REGISTRY_FILE"
         REGISTRY_HASH="$(sha256_file "$REGISTRY_FILE")"
+        REGISTRY_VERSION="$(stellar contract info meta --wasm "$REGISTRY_FILE" </dev/null 2>/dev/null |
+            sed -n 's/^ • binver: \(.*\)$/\1/p')"
+        [[ "$REGISTRY_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "$REGISTRY_FILE carries no binver to publish it at"
         log "registry code: $REGISTRY_FILE ($REGISTRY_HASH), published as $REGISTRY_NAME $REGISTRY_VERSION"
     fi
     WASM="$REGISTRY_FILE"
 }
 
-# The perch-account wasm into WASM, attested: --account-wasm, or, only with
-# --allow-unattested perch-account, built once from this checkout against its
-# committed pins and registry.path.
+# The perch-account wasm into WASM, attested: --account-wasm (by default the
+# testnet deployment's), or, with `build` and only with --allow-unattested
+# perch-account, built once from this checkout against its committed pins and
+# registry.path.
 ACCOUNT_FILE=""
 account_wasm() { # -> WASM
     if [ -z "$ACCOUNT_FILE" ]; then
-        if [ -n "$ACCOUNT_WASM" ]; then
-            option_wasm perch-account --account-wasm "$ACCOUNT_WASM"
-            ACCOUNT_FILE="$WASM"
-        else
+        option_wasm perch-account --account-wasm "$ACCOUNT_WASM"
+        ACCOUNT_FILE="$WASM"
+        if [ -z "$ACCOUNT_FILE" ]; then
             [[ "$ALLOW_UNATTESTED" == *" perch-account "* ]] ||
-                die "no --account-wasm: pass the attested release (--account-wasm perch-account-vX.Y.Z), or, off mainnet, --allow-unattested perch-account to build it from this checkout"
+                die "--account-wasm build: only off mainnet, with --allow-unattested perch-account"
             log "building perch-account from this checkout (stellar contract build)"
             mkdir -p "$WORK/account"
             (cd "$REPO" && stellar contract build --package perch-account --out-dir "$WORK/account") \
@@ -415,7 +451,8 @@ account_wasm() { # -> WASM
             ACCOUNT_FILE="$WORK/account/perch_account.wasm"
         fi
         attest perch-account "$ACCOUNT_FILE"
-        cp "$ACCOUNT_FILE" "$WASM_DIR/perch-account-$(sha256_file "$ACCOUNT_FILE").wasm"
+        local copy="$WASM_DIR/perch-account-$(sha256_file "$ACCOUNT_FILE").wasm"
+        [ "$ACCOUNT_FILE" -ef "$copy" ] || cp "$ACCOUNT_FILE" "$copy"
     fi
     WASM="$ACCOUNT_FILE"
 }
@@ -699,15 +736,28 @@ author_scoped() { # author registry
 }
 
 # A deployed author must resolve its infra in this network's constructorless:
-# an account built from another registry.path or other pins never would.
-check_infra() { # author
-    local want got
+# an account built from another registry.path never would. One this run
+# deploys must resolve the seeded tier-0. One deployed earlier keeps the
+# tier-0 it was built against until its own delayed upgrade, so each of its
+# infra addresses need only be the content address, in constructorless, of
+# the code it runs.
+check_infra() { # author fresh(0|1)
+    local want got a h
     want="$(jq -cn --arg c "$COMPILER" --arg i "$(content "$CONSTRUCTORLESS" "$(hash_of_seeded perch-interpreter)")" \
         --arg s "$(content "$CONSTRUCTORLESS" "$(hash_of_seeded perch-spending-limit)")" \
         '{doc_compiler: $c, interpreter: $i, spending_limit: $s}')"
     got="$(simulate "$1" infra | jq -c '{doc_compiler, interpreter, spending_limit}' 2>/dev/null || true)"
-    [ "$got" = "$want" ] || die "$1 resolves its infra at ${got:-nothing}, not $want in $CONSTRUCTORLESS"
-    log "$1 resolves its infra in $CONSTRUCTORLESS"
+    if [ "$got" = "$want" ]; then
+        log "$1 resolves its infra in $CONSTRUCTORLESS"
+        return
+    fi
+    [ "$2" = 0 ] && [ -n "$got" ] || die "$1 resolves its infra at ${got:-nothing}, not $want in $CONSTRUCTORLESS"
+    for a in $(jq -r '.[]' <<<"$got"); do
+        h="$(executable_of "$a")"
+        [ -n "$h" ] && [ "$(content "$CONSTRUCTORLESS" "$h")" = "$a" ] ||
+            die "$1 resolves its infra at $got: $a is not a contract constructorless $CONSTRUCTORLESS deployed"
+    done
+    warn "$1 resolves earlier tier-0 in $CONSTRUCTORLESS ($got), not the seeded $want: it predates them"
 }
 
 cmd_create_author() {
@@ -718,9 +768,11 @@ cmd_create_author() {
 
     # 1. The account: a design-A perch-account, deployed directly (the factory
     #    is itself deploy_stateless'd into constructorless later).
+    local fresh=0
     if instance_exists "$author"; then
         log "$project author already exists, running $(executable_of "$author")"
     else
+        fresh=1
         account_wasm
         wasm="$WASM"
         hash="$(sha256_file "$wasm")"
@@ -756,7 +808,7 @@ cmd_create_author() {
             plan "(the deploy is simulated once the code is on $NETWORK)"
         fi
     fi
-    if instance_exists "$author"; then check_infra "$author"; fi
+    if instance_exists "$author"; then check_infra "$author" "$fresh"; fi
 
     # 2. Its document. apply_doc compiles through the account's own compiler,
     #    deployer(constructorless, compiler hash), which `seed` puts there.

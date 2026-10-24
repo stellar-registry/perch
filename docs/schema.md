@@ -174,7 +174,7 @@ perch-ir's real parser + validator **at the applicable boundary**:
 | canonical fixture | accepts | parses + validates |
 | structural defect | rejects | parser rejects |
 | representable constraint (incl. `m <= N`, `quorum <= count`, `limit` positivity) | rejects | validator rejects (document still parses) |
-| per-document cap (signer/rule count, rule-name bytes) | rejects | **validator accepts** — the cap is the *compiler's*, so the schema is the earlier gate; the constant is pinned in `limits_parity.rs` |
+| per-document cap (signer/rule count, rule-name bytes) | rejects | **validator accepts** — the cap is the *compiler's*, so the schema is the earlier gate (for rules, on the source count; only the compiler counts installed rules); the constant is pinned in `limits_parity.rs` |
 | non-ASCII rule name within the byte cap | **rejects** | validator accepts — the one place the schema is deliberately stricter (byte cap via ASCII) |
 | cross-reference / semantic | **accepts** | validator rejects (documented gap) |
 

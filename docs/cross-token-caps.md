@@ -49,7 +49,8 @@ and cumulative cap. Approval / `transfer_from` flows require explicit rules.
 Cross-token scopes must have an explicit function list that excludes
 `transfer`, `transfer_from`, `approve`, `burn`, `burn_from`, `mint`, `clawback`,
 `set_authorized`, and `set_admin`. Otherwise splitting would leave a
-potentially token-moving operation on the scope contract uncapped.
+potentially token-moving operation on the scope contract uncapped. As with a
+scope, the token may not be the document's ZK adapter or pool.
 
 Select one rule ID per authorization context, in context order:
 
@@ -65,11 +66,13 @@ second rule. Treat IDs as revision-bound and resolve them from a fresh snapshot.
 
 ## Updates and rollout
 
-Reapplying identical text preserves both slots and spending history. A cap
-change changes the source rule's hash, so **both interpreter attachments are
-refreshed**, even though only the transfer rule has spending-limit parameters.
-That cap edit also reinstalls the transfer's spending limit, resetting its
-history as with existing same-token cap edits. Account reconciliation logic
+Reapplying identical text preserves both slots and spending history. Any cap
+change, `recipient` included, changes the source rule's hash, so **both
+interpreter attachments are refreshed**, even though only the transfer rule
+has spending-limit parameters. Changing `limit` or `period-ledgers` also
+reinstalls the transfer's spending limit, and changing `token` replaces the
+transfer rule; both start an empty window, as for same-token caps
+([`DEFERRED.md`](DEFERRED.md#persistent-spending-budgets-across-replacements)). Account reconciliation logic
 is unchanged. Signer reconciliation and rule replacement operate per slot.
 
 Ship with the next doc-compiler release and publish, then rebuild/redeploy the
@@ -78,4 +81,7 @@ factory pins. The npm release carries the builder and regenerated schema.
 The existing release pipeline computes versions; this PR does not repin a
 compiler before its release exists. Existing deployed accounts remain bound
 to their old compiler and fail closed on cross-token documents until their
-delayed account upgrade installs the new compiler pin.
+delayed account upgrade installs the new compiler pin. The generated
+`packages/perch-contracts` bindings follow the deployment
+(`scripts/bindings-contracts.sh`), so until then they describe the old
+compiler.

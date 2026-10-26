@@ -139,6 +139,9 @@ jobs:
       STELLAR_NETWORK: mainnet
       STELLAR_RPC_URL: https://mainnet.sorobanrpc.com
       STELLAR_NETWORK_PASSPHRASE: "Public Global Stellar Network ; September 2015"
+      # Soroban inclusion bid per tx (stroops): the CLI default 100 loses under
+      # surge pricing. Resource fees still come from simulation.
+      STELLAR_INCLUSION_FEE: "10000"
       # The mainnet environment's variable. No default: unset, it fails
       # scripts/mainnet-settings.sh.
       AUTHOR: ${{ vars.PERCH_MAINNET_AUTHOR_ADDRESS }}
@@ -279,6 +282,9 @@ jobs:
       STELLAR_NETWORK: mainnet
       STELLAR_RPC_URL: https://mainnet.sorobanrpc.com
       STELLAR_NETWORK_PASSPHRASE: "Public Global Stellar Network ; September 2015"
+      # Soroban inclusion bid per tx (stroops): the CLI default 100 loses under
+      # surge pricing. Resource fees still come from simulation.
+      STELLAR_INCLUSION_FEE: "10000"
       AUTHOR: ${{ vars.PERCH_MAINNET_AUTHOR_ADDRESS }}
       # Published to the mainnet registry by mainnet-publish from their
       # release assets; deploy-stack.sh checks it serves these hashes.

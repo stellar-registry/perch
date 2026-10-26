@@ -743,6 +743,13 @@ the derived registry.
 | `CI_PUBLISH_MAINNET_SECRET_KEY` | secret | the mainnet delegate's seed: fee source, and signer of `perch-author`'s authorization on its own context rule, which must allow `publish_hash` on the derived registry. Never the testnet key. |
 | `PERCH_MAINNET_AUTHOR_ADDRESS` | variable | the mainnet `perch-author` smart account (C…), bound to every name |
 
+The submitting jobs (`mainnet-publish`, `mainnet-deploy-stack`) set
+`STELLAR_INCLUSION_FEE: "10000"`: each transaction bids 10,000 stroops
+(0.001 XLM) for inclusion, over the CLI default of 100, which mainnet
+rejects with `TxInsufficientFee` whenever its Soroban inclusion fee is
+above that. Resource fees come from simulation; the `dry_run` fees include
+the bid.
+
 ### Before the first mainnet release
 
 None of this exists yet, so no mainnet job can publish today:

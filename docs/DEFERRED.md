@@ -132,7 +132,8 @@ authority unchanged:
 - uniqueness of signer ids and of rule names, compared by key across siblings —
   `perch-ir::validate`;
 - reference resolution (a principal/`replaceable` id resolving to a declared
-  signer; a cap `token` matching the rule's contract scope) — `perch-ir::validate`;
+  signer) and a cross-token cap's function restrictions and recipient
+  eligibility — `perch-ir::validate`;
 - the CRC16 checksum of every address strkey (the schema pins only the shape) —
   `perch-ir::validate`;
 - each `functions` entry being a Soroban `Symbol` (1–32 characters from
@@ -185,10 +186,13 @@ caps.
 `stellar-accounts` context rule (the pinned fork,
 [`audit-scope.md`](audit-scope.md#explicit-dependency-review)): policy-free,
 or with the Perch interpreter, plus OZ `spending_limit` for a rule with a
-`cap`. `apply_doc` reconciles the installed rules as a delta (spec §7.5).
+`cap`. A rule whose cap is on another token installs two: the rule and a
+capped transfer rule ([`cross-token-caps.md`](cross-token-caps.md)).
+`apply_doc` reconciles the installed rules as a delta (spec §7.5).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
-(`MAX_DOC_SIGNERS`), more than 11 rules (`MAX_DOC_RULES`), more than 8,192
+(`MAX_DOC_SIGNERS`), more than 11 installed document rules (`MAX_DOC_RULES`;
+a cross-token cap counts two), more than 8,192
 canonical bytes (`MAX_DOC_CANONICAL_BYTES`), or a rule name over 20 bytes
 (`MAX_RULE_NAME_BYTES`, OZ's `MAX_NAME_SIZE`). The recovery rule the account
 generates is additional to the 11 document rules. The caps are sized so that
@@ -302,7 +306,8 @@ reinstallation.
 unchanged keeps its state: a signer change or a change to the rule's other
 text keeps the window. Changing the cap's own parameters reinstalls the
 spending limit, and replacing the rule reinstalls every policy; both start
-an empty window. Whether a changed rule is edited or replaced is the cost
+an empty window. A cross-token cap's window is its transfer rule's, and
+changing its `token` replaces that rule. Whether a changed rule is edited or replaced is the cost
 model's choice (spec §7.5), so a document change that touches a capped rule
 can reset its window. A compromise recovery that restores a baseline can
 therefore give the baseline's retained signers a fresh window.

@@ -1071,6 +1071,8 @@ with:
   authority);
 - a rule scoped to the ZK adapter or pool of the applied recovery member
   (§15 rule 3, which the compiler can check only within one document).
+  A scope applied before the admin document enrolls that adapter or pool
+  is refused at authorization instead (below).
 
 So no scoped document can change the admin document's rules, recovery, or
 upgrades, whoever approves it. A rule scoped to the controller is allowed,
@@ -1084,8 +1086,13 @@ under. The account's scope generation starts at 0 and advances by one on
 every completed recovery, lost-key or compromise, and on nothing else.
 `__check_auth` refuses any selected rule whose tag's generation is not the
 current one (`PerchAuthError::StaleScope`), after the reserved-name guard
-and the freeze and before OZ evaluates anything. Like the freeze, it holds
-on every path that reaches `__check_auth`, CAP-0071 delegation included.
+and the freeze and before OZ evaluates anything. In the same pass it
+refuses a tagged rule selected for a call on the ZK adapter or pool of the
+applied recovery member (`PerchAuthError::ScopeEscalation`), so the
+`apply_scope` guard above also holds for a scope applied before that
+member, without `apply_doc` scanning the scopes. Like the freeze, both
+hold on every path that reaches `__check_auth`, CAP-0071 delegation
+included.
 A rule without a tag is the admin document's. OZ never reuses a rule id,
 so a tag never applies to a later rule.
 
@@ -1108,7 +1115,11 @@ passes the gate as an admin rule.
   only, so changing a scope never invalidates a collecting lost-key attempt.
 - A completion's revocations (§8) cover the admin document's credentials.
   A credential only a wiped scope names is dead while the scope stays
-  wiped, but it is not revoked: the owner may grant it again.
+  wiped, but it is not revoked: the owner may grant it again with
+  `apply_scope`, which checks only the revoked set. Revoking it (D7 for
+  scoped credentials, e.g. an index from fingerprint to the scope
+  generation that last named it) is deliberately deferred pending the
+  captain's decision.
 - The `Protected` freeze (§9) refuses `apply_scope` and `remove_scope`:
   both need the account's authorization. The policy block (D3) does not
   apply to them, so under `Loss` the owner may change scopes while an
@@ -1118,7 +1129,10 @@ passes the gate as an admin rule.
 `apply_scope`, with an argument constraint on the scope id, cannot touch the
 admin document or another scope id, but it is not a confined sub-owner:
 through its own scope it can grant itself any authority over other
-contracts, an uncapped token transfer included.
+contracts, an uncapped token transfer included. Nor is a credential
+confined to one scope: nothing indexes credentials across live scopes, so
+several scopes may name the same credential, and each authorizes it under
+its own rules.
 
 **Wallets.** `configuration` and `installed_rules` list the admin
 document's rules only; `scopes` and `scope` list the rest. Rule names
@@ -1173,7 +1187,9 @@ authorizes.
   every `apply_scope` (§7.6).
 - A completion revokes the admin document's credentials only. A credential
   only a scoped document names stops authorizing when the completion wipes
-  its scope (§7.6), but is not revoked.
+  its scope (§7.6), but is not revoked, so a later `apply_scope` may name
+  it again. Extending D7 to scoped credentials is deliberately deferred
+  pending the captain's decision (§7.6).
 - Fingerprints are computed over the verifier's canonical key bytes (OZ
   `Verifier::canonicalize_key`, called in its batched form
   `batch_canonicalize_key`), so a revoked key cannot return under a

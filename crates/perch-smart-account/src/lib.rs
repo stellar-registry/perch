@@ -167,6 +167,10 @@ pub enum PerchAuthError {
     /// A selected rule belongs to a scoped document a recovery completion
     /// wiped: its scope generation is not the account's (spec §7.6).
     StaleScope,
+    /// A selected scoped rule's context calls the ZK adapter or pool of the
+    /// applied recovery member, which may have been enrolled after the
+    /// scope was applied (spec §7.6).
+    ScopeEscalation,
 }
 
 /// What every context rule a scoped document installs is tagged with, by
@@ -995,7 +999,9 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 ///   CAP-0071 delegation, where the host hands this account the delegating
 ///   account's contexts.
 /// - A selected rule a scoped document installed under an earlier scope
-///   generation is refused (`StaleScope`), on every path the same way.
+///   generation is refused (`StaleScope`), and so is one selected for a
+///   call on the current ZK adapter or pool (`ScopeEscalation`), on every
+///   path the same way.
 pub fn check_auth(
     e: &Env,
     signature_payload: &Hash<32>,
@@ -1021,10 +1027,19 @@ pub fn check_auth(
     // §7.6). An admin document's rule has no tag. A tag is extended on
     // read as OZ extends the rule entry it gates, so the two live together.
     let gen = scope_gen(e);
-    for id in signatures.context_rule_ids.iter() {
+    for (i, id) in signatures.context_rule_ids.iter().enumerate() {
         if let Some(tag) = PerchStorage::get_scope_tags(e, &id) {
             if tag.gen != gen {
                 return Err(PerchAuthError::StaleScope.into());
+            }
+            if let Some(Context::Contract(ContractContext { contract, .. })) =
+                auth_contexts.get(i as u32)
+            {
+                if PerchStorage::get_current_zk(e)
+                    .is_some_and(|z| contract == z.adapter || contract == z.pool)
+                {
+                    return Err(PerchAuthError::ScopeEscalation.into());
+                }
             }
             PerchStorage::extend_scope_tags_ttl(
                 e,

@@ -109,8 +109,13 @@ fn call_via(w: &World, key: &Address, rule: u32) -> bool {
 /// The account's `__check_auth` of a [`Target`] call selecting `rule`,
 /// with no signatures: what it refuses before OZ looks at any signer.
 fn check_auth_selecting(w: &World, rule: u32) -> Result<(), soroban_sdk::Error> {
+    check_auth_on(w, &w.target, rule)
+}
+
+/// [`check_auth_selecting`] for a call on `contract`.
+fn check_auth_on(w: &World, contract: &Address, rule: u32) -> Result<(), soroban_sdk::Error> {
     let context = Context::Contract(ContractContext {
-        contract: w.target.clone(),
+        contract: contract.clone(),
         fn_name: Symbol::new(&w.env, "protected"),
         args: vec![&w.env, w.account.clone().into_val(&w.env)],
     });
@@ -460,6 +465,30 @@ fn a_scoped_document_cannot_reach_the_account_or_its_recovery() {
     )
     .is_ok());
     assert_eq!(w.client().scope_count(), 1, "nothing else was applied");
+}
+
+#[test]
+fn a_scope_applied_before_zk_enrollment_never_authorizes_on_its_adapter_or_pool() {
+    let w = world();
+    w.enroll(&w.doc(None));
+    let k = w.new_key();
+    apply_scope(
+        &w,
+        1,
+        &scoped(&w, &[("k", &k)], &[("adapter", &w.adapter, "k")]),
+    )
+    .unwrap();
+    apply_scope(&w, 2, &scoped(&w, &[("k", &k)], &[("pool", &w.pool, "k")])).unwrap();
+    let (adapter, pool) = (scoped_id(&w, 1, "adapter"), scoped_id(&w, 2, "pool"));
+    let escalation = || Err(PerchAuthError::ScopeEscalation.into());
+    // With no ZK factor applied, the gate passes them on to OZ.
+    assert_ne!(check_auth_on(&w, &w.adapter, adapter), escalation());
+    assert_ne!(check_auth_on(&w, &w.pool, pool), escalation());
+
+    w.apply(&w.doc(Some(w.recovery("loss", Mode::Zk))), 0)
+        .expect("enroll ZK recovery over the live scopes");
+    assert_eq!(check_auth_on(&w, &w.adapter, adapter), escalation());
+    assert_eq!(check_auth_on(&w, &w.pool, pool), escalation());
 }
 
 #[test]

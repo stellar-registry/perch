@@ -60,7 +60,8 @@ mod oracle {
     use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
     use perch_smart_account::{
         check_auth, install_admin, AccountCapabilities, AccountConfiguration, FreezeGate,
-        InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, UpgradeRequest,
+        InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, ScopeRecord,
+        UpgradeRequest,
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;

@@ -1,5 +1,7 @@
-//! The perch smart-account trait: **authorization data changes exactly one
-//! way — [`PerchSmartAccount::apply_doc`]**.
+//! The perch smart-account trait: **authorization data changes only by
+//! applying documents** — the admin document through
+//! [`PerchSmartAccount::apply_doc`], scoped documents through
+//! [`PerchSmartAccount::apply_scope`] and its removal entry points.
 //!
 //! [`PerchSmartAccount`] extends OZ's `CustomAccountInterface` + `SmartAccount`
 //! (the evaluation machinery) and exports a document-shaped surface instead of
@@ -19,10 +21,18 @@
 //! compiled document in one invocation (changing only the rules that differ,
 //! `rules`), and stores the canonical `doc_hash` so anyone can check
 //! installed == reviewed via [`PerchSmartAccount::applied_doc_hash`].
+//!
+//! The admin document holds the account's own rules, recovery, and
+//! everything a recovery restores. App grants can instead live in scoped
+//! documents, one per scope id, each compiled the same way, reconciled
+//! against its own records, and refused if it reaches the account itself or
+//! its recovery. A recovery completion wipes every scope at once by
+//! advancing a generation that `__check_auth` checks
+//! (`docs/recovery/spec.md` §7.6).
 #![no_std]
 
 use perch_doc_compiler::{
-    admin_survives, CompiledDoc, CompiledZkFactor, DocCompilerClient, DocCompilerError,
+    admin_survives, CompiledDoc, CompiledZkFactor, DocCompilerClient, DocCompilerError, RuleScope,
 };
 use perch_recovery_interface::account::{is_frozen, is_reserved_invoker_only, UpgradeReadiness};
 use perch_recovery_interface::config::{leaf_to_insert, zk_factor_transition_ok};
@@ -41,6 +51,7 @@ use soroban_sdk::{
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
 use stellar_accounts::smart_account::{
     self, AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccount,
+    SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD,
 };
 
 mod rules;
@@ -126,8 +137,17 @@ pub enum PerchAccountError {
     Recovery(RecoveryError),
     /// `apply_doc` named an `expected_revision` and the account is at
     /// another revision: the document was prepared against a configuration
-    /// that has since changed. Last, so every earlier code is unchanged.
+    /// that has since changed. Appended, so every earlier code is unchanged.
     StaleRevision,
+    /// `apply_scope` was given a document a scoped document may not be: it
+    /// has a `recovery` member, a `self-admin` rule, or a rule scoped to
+    /// the account itself or to its ZK adapter or pool (spec §7.6).
+    ScopeEscalation,
+    /// No scoped document has this scope id.
+    UnknownScope,
+    /// `gc_scope` was asked to remove a scope of the current scope
+    /// generation, which only `remove_scope` removes.
+    ScopeLive,
 }
 
 // scerr's composed (root) mode predates sdk 27's spec-shaking marker; the
@@ -144,6 +164,35 @@ pub enum PerchAuthError {
     /// A `Protected` recovery attempt is authorized: the account authorizes
     /// nothing but that attempt's completion (spec §9).
     AccountFrozen,
+    /// A selected rule belongs to a scoped document a recovery completion
+    /// wiped: its scope generation is not the account's (spec §7.6).
+    StaleScope,
+}
+
+/// What every context rule a scoped document installs is tagged with, by
+/// OZ rule id: the scope that installed it and the scope generation it was
+/// installed under. The admin document's rules carry no tag.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScopeTag {
+    pub scope: u32,
+    pub gen: u32,
+}
+
+/// One scoped document as applied: what [`PerchSmartAccount::scope`]
+/// returns.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScopeRecord {
+    /// The scope generation it was applied under. Once
+    /// [`PerchSmartAccount::scope_generation`] has moved past it, a recovery
+    /// completion has wiped the scope: its rules authorize nothing, and
+    /// anyone may remove them with `gc_scope`.
+    pub gen: u32,
+    /// The scoped document's canonical `doc_hash`.
+    pub doc_hash: BytesN<32>,
+    /// Every context rule it installed, with its OZ id.
+    pub rules: Vec<InstalledRule>,
 }
 
 /// The `Protected` freeze, mirrored from the adopted controller through
@@ -215,7 +264,9 @@ pub struct AccountCapabilities {
     /// earlier `oz_rule_ids` scheme omitted the account address; a client
     /// reads this symbol to tell which digest an account expects.
     pub auth_digest: Symbol,
-    /// How a document is applied: `one_tx`, one `apply_doc` transaction.
+    /// How documents are applied: `one_tx`, the admin document in one
+    /// `apply_doc` transaction; `scoped_v1`, scoped documents through
+    /// `apply_scope`, `remove_scope`, and `gc_scope` (spec §7.6).
     pub apply_modes: Vec<Symbol>,
     /// [`SNAPSHOT_VERSION`].
     pub snapshot_version: u32,
@@ -296,8 +347,10 @@ fn bind_payload(e: &Env, signature_payload: &Hash<32>) -> Hash<32> {
 /// The account's consumer interface version: the views
 /// ([`PerchSmartAccount::revision`], [`PerchSmartAccount::configuration`],
 /// [`PerchSmartAccount::document`], [`PerchSmartAccount::capabilities`]) and
-/// `apply_doc`'s `expected_revision`.
-pub const INTERFACE_VERSION: u32 = 1;
+/// `apply_doc`'s `expected_revision`. Version 2 adds scoped documents
+/// ([`PerchSmartAccount::apply_scope`] and the scope views); since then
+/// `configuration` and `installed_rules` cover the admin document only.
+pub const INTERFACE_VERSION: u32 = 2;
 /// The layout of [`AccountConfiguration`].
 pub const SNAPSHOT_VERSION: u32 = 1;
 
@@ -323,6 +376,46 @@ pub struct DocApplied {
     pub signers_removed: u32,
     pub policies_added: u32,
     pub policies_removed: u32,
+}
+
+/// Emitted after a scoped document is applied: its scope id, canonical
+/// `doc_hash`, the scope generation it was applied under, and what changed in
+/// its rule set, counted like [`DocApplied`]'s. `scope_doc` serves the
+/// document.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScopeApplied {
+    #[topic]
+    pub scope: u32,
+    pub doc_hash: BytesN<32>,
+    pub gen: u32,
+    pub rules_added: u32,
+    pub rules_removed: u32,
+    pub rules_edited: u32,
+    pub signers_added: u32,
+    pub signers_removed: u32,
+    pub policies_added: u32,
+    pub policies_removed: u32,
+}
+
+/// Emitted when a scoped document is removed with every rule it installed,
+/// by `remove_scope`, or by `gc_scope` once a completion wiped it.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScopeRemoved {
+    #[topic]
+    pub scope: u32,
+    /// The scope generation it had been applied under.
+    pub gen: u32,
+    pub rules_removed: u32,
+}
+
+/// Emitted when a recovery completion advances the scope generation to
+/// `gen`: every scoped document applied before stops authorizing.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ScopesWiped {
+    pub gen: u32,
 }
 
 /// Emitted when a recovery completion revokes a credential.
@@ -413,17 +506,41 @@ struct PerchStorage {
     /// in every successful `apply_doc` and every executed upgrade, by nothing
     /// else. Never decreases.
     revision: InstanceItem<u64>,
+    /// The scope generation (spec §7.6): 0 after the constructor, advanced
+    /// by one by every recovery completion, by nothing else. A scoped rule
+    /// authorizes only while its tag's generation is this one.
+    scope_gen: InstanceItem<u32>,
+    /// Each scoped document's records, by scope id. `apply_scope`
+    /// reconciles a scoped document against its own record alone.
+    scopes: PersistentMap<u32, ScopeRecord>,
+    /// Each scoped document's canonical bytes, by scope id.
+    scope_docs: PersistentMap<u32, Bytes>,
+    /// The tag of every context rule a scoped document installed, by OZ
+    /// rule id; none for the admin document's rules. OZ never reuses a rule
+    /// id, so a tag never outlives its rule into another.
+    scope_tags: PersistentMap<u32, ScopeTag>,
+    /// How many scope ids have a record: the length of `scope_index`.
+    scope_count: InstanceItem<u32>,
+    /// Every scope id with a record, by position `0..scope_count`: what
+    /// `scopes` lists. A removal moves the last id into the freed position,
+    /// so adding or removing a scope writes O(1) entries however many exist.
+    scope_index: PersistentMap<u32, u32>,
+    /// Each scope id's position in `scope_index`.
+    scope_position: PersistentMap<u32, u32>,
 }
 
 /// The doc-only smart account surface. Implementers get OZ evaluation from
-/// the supertraits and exactly one write path for authorization data from
-/// here, plus the controlled capabilities a wallet needs: execution through
-/// the account, full document reads, recovery cancellation, and delayed
-/// upgrades.
+/// the supertraits and documents as the only write path for authorization
+/// data from here: the admin document ([`Self::apply_doc`]) and scoped
+/// documents ([`Self::apply_scope`]). Plus the controlled capabilities a
+/// wallet needs: execution through the account, full document reads,
+/// recovery cancellation, and delayed upgrades.
 #[contracttrait]
 pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
-    /// Apply a policy document — **the only way authorization changes**.
-    /// The shared, immutable infra it uses (the doc compiler, the
+    /// Apply the admin document: the account's own rules, its recovery
+    /// member, and everything a recovery restores. With the scoped-document
+    /// entry points ([`Self::apply_scope`]), **the only way authorization
+    /// changes**. The shared, immutable infra it uses (the doc compiler, the
     /// interpreter, and the spending limit) is derived from build-time pins
     /// (see [`infra`]), never passed in. Brings the installed rules to the
     /// document in one invocation, changing only the rules that differ, and
@@ -694,13 +811,17 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// the same document included) and every executed upgrade. Freeze
     /// changes, recovery attempts, evidence, and cancellations do not
     /// advance it. Never decreases and never repeats, so unlike `doc_hash` it
-    /// tells A -> B -> A apart.
+    /// tells A -> B -> A apart. Scoped documents do not advance it: a grant
+    /// changing never makes an admin document prepared against this
+    /// revision stale.
     fn revision(e: &Env) -> u64 {
         revision(e)
     }
 
-    /// Everything rule selection and signing need, read at one ledger, with
-    /// the revision it belongs to.
+    /// Everything rule selection and signing need for the admin document,
+    /// read at one ledger, with the revision it belongs to. Scoped
+    /// documents' rules are not in it: [`Self::scopes`] and [`Self::scope`]
+    /// list them.
     fn configuration(e: &Env) -> AccountConfiguration {
         AccountConfiguration {
             revision: revision(e),
@@ -731,7 +852,10 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
             interface_version: INTERFACE_VERSION,
             doc_identity: Symbol::new(e, "canon_v1"),
             auth_digest: Symbol::new(e, "addr_oz_v1"),
-            apply_modes: Vec::from_array(e, [Symbol::new(e, "one_tx")]),
+            apply_modes: Vec::from_array(
+                e,
+                [Symbol::new(e, "one_tx"), Symbol::new(e, "scoped_v1")],
+            ),
             snapshot_version: SNAPSHOT_VERSION,
         }
     }
@@ -761,13 +885,15 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         });
     }
 
-    /// Every context rule the account has installed, with its OZ id. The
-    /// document's rules are matched against these by `apply_doc`.
+    /// Every context rule the admin document installed, with its OZ id. The
+    /// document's rules are matched against these by `apply_doc`. A scoped
+    /// document's are in its [`Self::scope`] record.
     fn installed_rules(e: &Env) -> Vec<InstalledRule> {
         PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e))
     }
 
-    /// OZ's count of the account's context rules, expired ones included.
+    /// OZ's count of the account's context rules, scoped documents' and
+    /// expired ones included.
     /// Read-only rule surface, re-exposed here because `SmartAccount` itself
     /// is deliberately not exported by doc-only accounts.
     fn get_context_rules_count(e: &Env) -> u32 {
@@ -779,10 +905,85 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     fn get_context_rule(e: &Env, context_rule_id: u32) -> ContextRule {
         smart_account::get_context_rule(e, context_rule_id)
     }
+
+    /// Apply a scoped document under `scope`, an id the owner chooses (one
+    /// per app grant, say), and return its `doc_hash` (spec §7.6). Owner
+    /// authorization. Refuses (`ScopeEscalation`) a `recovery` member, a
+    /// `self-admin` rule, or a rule scoped to the account or to its ZK
+    /// adapter or pool, so no scoped document reaches the admin document's
+    /// rules, recovery, or upgrades. Compiled under the same caps as any
+    /// document and reconciled against this scope's records only. Every
+    /// rule it installs is tagged with the scope and the current scope
+    /// generation, so applying over a wiped scope revives it with the new
+    /// rules. Calls no controller, and leaves the applied `doc_hash` and the
+    /// revision alone.
+    fn apply_scope(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
+        apply_scope_doc(e, scope, doc_json)
+    }
+
+    /// Remove the scoped document under `scope` and every rule it installed:
+    /// revoking a grant. Owner authorization.
+    fn remove_scope(e: &Env, scope: u32) -> Result<(), PerchAccountError> {
+        e.current_contract_address().require_auth();
+        let record = PerchStorage::get_scopes(e, &scope).ok_or(PerchAccountError::UnknownScope)?;
+        drop_scope(e, scope, &record);
+        Ok(())
+    }
+
+    /// Remove a scoped document a recovery completion wiped, with every rule
+    /// it installed. Permissionless: the rules already authorize nothing.
+    /// Refuses a scope of the current generation (`ScopeLive`).
+    fn gc_scope(e: &Env, scope: u32) -> Result<(), PerchAccountError> {
+        let record = PerchStorage::get_scopes(e, &scope).ok_or(PerchAccountError::UnknownScope)?;
+        if record.gen == scope_gen(e) {
+            return Err(PerchAccountError::ScopeLive);
+        }
+        drop_scope(e, scope, &record);
+        Ok(())
+    }
+
+    /// The scoped document under `scope` as applied, if any: its generation,
+    /// `doc_hash`, and rules with their OZ ids. Rule names repeat across
+    /// scopes, so a wallet selects a scoped rule by `(scope, name)`.
+    fn scope(e: &Env, scope: u32) -> Option<ScopeRecord> {
+        PerchStorage::get_scopes(e, &scope)
+    }
+
+    /// The canonical bytes of the scoped document under `scope`, if any.
+    /// `sha256` of them is its `doc_hash`.
+    fn scope_doc(e: &Env, scope: u32) -> Option<Bytes> {
+        PerchStorage::get_scope_docs(e, &scope)
+    }
+
+    /// The scope generation: how many recovery completions the account has
+    /// had. A scope whose record has another generation is wiped.
+    fn scope_generation(e: &Env) -> u32 {
+        scope_gen(e)
+    }
+
+    /// How many scope ids have a record, wiped ones included.
+    fn scope_count(e: &Env) -> u32 {
+        PerchStorage::get_scope_count(e).unwrap_or(0)
+    }
+
+    /// The scope ids with a record at positions `start..start + count` of
+    /// the index (fewer at its end), wiped ones included. Removing a scope
+    /// moves the last id into its position, so a listing read across
+    /// several calls can miss an id that moved in between; read
+    /// [`Self::scope_count`] again to tell.
+    fn scopes(e: &Env, start: u32, count: u32) -> Vec<u32> {
+        let end = Self::scope_count(e).min(start.saturating_add(count));
+        let mut ids = Vec::new(e);
+        for i in start..end {
+            ids.push_back(PerchStorage::get_scope_index(e, &i).unwrap());
+        }
+        ids
+    }
 }
 
-/// The account's `__check_auth`: the reserved-name guard and the
-/// `Protected` freeze run before OZ evaluates any rule (spec §9, §15).
+/// The account's `__check_auth`: the reserved-name guard, the `Protected`
+/// freeze, and the scope generation gate run before OZ evaluates any rule
+/// (spec §7.6, §9, §15).
 ///
 /// - Any context naming an invoker-only hook is refused, on any contract,
 ///   so no signature can satisfy a hook's `account.require_auth()`.
@@ -793,6 +994,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 ///   other entry point (each requires the account's own authorization), and
 ///   CAP-0071 delegation, where the host hands this account the delegating
 ///   account's contexts.
+/// - A selected rule a scoped document installed under an earlier scope
+///   generation is refused (`StaleScope`), on every path the same way.
 pub fn check_auth(
     e: &Env,
     signature_payload: &Hash<32>,
@@ -811,6 +1014,24 @@ pub fn check_auth(
             && !is_completion(e, signatures, auth_contexts)
         {
             return Err(PerchAuthError::AccountFrozen.into());
+        }
+    }
+    // A scoped rule authorizes only under the scope generation it was
+    // installed in; a recovery completion advances the generation (spec
+    // §7.6). An admin document's rule has no tag. A tag is extended on
+    // read as OZ extends the rule entry it gates, so the two live together.
+    let gen = scope_gen(e);
+    for id in signatures.context_rule_ids.iter() {
+        if let Some(tag) = PerchStorage::get_scope_tags(e, &id) {
+            if tag.gen != gen {
+                return Err(PerchAuthError::StaleScope.into());
+            }
+            PerchStorage::extend_scope_tags_ttl(
+                e,
+                &id,
+                SMART_ACCOUNT_TTL_THRESHOLD,
+                SMART_ACCOUNT_EXTEND_AMOUNT,
+            );
         }
     }
     // Bind the digest to this account's address before OZ layers the selected
@@ -838,8 +1059,9 @@ fn is_completion(e: &Env, signatures: &AuthPayload, contexts: &Vec<Context>) -> 
 /// A completed recovery revokes the union of the credentials it replaced in
 /// its source (the baseline's, for compromise) and every credential the
 /// applied document had that the target drops (spec §8,
-/// `credential::revocations`). It lifts the freeze and drops any pending
-/// upgrade (spec §12).
+/// `credential::revocations`). It lifts the freeze, drops any pending
+/// upgrade (spec §12), and advances the scope generation, which wipes every
+/// scoped document in one write however many exist (spec §7.6).
 fn complete_recovery(
     e: &Env,
     replaced: &Vec<Credential>,
@@ -863,7 +1085,163 @@ fn complete_recovery(
     }
     PerchStorage::remove_gate(e);
     drop_pending_upgrade(e);
+    let gen = scope_gen(e) + 1;
+    PerchStorage::set_scope_gen(e, &gen);
+    ScopesWiped { gen }.publish(e);
     Ok(())
+}
+
+fn scope_gen(e: &Env) -> u32 {
+    PerchStorage::get_scope_gen(e).unwrap_or(0)
+}
+
+/// `apply_scope`'s body.
+fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
+    let me = e.current_contract_address();
+    me.require_auth();
+    let compiled: CompiledDoc = DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
+        .try_compile_doc(&doc_json)??;
+    check_scoped(e, &me, &compiled)?;
+    for fingerprint in compiled.fingerprints.iter() {
+        if PerchStorage::has_revoked(e, &fingerprint) {
+            return Err(PerchAccountError::RevokedCredential);
+        }
+    }
+
+    let gen = scope_gen(e);
+    let record = PerchStorage::get_scopes(e, &scope);
+    let current = record
+        .as_ref()
+        .map(|r| r.rules.clone())
+        .unwrap_or(Vec::new(e));
+    let (desired, params) = rules::desired(e, &compiled);
+    let (next, sum) = rules::reconcile(e, &current, &desired, &params, rules::Mode::Cheapest);
+
+    // Every rule in a record carries the record's tag, so a rule kept under
+    // its id needs a new tag only when the record is from a wiped
+    // generation.
+    let live = record.as_ref().is_some_and(|r| r.gen == gen);
+    let tag = ScopeTag { scope, gen };
+    for c in current.iter() {
+        if !next.iter().any(|n| n.id == c.id) {
+            PerchStorage::remove_scope_tags(e, &c.id);
+        }
+    }
+    extend_persistent(e, |ttl| {
+        for n in next.iter() {
+            if !(live && current.iter().any(|c| c.id == n.id)) {
+                PerchStorage::set_scope_tags(e, &n.id, &tag);
+                PerchStorage::extend_scope_tags_ttl(e, &n.id, ttl, ttl);
+            }
+        }
+    });
+
+    if record.is_none() {
+        index_insert(e, scope);
+    }
+    let applied = ScopeRecord {
+        gen,
+        doc_hash: compiled.doc_hash.clone(),
+        rules: next,
+    };
+    if record.as_ref() != Some(&applied) {
+        let new_doc = record.as_ref().map(|r| &r.doc_hash) != Some(&compiled.doc_hash);
+        PerchStorage::set_scopes(e, &scope, &applied);
+        if new_doc {
+            PerchStorage::set_scope_docs(e, &scope, &compiled.canonical);
+        }
+        extend_persistent(e, |ttl| {
+            PerchStorage::extend_scopes_ttl(e, &scope, ttl, ttl);
+            if new_doc {
+                PerchStorage::extend_scope_docs_ttl(e, &scope, ttl, ttl);
+            }
+        });
+    }
+    ScopeApplied {
+        scope,
+        doc_hash: compiled.doc_hash.clone(),
+        gen,
+        rules_added: sum.rules_added,
+        rules_removed: sum.rules_removed,
+        rules_edited: sum.rules_edited,
+        signers_added: sum.signers_added,
+        signers_removed: sum.signers_removed,
+        policies_added: sum.policies_added,
+        policies_removed: sum.policies_removed,
+    }
+    .publish(e);
+    Ok(compiled.doc_hash)
+}
+
+/// Refuse a compiled document that would reach past a scope: a recovery
+/// member, or a rule scoped to the account itself (every `self-admin` rule)
+/// or to the ZK adapter or pool of the applied recovery member (spec §15,
+/// rule 3, which the compiler checks only within one document).
+fn check_scoped(e: &Env, me: &Address, compiled: &CompiledDoc) -> Result<(), PerchAccountError> {
+    if !compiled.recovery.is_empty() {
+        return Err(PerchAccountError::ScopeEscalation);
+    }
+    let zk = PerchStorage::get_current_zk(e);
+    for rule in compiled.rules.iter() {
+        let RuleScope::Contract(target) = &rule.scope else {
+            return Err(PerchAccountError::ScopeEscalation);
+        };
+        if target == me
+            || zk
+                .as_ref()
+                .is_some_and(|z| *target == z.adapter || *target == z.pool)
+        {
+            return Err(PerchAccountError::ScopeEscalation);
+        }
+    }
+    Ok(())
+}
+
+/// Remove `scope`'s rules (their policies uninstall as OZ removes them),
+/// tags, record, document, and index position.
+fn drop_scope(e: &Env, scope: u32, record: &ScopeRecord) {
+    for r in record.rules.iter() {
+        smart_account::remove_context_rule_no_events(e, r.id);
+        PerchStorage::remove_scope_tags(e, &r.id);
+    }
+    PerchStorage::remove_scopes(e, &scope);
+    PerchStorage::remove_scope_docs(e, &scope);
+    index_remove(e, scope);
+    ScopeRemoved {
+        scope,
+        gen: record.gen,
+        rules_removed: record.rules.len(),
+    }
+    .publish(e);
+}
+
+fn index_insert(e: &Env, scope: u32) {
+    let n = PerchStorage::get_scope_count(e).unwrap_or(0);
+    PerchStorage::set_scope_index(e, &n, &scope);
+    PerchStorage::set_scope_position(e, &scope, &n);
+    PerchStorage::set_scope_count(e, &(n + 1));
+    extend_persistent(e, |ttl| {
+        PerchStorage::extend_scope_index_ttl(e, &n, ttl, ttl);
+        PerchStorage::extend_scope_position_ttl(e, &scope, ttl, ttl);
+    });
+}
+
+/// Swap-remove `scope` from the index: the last id takes its position.
+fn index_remove(e: &Env, scope: u32) {
+    let last = PerchStorage::get_scope_count(e).unwrap_or(0) - 1;
+    let at = PerchStorage::get_scope_position(e, &scope).unwrap();
+    if at != last {
+        let moved = PerchStorage::get_scope_index(e, &last).unwrap();
+        PerchStorage::set_scope_index(e, &at, &moved);
+        PerchStorage::set_scope_position(e, &moved, &at);
+        extend_persistent(e, |ttl| {
+            PerchStorage::extend_scope_index_ttl(e, &at, ttl, ttl);
+            PerchStorage::extend_scope_position_ttl(e, &moved, ttl, ttl);
+        });
+    }
+    PerchStorage::remove_scope_index(e, &last);
+    PerchStorage::remove_scope_position(e, &scope);
+    PerchStorage::set_scope_count(e, &last);
 }
 
 fn generation(e: &Env) -> u64 {

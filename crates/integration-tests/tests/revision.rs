@@ -635,7 +635,13 @@ fn capabilities_and_limits_are_constants_of_the_wasm() {
     assert_eq!(caps.auth_digest, Symbol::new(&w.env, "addr_oz_v1"));
     assert_eq!(
         caps.apply_modes,
-        Vec::from_array(&w.env, [Symbol::new(&w.env, "one_tx")])
+        Vec::from_array(
+            &w.env,
+            [
+                Symbol::new(&w.env, "one_tx"),
+                Symbol::new(&w.env, "scoped_v1")
+            ]
+        )
     );
     w.enroll(&w.doc(None));
     assert_eq!(

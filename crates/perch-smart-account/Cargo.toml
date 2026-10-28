@@ -1,6 +1,6 @@
 [package]
 name = "perch-smart-account"
-description = "The doc-only smart-account trait: apply_doc is the sole write path, on OZ evaluation"
+description = "The doc-only smart-account trait: applying documents (apply_doc, apply_scope) is the sole write path, on OZ evaluation"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

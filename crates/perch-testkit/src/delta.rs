@@ -1005,9 +1005,11 @@ pub fn events(env: &Env) -> Vec<Event> {
 // Scoped documents
 // ---------------------------------------------------------------------------
 
-/// The scope ids a [`ScopeOp`] sequence draws from: two, so scopes are
-/// re-applied, removed, and created again over one another.
-pub const SCOPE_IDS: [u32; 2] = [0, 7];
+/// The scope ids a [`ScopeOp`] sequence draws from: three, so each scope
+/// has more than one neighbour to leave untouched and removals move entries
+/// around the scope index, yet few enough that scopes are re-applied,
+/// removed, and created again over one another.
+pub const SCOPE_IDS: [u32; 3] = [0, 7, 1];
 
 /// One step of a scoped-document sequence on [`DeltaWorld::delta`].
 #[derive(Clone, Debug, PartialEq, Eq)]

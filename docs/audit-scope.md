@@ -198,7 +198,12 @@ suffix and key canonicalization matter — is exercised by Nido's suite
 
 **Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps}.rs`;
 the full-replace oracle `crates/perch-testkit/src/delta.rs` and the fuzz
-target `fuzz/fuzz_targets/apply_doc_delta.rs`. The full replace shares
+target `fuzz/fuzz_targets/apply_doc_delta.rs`. The scoped-document paths:
+`crates/integration-tests/tests/{scoped_docs,apply_scope_delta}.rs` and the
+fuzz target `fuzz/fuzz_targets/apply_scope_delta.rs`, which interleave admin
+documents with `apply_scope`/`remove_scope` across several scopes and check
+each scope, the admin document and the other scopes against the model after
+every step; `release_stack.rs` (`docsplit_*`). The full replace shares
 compile and the desired rule set (expiry drop, recovery rule) with the
 delta, so it checks the reconcile only; each accepted step is also checked
 against the grant the document model computes on its own

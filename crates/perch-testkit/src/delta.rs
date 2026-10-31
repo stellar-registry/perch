@@ -1024,7 +1024,7 @@ impl ScopeOp {
     /// `1..=max` steps drawn from `u`, each with the ledgers to advance
     /// ([`DeltaWorld::advance`]) before it: half scope applications, a
     /// quarter removals (of live or unknown scopes), and a quarter admin
-    /// documents, one in eight of them without an admin rule (refused).
+    /// documents, about one in ten of them without an admin rule (refused).
     pub fn sequence(u: &mut Unstructured, max: usize) -> arbitrary::Result<Vec<(u32, ScopeOp)>> {
         let n = u.int_in_range(1..=max)?;
         (0..n)

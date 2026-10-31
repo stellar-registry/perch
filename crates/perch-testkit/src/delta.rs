@@ -1074,11 +1074,24 @@ impl ScopeModel {
     /// - (c) every operation leaves each scope it does not name as it was;
     /// - (d) a refused operation changes no ledger entry of any contract;
     ///
-    /// and that the account grants nothing outside its documents. Panics on
-    /// a violation; returns the operation's outcome.
+    /// and that the account grants nothing outside its documents. It also
+    /// predicts the outcome before running `op`: an admin document is
+    /// accepted iff it keeps the `admin` rule, a scoped document iff it has
+    /// no self-admin rule and no recovery member, and a removal iff the
+    /// scope is live. Nothing else can refuse in this world: generated
+    /// documents always compile, recovery is a guardian-only `Loss` member
+    /// with no ZK factor, and the scope pool never names the account. Panics
+    /// on a violation; returns the operation's outcome.
     pub fn step(&mut self, w: &DeltaWorld, op: &ScopeOp) -> Result<(), String> {
         let a = &w.delta;
         let named = op.scope();
+        let expected = match op {
+            ScopeOp::Admin(d) => d.rules.iter().any(|r| r.name == "admin"),
+            ScopeOp::Apply(_, d) => {
+                d.recovery.is_none() && d.rules.iter().all(|r| r.scope.is_some())
+            }
+            ScopeOp::Remove(s) => self.scopes.contains_key(s),
+        };
         let entries = raw_entries(&w.env);
         let admin = admin_view(w, a);
         let scopes: BTreeMap<u32, String> = SCOPE_IDS
@@ -1090,6 +1103,7 @@ impl ScopeModel {
             ScopeOp::Apply(s, d) => w.apply_scope(a, *s, d).map(|_| ()),
             ScopeOp::Remove(s) => w.remove_scope(a, *s),
         };
+        assert_eq!(out.is_ok(), expected, "{op:?} returned {out:?}");
         match (&out, op) {
             (Err(e), _) => assert!(
                 raw_entries(&w.env) == entries,

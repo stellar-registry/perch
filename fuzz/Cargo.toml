@@ -47,6 +47,13 @@ doc = false
 bench = false
 
 [[bin]]
+name = "apply_scope_delta"
+path = "fuzz_targets/apply_scope_delta.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "recovery_canonical_roundtrip"
 path = "fuzz_targets/recovery_canonical_roundtrip.rs"
 test = false

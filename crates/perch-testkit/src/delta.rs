@@ -22,6 +22,12 @@
 //! - [`DeltaWorld`] holds a delta account and an oracle account side by side
 //!   in one `Env`, with the shared infra, controller, verifier, and address
 //!   pools every generated document draws from.
+//! - [`ScopeOp::sequence`] interleaves admin `apply_doc` with `apply_scope`
+//!   and `remove_scope` over a few scope ids (spec §7.6), and
+//!   [`ScopeModel::step`] checks each step against the documents the model
+//!   says are applied: every scope grants exactly its own document's rules,
+//!   scope operations leave the admin document and the other scopes alone,
+//!   and a refused operation changes nothing.
 //! - [`storage_state`] reads an account's complete storage from the ledger
 //!   snapshot (its own entries, and every entry the interpreter, spending
 //!   limit, controller, and pool keep for it), renaming the ids that differ
@@ -230,7 +236,8 @@ pub struct Spelling {
 }
 
 /// A generated policy document. `rules[0]` is always the policy-free
-/// self-admin rule `admin` (the anti-brick check needs one).
+/// self-admin rule `admin` (the anti-brick check needs one), except in a
+/// scoped document ([`DocModel::generate_scoped`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocModel {
     pub signers: Vec<SignerModel>,
@@ -383,6 +390,18 @@ impl DocModel {
         (0..n)
             .map(|_| Ok((*u.choose(&ADVANCE)?, DocModel::generate(u)?)))
             .collect()
+    }
+
+    /// Draw a scoped document (`apply_scope`, spec §7.6): a generated
+    /// document without its self-admin rules and recovery member. One draw
+    /// in six keeps them, a document `apply_scope` must refuse.
+    pub fn generate_scoped(u: &mut Unstructured) -> arbitrary::Result<DocModel> {
+        let mut d = DocModel::generate(u)?;
+        if !u.ratio(1, 6)? {
+            d.rules.retain(|r| r.scope.is_some());
+            d.recovery = None;
+        }
+        Ok(d)
     }
 
     /// The rules this document grants `account` at the current ledger,
@@ -638,8 +657,6 @@ fn rule_line(
 /// for it (the interpreter's program, the spending limit's cap).
 pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
     let client = PerchAccountClient::new(&w.env, account);
-    let interpreter = PerchInterpreterClient::new(&w.env, &w.interpreter);
-    let seq = w.env.ledger().sequence();
     let count = client.get_context_rules_count();
     let mut out = BTreeSet::new();
     let (mut found, mut id) = (0, 0u32);
@@ -651,57 +668,83 @@ pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
             continue;
         };
         found += 1;
-        if rule.valid_until.is_some_and(|v| v < seq) {
-            continue;
-        }
-        let ctx = match &rule.context_type {
-            ContextRuleType::CallContract(a) => a.clone(),
-            other => panic!("unexpected context type {other:?}"),
-        };
-        let signers: BTreeSet<String> = rule
-            .signers
-            .iter()
-            .map(|s| match s {
-                Signer::Delegated(a) => strkey(&a),
-                Signer::External(v, key) => {
-                    let mut buf = std::vec![0u8; key.len() as usize];
-                    key.copy_into_slice(&mut buf);
-                    format!("{}:{}", strkey(&v), hex::encode(buf))
-                }
-            })
-            .collect();
-        let policies: BTreeSet<String> = rule
-            .policies
-            .iter()
-            .map(|p| {
-                if p == w.interpreter {
-                    match interpreter.get_program(account, &rule.id) {
-                        Some(i) => format!("interpreter:{:?}", i.program.ops),
-                        None => "interpreter:none".to_string(),
-                    }
-                } else if p == w.spending_limit {
-                    let data = w.env.as_contract(&w.spending_limit, || {
-                        get_spending_limit_data(&w.env, rule.id, account)
-                    });
-                    format!("cap:{}/{}", data.spending_limit, data.period_ledgers)
-                } else if p == w.controller {
-                    "recovery".to_string()
-                } else {
-                    strkey(&p)
-                }
-            })
-            .collect();
-        let mut name = std::vec![0u8; rule.name.len() as usize];
-        rule.name.copy_into_slice(&mut name);
-        out.insert(rule_line(
-            &String::from_utf8(name).unwrap(),
-            &ctx,
-            rule.valid_until,
-            &signers,
-            &policies,
-        ));
+        out.extend(granted(w, account, &rule));
     }
     out
+}
+
+/// [`live_rules`] restricted to the OZ rules `ids`: what one document's
+/// records grant, the admin document's (`installed_rules`) or a scope's.
+pub fn rules_by_id(
+    w: &DeltaWorld,
+    account: &Address,
+    ids: impl IntoIterator<Item = u32>,
+) -> BTreeSet<String> {
+    let client = PerchAccountClient::new(&w.env, account);
+    ids.into_iter()
+        .filter_map(|id| granted(w, account, &client.get_context_rule(&id)))
+        .collect()
+}
+
+/// `rule` rendered like [`DocModel::expected_rules`], or `None` once expired.
+fn granted(
+    w: &DeltaWorld,
+    account: &Address,
+    rule: &stellar_accounts::smart_account::ContextRule,
+) -> Option<String> {
+    if rule
+        .valid_until
+        .is_some_and(|v| v < w.env.ledger().sequence())
+    {
+        return None;
+    }
+    let interpreter = PerchInterpreterClient::new(&w.env, &w.interpreter);
+    let ctx = match &rule.context_type {
+        ContextRuleType::CallContract(a) => a.clone(),
+        other => panic!("unexpected context type {other:?}"),
+    };
+    let signers: BTreeSet<String> = rule
+        .signers
+        .iter()
+        .map(|s| match s {
+            Signer::Delegated(a) => strkey(&a),
+            Signer::External(v, key) => {
+                let mut buf = std::vec![0u8; key.len() as usize];
+                key.copy_into_slice(&mut buf);
+                format!("{}:{}", strkey(&v), hex::encode(buf))
+            }
+        })
+        .collect();
+    let policies: BTreeSet<String> = rule
+        .policies
+        .iter()
+        .map(|p| {
+            if p == w.interpreter {
+                match interpreter.get_program(account, &rule.id) {
+                    Some(i) => format!("interpreter:{:?}", i.program.ops),
+                    None => "interpreter:none".to_string(),
+                }
+            } else if p == w.spending_limit {
+                let data = w.env.as_contract(&w.spending_limit, || {
+                    get_spending_limit_data(&w.env, rule.id, account)
+                });
+                format!("cap:{}/{}", data.spending_limit, data.period_ledgers)
+            } else if p == w.controller {
+                "recovery".to_string()
+            } else {
+                strkey(&p)
+            }
+        })
+        .collect();
+    let mut name = std::vec![0u8; rule.name.len() as usize];
+    rule.name.copy_into_slice(&mut name);
+    Some(rule_line(
+        &String::from_utf8(name).unwrap(),
+        &ctx,
+        rule.valid_until,
+        &signers,
+        &policies,
+    ))
 }
 
 /// External key `n`: 32 bytes, distinct per `n`.
@@ -824,6 +867,30 @@ impl DeltaWorld {
         out
     }
 
+    /// `apply_scope(scope, doc)` on `account`, rendered like [`Self::apply`].
+    pub fn apply_scope(
+        &self,
+        account: &Address,
+        scope: u32,
+        doc: &DocModel,
+    ) -> Result<BytesN<32>, String> {
+        let bytes = doc.bytes(self);
+        self.env.cost_estimate().budget().reset_unlimited();
+        PerchAccountClient::new(&self.env, account)
+            .try_apply_scope(&scope, &bytes)
+            .map(|r| r.unwrap())
+            .map_err(|e| format!("{e:?}"))
+    }
+
+    /// `remove_scope(scope)` on `account`.
+    pub fn remove_scope(&self, account: &Address, scope: u32) -> Result<(), String> {
+        self.env.cost_estimate().budget().reset_unlimited();
+        PerchAccountClient::new(&self.env, account)
+            .try_remove_scope(&scope)
+            .map(|r| r.unwrap())
+            .map_err(|e| format!("{e:?}"))
+    }
+
     /// Apply `doc` to the oracle account with every changed rule forced down
     /// one path (in place where possible, or replaced whole).
     pub fn apply_forced(&self, doc: &DocModel, in_place: bool) -> Result<BytesN<32>, String> {
@@ -932,6 +999,176 @@ pub fn events(env: &Env) -> Vec<Event> {
             }
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Scoped documents
+// ---------------------------------------------------------------------------
+
+/// The scope ids a [`ScopeOp`] sequence draws from: two, so scopes are
+/// re-applied, removed, and created again over one another.
+pub const SCOPE_IDS: [u32; 2] = [0, 7];
+
+/// One step of a scoped-document sequence on [`DeltaWorld::delta`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ScopeOp {
+    /// `apply_doc` of an admin document.
+    Admin(DocModel),
+    /// `apply_scope(scope, doc)`.
+    Apply(u32, DocModel),
+    /// `remove_scope(scope)`.
+    Remove(u32),
+}
+
+impl ScopeOp {
+    /// `1..=max` steps drawn from `u`, each with the ledgers to advance
+    /// ([`DeltaWorld::advance`]) before it: half scope applications, a
+    /// quarter removals (of live or unknown scopes), and a quarter admin
+    /// documents, one in eight of them without an admin rule (refused).
+    pub fn sequence(u: &mut Unstructured, max: usize) -> arbitrary::Result<Vec<(u32, ScopeOp)>> {
+        let n = u.int_in_range(1..=max)?;
+        (0..n)
+            .map(|_| {
+                let advance = *u.choose(&ADVANCE)?;
+                let op = match u.int_in_range(0..=7u32)? {
+                    0 | 1 if u.ratio(1, 8)? => ScopeOp::Admin(DocModel::generate_scoped(u)?),
+                    0 | 1 => ScopeOp::Admin(DocModel::generate(u)?),
+                    6 | 7 => ScopeOp::Remove(*u.choose(&SCOPE_IDS)?),
+                    _ => ScopeOp::Apply(*u.choose(&SCOPE_IDS)?, DocModel::generate_scoped(u)?),
+                };
+                Ok((advance, op))
+            })
+            .collect()
+    }
+
+    /// The scope the step names, if any.
+    fn scope(&self) -> Option<u32> {
+        match self {
+            ScopeOp::Apply(s, _) | ScopeOp::Remove(s) => Some(*s),
+            ScopeOp::Admin(_) => None,
+        }
+    }
+}
+
+/// The documents a [`ScopeOp`] sequence has left applied to
+/// [`DeltaWorld::delta`]: the admin document (`None` while the
+/// constructor's admin rule stands) and each live scope's.
+#[derive(Clone, Debug, Default)]
+pub struct ScopeModel {
+    pub admin: Option<DocModel>,
+    pub scopes: BTreeMap<u32, DocModel>,
+}
+
+impl ScopeModel {
+    /// Run `op` on the delta account and check, accepted or refused:
+    ///
+    /// - (a) every live scope grants exactly the rules the model computes
+    ///   for its own document ([`DocModel::expected_rules`] against the OZ
+    ///   rules its record names), and the scope index lists exactly the
+    ///   model's scopes;
+    /// - (b) a scope operation leaves the admin document as it was: its
+    ///   records, the rules, signers, and policies they grant, the applied
+    ///   document, the revision, and the recovery wiring;
+    /// - (c) every operation leaves each scope it does not name as it was;
+    /// - (d) a refused operation changes no ledger entry of any contract;
+    ///
+    /// and that the account grants nothing outside its documents. Panics on
+    /// a violation; returns the operation's outcome.
+    pub fn step(&mut self, w: &DeltaWorld, op: &ScopeOp) -> Result<(), String> {
+        let a = &w.delta;
+        let named = op.scope();
+        let entries = raw_entries(&w.env);
+        let admin = admin_view(w, a);
+        let scopes: BTreeMap<u32, String> = SCOPE_IDS
+            .iter()
+            .map(|s| (*s, scope_view(w, a, *s)))
+            .collect();
+        let out = match op {
+            ScopeOp::Admin(d) => w.apply(a, d).map(|_| ()),
+            ScopeOp::Apply(s, d) => w.apply_scope(a, *s, d).map(|_| ()),
+            ScopeOp::Remove(s) => w.remove_scope(a, *s),
+        };
+        match (&out, op) {
+            (Err(e), _) => assert!(
+                raw_entries(&w.env) == entries,
+                "(d) the refused {op:?} changed the ledger ({e})"
+            ),
+            (Ok(()), ScopeOp::Admin(d)) => self.admin = Some(d.clone()),
+            (Ok(()), ScopeOp::Apply(s, d)) => {
+                self.scopes.insert(*s, d.clone());
+            }
+            (Ok(()), ScopeOp::Remove(s)) => {
+                self.scopes.remove(s);
+            }
+        }
+        if named.is_some() {
+            assert_eq!(
+                admin_view(w, a),
+                admin,
+                "(b) {op:?} changed the admin document"
+            );
+        }
+        for s in SCOPE_IDS {
+            if Some(s) != named {
+                assert_eq!(
+                    scope_view(w, a, s),
+                    scopes[&s],
+                    "(c) {op:?} changed scope {s}"
+                );
+            }
+        }
+        self.check(w);
+        out
+    }
+
+    /// (a), the admin document's grant, and that every live OZ rule belongs
+    /// to the admin document or a scope.
+    pub fn check(&self, w: &DeltaWorld) {
+        let a = &w.delta;
+        let client = PerchAccountClient::new(&w.env, a);
+        let admin = rules_by_id(w, a, client.installed_rules().iter().map(|r| r.id));
+        if let Some(d) = &self.admin {
+            assert_eq!(admin, d.expected_rules(w, a), "the admin document's grant");
+        }
+        let listed: BTreeSet<u32> = client.scopes(&0, &u32::MAX).iter().collect();
+        assert_eq!(
+            listed,
+            self.scopes.keys().copied().collect(),
+            "(a) the scope index"
+        );
+        let mut all = admin;
+        for (s, d) in &self.scopes {
+            let record = client.scope(s).expect("a live scope has a record");
+            let granted = rules_by_id(w, a, record.rules.iter().map(|r| r.id));
+            assert_eq!(granted, d.expected_rules(w, a), "(a) scope {s}'s grant");
+            all.extend(granted);
+        }
+        assert_eq!(
+            live_rules(w, a),
+            all,
+            "a live context rule outside every document"
+        );
+    }
+}
+
+/// The admin document as an account holds it: its configuration (records,
+/// `doc_hash`, revision, recovery wiring), applied bytes, and what its
+/// records grant.
+fn admin_view(w: &DeltaWorld, account: &Address) -> String {
+    let client = PerchAccountClient::new(&w.env, account);
+    let configuration = client.configuration();
+    let granted = rules_by_id(w, account, configuration.rules.iter().map(|r| r.id));
+    format!("{configuration:?} {:?} {granted:?}", client.applied_doc())
+}
+
+/// Scope `scope` as an account holds it: its record, bytes, and grant.
+fn scope_view(w: &DeltaWorld, account: &Address, scope: u32) -> String {
+    let client = PerchAccountClient::new(&w.env, account);
+    let record = client.scope(&scope);
+    let granted = record
+        .as_ref()
+        .map(|r| rules_by_id(w, account, r.rules.iter().map(|x| x.id)));
+    format!("{record:?} {:?} {granted:?}", client.scope_doc(&scope))
 }
 
 // ---------------------------------------------------------------------------

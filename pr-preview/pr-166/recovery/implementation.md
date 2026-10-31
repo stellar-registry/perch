@@ -247,9 +247,11 @@ mid-sequence is outside the oracle's coverage.
 | Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_edit_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
 | On the release wasm: each signer transition leaves exactly the target signers (a joining key acts, a leaving key cannot); a rejected transition (a duplicate key, or the budget running out at 25, 50, 75, and 95% of a full rotation) leaves every ledger entry unchanged | `release_stack.rs`: `signer_transitions` (paths and costs in [`budgets.md`](budgets.md#signer-transitions)), `a_rejected_signer_transition_changes_nothing` |
 | Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |
+| Scoped documents interleaved with admin documents (spec §7.6): each scope grants exactly its own document's rules, scope operations leave the admin document and other scopes untouched, refused operations change nothing | `apply_scope_delta.rs` (proptest and a named sequence); `fuzz/fuzz_targets/apply_scope_delta.rs`, in the assurance fuzz pass |
 
 `PERCH_DELTA_CASES` sets the proptest case count (defaults: 48 for the
-oracle and accounting properties, 32 for the algebra properties).
+oracle and accounting properties, 32 for the algebra properties and the
+scoped-document property).
 
 ## Not covered here
 

@@ -556,6 +556,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
 dependencies = [
  "const-oid",
+ "pem-rfc7468",
  "zeroize",
 ]
 
@@ -639,6 +640,7 @@ dependencies = [
  "elliptic-curve",
  "rfc6979",
  "signature",
+ "spki",
 ]
 
 [[package]]
@@ -696,6 +698,8 @@ dependencies = [
  "ff",
  "generic-array",
  "group",
+ "pem-rfc7468",
+ "pkcs8",
  "rand_core",
  "sec1",
  "subtle",
@@ -1213,8 +1217,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "pem-rfc7468"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88b39c9bfcfc231068454382784bb460aae594343fb030d46e9f50a645418412"
+dependencies = [
+ "base64ct",
+]
+
+[[package]]
 name = "perch-account"
-version = "0.3.0"
+version = "0.5.1"
 dependencies = [
  "perch-smart-account",
  "soroban-sdk",
@@ -1232,7 +1245,7 @@ dependencies = [
 
 [[package]]
 name = "perch-doc-compiler"
-version = "0.3.0"
+version = "0.3.5"
 dependencies = [
  "hex",
  "perch-compile",
@@ -1246,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "perch-ed25519-verifier"
-version = "0.1.1"
+version = "10.0.2"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",
@@ -1266,7 +1279,7 @@ dependencies = [
 
 [[package]]
 name = "perch-interpreter"
-version = "0.1.2"
+version = "0.1.6"
 dependencies = [
  "perch-program",
  "soroban-sdk",
@@ -1292,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "perch-recovery"
-version = "0.1.0"
+version = "0.1.5"
 dependencies = [
  "perch-doc-compiler",
  "perch-recovery-interface",
@@ -1324,6 +1337,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "sha2",
+ "stellar-strkey 0.0.16",
  "syn 2.0.119",
 ]
 
@@ -1341,7 +1355,7 @@ dependencies = [
 
 [[package]]
 name = "perch-spending-limit"
-version = "0.1.1"
+version = "0.1.4"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",
@@ -1352,7 +1366,9 @@ name = "perch-testkit"
 version = "0.1.1"
 dependencies = [
  "arbitrary",
+ "base64",
  "hex",
+ "p256",
  "perch-account",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
@@ -1361,6 +1377,7 @@ dependencies = [
  "perch-recovery",
  "perch-smart-account",
  "perch-spending-limit",
+ "sha2",
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -1579,6 +1596,7 @@ dependencies = [
  "base16ct",
  "der",
  "generic-array",
+ "pkcs8",
  "subtle",
  "zeroize",
 ]
@@ -2015,7 +2033,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "stellar-accounts"
 version = "0.7.1"
-source = "git+https://github.com/theahaco/stellar-contracts-OZ.git?rev=82002206b1da48167091f33fe2ecfc97ce915857#82002206b1da48167091f33fe2ecfc97ce915857"
+source = "git+https://github.com/theahaco/stellar-contracts-OZ.git?rev=33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9#33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9"
 dependencies = [
  "serde",
  "serde-json-core",

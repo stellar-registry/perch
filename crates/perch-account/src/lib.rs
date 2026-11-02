@@ -24,7 +24,7 @@ use stellar_accounts::smart_account::{ContextRule, Signer};
 #[allow(unused_imports)]
 pub use perch_smart_account::{
     AccountCapabilities, AccountConfiguration, FreezeGate, InfraPins, InstalledRule,
-    PerchAccountError, PerchAuthError, UpgradeRequest,
+    PerchAccountError, PerchAuthError, ScopeRecord, UpgradeRequest,
 };
 
 #[contract]

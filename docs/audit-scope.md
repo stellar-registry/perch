@@ -191,14 +191,19 @@ suffix and key canonicalization matter — is exercised by Nido's suite
 | Path | What |
 | --- | --- |
 | `crates/perch-smart-account/src/rules.rs` | The delta reconcile: rules matched by slot, the cheaper of an in-place edit and a replacement per rule (`Cost`, `Meter`), every OZ mutation through its `_no_events` variant, the `DeltaSummary` |
-| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the OZ rule views, `install_admin` |
+| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the OZ rule views, `install_admin`; the scoped-document paths `apply_scope_doc`, `check_scoped`, `drop_scope`, and the scope index (spec §7.6) |
 | `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 11, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (OZ's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
 | `crates/perch-spending-limit/**` | The deployable wrapper of OZ `spending_limit`, installing and uninstalling without events |
 | `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it (all but the ZK pool and adapter) |
 
 **Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps}.rs`;
 the full-replace oracle `crates/perch-testkit/src/delta.rs` and the fuzz
-target `fuzz/fuzz_targets/apply_doc_delta.rs`. The full replace shares
+target `fuzz/fuzz_targets/apply_doc_delta.rs`. The scoped-document paths:
+`crates/integration-tests/tests/{scoped_docs,apply_scope_delta}.rs` and the
+fuzz target `fuzz/fuzz_targets/apply_scope_delta.rs`, which interleave admin
+documents with `apply_scope`/`remove_scope` across several scopes and check
+each scope, the admin document and the other scopes against the model after
+every step; `release_stack.rs` (`docsplit_*`). The full replace shares
 compile and the desired rule set (expiry drop, recovery rule) with the
 delta, so it checks the reconcile only; each accepted step is also checked
 against the grant the document model computes on its own

@@ -210,7 +210,9 @@ owner key cannot make a recovery too expensive to complete (spec §7.5). A
 document over a cap is refused whole and changes nothing. The OZ
 materialization is the audited backend (the Perch OZ materialization unit).
 The residual limit is product capacity: a document that needs more signers,
-rules, or bytes cannot be applied.
+rules, or bytes cannot be applied. The caps apply per document; app grants
+can be spread over any number of scoped documents (spec §7.6), each under
+the same caps.
 
 **Exit criterion and follow-up review:** a backend change is a new account
 build that existing accounts adopt only by upgrade. Review it as a

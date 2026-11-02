@@ -64,9 +64,10 @@ crates/
   perch-compile/      lowering: PolicyDoc → OZ rules, each policy-free or with a program
   perch-doc-compiler/ deployable, stateless: doc JSON → compiled rules, doc_hash,
                       config_hash, document caps, and recovery target derivation
-  perch-smart-account/  the account trait: apply_doc (the one write path for rules and
-                      signers), the delta reconcile onto OZ, execute, upgrades, the
-                      recovery hooks, and the consumer views
+  perch-smart-account/  the account trait: apply_doc and apply_scope (the admin and
+                      scoped documents, the only write paths for rules and signers),
+                      the delta reconcile onto OZ, execute, upgrades, the recovery
+                      hooks, and the consumer views
   perch-account/      the deployable account contract over perch-smart-account
   perch-account-factory/  deployable factory: deploys the build-time-pinned account
                       wasm at an address bound to its admin signers

@@ -27,10 +27,15 @@ fn one_rule_hash_definition() {
 }
 
 /// `testdata/rule-hashes.json` is cut out of the canonical fixtures by
-/// `scripts/rule-hash-vectors.py`, independently of any Rust code.
+/// `scripts/rule-hash-vectors.py`, independently of any Rust code. Every
+/// program the compiler installs carries its source rule's hash, including
+/// both programs of a cross-token pair.
 #[test]
 fn every_installed_programs_provenance_matches_the_vectors() {
     let e = Env::default();
+    let cfg = perch_compile::CompileConfig {
+        interpreter_wasm_hash: BytesN::from_array(&e, &[7; 32]),
+    };
     let v: serde_json::Value = serde_json::from_str(&testdata("rule-hashes.json")).unwrap();
     for f in v["fixtures"].as_array().unwrap() {
         let name = f["fixture"]
@@ -39,11 +44,31 @@ fn every_installed_programs_provenance_matches_the_vectors() {
             .trim_start_matches("testdata/")
             .replace(".canonical.json", ".json");
         let doc = perch_ir::from_json(&testdata(&name)).unwrap();
-        for (rule, want) in doc.rules.iter().zip(f["rules"].as_array().unwrap()) {
+        let vectors = f["rules"].as_array().unwrap();
+        for (rule, want) in doc.rules.iter().zip(vectors) {
             let want = hex32(&e, want["rule_hash"].as_str().unwrap());
             let canonical = Bytes::from_slice(&e, perch_ir::rule_canonical_json(rule).as_bytes());
             assert_eq!(fragment::rule_hash(&e, &canonical), want, "{name}");
             assert_eq!(perch_compile::rule_hash_onchain(&e, rule), want, "{name}");
+        }
+        let plan = perch_compile::compile(&e, &doc, &cfg).unwrap();
+        assert_eq!(plan.rules.len(), doc.compiled_rule_count(), "{name}");
+        for lowered in &plan.rules {
+            let Some(install) = &lowered.install else {
+                continue;
+            };
+            let want = vectors
+                .iter()
+                .find(|r| r["name"].as_str() == Some(lowered.name.as_str()))
+                .unwrap()["rule_hash"]
+                .as_str()
+                .unwrap();
+            assert_eq!(
+                install.doc_hash,
+                hex32(&e, want),
+                "{name}: `{}`",
+                lowered.name
+            );
         }
     }
 }

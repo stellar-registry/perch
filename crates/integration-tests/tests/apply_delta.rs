@@ -432,6 +432,8 @@ fn rule(name: &'static str, scope: Option<usize>, signers: &[usize]) -> RuleMode
         functions: None,
         not_after: None,
         cap: None,
+        cap_token: None,
+        recipient: None,
     }
 }
 
@@ -657,6 +659,49 @@ fn new_cap_parameters_edit_only_that_rule() {
             "rule_edited",
         ])
     );
+}
+
+/// A cross-token cap installs two rules sharing a name, so the reconcile
+/// matches them by name and scope. Walk one rule through every transition a
+/// pair has: into a pair, recipient edits, a cap edit, a token move (the
+/// transfer rule's scope changes), a rename, back to a same-token cap, and
+/// uncapped. Each step is checked against the full replace, the cost model,
+/// and the model's own grant.
+#[test]
+fn cross_token_pairs_reconcile_slot_by_slot() {
+    let r = |name: &'static str,
+             cap: Option<(u32, u32)>,
+             cap_token: Option<usize>,
+             recipient: Option<RecipientModel>| {
+        let mut r = rule(name, Some(0), &[0, 1]);
+        r.functions = Some(std::vec!["play"]);
+        r.cap = cap;
+        r.cap_token = cap_token;
+        r.recipient = recipient;
+        r
+    };
+    let cap = Some((1_000, 100));
+    let steps = [
+        r("r1", cap, None, None),
+        r("r1", cap, Some(1), None),
+        r("r1", cap, Some(1), Some(RecipientModel::Key(3))),
+        r("r1", cap, Some(1), Some(RecipientModel::Scope(2))),
+        r("r1", Some((2_000, 100)), Some(1), Some(RecipientModel::Any)),
+        r("r1", Some((2_000, 100)), Some(2), Some(RecipientModel::Any)),
+        r("r2", Some((2_000, 100)), Some(2), Some(RecipientModel::Any)),
+        r("r2", Some((2_000, 100)), Some(0), None),
+        r("r2", None, None, None),
+    ]
+    .map(|r| doc(delegated(2), std::vec![admin(&[0]), r]));
+    let w = DeltaWorld::new();
+    apply_both(&w, &steps[0]);
+    for b in &steps[1..] {
+        let before = w.installed(&w.delta);
+        let (w, ..) = transition_after(&w, b, before);
+        for account in [&w.delta, &w.oracle] {
+            assert_eq!(live_rules(&w, account), b.expected_rules(&w, account));
+        }
+    }
 }
 
 #[test]

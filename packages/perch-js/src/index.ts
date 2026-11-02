@@ -36,6 +36,7 @@ export {
   type ArgConstraint,
   type ArgPred,
   type CapConstraint,
+  type CapRecipient,
 } from './schema.js';
 export {
   requestToPolicyDoc,
@@ -112,7 +113,7 @@ export {
   type RuleScope,
   type RuleSelection,
 } from './selection.js';
-export { checkLimits, decodeDocLimits, type FlatDocLimits } from './limits.js';
+export { compiledRuleCount, checkLimits, decodeDocLimits, type FlatDocLimits } from './limits.js';
 export {
   PerchError,
   StaleRevision,

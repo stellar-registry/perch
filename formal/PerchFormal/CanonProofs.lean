@@ -564,15 +564,43 @@ theorem pSignerList_rt (l : List CSigner) (tail : List Char) :
   pList_rt pSigner emitSigner pSigner_rt
     (fun s => by cases s <;> exact ⟨'{', _, rfl, by decide⟩) l tail
 
+theorem miss_cap_recipient_token (t e : P α) (rest : List Char) :
+    pOpt (lit ",\"recipient\":") t e (lit ",\"token\":" ++ rest)
+      = e (lit ",\"token\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after [',', '"'] (by decide) _ _)
+
+theorem miss_cap_recipient_close (t e : P α) (rest : List Char) :
+    pOpt (lit ",\"recipient\":") t e (lit "}" ++ rest) = e (lit "}" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after [] (by decide) _ _)
+
+theorem miss_recipient_any (t e : P α) (rest : List Char) :
+    pOpt (lit "{\"address\":") t e (lit "{\"type\":\"any\"}" ++ rest)
+      = e (lit "{\"type\":\"any\"}" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['{', '"'] (by decide) _ _)
+
+theorem hnd_recipient (rest : List Char) :
+    headNotDigit (lit ",\"recipient\":" ++ rest) := rfl
+
+set_option linter.unusedSimpArgs false in
+theorem pRecipient_rt (r : CRecipient) (tail : List Char) :
+    pRecipient (emitRecipient r ++ tail) = some (r, tail) := by
+  cases r
+  all_goals
+    unfold pRecipient emitRecipient
+    simp only [List.append_assoc, List.nil_append, pOpt_hit, miss_recipient_any,
+      pStr_rt, pExact_rt, obind_some]
+    try rfl
+
 set_option linter.unusedSimpArgs false in
 theorem pCap_rt (c : CCap) (tail : List Char) :
     pCap (emitCap c ++ tail) = some (c, tail) := by
-  obtain ⟨token, limit, pl⟩ := c
-  cases token
+  obtain ⟨token, recipient, limit, pl⟩ := c
+  cases token <;> cases recipient
   all_goals
-    unfold pCap emitCap
+    unfold pCap emitCap pCapTail
     simp only [List.append_assoc, List.nil_append, pOpt_hit, miss_cap_token,
-      pStr_rt, pNat_rt, hnd_token, hnd_close, pExact_rt, obind_some]
+      miss_cap_recipient_token, miss_cap_recipient_close, pRecipient_rt,
+      pStr_rt, pNat_rt, hnd_token, hnd_close, hnd_recipient, pExact_rt, obind_some]
     try rfl
 
 set_option linter.unusedSimpArgs false in

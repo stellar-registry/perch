@@ -54,8 +54,10 @@
 //! within the per-call bound, and drains any intended total — the exact drain
 //! passkey-kit documents for a per-transfer limit without a cumulative one. A
 //! cumulative cap requires a *stateful* sibling policy — e.g. OpenZeppelin's
-//! `spending_limit` — attached to the same OZ context rule alongside perch's
-//! interpreter, where OZ enforces every attached policy (AND). Perch stays the
+//! `spending_limit` — attached to an OZ context rule alongside perch's
+//! interpreter (the rule's own, or for a cap on another token a generated
+//! `transfer` rule; see [`CapConstraint`]), where OZ enforces every attached
+//! policy (AND). Perch stays the
 //! stateless "what may be called" layer; cumulative accounting lives in a
 //! purpose-built stateful contract, never here.
 //!
@@ -76,9 +78,10 @@ pub use canon::{
 pub use canon::{doc_hash, doc_hash_hex, rule_hash};
 pub use doc::{
     AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, BaselineCommitment, CapConstraint,
-    ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig, RecoveryMode,
-    RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
-    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred, ZkFactor,
+    CapRecipient, ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig,
+    RecoveryMode, RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals,
+    SignerDecl, SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred,
+    ZkFactor,
 };
 pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{

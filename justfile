@@ -89,7 +89,7 @@ bench: bench-build
 formal:
     cd formal && lake build && lake env lean CheckAxioms.lean
 
-# Keep the fixture list below in sync with .github/workflows/assurance.yml.
+# Keep the fixture globs below in sync with .github/workflows/assurance.yml.
 # Differential conformance: run the frozen eval vectors through the real Rust
 # evaluator AND the proved Lean model, and round-trip the Rust-emitted
 # canonical fixtures (whole documents, then recovery members after
@@ -98,15 +98,8 @@ formal:
 drt: formal
     cargo test -p perch-conformance
     cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
-      ../testdata/ci-publish.canonical.json \
-      ../testdata/ci-publish-delegated.canonical.json \
-      ../testdata/ci-publish-threshold.canonical.json \
-      ../testdata/ci-publish-recovery.canonical.json \
-      ../testdata/ci-publish-recovery-combined.canonical.json \
-      --recovery \
-      ../testdata/recovery/config-guardian-only.canonical.json \
-      ../testdata/recovery/config-zk-only.canonical.json \
-      ../testdata/recovery/config-combined.canonical.json
+      ../testdata/*.canonical.json \
+      --recovery ../testdata/recovery/*.canonical.json
 
 # Per-policy SMT prover (needs z3, e.g. `brew install z3`): dead rules,
 # intent conformance, semantic attenuation. Example:

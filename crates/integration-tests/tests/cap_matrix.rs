@@ -62,6 +62,7 @@ fn cap_doc(pubkey_hex: &str) -> perch_ir::PolicyDoc {
             args: None,
             not_after_ledger: None,
             cap: Some(CapConstraint {
+                recipient: None,
                 token: None, // denominate in the scope contract (TOKEN)
                 limit: LIMIT.to_string(),
                 period_ledgers: PERIOD_LEDGERS,

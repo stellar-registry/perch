@@ -69,21 +69,15 @@ jobs:
         working-directory: formal
         run: lake env lean CheckAxioms.lean
       # Whole documents first (canonical_json), then recovery members on their
-      # own (recovery_canonical_json, the config_hash text). Keep in sync with
+      # own (recovery_canonical_json, the config_hash text). Globs, not a list,
+      # so a new canonical fixture cannot skip the model. Keep in sync with
       # the justfile's drt recipe.
       - name: Replay conformance vectors + canonical fixtures through the model
         working-directory: formal
         run: |
           lake exe drt ../testdata/eval/eval-vectors.json \
-            ../testdata/ci-publish.canonical.json \
-            ../testdata/ci-publish-delegated.canonical.json \
-            ../testdata/ci-publish-threshold.canonical.json \
-            ../testdata/ci-publish-recovery.canonical.json \
-            ../testdata/ci-publish-recovery-combined.canonical.json \
-            --recovery \
-            ../testdata/recovery/config-guardian-only.canonical.json \
-            ../testdata/recovery/config-zk-only.canonical.json \
-            ../testdata/recovery/config-combined.canonical.json
+            ../testdata/*.canonical.json \
+            --recovery ../testdata/recovery/*.canonical.json
 
   fuzz:
     runs-on: ubuntu-latest

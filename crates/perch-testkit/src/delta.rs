@@ -14,7 +14,9 @@
 //! - [`DocModel`] is a generated policy document. [`DocModel::generate`]
 //!   draws one from bytes, so proptest (shrinking over bytes) and cargo-fuzz
 //!   share one generator. It reaches the document caps, draws signer lists
-//!   in any order, spells keys in either hex case and cap limits with
+//!   in any order, draws same-token and cross-token caps (the latter
+//!   installing two rules under one name, with every recipient form),
+//!   spells keys in either hex case and cap limits with
 //!   leading zeros or a sign, and [`DocModel::sequence`] advances the ledger
 //!   between documents past the rule expiries it draws.
 //! - [`DeltaWorld`] holds a delta account and an oracle account side by side
@@ -140,6 +142,8 @@ pub const RULE_NAMES: [&str; 15] = [
 ];
 /// Function names a constrained rule may allow.
 pub const FUNCTIONS: [&str; 3] = ["transfer", "approve", "mint"];
+/// Function names a cross-token cap's scope may list: none moves tokens.
+pub const SCOPE_FUNCTIONS: [&str; 2] = ["play", "settle"];
 /// Size of the key pool (delegated addresses and external keys).
 pub const KEY_POOL: usize = 20;
 /// Size of the scope pool (contracts rules are scoped to).
@@ -175,6 +179,32 @@ pub struct RuleModel {
     pub not_after: Option<u32>,
     /// `(limit, period_ledgers)`; contract scopes only.
     pub cap: Option<(u32, u32)>,
+    /// The cap's explicit `token`, scope-pool contract `n`: the rule's own
+    /// scope (a same-token cap, spelled out) or another contract (a
+    /// cross-token cap, installed as the scope rule plus a capped transfer
+    /// rule on the token). `None`: omitted, the scope.
+    pub cap_token: Option<usize>,
+    /// A cross-token cap's `recipient`. `None`: omitted, the scope contract.
+    pub recipient: Option<RecipientModel>,
+}
+
+/// A cross-token cap's transfer recipient.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RecipientModel {
+    /// `{"type":"any"}`.
+    Any,
+    /// `address-eq` key-pool address `n`.
+    Key(usize),
+    /// `address-eq` scope-pool contract `n`.
+    Scope(usize),
+}
+
+impl RuleModel {
+    /// The token of a cross-token cap: a cap token other than the scope.
+    pub fn cross_token(&self) -> Option<usize> {
+        self.cap_token
+            .filter(|t| self.cap.is_some() && Some(*t) != self.scope)
+    }
 }
 
 /// A `Loss`, guardian-only recovery member at the world's controller. Loss
@@ -247,8 +277,13 @@ impl DocModel {
             functions: None,
             not_after: None,
             cap: None,
+            cap_token: None,
+            recipient: None,
         }];
         let n_rules = u.int_in_range(0..=MAX_DOC_RULES as usize - 1)?;
+        // A cross-token cap installs two rules, and installed rules count
+        // against the cap: spend only the room the drawn rules leave.
+        let mut spare = MAX_DOC_RULES as usize - 1 - n_rules;
         let mut names: Vec<&'static str> = RULE_NAMES.to_vec();
         for _ in 0..n_rules {
             let name = names.remove(u.choose_index(names.len())?);
@@ -263,7 +298,7 @@ impl DocModel {
             } else {
                 None
             };
-            let functions = if u.ratio(1, 3)? {
+            let mut functions = if u.ratio(1, 3)? {
                 let n = u.int_in_range(1..=FUNCTIONS.len())?;
                 Some(FUNCTIONS[..n].to_vec())
             } else {
@@ -282,6 +317,30 @@ impl DocModel {
             } else {
                 None
             };
+            // A capped rule's token: omitted, its own scope spelled out, or
+            // (room permitting) another contract. A cross-token scope must
+            // list only functions that move no tokens.
+            let (mut cap_token, mut recipient) = (None, None);
+            if let (Some(_), Some(own)) = (cap, scope) {
+                match u.int_in_range(0..=3u32)? {
+                    0 => {}
+                    1 => cap_token = Some(own),
+                    _ if spare > 0 => {
+                        spare -= 1;
+                        let t = u.int_in_range(0..=SCOPE_POOL - 2)?;
+                        cap_token = Some(if t >= own { t + 1 } else { t });
+                        let n = u.int_in_range(1..=SCOPE_FUNCTIONS.len())?;
+                        functions = Some(SCOPE_FUNCTIONS[..n].to_vec());
+                        recipient = match u.int_in_range(0..=3u32)? {
+                            0 => None,
+                            1 => Some(RecipientModel::Any),
+                            2 => Some(RecipientModel::Key(u.int_in_range(0..=KEY_POOL - 1)?)),
+                            _ => Some(RecipientModel::Scope(u.int_in_range(0..=SCOPE_POOL - 1)?)),
+                        };
+                    }
+                    _ => {}
+                }
+            }
             rules.push(RuleModel {
                 name,
                 scope,
@@ -290,6 +349,8 @@ impl DocModel {
                 functions,
                 not_after,
                 cap,
+                cap_token,
+                recipient,
             });
         }
         let recovery = if u.ratio(1, 3)? {
@@ -329,8 +390,12 @@ impl DocModel {
     /// reached grants nothing; a rule's signers are a set; a threshold,
     /// function list, or cap attaches the interpreter with an m-of-n floor
     /// (n for `all`); a cap attaches the spending limit at the limit's
-    /// numeric value however it is spelled; recovery adds a zero-signer
-    /// self-scoped rule held by the controller.
+    /// numeric value however it is spelled; a cap on a token other than the
+    /// scope instead grants the rule uncapped plus, under the same name,
+    /// signers and expiry, a capped `transfer` rule on the token whose
+    /// argument 1 must be the recipient (the scope by default, unconstrained
+    /// for `any`); recovery adds a zero-signer self-scoped rule held by the
+    /// controller.
     pub fn expected_rules(&self, w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
         let seq = w.env.ledger().sequence();
         let mut out = BTreeSet::new();
@@ -352,22 +417,35 @@ impl DocModel {
                     }
                 })
                 .collect();
-            let mut policies = BTreeSet::new();
-            if r.threshold.is_some() || r.functions.is_some() || r.cap.is_some() {
-                let m = r.threshold.unwrap_or(r.signers.len() as u32);
+            let m = r.threshold.unwrap_or(r.signers.len() as u32);
+            let program = |functions: &[&str], recipient: Option<&Address>| {
                 let mut ops = soroban_sdk::Vec::new(&w.env);
                 ops.push_back(Op::MinSigners(m));
-                if let Some(f) = &r.functions {
-                    let mut syms = soroban_sdk::Vec::new(&w.env);
-                    for f in f {
-                        syms.push_back(soroban_sdk::Symbol::new(&w.env, f));
-                    }
-                    ops.push_back(Op::FnIn(syms));
+                let mut syms = soroban_sdk::Vec::new(&w.env);
+                for f in functions {
+                    syms.push_back(soroban_sdk::Symbol::new(&w.env, f));
                 }
-                ops.push_back(Op::All(1 + r.functions.is_some() as u32));
-                policies.insert(format!("interpreter:{ops:?}"));
+                ops.push_back(Op::FnIn(syms));
+                if let Some(a) = recipient {
+                    ops.push_back(Op::ArgAddrEq(1, a.clone()));
+                }
+                ops.push_back(Op::All(2 + recipient.is_some() as u32));
+                format!("interpreter:{ops:?}")
+            };
+            let cross = r.cross_token();
+            let mut policies = BTreeSet::new();
+            if r.threshold.is_some() || r.functions.is_some() || r.cap.is_some() {
+                policies.insert(match &r.functions {
+                    Some(f) => program(f, None),
+                    None => {
+                        let mut ops = soroban_sdk::Vec::new(&w.env);
+                        ops.push_back(Op::MinSigners(m));
+                        ops.push_back(Op::All(1));
+                        format!("interpreter:{ops:?}")
+                    }
+                });
             }
-            if let Some((limit, period)) = r.cap {
+            if let (Some((limit, period)), None) = (r.cap, cross) {
                 policies.insert(format!("cap:{limit}/{period}"));
             }
             out.insert(rule_line(
@@ -377,6 +455,24 @@ impl DocModel {
                 &signers,
                 &policies,
             ));
+            if let (Some(t), Some((limit, period))) = (cross, r.cap) {
+                let recipient = match &r.recipient {
+                    None => Some(ctx),
+                    Some(RecipientModel::Any) => None,
+                    Some(RecipientModel::Key(k)) => Some(&w.keys[*k]),
+                    Some(RecipientModel::Scope(n)) => Some(&w.scopes[*n]),
+                };
+                out.insert(rule_line(
+                    r.name,
+                    &w.scopes[t],
+                    r.not_after.map(|n| n - 1),
+                    &signers,
+                    &BTreeSet::from([
+                        program(&["transfer"], recipient),
+                        format!("cap:{limit}/{period}"),
+                    ]),
+                ));
+            }
         }
         if self.recovery.is_some() {
             out.insert(rule_line(
@@ -473,9 +569,25 @@ impl DocModel {
             let _ = write!(out, r#","not-after-ledger":{n}"#);
         }
         if let Some((limit, period)) = r.cap {
+            let token = match r.cap_token {
+                Some(n) => format!(r#""token":"{}","#, strkey(&w.scopes[n])),
+                None => String::new(),
+            };
+            let recipient = match &r.recipient {
+                None => String::new(),
+                Some(RecipientModel::Any) => r#""recipient":{"type":"any"},"#.to_string(),
+                Some(RecipientModel::Key(k)) => format!(
+                    r#""recipient":{{"type":"address-eq","address":"{}"}},"#,
+                    strkey(&w.keys[*k])
+                ),
+                Some(RecipientModel::Scope(n)) => format!(
+                    r#""recipient":{{"type":"address-eq","address":"{}"}},"#,
+                    strkey(&w.scopes[*n])
+                ),
+            };
             let _ = write!(
                 out,
-                r#","cap":{{"limit":"{}{limit}","period-ledgers":{period}}}"#,
+                r#","cap":{{{token}{recipient}"limit":"{}{limit}","period-ledgers":{period}}}"#,
                 self.spelling.limit_prefix
             );
         }

@@ -136,7 +136,7 @@
     },
     "capConstraint": {
       "additionalProperties": false,
-      "description": "A cumulative spend cap over a rolling window. Lowers to OpenZeppelin's stateful `spending_limit` policy (perch itself is stateless).",
+      "description": "A cumulative spend cap over a rolling window. Lowers to OpenZeppelin's stateful `spending_limit` policy (perch itself is stateless), which meters `transfer` on the cap's token.",
       "properties": {
         "limit": {
           "description": "Maximum cumulative amount as a decimal string (a string, not a number, because an i128 amount does not fit a JSON number safely). Must be a POSITIVE integer: the pattern rejects `0`, all-zero spellings, a sign-minus, and any value with more significant digits than an i128 can hold. A leading `+` and leading zeros are accepted (the parser accepts them; a single canonical spelling is CANON v2, `docs/schema.md`). Only the EXACT i128 upper bound remains a semantic check in perch-ir's validator.",
@@ -149,8 +149,43 @@
           "minimum": 1,
           "type": "integer"
         },
+        "recipient": {
+          "description": "Cross-token caps only. Omitted means the scope contract; `any` permits any recipient. Transfers can also be called directly, independently of the scope call.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "address": {
+                  "description": "The allowed transfer recipient (C- or G-address). A muxed recipient never matches.",
+                  "pattern": "^[CG][A-Z2-7]{55}$",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "address-eq"
+                }
+              },
+              "required": [
+                "type",
+                "address"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "any"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            }
+          ]
+        },
         "token": {
-          "description": "Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope when omitted; cap/scope agreement is a cross-reference check (outside this schema).",
+          "description": "Token contract (C-address) the cap is denominated in. Defaults to the rule's contract scope. A different token produces a separate capped transfer rule, and the rule must then list its functions, none of them token-moving (`docs/cross-token-caps.md`; a cross-reference check outside this schema).",
           "pattern": "^C[A-Z2-7]{55}$",
           "type": "string"
         }
@@ -979,7 +1014,7 @@
       "description": "Optional account-recovery enrollment (reviewable configuration, never a recovery attempt). Omitted from the canonical form when absent, so a document that never enrolls recovery hashes exactly as before this field existed."
     },
     "rules": {
-      "description": "The policy rules. Order is preserved and significant to the hash. At most MAX_DOC_RULES (the compiler's per-document rule cap).",
+      "description": "The policy rules. Order is preserved and significant to the hash. At most MAX_DOC_RULES source rules; cross-token caps count twice toward the compiler's installed-rule cap.",
       "items": {
         "$ref": "#/$defs/rule"
       },

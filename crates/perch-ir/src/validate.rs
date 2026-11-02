@@ -295,23 +295,27 @@ pub enum ValidationError {
     },
     /// A `cap` is on a `self-admin` scope (or otherwise non-`contract` scope),
     /// so there is no `CallContract` token for OZ `spending_limit` to meter.
-    /// A capped rule must be scoped to the token contract.
+    /// A capped rule must have a contract scope.
     CapWithoutToken {
         /// The offending rule name.
         rule: String,
     },
-    /// A `cap`'s explicit `token` differs from the rule's `contract` scope
-    /// address. OZ `spending_limit` meters the token pinned by the rule's
-    /// `CallContract` context type — which is the scope contract — so a
-    /// differing token would silently cap a different contract than named.
-    /// Omit `token` (it defaults to the scope) or set it equal to the scope.
-    CapTokenMismatch {
+    /// `recipient` only applies to a cap that expands to a transfer rule.
+    CapRecipientWithoutCrossToken {
         /// The offending rule name.
         rule: String,
-        /// The cap's declared token.
-        token: String,
-        /// The rule's contract scope address.
-        scope: String,
+    },
+    /// A recipient is not a checksum-valid C- or G-address.
+    InvalidCapRecipient {
+        /// The offending rule name.
+        rule: String,
+        /// The malformed address.
+        address: String,
+    },
+    /// A cross-token cap would leave token-moving scope calls uncapped.
+    UnsafeCrossTokenFunctions {
+        /// The offending rule name.
+        rule: String,
     },
     /// A rule is scoped to the document's own ZK adapter or membership pool.
     /// The account has no reason to authorize calls to either (the adapter
@@ -542,11 +546,16 @@ impl fmt::Display for ValidationError {
             }
             E::CapWithoutToken { rule } => write!(
                 f,
-                "rule `{rule}`: cap on a non-contract scope has no token to meter (scope the rule to the token contract)"
+                "rule `{rule}`: cap on a non-contract scope has no token to meter (use a contract scope)"
             ),
-            E::CapTokenMismatch { rule, token, scope } => write!(
-                f,
-                "rule `{rule}`: cap token `{token}` differs from the contract scope `{scope}` (omit it or set it equal)"
+            E::CapRecipientWithoutCrossToken { rule } => write!(
+                f, "rule `{rule}`: cap recipient requires a cross-token cap"
+            ),
+            E::InvalidCapRecipient { rule, address } => write!(
+                f, "rule `{rule}`: cap recipient `{address}` is not a C- or G-address"
+            ),
+            E::UnsafeCrossTokenFunctions { rule } => write!(
+                f, "rule `{rule}`: cross-token cap requires an explicit function list without token-moving functions"
             ),
             E::RuleScopedToRecoveryContract { rule, address } => write!(
                 f,
@@ -835,6 +844,19 @@ fn validate_principal_signers(
     }
 }
 
+/// SEP-41/SAC operations that cannot be left uncapped by cross-token lowering.
+pub const TOKEN_MOVING_FUNCTIONS: &[&str] = &[
+    "transfer",
+    "transfer_from",
+    "approve",
+    "burn",
+    "burn_from",
+    "mint",
+    "clawback",
+    "set_authorized",
+    "set_admin",
+];
+
 /// Validate one rule's scope, principals, functions, args, and expiry.
 fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<ValidationError>) {
     let name = || rule.name.clone();
@@ -982,31 +1004,35 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
         if cap.period_ledgers == 0 {
             errors.push(ValidationError::ZeroCapPeriod { rule: name() });
         }
-        // OZ `spending_limit` meters the token pinned by the rule's
-        // `CallContract` context type — the rule's scope contract. So a capped
-        // rule must be contract-scoped, and an explicit `token` must equal that
-        // scope; otherwise the cap would silently meter a different contract.
-        match &rule.scope {
-            Scope::Contract(scope) => match &cap.token {
-                Some(token) if !is_contract_address_shape(token) => {
-                    errors.push(ValidationError::InvalidCapToken {
-                        rule: name(),
-                        address: token.clone(),
-                    });
-                }
-                Some(token) if token != &scope.address => {
-                    errors.push(ValidationError::CapTokenMismatch {
-                        rule: name(),
-                        token: token.clone(),
-                        scope: scope.address.clone(),
-                    });
-                }
-                // `None` (denominate in the scope) or `token == scope`: ok.
-                _ => {}
-            },
-            Scope::SelfAdmin(_) => {
-                errors.push(ValidationError::CapWithoutToken { rule: name() });
+        if let Some(token) = &cap.token {
+            if !is_contract_address_shape(token) {
+                errors.push(ValidationError::InvalidCapToken {
+                    rule: name(),
+                    address: token.clone(),
+                });
             }
+        }
+        if !matches!(rule.scope, Scope::Contract(_)) {
+            errors.push(ValidationError::CapWithoutToken { rule: name() });
+        }
+        if let Some(crate::CapRecipient::AddressEq(p)) = &cap.recipient {
+            if !is_address_shape(&p.address) {
+                errors.push(ValidationError::InvalidCapRecipient {
+                    rule: name(),
+                    address: p.address.clone(),
+                });
+            }
+        }
+        if rule.cross_token_cap().is_some() {
+            if rule.functions.as_ref().is_none_or(|functions| {
+                functions
+                    .iter()
+                    .any(|f| TOKEN_MOVING_FUNCTIONS.contains(&f.as_str()))
+            }) {
+                errors.push(ValidationError::UnsafeCrossTokenFunctions { rule: name() });
+            }
+        } else if cap.recipient.is_some() {
+            errors.push(ValidationError::CapRecipientWithoutCrossToken { rule: name() });
         }
     }
 }
@@ -1029,6 +1055,16 @@ fn validate_rules_avoid_zk_contracts(
                     rule: rule.name.clone(),
                     address: scope.address.clone(),
                 });
+            }
+        }
+        if let Some((_, cap)) = rule.cross_token_cap() {
+            if let Some(token) = &cap.token {
+                if token == &zk.adapter || token == &zk.pool {
+                    errors.push(ValidationError::RuleScopedToRecoveryContract {
+                        rule: rule.name.clone(),
+                        address: token.clone(),
+                    });
+                }
             }
         }
     }

@@ -59,7 +59,8 @@ checks what every declaration actually depends on.
   `doc_hash` identifies exactly one document up to a SHA-256 collision. The
   domain is every shape `perch_ir::canonical_json` emits: `external` and
   `delegated` signers, `all`/`threshold`/`self-authenticating` principals,
-  every arg predicate, caps, expiries, and the optional `recovery` member
+  every arg predicate, caps (with or without a cross-token `recipient`),
+  expiries, and the optional `recovery` member
   (both profiles; `guardian-only`, `zk-only`, and `combined` modes with every
   guardian and ZK field; controller; optional baseline; replaceable ids; the
   three ledger counts). The proofs hold at any size; the doc compiler's
@@ -94,15 +95,17 @@ canonical fixture:
 just drt          # Rust side + Lean side over the same vectors and fixtures
 # or directly:
 cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
-  ../testdata/ci-publish*.canonical.json \
-  --recovery ../testdata/recovery/config-*.canonical.json
+  ../testdata/*.canonical.json \
+  --recovery ../testdata/recovery/*.canonical.json
 ```
 
 Green means the hand-authored spec, the Rust evaluator, and this proved model
 agree on every case, and that the model's canonicalizer parses and re-emits
-the Rust canonicalizer's bytes for every fixture: five documents (external
-and delegated signers, `all` and `threshold` principals, a cap,
-`guardian-only` and `combined` recovery) and one recovery member per mode.
+the Rust canonicalizer's bytes for every fixture: six documents (external
+and delegated signers, `all` and `threshold` principals, a cap, a
+cross-token cap with a `recipient`, `guardian-only` and `combined` recovery)
+and one recovery member per mode. CI and `just drt` glob the fixtures, so a
+new one cannot skip the model.
 `crates/perch-ir/tests/recovery.rs` regenerates the recovery-member fixtures
 from Rust and fails when they are stale.
 

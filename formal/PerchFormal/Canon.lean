@@ -71,8 +71,15 @@ inductive CSigner where
   | delegated (id address : Str)
 deriving DecidableEq, Repr
 
+/-- `CapRecipient`: a cross-token cap's transfer recipient. -/
+inductive CRecipient where
+  | any
+  | addressEq (address : Str)
+deriving DecidableEq, Repr
+
 structure CCap where
   token : Option Str
+  recipient : Option CRecipient
   limit : Str
   periodLedgers : Nat
 deriving DecidableEq, Repr
@@ -211,9 +218,16 @@ def emitSigner : CSigner → List Char
   | .delegated id address =>
     lit "{\"address\":" ++ emitStr address ++ lit ",\"id\":" ++ emitStr id ++ lit "}"
 
+def emitRecipient : CRecipient → List Char
+  | .any => lit "{\"type\":\"any\"}"
+  | .addressEq a => lit "{\"address\":" ++ emitStr a ++ lit ",\"type\":\"address-eq\"}"
+
 def emitCap (c : CCap) : List Char :=
   lit "{\"limit\":" ++ emitStr c.limit
     ++ lit ",\"period-ledgers\":" ++ emitNat c.periodLedgers
+    ++ (match c.recipient with
+        | some r => lit ",\"recipient\":" ++ emitRecipient r
+        | none => [])
     ++ (match c.token with
         | some t => lit ",\"token\":" ++ emitStr t
         | none => [])
@@ -515,20 +529,37 @@ def pSigner : P CSigner :=
       let ((), r7) ← pExact (lit "}") r6
       some (.external id verifier key, r7))
 
+def pRecipient : P CRecipient :=
+  pOpt (lit "{\"address\":")
+    (fun i => do
+      let (a, r1) ← pStr i
+      let ((), r2) ← pExact (lit ",\"type\":\"address-eq\"}") r1
+      some (.addressEq a, r2))
+    (fun i => do
+      let ((), r1) ← pExact (lit "{\"type\":\"any\"}") i
+      some (.any, r1))
+
+def pCapTail (limit : Str) (pl : Nat) (rc : Option CRecipient) : P CCap :=
+  pOpt (lit ",\"token\":")
+    (fun i => do
+      let (t, r5) ← pStr i
+      let ((), r6) ← pExact (lit "}") r5
+      some (⟨some t, rc, limit, pl⟩, r6))
+    (fun i => do
+      let ((), r5) ← pExact (lit "}") i
+      some (⟨none, rc, limit, pl⟩, r5))
+
 def pCap : P CCap
   | input => do
     let ((), r1) ← pExact (lit "{\"limit\":") input
     let (limit, r2) ← pStr r1
     let ((), r3) ← pExact (lit ",\"period-ledgers\":") r2
     let (pl, r4) ← pNat r3
-    pOpt (lit ",\"token\":")
+    pOpt (lit ",\"recipient\":")
       (fun i => do
-        let (t, r5) ← pStr i
-        let ((), r6) ← pExact (lit "}") r5
-        some (⟨some t, limit, pl⟩, r6))
-      (fun i => do
-        let ((), r5) ← pExact (lit "}") i
-        some (⟨none, limit, pl⟩, r5))
+        let (rc, r5) ← pRecipient i
+        pCapTail limit pl (some rc) r5)
+      (pCapTail limit pl none)
       r4
 
 def pRule : P CRule

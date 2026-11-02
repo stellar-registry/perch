@@ -828,12 +828,13 @@ fn display_names_the_offender() {
 }
 
 // --- cap (#19 PR6): InvalidCapLimit / ZeroCapPeriod / InvalidCapToken /
-// --- CapWithoutToken / CapTokenMismatch -------------------------------------
+// --- CapWithoutToken / UnsafeCrossTokenFunctions -------------------------------------
 
 fn capped_doc(token: Option<&str>, limit: &str, period: u32) -> perch_ir::PolicyDoc {
     let mut doc = base_doc();
     let mut r = rule("spend", Scope::contract(REGISTRY), &["admin"]);
     r.cap = Some(CapConstraint {
+        recipient: None,
         token: token.map(str::to_string),
         limit: limit.to_string(),
         period_ledgers: period,
@@ -850,15 +851,12 @@ fn accepts_valid_cap_with_and_without_token() {
 }
 
 #[test]
-fn rejects_cap_token_differing_from_scope() {
-    // OZ spending_limit meters the scope contract's token, so an explicit token
-    // that isn't the scope would silently cap a different contract.
+fn rejects_cross_token_cap_without_functions() {
+    // The uncapped scope rule must explicitly restrict its functions.
     assert_rejects(
         &capped_doc(Some(POLICY_CONTRACT), "1000", 100),
-        &ValidationError::CapTokenMismatch {
+        &ValidationError::UnsafeCrossTokenFunctions {
             rule: "spend".into(),
-            token: POLICY_CONTRACT.into(),
-            scope: REGISTRY.into(),
         },
     );
 }
@@ -909,6 +907,7 @@ fn rejects_invalid_cap_token() {
 fn rejects_cap_without_token_on_self_admin() {
     let mut doc = base_doc();
     doc.rules[0].cap = Some(CapConstraint {
+        recipient: None,
         token: None,
         limit: "1000".into(),
         period_ledgers: 100,

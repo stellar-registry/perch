@@ -66,6 +66,11 @@ second rule. Treat IDs as revision-bound and resolve them from a fresh snapshot.
 
 ## Updates and rollout
 
+For attenuation, `perch_compile::attenuate` refuses any change to a capped
+rule's cap or recipient, a tighter one included, and a renamed or uncapped
+rule taking over its authority; `perch-analyze narrows` compares recipients
+semantically.
+
 Reapplying identical text preserves both slots and spending history. Any cap
 change, `recipient` included, changes the source rule's hash, so **both
 interpreter attachments are refreshed**, even though only the transfer rule

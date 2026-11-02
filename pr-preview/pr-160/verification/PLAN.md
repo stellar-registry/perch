@@ -142,7 +142,11 @@ models are deferred ([`DEFERRED.md`](../DEFERRED.md#additional-formal-models)).
 - T9, monotonicity of attenuation: tightening a bound (a subset `FnIn` or
   `StrIn`, an earlier `notAfter`) never admits a previously denied
   invocation. `attenuation::is_narrowing` and `perch-analyze narrows` check
-  it per pair of documents; the model does not prove it.
+  it per pair of documents; the model does not prove it. `is_narrowing`
+  compares `(scope, function)` reach, and for a capped rule (a cross-token
+  cap's transfer rule included) requires the same rule with an identical
+  cap and recipient, refusing even a tighter one; `narrows` compares the
+  argument predicates semantically.
 - A deductive tie between the model and the Rust code (Verus `spec fn`
   proofs or Aeneas extraction); the tie today is differential.
 - Certora Sunbeam rules over the compiled interpreter Wasm (needs a Certora

@@ -457,8 +457,9 @@ pub enum WideningFinding {
 /// Semantic attenuation check: every finding is a reason `child` is NOT a
 /// pure narrowing of `parent`. Empty = proved narrowing (per matched rule
 /// name), strictly stronger on program semantics than
-/// `perch_compile::attenuation::is_narrowing` (which compares only
-/// `(scope, function-set)` reachability and cannot see argument predicates).
+/// `perch_compile::attenuation::is_narrowing` (which compares
+/// `(scope, function-set)` reachability, and of the argument predicates only
+/// a capped rule's recipient, by exact equality with its cap).
 #[must_use]
 pub fn narrows(parent: &PolicyDoc, child: &PolicyDoc) -> Vec<WideningFinding> {
     let mut findings = Vec::new();

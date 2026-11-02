@@ -562,6 +562,125 @@ fn a_document_narrows_itself() {
     assert_eq!(link.parent_hash, link.child_hash);
 }
 
+fn cross_token_doc() -> perch_ir::PolicyDoc {
+    perch_ir::from_json(include_str!("../../../testdata/cross-token-cap.json")).unwrap()
+}
+
+fn not_a_narrowing(rule: &str) -> Result<Attenuation, AttenuationError> {
+    Err(AttenuationError::NotANarrowing {
+        rule: rule.to_string(),
+    })
+}
+
+/// A capped rule keeps its cap and recipient exactly: `is_narrowing` cannot
+/// order caps, so a tighter limit is refused along with a looser one, and a
+/// recipient change either way is refused (fail closed).
+#[test]
+fn a_cross_token_caps_recipient_and_parameters_must_be_kept_exactly() {
+    let env = Env::default();
+    let parent = cross_token_doc();
+    let edits: [fn(&mut perch_ir::CapConstraint); 7] = [
+        |c| c.recipient = None,
+        |c| c.recipient = Some(perch_ir::CapRecipient::Any),
+        |c| {
+            c.recipient = Some(perch_ir::CapRecipient::AddressEq(perch_ir::AddressEqPred {
+                address: REGISTRY.into(),
+            }))
+        },
+        |c| c.limit = "3".into(),
+        |c| c.limit = "1".into(),
+        |c| c.period_ledgers = 999,
+        |c| c.period_ledgers = 2000,
+    ];
+    for edit in edits {
+        let mut child = parent.clone();
+        edit(child.rules[1].cap.as_mut().unwrap());
+        assert_eq!(
+            attenuate(&env, &parent, &child, &cfg(&env)),
+            not_a_narrowing("game"),
+            "{:?}",
+            child.rules[1].cap
+        );
+    }
+    // A renamed copy would get a fresh window.
+    let mut child = parent.clone();
+    child.rules[1].name = "game2".into();
+    assert_eq!(
+        attenuate(&env, &parent, &child, &cfg(&env)),
+        not_a_narrowing("game2")
+    );
+}
+
+#[test]
+fn a_cross_token_cap_narrows_itself_and_dropping_its_transfer_narrows() {
+    let env = Env::default();
+    let parent = cross_token_doc();
+    assert!(attenuate(&env, &parent, &parent, &cfg(&env)).is_ok());
+    // Without the cap only the uncapped scope rule remains.
+    let mut child = parent.clone();
+    child.rules[1].cap = None;
+    assert!(attenuate(&env, &parent, &child, &cfg(&env)).is_ok());
+}
+
+#[test]
+fn an_uncapped_rule_cannot_take_over_a_capped_transfer() {
+    let env = Env::default();
+    let parent = cross_token_doc();
+    let token = parent.rules[1].cap.as_ref().unwrap().token.clone().unwrap();
+    let mut child = parent.clone();
+    child.rules[1] = perch_ir::Rule {
+        name: "pay".into(),
+        scope: perch_ir::Scope::contract(&token),
+        functions: Some(std::vec!["transfer".into()]),
+        args: None,
+        cap: None,
+        ..parent.rules[1].clone()
+    };
+    assert_eq!(
+        attenuate(&env, &parent, &child, &cfg(&env)),
+        not_a_narrowing("pay")
+    );
+}
+
+#[test]
+fn a_same_token_cap_must_be_kept_exactly() {
+    let env = Env::default();
+    let mut parent = perch_ir::from_json(&fixture()).expect("parse");
+    let cap = perch_ir::CapConstraint {
+        recipient: None,
+        token: None,
+        limit: "10".into(),
+        period_ledgers: 100,
+    };
+    // Adding a cap to an uncapped rule narrows it.
+    let mut capped = parent.clone();
+    capped.rules[1].cap = Some(cap.clone());
+    assert!(attenuate(&env, &parent, &capped, &cfg(&env)).is_ok());
+    parent = capped;
+    // Spelling out the scope as the token is the same cap.
+    let mut child = parent.clone();
+    child.rules[1].cap.as_mut().unwrap().token = Some(REGISTRY.into());
+    assert!(attenuate(&env, &parent, &child, &cfg(&env)).is_ok());
+    for child_cap in [
+        None,
+        Some(perch_ir::CapConstraint {
+            limit: "11".into(),
+            ..cap.clone()
+        }),
+        Some(perch_ir::CapConstraint {
+            period_ledgers: 99,
+            ..cap
+        }),
+    ] {
+        let mut child = parent.clone();
+        child.rules[1].cap = child_cap;
+        assert_eq!(
+            attenuate(&env, &parent, &child, &cfg(&env)),
+            not_a_narrowing("ci-publish")
+        );
+    }
+}
+
 #[test]
 fn delegated_signer_lowers_to_signer_spec_delegated() {
     let env = Env::default();

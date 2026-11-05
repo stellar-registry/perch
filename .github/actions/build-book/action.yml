@@ -1,0 +1,17 @@
+name: Build the Perch Book
+description: Install the pinned mdBook and render the book for documentation publishing.
+inputs:
+  destination:
+    description: Output directory relative to the book root
+    default: ../docs/book
+runs:
+  using: composite
+  steps:
+    - name: Install mdBook
+      shell: bash
+      run: cargo install mdbook --locked --version 0.4.52
+    - name: Render book
+      shell: bash
+      env:
+        BOOK_DESTINATION: ${{ inputs.destination }}
+      run: mdbook build book --dest-dir "$BOOK_DESTINATION"

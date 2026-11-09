@@ -2,13 +2,13 @@
 
 A composable policy layer for Soroban smart accounts.
 
-Perch is a policy library and toolchain for Soroban smart accounts whose signers, authorization payload and context-rule views are wire-compatible with [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts); the account and the recovery controller link none of its code. At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, the on-chain doc compiler compiles it, and the account lowers it to rule-core's evaluator (`rule-eval`), whose rules it stores beside its own rule records (each rule's id, signers and policies) and decides every authorization with. Perch accounts can also enroll opt-in recovery (guardians, a zero-knowledge proof, or both) in the same document.
+Perch is a policy library and toolchain for Soroban smart accounts whose signers, authorization payload and context-rule views are wire-compatible with [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts); the account and the recovery controller link none of its code. At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, the on-chain doc compiler compiles it, and the account lowers it to rule-core's evaluator (`rule-eval`). The account's [contract interface](./docs/account-interface.md) describes its rule views and authorization paths. Perch accounts can also enroll opt-in recovery (guardians, a zero-knowledge proof, or both) in the same document.
 
 The motivating use-case is a CI key stored in GitHub that can publish Wasm releases to the [Stellar Registry](https://github.com/stellar-registry) as a smart account, and do nothing else.
 
 ```ts
 const doc = policy()
-  .signer('admin', external(WEBAUTHN_VERIFIER, maintainerPasskey))
+  .signer('admin', named(WEBAUTHN_VERIFIER_NAME, WEBAUTHN_VERIFIER, maintainerPasskey))
   .signer('ci',    delegated(CI_ACCOUNT)) // CAP-0071: host-authenticated G-account
   .rule('root', r => r.selfAdmin().signedBy('admin'))
   .rule('ci-publish', r => r
@@ -22,9 +22,10 @@ const doc = policy()
 
 ## Status
 
-Pre-mainnet. The contracts are deployed on testnet (channel `beta`,
-[`deployments/testnet.json`](./deployments/testnet.json)). For the external
-security audit:
+Recorded deployments are in [`deployments/testnet.json`](./deployments/testnet.json)
+and [`deployments/mainnet.json`](./deployments/mainnet.json). This source adds
+features beyond those deployed builds; see [exact-root compatibility](./docs/auth-root.md#client-and-deployment-compatibility)
+before using the new account interface. For the external security audit:
 
 - [`docs/audit-scope.md`](./docs/audit-scope.md): the audit manifest: the
   reviewed commit, the deployed build and its hashes, toolchains, review
@@ -46,6 +47,10 @@ starts an empty spending record
 [`docs/verification/THEORY.md`](./docs/verification/THEORY.md) states which
 policies a stateless monitor can enforce.
 
+A transfer rule can also require an exact authorization-entry root, such as
+a game's `guess` call. See [exact-root semantics](./docs/auth-root.md) and the
+[TypeScript usage](./packages/perch-js/README.md#exact-authorization-entry-roots).
+
 ## Layout
 
 ```
@@ -65,7 +70,7 @@ crates/
                       recovery target derivation
   perch-smart-account/  the account trait: apply_doc and apply_scope (the admin and
                       scoped documents, the only write paths for rules and signers),
-                      the delta reconcile onto OZ, execute, upgrades, the recovery
+                      the delta reconcile of account records, execute, upgrades, the recovery
                       hooks, and the consumer views
   perch-account/      the deployable account contract over perch-smart-account
   perch-account-factory/  deployable factory: deploys the build-time-pinned account
@@ -119,8 +124,8 @@ packages/
   perch-relay/        @stellar-registry/perch-relay: store-and-forward relay for signed
                       guardian approvals
   perch-contracts/    @stellar-registry/perch-contracts: stack contract bindings generated
-                      from the deployed wasm, plus the deployment manifests (regen via
-                      scripts/bindings-contracts.sh)
+                      from deployed or explicitly undeployed wasm, plus deployment
+                      manifests (see packages/perch-contracts/README.md)
   perch-artifacts/    @stellar-registry/perch-artifacts: deployments/, circuits/, test
                       vectors, document and program limits, fetch-infra-wasm.sh and
                       zk-toolchain.sh as files, copied at build time
@@ -140,7 +145,7 @@ scripts/              build-stack.sh / deploy-stack.sh: the stack in pin order a
                       against the chain; bindings-contracts.sh, check-packages.sh;
                       bootstrap-testnet.sh: the canonical registry + author account;
                       zk-toolchain.sh: pinned, checksummed nargo/bb
-deployments/          deployment manifests (testnet.json) and the raw testnet exercise
+deployments/          deployment manifests and the raw testnet exercise
                       record (testnet-exercise.json)
 docs/audit-scope.md   the audit manifest
 docs/account-interface.md  the account's entry points, types, events, and errors: the
@@ -165,15 +170,8 @@ testdata/             golden vectors shared by the Rust, TypeScript, and Lean su
 testdata/schema/      shared PolicyDoc JSON Schema conformance cases (Rust + perch-js suites)
 ```
 
-The release pipeline (`.github/workflows/release.yml`) publishes the
-interpreter, the doc compiler, the ed25519 verifier, and the spending limit
-to the canonical registry, authored by the perch author account
-([`docs/testnet-deployment.md`](./docs/testnet-deployment.md)). The
-recovery stack (all ten contracts in the manifest) is deployed in pin order
-into the same registry by `release.yml`'s `deploy-stack` job
-(`scripts/deploy-stack.sh`), which reuses those four published contracts;
-[`docs/deploy/`](./docs/deploy/README.md) covers the build order, the
-manifest, and how a deployment is verified.
+[`docs/deploy/`](./docs/deploy/README.md) covers release and deployment,
+including build order, manifests, registries, and deployment verification.
 
 ## Development
 

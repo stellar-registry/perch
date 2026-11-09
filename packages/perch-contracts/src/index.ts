@@ -3,6 +3,8 @@
 // own entry point (`@stellar-registry/perch-contracts/factory`, ...).
 
 export * as account from './account.js';
+export * as legacyAccount from './legacy-account.js';
+export * as legacyDocCompiler from './legacy-doc-compiler.js';
 export * as factory from './factory.js';
 export * as recovery from './recovery.js';
 export * as pool from './pool.js';

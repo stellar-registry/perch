@@ -17,7 +17,8 @@ use rule_eval::{Doc, Functions, Principals, Rule, Scope};
 /// every function of `me`, no condition, no cap, no last ledger, at least
 /// one signer, and all of them required.
 fn is_admin(r: &Rule, me: &[u8]) -> bool {
-    r.contract == me
+    r.auth_root.is_none()
+        && r.contract == me
         && matches!(&r.functions, Functions::AnyExcept(xs) if xs.is_empty())
         && r.conds.is_empty()
         && r.cap.is_none()
@@ -45,7 +46,8 @@ pub fn admin_survives(rules: &[Rule], me: &[u8]) -> bool {
 #[must_use]
 pub fn admin_declared(d: &Doc) -> bool {
     d.rules.iter().any(|r| {
-        matches!(r.scope, Scope::SelfAdmin)
+        r.auth_root.is_none()
+            && matches!(r.scope, Scope::SelfAdmin)
             && matches!(&r.principals, Principals::All(ids) if !ids.is_empty())
             && r.functions.is_none()
             && r.args.is_none()

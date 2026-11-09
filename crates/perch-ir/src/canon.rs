@@ -271,6 +271,15 @@ fn rule_to_cv(r: &Rule) -> Cv<'_> {
     if let Some(cap) = &r.cap {
         o.push(("cap", cap_to_cv(cap)));
     }
+    if let Some(root) = &r.auth_root {
+        o.push((
+            "auth-root",
+            Cv::Obj(vec![
+                ("contract", Cv::Str(&root.contract)),
+                ("function", Cv::Str(&root.function)),
+            ]),
+        ));
+    }
     Cv::Obj(o)
 }
 

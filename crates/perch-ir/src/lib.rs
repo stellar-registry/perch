@@ -40,26 +40,14 @@
 //! bytes with SHA-256. Two structurally equal documents hash identically no
 //! matter how they were written down.
 //!
-//! # Stateless, per-invocation semantics
+//! # Authorization semantics
 //!
-//! Every constraint a [`PolicyDoc`] can express is a **pure predicate over a
-//! single invocation** — this call's function name and this call's arguments.
-//! Perch has no op that reads or writes state, so it cannot express a
-//! *cumulative* constraint: "at most N calls per day", "at most X total
-//! transferred this month". An [`ArgPred`] bound on a numeric argument limits
-//! *one* call's value, never a running total.
-//!
-//! This matters for spend limits specifically: a per-invocation bound is **not**
-//! a spend cap. An authorized signer simply issues the call repeatedly, each
-//! within the per-call bound, and drains any intended total — the exact drain
-//! passkey-kit documents for a per-transfer limit without a cumulative one. A
-//! cumulative cap requires a *stateful* sibling policy — e.g. OpenZeppelin's
-//! `spending_limit` — attached to the same OZ context rule alongside perch's
-//! interpreter, where OZ enforces every attached policy (AND). Perch stays the
-//! stateless "what may be called" layer; cumulative accounting lives in a
-//! purpose-built stateful contract, never here.
-//!
-//! Tracking issue: <https://github.com/stellar-registry/perch/issues/4>
+//! Function and argument predicates inspect the selected call. An optional
+//! [`AuthRoot`] additionally constrains this account's authorization-entry
+//! root; a cap is cumulative state maintained by the account evaluator.
+//! All conditions are conjunctive. The legacy RPN compiler supports local
+//! predicates only and refuses root-bearing documents. See `docs/auth-root.md`
+//! for the host boundary and compatibility rules.
 
 extern crate alloc;
 
@@ -77,10 +65,11 @@ pub use canon::{
 #[cfg(feature = "std")]
 pub use canon::{doc_hash, doc_hash_hex, rule_hash};
 pub use doc::{
-    AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, BaselineCommitment, CapConstraint,
-    ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig, RecoveryMode,
-    RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
-    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred, ZkFactor,
+    AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, AuthRoot, BaselineCommitment,
+    CapConstraint, ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig,
+    RecoveryMode, RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals,
+    SignerDecl, SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred,
+    ZkFactor,
 };
 pub use normal::{normal_form, NotNormal};
 pub use parse::{from_json, JsonError, ParseError};

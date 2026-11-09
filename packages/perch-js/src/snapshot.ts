@@ -12,6 +12,7 @@
 
 import { AccountFrozen, CompilerMismatch, InconsistentRead, StaleRevision, UnsupportedCapability } from './errors.js';
 import type { FlatDocLimits } from './limits.js';
+import type { AuthRoot, PolicyDoc } from './schema.js';
 import type { SignerKey } from './xdr.js';
 
 /** One context rule as the account installed it (`InstalledRule`). Perch
@@ -24,6 +25,8 @@ export interface InstalledRule {
   name: string;
   contract: string;
   validUntil: number | null;
+  /** Undefined only for a legacy snapshot; null means unrestricted. */
+  authRoot?: AuthRoot | null;
   signers: SignerKey[];
   policies: { policy: string; params: Uint8Array }[];
 }
@@ -122,7 +125,7 @@ export function checkCapabilities(c: AccountCapabilities): void {
   // earlier `oz_rule_ids` scheme omitted the account address and is no longer
   // produced; this perch-js signs only the bound digest, so it refuses it.
   if (c.authDigest !== 'addr_oz_v1') throw new UnsupportedCapability(`authorization digest ${c.authDigest}`);
-  if (c.snapshotVersion !== 1) throw new UnsupportedCapability(`snapshot format ${c.snapshotVersion}`);
+  if (c.snapshotVersion !== 1 && c.snapshotVersion !== 2) throw new UnsupportedCapability(`snapshot format ${c.snapshotVersion}`);
 }
 
 /**
@@ -147,6 +150,9 @@ export async function readSnapshot(reader: AccountReader, options: SnapshotOptio
     const config = take(await reader.configuration());
     const r = config.value.revision;
     const capabilities = take(await reader.capabilities());
+    if (capabilities.value.snapshotVersion === 2 && config.value.rules.some((rule) => rule.authRoot === undefined)) {
+      throw new UnsupportedCapability('snapshot 2 rule omits auth-root metadata');
+    }
     const limits = take(await reader.limits());
     let document: Uint8Array | null | undefined;
     if (options.document) {
@@ -212,4 +218,13 @@ export async function assertSignable(reader: AccountReader, revision: bigint, cl
   if (now.value.revision !== revision) throw new StaleRevision(revision, now.value.revision);
   const gate = now.value.gate;
   if (gate && frozenAt(now.value, now.latestLedger)) throw new AccountFrozen(gate.attemptId, gate.until);
+}
+
+/** Refuse authoring a root-aware document for an older account build. */
+export function checkDocumentCapabilities(doc: PolicyDoc, c: AccountCapabilities): void {
+  checkCapabilities(c);
+  if (doc.rules.some((r) => r['auth-root'] !== undefined) &&
+      (c.interfaceVersion < 3 || c.snapshotVersion < 2)) {
+    throw new UnsupportedCapability('auth-root requires account interface 3 and snapshot 2');
+  }
 }

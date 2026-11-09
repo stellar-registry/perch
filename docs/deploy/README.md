@@ -87,7 +87,7 @@ every consumer reads.
 | `cargo test -p perch-integration-tests --test testnet_pins` | The pins actually compiled into the account and the factory equal the manifest's. |
 | `cargo test -p perch-integration-tests --test release_stack -- --ignored` | Every recovery flow through the stack's wasm, with real proofs (`PERCH_STACK_DIR`, default `target/stack`). On a rehearsal's stack, add `--skip one_build_resolves_each_networks_own_registry`, which checks the canonical registries. |
 | `cargo run -p perch-testnet` | The same flows on the deployed contracts (see [`testnet-exercise.md`](testnet-exercise.md)). |
-| `scripts/bindings-contracts.sh` | Regenerates `packages/perch-contracts` from the deployed wasm and the manifest. |
+| `scripts/bindings-contracts.sh` | Regenerates `packages/perch-contracts`; [the package README](../../packages/perch-contracts/README.md) covers deployed and undeployed inputs. |
 | `scripts/check-packages.sh` | Packs every npm package, installs the tarballs into an empty project, imports every entry point, and runs every command they install. Publishes nothing. |
 
 CI's `rust` job runs `fetch-infra-wasm.sh --stack`, the workspace tests
@@ -1011,7 +1011,7 @@ hashes do not change unless the source does.
 | `@stellar-registry/perch-interpreter` | interpreter bindings |
 | `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer, serving witnesses from `PoolWitnessIndex` (one chunk of leaves per witness; node stores and a snapshot to resume) |
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature with the call rebuilt from the posted statement), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
-| `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
+| `@stellar-registry/perch-contracts` | stack bindings and manifests; [ABI selection and generation](../../packages/perch-contracts/README.md) |
 | `@stellar-registry/perch-artifacts` | the deployment manifests, Noir circuits and their manifest, test vectors, and document and program limits as files; `perch-fetch-infra-wasm --stack` and `perch-zk-toolchain` run the repository's scripts against them. Changing a shipped file re-releases it |
 
 All six are published to npm by `release.yml`'s `npm-pack` and

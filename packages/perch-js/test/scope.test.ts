@@ -54,6 +54,7 @@ const cond = (c: any): StoredCond => {
 
 const rule = (r: any): StoredRule => ({
   contract: r.contract,
+  authRoot: r.authRoot,
   functions: r.functions,
   conds: r.conds.map(cond),
   signers: r.signers.map(signer),
@@ -91,6 +92,7 @@ const native = (v: any) => {
   const nSigner = (s: any) =>
     s.kind === 'delegated' ? tagged('Delegated', s.address) : tagged('External', s.verifier, Buffer.from(hexToBytes(s.key)));
   const ruleSet = v.rules.map(({ rule: r }: any) => ({
+    ...(r.authRoot ? { auth_root: [r.authRoot] } : {}),
     contract: r.contract,
     functions: tagged(r.functions.kind === 'anyExcept' ? 'AnyExcept' : 'Only', r.functions.names),
     conds: r.conds.map(nCond),

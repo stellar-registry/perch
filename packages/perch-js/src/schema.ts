@@ -89,6 +89,11 @@ const capConstraint = z
   })
   .strict();
 
+const authRoot = z.object({
+  contract: z.string().regex(/^C[A-Z2-7]{55}$/),
+  function: z.string().regex(/^[a-zA-Z0-9_]{1,32}$/),
+}).strict();
+
 const rule = z
   .object({
     name: z.string(),
@@ -98,8 +103,12 @@ const rule = z
     args: z.array(argConstraint).optional(),
     'not-after-ledger': u32.optional(),
     cap: capConstraint.optional(),
+    'auth-root': authRoot.optional(),
   })
-  .strict();
+  .strict()
+  .refine((r) => r['auth-root'] === undefined || r.scope.type !== 'self-admin', {
+    message: 'self-admin cannot carry auth-root', path: ['auth-root'],
+  });
 
 // Opt-in account-recovery enrollment, mirroring perch-ir's `RecoveryConfig`.
 // Reviewable configuration only — never the recovery attempt itself. See
@@ -159,6 +168,7 @@ export type Principals = z.infer<typeof principals>;
 export type Rule = z.infer<typeof rule>;
 export type ArgConstraint = z.infer<typeof argConstraint>;
 export type ArgPred = z.infer<typeof argPred>;
+export type AuthRoot = z.infer<typeof authRoot>;
 export type CapConstraint = z.infer<typeof capConstraint>;
 export type RecoveryConfig = z.infer<typeof recoveryConfig>;
 export type RecoveryMode = z.infer<typeof recoveryMode>;

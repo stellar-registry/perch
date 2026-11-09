@@ -154,6 +154,10 @@ fn gen_rule(r: &mut Rng, p: &Pools) -> Rule {
             amount_arg: r.below(4) as u32,
         }),
         valid_until: r.pick(&[None, Some(0), Some(u32::MAX)]),
+        auth_root: (r.below(2) == 0).then(|| rule_eval::AuthRoot {
+            contract: r.pick(&p.addresses[..4]),
+            function: b"guess".to_vec(),
+        }),
         generation: r.pick(&[None, Some(0), Some(u64::MAX)]),
     }
 }
@@ -192,6 +196,7 @@ fn sample(p: &Pools) -> Rule {
             amount_arg: 2,
         }),
         valid_until: Some(9),
+        auth_root: None,
         generation: Some(3),
     }
 }
@@ -292,6 +297,7 @@ fn a_mirror_is_the_contracttype_of_its_fields() {
             }],
         ),
         valid_until: Some(9),
+        auth_root: None,
         generation: Some(3),
     };
     assert_eq!(
@@ -467,6 +473,15 @@ fn model_from_doc(e: &Env, d: &Doc) -> CompiledModel {
                     }),
                 )
             }),
+            auth_root: r.auth_root.as_ref().map(|root| {
+                SVec::from_array(
+                    e,
+                    [perch_rule_eval::StoredAuthRoot {
+                        contract: a(&root.contract),
+                        function: Symbol::new(e, std::str::from_utf8(&root.function).unwrap()),
+                    }],
+                )
+            }),
             not_after_ledger: r.not_after_ledger,
             cap: SVec::from_iter(
                 e,
@@ -537,6 +552,7 @@ fn gen_doc(r: &mut Rng, p: &Pools) -> Doc {
                     },
                 })
             }),
+            auth_root: None,
             not_after_ledger: r.pick(&[None, Some(0), Some(u32::MAX)]),
             cap: (r.below(2) == 0).then(|| DocCap {
                 limit: r.pick(&[1, i128::MAX, -1]),
@@ -560,7 +576,15 @@ fn every_document_round_trips_through_its_model_and_the_host() {
     let me = p.addresses[0].clone();
     let mut r = Rng(11);
     for i in 0..300 {
-        let d = gen_doc(&mut r, &p);
+        let mut d = gen_doc(&mut r, &p);
+        for rule in &mut d.rules {
+            if matches!(rule.scope, Scope::Contract(_)) && r.below(2) == 0 {
+                rule.auth_root = Some(rule_eval::AuthRoot {
+                    contract: r.pick(&p.addresses[..4]),
+                    function: b"guess".to_vec(),
+                });
+            }
+        }
         let m = model_from_doc(&e, &d);
         let back = doc_of(&e, &m).unwrap_or_else(|| panic!("document {i}: no document"));
         // `model_from_doc` maps each field one to one, so equal models mean
@@ -591,6 +615,7 @@ fn a_model_holding_two_of_what_holds_one_has_no_document() {
         principals: ModelPrincipals::All(SVec::new(&e)),
         functions: None,
         args: None,
+        auth_root: None,
         not_after_ledger: None,
         cap: SVec::new(&e),
     };
@@ -816,7 +841,7 @@ fn authorize_on_the_chosen_rules_is_authorize_on_the_set() {
     for case in 0..10_000 {
         let seeds: Vec<u64> = (0..1 + r.below(5)).map(|_| r.next()).collect();
         let rule = |i: usize| gen_rule(&mut Rng(seeds[i]), &p);
-        let rules: Vec<Rule> = (0..seeds.len()).map(rule).collect();
+        let mut rules: Vec<Rule> = (0..seeds.len()).map(rule).collect();
         let records: Vec<SpendRecord> = (0..seeds.len()).map(|_| record(&mut r)).collect();
         let choices: Vec<u32> = (0..1 + r.below(3))
             .map(|_| r.below(seeds.len()) as u32)
@@ -825,6 +850,23 @@ fn authorize_on_the_chosen_rules_is_authorize_on_the_set() {
             .iter()
             .map(|&c| call_for(&mut r, &p, &rules[c as usize]))
             .collect();
+        // Half of the batches satisfy their selected exact-root conditions;
+        // the rest retain independently generated mismatches.
+        let align_root = |mut rule: Rule| {
+            if case % 2 == 0 && rule.auth_root.is_some() {
+                if let Some(rule_eval::Context::Call {
+                    contract, function, ..
+                }) = contexts.first()
+                {
+                    rule.auth_root = Some(rule_eval::AuthRoot {
+                        contract: contract.clone(),
+                        function: function.clone(),
+                    });
+                }
+            }
+            rule
+        };
+        rules = rules.into_iter().map(align_root).collect();
         let mut signers: Vec<Signer> = vec![];
         for &c in &choices {
             for s in &rules[c as usize].signers {
@@ -851,7 +893,7 @@ fn authorize_on_the_chosen_rules_is_authorize_on_the_set() {
             });
             sub_choices.push(j as u32);
         }
-        let sub_rules: Vec<Rule> = ids.iter().map(|&c| rule(c as usize)).collect();
+        let sub_rules: Vec<Rule> = ids.iter().map(|&c| align_root(rule(c as usize))).collect();
         let sub_records: Vec<SpendRecord> = ids
             .iter()
             .map(|&c| {

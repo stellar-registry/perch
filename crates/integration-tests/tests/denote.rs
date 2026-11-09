@@ -77,6 +77,7 @@ impl Fixture {
             threshold,
             cap,
             valid_until: Some(7),
+            auth_root: None,
             generation: None,
         }
     }

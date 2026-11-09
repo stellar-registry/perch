@@ -13,7 +13,7 @@ the canonical-form proofs are about are defined in
 | # | Target | Statement | Status |
 |---|--------|-----------|--------|
 | (a) | **Evaluator soundness** | `perch-program`'s fail-closed evaluation implements the canonical semantics exactly | Proved of the Lean model (T1–T4); tied to the Rust evaluator and a Wasm build of it by shared vectors |
-| (b) | **Lowering preservation** | `perch-compile` emits programs that admit exactly the invocations the source rule admits | Proved of the model's lowering (T6); tied to Rust by the vectors and the compile→eval differential suite |
+| (b) | **Lowering preservation** | `perch-compile` emits programs that admit exactly the invocations the supported source rule admits | Proved of the legacy interpreter model's lowering (T6); tied to Rust by the vectors and the compile→eval differential suite; root-bearing documents are refused |
 | (c) | **Per-policy properties** | A given document admits only intended invocations (dead rules, intent conformance, attenuation) | `perch-analyze` (SMT, z3), per document |
 | (d) | **Artifact-level guarantees** | (a)–(c) hold of the shipped Wasm, not only the Rust source | Partial: the vectors replay through a Wasm contract wrapping the same evaluator entry points (`perch-bench-rpn`), and Komet checks three properties of the evaluator compiled to Wasm; neither is the deployed interpreter binary |
 
@@ -78,8 +78,8 @@ the release-stack suite, and the testnet exercise cover them.
   The only formal fact behind `target_bytes_hash == target_doc_hash` under
   CANON v1 is `canonical_bytes_identity`; T7 adds that the identity names
   one document.
-- **Account authorization** (`crates/perch-smart-account`): `__check_auth`,
-  OZ context-rule selection, `execute`, `apply_doc` and its delta (which
+- **Account integration** (`crates/perch-smart-account`): `__check_auth`,
+  selection from the account's stored rule records, `execute`, `apply_doc` and its delta (which
   rules it touches), the reserved-name guards, upgrades, and the
   configuration revision with `apply_doc`'s `expected_revision`
   (`revision.rs`). T8 shows equal `rule_hash` preimages mean equal rule
@@ -122,9 +122,11 @@ the release-stack suite, and the testnet exercise cover them.
   - by `release_stack.rs`'s `docsplit_*` tests and the `worst_case_*`
     compromise flows with a thief's scopes installed, on the release wasm.
 
-  No model covers how scoped and admin rules combine in one batch, so the
-  claim that a scoped document cannot reach the account's own entry points
-  rests on OZ's context-type check and these tests.
+  The account shell's mapping of host contexts and selected ids into the
+  rule-eval batch is tested here; rule-core supplies the evaluator model.
+  Scoped-rule exclusion is enforced by `check_scoped`, the authorization
+  gate and rule-eval. For exact-root proof and host-auth evidence boundaries,
+  see [auth-root.md](../auth-root.md#narrowing-and-evidence-boundaries).
 - **The ZK circuit, verifier, adapter, and pool** (`circuits/`,
   `vendor/ultrahonk-soroban-verifier`, `crates/perch-zk-adapter`,
   `crates/perch-zk-pool`): real-proof tests and cross-implementation
@@ -145,7 +147,7 @@ the release-stack suite, and the testnet exercise cover them.
 |---|---|
 | Lean proofs | the Lean kernel, and that the model states what the spec means |
 | Model ↔ code link | the Lean compiler and the replay glue (`Main.lean`), and the shared vectors' coverage |
-| Every runtime claim | the Soroban host and its Wasm engine, rustc and LLVM, SHA-256, the pinned OpenZeppelin `stellar-accounts` fork, the CAP-0071 host behaviour in [`cap-0071.md`](../recovery/cap-0071.md), and the hardware |
+| Every runtime claim | the Soroban host and its Wasm engine, rustc and LLVM, SHA-256, each contract's linked dependencies ([audit scope](../audit-scope.md)), the CAP-0071 host behaviour in [`cap-0071.md`](../recovery/cap-0071.md), and the hardware |
 | Komet's three properties | the K semantics of Soroban and Wasm (an independent stack); rustc is outside its trusted base, because Komet runs the compiled Wasm |
 
 ## Spec-coverage notes

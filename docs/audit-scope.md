@@ -242,8 +242,8 @@ Review the fork's changes as the diff from `fbfde38` to `42089fc9`.
 | [#5](https://github.com/theahaco/stellar-contracts-OZ/pull/5) | `reconcile_signers[_no_events]`: one validated, atomic signer-set update |
 | bitswell-hq [#1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1) | soroban-sdk 29.0.1: `ContextRuleType::CreateContractExternalRef` for CAP-0085 executable references, soroban-poseidon vendored |
 
-None of this code is in the Perch repository. It is in scope because every
-Perch contract except the ZK pool and adapter links it. The host and OZ behaviour the recovery design
+None of this code is in the Perch repository. Its contract consumers are
+listed under [Perch OZ materialization](#perch-oz-materialization). The host and OZ behaviour the recovery design
 relies on is pinned by tests in [`recovery/cap-0071.md`](recovery/cap-0071.md).
 Merging the pull requests is
 [deferred](DEFERRED.md#oz-quiet-events-fork-pull-requests).
@@ -347,7 +347,7 @@ the generated paths in GitHub diffs.
 | Path | Produced by | Checked by |
 | --- | --- | --- |
 | `Cargo.lock`, `**/package-lock.json` | cargo, npm | `--locked` builds, `npm ci` |
-| `packages/perch-contracts/src/**` | `scripts/bindings-contracts.sh` from the deployed Wasm | `packages/perch-contracts/test` (`WASM_SHA256` equals the manifest's) |
+| `packages/perch-contracts/src/**` | `scripts/bindings-contracts.sh`; [deployed/undeployed ABI selection](../packages/perch-contracts/README.md) | `packages/perch-contracts/test` checks deployed hashes against the manifest and legacy/new ABI decoding |
 | `deployments/**` | `scripts/deploy-stack.sh`, `cargo run -p perch-testnet` | `scripts/verify-deployment.sh`, `testnet_pins` |
 | `circuits/artifacts/**`, `circuits/manifest.json`, `packages/perch-zk/artifacts/**`, `testdata/zk/**` | `nargo`/`bb` with the pinned toolchain, `perch-zk-fixtures` | CI's `zk` job (`perch-zk-fixtures check`) |
 | `vendor/ultrahonk-soroban-verifier/**` except the delta | NethermindEth's audited UltraHonk verifier | `UPSTREAM.sha256`, `CHECKSUMS.sha256`, `crates/perch-zk-adapter/tests/vendor.rs` |

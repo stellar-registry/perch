@@ -235,8 +235,8 @@ element of the `rules` array (`CANONICAL.md`, "Fragment hashes"; vectors in
   `rule_hash` as provenance, instead of the whole document's `doc_hash`.
   Editing one rule, or any non-rule member, then leaves every other rule's
   compiled form unchanged, which let `apply_doc` reinstall only the rules
-  that changed when the account installed programs. It installs none now:
-  a rule's program is part of its stored rule-eval rule (§7.5).
+  that changed when the account installed programs. Current accounts store
+  rule-eval rules instead; see §7.5 for reconciliation.
 - **Scope.** A `rule_hash` covers the rule text and its signer ids, not the
   signers' credentials. Only `doc_hash` identifies the whole document.
 - **Domain separation.** The `perch/rule` and `perch/recovery/config` tags

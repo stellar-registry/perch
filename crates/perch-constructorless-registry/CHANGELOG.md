@@ -15,5 +15,3 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 ### 🚜 Refactor
 
 - [**breaking**] Rename the stateless registry to constructorless (#151)
-
-

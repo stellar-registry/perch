@@ -129,6 +129,21 @@ pub struct Rule {
     /// `None`, so documents without a cap hash exactly as before this field
     /// existed.
     pub cap: Option<CapConstraint>,
+    /// Exact first contract call of this account's host-authenticated
+    /// authorization entry. Omitted means unrestricted. This is not a
+    /// transaction-root or ancestry condition; every other rule check still
+    /// applies. Forbidden on self-admin rules.
+    pub auth_root: Option<AuthRoot>,
+}
+
+/// An exact authorization-entry root, never supplied by the caller separately
+/// from the host-authenticated context batch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthRoot {
+    /// Contract-address strkey of the first authorized invocation.
+    pub contract: String,
+    /// Exact Soroban function symbol (no wildcard).
+    pub function: String,
 }
 
 /// A cumulative spend cap on a [`Rule`], over a rolling window of ledgers.

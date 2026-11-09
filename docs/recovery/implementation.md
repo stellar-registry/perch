@@ -109,9 +109,8 @@ What the spec leaves to the implementation, or what only its tests show.
   consumers a spurious stale-revision result, which is safe.
   `configuration()` returns it with everything rule selection needs, read
   at one ledger. A completion may carry `expected_revision` too: the
-  controller's `rcv_complete` reads only argument 0. `UnguardedRule` is the last
-  code of the account's error enum, after `StaleRevision`,
-  `GenerationExhausted` and `ModelInvalid`.
+  controller's `rcv_complete` reads only argument 0. Error meanings are in
+  [the account interface](../account-interface.md#errors).
 - **Account renewal.** Each revoked fingerprint and each enrolled id is its
   own persistent entry, so the account's `renew` takes the fingerprints and
   enrollment ids to extend; it also extends the instance, the applied
@@ -158,7 +157,7 @@ signers for every function of the account with no condition, cap, or last
 ledger. That check comes after the compiled-rule check (`admin_survives`),
 and every document the compiled check accepts passes it. It also accepts an
 n-of-n `threshold` self-admin rule, which the compiled check refuses because
-the compiler gives that rule an interpreter program. `apply_scope` does the same
+it requires explicit `all` principals. `apply_scope` does the same
 for a scoped document with `rule_eval::lower_scoped`, under the account's
 excluded set and the current scope generation, which every stored scoped
 rule carries, into the scope record's rules (view `scope_rule_set(scope)`).
@@ -313,9 +312,9 @@ but a full replace gives the rule a new id and an empty record, so on a
 rule whose cap is already partly spent the delta and the oracle diverge by
 construction. The generator applies to fresh state,
 where no window is yet spent; persistent spending budgets across replacements
-are deferred ([`DEFERRED.md`](../DEFERRED.md)). The generator also never
-advances the ledger between steps, so a rule whose `not-after-ledger` expires
-mid-sequence is outside the oracle's coverage.
+are deferred ([`DEFERRED.md`](../DEFERRED.md)). The generator's current
+coverage, including ledger advances, is documented in
+[`perch-testkit::delta`](../../crates/perch-testkit/src/delta.rs).
 
 | Property | Test |
 | --- | --- |

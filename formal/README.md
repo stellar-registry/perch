@@ -59,7 +59,7 @@ checks what every declaration actually depends on.
   `doc_hash` identifies exactly one document up to a SHA-256 collision. The
   domain is every shape `perch_ir::canonical_json` emits: `external` and
   `delegated` signers, `all`/`threshold`/`self-authenticating` principals,
-  every arg predicate, caps, expiries, and the optional `recovery` member
+  every arg predicate, optional exact `auth-root` (contract and function), caps, expiries, and the optional `recovery` member
   (both profiles; `guardian-only`, `zk-only`, and `combined` modes with every
   guardian and ZK field; controller; optional baseline; replaceable ids; the
   three ledger counts). The proofs hold at any size; the doc compiler's
@@ -94,13 +94,13 @@ canonical fixture:
 just drt          # Rust side + Lean side over the same vectors and fixtures
 # or directly:
 cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
-  ../testdata/ci-publish*.canonical.json \
+  ../testdata/ci-publish*.canonical.json ../testdata/auth-root.canonical.json \
   --recovery ../testdata/recovery/config-*.canonical.json
 ```
 
 Green means the hand-authored spec, the Rust evaluator, and this proved model
 agree on every case, and that the model's canonicalizer parses and re-emits
-the Rust canonicalizer's bytes for every fixture: five documents (external
+the Rust canonicalizer's bytes for every fixture: six documents (including an exact authorization root; external
 and delegated signers, `all` and `threshold` principals, a cap,
 `guardian-only` and `combined` recovery) and one recovery member per mode.
 `crates/perch-ir/tests/recovery.rs` regenerates the recovery-member fixtures
@@ -129,9 +129,13 @@ the same bytes. Two tests tie T8 to the code that computes the hashes:
 
 ## What is not modeled
 
+This directory models the legacy per-invocation interpreter and canonical
+identity. It does not prove authorization-root enforcement: that is the
+separate rule-core dependency's batch evaluator, linked to Perch by host tests
+and model conversions (see `docs/auth-root.md`).
+
 The model covers two things: the per-invocation evaluator and lowering
-(T1–T6), and the canonical form and its hashes (T7, T8). Nothing else has
-a model or a proof: not the recovery controller's state machine, account
+(T1–T6), and the canonical form and its hashes (T7, T8). This directory does not model or prove: not the recovery controller's state machine, account
 authorization, the ZK circuit, verifier, adapter, and pool, the document
 compiler beyond canonical bytes and `config_hash`, or the recovery
 statement encoding.

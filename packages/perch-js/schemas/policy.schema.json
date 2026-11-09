@@ -787,6 +787,28 @@
     },
     "rule": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "type": {
+                    "const": "self-admin"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "auth-root"
+              ]
+            }
+          }
+        }
+      ],
       "description": "A single policy rule: who (`principals`) may do what (`functions`, `args`) where (`scope`) until when (`not-after-ledger`), with an optional cumulative spend `cap`.",
       "properties": {
         "args": {
@@ -796,6 +818,25 @@
           },
           "minItems": 1,
           "type": "array"
+        },
+        "auth-root": {
+          "additionalProperties": false,
+          "properties": {
+            "contract": {
+              "description": "Exact contract at the root of this account's authorization entry, not the outer transaction call.",
+              "pattern": "^C[A-Z2-7]{55}$",
+              "type": "string"
+            },
+            "function": {
+              "pattern": "^[a-zA-Z0-9_]{1,32}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "contract",
+            "function"
+          ],
+          "type": "object"
         },
         "cap": {
           "$ref": "#/$defs/capConstraint"

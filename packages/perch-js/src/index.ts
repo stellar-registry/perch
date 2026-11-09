@@ -36,6 +36,7 @@ export {
   type ArgConstraint,
   type ArgPred,
   type CapConstraint,
+  type AuthRoot,
 } from './schema.js';
 export {
   requestToPolicyDoc,
@@ -114,6 +115,7 @@ export {
   assertSignable,
   frozenAt,
   checkCapabilities,
+  checkDocumentCapabilities,
   LedgerClock,
   type AccountReader,
   type AccountConfiguration,
@@ -126,6 +128,8 @@ export {
 } from './snapshot.js';
 export {
   selectRules,
+  AuthRootMismatch,
+  type AuthorizationCall,
   selectRecoveryRule,
   resolveRule,
   type RuleRef,

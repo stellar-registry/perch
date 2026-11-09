@@ -218,6 +218,12 @@ pub enum ValidationError {
         /// The invalid function name.
         name: String,
     },
+    /// An auth-root contract is not a valid contract-address strkey.
+    InvalidAuthRootContract { rule: String, address: String },
+    /// An auth-root function is not a nonempty Soroban symbol.
+    InvalidAuthRootFunction { rule: String, name: String },
+    /// Self-administration cannot depend on an authorization root.
+    AuthRootOnSelfAdmin { rule: String },
     /// A rule's `args` list is present but empty — ambiguous for the same
     /// reason as [`ValidationError::EmptyFunctions`]. Omit the field to mean
     /// "unconstrained".
@@ -510,6 +516,9 @@ impl fmt::Display for ValidationError {
             E::InvalidFunctionName { rule, name } => {
                 write!(f, "rule `{rule}`: function `{name}` is not a valid Soroban Symbol")
             }
+            E::InvalidAuthRootContract { rule, address } => write!(f, "rule `{rule}`: auth-root contract `{address}` is not a C-address strkey"),
+            E::InvalidAuthRootFunction { rule, name } => write!(f, "rule `{rule}`: auth-root function `{name}` is not a valid Soroban Symbol"),
+            E::AuthRootOnSelfAdmin { rule } => write!(f, "rule `{rule}`: self-admin cannot carry auth-root"),
             E::EmptyArgs { rule } => write!(
                 f,
                 "rule `{rule}`: args list is present but empty (omit it for unconstrained)"
@@ -874,6 +883,24 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
             }
         }
         Scope::SelfAdmin(_) => {}
+    }
+
+    if let Some(root) = &rule.auth_root {
+        if !is_contract_address_shape(&root.contract) {
+            errors.push(ValidationError::InvalidAuthRootContract {
+                rule: name(),
+                address: root.contract.clone(),
+            });
+        }
+        if !is_valid_symbol(&root.function) {
+            errors.push(ValidationError::InvalidAuthRootFunction {
+                rule: name(),
+                name: root.function.clone(),
+            });
+        }
+        if matches!(rule.scope, Scope::SelfAdmin(_)) {
+            errors.push(ValidationError::AuthRootOnSelfAdmin { rule: name() });
+        }
     }
 
     match &rule.principals {

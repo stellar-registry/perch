@@ -156,7 +156,7 @@ fn main() -> ExitCode {
             };
             let findings = narrows(&parent, &child);
             if findings.is_empty() {
-                println!("proved: child only narrows parent (matched rule names, program semantics + expiry + caps)");
+                println!("proved: child only narrows parent (matched rule names, local semantics + exact roots + expiry + caps)");
                 return ExitCode::SUCCESS;
             }
             for f in findings {
@@ -176,6 +176,9 @@ fn main() -> ExitCode {
                         if let Z3Verdict::Sat(w) = verdict {
                             println!("{w}");
                         }
+                    }
+                    WideningFinding::AuthRootChanged { rule } => {
+                        println!("WIDENING: rule `{rule}` erased or changed its exact authorization root");
                     }
                     WideningFinding::ExpiryExtended { rule } => {
                         println!("WIDENING: rule `{rule}` expires later than the parent's");

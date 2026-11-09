@@ -19,7 +19,7 @@ use crate::{InstalledRule, PerchStorage};
 
 const DAY_IN_LEDGERS: u32 = 17280;
 /// The TTL, in ledgers, that `__check_auth` extends an entry it reads to:
-/// OZ's, so the account's entries live as long as the OZ entries beside them.
+/// retained from OZ so existing account entries keep the same TTL policy.
 pub const SMART_ACCOUNT_EXTEND_AMOUNT: u32 = 30 * DAY_IN_LEDGERS;
 /// The TTL below which `__check_auth` extends an entry it reads.
 pub const SMART_ACCOUNT_TTL_THRESHOLD: u32 = SMART_ACCOUNT_EXTEND_AMOUNT - DAY_IN_LEDGERS;

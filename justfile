@@ -103,6 +103,7 @@ formal:
 drt: formal
     cargo test -p perch-conformance
     cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
+      ../testdata/auth-root.canonical.json \
       ../testdata/ci-publish.canonical.json \
       ../testdata/ci-publish-delegated.canonical.json \
       ../testdata/ci-publish-threshold.canonical.json \

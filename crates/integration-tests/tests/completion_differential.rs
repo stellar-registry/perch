@@ -149,6 +149,7 @@ fn world(valid_until: Option<u32>) -> World {
         signers,
         cap: Vec::new(&env),
         valid_until,
+        auth_root: None,
         generation: None,
     };
     let records = vec![

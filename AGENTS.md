@@ -137,6 +137,16 @@ shadow bookkeeping (diagnostic events, auth observation), which fails on
 invocation resource limits already enforce the network's per-transaction
 limits.
 
+## Generated TypeScript bindings and changed struct layouts
+
+The generated TypeScript clients' Stellar SDK decodes contract structs by
+field position, so adding an optional Rust field does **not** make a new
+generated spec safe for old deployed values. Retain the deployed spec and
+select the matching ABI before reading changed structs; the unchanged
+`capabilities` view is the bootstrap for account snapshots. See
+`docs/auth-root.md` and `packages/perch-contracts/test/auth-root.test.ts` for
+the snapshot-1/2 boundary and its regression test.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

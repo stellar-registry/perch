@@ -177,17 +177,11 @@ rules and the cross-language parity vectors.
 
 ## Versioned policy backend and larger limits
 
-**Deferred:** a policy backend other than the OpenZeppelin context-rule
-materialization, selected by version, and document limits above the current
-caps.
+**Deferred:** explicit policy-backend versioning and document
+limits above the current caps.
 
-**Current behaviour:** the account installs each document rule as a record
-of its own (its rule registry) with its contract, signers and last ledger
-and no policy, beside the rule-eval rule it stores for it, which decides
-every authorization through it but a recovery completion, which the
-controller's `rcv_complete` decides once the account has checked it over
-its record of the recovery rule. The account writes nothing to OZ's registry.
-`apply_doc` reconciles the installed rules as a delta (spec §7.5).
+**Current behaviour:** the account's rule-eval backend and delta reconciliation
+are described in [the recovery spec §7.5](recovery/spec.md#75-bounded-completion-cost).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
 (`MAX_DOC_SIGNERS`), more than 10 rules (`MAX_DOC_RULES`), more than 8,192
@@ -216,7 +210,7 @@ the same caps.
 build that existing accounts adopt only by upgrade. Review it as a
 separately scoped change with regression evidence across authorization,
 recovery, and migration, and re-measure the caps against the new
-completion cost. Before mainnet, decide whether existing funded accounts
+completion cost. Before rollout, decide whether existing funded accounts
 move to it and how. The two Perch review units are a boundary for that
 review, not a guarantee that the new backend needs no integration review.
 

@@ -102,6 +102,7 @@ pub fn ci_publish_rule(
         signers,
         cap: Vec::new(env),
         valid_until,
+        auth_root: None,
         generation: None,
     }
 }

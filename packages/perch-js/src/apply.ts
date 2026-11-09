@@ -18,7 +18,7 @@ import { AccountFrozen, Aborted, InconsistentRead, mapSubmissionError } from './
 import { checkLimits } from './limits.js';
 import type { PolicyDoc } from './schema.js';
 import { selectRules, type RuleRef, type RuleSelection } from './selection.js';
-import { assertSignable, frozenAt, LedgerClock, readSnapshot, type AccountReader, type Snapshot } from './snapshot.js';
+import { assertSignable, checkDocumentCapabilities, frozenAt, LedgerClock, readSnapshot, type AccountReader, type Snapshot } from './snapshot.js';
 
 export type ApplyPhase = 'prepare' | 'authorize' | 'submit' | 'confirm';
 
@@ -161,6 +161,7 @@ export function applyDocument(
     if (config.gate && frozenAt(config, snapshot.ledger)) {
       throw new AccountFrozen(config.gate.attemptId, config.gate.until);
     }
+    checkDocumentCapabilities(doc, snapshot.capabilities);
     checkLimits(doc, snapshot.limits);
     const selection = selectRules(snapshot, options.rule ?? ADMIN);
     const steps = await backend.plan({

@@ -260,7 +260,7 @@
     },
     {
       "step": "every scenario's setup and every apply_doc that changes the rule set: the admin rules' records",
-      "cause": "The account keeps the admin document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. The views give the shapes they did (installed_rules, rule_set, configuration, get_context_rule). Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included.",
+      "cause": "The account keeps the admin document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. The views give the shapes they did (installed_rules, rule_set, configuration, get_context_rule). Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included. Exact-root support writes auth_root: void for these unrestricted stored rules; legacy canonical bytes and authorization outcomes are unchanged. The strict decoder still accepts their exact old eight-field layout.",
       "fields": [
         {
           "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
@@ -328,6 +328,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -480,6 +484,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -538,6 +546,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -690,6 +702,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -748,6 +764,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -861,6 +881,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -1077,6 +1101,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -1135,6 +1163,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -1213,6 +1245,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -1332,6 +1368,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -1528,6 +1568,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -1586,6 +1630,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -1656,6 +1704,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -1849,6 +1901,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -1907,6 +1963,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -1977,6 +2037,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -2087,6 +2151,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -2283,6 +2351,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -2341,6 +2413,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -2411,6 +2487,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -2560,6 +2640,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -2618,6 +2702,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -2814,6 +2902,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -2872,6 +2964,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -2942,6 +3038,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -3052,6 +3152,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -3204,6 +3308,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -3262,6 +3370,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -3375,6 +3487,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       []
@@ -3548,6 +3664,10 @@
                   "sym:rule",
                   [
                     [
+                      "sym:auth_root",
+                      null
+                    ],
+                    [
                       "sym:cap",
                       []
                     ],
@@ -3606,6 +3726,10 @@
                 [
                   "sym:rule",
                   [
+                    [
+                      "sym:auth_root",
+                      null
+                    ],
                     [
                       "sym:cap",
                       [

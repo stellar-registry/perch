@@ -150,6 +150,7 @@ mod tests {
             functions: None,
             args: None,
             not_after_ledger: None,
+            auth_root: None,
             cap: None,
         }
     }

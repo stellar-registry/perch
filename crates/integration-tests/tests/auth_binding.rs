@@ -73,6 +73,7 @@ fn account_with_rule(env: &Env, signer: &Signer, target: &Address) -> Address {
         threshold: 1,
         cap: Vec::new(env),
         valid_until: None,
+        auth_root: None,
         generation: None,
     };
     let id = env.as_contract(&account, || {

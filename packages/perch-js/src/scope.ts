@@ -31,7 +31,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { canonicalJson } from './canonical.js';
 import { PerchError } from './errors.js';
-import type { PolicyDoc } from './schema.js';
+import type { AuthRoot, PolicyDoc } from './schema.js';
 import type { SignerKey } from './xdr.js';
 
 /** A stored argument value (`StoredVal`). */
@@ -55,6 +55,8 @@ export type StoredCond =
 /** A stored rule-eval rule (`StoredRule`). */
 export interface StoredRule {
   contract: string;
+  /** Absent only in legacy stored rules. */
+  authRoot?: AuthRoot | null;
   functions: { kind: 'anyExcept' | 'only'; names: string[] };
   conds: StoredCond[];
   signers: SignerKey[];
@@ -203,6 +205,7 @@ export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
       args: conds.length > 0 ? conds.map((c) => arg(scope.account, c)) : undefined,
       'not-after-ledger': rule.validUntil === null ? undefined : rule.validUntil + 1,
       cap,
+      'auth-root': rule.authRoot ?? undefined,
     };
   });
   const doc = {

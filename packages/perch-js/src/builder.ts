@@ -80,6 +80,7 @@ export class RuleBuilder {
   private _args?: Rule['args'];
   private _notAfterLedger?: number;
   private _cap?: Rule['cap'];
+  private _authRoot?: Rule['auth-root'];
 
   constructor(private readonly name: string) {}
 
@@ -131,6 +132,13 @@ export class RuleBuilder {
     return this;
   }
 
+  /** Require this account's authorization entry to start at exactly this
+   * contract/function. Other rule checks remain conjunctive. */
+  authRoot(contract: string, functionName: string): this {
+    this._authRoot = { contract, function: functionName };
+    return this;
+  }
+
   /** @internal */
   toWire(): Rule {
     if (!this._scope) throw new Error(`rule "${this.name}": scope not set (call selfAdmin/callContract)`);
@@ -144,6 +152,7 @@ export class RuleBuilder {
     if (this._args !== undefined) r.args = this._args;
     if (this._notAfterLedger !== undefined) r['not-after-ledger'] = this._notAfterLedger;
     if (this._cap !== undefined) r.cap = this._cap;
+    if (this._authRoot !== undefined) r['auth-root'] = this._authRoot;
     return r as Rule;
   }
 }

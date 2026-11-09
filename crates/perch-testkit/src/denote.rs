@@ -170,6 +170,7 @@ pub fn denote(e: &Env, me: &Address, rule: &Installed) -> Option<rule_eval::Rule
         threshold,
         cap,
         valid_until: rule.valid_until,
+        auth_root: None,
         generation: None,
     })
 }

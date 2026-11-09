@@ -7,6 +7,7 @@
 import { decodeDocLimits, type FlatDocLimits } from './limits.js';
 import { rebuildScopeDoc, type RebuiltScope, type StoredCond, type StoredRule, type StoredScope, type StoredVal } from './scope.js';
 import type { AccountCapabilities, AccountConfiguration, AccountReader, InstalledRule, Read } from './snapshot.js';
+import type { AuthRoot } from './schema.js';
 import type { SignerKey } from './xdr.js';
 
 /** What a generated client method resolves to (`AssembledTransaction`). */
@@ -47,6 +48,20 @@ function signer(s: Enum): SignerKey {
   throw new Error(`unknown signer ${s.tag}`);
 }
 
+/** The host encoding is an optional singleton vector: SDK contracttype cannot
+ * encode Option<struct> directly. Malformed/multiple entries fail closed. */
+function authRoot(v: unknown): AuthRoot | null {
+  if (v === null || v === undefined) return null;
+  if (!Array.isArray(v) || v.length !== 1 || !v[0] || typeof v[0] !== 'object') throw new Error('malformed auth_root');
+  const root = v[0] as Record<string, unknown>;
+  if (Object.keys(root).sort().join(',') !== 'contract,function' ||
+      typeof root.contract !== 'string' || typeof root.function !== 'string' ||
+      !/^C[A-Z2-7]{55}$/.test(root.contract) || !/^[a-zA-Z0-9_]{1,32}$/.test(root.function)) {
+    throw new Error('malformed auth_root');
+  }
+  return { contract: root.contract, function: root.function };
+}
+
 function rule(r: Record<string, unknown>): InstalledRule {
   const ctx = r.context_type as Enum;
   if (ctx.tag !== 'CallContract') throw new Error(`rule ${String(r.id)}: unexpected context type ${ctx.tag}`);
@@ -56,6 +71,7 @@ function rule(r: Record<string, unknown>): InstalledRule {
     name: String(r.name),
     contract: String(ctx.values?.[0]),
     validUntil: opt(r.valid_until as number | undefined),
+    authRoot: Object.hasOwn(r, 'auth_root') ? authRoot(r.auth_root) : undefined,
     signers: (r.signers as Enum[]).map(signer),
     policies: (r.policies as { policy: string; params: unknown }[]).map((p) => ({
       policy: String(p.policy),
@@ -174,6 +190,9 @@ function storedCond(c: Enum): StoredCond {
 
 /** Decode one `StoredRule` as the bindings return it. */
 export function decodeStoredRule(r: Record<string, unknown>): StoredRule {
+  const keys = Object.keys(r).sort().join(',');
+  const legacy = 'cap,conds,contract,functions,generation,signers,threshold,valid_until';
+  if (keys !== legacy && keys !== `auth_root,${legacy}`) throw new Error('unknown stored rule layout');
   const functions = r.functions as Enum;
   if (functions.tag !== 'AnyExcept' && functions.tag !== 'Only') throw new Error(`unknown functions ${functions.tag}`);
   const cap = (r.cap as { limit: bigint; period: number; amount_arg: number }[])[0];
@@ -189,6 +208,7 @@ export function decodeStoredRule(r: Record<string, unknown>): StoredRule {
     threshold: Number(r.threshold),
     cap: cap ? { limit: BigInt(cap.limit), period: Number(cap.period), amountArg: Number(cap.amount_arg) } : null,
     validUntil: opt(r.valid_until as number | undefined),
+    authRoot: Object.hasOwn(r, 'auth_root') ? authRoot(r.auth_root) : undefined,
     generation: generation === null ? null : BigInt(generation),
   };
 }

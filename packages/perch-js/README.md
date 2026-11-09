@@ -74,8 +74,8 @@ resolves to, as the compiler does: `perch/verifiers` (`verifierRegistryId`)
 publishes a wasm hash under the name and version, deployed at its content
 address there (`verifierAddress`). perch-js depends on no Stellar SDK, so
 `fetchHash` is the caller's simulated call of the registry's `fetch_hash`.
-An account stores the address, never the name: a name the registry later
-repoints changes no applied account until it applies a document again.
+Verifier resolution and the names retained for scoped-document reconstruction
+are described in [the account interface](../../docs/account-interface.md#verifiers).
 
 Parsing/validating an existing document:
 
@@ -108,13 +108,26 @@ included) and every executed upgrade, and never anything else. Unlike
 
 ```ts
 import { accountReader, readSnapshot } from '@stellar-registry/perch';
-import { account, docCompiler } from '@stellar-registry/perch-contracts';
+import { account, docCompiler, legacyAccount, legacyDocCompiler } from '@stellar-registry/perch-contracts';
 
-const reader = accountReader(accountId, new account.Client(opts(accountId)),
-  new docCompiler.Client(opts(compilerId)));
+// capabilities() has the same ABI in both builds; choose before decoding rules.
+const probe = new account.Client(opts(accountId));
+const { result: capabilities } = await probe.capabilities();
+const bindings = capabilities.snapshot_version === 1
+  ? { account: legacyAccount, compiler: legacyDocCompiler }
+  : capabilities.snapshot_version === 2
+    ? { account, compiler: docCompiler }
+    : undefined;
+if (!bindings) throw new Error('Unsupported snapshot version');
+const reader = accountReader(accountId, new bindings.account.Client(opts(accountId)),
+  new bindings.compiler.Client(opts(compilerId)));
 const snapshot = await readSnapshot(reader); // configuration, limits, capabilities
 snapshot.configuration.revision;             // what every value in it belongs to
 ```
+
+See [ABI compatibility](../../docs/auth-root.md#client-and-deployment-compatibility)
+for the supported bindings and upgrade boundary. `compilerId` must identify
+the compiler this account pins.
 
 `readSnapshot` reads `configuration()` (rules with their ids, the applied
 `doc_hash`, recovery wiring, the freeze, the pinned infra), the compiler's
@@ -137,18 +150,17 @@ import { selectRules, assertRevision, signingDigest, buildAuthPayload } from '@s
 
 const selection = selectRules(snapshot, { name: 'pay', scope: { type: 'contract', address: token } });
 await assertRevision(reader, selection.revision);       // StaleRevision if it moved
-const digest = signingDigest(signaturePayload, selection.ruleIds);
+const digest = signingDigest(accountId, signaturePayload, selection.ruleIds);
 const signature = buildAuthPayload(selection, [{ signer, signature: await sign(digest) }]);
 ```
 
-Rule ids are OZ context-rule ids. They survive an in-place edit and change
-when a rule is replaced (a new scope, a rename, a removal and re-addition,
-or `apply_doc`'s delta pricing a replacement below an edit), and OZ never
-reuses one, so select by name and scope at a revision and never
-keep ids across revisions. `signingDigest` is what every signer signs: OZ's
-`sha256(signature_payload || xdr(rule ids))`, where `signature_payload` is
-the account auth entry's Soroban payload. `buildAuthPayload` is the `ScVal`
-XDR of OZ's `AuthPayload` for that entry's `signature`.
+Select by name and scope at a revision and never keep ids across revisions;
+the account's [rule views](../../docs/account-interface.md#views) define id
+lifetime. `signingDigest` binds the account address, the host payload and the
+selected rule ids using the account's
+[`auth_digest` scheme](../../docs/account-interface.md#types).
+`buildAuthPayload` is the `ScVal` XDR of the wire-compatible `AuthPayload`
+for that entry's `signature`.
 
 **Only `apply_doc` is bound to a revision.** The pre-sign check guarantees
 the selection was current when it was signed, not when it executes. An
@@ -283,3 +295,32 @@ compiler is authoritative; `checkLimits` checks only its caps.
 ## License
 
 Apache-2.0
+
+
+### Exact authorization-entry roots
+
+`.authRoot(gameAddress, 'guess')` on a rule adds an exact entry-root
+constraint. For a capped token transfer, put it on the transfer rule; the
+companion game rule authorizes the guess itself. `request` also accepts
+`authRoot: { contract: gameAddress, function: 'guess' }` per permission.
+
+Pass the actual authorization-entry preorder to rule selection:
+
+```ts
+const selection = selectRules(snapshot, [gameRef, transferRef], [
+  { contract: gameAddress, function: 'guess' },
+  { contract: tokenAddress, function: 'transfer' },
+]);
+```
+
+This screens the root, but the caller must derive it from the XDR being
+signed. The account's host-authenticated entry is authoritative. A root-only
+winning guess selects just the game rule; a direct transfer fails the transfer
+rule's root condition. An outer router with no account authorization is not
+that entry root. General ancestry and root arguments are outside this feature.
+
+`readSnapshot` accepts legacy snapshot 1 and root-aware snapshot 2; every
+snapshot-2 rule must include root metadata. Applying root-bearing documents
+requires interface >=3 and snapshot >=2. Canonical bytes/hashes of documents
+without `auth-root` are unchanged. Existing deployments require a deliberate
+new build/upgrade before accepting it. See [root semantics and compatibility](../../docs/auth-root.md).

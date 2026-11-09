@@ -1558,7 +1558,7 @@ dependencies = [
 [[package]]
 name = "rule-eval"
 version = "0.1.0"
-source = "git+https://github.com/bitswell/soroban-rule-core?rev=fe16e21bb6f145b031c50f60a12b8188d341fc25#fe16e21bb6f145b031c50f60a12b8188d341fc25"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=a3c92ba074dcac4052727b7599e5fd8674af6c0a#a3c92ba074dcac4052727b7599e5fd8674af6c0a"
 
 [[package]]
 name = "rustc_version"
@@ -1868,7 +1868,7 @@ dependencies = [
 [[package]]
 name = "soroban-facade"
 version = "0.1.0"
-source = "git+https://github.com/bitswell/soroban-rule-core?rev=fe16e21bb6f145b031c50f60a12b8188d341fc25#fe16e21bb6f145b031c50f60a12b8188d341fc25"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=a3c92ba074dcac4052727b7599e5fd8674af6c0a#a3c92ba074dcac4052727b7599e5fd8674af6c0a"
 dependencies = [
  "rule-eval",
  "soroban-sdk",

@@ -1,0 +1,36 @@
+Table~\ref{tab:tab-compare-full} gives all twenty dimensions with their sources
+and marks; Table~\ref{tab:tab-disclosed} lists the open items each project
+documents about itself, Perch's first.
+
+\paragraph{Comparator artifacts.} oz-policy-builder pins one interpreter, on
+testnet only (mainnet: \fact{opb-interpreter-mainnet}), at
+\facthash{opb-interpreter-testnet}, running Wasm \facthash{opb-interpreter-wasm}
+with deploy-time limits \fact{opb-interpreter-limits}; its execution adapter runs
+\fact{opb-adapter-wasm-short}. It signs for two OpenZeppelin account builds, the
+\fact{oz-v080-tag} build \fact{oz-v080-account-build} and the
+\fact{oz-v072-tag}-line build \fact{oz-v072-line-account-build}. The OpenZeppelin
+policies it pins are \fact{oz-policies-testnet}, on testnet, and
+\fact{oz-policies-mainnet}, on mainnet. \code{spending\_limit} keeps at most
+\fact{oz-spending-history-max} history entries at \fact{oz-v080-tag} and
+\fact{oz-spending-history-max-v072} at \fact{oz-v072-tag}, and refuses with
+\fact{oz-spending-limit-exceeded}. The interpreter's refusal codes include
+\fact{opb-error-arg-mismatch} (an argument mismatch),
+\fact{opb-error-nonce-replay} (an install nonce that is not the next),
+\fact{opb-error-signers-changed} (a changed signer set),
+\fact{opb-error-predicate-hash} (a predicate-hash mismatch),
+\fact{opb-error-no-authenticated-signers} (no authenticated signer),
+\fact{opb-error-external-signer} (an external signer) and
+\fact{opb-error-default-context} (a rule that reaches the account's
+administration). An install's authorization window is
+\fact{opb-install-auth-window} ledgers (\srcpath{README.md:42-62};
+\srcpath{config.ts:26-28, 57-80}; \srcpath{deployments/oz-policies.json:2-28};
+\srcpath{policy-interpreter/src/storage.rs:46-111}). Its threat register lists
+\fact{opb-open-high} as open at High (\srcpath{evidence/stride-threat-model.md:392-405}).
+
+\perchtable{tab-compare-full}
+
+\paragraph{Open items.} Each project documents items about itself.
+oz-policy-builder rates its items in its STRIDE register; Perch keeps no register,
+so its rows give the status its own documents state.
+
+\perchtable{tab-disclosed}

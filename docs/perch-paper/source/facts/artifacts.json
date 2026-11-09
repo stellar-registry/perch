@@ -1,0 +1,69 @@
+{
+ "deployed-account-wasm": {
+  "value": "2c976bfd98678f3b6fcf5514420a81ef5e5b9fc1c5b6c60ec6f2dd64448479d5",
+  "source": "`P:deployments/mainnet.json:107` (V)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "deployed-account-bytes": {
+  "value": "70,702",
+  "source": "`…/mainnet.json:108` (V)"
+ },
+ "deployed-policy-1-wasm": {
+  "value": "f884913eba4a9491f8bcf89d1a687381c7c0699b148f98f8dc344e9a6223b26e",
+  "source": "`…/mainnet.json:44` (V)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "deployed-policy-1-bytes": {
+  "value": "17,999",
+  "source": "`…/mainnet.json:45` (V)"
+ },
+ "deployed-policy-2-wasm": {
+  "value": "8c043dcc24f944d7c3e349fb5fd83cedba4a9124b5791b625bd76b520b0f4a80",
+  "source": "`…/mainnet.json:53` (V)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "deployed-policy-2-bytes": {
+  "value": "12,923",
+  "source": "`…/mainnet.json:54` (V)"
+ },
+ "embedded-compiler": {
+  "value": "perch_doc_compiler.wasm · 111,418 B · 60f470704831852e67835379187a32058d9636b3783bf5ad9e625a29fc8da86f",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-policy-1": {
+  "value": "perch_interpreter.wasm · 18,806 B · 4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-policy-2": {
+  "value": "perch_spending_limit.wasm · 13,720 B · ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-ed25519": {
+  "value": "perch_ed25519_verifier.wasm · 1,634 B · 27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-recovery": {
+  "value": "perch_recovery.wasm · 67,816 B · ffb371746321c57487197145b8290fd4ec4a5b1a4a5eaf8969cfb93ed63f27c3",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-account": {
+  "value": "perch_account.wasm · 106,736 B · 3038f5dc50ad803acfd7567f10deabc0b24cedb2b8d5b7ea83030418b4914527",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-account-short": {
+  "value": "3038f5dc…",
+  "source": "same (C)"
+ },
+ "embedded-stub": {
+  "value": "verifiers_stub.wasm · 562 B · 65a4168ba2123c22dee2d30e0341f420db1dae59bef7b207ba0c8da3f55f5d14",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-game": {
+  "value": "guess_the_number.wasm · 3,217 B · 882b950b11ee752f99a4149fc5c238dac03ee7091ba2723adfb87b5e029d4b42",
+  "source": "`MANIFEST` (C)"
+ },
+ "embedded-reactor": {
+  "value": "perch_browser.wasm · 3,372,928 B · effaddd920357a560958a054849e6de15b1f74798846140ede66dd8ad1bb08ab",
+  "source": "`MANIFEST` (C)"
+ }
+}

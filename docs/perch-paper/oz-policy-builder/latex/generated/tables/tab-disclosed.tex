@@ -1,0 +1,21 @@
+% Generated from source/tables/tab-disclosed.json; edit that.
+\begin{table}[tbp]
+\centering
+\caption{\textbf{Disclosed open items in both systems.} Items each project documents about itself. oz-policy-builder rates its items in a STRIDE register; Perch keeps none, so its rows give the status its documents state. H-1/E-36 and E-38 arise from features Perch lacks; their absence in Perch is not a security property of Perch.}\label{tab:tab-disclosed}
+\scriptsize\begin{tabularx}{\linewidth}{@{}lLp{0.2\linewidth}p{0.24\linewidth}@{}}
+\toprule
+\textbf{System} & \textbf{Item} & \textbf{Status} & \textbf{Source} \\
+\midrule
+Perch & The completion marker is consumed by the target's canonical identity, not its exact bytes & open & issue \fact{completion-marker-issue} \\
+Perch & Delegated signers do not bind rule IDs & by design (CAP-0071) & \code{docs/\allowbreak{}recovery/\allowbreak{}cap-\allowbreak{}0071.\allowbreak{}md:\allowbreak{}28} \\
+Perch & Replacing a capped rule, or changing its cap, starts an empty window & documented & \code{docs/\allowbreak{}DEFERRED.\allowbreak{}md:\allowbreak{}298-\allowbreak{}324} \\
+Perch & A rule edited in place between signing and inclusion decides under its new contents & documented & \code{docs/\allowbreak{}DEFERRED.\allowbreak{}md:\allowbreak{}227-\allowbreak{}262} \\
+Perch & Grant installs take no expected version & stated & \code{lib.rs:1000-1006} \\
+Perch & One key is admin and manager of \code{perch/verifiers} on testnet and mainnet; the admin can replace the registry's code at once & deployment fact & \code{deployments/\allowbreak{}*.\allowbreak{}json:\allowbreak{}22-\allowbreak{}23} \\
+oz-policy-builder & H-1/E-36: a keyed door on a no-gate adapter without the grants pin & High, residual Medium; tooling-only guard & \code{audit-\allowbreak{}overview.\allowbreak{}md:\allowbreak{}165-\allowbreak{}177} \\
+oz-policy-builder & E-38: a keyless follower's fence can be loosened by the followed rule's admins & \fact{opb-e38-severity} & \code{stride-\allowbreak{}threat-\allowbreak{}model.\allowbreak{}md:\allowbreak{}400} \\
+oz-policy-builder & T-05: same-transaction read manipulation & High where a rule uses \code{read} & \code{stride-\allowbreak{}threat-\allowbreak{}model.\allowbreak{}md:\allowbreak{}397} \\
+oz-policy-builder & T-19: the review reaches the owner through the agent & High until the owner side runs it & \code{stride-\allowbreak{}threat-\allowbreak{}model.\allowbreak{}md:\allowbreak{}398} \\
+\bottomrule
+\end{tabularx}
+\end{table}

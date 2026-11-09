@@ -1,0 +1,45 @@
+{
+ "title": "Deployed artifacts this paper cites.",
+ "caption": "Testnet is reset periodically. Manifests: `deployments/testnet.json`, `mainnet.json` at `{{fact:perch-pin-short}}`. The embedded build's artifacts and their hashes are listed with the source revisions in the reproducibility material.",
+ "columns": [
+  "Artifact",
+  "Network",
+  "Identifier"
+ ],
+ "latex_colspec": "@{}p{0.33\\linewidth}p{0.14\\linewidth}L@{}",
+ "rows": [
+  [
+   "Perch {{fact:perch-deployed-account-version}} account (`{{fact:perch-deployed-source-short}}`), {{fact:deployed-account-bytes}} B",
+   "testnet, mainnet",
+   "Wasm `{{fact:deployed-account-wasm}}`"
+  ],
+  [
+   "Perch {{fact:perch-deployed-account-version}} policy contracts, {{fact:deployed-policy-1-bytes}} B and {{fact:deployed-policy-2-bytes}} B",
+   "testnet, mainnet",
+   "Wasm `{{fact:deployed-policy-1-wasm}}`; `{{fact:deployed-policy-2-wasm}}`"
+  ],
+  [
+   "This paper's account, preview deployment, {{fact:preview-account-bytes}} B",
+   "testnet",
+   "Wasm `{{fact:preview-account-wasm}}`"
+  ],
+  [
+   "{{fact:wallet-name}} preview account; completion transaction",
+   "testnet",
+   "`{{fact:completion-account}}`; `{{fact:completion-tx}}`"
+  ],
+  [
+   "Storage-census account (fresh preview account holding the game grant)",
+   "testnet",
+   "`{{fact:census-account}}`"
+  ],
+  [
+   "Smoke-test account; 1-stroop passkey transfer through a grant rule",
+   "testnet",
+   "`{{fact:smoke-account}}`; `{{fact:smoke-tx}}`"
+  ]
+ ],
+ "editions": [
+  "html"
+ ]
+}

@@ -1,0 +1,273 @@
+{
+ "about": "Data for fig-two-paths: the phases of one __check_auth in a Perch account and in an OpenZeppelin v0.8.0 account whose rules carry oz-policy-builder's policy-interpreter and OpenZeppelin's spending_limit. Read from source, not measured. Sources: P = Perch at f0275f4; oz8 = OpenZeppelin stellar-contracts v0.8.0 packages/accounts/src; opb = oz-policy-builder at 43b13ed. The SVG, its narrow form and the text alternative are generated from this file.",
+ "repos": {
+  "P": "Perch f0275f4 ",
+  "oz8": "stellar-contracts v0.8.0 packages/accounts/src/",
+  "opb": "oz-policy-builder 43b13ed "
+ },
+ "columns": {
+  "perch": {
+   "title": "Perch",
+   "sub": "passkey; WebAuthn verifier contract"
+  },
+  "oz": {
+   "title": "OpenZeppelin v0.8.0",
+   "sub": "interpreter, spending_limit; delegated signer"
+  }
+ },
+ "scenarios": {
+  "lost": "Lost guess",
+  "overcap": "Guess over the cap",
+  "direct": "Direct transfer"
+ },
+ "phases": [
+  {
+   "n": 1,
+   "id": "call",
+   "name": "Host call",
+   "perch": {
+    "text": "The host calls `__check_auth` with two contexts: the `guess`, then the transfer it makes.",
+    "direct": "The host calls `__check_auth` with one context: the transfer.",
+    "src": [
+     [
+      "P",
+      "crates/perch-smart-account/src/lib.rs:1842-1849"
+     ]
+    ],
+    "io": "receives the payload's rule IDs and signers"
+   },
+   "oz": {
+    "text": "The host calls `__check_auth`, which runs `do_check_auth` on the same two contexts.",
+    "direct": "The host calls `__check_auth`, which runs `do_check_auth` on one context: the transfer.",
+    "src": [
+     [
+      "oz8",
+      "smart_account/storage.rs:629-637"
+     ]
+    ],
+    "io": "one rule ID per context"
+   }
+  },
+  {
+   "n": 2,
+   "id": "select",
+   "name": "Rule selection",
+   "perch": {
+    "text": "Guards: reserved hooks, freeze, excluded set. Each rule ID resolves to a stored rule and its spending record.",
+    "src": [
+     [
+      "P",
+      "crates/perch-smart-account/src/lib.rs:1113-1147"
+     ],
+     [
+      "P",
+      "crates/perch-smart-account/src/gate.rs:70-90"
+     ]
+    ],
+    "io": "reads the rule set, scope tags, freeze and spending records"
+   },
+   "oz": {
+    "text": "Each rule must exist, be unexpired and match its context's contract; a signer on no selected rule is refused (3016).",
+    "src": [
+     [
+      "oz8",
+      "smart_account/storage.rs:312-367"
+     ],
+     [
+      "oz8",
+      "smart_account/storage.rs:639-671"
+     ]
+    ],
+    "io": "reads each selected context rule; checks each payload signer against the selected rules' signers"
+   }
+  },
+  {
+   "n": 3,
+   "id": "decide",
+   "name": "Decision",
+   "perch": {
+    "text": "`rule_eval::authorize` decides both contexts: function, recipient, signers, expiry and the window cap.",
+    "direct": "`rule_eval::authorize` decides the transfer alone; the window cap charges it.",
+    "src": [
+     [
+      "P",
+      "crates/perch-smart-account/src/gate.rs:91-105"
+     ]
+    ],
+    "io": "reads rules, records, ledger and grant generation; writes nothing",
+    "refusal": {
+     "scenario": "overcap",
+     "code": "RuleEvalRefused",
+     "fact": "auth-error-rule-eval-refused",
+     "note": "Perch refuses here, before any signer is authenticated: the transfer would exceed 2 XLM in the window. No verifier is called and nothing is written."
+    }
+   },
+   "oz": {
+    "none": true,
+    "text": "No decision here: a rule with policies leaves it to them.",
+    "src": [
+     [
+      "oz8",
+      "smart_account/storage.rs:358-364"
+     ]
+    ],
+    "io": "with policies, the signer check is deferred to enforce"
+   }
+  },
+  {
+   "n": 4,
+   "id": "digest",
+   "name": "Digest",
+   "perch": {
+    "text": "digest = SHA-256(bound ‖ XDR(rule IDs)); bound hashes the payload with the account.",
+    "src": [
+     [
+      "P",
+      "crates/perch-smart-account/src/lib.rs:1155"
+     ],
+     [
+      "P",
+      "crates/perch-smart-account/src/gate.rs:106-110"
+     ]
+    ],
+    "io": "computes the digest an external signer signs",
+    "unreached": [
+     "overcap"
+    ]
+   },
+   "oz": {
+    "text": "`AuthDigestPreimage` holds the account, the payload and the rule IDs.",
+    "src": [
+     [
+      "oz8",
+      "smart_account/storage.rs:157-175"
+     ],
+     [
+      "oz8",
+      "smart_account/storage.rs:659-663"
+     ]
+    ],
+    "io": "the value a delegated signer authorizes"
+   }
+  },
+  {
+   "n": 5,
+   "id": "authenticate",
+   "name": "Authentication",
+   "perch": {
+    "text": "Calls the WebAuthn verifier contract: `verify(digest)` checks the passkey signature.",
+    "src": [
+     [
+      "P",
+      "crates/perch-smart-account/src/auth.rs:47-58"
+     ]
+    ],
+    "io": "one call out of the account, in this authorization entry",
+    "unreached": [
+     "overcap"
+    ]
+   },
+   "oz": {
+    "text": "The Stellar account authorizes `__check_auth(preimage)` in its own second authorization entry, which the host checks.",
+    "src": [
+     [
+      "oz8",
+      "smart_account/storage.rs:668-674"
+     ],
+     [
+      "oz8",
+      "smart_account/storage.rs:408-411"
+     ]
+    ],
+    "io": "require_auth_for_args on the delegated address"
+   }
+  },
+  {
+   "n": 6,
+   "id": "policies",
+   "name": "Policies",
+   "perch": {
+    "none": true,
+    "text": "No policies: the account decided in phase 3.",
+    "src": [
+     [
+      "P",
+      "crates/perch-smart-account/src/gate.rs:56-123"
+     ]
+    ],
+    "io": "no call",
+    "unreached": [
+     "overcap"
+    ]
+   },
+   "oz": {
+    "text": "Each rule's policies run `enforce` in stored order: the interpreter on the `guess`; on the transfer, `spending_limit` first, then the interpreter.",
+    "direct": "On the transfer, the policies run `enforce` in stored order: `spending_limit` first, then the interpreter.",
+    "src": [
+     [
+      "oz8",
+      "smart_account/storage.rs:676-686"
+     ],
+     [
+      "oz8",
+      "smart_account/storage.rs:830"
+     ],
+     [
+      "oz8",
+      "smart_account/storage.rs:1304"
+     ],
+     [
+      "opb",
+      "contracts/stellar/policy-interpreter/src/lib.rs:192-277"
+     ],
+     [
+      "oz8",
+      "policies/spending_limit.rs:233-298"
+     ]
+    ],
+    "io": "calls out of the account: each attached policy, in stored order (address order at rule creation; add_policy appends)",
+    "refusal": {
+     "scenario": "overcap",
+     "code": "SpendingLimitExceeded",
+     "fact": "oz-spending-limit-exceeded",
+     "note": "The OpenZeppelin account refuses here, in `spending_limit`, after the signer was authenticated and the interpreter permitted the `guess`; with `spending_limit` stored first, the transfer's interpreter call does not run."
+    }
+   }
+  },
+  {
+   "n": 7,
+   "id": "commit",
+   "name": "Commit",
+   "perch": {
+    "text": "Stores the transfer rule's changed spending record in the account.",
+    "src": [
+     [
+      "P",
+      "crates/perch-smart-account/src/gate.rs:114-121"
+     ]
+    ],
+    "io": "writes the spending record",
+    "unreached": [
+     "overcap"
+    ]
+   },
+   "oz": {
+    "text": "Writes made in `enforce` stay: `spending_limit`'s history and the interpreter's TTL bumps.",
+    "src": [
+     [
+      "oz8",
+      "policies/spending_limit.rs:298"
+     ],
+     [
+      "opb",
+      "contracts/stellar/policy-interpreter/src/lib.rs:261-265"
+     ]
+    ],
+    "io": "writes in the two policy contracts",
+    "unreached": [
+     "overcap"
+    ]
+   }
+  }
+ ]
+}

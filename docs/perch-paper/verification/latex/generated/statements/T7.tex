@@ -1,0 +1,9 @@
+% Generated from source/statements.json.
+\begin{perchstatement}{7}{Delegation-tree budgets.}\label{stmt:delegation-tree-budgets}
+\[\begin{aligned}&\mathit{valid}(T) \land (\forall n \in T.\ \mathit{spent}_n = 0)\\
+&\quad \land\ \mathit{run}(T, \vec o) = (T', \mathit{log}) \land T'_a = n\\
+&\qquad \implies \mathit{spentUnder}(T', \mathit{log}, a) \le \mathit{allowance}_n\end{aligned}\]
+\(\mathit{valid}(T)\) says that every node's parent index is below its own and no allowance or spent amount is negative; \(\mathit{run}\) applies spends, delegations and refills in order, keeping the tree on a refused one and logging each successful spend; \(\mathit{spentUnder}(T', \mathit{log}, a)\) totals the logged spends made at or under node \(a\), and \(\mathit{allowance}_n\) is that node's allowance at the end. From a valid tree with nothing spent, spending beneath every node is at most its allowance, including when its children's allowances add up to more than its own. Allowances are lifetime totals, not windows, and refills raise them.
+\statementhypotheses{A valid tree with nothing spent}
+\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/Budget.lean\#L852}{Budget.Tree.spentUnder\_le\_allowance}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/ExtractedBudget.lean\#L172}{Extracted.runBudget\_spentUnder\_le\_allowance} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}}
+\end{perchstatement}

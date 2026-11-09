@@ -1,0 +1,183 @@
+{
+ "nav_note": "A research paper with a side-by-side simulation.<br>November 2026",
+ "glossary": "tab-glossary-main",
+ "exhibit_editions": {
+  "tab-sim": [
+   "latex"
+  ]
+ },
+ "sections": [
+  {
+   "id": "motivation",
+   "title_html": "Apps and agents need authority with limits",
+   "title_latex": "Introduction",
+   "nav": "The request",
+   "figures": [
+    "fig-overview",
+    "fig-shop-grant"
+   ],
+   "aliases": [
+    "status"
+   ]
+  },
+  {
+   "id": "background",
+   "title_html": "How does a Soroban account approve a call?",
+   "title_latex": "Background",
+   "nav": "Background",
+   "editions": [
+    "latex"
+   ]
+  },
+  {
+   "id": "grants",
+   "title_html": "The sign dialog shows the whole request and previews it",
+   "title_latex": "Grants and Spending Windows",
+   "nav": "Review and preview",
+   "figures": [
+    "fig-cap-window"
+   ],
+   "aliases": [
+    "model",
+    "authority",
+    "recovery"
+   ]
+  },
+  {
+   "id": "authorization",
+   "title_html": "The user signs or refuses, and the account decides",
+   "title_latex": "The Authorization Path",
+   "nav": "Sign or refuse",
+   "figures": [
+    "fig-auth-path"
+   ],
+   "aliases": [
+    "gate",
+    "background",
+    "threat-model",
+    "limits"
+   ]
+  },
+  {
+   "id": "threat-model",
+   "title_html": "A stolen app key can do only what its grant allows",
+   "title_latex": "Threat Model",
+   "nav": "Threat model",
+   "tables": [
+    "tab-grantee"
+   ],
+   "editions": [
+    "latex"
+   ]
+  },
+  {
+   "id": "compare",
+   "title_html": "Perch and oz-policy-builder place the same checks differently",
+   "title_latex": "Perch and oz-policy-builder",
+   "nav": "Comparison",
+   "tables": [
+    "tab-choose"
+   ],
+   "editions": [
+    "latex"
+   ]
+  },
+  {
+   "id": "simulation",
+   "title_html": "The same request runs against an OpenZeppelin account",
+   "title_latex": "Both Designs in soroban-sim",
+   "nav": "Against OpenZeppelin",
+   "figures": [
+    "fig-sim"
+   ],
+   "tables": [
+    "tab-sim"
+   ],
+   "aliases": [
+    "experiment",
+    "compare"
+   ]
+  },
+  {
+   "id": "proofs",
+   "title_html": "The decision function's guarantees are proved in Lean",
+   "title_latex": "Formal Results",
+   "nav": "What is proved"
+  },
+  {
+   "id": "evaluation",
+   "title_html": "A Nido wallet run used a grant end to end",
+   "title_latex": "Evaluation",
+   "nav": "In Nido"
+  },
+  {
+   "id": "limits",
+   "title_html": "What does Perch not protect?",
+   "title_latex": "Limitations",
+   "nav": "Limitations",
+   "editions": [
+    "latex"
+   ]
+  },
+  {
+   "id": "related",
+   "title_html": "Related work",
+   "title_latex": "Related Work",
+   "nav": "Related work",
+   "editions": [
+    "latex"
+   ]
+  },
+  {
+   "id": "agents",
+   "title_html": "What next",
+   "title_latex": "Future Work",
+   "nav": "Future work",
+   "editions": [
+    "latex"
+   ]
+  },
+  {
+   "id": "conclusion",
+   "title_html": "What Perch shows and what comes next",
+   "title_latex": "Conclusion",
+   "nav": "Conclusion",
+   "aliases": [
+    "agents",
+    "related"
+   ]
+  },
+  {
+   "id": "repro",
+   "title_html": "Provenance and reproducibility",
+   "title_latex": "Artifacts",
+   "nav": "Provenance",
+   "appendix": true,
+   "aliases": [
+    "api"
+   ]
+  },
+  {
+   "id": "glossary",
+   "title_html": "Glossary",
+   "title_latex": "Glossary",
+   "nav": "Glossary",
+   "editions": [
+    "html"
+   ],
+   "appendix": true,
+   "unnumbered": true
+  },
+  {
+   "id": "references",
+   "title_html": "References",
+   "title_latex": "References",
+   "nav": "References",
+   "editions": [
+    "html"
+   ],
+   "appendix": true,
+   "unnumbered": true
+  }
+ ]
+}

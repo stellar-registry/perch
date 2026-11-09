@@ -1,0 +1,135 @@
+{
+ "title": "Perch and oz-policy-builder, all twenty dimensions with sources.",
+ "caption": "Perch paths are at {{fact:perch-pin-short}}, oz-policy-builder paths at {{fact:opb-pin-short}}, OpenZeppelin (OZ) paths at `stellar-contracts` {{fact:oz-v080-tag}} unless marked. Mark: V checked in source at the pin by the authors; R cited from source by an internal reader and not re-read by the authors; U not verified. Nothing here was measured; the policy order was also observed in the walkthrough. T*n* and O*n* are the theorems and obligations of What Perch proves.",
+ "columns": [
+  "Dimension",
+  "Perch",
+  "oz-policy-builder on an OpenZeppelin account",
+  "Mark"
+ ],
+ "latex_long": true,
+ "latex_size": "scriptsize",
+ "latex_colspec": "@{}p{0.13\\linewidth}LLl@{}",
+ "rows": [
+  [
+   "Where the decision runs",
+   "Linked `rule_eval::authorize` inside `__check_auth` (`gate.rs:93-105`)",
+   "The account selects the rule and authenticates, then calls each attached policy's `enforce`; the shared interpreter evaluates the stored predicate (OZ `storage.rs:629-690`; `policy-interpreter/src/lib.rs:192-277`)",
+   "V"
+  ],
+  [
+   "Order of checks",
+   "Whole rule decision, caps included, before authentication; a refused batch calls no verifier (`gate.rs:93-113`)",
+   "Rule existence, scope and expiry, then a refusal of any signer on no selected rule, before authentication; then each attached policy's `enforce` (predicate, spending total, threshold) in the rule's stored order: address order for the policies it was created with, then any added later (OZ `storage.rs:629-689, 830, 1304, 1588-1596`; observed in the walkthrough)",
+   "V"
+  ],
+  [
+   "Where decision state lives",
+   "Account storage only: rules, grants, spending records, generation (`lib.rs:597-636`)",
+   "Account (rules, signers); interpreter, one entry per (account, rule) (`policy-interpreter/src/storage.rs:167-188`); `spending_limit`, history per (account, rule) (OZ `spending_limit.rs:143-148`)",
+   "V/R"
+  ],
+  [
+   "Conditions on one call",
+   "Target, function list, {{fact:doc-conditions-count}} conjunctive argument conditions, threshold, expiry; no per-call amount bound (`perch-ir/src/doc.rs:281-304`; rule-core `lowering.rs:17-20`)",
+   "And/or, six comparisons, in/nin, all/any/sum over vectors, scaled arithmetic, ledger time `now`, nested `call_path`, `read` (`policy-interpreter/src/dsl.rs:84-158`); per-call `lte` on amounts",
+   "V"
+  ],
+  [
+   "Relating calls in one transaction",
+   "None: each context is checked alone against its rule; draft changes after the pinned build ({{fact:exact-roots-prs}}) add entry roots",
+   "One predicate over the execution adapter's batch argument can relate its calls (`docs/stellar.md:350-352`; `policy-interpreter/README.md:390-397`)",
+   "V"
+  ],
+  [
+   "External state in the decision",
+   "None; reads account storage only",
+   "`read` calls other contracts during `enforce`, up to the instance's `max_reads` ({{fact:opb-interpreter-max-reads}} on the testnet pin) (`dsl.rs:409-423`; `config.ts:66-73`); same-transaction manipulation is open at High, with the safe-list refusal in place (T-05, `stride-threat-model.md:397`)",
+   "V"
+  ],
+  [
+   "Rolling spending cap",
+   "In the evaluator; window (L − P, L]; proved from empty records (T6); at most {{fact:spends-per-window}} spends per window on chain (`docs/recovery/budgets.md:604-611`)",
+   "Not in the interpreter (`dsl.rs:65-72`). OpenZeppelin `spending_limit` beside it: same window boundary, at most {{fact:oz-spending-history-max}} entries, `transfer` only (OZ `spending_limit.rs:9-12, 169`; `install.ts:957-967`); the oz-policy-builder authors did not audit it (`evidence/README.md:157`); OpenZeppelin's v0.8.0 diff audit lists it in scope (OZ `audits/`, v0.8.0 report, p. 4)",
+   "V"
+  ],
+  [
+   "Threshold and signer kinds",
+   "Threshold inside the rule, counting distinct identities (T3); External (Ed25519, WebAuthn) and Delegated (CAP-0071) signers",
+   "A rule with any policy accepts one signer unless OpenZeppelin's threshold policy is attached; the builder refuses that shape unless `anyOne` (`tools.ts:590`). Policed rules accept Delegated signers only (`lib.rs:455-462`, error {{fact:opb-error-external-signer}})",
+   "V"
+  ],
+  [
+   "What a signature binds",
+   "External: account and rule IDs. Delegated: account, not rule IDs (`gate.rs:106-113`; `auth.rs:47-61`)",
+   "v0.8.0: account and rule IDs for both kinds; an external signer signs the hash of `AuthDigestPreimage`, a delegated signer authorizes it through `require_auth_for_args` (OZ `storage.rs:150-175, 396-412`). 0.7.2-line: rule IDs, not the account, for External with a legacy `Address` credential (OZ v0.7.2 `storage.rs:492-495`)",
+   "V"
+  ],
+  [
+   "Ending authority in bulk",
+   "A completed recovery advances the grant generation, and every earlier grant refuses in that transaction (T10); otherwise one grant at a time",
+   "Rules are removed one at a time. A policed rule is pinned to its exact signer set (error {{fact:opb-error-signers-changed}} after any change). Removing a rule with only rule 0's signatures leaves the interpreter's entry for it until the entry archives (`docs/stellar.md:548-562`); a rule that follows it keeps enforcing it (policy-synth `README.md:144`)",
+   "V"
+  ],
+  [
+   "Assurance",
+   "Lean proofs of the evaluator over its translation (What Perch proves); shell tested; no external audit completed",
+   "{{fact:opb-interpreter-tests}} interpreter tests ({{fact:opb-tests-against-oz08}} against OpenZeppelin's 0.8.0 Wasm), parity corpus, worst-case suite on Wasm, STRIDE model, mutation testing of one path; no formal model found in the tree (a search, not a proof of absence); pull request {{fact:opb-pentest-pr}} hardened the off-chain packages after an external penetration test; external audit of {{fact:opb-release}} {{fact:opb-audit-status}} since {{fact:opb-audit-start}}, with the OpenZeppelin account and policies out of scope, though OpenZeppelin's own v0.8.0 diff audit lists `spending_limit.rs` and the account's `storage.rs` in scope (`README.md:57-59, 166-171`; `audit-overview.md:15-20, 76-85`; `evidence/README.md:23`; OZ `audits/`, v0.8.0 report, p. 4)",
+   "V"
+  ],
+  [
+   "Deployment",
+   "This design: testnet preview. Earlier design `{{fact:perch-deployed-source-short}}`: testnet and mainnet",
+   "Interpreter pinned on testnet only; no mainnet pin (`config.ts:57-80`). OpenZeppelin v0.7.2 policies on mainnet (`evidence/README.md:154-157`)",
+   "V"
+  ],
+  [
+   "Rules with no signer",
+   "Refused, `UnguardedRule` (`rule_set.rs:53-55`)",
+   "Allowed when bound to an execution adapter; anyone may then run what the predicate permits (`lib.rs:210-223`; `architecture.md:149`)",
+   "V/R"
+  ],
+  [
+   "Rules shared across accounts",
+   "None; grant rules are copied into the account at install",
+   "A rule may follow another account's rule, whose admins can change the predicate (E-38, {{fact:opb-e38-severity}}) (`lib.rs:76-84`; `audit-overview.md:243-278`)",
+   "V"
+  ],
+  [
+   "Account-key recovery",
+   "Guardian or ZK recovery replaces credentials (The Perch vision)",
+   "None; Prime's \"recovery\" moves custody funds to a fixed address (`architecture.md:81-94`)",
+   "V"
+  ],
+  [
+   "Install ordering",
+   "`apply_doc` takes an optional expected revision; `apply_scope` takes none (`lib.rs:1000-1006`; `docs/account-interface.md:96-135`)",
+   "`install_nonce` must be the stored nonce plus one (`lib.rs:144-145`)",
+   "V"
+  ],
+  [
+   "Authoring tools",
+   "perch-js builder (`packages/perch-js/README.md:31-44`); on-chain compiler; offline z3 checks in `perch-analyze` (`crates/perch-analyze/src/lib.rs:1-27`)",
+   "Recorder, synthesiser, verifier with minimality, review renderer, unsigned install builder, overlap scan; {{fact:opb-tools-count}} tools over a CLI and an MCP server (`README.md:13-24`)",
+   "V/R"
+  ],
+  [
+   "Who can change deployed code",
+   "Account: the owner, after {{fact:upgrade-delay-ledgers}} ledgers (`perch-recovery-interface/src/account.rs:15`). Compiler, verifiers, controller: no admin (`docs/recovery/spec.md:100`). Registry: admin-upgradeable (`perch-constructorless-registry/src/lib.rs:105-108`)",
+   "Interpreter, adapter, gate and seat: no admin and no upgrade path (`architecture.md:153`). Oracles on the safe list are admin-upgradeable (`config.ts:215`). OpenZeppelin account and policies: not examined",
+   "V/R/U"
+  ],
+  [
+   "Keeping state alive",
+   "Rule set extended on every authorization; grants on read; spending records to the maximum on write; `renew` omits grants (`gate.rs:64, 114-119`; `lib.rs:936-959`)",
+   "Interpreter entry bumped on a permit when fewer than 100 ledgers remain; instance and read targets need a keep-alive job (`lib.rs:256-265`; `docs/stellar.md:304-308`)",
+   "V/R"
+  ],
+  [
+   "What a refusal reports",
+   "`StaleScope` ({{fact:auth-error-stale-scope}}) or `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}}); a wallet re-runs the evaluator off chain for the reason",
+   "A specific deny code per reason (`storage.rs:27-86`)",
+   "V"
+  ]
+ ]
+}

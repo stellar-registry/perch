@@ -1,0 +1,10 @@
+<p class="lede"><strong>A grant document becomes stored rules through lowering. Two theorems cover that step: what lowering refuses, and what the result allows once attenuated and accepted.</strong></p>
+<p>The account installs a grant by calling the document compiler, which validates the JSON and returns a model of the document, and then lowering that model with rule-core's <code>lower_scoped</code> under its own address \(A\), its excluded set \(X\) and its current generation \(g\) ({{ref:def:documents-and-lowering}}). In the account, \(X\) holds its adopted recovery controller and the zero-knowledge adapter and pool of its recovery configuration; lowering refuses any rule whose target is \(A\) or in \(X\).</p>
+<h3 id="hypotheses">Three hypotheses</h3>
+<ul>
+<li><code>Doc.Valid</code>: every rule that requires all its signers names distinct signers, fewer than \(2^{32}\) of them, and no rule has a not-after ledger of 0. That Perch's compiler accepts only valid documents is recorded as unproven (<code>{{fact:claim-perch-validation}}</code>; obligation O5).</li>
+<li><code>LowerRoom</code>: the document's lists fit the evaluator's bounded vectors, so the translated <code>lower</code> has room to run.</li>
+<li><code>ArgsRoom</code>: the weaker condition that each rule's argument conditions fit, enough for the translated <code>lower_scoped</code>, refusals included.</li>
+</ul>
+{{statements:T8,T9}}
+<p>{{ref:stmt:grant-target-containment}} is the install-time half of containment, and it survives attenuation. {{ref:stmt:the-containment-chain}} composes issue, attenuation and acceptance: what is accepted is allowed by the source document, never calls the account or its excluded set, and is evaluated at the issuing generation. The account builds \(X\) from its storage rather than from the translated <code>excluded</code>, and because a controller can be adopted after a grant is installed, <code>__check_auth</code> rechecks each selected grant rule against the current set; both are tested (obligation O4). {{ref:sec:obligations}} ties the translated lowering to the model ({{ref:stmt:lowering-equivalence}}).</p>

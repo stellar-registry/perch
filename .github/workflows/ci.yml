@@ -396,6 +396,32 @@ jobs:
           CARGO_TARGET_DIR=target/zk-d24 zk_wasm --features tree-depth-24
           cargo test -q -p perch-zk-adapter --test costs -- --ignored --nocapture --test-threads 1
 
+  # The Perch papers: every edition comes from docs/perch-paper/source, so the
+  # committed pages and latex/generated/ folders must match it (paper.py --check),
+  # and each LaTeX edition must build with no undefined reference or citation.
+  paper:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # The explorables' in-page models (PerchModel in source/html/figures.js) against the paper's definitions.
+      - run: node docs/perch-paper/build/figures/test_model.mjs
+      - uses: ./.github/actions/setup-tectonic
+      - run: docs/perch-paper/latex/build.sh --stage "$PDF_STAGE"
+        env:
+          PDF_STAGE: ${{ runner.temp }}/perch-pdfs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perch-paper-pdf
+          path: ${{ runner.temp }}/perch-pdfs
+          if-no-files-found: error
+
   zizmor:
     runs-on: ubuntu-latest
     permissions:

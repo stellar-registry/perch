@@ -1,0 +1,46 @@
+{
+ "title": "Adversaries and what holds against each.",
+ "caption": "Trusted, not adversaries: the Soroban host and validators; the verifier contracts documents name; the adopted recovery controller; the document compiler, which turns grant JSON into the model the account lowers; rustc {{fact:rustc-perch}}, which builds the pinned contracts and the testnet preview; the wallet's display of what is signed; and, for the proofs, the Lean kernel, Charon, Aeneas and the specification. T-labels refer to the theorems and O-labels to the shell obligations of What Perch proves.",
+ "columns": [
+  "Adversary",
+  "Can do",
+  "What Perch claims (evidence)",
+  "Residual"
+ ],
+ "latex_colspec": "@{}>{\\raggedright\\arraybackslash}p{0.14\\linewidth}LLL@{}",
+ "rows": [
+  [
+   "A1 Grantee (app or agent key)",
+   "Sign within rules that name its key; build any invocation tree; cite any rule that names its key",
+   "An accepted authorization is allowed by the rules it cites (proved for the evaluator, T2; signer authentication, selection and context conversion tested, O1, O2, O7). No grant rule allows a call to the account, its adopted recovery controller, or the ZK adapter and pool of its recovery configuration (proved for lowering under `Doc.Valid`, documents' well-formedness, T8–T9; O5 unproven; runtime recheck tested). Each capped rule's window stays within its limit (proved for the evaluator from empty records, T6; selection and record persistence tested, O2, O6)",
+   "A key named by several live rules has the union of their authority. Caps are per rule, not per grant. Each context is checked alone, so a rule meant for a call the game makes also allows that call made directly. Allowances, and funds held by other contracts, move without the account's authorization"
+  ],
+  [
+   "A2 Submitter or relayer",
+   "Wrap signed entries, choose timing and fee, resubmit a refused entry until its expiration ledger",
+   "An external signer's signature binds this account and the selected rule IDs (tested)",
+   "Delegated signers do not bind rule IDs. A rule edited in place between signing and inclusion decides under its new contents"
+  ],
+  [
+   "A3 Thief of the owner key",
+   "Everything the owner can do",
+   "Under Protected with an enrolled baseline, once the recovery condition authorizes an attempt, the account authorizes only its completion; changing recovery or upgrading needs the condition's evidence (tested)",
+   "Without a baseline, Protected is no stronger than Loss, under which the thief can cancel any recovery. Allowances survive recovery. An owner upgrade executes after {{fact:upgrade-delay-ledgers}} ledgers"
+  ],
+  [
+   "A4 Guardians below quorum",
+   "Approve attempts",
+   "Completion needs the quorum, the delay and the window (tested)",
+   "A full quorum, or whoever holds the zero-knowledge secret, is trusted: recovery cannot tell two holders of one factor apart"
+  ],
+  [
+   "A5 Manager or admin of `perch/verifiers`",
+   "Admit verifier names; the admin can upgrade the registry",
+   "An applied account, and its pinned infrastructure addresses, are unaffected by later registry actions (argued)",
+   "Names resolved by later installs follow the manager. One key holds both roles on testnet and mainnet"
+  ]
+ ],
+ "editions": [
+  "html"
+ ]
+}

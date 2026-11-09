@@ -1,0 +1,39 @@
+{
+ "columns": [
+  "Counter",
+  "Lives in",
+  "Advances on",
+  "Used for"
+ ],
+ "rows": [
+  [
+   "Grant generation",
+   "Account",
+   "Each completed recovery, nothing else",
+   "Stamping grants; refusing stale ones"
+  ],
+  [
+   "Recovery generation",
+   "Account",
+   "Every recovery-configuration change (enrollment, reconfiguration, removal, each side of a controller switch), each completed recovery, each executed upgrade",
+   "Making scheduled upgrades stale"
+  ],
+  [
+   "Revision",
+   "Account",
+   "Every `apply_doc` and executed upgrade",
+   "The optional expected-revision check on account-document writes"
+  ],
+  [
+   "Epoch",
+   "Recovery controller",
+   "Every configuration change, completed recovery and executed account upgrade",
+   "Invalidating older evidence and attempts"
+  ]
+ ],
+ "title": "Four counters, each with its own trigger; {{ref:fig:fig-recovery}} shows the first two in the reference run.",
+ "caption": "",
+ "editions": [
+  "html"
+ ]
+}

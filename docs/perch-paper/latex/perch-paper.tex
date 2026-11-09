@@ -1,0 +1,29 @@
+% Perch: the academic edition of the main paper. Build with ./build.sh (pinned
+% Tectonic). Section order, titles, figures, tables, facts, formal statements
+% and references come from ../source via ../build/paper.py, which writes
+% generated/; prose lives in sections/. See ../README.md.
+% Pass \def\anonymous{} before \input (or build with ANONYMOUS=1) for a
+% double-blind submission: author names and repository links are withheld.
+\documentclass[runningheads]{llncs}
+\input{perch-preamble}
+
+\title{Perch: Bounded Grants for Apps and Agents\\on Soroban Smart Accounts}
+\titlerunning{Perch: Bounded Grants on Soroban Smart Accounts}
+\ifdefined\anonymous
+\author{Anonymous authors}
+\institute{Anonymous institution}
+\newcommand\repolink[2]{\perchbrk{#2}}
+\else
+\author{Willem Wyndham \and Elizabeth Engelman}
+\authorrunning{W. Wyndham and E. Engelman}
+\institute{The Aha Company}
+\newcommand\repolink[2]{\href{#1}{\perchbrk{#2}}}
+\fi
+
+\begin{document}
+\maketitle
+\input{sections/abstract}
+\input{generated/body}
+\bibliographystyle{splncs04}
+\bibliography{generated/refs}
+\end{document}

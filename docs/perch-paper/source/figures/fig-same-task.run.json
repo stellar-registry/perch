@@ -1,0 +1,537 @@
+{
+ "_source": "Recorded native reference run of docs/oz-walkthrough/index.html (evidence/native-golden.jsonl in its embedded build sources); the page checks its browser run against this record.",
+ "walkthrough_sha256": "45f4759b3271d261de60b7e782cd81688317118617e0bbfeaee944374ec78656",
+ "golden_sha256": "b7e87793af28d099331aa6176092bbc4d0509bcd01fdfec4b199d603ec165e0b",
+ "task": "An app key may send XLM from the account only to the shop, at most 10 XLM in any 100-ledger window (OpenZeppelin: per-call bound 10 XLM in the interpreter plus spending_limit 10 XLM per 100 ledgers; Perch: one grant with a 10 XLM per 100-ledger cap).",
+ "steps": [
+  {
+   "command": 1,
+   "label": "The owner installs the rule",
+   "request": {
+    "op": "install"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "insns": 5681179,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "OpenZeppelin account",
+       "fn": "add_context_rule"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 1,
+       "contract": "spending_limit",
+       "fn": "install"
+      },
+      {
+       "depth": 1,
+       "contract": "policy-interpreter",
+       "fn": "install"
+      }
+     ]
+    },
+    "perch": {
+     "status": "applied",
+     "code": null,
+     "insns": 9881592,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "Perch account",
+       "fn": "apply_scope"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      },
+      {
+       "depth": 1,
+       "contract": "document compiler",
+       "fn": "compile_doc"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "batch_canonicalize_key"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "command": 2,
+   "label": "The app pays the shop 6 XLM",
+   "request": {
+    "amount_xlm": 6,
+    "op": "pay",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "insns": 4337137,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      }
+     ]
+    },
+    "perch": {
+     "status": "applied",
+     "code": null,
+     "insns": 2870646,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "command": 3,
+   "label": "5 XLM more in the same window",
+   "request": {
+    "amount_xlm": 5,
+    "op": "pay",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": 3221,
+     "insns": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      },
+      {
+       "depth": 3,
+       "contract": "spending_limit",
+       "error": "Error(Contract(3221))"
+      },
+      {
+       "depth": 3,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Contract(3221))"
+      },
+      {
+       "depth": 3,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "insns": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "command": 4,
+   "label": "1 XLM to another recipient",
+   "request": {
+    "amount_xlm": 1,
+    "op": "pay",
+    "to": "mallory"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": 100,
+     "insns": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      },
+      {
+       "depth": 3,
+       "contract": "policy-interpreter",
+       "error": "Error(Contract(100))"
+      },
+      {
+       "depth": 3,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Contract(100))"
+      },
+      {
+       "depth": 3,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "insns": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "command": 5,
+   "label": "Another key signs in the app's name",
+   "request": {
+    "amount_xlm": 1,
+    "op": "pay",
+    "signer": "forged",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": null,
+     "insns": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Crypto(InvalidInput))"
+      },
+      {
+       "depth": 2,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Auth(InvalidAction))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    },
+    "perch": {
+     "status": "refused",
+     "code": null,
+     "insns": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      },
+      {
+       "depth": 3,
+       "contract": "Ed25519 verifier",
+       "error": "Error(Crypto(InvalidInput))"
+      },
+      {
+       "depth": 3,
+       "contract": "Perch account",
+       "error": "Error(Crypto(InvalidInput))"
+      },
+      {
+       "depth": 3,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "command": 6,
+   "label": "A key not on the rule signs as itself",
+   "request": {
+    "amount_xlm": 1,
+    "op": "pay",
+    "signer": "unlisted",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": 3016,
+     "insns": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Contract(3016))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "insns": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "command": 8,
+   "label": "100 ledgers later, 5 XLM",
+   "request": {
+    "amount_xlm": 5,
+    "op": "pay",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "insns": 4343344,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      }
+     ]
+    },
+    "perch": {
+     "status": "applied",
+     "code": null,
+     "insns": 2970928,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "per_call_only": {
+  "_source": "Examination of oz-policy-builder 43b13ed on a local Stellar quickstart network (protocol 30): an OpenZeppelin v0.8.0 account whose rule carries only the policy-interpreter with a per-call bound of 5 XLM (no spending_limit). Not part of the walkthrough run.",
+  "cap_per_call_xlm": 5,
+  "sends": [
+   {
+    "xlm": "3",
+    "result": "applied"
+   },
+   {
+    "xlm": "5",
+    "result": "applied"
+   },
+   {
+    "xlm": "5 + 1 stroop",
+    "result": "refused",
+    "code": 100
+   },
+   {
+    "xlm": "1",
+    "result": "applied"
+   }
+  ],
+  "moved_xlm": "9",
+  "note": "three applied sends moved 9 XLM under a 5 XLM per-call bound; the interpreter keeps no running total (oz-policy-builder docs/stellar.md:404-407)"
+ }
+}

@@ -1,0 +1,100 @@
+% Generated from source/outline.json and source/figures/fig-two-paths.svg; edit those.
+\begin{figure}[tbp]
+\centering
+\begin{adjustbox}{max width=\linewidth,max totalheight=0.8\textheight}%
+\begin{tikzpicture}[x=1pt,y=-1pt,line join=round,line cap=round]
+\useasboundingbox (0,0) rectangle (760,766);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{16}{19.2}\selectfont\sffamily\bfseries] at (150,18) {Perch};
+\node[anchor=base west, inner sep=0, text=cmuted, font=\fontsize{14}{16.8}\selectfont\sffamily] at (150,38) {passkey; WebAuthn verifier contract};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{16}{19.2}\selectfont\sffamily\bfseries] at (460,18) {OpenZeppelin v0.8.0};
+\node[anchor=base west, inner sep=0, text=cmuted, font=\fontsize{14}{16.8}\selectfont\sffamily] at (460,38) {interpreter, spending\_limit; delegated signer};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt] (14,72) circle[radius=11pt];
+\node[anchor=base, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily\bfseries] at (14,76.9) {1};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{15}{18}\selectfont\sffamily\bfseries] at (32,77) {Host call};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (150,52) rectangle (448,126);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,75) {The host calls {\ttfamily \_\_check\_auth} with two};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,93) {contexts: the {\ttfamily guess}, then the transfer it};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,111) {makes.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (460,52) rectangle (758,126);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,75) {The host calls {\ttfamily \_\_check\_auth}, which runs};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,93) {{\ttfamily do\_check\_auth} on the same two};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,111) {contexts.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt] (14,156) circle[radius=11pt];
+\node[anchor=base, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily\bfseries] at (14,160.9) {2};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{15}{18}\selectfont\sffamily\bfseries] at (32,161) {Rule selection};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (150,136) rectangle (448,210);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,159) {Guards: reserved hooks, freeze, excluded};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,177) {set. Each rule ID resolves to a stored rule};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,195) {and its spending record.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (460,136) rectangle (758,210);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,159) {Each rule must exist, be unexpired and};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,177) {match its context's contract; a signer on};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,195) {no selected rule is refused (3016).};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt] (14,240) circle[radius=11pt];
+\node[anchor=base, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily\bfseries] at (14,244.9) {3};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{15}{18}\selectfont\sffamily\bfseries] at (32,245) {Decision};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (150,220) rectangle (448,328);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,243) {{\ttfamily rule\_eval::authorize} decides both};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,261) {contexts: function, recipient, signers,};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,279) {expiry and the window cap.};
+\path[draw=cdeny, line width=2pt, {}-{Bar[width=14pt,line width=3pt,color=cdeny]}] (162,307) -- (176,307);
+\path[draw=cdeny, line width=2.2pt] (185,302) -- (195,312);
+\path[draw=cdeny, line width=2.2pt] (195,302) -- (185,312);
+\path[fill=cfig-deny, draw=cdeny, line width=1.5pt, rounded corners=13pt] (202,294) rectangle (357.99,320);
+\node[anchor=base west, inner sep=0, text=cdeny, font=\fontsize{14}{16.8}\selectfont\sffamily] at (213,312.04) {RuleEvalRefused \ensuremath{\cdot} 5};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, dash pattern=on 6pt off 4pt, rounded corners=6pt] (460,220) rectangle (758,328);
+\node[anchor=base west, inner sep=0, text=cmuted, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,243) {No decision here: a rule with policies};
+\node[anchor=base west, inner sep=0, text=cmuted, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,261) {leaves it to them.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt] (14,358) circle[radius=11pt];
+\node[anchor=base, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily\bfseries] at (14,362.9) {4};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{15}{18}\selectfont\sffamily\bfseries] at (32,363) {Digest};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (150,338) rectangle (448,412);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,361) {digest = SHA-256(bound \ensuremath{\|} XDR(rule};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,379) {IDs)); bound hashes the payload with the};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,397) {account.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (460,338) rectangle (758,412);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,361) {{\ttfamily AuthDigestPreimage} holds the};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,379) {account, the payload and the rule IDs.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt] (14,442) circle[radius=11pt];
+\node[anchor=base, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily\bfseries] at (14,446.9) {5};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{15}{18}\selectfont\sffamily\bfseries] at (32,447) {Authentication};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (150,422) rectangle (448,514);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,445) {Calls the WebAuthn verifier contract:};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,463) {{\ttfamily verify(digest)} checks the passkey};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,481) {signature.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (460,422) rectangle (758,514);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,445) {The Stellar account authorizes};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,463) {{\ttfamily \_\_check\_auth(preimage)} in its own};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,481) {second authorization entry, which the};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,499) {host checks.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt] (14,544) circle[radius=11pt];
+\node[anchor=base, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily\bfseries] at (14,548.9) {6};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{15}{18}\selectfont\sffamily\bfseries] at (32,549) {Policies};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, dash pattern=on 6pt off 4pt, rounded corners=6pt] (150,524) rectangle (448,650);
+\node[anchor=base west, inner sep=0, text=cmuted, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,547) {No policies: the account decided in phase};
+\node[anchor=base west, inner sep=0, text=cmuted, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,565) {3.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (460,524) rectangle (758,650);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,547) {Each rule's policies run {\ttfamily enforce} in};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,565) {stored order: the interpreter on the};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,583) {{\ttfamily guess}; on the transfer, {\ttfamily spending\_limit}};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,601) {first, then the interpreter.};
+\path[draw=cdeny, line width=2pt, {}-{Bar[width=14pt,line width=3pt,color=cdeny]}] (472,629) -- (486,629);
+\path[draw=cdeny, line width=2.2pt] (495,624) -- (505,634);
+\path[draw=cdeny, line width=2.2pt] (505,624) -- (495,634);
+\path[fill=cfig-deny, draw=cdeny, line width=1.5pt, rounded corners=13pt] (512,616) rectangle (737.46,642);
+\node[anchor=base west, inner sep=0, text=cdeny, font=\fontsize{14}{16.8}\selectfont\sffamily] at (523,634.04) {SpendingLimitExceeded \ensuremath{\cdot} 3221};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt] (14,680) circle[radius=11pt];
+\node[anchor=base, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily\bfseries] at (14,684.9) {7};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{15}{18}\selectfont\sffamily\bfseries] at (32,685) {Commit};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (150,660) rectangle (448,734);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,683) {Stores the transfer rule's changed};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (162,701) {spending record in the account.};
+\path[fill=cfig-fill, draw=cfig-stroke, line width=1.5pt, rounded corners=6pt] (460,660) rectangle (758,734);
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,683) {Writes made in {\ttfamily enforce} stay:};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,701) {{\ttfamily spending\_limit}'s history and the};
+\node[anchor=base west, inner sep=0, text=ctext, font=\fontsize{14}{16.8}\selectfont\sffamily] at (472,719) {interpreter's TTL bumps.};
+\node[anchor=base west, inner sep=0, text=cmuted, font=\fontsize{14}{16.8}\selectfont\sffamily] at (2,758) {Cross and bar: where a guess over the cap is refused. Dashed: no such phase, or not reached in this scenario.};
+\end{tikzpicture}%
+\end{adjustbox}
+\caption{\textbf{One guarded call in two accounts.} Phase by phase through \code{\_\_check\_auth} for a lost guess, with notes for a guess over the cap and a direct transfer: under Perch, and under an OpenZeppelin account whose rules carry oz-policy-builder's \code{policy-\allowbreak{}interpreter} and OpenZeppelin's \code{spending\_limit}. The Perch signer is a passkey checked by a verifier contract. oz-policy-builder's rules accept only delegated signers; here the signer is a Stellar account whose own authorization entry the host checks. The OpenZeppelin account runs a rule's policies in the rule's stored order, which for policies given at creation is their address order. A cross marks where each design refuses a guess over the cap: Perch before any signer is authenticated, the OpenZeppelin account in \code{spending\_limit} after authentication. Dashed: no such phase in that design, or not reached in the scenario. Read from source at Perch \fact{perch-pin-short}, OpenZeppelin \code{stellar-\allowbreak{}contracts} \fact{oz-v080-tag} and oz-policy-builder \fact{opb-pin-short}; Table~\ref{tab:tab-walkthrough} gives the recorded run of the shop task.}\label{fig:fig-two-paths}
+\end{figure}

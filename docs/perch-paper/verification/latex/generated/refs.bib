@@ -1,0 +1,343 @@
+% Generated from source/refs.bib; edit that.
+% Shared bibliography for both editions of the Perch paper.
+% The HTML reference list is generated from this file (build/paper.py), so keep
+% to the restricted form it parses: one entry per block, one field per line as
+% name = {value}, and the closing brace of each entry alone on its line.
+
+@misc{perch-src,
+  author = {Willem Wyndham and Elizabeth Engelman},
+  title = {Perch source, revision f0275f4},
+  howpublished = {GitHub, bitswell-hq/stellar-registry\_\_perch},
+  note = {Account, compiler, recovery, verifiers and canonical-document proof},
+  url = {https://github.com/bitswell-hq/stellar-registry__perch/tree/f0275f41c5ab47c903bbfe9986b4bf3239c01b11},
+  year = {2026}
+}
+
+@misc{rule-core,
+  author = {Willem Wyndham},
+  title = {soroban-rule-core, revision cbabe59},
+  howpublished = {GitHub, bitswell/soroban-rule-core},
+  note = {{Rust} evaluator, model, translation and proof trust inventory},
+  url = {https://github.com/bitswell/soroban-rule-core/tree/cbabe594ae2df408991e825e56ddd618ea29541b},
+  year = {2026}
+}
+
+@misc{soroban-sim,
+  key = {soroban-sim},
+  title = {soroban-sim, revision d029384},
+  howpublished = {GitHub, theahaco/soroban-sim},
+  note = {Portable host and session driver; host 29.0.2},
+  url = {https://github.com/theahaco/soroban-sim/tree/d02938430f0ac41f34e5e3e4c8c48d85b871bd68},
+  year = {2026}
+}
+
+@misc{guess-the-number,
+  key = {Guess the Number},
+  title = {{Guess the Number} fixture, revision df80831},
+  howpublished = {GitHub, nidohq/guess-the-number},
+  note = {Tested source commit, published in draft pull request nidohq/guess-the-number\#7 and unmerged at artifact intake; its exact build-input archive is in the paper's source download},
+  url = {https://github.com/nidohq/guess-the-number/tree/df80831ac6bc2a2110cab15654726456b53cc8f3},
+  year = {2026}
+}
+
+@misc{stellar-custom-account,
+  author = {{Stellar Development Foundation}},
+  title = {Custom account example},
+  howpublished = {Stellar developer documentation},
+  note = {Soroban authorization payloads and contexts},
+  url = {https://developers.stellar.org/docs/build/smart-contracts/example-contracts/complex-account}
+}
+
+@inproceedings{aeneas,
+  author = {Son Ho and Jonathan Protzenko},
+  title = {{Aeneas}: {Rust} Verification by Functional Translation},
+  booktitle = {Proceedings of the ACM on Programming Languages (ICFP)},
+  year = {2022},
+  url = {https://arxiv.org/abs/2206.07185}
+}
+
+@inproceedings{macaroons,
+  author = {Arnar Birgisson and Joe Gibbs Politz and {\'U}lfar Erlingsson and Ankur Taly and Michael Vrable and Mark Lentczner},
+  title = {Macaroons: Cookies with Contextual Caveats for Decentralized Authorization in the Cloud},
+  booktitle = {Network and Distributed System Security Symposium (NDSS)},
+  year = {2014},
+  url = {https://research.google/pubs/macaroons-cookies-with-contextual-caveats-for-decentralized-authorization-in-the-cloud/}
+}
+
+@article{cedar,
+  author = {Joseph W. Cutler and Craig Disselkoen and Aaron Eline and Shaobo He and Kyle Headley and Michael Hicks and Kesha Hietala and Eleftherios Ioannidis and John Kastner and Anwar Mamat and Darin McAdams and Matt McCutchen and Neha Rungta and Emina Torlak and Andrew M. Wells},
+  title = {{Cedar}: A New Language for Expressive, Fast, Safe, and Analyzable Authorization},
+  journal = {Proceedings of the ACM on Programming Languages (OOPSLA)},
+  year = {2024},
+  url = {https://www.amazon.science/publications/cedar-a-new-language-for-expressive-fast-safe-and-analyzable-authorization}
+}
+
+@misc{erc7710,
+  author = {Ryan McPeck and Dan Finlay and Rob Dawson and Derek Chiang},
+  title = {{ERC-7710}: Smart Contract Delegation},
+  howpublished = {Ethereum Improvement Proposals},
+  note = {Interface proposal (Draft)},
+  url = {https://eips.ethereum.org/EIPS/eip-7710},
+  year = {2024}
+}
+
+@misc{sunbeam,
+  author = {{Certora}},
+  title = {User Guide for {Sunbeam}},
+  howpublished = {Certora documentation},
+  note = {Contract specification and Wasm verification workflow},
+  url = {https://docs.certora.com/en/latest/docs/sunbeam/usage.html}
+}
+
+@misc{komet,
+  author = {{Runtime Verification}},
+  title = {Komet, revision a078e29},
+  howpublished = {GitHub, runtimeverification/komet},
+  note = {Pinned contract-semantics source},
+  url = {https://github.com/runtimeverification/komet/tree/a078e296621a4f52fd1497fed64435e9948cc830}
+}
+
+@misc{oz-stellar-accounts,
+  author = {{OpenZeppelin}},
+  title = {Stellar smart account contracts, v0.8.0 (ddc327e)},
+  howpublished = {GitHub, OpenZeppelin/stellar-contracts, packages/accounts},
+  note = {Context rules, signers and policies},
+  url = {https://github.com/OpenZeppelin/stellar-contracts/tree/ddc327eb92d63709436da3a8455f641c2d5476c5/packages/accounts/src},
+  year = {2026}
+}
+
+@misc{oz-policy-builder,
+  author = {{Untangled Finance}},
+  title = {{OZ Policy Builder}, revision 43b13ed (v5.2.0 line)},
+  howpublished = {GitHub, untangledfinance/oz-policy-builder},
+  note = {Policy synthesiser, policy-interpreter contract, execution adapter, custody gate and Prime seat},
+  url = {https://github.com/untangledfinance/oz-policy-builder/tree/43b13ed1d9c6662afd74f446006e69bfcf21259b},
+  year = {2026}
+}
+
+@article{confused-deputy,
+  author = {Norm Hardy},
+  title = {The Confused Deputy (or why capabilities might have been invented)},
+  journal = {ACM SIGOPS Operating Systems Review},
+  volume = {22},
+  number = {4},
+  year = {1988},
+  url = {https://doi.org/10.1145/54289.871709}
+}
+
+@misc{spki,
+  author = {Carl Ellison and Bill Frantz and Butler Lampson and Ron Rivest and Brian Thomas and Tatu Yl{\"o}nen},
+  title = {{SPKI} Certificate Theory},
+  howpublished = {RFC 2693},
+  year = {1999},
+  url = {https://www.rfc-editor.org/rfc/rfc2693}
+}
+
+@misc{biscuit,
+  key = {Biscuit},
+  title = {{Biscuit} authorization token specification},
+  howpublished = {biscuitsec.org},
+  url = {https://www.biscuitsec.org/}
+}
+
+@misc{ucan,
+  key = {UCAN},
+  title = {{UCAN} specification},
+  howpublished = {GitHub, ucan-wg/spec},
+  url = {https://github.com/ucan-wg/spec}
+}
+
+@article{schneider-enforceable,
+  author = {Fred B. Schneider},
+  title = {Enforceable Security Policies},
+  journal = {ACM Transactions on Information and System Security},
+  volume = {3},
+  number = {1},
+  year = {2000},
+  url = {https://doi.org/10.1145/353323.353382}
+}
+
+@misc{erc4337,
+  author = {Vitalik Buterin and Yoav Weiss and Dror Tirosh and Shahaf Nacson and Alex Forshtat and Kristof Gazso and Tjaden Hess},
+  title = {{ERC-4337}: Account Abstraction Using Alt Mempool},
+  howpublished = {Ethereum Improvement Proposals},
+  url = {https://eips.ethereum.org/EIPS/eip-4337},
+  year = {2021}
+}
+
+@misc{erc7579,
+  author = {zeroknots and Konrad Kopp and Taek Lee and Fil Makarov and Elim Poon and Lyu Min},
+  title = {{ERC-7579}: Minimal Modular Smart Accounts},
+  howpublished = {Ethereum Improvement Proposals},
+  note = {Draft},
+  url = {https://eips.ethereum.org/EIPS/eip-7579},
+  year = {2023}
+}
+
+@inproceedings{cedar-vgd,
+  author = {Craig Disselkoen and Aaron Eline and Shaobo He and Kyle Headley and Michael Hicks and Kesha Hietala and John Kastner and Anwar Mamat and Matt McCutchen and Neha Rungta and Bhakti Shah and Emina Torlak and Andrew Wells},
+  title = {How We Built {Cedar}: A Verification-Guided Approach},
+  booktitle = {Companion Proceedings of the 32nd ACM International Conference on the Foundations of Software Engineering (FSE Companion)},
+  year = {2024},
+  url = {https://arxiv.org/abs/2407.01688}
+}
+
+@misc{perch-deployments,
+  key = {Perch deployments},
+  title = {Perch deployment manifests, deployments/testnet.json and deployments/mainnet.json at f0275f4},
+  howpublished = {GitHub, bitswell-hq/stellar-registry\_\_perch},
+  url = {https://github.com/bitswell-hq/stellar-registry__perch/tree/f0275f41c5ab47c903bbfe9986b4bf3239c01b11/deployments},
+  year = {2026}
+}
+
+@misc{nido,
+  key = {Nido},
+  title = {Nido: a smart wallet solution using passkeys},
+  howpublished = {GitHub, nidohq/nido},
+  url = {https://github.com/nidohq/nido},
+  year = {2026}
+}
+
+@misc{nido-preview,
+  key = {Nido},
+  title = {Nido testnet preview, draft pull request nidohq/nido\#356},
+  howpublished = {GitHub, nidohq/nido},
+  url = {https://github.com/nidohq/nido/pull/356},
+  year = {2026}
+}
+
+@misc{cap-0046-11,
+  author = {Dmytro Kozhevin},
+  title = {{CAP-0046-11}: {Soroban} Authorization Framework},
+  howpublished = {Stellar Core Advancement Proposals},
+  note = {Final},
+  url = {https://github.com/stellar/stellar-protocol/blob/master/core/cap-0046-11.md}
+}
+
+@misc{cap-0071,
+  author = {Dmytro Kozhevin},
+  title = {{CAP-0071}: Authentication delegation and address-bound {Soroban} credentials},
+  howpublished = {Stellar Core Advancement Proposals},
+  note = {Final; protocol 27},
+  url = {https://github.com/stellar/stellar-protocol/blob/master/core/cap-0071.md},
+  year = {2025}
+}
+
+@misc{zodiac-roles,
+  author = {{Gnosis Guild}},
+  title = {{Zodiac Roles Modifier}: conditions},
+  howpublished = {Zodiac documentation},
+  url = {https://docs.zodiac.eco/developers/roles/conditions}
+}
+
+@misc{erc7715,
+  author = {Luka Isailovic and Derek Rein and Dan Finlay and Derek Chiang and Fil Makarov and Pedro Gomes and Conner Swenberg and Lukas Rosario and Idris Bowman and Jeff Smale},
+  title = {{ERC-7715}: Request Permissions from Wallets},
+  howpublished = {Ethereum Improvement Proposals},
+  note = {Draft},
+  url = {https://eips.ethereum.org/EIPS/eip-7715},
+  year = {2024}
+}
+
+@misc{xacml3,
+  author = {{OASIS}},
+  title = {{eXtensible Access Control Markup Language (XACML)} Version 3.0},
+  howpublished = {OASIS Standard},
+  url = {https://docs.oasis-open.org/xacml/3.0/xacml-3.0-core-spec-os-en.html},
+  year = {2013}
+}
+
+@article{saltzer-schroeder,
+  author = {Jerome H. Saltzer and Michael D. Schroeder},
+  title = {The Protection of Information in Computer Systems},
+  journal = {Proceedings of the IEEE},
+  volume = {63},
+  number = {9},
+  year = {1975},
+  url = {https://doi.org/10.1109/PROC.1975.9939}
+}
+
+@article{xu-stoller-mining,
+  author = {Zhongyuan Xu and Scott D. Stoller},
+  title = {Mining Attribute-Based Access Control Policies},
+  journal = {IEEE Transactions on Dependable and Secure Computing},
+  volume = {12},
+  number = {5},
+  year = {2015},
+  url = {https://doi.org/10.1109/TDSC.2014.2369048}
+}
+
+@misc{rfc8785,
+  author = {Anders Rundgren and Bret Jordan and Samuel Erdtman},
+  title = {{JSON} Canonicalization Scheme ({JCS})},
+  howpublished = {RFC 8785},
+  year = {2020},
+  url = {https://www.rfc-editor.org/rfc/rfc8785}
+}
+
+@misc{rfc8032,
+  author = {Simon Josefsson and Ilari Liusvaara},
+  title = {{Edwards}-Curve Digital Signature Algorithm ({EdDSA})},
+  howpublished = {RFC 8032},
+  year = {2017},
+  url = {https://www.rfc-editor.org/rfc/rfc8032}
+}
+
+@misc{fips204,
+  author = {{National Institute of Standards and Technology}},
+  title = {Module-Lattice-Based Digital Signature Standard},
+  howpublished = {FIPS 204},
+  year = {2024},
+  url = {https://csrc.nist.gov/pubs/fips/204/final}
+}
+
+@misc{webauthn2,
+  author = {{W3C}},
+  title = {Web Authentication: An API for accessing Public Key Credentials, Level 2},
+  howpublished = {W3C Recommendation},
+  year = {2021},
+  url = {https://www.w3.org/TR/webauthn-2/}
+}
+
+@misc{cedar-spec,
+  key = {cedar-spec},
+  title = {cedar-spec, revision a4c5a89},
+  howpublished = {GitHub, cedar-policy/cedar-spec},
+  note = {Lean formalization of Cedar and differential testing against its Rust implementation; Lean 4.35.0},
+  url = {https://github.com/cedar-policy/cedar-spec/tree/a4c5a89cd15637afc1dab39ef0c89baf31c7ebdf},
+  year = {2026}
+}
+
+@misc{charon,
+  author = {Son Ho and Guillaume Boisseau and Lucas Franceschino and Yoann Prak and Aymeric Fromherz and Jonathan Protzenko},
+  title = {{Charon}: An Analysis Framework for {Rust}},
+  howpublished = {arXiv:2410.18042},
+  url = {https://arxiv.org/abs/2410.18042},
+  year = {2024}
+}
+
+@inproceedings{lean4,
+  author = {Leonardo de Moura and Sebastian Ullrich},
+  title = {The {Lean} 4 Theorem Prover and Programming Language},
+  booktitle = {Automated Deduction -- CADE 28, LNCS 12699},
+  pages = {625--635},
+  year = {2021},
+  url = {https://doi.org/10.1007/978-3-030-79876-5_37}
+}
+
+@misc{smart-sessions,
+  author = {{Rhinestone} and {Biconomy}},
+  title = {{SmartSession}: a session-key module for {ERC-7579} accounts, revision f5aaf86},
+  howpublished = {GitHub, erc7579/smartsessions},
+  url = {https://github.com/erc7579/smartsessions/tree/f5aaf867f7e22f3b9d746ce6f404f3a56833757f},
+  year = {2025}
+}
+
+@misc{metamask-delegation,
+  author = {{MetaMask}},
+  title = {{Delegation Framework}, revision b4b8c41},
+  howpublished = {GitHub, MetaMask/delegation-framework},
+  note = {Delegations restricted by caveat enforcer contracts},
+  url = {https://github.com/MetaMask/delegation-framework/tree/b4b8c41fc912455a1af2300bfcd1276676b92a2e},
+  year = {2026}
+}

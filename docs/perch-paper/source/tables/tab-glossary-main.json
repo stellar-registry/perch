@@ -1,0 +1,130 @@
+{
+ "title": "Glossary.",
+ "caption": "The terms this paper uses, the names they carry in the code, and, where it differs, the meaning in OpenZeppelin's account or in oz-policy-builder. The vision companion paper has the full glossary.",
+ "columns": [
+  "Term",
+  "In Perch",
+  "Name in the artifacts",
+  "In OpenZeppelin or oz-policy-builder"
+ ],
+ "editions": [
+  "html"
+ ],
+ "row_ids": "gloss",
+ "rows": [
+  [
+   "Grant",
+   "A bounded set of rules the owner installs so an app can act without a prompt for each call",
+   "scope",
+   "No single object: one context rule per contract, each with its policies"
+  ],
+  [
+   "Grant document",
+   "The JSON the owner submits to install a grant",
+   "scope document",
+   "—"
+  ],
+  [
+   "Rule",
+   "One target contract, function list, argument conditions and signer threshold, with an optional expiry and cap",
+   "`Rule`",
+   "Context rule (below)"
+  ],
+  [
+   "Cap and window",
+   "At most *limit* charged in the last *P* ledgers, checked at every ledger, so the window slides",
+   "`cap`, `period-ledgers`",
+   "`spending_limit` uses the same window boundary. In an oz-policy-builder Intent, `cap` bounds one call (`lte`)"
+  ],
+  [
+   "Attenuation",
+   "Deriving from a grant a narrower one that allows no call the original does not",
+   "rule-core `attenuate`",
+   "—"
+  ],
+  [
+   "Spending record",
+   "A capped rule's charged amounts and their ledgers",
+   "`SpendRecord`",
+   "History in OpenZeppelin's `spending_limit`"
+  ],
+  [
+   "Document compiler",
+   "A stateless contract that parses and validates a grant document",
+   "`perch_doc_compiler`",
+   "Off chain: the policy synthesiser"
+  ],
+  [
+   "Decision function",
+   "The pure function that decides an authorization and returns the next spending records; it reads no storage and checks no signature",
+   "`rule_eval::authorize`",
+   "Each attached policy's `enforce`"
+  ],
+  [
+   "Verifier",
+   "A contract with `verify(digest, key, signature) -> bool`",
+   "`perch_ed25519_verifier`, WebAuthn verifier",
+   "The same interface for External signers"
+  ],
+  [
+   "External signer",
+   "A key the account checks through a verifier contract, such as an Ed25519 key or a passkey",
+   "`Signer::External`",
+   "Refused on rules the interpreter polices (error {{fact:opb-error-external-signer}})"
+  ],
+  [
+   "Delegated signer",
+   "Another Stellar address that approves through the host, inside the account's own authorization entry (CAP-0071)",
+   "`Signer::Delegated`",
+   "Approves in an authorization entry of its own, which binds the rule IDs; the only kind on policed rules"
+  ],
+  [
+   "Context",
+   "One call or contract creation in the request the host passes to `__check_auth`",
+   "`Context`",
+   "The same; a context rule matches it"
+  ],
+  [
+   "Enforcing simulation",
+   "A simulation that runs `__check_auth`, so it predicts a refusal; recording simulation, which discovers which entries a transaction needs, does not",
+   "—",
+   "—"
+  ],
+  [
+   "Context rule",
+   "—",
+   "—",
+   "OpenZeppelin's unit of authorization: a context type, signers, policies and an optional `valid_until`"
+  ],
+  [
+   "Policy",
+   "—",
+   "—",
+   "A contract attached to a context rule; the account calls its `enforce` after authenticating (hooks `install`, `uninstall`, `enforce`)"
+  ],
+  [
+   "Predicate",
+   "—",
+   "—",
+   "The expression the interpreter stores per (account, rule) and evaluates in `enforce`"
+  ],
+  [
+   "Interpreter",
+   "No counterpart: Perch decides in the account",
+   "—",
+   "oz-policy-builder's `policy-interpreter`, the shared predicate evaluator"
+  ],
+  [
+   "Stroop",
+   "The smallest unit of XLM: {{fact:stroops-per-xlm}} stroops make one XLM",
+   "—",
+   "—"
+  ],
+  [
+   "Lean",
+   "The proof assistant whose kernel checks the theorems",
+   "—",
+   "—"
+  ]
+ ]
+}

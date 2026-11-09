@@ -1,0 +1,61 @@
+{
+ "title": "Shell obligations that carry the theorems to the account.",
+ "caption": "Each obligation is what the account shell must do for a statement about the evaluator to hold of the deployed account.",
+ "columns": [
+  "",
+  "Obligation",
+  "Status",
+  "Source"
+ ],
+ "latex_colspec": "@{}lLp{0.22\\linewidth}p{0.25\\linewidth}@{}",
+ "rows": [
+  [
+   "O1",
+   "The shell authenticates every claimed signer",
+   "tested",
+   "`gate.rs:106-113`"
+  ],
+  [
+   "O2",
+   "Selection and renumbering carry the evaluator's theorems to the account",
+   "argued and tested",
+   "`gate.rs:14-16`"
+  ],
+  [
+   "O3",
+   "The generation is passed in, advances only on completion, and refuses on overflow",
+   "tested; rule-core lists it as unproven against Perch `{{fact:doc-allows-source}}`",
+   "rule-core `claims.yaml:2901`"
+  ],
+  [
+   "O4",
+   "The excluded set matches the theorem's X, and the recheck runs",
+   "tested",
+   "`lib.rs:1225-1234`"
+  ],
+  [
+   "O5",
+   "Compiler outputs satisfy `Doc.Valid`",
+   "unproven",
+   "rule-core `claims.yaml:2928`"
+  ],
+  [
+   "O6",
+   "Spending records persist correctly",
+   "tested",
+   "`gate.rs:114-121`"
+  ],
+  [
+   "O7",
+   "Context conversion is correct",
+   "tested",
+   "`crates/perch-rule-eval/src/convert.rs`"
+  ],
+  [
+   "O8",
+   "The shell installs exactly the lowered rules, and ordinary authorization cannot select the recovery rule",
+   "tested; rule-core lists it as unproven",
+   "rule-core `claims.yaml:2940`"
+  ]
+ ]
+}

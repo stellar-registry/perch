@@ -1,0 +1,1712 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Café Perch sign mock (single file)</title>
+<meta name="description" content="Mock of the soroban-sign-dialog web component embedded in a toy dapp: Perch grant transfers within cap, over cap, and with a smuggled authorization entry.">
+<style>
+  :root {
+    --bg: #f6f3ee; --panel: #fffdf9; --ink: #221d17; --muted: #6d6458; --line: #e4dccf;
+    --brand: #7a3e12; --brand-ink: #fff8f0; --code: #f0eadf;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15120f; --panel: #1f1b17; --ink: #f1ebe2; --muted: #a99d8d; --line: #39322a;
+      --brand: #e0a06a; --brand-ink: #1a1007; --code: #2a241e; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15120f; --panel: #1f1b17; --ink: #f1ebe2; --muted: #a99d8d; --line: #39322a;
+    --brand: #e0a06a; --brand-ink: #1a1007; --code: #2a241e; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Georgia, "Iowan Old Style", serif; }
+  .wrap { max-width: 68rem; margin: 0 auto; padding: 1.25rem 16px 3rem; }
+  .notice { font: 13.5px/1.45 system-ui, sans-serif; background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.8rem; color: var(--muted); }
+  .notice b { color: var(--ink); }
+  header.shop { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: 1.4rem 0 1rem; }
+  h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: -0.01em; }
+  h1 small { display: block; font: 600 0.8rem/1.4 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand); }
+  .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; font: 14px system-ui, sans-serif; }
+  .controls label { display: flex; gap: 0.35rem; align-items: center; color: var(--muted); }
+  select { font: inherit; padding: 0.3rem 0.4rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .menu { display: grid; gap: 0.8rem; }
+  .item { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.3rem 1rem; align-items: center; }
+  .item h2 { margin: 0; font-size: 1.2rem; }
+  .item p { margin: 0; color: var(--muted); font: 14px/1.45 system-ui, sans-serif; grid-column: 1; }
+  .item .tag { font: 600 12px/1 system-ui, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.3rem 0.5rem; border-radius: 999px; background: var(--code); color: var(--muted); justify-self: start; }
+  .item button { grid-column: 2; grid-row: 1 / span 3; font: 600 15px system-ui, sans-serif; padding: 0.65rem 1rem; border-radius: 10px; border: 0; background: var(--brand); color: var(--brand-ink); cursor: pointer; white-space: nowrap; }
+  .item button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; font: 14px/1.5 system-ui, sans-serif; min-width: 0; }
+  aside h2 { font: 600 0.8rem/1.4 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.5rem; }
+  pre { background: var(--code); border-radius: 8px; padding: 0.6rem 0.7rem; overflow-x: auto; font: 12.5px/1.5 ui-monospace, Menlo, monospace; margin: 0.4rem 0 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #log:empty::before { content: "Nothing yet. Pick an order."; color: var(--muted); }
+  .ev { border-top: 1px solid var(--line); padding: 0.6rem 0; }
+  .ev:first-child { border-top: 0; padding-top: 0; }
+  .ev b.ok { color: #2f7a43; } .ev b.no { color: #a33a2a; }
+  /* A dapp can brand the dialog through its custom properties: */
+  soroban-sign-dialog.brand {
+    --ssd-accent: #7a3e12; --ssd-accent-fg: #fff8f0; --ssd-radius: 18px;
+    --ssd-font: Georgia, "Iowan Old Style", serif;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="notice"><b>Mock.</b> The dialog is the real <code>&lt;soroban-sign-dialog&gt;</code> module, and its authorization tree is decoded from each order's real transaction XDR. <b>Preview effects</b> returns canned results captured from a native soroban-sim run of the pinned Perch contracts (account with grant 1: 10 XLM per 100 ledgers, 3 XLM already spent). The 0.7 s delay is artificial. See <code>NOTICE.md</code>.</p>
+
+  <header class="shop">
+    <h1><small>A toy dapp</small>Café Perch</h1>
+    <div class="controls">
+      <label>Page theme <select id="theme"><option value="">auto</option><option>light</option><option>dark</option></select></label>
+      <label>Dialog style <select id="brand"><option value="">default</option><option value="brand">shop brand</option></select></label>
+      <label>Preview <select id="preview"><option value="manual">on request</option><option value="auto">automatic</option><option value="off">off</option></select></label>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="menu" aria-label="Orders">
+      <div class="item">
+        <h2>Flat white</h2><span class="tag">5 XLM · within the cap</span>
+        <p>Paid from your Nido account under the shop's grant: 10 XLM per 100 ledgers, 7 XLM left.</p>
+        <button data-scenario="within-cap">Pay 5 XLM</button>
+      </div>
+      <div class="item">
+        <h2>Bag of beans</h2><span class="tag">8 XLM · over the cap</span>
+        <p>More than the grant has left in this window. The tree looks fine; the preview shows Perch would refuse it.</p>
+        <button data-scenario="over-cap">Pay 8 XLM</button>
+      </div>
+      <div class="item">
+        <h2>Espresso</h2><span class="tag">2 XLM · compromised checkout</span>
+        <p>A tampered checkout script adds a second authorization (4 XLM to another address) that this transaction never uses.</p>
+        <button data-scenario="smuggled-entry">Pay 2 XLM</button>
+      </div>
+    </section>
+
+    <aside>
+      <h2>Embed</h2>
+<pre>&lt;script type="module" src="soroban-sign-dialog.js"&gt;&lt;/script&gt;
+&lt;soroban-sign-dialog engine="soroban-sim-preview.js"&gt;&lt;/soroban-sign-dialog&gt;
+
+const r = await dialog.request({ transaction, signer, dapp });
+if (r.approved) wallet.sign(r.entries);  // keys stay in the wallet</pre>
+      <h2>What the wallet receives</h2>
+      <div id="log" aria-live="polite"></div>
+    </aside>
+  </div>
+</div>
+
+<soroban-sign-dialog id="dialog"></soroban-sign-dialog>
+
+<script type="module">
+// <soroban-sign-dialog> — review a Soroban request before a wallet signs it.
+//
+// The authorization tree is decoded from XDR alone, so it renders instantly
+// with no network and no simulator. "Preview effects" is opt-in: it calls a
+// preview provider (by default a lazily imported simulator engine module)
+// that re-records the tree independently and reports balance changes,
+// events, the account's verdict and any spending budget.
+//
+// The component never holds keys. Approval emits the exact entries to sign,
+// with the hash of each reviewed invocation, and the wallet signs them.
+//
+// One-line embed:
+//   <script type="module" src="soroban-sign-dialog.js"><\/script>
+// then either markup (<soroban-sign-dialog transaction="AAAA…">) or
+//   const r = await SorobanSignDialog.request({ transaction, signer, dapp });
+
+export const VERSION = '0.1.0';
+
+// ---------------------------------------------------------------------------
+// XDR: a reader for the subset a signing review needs.
+// ---------------------------------------------------------------------------
+
+export class XdrError extends Error {}
+
+const MAX_DEPTH = 64;
+const td = new TextDecoder('utf-8', { fatal: false });
+
+class Reader {
+  constructor(bytes) {
+    this.b = bytes;
+    this.v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.o = 0;
+  }
+  need(n) {
+    if (n < 0 || this.o + n > this.b.length) throw new XdrError('truncated XDR');
+  }
+  u32() { this.need(4); const x = this.v.getUint32(this.o); this.o += 4; return x; }
+  i32() { this.need(4); const x = this.v.getInt32(this.o); this.o += 4; return x; }
+  u64() { this.need(8); const x = this.v.getBigUint64(this.o); this.o += 8; return x; }
+  i64() { this.need(8); const x = this.v.getBigInt64(this.o); this.o += 8; return x; }
+  bool() {
+    const x = this.u32();
+    if (x > 1) throw new XdrError('bad bool');
+    return x === 1;
+  }
+  fixed(n) {
+    const padded = (n + 3) & ~3;
+    this.need(padded);
+    const x = this.b.subarray(this.o, this.o + n);
+    for (let i = this.o + n; i < this.o + padded; i++) if (this.b[i]) throw new XdrError('non-zero padding');
+    this.o += padded;
+    return x;
+  }
+  var(max = Infinity) {
+    const n = this.u32();
+    if (n > max) throw new XdrError(`length ${n} over limit ${max}`);
+    return this.fixed(n);
+  }
+  str(max) { return td.decode(this.var(max)); }
+  arr(f, max = Infinity) {
+    const n = this.u32();
+    if (n > max || n > this.b.length - this.o) throw new XdrError('bad array length');
+    const out = new Array(n);
+    for (let i = 0; i < n; i++) out[i] = f();
+    return out;
+  }
+  opt(f) { return this.bool() ? f() : null; }
+  span(f) {
+    const start = this.o;
+    const value = f();
+    return [value, this.b.subarray(start, this.o)];
+  }
+  done() {
+    if (this.o !== this.b.length) throw new XdrError(`${this.b.length - this.o} trailing bytes`);
+  }
+}
+
+const fromB64 = (s) => {
+  const bin = atob(String(s).trim());
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+};
+const toB64 = (bytes) => {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+export const hex = (bytes) => Array.from(bytes, (x) => x.toString(16).padStart(2, '0')).join('');
+const bytesOf = (x) => (x instanceof Uint8Array ? x : fromB64(x));
+
+function readPublicKey(r) {
+  const t = r.u32();
+  if (t !== 0) throw new XdrError(`public key type ${t}`);
+  return r.fixed(32);
+}
+
+function readScAddress(r) {
+  const t = r.u32();
+  switch (t) {
+    case 0: return address('account', readPublicKey(r));
+    case 1: return address('contract', r.fixed(32));
+    case 2: { const id = r.u64(); return address('muxed', r.fixed(32), id); }
+    case 3: {
+      const ct = r.u32();
+      if (ct !== 0) throw new XdrError(`claimable balance id type ${ct}`);
+      return address('claimable', r.fixed(32));
+    }
+    case 4: return address('pool', r.fixed(32));
+    default: throw new XdrError(`unsupported address type ${t}`);
+  }
+}
+
+function address(kind, key, id) {
+  return { t: 'address', kind, key, id, str: strkeyFor(kind, key, id) };
+}
+
+function readScVal(r, depth = 0) {
+  if (depth > MAX_DEPTH) throw new XdrError('ScVal nested too deeply');
+  const t = r.u32();
+  const next = () => readScVal(r, depth + 1);
+  switch (t) {
+    case 0: return { t: 'bool', v: r.bool() };
+    case 1: return { t: 'void' };
+    case 2: {
+      const type = r.u32();
+      return { t: 'error', type, code: r.u32() };
+    }
+    case 3: return { t: 'u32', v: r.u32() };
+    case 4: return { t: 'i32', v: r.i32() };
+    case 5: return { t: 'u64', v: r.u64() };
+    case 6: return { t: 'i64', v: r.i64() };
+    case 7: return { t: 'timepoint', v: r.u64() };
+    case 8: return { t: 'duration', v: r.u64() };
+    case 9: { const hi = r.u64(); return { t: 'u128', v: (hi << 64n) | r.u64() }; }
+    case 10: { const hi = r.i64(); return { t: 'i128', v: (hi << 64n) | r.u64() }; }
+    case 11: case 12: {
+      const hh = t === 12 ? r.i64() : r.u64();
+      const hl = r.u64(), lh = r.u64(), ll = r.u64();
+      return { t: t === 12 ? 'i256' : 'u256', v: (hh << 192n) | (hl << 128n) | (lh << 64n) | ll };
+    }
+    case 13: return { t: 'bytes', v: r.var() };
+    case 14: return { t: 'string', v: r.str() };
+    case 15: return { t: 'symbol', v: r.str(32) };
+    case 16: return { t: 'vec', v: r.opt(() => r.arr(next)) ?? [] };
+    case 17: return { t: 'map', v: r.opt(() => r.arr(() => ({ k: next(), v: next() }))) ?? [] };
+    case 18: return readScAddress(r);
+    case 19: {
+      const executable = readExecutable(r);
+      const storage = r.opt(() => r.arr(() => ({ k: next(), v: next() })));
+      return { t: 'instance', executable, storage };
+    }
+    case 20: return { t: 'instanceKey' };
+    case 21: return { t: 'nonceKey', v: r.i64() };
+    case 22: return { t: 'executableTag', v: r.str() };
+    default: throw new XdrError(`unsupported ScVal type ${t}`);
+  }
+}
+
+function readExecutable(r) {
+  const t = r.u32();
+  if (t === 0) return { kind: 'wasm', hash: r.fixed(32) };
+  if (t === 1) return { kind: 'stellar-asset' };
+  if (t === 2) return { kind: 'external', owner: readScAddress(r), tag: r.str() };
+  throw new XdrError(`executable type ${t}`);
+}
+
+function readAsset(r) {
+  const t = r.u32();
+  if (t === 0) return { native: true, code: 'XLM' };
+  if (t === 1 || t === 2) {
+    const code = td.decode(r.fixed(t === 1 ? 4 : 12)).replace(/\0+$/, '');
+    return { native: false, code, issuer: strkeyFor('account', readPublicKey(r)) };
+  }
+  throw new XdrError(`asset type ${t}`);
+}
+
+function readInvokeArgs(r) {
+  const contract = readScAddress(r);
+  const fn = r.str(32);
+  const args = r.arr(() => readScVal(r));
+  return { kind: 'call', contract, fn, args };
+}
+
+function readPreimage(r) {
+  const t = r.u32();
+  if (t === 0) return { from: 'address', address: readScAddress(r), salt: r.fixed(32) };
+  if (t === 1) return { from: 'asset', asset: readAsset(r) };
+  throw new XdrError(`contract id preimage ${t}`);
+}
+
+function readCreate(r, v2) {
+  const preimage = readPreimage(r);
+  const executable = readExecutable(r);
+  const args = v2 ? r.arr(() => readScVal(r)) : [];
+  return { kind: 'create', preimage, executable, args };
+}
+
+function readAuthorizedInvocation(r, depth = 0) {
+  if (depth > MAX_DEPTH) throw new XdrError('invocation nested too deeply');
+  const [node, raw] = r.span(() => {
+    const t = r.u32();
+    let fn;
+    if (t === 0) fn = readInvokeArgs(r);
+    else if (t === 1) fn = readCreate(r, false);
+    else if (t === 2) fn = readCreate(r, true);
+    else throw new XdrError(`authorized function type ${t}`);
+    const subs = r.arr(() => readAuthorizedInvocation(r, depth + 1));
+    return { fn, subs };
+  });
+  node.raw = raw;
+  return node;
+}
+
+function readAddressCredentials(r) {
+  const [addr, addrRaw] = r.span(() => readScAddress(r));
+  return { address: addr, addressRaw: addrRaw, nonce: r.i64(), expiration: r.u32(), signature: readScVal(r) };
+}
+
+function readDelegate(r, depth = 0) {
+  if (depth > MAX_DEPTH) throw new XdrError('delegates nested too deeply');
+  return { address: readScAddress(r), signature: readScVal(r), nested: r.arr(() => readDelegate(r, depth + 1)) };
+}
+
+function readCredentials(r) {
+  const t = r.u32();
+  if (t === 0) return { type: 'source-account' };
+  if (t === 1) return { type: 'address', ...readAddressCredentials(r) };
+  if (t === 2) return { type: 'address-v2', ...readAddressCredentials(r) };
+  if (t === 3) {
+    const c = readAddressCredentials(r);
+    return { type: 'address-with-delegates', ...c, delegates: r.arr(() => readDelegate(r)) };
+  }
+  throw new XdrError(`credentials type ${t}`);
+}
+
+function readAuthEntry(r) {
+  const [entry, raw] = r.span(() => ({ credentials: readCredentials(r), root: readAuthorizedInvocation(r) }));
+  entry.raw = raw;
+  return entry;
+}
+
+function readHostFunction(r) {
+  const t = r.u32();
+  if (t === 0) return readInvokeArgs(r);
+  if (t === 1) return readCreate(r, false);
+  if (t === 2) return { kind: 'upload', wasm: r.var() };
+  if (t === 3) return readCreate(r, true);
+  throw new XdrError(`host function type ${t}`);
+}
+
+function readMuxed(r) {
+  const t = r.u32();
+  if (t === 0) return address('account', r.fixed(32));
+  if (t === 0x100) { const id = r.u64(); return address('muxed', r.fixed(32), id); }
+  throw new XdrError(`muxed account type ${t}`);
+}
+
+function readLedgerKey(r) {
+  const [key, raw] = r.span(() => {
+    const t = r.u32();
+    switch (t) {
+      case 0: return { type: 'account', account: strkeyFor('account', readPublicKey(r)) };
+      case 1: {
+        const account = strkeyFor('account', readPublicKey(r));
+        const at = r.u32();
+        let asset;
+        if (at === 3) asset = { pool: hex(r.fixed(32)) };
+        else if (at === 0) asset = { native: true, code: 'XLM' };
+        else {
+          const code = td.decode(r.fixed(at === 1 ? 4 : 12)).replace(/\0+$/, '');
+          asset = { code, issuer: strkeyFor('account', readPublicKey(r)) };
+        }
+        return { type: 'trustline', account, asset };
+      }
+      case 2: return { type: 'offer', seller: strkeyFor('account', readPublicKey(r)), id: r.i64() };
+      case 3: return { type: 'data', account: strkeyFor('account', readPublicKey(r)), name: r.str(64) };
+      case 4: { r.u32(); return { type: 'claimable-balance', id: hex(r.fixed(32)) }; }
+      case 5: return { type: 'liquidity-pool', id: hex(r.fixed(32)) };
+      case 6: return { type: 'contract-data', contract: readScAddress(r), key: readScVal(r), durability: r.u32() ? 'persistent' : 'temporary' };
+      case 7: return { type: 'contract-code', hash: hex(r.fixed(32)) };
+      case 8: return { type: 'config-setting', id: r.u32() };
+      case 9: return { type: 'ttl', hash: hex(r.fixed(32)) };
+      default: throw new XdrError(`ledger key type ${t}`);
+    }
+  });
+  key.xdr = toB64(raw);
+  return key;
+}
+
+function readSorobanData(r) {
+  const ext = r.u32();
+  const archived = ext === 1 ? r.arr(() => r.u32()) : [];
+  if (ext > 1) throw new XdrError(`soroban data ext ${ext}`);
+  const readOnly = r.arr(() => readLedgerKey(r));
+  const readWrite = r.arr(() => readLedgerKey(r));
+  return { readOnly, readWrite, archived, instructions: r.u32(), diskReadBytes: r.u32(), writeBytes: r.u32(), resourceFee: r.i64() };
+}
+
+function skipPreconditions(r) {
+  const t = r.u32();
+  if (t === 0) return null;
+  if (t === 1) return { minTime: r.u64(), maxTime: r.u64() };
+  if (t !== 2) throw new XdrError(`preconditions ${t}`);
+  const tb = r.opt(() => ({ minTime: r.u64(), maxTime: r.u64() }));
+  const lb = r.opt(() => ({ minLedger: r.u32(), maxLedger: r.u32() }));
+  r.opt(() => r.i64());
+  r.u64();
+  r.u32();
+  r.arr(() => {
+    const k = r.u32();
+    r.fixed(32);
+    if (k === 3) r.var(64);
+  }, 2);
+  return { ...tb, ...lb };
+}
+
+function readMemo(r) {
+  const t = r.u32();
+  if (t === 0) return null;
+  if (t === 1) return { text: r.str(28) };
+  if (t === 2) return { id: r.u64() };
+  if (t === 3 || t === 4) return { hash: hex(r.fixed(32)) };
+  throw new XdrError(`memo ${t}`);
+}
+
+function readOperation(r) {
+  const source = r.opt(() => readMuxed(r));
+  const t = r.u32();
+  if (t === 24) return { type: 'invoke', source, hostFunction: readHostFunction(r), auth: r.arr(() => readAuthEntry(r)) };
+  if (t === 25) { r.u32(); return { type: 'extend-ttl', source, extendTo: r.u32() }; }
+  if (t === 26) { r.u32(); return { type: 'restore', source }; }
+  // A classic operation: Soroban transactions carry exactly one operation,
+  // so the review stops here and says so instead of guessing.
+  throw new XdrError(`operation type ${t} is not a Soroban operation`);
+}
+
+function readTransaction(r) {
+  const [tx, raw] = r.span(() => {
+    const source = readMuxed(r);
+    const fee = r.u32();
+    const seq = r.i64();
+    const cond = skipPreconditions(r);
+    const memo = readMemo(r);
+    const operations = r.arr(() => readOperation(r), 100);
+    const ext = r.u32();
+    const soroban = ext === 1 ? readSorobanData(r) : null;
+    if (ext > 1) throw new XdrError(`transaction ext ${ext}`);
+    return { source, fee, seq, cond, memo, operations, soroban };
+  });
+  tx.raw = raw;
+  return tx;
+}
+
+/** Decode a base64 or byte TransactionEnvelope. Fee bumps unwrap to the inner transaction. */
+export function decodeEnvelope(xdr) {
+  const r = new Reader(bytesOf(xdr));
+  const t = r.u32();
+  let tx, feeBump = null;
+  if (t === 2) {
+    tx = readTransaction(r);
+  } else if (t === 5) {
+    const feeSource = readMuxed(r);
+    const fee = r.i64();
+    if (r.u32() !== 2) throw new XdrError('fee bump inner envelope type');
+    tx = readTransaction(r);
+    r.arr(() => { r.fixed(4); r.var(64); }, 20);
+    r.u32();
+    feeBump = { feeSource, fee };
+  } else {
+    throw new XdrError(t === 0 ? 'v0 envelopes cannot carry Soroban operations' : `envelope type ${t}`);
+  }
+  const signatures = r.arr(() => ({ hint: hex(r.fixed(4)), signature: r.var(64) }), 20);
+  r.done();
+  return { tx, feeBump, signatures };
+}
+
+/** Decode one base64 or byte SorobanAuthorizationEntry. */
+export function decodeAuthEntry(xdr) {
+  const r = new Reader(bytesOf(xdr));
+  const e = readAuthEntry(r);
+  r.done();
+  return e;
+}
+
+/** Decode one base64 or byte ScVal. */
+export function decodeScVal(xdr) {
+  const r = new Reader(bytesOf(xdr));
+  const v = readScVal(r);
+  r.done();
+  return v;
+}
+
+/** Decode one base64 or byte ContractEvent. */
+export function decodeEvent(xdr) {
+  const r = new Reader(bytesOf(xdr));
+  r.u32();
+  const contract = r.opt(() => address('contract', r.fixed(32)));
+  const type = r.u32();
+  if (r.u32() !== 0) throw new XdrError('event body version');
+  const topics = r.arr(() => readScVal(r));
+  const data = readScVal(r);
+  r.done();
+  return { contract, type, topics, data };
+}
+
+// ---------------------------------------------------------------------------
+// StrKey, hashing, preimages.
+// ---------------------------------------------------------------------------
+
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function crc16(bytes) {
+  let crc = 0;
+  for (const b of bytes) {
+    crc ^= b << 8;
+    for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
+  }
+  return crc;
+}
+
+function strkey(version, payload) {
+  const data = new Uint8Array(payload.length + 3);
+  data[0] = version;
+  data.set(payload, 1);
+  const c = crc16(data.subarray(0, payload.length + 1));
+  data[payload.length + 1] = c & 0xff;
+  data[payload.length + 2] = c >> 8;
+  let bits = 0, value = 0, out = '';
+  for (const b of data) {
+    value = (value << 8) | b;
+    bits += 8;
+    while (bits >= 5) { out += B32[(value >>> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits > 0) out += B32[(value << (5 - bits)) & 31];
+  return out;
+}
+
+export function strkeyFor(kind, key, id) {
+  switch (kind) {
+    case 'account': return strkey(6 << 3, key);
+    case 'contract': return strkey(2 << 3, key);
+    case 'muxed': {
+      const p = new Uint8Array(40);
+      p.set(key);
+      new DataView(p.buffer).setBigUint64(32, id);
+      return strkey(12 << 3, p);
+    }
+    case 'claimable': { const p = new Uint8Array(33); p.set(key, 1); return strkey(1 << 3, p); }
+    case 'pool': return strkey(11 << 3, key);
+    default: return hex(key);
+  }
+}
+
+const sha256 = async (bytes) => new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+const u32be = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n); return b; };
+const i64be = (n) => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(n)); return b; };
+const concat = (...parts) => {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) { out.set(p, o); o += p.length; }
+  return out;
+};
+
+export const NETWORKS = {
+  testnet: 'Test SDF Network ; September 2015',
+  mainnet: 'Public Global Stellar Network ; September 2015',
+  futurenet: 'Test SDF Future Network ; October 2022',
+  local: 'Standalone Network ; February 2017',
+};
+
+export const networkId = (passphrase) => sha256(new TextEncoder().encode(passphrase));
+
+/** The native asset's Stellar Asset Contract id on a network. */
+export async function nativeAssetContract(passphrase) {
+  // HashIdPreimage::ContractId { networkId, ContractIdPreimage::FromAsset(Asset::Native) }
+  const pre = concat(u32be(8), await networkId(passphrase), u32be(1), u32be(0));
+  return strkeyFor('contract', await sha256(pre));
+}
+
+/**
+ * The 32-byte payload an address credential signs, for a given expiration
+ * ledger: sha256(HashIdPreimage::SorobanAuthorization[WithAddress]).
+ */
+export async function authPayloadHash(entry, passphrase, expirationLedger) {
+  const c = entry.credentials;
+  if (!c.address) return null;
+  const nid = await networkId(passphrase);
+  const exp = u32be(expirationLedger ?? c.expiration);
+  const pre = c.type === 'address'
+    ? concat(u32be(9), nid, i64be(c.nonce), exp, entry.root.raw)
+    : concat(u32be(10), nid, i64be(c.nonce), exp, c.addressRaw, entry.root.raw);
+  return sha256(pre);
+}
+
+/** The transaction hash the source account signs. */
+export async function transactionHash(decoded, passphrase) {
+  return sha256(concat(await networkId(passphrase), u32be(2), decoded.tx.raw));
+}
+
+// ---------------------------------------------------------------------------
+// Readable labels.
+// ---------------------------------------------------------------------------
+
+// SEP-41 token interface (and the Stellar Asset Contract's admin calls):
+// argument names, used only for contracts known to be tokens.
+const TOKEN_FNS = {
+  transfer: ['from', 'to', 'amount'],
+  transfer_from: ['spender', 'from', 'to', 'amount'],
+  approve: ['from', 'spender', 'amount', 'expiration_ledger'],
+  burn: ['from', 'amount'],
+  burn_from: ['spender', 'from', 'amount'],
+  mint: ['to', 'amount'],
+  clawback: ['from', 'amount'],
+  set_admin: ['new_admin'],
+  set_authorized: ['id', 'authorize'],
+};
+
+// Perch account entry points that carry a policy document.
+const PERCH_FNS = {
+  apply_doc: ['doc_json', 'approval_valid_until', 'expected_revision'],
+  apply_scope: ['grant_id', 'doc_json'],
+  remove_scope: ['grant_id'],
+  execute: ['target', 'target_fn', 'target_args'],
+};
+
+export function formatAmount(v, decimals = 7) {
+  const neg = v < 0n;
+  let s = (neg ? -v : v).toString().padStart(decimals + 1, '0');
+  const whole = s.slice(0, s.length - decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const frac = decimals ? s.slice(s.length - decimals).replace(/0+$/, '') : '';
+  return (neg ? '−' : '') + whole + (frac ? '.' + frac : '');
+}
+
+const short = (s) => (s && s.length > 14 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s);
+
+function tryJson(bytes) {
+  if (!bytes || bytes.length < 2 || bytes[0] !== 0x7b) return null;
+  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { return null; }
+}
+
+// ---------------------------------------------------------------------------
+// Authorization tree comparison (supplied vs independently recorded).
+// ---------------------------------------------------------------------------
+
+const sameBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+const credAddress = (e) => e.credentials.address?.str ?? 'source-account';
+
+/**
+ * Pair supplied entries with recorded ones. An entry matches when the signer
+ * and the whole invocation tree are byte-identical; nonces, expirations and
+ * signatures are ignored because the recording invents its own.
+ */
+export function compareAuth(supplied, recorded) {
+  const left = recorded.map((e, i) => ({ e, i, used: false }));
+  const result = supplied.map((e, index) => {
+    const exact = left.find((x) => !x.used && credAddress(x.e) === credAddress(e) && sameBytes(x.e.root.raw, e.root.raw));
+    if (exact) { exact.used = true; return { index, status: 'match', recorded: exact.i }; }
+    return { index, status: 'unmatched' };
+  });
+  for (const r of result) {
+    if (r.status !== 'unmatched') continue;
+    const e = supplied[r.index];
+    const same = left.find((x) => !x.used && credAddress(x.e) === credAddress(e));
+    if (same) { same.used = true; r.status = 'differs'; r.recorded = same.i; } else r.status = 'extra';
+  }
+  const missing = left.filter((x) => !x.used).map((x) => x.i);
+  return { entries: result, missing };
+}
+
+// ---------------------------------------------------------------------------
+// The element.
+// ---------------------------------------------------------------------------
+
+const STYLE = `
+:host {
+  --ssd-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ssd-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ssd-bg: #ffffff;
+  --ssd-surface: #f5f6f8;
+  --ssd-fg: #16181d;
+  --ssd-muted: #5d6470;
+  --ssd-border: #dde1e7;
+  --ssd-accent: #2f5bd8;
+  --ssd-accent-fg: #ffffff;
+  --ssd-ok: #1d7a46;
+  --ssd-ok-bg: #e5f4ea;
+  --ssd-warn: #8a5a00;
+  --ssd-warn-bg: #fdf1d8;
+  --ssd-danger: #b42318;
+  --ssd-danger-bg: #fde8e6;
+  --ssd-radius: 12px;
+  --ssd-width: 34rem;
+  --ssd-backdrop: rgba(10, 12, 16, 0.55);
+  --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+  display: contents;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :host(:not([theme="light"])) {
+    --ssd-bg: #17191e; --ssd-surface: #20232a; --ssd-fg: #eceef2; --ssd-muted: #a3aab6;
+    --ssd-border: #33373f; --ssd-accent: #7f9cff; --ssd-accent-fg: #0d1020;
+    --ssd-ok: #6fd39a; --ssd-ok-bg: #173323; --ssd-warn: #f2c063; --ssd-warn-bg: #3a2c10;
+    --ssd-danger: #ff8a7e; --ssd-danger-bg: #3d1c19; --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:host([theme="dark"]) {
+  --ssd-bg: #17191e; --ssd-surface: #20232a; --ssd-fg: #eceef2; --ssd-muted: #a3aab6;
+  --ssd-border: #33373f; --ssd-accent: #7f9cff; --ssd-accent-fg: #0d1020;
+  --ssd-ok: #6fd39a; --ssd-ok-bg: #173323; --ssd-warn: #f2c063; --ssd-warn-bg: #3a2c10;
+  --ssd-danger: #ff8a7e; --ssd-danger-bg: #3d1c19; --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+dialog {
+  box-sizing: border-box; width: min(var(--ssd-width), calc(100vw - 2rem)); max-height: min(46rem, calc(100dvh - 2rem));
+  padding: 0; border: 1px solid var(--ssd-border); border-radius: var(--ssd-radius);
+  background: var(--ssd-bg); color: var(--ssd-fg); font: 15px/1.45 var(--ssd-font); box-shadow: var(--ssd-shadow);
+  overflow: hidden;
+}
+dialog[open] { display: flex; flex-direction: column; }
+dialog::backdrop { background: var(--ssd-backdrop); }
+:host([inline]) dialog { position: static; width: 100%; max-height: none; box-shadow: none; margin: 0; }
+@media (max-width: 560px) {
+  :host(:not([inline])) dialog {
+    width: 100vw; max-width: 100vw; max-height: 92dvh; margin: auto 0 0; border-radius: var(--ssd-radius) var(--ssd-radius) 0 0;
+  }
+}
+header { padding: 1rem 1.25rem 0.75rem; border-bottom: 1px solid var(--ssd-border); }
+.meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--ssd-muted); font-size: 0.82rem; }
+.chip { border: 1px solid var(--ssd-border); border-radius: 999px; padding: 0.05rem 0.55rem; background: var(--ssd-surface); }
+h2 { margin: 0.4rem 0 0.15rem; font-size: 1.12rem; line-height: 1.3; }
+.sub { margin: 0; color: var(--ssd-muted); font-size: 0.88rem; }
+.body { overflow: auto; padding: 0.75rem 1.25rem 1rem; flex: 1 1 auto; min-height: 0; }
+h3 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ssd-muted); margin: 0.9rem 0 0.4rem; }
+.entry { border: 1px solid var(--ssd-border); border-radius: calc(var(--ssd-radius) - 4px); padding: 0.6rem 0.75rem; margin: 0 0 0.6rem; background: var(--ssd-bg); }
+.entry[data-status="extra"], .entry[data-status="differs"] { border-color: var(--ssd-danger); background: var(--ssd-danger-bg); }
+.entry[data-status="match"] { border-color: color-mix(in srgb, var(--ssd-ok) 55%, var(--ssd-border)); }
+.entry-head { display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--ssd-muted); }
+.entry-head b { color: var(--ssd-fg); font-weight: 600; }
+.badge { font-size: 0.75rem; font-weight: 600; border-radius: 999px; padding: 0.05rem 0.5rem; white-space: nowrap; }
+.badge.ok { color: var(--ssd-ok); background: var(--ssd-ok-bg); }
+.badge.warn { color: var(--ssd-warn); background: var(--ssd-warn-bg); }
+.badge.bad { color: var(--ssd-danger); background: var(--ssd-danger-bg); }
+ol.tree, ol.tree ol { list-style: none; margin: 0; padding: 0; }
+ol.tree ol { margin-left: 0.55rem; padding-left: 0.85rem; border-left: 2px solid var(--ssd-border); }
+li.node { margin: 0.45rem 0 0; }
+.sentence { font-weight: 600; overflow-wrap: anywhere; }
+details { margin-top: 0.15rem; }
+summary { cursor: pointer; color: var(--ssd-muted); font-size: 0.84rem; overflow-wrap: anywhere; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--ssd-accent); outline-offset: 2px; }
+dl.args { display: grid; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: 0.2rem 0.75rem; margin: 0.35rem 0 0.2rem; font-size: 0.86rem; }
+dt { color: var(--ssd-muted); }
+dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+code, .mono { font-family: var(--ssd-mono); font-size: 0.82em; }
+.addr { white-space: nowrap; }
+.doc { border: 1px dashed var(--ssd-border); border-radius: 8px; padding: 0.45rem 0.6rem; margin-top: 0.25rem; background: var(--ssd-surface); }
+.doc ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+.notice { border-radius: 8px; padding: 0.55rem 0.7rem; margin: 0.5rem 0; font-size: 0.88rem; background: var(--ssd-warn-bg); color: var(--ssd-fg); border: 1px solid color-mix(in srgb, var(--ssd-warn) 45%, transparent); }
+.notice.bad { background: var(--ssd-danger-bg); border-color: color-mix(in srgb, var(--ssd-danger) 45%, transparent); }
+.notice.ok { background: var(--ssd-ok-bg); border-color: color-mix(in srgb, var(--ssd-ok) 45%, transparent); }
+.preview { border-top: 1px solid var(--ssd-border); margin-top: 0.8rem; padding-top: 0.2rem; }
+.card { border: 1px solid var(--ssd-border); border-radius: 8px; padding: 0.6rem 0.75rem; margin: 0.45rem 0; background: var(--ssd-surface); }
+.verdict { display: flex; gap: 0.6rem; align-items: flex-start; }
+.verdict .icon { font-weight: 700; font-size: 1.1rem; line-height: 1.2; }
+.verdict[data-allowed="true"] .icon { color: var(--ssd-ok); }
+.verdict[data-allowed="false"] .icon { color: var(--ssd-danger); }
+.meter { height: 0.6rem; border-radius: 999px; background: var(--ssd-border); overflow: hidden; display: flex; margin: 0.45rem 0 0.3rem; }
+.meter span { display: block; height: 100%; }
+.meter .spent { background: var(--ssd-muted); }
+.meter .this { background: var(--ssd-accent); }
+.meter .over { background: var(--ssd-danger); }
+table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+th, td { text-align: left; padding: 0.25rem 0.35rem; border-bottom: 1px solid var(--ssd-border); vertical-align: top; }
+th { color: var(--ssd-muted); font-weight: 500; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.neg { color: var(--ssd-danger); }
+.pos { color: var(--ssd-ok); }
+ul.events { margin: 0; padding-left: 1.1rem; font-size: 0.88rem; }
+.muted { color: var(--ssd-muted); }
+.small { font-size: 0.82rem; }
+footer { display: flex; gap: 0.6rem; justify-content: flex-end; flex-wrap: wrap; padding: 0.75rem 1.25rem; border-top: 1px solid var(--ssd-border); background: var(--ssd-surface); }
+button { font: inherit; font-weight: 600; border-radius: 8px; padding: 0.5rem 1rem; border: 1px solid var(--ssd-border); background: var(--ssd-bg); color: var(--ssd-fg); cursor: pointer; min-height: 2.5rem; }
+button.primary { background: var(--ssd-accent); color: var(--ssd-accent-fg); border-color: var(--ssd-accent); }
+button.danger { background: var(--ssd-danger); color: #fff; border-color: var(--ssd-danger); }
+button[disabled] { opacity: 0.55; cursor: not-allowed; }
+button.link { border: 0; background: none; padding: 0.3rem 0; color: var(--ssd-accent); min-height: 0; }
+.spinner { display: inline-block; width: 0.9em; height: 0.9em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -0.1em; margin-right: 0.35em; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+`;
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+export class SorobanSignDialog extends HTMLElement {
+  static observedAttributes = ['transaction', 'auth-entries', 'network', 'signer', 'dapp', 'open', 'preview', 'engine', 'rpc-url'];
+
+  #root;
+  #labels = new Map();
+  #tokens = new Map();
+  #provider = null;
+  #decoded = null;
+  #entries = [];
+  #error = null;
+  #preview = null;
+  #previewState = 'idle';
+  #comparison = null;
+  #pending = null;
+  #confirming = false;
+  #nativeSac = null;
+  #renderQueued = false;
+  #abort = null;
+
+  constructor() {
+    super();
+    this.#root = this.attachShadow({ mode: 'open' });
+    this.#root.innerHTML = `<style>${STYLE}</style><dialog part="dialog" aria-labelledby="ssd-title" aria-describedby="ssd-sub"></dialog>`;
+    this.dialog = this.#root.querySelector('dialog');
+    this.dialog.addEventListener('cancel', (e) => { e.preventDefault(); this.#finish(false, 'dismissed'); });
+    this.dialog.addEventListener('click', (e) => this.#onClick(e));
+    this.dialog.addEventListener('keydown', (e) => this.#trapFocus(e));
+  }
+
+  connectedCallback() {
+    this.#queue();
+    if (this.hasAttribute('open')) queueMicrotask(() => this.show());
+  }
+
+  attributeChangedCallback(name, oldValue, value) {
+    if (oldValue === value) return;
+    if (name === 'transaction' || name === 'auth-entries' || name === 'network') this.#reset();
+    if (name === 'open') {
+      if (value !== null && !this.dialog.open) this.show();
+      if (value === null && this.dialog.open) this.dialog.close();
+    }
+    this.#queue();
+  }
+
+  // --- properties -----------------------------------------------------------
+
+  get transaction() { return this.getAttribute('transaction'); }
+  set transaction(v) { v ? this.setAttribute('transaction', v) : this.removeAttribute('transaction'); }
+
+  /** Base64 SorobanAuthorizationEntry list, for a bare auth-entry request. */
+  get authEntries() { const a = this.getAttribute('auth-entries'); return a ? a.split(/[\s,]+/).filter(Boolean) : []; }
+  set authEntries(list) { list?.length ? this.setAttribute('auth-entries', list.join(' ')) : this.removeAttribute('auth-entries'); }
+
+  get networkPassphrase() {
+    const n = this.getAttribute('network') ?? 'testnet';
+    return NETWORKS[n] ?? n;
+  }
+  set networkPassphrase(v) { this.setAttribute('network', v); }
+
+  /** Address the wallet signs for; its entries are highlighted. */
+  get signer() { return this.getAttribute('signer'); }
+  set signer(v) { v ? this.setAttribute('signer', v) : this.removeAttribute('signer'); }
+
+  /**
+   * Names for addresses: { "C…": "Café Perch" } or { "C…": { name, token: { code, decimals } } }.
+   * Labels come from the embedder (wallet address book, dapp manifest); the
+   * component adds only the native asset contract, which it derives itself.
+   */
+  get labels() { return Object.fromEntries(this.#labels); }
+  set labels(map) {
+    this.#labels = new Map();
+    this.#tokens = new Map();
+    for (const [k, v] of Object.entries(map ?? {})) {
+      if (typeof v === 'string') this.#labels.set(k, v);
+      else { this.#labels.set(k, v.name); if (v.token) this.#tokens.set(k, v.token); }
+    }
+    this.#queue();
+  }
+
+  /**
+   * async (request) => PreviewResult. The default imports the module named by
+   * the `engine` attribute on first use and calls its `preview(request)`.
+   */
+  get previewProvider() { return this.#provider; }
+  set previewProvider(fn) { this.#provider = fn; this.#queue(); }
+
+  get previewResult() { return this.#preview; }
+
+  // --- methods --------------------------------------------------------------
+
+  show() {
+    if (!this.isConnected) document.body.append(this);
+    this.#render();
+    if (this.dialog.open) return;
+    if (this.hasAttribute('inline')) this.dialog.show();
+    else this.dialog.showModal();
+    this.#root.querySelector('[data-act="reject"]')?.focus();
+    this.dispatchEvent(new CustomEvent('open', { bubbles: true, composed: true }));
+    if (this.getAttribute('preview') === 'auto') this.runPreview();
+  }
+
+  close() { this.#finish(false, 'closed'); }
+
+  /**
+   * Open the dialog for one request and resolve when the user decides:
+   * { approved: true, ...approveDetail } or { approved: false, reason }.
+   */
+  request(opts = {}) {
+    if (opts.labels) this.labels = opts.labels;
+    if (opts.previewProvider) this.previewProvider = opts.previewProvider;
+    for (const [k, attr] of [['network', 'network'], ['networkPassphrase', 'network'], ['signer', 'signer'], ['dapp', 'dapp']]) {
+      if (opts[k]) this.setAttribute(attr, opts[k]);
+    }
+    if (opts.transaction) { this.removeAttribute('auth-entries'); this.transaction = opts.transaction; }
+    if (opts.authEntries) { this.removeAttribute('transaction'); this.authEntries = opts.authEntries; }
+    this.#reset();
+    this.#pending?.resolve({ approved: false, reason: 'superseded' });
+    return new Promise((resolve) => {
+      this.#pending = { resolve };
+      this.show();
+    });
+  }
+
+  async runPreview() {
+    if (this.#previewState === 'loading' || !this.#decoded) return;
+    this.#abort?.abort();
+    this.#abort = new AbortController();
+    this.#previewState = 'loading';
+    this.#render();
+    try {
+      const provider = this.#provider ?? (await this.#engineProvider());
+      const result = await provider({
+        transaction: this.transaction,
+        authEntries: this.#entries.map((e) => toB64(e.raw)),
+        networkPassphrase: this.networkPassphrase,
+        signer: this.signer,
+        rpcUrl: this.getAttribute('rpc-url'),
+        decoded: this.#decoded,
+        signal: this.#abort.signal,
+      });
+      this.#setPreview(result);
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      this.#setPreview({ status: 'error', notice: `Preview failed: ${err?.message ?? err}` });
+    }
+  }
+
+  // --- internals ------------------------------------------------------------
+
+  async #engineProvider() {
+    const url = this.getAttribute('engine');
+    if (!url) throw new Error('no preview engine configured (set the engine attribute or previewProvider)');
+    const mod = await import(new URL(url, document.baseURI).href);
+    return (req) => mod.preview(req);
+  }
+
+  #setPreview(result) {
+    this.#preview = result;
+    this.#previewState = result?.status === 'ok' ? 'done' : (result?.status ?? 'error');
+    if (result?.recordedAuth) {
+      try {
+        const recorded = result.recordedAuth.map(decodeAuthEntry);
+        this.#comparison = compareAuth(this.#entries, recorded);
+        this.#comparison.recorded = recorded;
+      } catch (err) {
+        this.#comparison = null;
+        result.notice = `${result.notice ?? ''} Recorded tree could not be decoded: ${err.message}`.trim();
+      }
+    }
+    this.#confirming = false;
+    this.#render();
+    this.dispatchEvent(new CustomEvent('preview', { bubbles: true, composed: true, detail: { result, flags: this.#flags() } }));
+  }
+
+  #reset() {
+    this.#decoded = null;
+    this.#entries = [];
+    this.#error = null;
+    this.#preview = null;
+    this.#comparison = null;
+    this.#previewState = 'idle';
+    this.#confirming = false;
+    this.#abort?.abort();
+    try {
+      if (this.transaction) {
+        const env = decodeEnvelope(this.transaction);
+        const op = env.tx.operations[0];
+        if (env.tx.operations.length !== 1) throw new XdrError('a Soroban transaction carries exactly one operation');
+        this.#decoded = { kind: 'transaction', envelope: env, op };
+        this.#entries = op.type === 'invoke' ? op.auth : [];
+      } else if (this.authEntries.length) {
+        this.#entries = this.authEntries.map(decodeAuthEntry);
+        this.#decoded = { kind: 'auth-entries' };
+      }
+    } catch (err) {
+      this.#error = err;
+    }
+    nativeAssetContract(this.networkPassphrase).then((id) => {
+      if (id !== this.#nativeSac) { this.#nativeSac = id; this.#queue(); }
+    }, () => {});
+  }
+
+  #queue() {
+    if (this.#renderQueued) return;
+    this.#renderQueued = true;
+    queueMicrotask(() => { this.#renderQueued = false; this.#render(); });
+  }
+
+  #flags() {
+    const flags = [];
+    const p = this.#preview;
+    if (this.#comparison) {
+      for (const e of this.#comparison.entries) if (e.status !== 'match') flags.push({ kind: e.status, entry: e.index });
+      for (const i of this.#comparison.missing) flags.push({ kind: 'missing', recorded: i });
+    }
+    for (const v of p?.verdicts ?? []) if (!v.allowed) flags.push({ kind: 'refused', address: v.address, code: v.code });
+    if (p?.outcome && !p.outcome.ok && !(p.verdicts ?? []).some((v) => !v.allowed)) flags.push({ kind: 'fails', error: p.outcome.error });
+    return flags;
+  }
+
+  #label(addr) {
+    if (!addr) return '';
+    if (addr === this.#nativeSac) return this.#labels.get(addr) ?? 'XLM (native asset)';
+    return this.#labels.get(addr) ?? null;
+  }
+
+  #token(addr) {
+    if (addr === this.#nativeSac) return { code: 'XLM', decimals: 7 };
+    return this.#tokens.get(addr) ?? null;
+  }
+
+  #addr(a) {
+    const s = typeof a === 'string' ? a : a.str;
+    const label = this.#label(s);
+    const you = s === this.signer ? ' (you)' : '';
+    return label
+      ? `<span class="addr" title="${esc(s)}">${esc(label)}${you} <span class="mono muted">${esc(short(s))}</span></span>`
+      : `<span class="addr mono" title="${esc(s)}">${esc(short(s))}${you}</span>`;
+  }
+
+  #val(v, hint, token) {
+    switch (v.t) {
+      case 'address': return this.#addr(v);
+      case 'i128': case 'u128': case 'i256': case 'u256': case 'i64': case 'u64':
+        if (token && /amount|limit/.test(hint ?? '')) return `<b>${esc(formatAmount(v.v, token.decimals))} ${esc(token.code)}</b> <span class="muted small">(${esc(v.v.toString())})</span>`;
+        return `<span class="mono">${esc(v.v.toString())}</span>`;
+      case 'u32': case 'i32': return `<span class="mono">${v.v}</span>`;
+      case 'timepoint': return `${esc(new Date(Number(v.v) * 1000).toISOString())}`;
+      case 'duration': return `${esc(v.v.toString())} s`;
+      case 'bool': return v.v ? 'yes' : 'no';
+      case 'void': return '<span class="muted">none</span>';
+      case 'symbol': return `<code>${esc(v.v)}</code>`;
+      case 'string': return `“${esc(v.v)}”`;
+      case 'bytes': {
+        const doc = tryJson(v.v);
+        if (doc) return this.#doc(doc);
+        const h = hex(v.v);
+        return `<span class="mono" title="${esc(h)}">0x${esc(h.length > 32 ? h.slice(0, 32) + '…' : h)}</span> <span class="muted small">(${v.v.length} bytes)</span>`;
+      }
+      case 'vec': return v.v.length ? `[${v.v.map((x) => this.#val(x)).join(', ')}]` : '[ ]';
+      case 'map': return `{ ${v.v.map((e) => `${this.#val(e.k)}: ${this.#val(e.v, e.k.v)}`).join(', ')} }`;
+      case 'error': return `<span class="mono">error(${v.type}, ${v.code})</span>`;
+      default: return `<span class="mono">${esc(v.t)}</span>`;
+    }
+  }
+
+  /** A policy document carried in bytes (Perch apply_doc / grant install). */
+  #doc(doc) {
+    const rules = Array.isArray(doc.rules) ? doc.rules : [];
+    const signers = Array.isArray(doc.signers) ? doc.signers : [];
+    const items = rules.map((rule) => {
+      const scope = rule.scope?.type === 'contract' ? this.#addr(String(rule.scope.address)) : esc(rule.scope?.type ?? 'any');
+      const fns = Array.isArray(rule.functions) ? rule.functions.map((f) => `<code>${esc(f)}</code>`).join(', ') : 'any function';
+      let cap = '';
+      if (rule.cap?.limit) {
+        const token = this.#token(rule.cap.token ?? rule.scope?.address) ?? { code: 'units', decimals: 0 };
+        cap = `; at most <b>${esc(formatAmount(BigInt(rule.cap.limit), token.decimals))} ${esc(token.code)}</b> per ${esc(rule.cap['period-ledgers'])} ledgers`;
+      }
+      const who = rule.principals?.signers ? ` by ${rule.principals.signers.map((s) => `<code>${esc(s)}</code>`).join(' + ')}` : '';
+      return `<li><b>${esc(rule.name ?? 'rule')}</b>: ${fns} on ${scope}${who}${cap}</li>`;
+    }).join('');
+    const keys = signers.map((s) => `<li><code>${esc(s.id)}</code>: ${s.key ? `key <span class="mono">${esc(short(String(s.key)))}</span>` : this.#addr(String(s.address ?? ''))}</li>`).join('');
+    return `<div class="doc" part="doc"><div class="small muted">Policy document (${esc(doc.network ?? 'network not named')})</div>
+      ${items ? `<div class="small">Rules</div><ul>${items}</ul>` : ''}${keys ? `<div class="small">Signers</div><ul>${keys}</ul>` : ''}</div>`;
+  }
+
+  #sentence(fn) {
+    if (fn.kind === 'create') {
+      const from = fn.preimage.from === 'asset' ? `the ${esc(fn.preimage.asset.code)} asset contract` : 'a new contract';
+      return `Deploy ${from}${fn.executable.kind === 'wasm' ? ` from code ${esc(short(hex(fn.executable.hash)))}` : ''}`;
+    }
+    if (fn.kind === 'upload') return `Upload contract code (${fn.wasm.length} bytes)`;
+    const c = fn.contract.str;
+    const token = this.#token(c);
+    const names = token ? TOKEN_FNS[fn.fn] : null;
+    const arg = (n) => fn.args[names.indexOf(n)];
+    if (token && names && fn.args.length === names.length) {
+      const amt = (v) => (v && /128|64/.test(v.t) ? `${esc(formatAmount(v.v, token.decimals))} ${esc(token.code)}` : '?');
+      switch (fn.fn) {
+        case 'transfer': return `Send ${amt(arg('amount'))} from ${this.#addr(arg('from'))} to ${this.#addr(arg('to'))}`;
+        case 'approve': return `Let ${this.#addr(arg('spender'))} spend up to ${amt(arg('amount'))} of ${this.#addr(arg('from'))}'s balance until ledger ${esc(arg('expiration_ledger').v)}`;
+        case 'transfer_from': return `${this.#addr(arg('spender'))} sends ${amt(arg('amount'))} from ${this.#addr(arg('from'))} to ${this.#addr(arg('to'))}`;
+        case 'burn': return `Burn ${amt(arg('amount'))} from ${this.#addr(arg('from'))}`;
+        case 'mint': return `Mint ${amt(arg('amount'))} to ${this.#addr(arg('to'))}`;
+        default: break;
+      }
+    }
+    if (c === this.signer && (fn.fn === 'apply_doc' || fn.fn === 'apply_scope')) {
+      return fn.fn === 'apply_scope' ? `Install grant #${esc(fn.args[0]?.v ?? '?')} on your account` : 'Replace your account\'s policy document';
+    }
+    return `Call <code>${esc(fn.fn)}</code> on ${this.#addr(fn.contract)}`;
+  }
+
+  #argNames(fn) {
+    if (fn.kind !== 'call') return [];
+    if (this.#token(fn.contract.str) && TOKEN_FNS[fn.fn]?.length === fn.args.length) return TOKEN_FNS[fn.fn];
+    if (fn.contract.str === this.signer && PERCH_FNS[fn.fn]?.length === fn.args.length) return PERCH_FNS[fn.fn];
+    return [];
+  }
+
+  #node(inv) {
+    const fn = inv.fn;
+    const names = this.#argNames(fn);
+    const token = fn.kind === 'call' ? this.#token(fn.contract.str) : null;
+    const args = fn.args.map((a, i) => `<dt>${esc(names[i] ?? `arg ${i + 1}`)}</dt><dd>${this.#val(a, names[i], token)}</dd>`).join('');
+    const where = fn.kind === 'call' ? `<code>${esc(fn.fn)}</code> on ${esc(this.#label(fn.contract.str) ?? short(fn.contract.str))}` : esc(fn.kind);
+    const details = `<details part="node-details"><summary>${where}${fn.args.length ? ` · ${fn.args.length} argument${fn.args.length > 1 ? 's' : ''}` : ''}</summary>
+      ${fn.kind === 'call' ? `<dl class="args"><dt>contract</dt><dd class="mono">${esc(fn.contract.str)}</dd>${args}</dl>` : args ? `<dl class="args">${args}</dl>` : ''}</details>`;
+    const kids = inv.subs.length ? `<ol role="list">${inv.subs.map((s) => this.#node(s)).join('')}</ol>` : '';
+    return `<li class="node" part="node"><div class="sentence">${this.#sentence(fn)}</div>${details}${kids}</li>`;
+  }
+
+  #entry(e, i) {
+    const c = e.credentials;
+    const who = c.type === 'source-account' ? 'the transaction source account' : this.#addr(c.address);
+    const cmp = this.#comparison?.entries[i];
+    const badge = !cmp ? ''
+      : cmp.status === 'match' ? '<span class="badge ok">✓ matches simulation</span>'
+      : cmp.status === 'extra' ? '<span class="badge bad">⚠ not used by this transaction</span>'
+      : '<span class="badge bad">⚠ differs from simulation</span>';
+    const extraNote = cmp?.status === 'extra'
+      ? `<div class="notice bad small">This entry is not needed to run the transaction. If you sign it, the signature is published with the transaction and anyone can submit it later, until it expires.</div>`
+      : cmp?.status === 'differs' ? `<div class="notice bad small">The simulator recorded a different authorization for this signer. Compare the trees before signing.</div>` : '';
+    const mine = c.address?.str === this.signer;
+    return `<article class="entry" part="entry" data-status="${cmp?.status ?? 'unchecked'}" data-mine="${mine}">
+      <div class="entry-head"><span>${i + 1}. Authorized by <b>${who}</b>${c.type === 'address-v2' ? ' · address-bound' : ''}</span>${badge}</div>
+      ${extraNote}<ol class="tree" role="list">${this.#node(e.root)}</ol></article>`;
+  }
+
+  #previewHtml() {
+    const state = this.#previewState;
+    const p = this.#preview;
+    if (state === 'idle') {
+      const canPreview = this.#provider || this.hasAttribute('engine');
+      if (this.getAttribute('preview') === 'off' || !canPreview) return '';
+      return `<div class="preview" part="preview"><h3>Effects</h3>
+        <p class="small muted">The tree above is decoded from the request itself. A preview runs the transaction in a local simulator against current ledger state.</p>
+        <button data-act="preview" part="preview-button">Preview effects</button></div>`;
+    }
+    if (state === 'loading') return `<div class="preview" part="preview"><h3>Effects</h3><p role="status"><span class="spinner" aria-hidden="true"></span>Running the simulator…</p></div>`;
+    if (state !== 'done') {
+      return `<div class="preview" part="preview"><h3>Effects</h3><div class="notice ${state === 'error' ? 'bad' : ''}" part="notice" role="status">${esc(p?.notice ?? 'Preview unavailable.')} The authorization tree above is still exact.</div></div>`;
+    }
+    const parts = [];
+    if (p.notice) parts.push(`<div class="notice" part="notice">${esc(p.notice)}</div>`);
+    const cmp = this.#comparison;
+    if (cmp) {
+      const bad = cmp.entries.filter((e) => e.status !== 'match').length + cmp.missing.length;
+      parts.push(bad
+        ? `<div class="notice bad" part="auth-check">⚠ The simulator's own recording of the authorization tree does not match the request: ${cmp.entries.filter((e) => e.status === 'extra').length} extra, ${cmp.entries.filter((e) => e.status === 'differs').length} different, ${cmp.missing.length} missing.</div>`
+        : `<div class="notice ok" part="auth-check">✓ The simulator recorded the same authorization tree independently.</div>`);
+      if (cmp.missing.length) {
+        parts.push(`<div class="small">Needed but not supplied:</div>${cmp.missing.map((i) => this.#entry(cmp.recorded[i], -1)).join('')}`);
+      }
+    }
+    for (const v of p.verdicts ?? []) {
+      parts.push(`<div class="card verdict" part="verdict" data-allowed="${!!v.allowed}"><span class="icon" aria-hidden="true">${v.allowed ? '✓' : '✕'}</span>
+        <div><b>${v.allowed ? 'Would be accepted' : 'Would be refused'}</b> by ${this.#addr(v.address)}${v.rule ? ` under rule <code>${esc(v.rule.name ?? v.rule.id)}</code>` : ''}.
+        ${v.reason ? `<div class="small">${esc(v.reason)}</div>` : ''}${v.code != null ? `<div class="small muted">Contract error ${esc(v.code)}</div>` : ''}</div></div>`);
+    }
+    for (const b of p.budgets ?? []) parts.push(this.#budget(b));
+    if (p.balances?.length) {
+      const rows = p.balances.map((b) => {
+        const before = BigInt(b.before ?? 0), after = BigInt(b.after ?? 0), d = after - before;
+        const tok = b.asset ?? { code: '', decimals: 0 };
+        return `<tr><td>${this.#addr(b.address)}</td><td>${esc(tok.code)}</td><td class="num">${esc(formatAmount(before, tok.decimals))}</td><td class="num">${esc(formatAmount(after, tok.decimals))}</td><td class="num ${d < 0n ? 'neg' : 'pos'}">${d > 0n ? '+' : ''}${esc(formatAmount(d, tok.decimals))}</td></tr>`;
+      }).join('');
+      parts.push(`<h3>Balance changes</h3><table part="balances"><thead><tr><th>Account</th><th>Asset</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr></thead><tbody>${rows}</tbody></table>`);
+    } else if (p.outcome?.ok) {
+      parts.push('<p class="small muted">No balance changes.</p>');
+    }
+    if (p.events?.length) {
+      const items = p.events.map((x) => { try { return `<li>${this.#event(decodeEvent(x))}</li>`; } catch (err) { return `<li class="muted">undecodable event (${esc(err.message)})</li>`; } }).join('');
+      parts.push(`<h3>Events</h3><ul class="events" part="events">${items}</ul>`);
+    }
+    if (p.outcome && !p.outcome.ok && !(p.verdicts ?? []).length) {
+      parts.push(`<div class="notice bad">The transaction would fail: ${esc(p.outcome.error ?? 'unknown error')}${p.outcome.codes?.length ? ` (contract error ${esc(p.outcome.codes.join(', '))})` : ''}</div>`);
+    }
+    const eng = p.engine ? `${esc(p.engine.name ?? 'simulator')} ${esc(p.engine.host ?? '')}, protocol ${esc(p.engine.protocol ?? '?')}` : 'simulator';
+    const led = p.ledger ? ` at ledger ${esc(p.ledger.sequence)}` : '';
+    parts.push(`<p class="small muted">Simulated with ${eng}${led}. Ledger state comes from ${esc(p.stateSource ?? 'RPC')}; the result is a prediction, not a guarantee.</p>`);
+    return `<div class="preview" part="preview" aria-live="polite"><h3>Effects</h3>${parts.join('')}</div>`;
+  }
+
+  #budget(b) {
+    const tok = b.token ?? { code: '', decimals: 0 };
+    const limit = BigInt(b.limit), spent = BigInt(b.spentInWindow), amount = BigInt(b.amount ?? 0);
+    const remaining = limit - spent;
+    const fits = amount <= remaining;
+    const pct = (x) => (limit > 0n ? Math.max(0, Math.min(100, Number((x * 10000n) / limit) / 100)) : 0);
+    const f = (x) => `${formatAmount(x, tok.decimals)} ${tok.code}`;
+    const minutes = b.nextReleaseLedger && b.ledger ? Math.round(((b.nextReleaseLedger - b.ledger) * 5) / 60) : null;
+    return `<div class="card" part="budget"><b>Spending cap</b>${b.rule ? ` · rule <code>${esc(b.rule.name ?? b.rule.id)}</code>` : ''}
+      <div class="meter" role="img" aria-label="${esc(`${f(spent)} spent of ${f(limit)}; this request ${f(amount)}`)}">
+        <span class="spent" style="width:${pct(spent)}%"></span><span class="${fits ? 'this' : 'over'}" style="width:${pct(fits ? amount : remaining > 0n ? remaining : 0n)}%"></span></div>
+      <div class="small">${esc(f(remaining))} of ${esc(f(limit))} left in the current window of ${esc(b.periodLedgers)} ledgers.
+      ${fits ? `After this: <b>${esc(f(remaining - amount))}</b> left.` : `<b>This request (${esc(f(amount))}) is over the remaining cap.</b>`}
+      ${b.nextReleaseLedger ? `<span class="muted">The oldest spend leaves the window at ledger ${esc(b.nextReleaseLedger)}${minutes != null ? ` (about ${minutes} min)` : ''}.</span>` : ''}</div></div>`;
+  }
+
+  #event(ev) {
+    const [name, ...rest] = ev.topics;
+    const token = ev.contract ? this.#token(ev.contract.str) : null;
+    if (name?.t === 'symbol' && name.v === 'transfer' && rest.length >= 2) {
+      const amount = ev.data.t === 'map' ? ev.data.v.find((e) => e.k.v === 'amount')?.v : ev.data;
+      const amt = amount && token ? `${formatAmount(amount.v, token.decimals)} ${token.code}` : amount?.v?.toString() ?? '?';
+      return `<b>transfer</b> ${esc(amt)} from ${this.#val(rest[0])} to ${this.#val(rest[1])} <span class="muted small">(${esc(this.#label(ev.contract?.str) ?? short(ev.contract?.str ?? ''))})</span>`;
+    }
+    return `<code>${esc(name?.v ?? name?.t ?? '?')}</code> ${rest.map((t) => this.#val(t)).join(' ')} → ${this.#val(ev.data)} <span class="muted small">(${esc(this.#label(ev.contract?.str) ?? short(ev.contract?.str ?? ''))})</span>`;
+  }
+
+  #render() {
+    const d = this.dialog;
+    const dapp = this.getAttribute('dapp');
+    const net = Object.entries(NETWORKS).find(([, v]) => v === this.networkPassphrase)?.[0] ?? 'custom network';
+    let body, title, sub = '';
+    if (this.#error) {
+      title = 'This request could not be read';
+      body = `<div class="notice bad" role="alert">${esc(this.#error.message)}. Nothing has been signed. Reject the request.</div>`;
+    } else if (!this.#decoded) {
+      title = 'No request';
+      body = '<p class="muted">Nothing to review.</p>';
+    } else {
+      const n = this.#entries.length;
+      const op = this.#decoded.op;
+      title = n === 1 ? 'Authorize this call' : n ? `Authorize ${n} calls` : 'Approve this transaction';
+      const tx = this.#decoded.envelope?.tx;
+      if (tx) sub = `Fee up to ${esc(formatAmount(BigInt(tx.fee), 7))} XLM, paid by ${this.#addr(tx.source)}`;
+      const entries = n ? this.#entries.map((e, i) => this.#entry(e, i)).join('')
+        : op?.type === 'invoke' ? `<article class="entry"><div class="entry-head"><span>Runs with the source account's authority</span></div><ol class="tree" role="list">${this.#node({ fn: op.hostFunction, subs: [] })}</ol></article>`
+        : `<p>${esc(op?.type ?? 'unknown')} operation</p>`;
+      body = `<h3>What you authorize</h3><div part="tree">${entries}</div>${this.#previewHtml()}`;
+    }
+    const flags = this.#flags();
+    const risky = flags.length > 0 || !!this.#error;
+    const strict = this.hasAttribute('strict');
+    const approveLabel = this.#error ? 'Sign' : this.#confirming ? 'Confirm: sign anyway' : risky ? 'Sign anyway' : 'Sign';
+    d.innerHTML = `<header part="header">
+        <div class="meta"><span class="chip" part="network">${esc(net)}</span>${dapp ? `<span>Request from <b>${esc(dapp)}</b></span>` : ''}</div>
+        <h2 id="ssd-title" part="title">${esc(title)}</h2>
+        <p id="ssd-sub" class="sub" part="summary">${sub}</p></header>
+      <div class="body">${body}</div>
+      <footer part="footer">
+        <button data-act="reject" part="reject">Reject</button>
+        <button data-act="approve" part="approve" class="${risky ? 'danger' : 'primary'}" ${this.#error || (strict && risky) || !this.#decoded ? 'disabled' : ''}>${approveLabel}</button>
+      </footer>`;
+  }
+
+  #onClick(e) {
+    const act = e.target.closest?.('[data-act]')?.dataset.act;
+    if (act === 'reject') this.#finish(false, 'rejected');
+    else if (act === 'preview') this.runPreview();
+    else if (act === 'approve') {
+      if (this.#flags().length && !this.#confirming) {
+        this.#confirming = true;
+        this.#render();
+        this.#root.querySelector('[data-act="approve"]')?.focus();
+        return;
+      }
+      this.#approve();
+    }
+  }
+
+  async #approve() {
+    const passphrase = this.networkPassphrase;
+    const entries = await Promise.all(this.#entries.map(async (e, index) => ({
+      index,
+      address: e.credentials.address?.str ?? null,
+      credentials: e.credentials.type,
+      nonce: e.credentials.nonce?.toString() ?? null,
+      entryXdr: toB64(e.raw),
+      invocationXdr: toB64(e.root.raw),
+      invocationHash: hex(await sha256(e.root.raw)),
+      forSigner: !!this.signer && e.credentials.address?.str === this.signer,
+    })));
+    const tx = this.#decoded?.envelope;
+    const detail = {
+      transaction: this.transaction ?? null,
+      transactionHash: tx ? hex(await transactionHash(tx, passphrase)) : null,
+      networkPassphrase: passphrase,
+      signer: this.signer,
+      entries,
+      flags: this.#flags(),
+      preview: this.#preview,
+    };
+    const ok = this.dispatchEvent(new CustomEvent('approve', { bubbles: true, composed: true, cancelable: true, detail }));
+    if (!ok) return;
+    this.#close();
+    this.#pending?.resolve({ approved: true, ...detail });
+    this.#pending = null;
+  }
+
+  #finish(approved, reason) {
+    if (!this.dialog.open && !this.#pending) return;
+    this.dispatchEvent(new CustomEvent('reject', { bubbles: true, composed: true, detail: { reason, flags: this.#flags() } }));
+    this.#close();
+    this.#pending?.resolve({ approved: false, reason });
+    this.#pending = null;
+  }
+
+  #close() {
+    this.#abort?.abort();
+    if (this.dialog.open) this.dialog.close();
+    this.removeAttribute('open');
+    this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
+  }
+
+  #trapFocus(e) {
+    if (e.key !== 'Tab' || this.hasAttribute('inline')) return;
+    const items = [...this.dialog.querySelectorAll('button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')].filter((x) => x.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    const active = this.#root.activeElement;
+    if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+  }
+}
+
+if (!customElements.get('soroban-sign-dialog')) customElements.define('soroban-sign-dialog', SorobanSignDialog);
+
+/** Open a shared dialog for one request: the one-call embed. */
+export function request(opts) {
+  let el = document.querySelector('soroban-sign-dialog[data-shared]');
+  if (!el) {
+    el = document.createElement('soroban-sign-dialog');
+    el.dataset.shared = '';
+    if (opts?.engine) el.setAttribute('engine', opts.engine);
+    if (opts?.theme) el.setAttribute('theme', opts.theme);
+    document.body.append(el);
+  }
+  return el.request(opts);
+}
+
+globalThis.SorobanSignDialog ??= { request, decodeEnvelope, decodeAuthEntry, decodeEvent, compareAuth, authPayloadHash, VERSION };
+
+</script>
+<script type="module">
+// Generated by make-canned.py from a captured soroban-sim run. Do not edit.
+globalThis.CANNED = {
+ "network": "Standalone Network ; February 2017",
+ "signer": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+ "labels": {
+  "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM": "Your Nido account",
+  "GCUVC6XONHNFB5OT7JZLWXLTTLDB5ZB36CTM67UNR7MZH2KUWFU75HPY": "Caf\u00e9 Perch",
+  "GATHL67I6ID4TMHI2M4EGVEPWEZ3PCJ5HI7LHXOQMB4PGPFJ5TKB2LAF": "Caf\u00e9 Perch fee payer",
+  "CBOGZ4BQX2UC52M5FMLCKCDELIJQWNPVRLHJXXPFYBB2X4QNBN7ZQ2ET": "Perch ed25519 verifier"
+ },
+ "scenarios": [
+  {
+   "id": "within-cap",
+   "title": "Pay the shop 5 XLM",
+   "amountXlm": 5,
+   "transaction": "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAAvrwgAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAL68IAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA="
+  },
+  {
+   "id": "over-cap",
+   "title": "Pay the shop 8 XLM",
+   "amountXlm": 8,
+   "transaction": "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAABMS0AAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAATEtAAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA="
+  },
+  {
+   "id": "smuggled-entry",
+   "title": "Pay the shop 2 XLM (dapp adds a hidden entry)",
+   "amountXlm": 2,
+   "transaction": "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAATEtAAAAAAIAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAExLQAAAAAAAAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mQ/aAAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAADDUjdklj8GBpUjkxgJIugBQ3BUAXqmqcADzI8ZhSbM7AAAAAoAAAAAAAAAAAAAAAACYloAAAAAAAAAAAEAAAAAAAAAAwAAAAYAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAAUAAAAAQAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAUAAAAAQAAAAcwOPXcUK2AOs/XVn8Q3qvAskztsrjVt+qDAwQYtJFFJwAAAAMAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABUz1TLbfZlRNwAAAAAAAAAGAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAAEAAAAAEAAAACAAAADwAAAAdCYWxhbmNlAAAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAABAD8NKwAAAJAAAAG4AAAAAAANqYIAAAAA"
+  }
+ ],
+ "previews": {
+  "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAAvrwgAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAL68IAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA=": {
+   "version": 1,
+   "status": "ok",
+   "engine": {
+    "name": "soroban-sim",
+    "host": "soroban-env-host 29.0.2",
+    "protocol": 29
+   },
+   "ledger": {
+    "sequence": 10000019,
+    "protocol": 29
+   },
+   "stateSource": "a local fixture ledger (captured run)",
+   "recordedAuth": [
+    "AAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mVE3AAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAACpUXruadpQ9dP6crtdc5rGHuQ78KbPfo2P2ZPpVLFp/gAAAAoAAAAAAAAAAAAAAAAC+vCAAAAAAA=="
+   ],
+   "outcome": {
+    "ok": true,
+    "error": null,
+    "codes": []
+   },
+   "verdicts": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "kind": "perch",
+     "allowed": true,
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "code": null,
+     "reason": "Grant 1, rule \u2018spend\u2019: transfer on XLM signed by the app key, within the cap."
+    }
+   ],
+   "budgets": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "token": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "limit": "100000000",
+     "periodLedgers": 100,
+     "spentInWindow": "30000000",
+     "amount": "50000000",
+     "ledger": 10000019,
+     "nextReleaseLedger": 10000113
+    }
+   ],
+   "balances": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "970000000",
+     "after": "920000000"
+    },
+    {
+     "address": "GCUVC6XONHNFB5OT7JZLWXLTTLDB5ZB36CTM67UNR7MZH2KUWFU75HPY",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "40000000",
+     "after": "90000000"
+    }
+   ],
+   "events": [
+    "AAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAEAAAAAAAAABAAAAA8AAAAIdHJhbnNmZXIAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAOAAAABm5hdGl2ZQAAAAAACgAAAAAAAAAAAAAAAAL68IA="
+   ],
+   "resources": {
+    "instructions": 2918617
+   },
+   "captured": {
+    "timingsMs": {
+     "enforcing": 1.309666,
+     "recording": 0.06466599999999999
+    },
+    "replayOfUnusedEntries": []
+   }
+  },
+  "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAABMS0AAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAATEtAAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA=": {
+   "version": 1,
+   "status": "ok",
+   "engine": {
+    "name": "soroban-sim",
+    "host": "soroban-env-host 29.0.2",
+    "protocol": 29
+   },
+   "ledger": {
+    "sequence": 10000019,
+    "protocol": 29
+   },
+   "stateSource": "a local fixture ledger (captured run)",
+   "recordedAuth": [
+    "AAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mVE3AAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAACpUXruadpQ9dP6crtdc5rGHuQ78KbPfo2P2ZPpVLFp/gAAAAoAAAAAAAAAAAAAAAAExLQAAAAAAA=="
+   ],
+   "outcome": {
+    "ok": false,
+    "error": "Error(Auth, InvalidAction)",
+    "codes": [
+     5
+    ]
+   },
+   "verdicts": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "kind": "perch",
+     "allowed": false,
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "code": 5,
+     "reason": "Perch refused the authorization (PerchAuthError::RuleEvalRefused, contract error 5). The rule's cap has 7 XLM left in this window and the request is 8 XLM."
+    }
+   ],
+   "budgets": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "token": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "limit": "100000000",
+     "periodLedgers": 100,
+     "spentInWindow": "30000000",
+     "amount": "80000000",
+     "ledger": 10000019,
+     "nextReleaseLedger": 10000113
+    }
+   ],
+   "balances": [],
+   "events": [],
+   "resources": {
+    "instructions": 1966656
+   },
+   "captured": {
+    "timingsMs": {
+     "enforcing": 1.140583,
+     "recording": 0.067125
+    },
+    "replayOfUnusedEntries": []
+   }
+  },
+  "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAATEtAAAAAAIAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAExLQAAAAAAAAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mQ/aAAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAADDUjdklj8GBpUjkxgJIugBQ3BUAXqmqcADzI8ZhSbM7AAAAAoAAAAAAAAAAAAAAAACYloAAAAAAAAAAAEAAAAAAAAAAwAAAAYAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAAUAAAAAQAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAUAAAAAQAAAAcwOPXcUK2AOs/XVn8Q3qvAskztsrjVt+qDAwQYtJFFJwAAAAMAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABUz1TLbfZlRNwAAAAAAAAAGAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAAEAAAAAEAAAACAAAADwAAAAdCYWxhbmNlAAAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAABAD8NKwAAAJAAAAG4AAAAAAANqYIAAAAA": {
+   "version": 1,
+   "status": "ok",
+   "engine": {
+    "name": "soroban-sim",
+    "host": "soroban-env-host 29.0.2",
+    "protocol": 29
+   },
+   "ledger": {
+    "sequence": 10000019,
+    "protocol": 29
+   },
+   "stateSource": "a local fixture ledger (captured run)",
+   "recordedAuth": [
+    "AAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mVE3AAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAACpUXruadpQ9dP6crtdc5rGHuQ78KbPfo2P2ZPpVLFp/gAAAAoAAAAAAAAAAAAAAAABMS0AAAAAAA=="
+   ],
+   "outcome": {
+    "ok": true,
+    "error": null,
+    "codes": []
+   },
+   "verdicts": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "kind": "perch",
+     "allowed": true,
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "code": null,
+     "reason": "Grant 1, rule \u2018spend\u2019: transfer on XLM signed by the app key, within the cap."
+    }
+   ],
+   "budgets": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "token": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "limit": "100000000",
+     "periodLedgers": 100,
+     "spentInWindow": "30000000",
+     "amount": "20000000",
+     "ledger": 10000019,
+     "nextReleaseLedger": 10000113
+    }
+   ],
+   "balances": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "970000000",
+     "after": "950000000"
+    },
+    {
+     "address": "GCUVC6XONHNFB5OT7JZLWXLTTLDB5ZB36CTM67UNR7MZH2KUWFU75HPY",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "40000000",
+     "after": "60000000"
+    }
+   ],
+   "events": [
+    "AAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAEAAAAAAAAABAAAAA8AAAAIdHJhbnNmZXIAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAOAAAABm5hdGl2ZQAAAAAACgAAAAAAAAAAAAAAAAExLQA="
+   ],
+   "resources": {
+    "instructions": 2950038
+   },
+   "captured": {
+    "timingsMs": {
+     "enforcing": 1.337958,
+     "recording": 0.069875
+    },
+    "replayOfUnusedEntries": [
+     {
+      "applied": true,
+      "balancesAfterReplay": {
+       "account": "910000000",
+       "mallory": "50000000"
+      },
+      "detail": "()",
+      "function": "transfer"
+     }
+    ]
+   }
+  }
+ },
+ "notice": "Captured from a native soroban-sim run (soroban-env-host 29.0.2) of the pinned Perch contracts; see proto/perch-fixture."
+};
+
+</script>
+<script type="module">
+// Toy dapp glue for the mock. It uses only the component's public API:
+// labels, previewProvider, request(), and the approve / reject / preview events.
+const C = globalThis.CANNED;
+const dialog = document.getElementById('dialog');
+const log = document.getElementById('log');
+const short = (s) => (s ? `${s.slice(0, 4)}…${s.slice(-4)}` : '');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+dialog.labels = C.labels;
+
+// Canned stand-in for the simulator engine: same request in, same
+// PreviewResult shape out as the real engine module.
+dialog.previewProvider = ({ transaction, signal }) =>
+  new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      const result = C.previews[transaction];
+      resolve(result ? structuredClone(result) : { status: 'fallback', notice: 'No canned preview for this transaction.' });
+    }, 700);
+    signal?.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('aborted', 'AbortError')); });
+  });
+
+const set = (id, fn) => document.getElementById(id).addEventListener('change', (e) => fn(e.target.value));
+set('theme', (v) => {
+  v ? document.documentElement.setAttribute('data-theme', v) : document.documentElement.removeAttribute('data-theme');
+  v ? dialog.setAttribute('theme', v) : dialog.removeAttribute('theme');
+});
+set('brand', (v) => dialog.classList.toggle('brand', v === 'brand'));
+set('preview', (v) => dialog.setAttribute('preview', v));
+dialog.setAttribute('preview', 'manual');
+
+for (const button of document.querySelectorAll('[data-scenario]')) {
+  button.addEventListener('click', async () => {
+    const s = C.scenarios.find((x) => x.id === button.dataset.scenario);
+    const r = await dialog.request({ transaction: s.transaction, network: C.network, signer: C.signer, dapp: 'cafe-perch.example' });
+    const item = document.createElement('div');
+    item.className = 'ev';
+    if (r.approved) {
+      const mine = r.entries.filter((e) => e.forSigner);
+      item.innerHTML = `<b class="ok">approve</b> · ${esc(s.title)}<br>
+        The wallet now signs ${mine.length} entr${mine.length === 1 ? 'y' : 'ies'} for ${esc(short(r.signer))}:
+        <pre>${esc(mine.map((e) => `#${e.index + 1} ${e.credentials} nonce ${e.nonce}\n   invocationHash ${e.invocationHash}`).join('\n'))}</pre>
+        ${r.flags.length ? `Signed despite: ${esc(r.flags.map((f) => f.kind).join(', '))}` : 'No flags.'}`;
+    } else {
+      item.innerHTML = `<b class="no">reject</b> · ${esc(s.title)} · reason <code>${esc(r.reason)}</code>`;
+    }
+    log.prepend(item);
+    button.focus();
+  });
+}
+
+</script>
+</body>
+</html>

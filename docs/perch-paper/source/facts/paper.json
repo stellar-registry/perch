@@ -1,0 +1,34 @@
+{
+ "paper-date": {
+  "value": "7 November 2026",
+  "note": "O resets it to the r3 build date",
+  "source": "`source/facts/paper.json` (C)"
+ },
+ "paper-title-latex": {
+  "value": "Perch: Bounded Grants for Apps and Agents on Soroban Smart Accounts",
+  "source": "r4 plan §2"
+ },
+ "paper-subtitle-html": {
+  "value": "Bounded grants for apps and agents on Stellar",
+  "source": "r4 plan §3.1"
+ },
+ "paper-iteration": {
+  "value": "Fourth iteration · November 2026",
+  "source": "r4 plan §3.2"
+ },
+ "authors": {
+  "value": "Willem Wyndham and Elizabeth Engelman",
+  "anon": "Anonymous authors",
+  "source": "panel brief"
+ },
+ "affiliation": {
+  "value": "The Aha Company",
+  "anon": "Anonymous institution",
+  "source": "panel brief"
+ },
+ "wallet-name": {
+  "value": "Nido",
+  "anon": "a passkey wallet",
+  "source": "panel brief"
+ }
+}

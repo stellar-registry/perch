@@ -1,0 +1,112 @@
+{
+ "fig-overview": {
+  "title": "Who does what.",
+  "caption": "The owner installs a grant in the account; the app or agent signs its own calls; for each call the host asks the account, whose one decision function checks the grant and its window; a verifier contract checks the signature. Double border: covered by the theorems. Single border: tested. Hatched: trusted.",
+  "editions": [
+   "html"
+  ],
+  "short": "the overview diagram",
+  "caption_html": "The account checks each call against the grant before a verifier checks the signature, and stores the new spending record only after both pass."
+ },
+ "fig-shop-grant": {
+  "title": "The running example: an app may pay the shop at most {{fact:shop-cap-xlm}} XLM in any {{fact:shop-period-ledgers}} ledgers ({{fact:shop-period-minutes}}).",
+  "caption": "(a) The grant document as the simulation installs it, with addresses and the key abbreviated: `C...` is a contract, `G...` an account controlled by a key pair. (b) Each marked field in words.",
+  "kind": "code",
+  "short": "the shop grant figure",
+  "panels": [
+   {
+    "file": "a",
+    "title": "(a) The grant document",
+    "latex_width": 0.49
+   },
+   {
+    "file": "b",
+    "title": "(b) In words",
+    "latex_width": 0.49
+   }
+  ]
+ },
+ "fig-cap-window": {
+  "title": "The shop grant's cap, {{fact:shop-cap-xlm}} XLM per {{fact:shop-period-ledgers}} ledgers, on illustrative ledgers.",
+  "caption": "At ledger *L* the window holds charges made after *L* − 100 and through *L*. Charges inside the window at *t* + 100 are highlighted. A refused transfer leaves the spending record unchanged. A charge stops counting exactly 100 ledgers after it was made.",
+  "interactive": "cap-window",
+  "short": "the cap-window figure"
+ },
+ "fig-auth-path": {
+  "title": "One authorization in six stages.",
+  "caption": "Stage 4 (decide) is the function the theorems cover; the other stages are tested account code, and the host is trusted. The vision companion paper splits these six stages into nine steps.",
+  "kind": "algorithm",
+  "interactive": "auth-path",
+  "latex_size": "scriptsize",
+  "latex_exit_width": "0.27",
+  "editions": [
+   "latex"
+  ]
+ },
+ "fig-sim": {
+  "title": "Both designs, one scenario, from soroban-sim's native run.",
+  "caption": "RECORDED. Per request: the contracts the request called (from the host's diagnostic events), the verdict and code, and the window. The OpenZeppelin side's signature check calls no contract, so it has no row. The window shown is the stored record; spends 100 or more ledgers old leave it at the next charge. Dashed: not run; no Perch counterpart. Page `{{fact:sim-page-sha256-short}}`, reference run `{{fact:sim-golden-sha256-short}}`; pins in {{ref:sec:repro}}. No instruction counts.",
+  "interactive": "sim-poster",
+  "editions": [
+   "html"
+  ],
+  "short": "the recorded-run figure",
+  "caption_html": "Per request: the contracts called during authorization, from the host's diagnostic events; the verdict and code; and the window. OpenZeppelin's signature check calls no contract, so it has no box. Dashed: no Perch counterpart. Page `{{fact:sim-page-sha256-short}}`, reference run `{{fact:sim-golden-sha256-short}}`; pins in {{ref:sec:repro}}."
+ },
+ "fig-two-paths": {
+  "title": "One guarded call in two accounts.",
+  "caption": "Phase by phase through `__check_auth` for a lost guess, with notes for a guess over the cap and a direct transfer: under Perch, and under an OpenZeppelin account whose rules carry oz-policy-builder's `policy-interpreter` and OpenZeppelin's `spending_limit`. The Perch signer is a passkey checked by a verifier contract. oz-policy-builder's rules accept only delegated signers; here the signer is a Stellar account whose own authorization entry the host checks. The OpenZeppelin account runs a rule's policies in the rule's stored order, which for policies given at creation is their address order. A cross marks where each design refuses a guess over the cap: Perch before any signer is authenticated, the OpenZeppelin account in `spending_limit` after authentication. Dashed: no such phase in that design, or not reached in the scenario. Read from source at Perch {{fact:perch-pin-short}}, OpenZeppelin `stellar-contracts` {{fact:oz-v080-tag}} and oz-policy-builder {{fact:opb-pin-short}}; {{ref:tab:tab-walkthrough}} gives the recorded run of the shop task.",
+  "interactive": "stepper",
+  "scenarios": "lost:Lost guess|overcap:Guess over the cap|direct:Direct transfer"
+ },
+ "fig-same-task": {
+  "title": "One task in both designs, replayed from the recorded run.",
+  "caption": "Each row is one request of the walkthrough ({{ref:tab:tab-walkthrough}}); for each design it lists, in order, the contracts called while the account authorized the request, and where the request was refused. Below the rows, one panel repeats in-rule payments: under a per-call bound alone, an OpenZeppelin account whose rule carries only the interpreter, run on a local network outside the walkthrough, where {{fact:opb-per-call-applied-sends}} sends moved {{fact:opb-per-call-moved-xlm}} XLM under a {{fact:opb-per-call-bound-xlm}}-XLM bound; and under a window, OpenZeppelin's `spending_limit` or a Perch grant, from the walkthrough. The last panel lists the contracts each design called for one payment and where its decision state lives. The OpenZeppelin side's second authorization entry is its delegated signer's, because oz-policy-builder takes only delegated signers. Calls and codes are recorded, not drawn from source.",
+  "interactive": "same-task"
+ },
+ "fig-two-spellings": {
+  "title": "One intent, two spellings.",
+  "caption": "The intent: the app key may call `guess` on the game, and may send XLM only to the game, at most 2 XLM per {{fact:preview-game-period-ledgers}} ledgers, through ledger *N* − 1. (a) Perch: one grant document, installed by one `apply_scope` call. (b) oz-policy-builder: an Intent, lowered to one predicate per contract. (c) The XLM rule's predicate in wire form, and the `install_policy` arguments that attach OpenZeppelin's `spending_limit`; a second call installs the game rule. `C…`, `G…` and *N* are placeholders; `{ \"...\": \"(b)\" }` stands for the Intent in (b), passed as `intent`. Read from source; these two oz-policy-builder installs were not run.",
+  "kind": "code",
+  "panels": [
+   {
+    "file": "a",
+    "title": "(a) Perch grant document"
+   },
+   {
+    "file": "b",
+    "title": "(b) oz-policy-builder Intent",
+    "latex_width": 0.49
+   },
+   {
+    "file": "c",
+    "title": "(c) XLM rule: wire predicate and install arguments",
+    "latex_width": 0.49
+   }
+  ]
+ },
+ "fig-parts": {
+  "title": "The parts of a Perch account at the pinned build.",
+  "caption": "Arrows are calls out of the account, labelled with when they happen. Double border: the evaluator functions the theorems cover. Single border: tested code. Hatched: trusted components."
+ },
+ "fig-check-auth": {
+  "title": "One authorization through `__check_auth` at the pinned build.",
+  "caption": "Step 7, the evaluator, is covered by the theorems; the other steps are tested account-shell code. Each exit except a verifier trap names the account's error and its number, which a wallet finds in the diagnostic events of the host's `Error(Auth, InvalidAction)`; a verifier that traps fails in the host's signature check. No exit leaves a write. A recovery completion leaves at step 4 and is decided by the recovery controller. The Perch paper groups these steps into six stages: after the host call, guards (steps 1–4), select (6), decide (7), authenticate (5 and 8) and store (9).",
+  "kind": "algorithm"
+ },
+ "fig-recovery": {
+  "title": "Recovery in the reference run, commands 5–18.",
+  "caption": "For each command 5–18, its result and the state it changes. Completion (command 12) moves the grant generation from 0 to 1 and revokes the replaced owner key. Grant 1 stops authorizing there but stays stored until anyone collects it (command 18); its key stays barred. Command numbers match {{ref:tab:tab-run}}.",
+  "interactive": "stepper"
+ },
+ "fig-proof-paths": {
+  "title": "One source, two paths.",
+  "caption": "Lean's kernel checks theorems about the Aeneas translation of the MIR that nightly rustc produces; the account ships WebAssembly from rustc {{fact:rustc-perch}}, and nothing checks one against the other. Double border: proved, around the objects the theorems are about. Single border: tested. Hatched: trusted, including that each model matches its subject. Dashed connectors: the tests that bridge the two paths.",
+  "interactive": "proof-paths"
+ },
+ "fig-attenuation": {
+  "title": "Handing part of a grant to a helper, modelled.",
+  "caption": "MODEL. Three attenuation steps narrow the parent grant, and a move that would widen it is refused. Seven probes, each run alone from empty records, show that the child allows only what the parent allows; a replay sends the child's accepted requests through the parent. A bar marks a narrowed part; a cross and a bar end mark a refusal. The account cannot install an attenuated grant at the pinned build (proposed).",
+  "interactive": "attenuation"
+ }
+}

@@ -1,0 +1,74 @@
+{
+ "rustc-mir-nightly": {
+  "value": "nightly-2026-09-17",
+  "source": "`rc:TRUSTED.md:9-17` (R, r1-plan C22)"
+ },
+ "rustc-rule-core-stable": {
+  "value": "1.99.0",
+  "source": "same (R)"
+ },
+ "rustc-perch": {
+  "value": "1.97.1",
+  "source": "`P:rust-toolchain.toml` (R, r1-plan C22)"
+ },
+ "charon-rev": {
+  "value": "7b462d9",
+  "source": "rule-core README (C, r2:643)"
+ },
+ "aeneas-rev": {
+  "value": "ab34bd2",
+  "source": "same (C)"
+ },
+ "lean-rule-core": {
+  "value": "v4.35.0",
+  "source": "same (C)"
+ },
+ "lean-perch-canon": {
+  "value": "v4.33.0",
+  "source": "r2:643 (C)"
+ },
+ "soroban-sdk-account": {
+  "value": "29.0.1",
+  "source": "r2:427 (C)"
+ },
+ "soroban-sdk-deployed": {
+  "value": "27.0.6",
+  "source": "r2:427; r2-final (C)"
+ },
+ "soroban-env-host-sim": {
+  "value": "29.0.2",
+  "source": "r2:585, 993 (C)"
+ },
+ "host-model-tested-versions": {
+  "value": "soroban-env-host 29.0.1 and 30.0.0",
+  "source": "`rc:` README \"What is tested\" (C, r1-plan C8)"
+ },
+ "sim-protocol": {
+  "value": "29",
+  "source": "r2:501 (C)"
+ },
+ "testnet-protocol": {
+  "value": "30",
+  "source": "r2:587 (C; may change, recheck at build)"
+ },
+ "fixture-ledger": {
+  "value": "5,301,502",
+  "source": "r2:587 (C)"
+ },
+ "testnet-passphrase": {
+  "value": "Test SDF Network ; September 2015",
+  "source": "`P:deployments/testnet.json:4` (V)"
+ },
+ "standalone-passphrase": {
+  "value": "Standalone Network ; February 2017",
+  "source": "r2:122 (C)"
+ },
+ "wasi-imports-count": {
+  "value": "5",
+  "source": "r2:641 (C)"
+ },
+ "wasi-imports": {
+  "value": "clock_time_get, environ_get, environ_sizes_get, fd_write, proc_exit",
+  "source": "r2:641 (C)"
+ }
+}

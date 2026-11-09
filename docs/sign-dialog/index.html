@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Café Perch sign mock</title>
+<meta name="description" content="Mock of the soroban-sign-dialog web component embedded in a toy dapp: Perch grant transfers within cap, over cap, and with a smuggled authorization entry.">
+<style>
+  :root {
+    --bg: #f6f3ee; --panel: #fffdf9; --ink: #221d17; --muted: #6d6458; --line: #e4dccf;
+    --brand: #7a3e12; --brand-ink: #fff8f0; --code: #f0eadf;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15120f; --panel: #1f1b17; --ink: #f1ebe2; --muted: #a99d8d; --line: #39322a;
+      --brand: #e0a06a; --brand-ink: #1a1007; --code: #2a241e; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15120f; --panel: #1f1b17; --ink: #f1ebe2; --muted: #a99d8d; --line: #39322a;
+    --brand: #e0a06a; --brand-ink: #1a1007; --code: #2a241e; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Georgia, "Iowan Old Style", serif; }
+  .wrap { max-width: 68rem; margin: 0 auto; padding: 1.25rem 16px 3rem; }
+  .notice { font: 13.5px/1.45 system-ui, sans-serif; background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.8rem; color: var(--muted); }
+  .notice b { color: var(--ink); }
+  header.shop { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: 1.4rem 0 1rem; }
+  h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: -0.01em; }
+  h1 small { display: block; font: 600 0.8rem/1.4 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand); }
+  .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; font: 14px system-ui, sans-serif; }
+  .controls label { display: flex; gap: 0.35rem; align-items: center; color: var(--muted); }
+  select { font: inherit; padding: 0.3rem 0.4rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .menu { display: grid; gap: 0.8rem; }
+  .item { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.3rem 1rem; align-items: center; }
+  .item h2 { margin: 0; font-size: 1.2rem; }
+  .item p { margin: 0; color: var(--muted); font: 14px/1.45 system-ui, sans-serif; grid-column: 1; }
+  .item .tag { font: 600 12px/1 system-ui, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.3rem 0.5rem; border-radius: 999px; background: var(--code); color: var(--muted); justify-self: start; }
+  .item button { grid-column: 2; grid-row: 1 / span 3; font: 600 15px system-ui, sans-serif; padding: 0.65rem 1rem; border-radius: 10px; border: 0; background: var(--brand); color: var(--brand-ink); cursor: pointer; white-space: nowrap; }
+  .item button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; font: 14px/1.5 system-ui, sans-serif; min-width: 0; }
+  aside h2 { font: 600 0.8rem/1.4 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.5rem; }
+  pre { background: var(--code); border-radius: 8px; padding: 0.6rem 0.7rem; overflow-x: auto; font: 12.5px/1.5 ui-monospace, Menlo, monospace; margin: 0.4rem 0 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #log:empty::before { content: "Nothing yet. Pick an order."; color: var(--muted); }
+  .ev { border-top: 1px solid var(--line); padding: 0.6rem 0; }
+  .ev:first-child { border-top: 0; padding-top: 0; }
+  .ev b.ok { color: #2f7a43; } .ev b.no { color: #a33a2a; }
+  /* A dapp can brand the dialog through its custom properties: */
+  soroban-sign-dialog.brand {
+    --ssd-accent: #7a3e12; --ssd-accent-fg: #fff8f0; --ssd-radius: 18px;
+    --ssd-font: Georgia, "Iowan Old Style", serif;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="notice"><b>Mock.</b> The dialog is the real <code>&lt;soroban-sign-dialog&gt;</code> module, and its authorization tree is decoded from each order's real transaction XDR. <b>Preview effects</b> returns canned results captured from a native soroban-sim run of the pinned Perch contracts (account with grant 1: 10 XLM per 100 ledgers, 3 XLM already spent). The 0.7 s delay is artificial. See <code>NOTICE.md</code>.</p>
+
+  <header class="shop">
+    <h1><small>A toy dapp</small>Café Perch</h1>
+    <div class="controls">
+      <label>Page theme <select id="theme"><option value="">auto</option><option>light</option><option>dark</option></select></label>
+      <label>Dialog style <select id="brand"><option value="">default</option><option value="brand">shop brand</option></select></label>
+      <label>Preview <select id="preview"><option value="manual">on request</option><option value="auto">automatic</option><option value="off">off</option></select></label>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="menu" aria-label="Orders">
+      <div class="item">
+        <h2>Flat white</h2><span class="tag">5 XLM · within the cap</span>
+        <p>Paid from your Nido account under the shop's grant: 10 XLM per 100 ledgers, 7 XLM left.</p>
+        <button data-scenario="within-cap">Pay 5 XLM</button>
+      </div>
+      <div class="item">
+        <h2>Bag of beans</h2><span class="tag">8 XLM · over the cap</span>
+        <p>More than the grant has left in this window. The tree looks fine; the preview shows Perch would refuse it.</p>
+        <button data-scenario="over-cap">Pay 8 XLM</button>
+      </div>
+      <div class="item">
+        <h2>Espresso</h2><span class="tag">2 XLM · compromised checkout</span>
+        <p>A tampered checkout script adds a second authorization (4 XLM to another address) that this transaction never uses.</p>
+        <button data-scenario="smuggled-entry">Pay 2 XLM</button>
+      </div>
+    </section>
+
+    <aside>
+      <h2>Embed</h2>
+<pre>&lt;script type="module" src="soroban-sign-dialog.js"&gt;&lt;/script&gt;
+&lt;soroban-sign-dialog engine="soroban-sim-preview.js"&gt;&lt;/soroban-sign-dialog&gt;
+
+const r = await dialog.request({ transaction, signer, dapp });
+if (r.approved) wallet.sign(r.entries);  // keys stay in the wallet</pre>
+      <h2>What the wallet receives</h2>
+      <div id="log" aria-live="polite"></div>
+    </aside>
+  </div>
+</div>
+
+<soroban-sign-dialog id="dialog"></soroban-sign-dialog>
+
+<script type="module" src="soroban-sign-dialog.js"></script>
+<script type="module" src="canned-previews.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

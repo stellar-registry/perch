@@ -1,0 +1,27 @@
+\paragraph{Soroban authorization.} A contract that needs an address's approval
+calls \code{require\_auth}; for a contract account, the host then calls the
+account's \code{\_\_check\_auth}~\cite{cap-0046-11,stellar-custom-account} with
+the authorization entry's signed payload (network ID, nonce, expiration ledger,
+invocation tree), its signatures and its \emph{contexts}: every call and
+contract creation in the tree, in preorder, each of which the account must
+decide. A lost guess in a game gives two, the game's \code{guess} and the
+\code{transfer} it makes from the account. The nonce is consumed only on
+success, so a refused entry can be resubmitted until it expires.
+CAP-0071~\cite{cap-0071} lets a delegated signer's approval ride in the
+account's own entry. Recording-mode simulation, which builds entries, does not
+call \code{\_\_check\_auth}, so only enforcing simulation predicts a refusal.
+
+\paragraph{OpenZeppelin and oz-policy-builder.} OpenZeppelin's Soroban
+library~\cite{oz-stellar-accounts} stores \emph{context rules} with
+\emph{external} signers (a verifier contract and key), \emph{delegated} signers
+(addresses) and \emph{policies}, contracts with an \code{enforce} hook; the
+payload names one rule per context (\code{context\_rule\_ids}). In
+\fact{oz-v080-tag}, \code{\_\_check\_auth} validates the selected rules,
+authenticates the signers, then calls each policy's \code{enforce}
+(\nolinkurl{storage.rs:629-690}). oz-policy-builder~\cite{oz-policy-builder} has two
+halves (\nolinkurl{README.md:13-24}): off chain, a synthesiser turns a recorded
+transaction or a declared intent into a predicate, verified against the deployed
+interpreter's \code{check}; on chain, a shared \code{policy-interpreter} policy
+evaluates it on each guarded call alone and keeps no totals, which OpenZeppelin's
+\code{spending\_limit} policy keeps (\nolinkurl{docs/stellar.md:404-407}). Perch
+reuses OpenZeppelin's types and payload field; it differs in what decides.

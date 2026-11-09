@@ -1,0 +1,8 @@
+% Generated from source/statements.json.
+\begin{perchstatement}{2}{Acceptance implies permission.}\label{stmt:acceptance-implies-permission}
+\[\begin{aligned}&\mathit{authorize}(R, \rho, (\vec c, \vec j, S, \ell, g)) = \rho'\\
+&\qquad \implies \forall c \in \vec c.\ \exists r \in R.\ \mathit{allows}(r, c, S)\end{aligned}\]
+If evaluation accepts, the selected rule set allows every supplied context for the signer list it was given. The theorem takes that list as an input; the account authenticates it (obligation O1).
+\statementhypotheses{The signer list is an input; the account authenticates it (O1)}
+\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/Chain.lean\#L898}{Chain.RuleSet.authorize\_allowsAll} and \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/ExtractedAuthorize.lean\#L79}{Extracted.authorize\_allows\_all} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}; the chosen rule as witness: \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/Authorize.lean\#L208}{RuleSet.authorize\_chosen} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL}}
+\end{perchstatement}

@@ -198,7 +198,7 @@ suffix and key canonicalization matter — is exercised by Nido's suite
 | `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the rule views (`get_context_rule`, `get_context_rules_count`), `install_admin` and its `ContextRuleAdded`; the scoped-document paths `apply_scope_doc`, `check_scoped`, `rule_set::names_guardian_approval`, the normal-form refusal (`check_normal`), `excluded_contract`, the credential index (`check_unwiped`), `drop_scope`, and the scope index (spec §7.6) |
 | `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (the account's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
 | `crates/perch-spending-limit/**` | The deployable wrapper of OZ `spending_limit`, installing and uninstalling without events |
-| `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it (all but the ZK pool and adapter) |
+| `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it: the interpreter, the spending limit, and the Ed25519, WebAuthn and ML-DSA verifiers. The account, the recovery controller, the factory, the doc compiler, the ZK pool and the ZK adapter link none of it |
 
 **Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps,install_checks}.rs`;
 `oz_differential.rs` against the OZ-registry build it replaces;

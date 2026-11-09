@@ -2,7 +2,7 @@
 
 A composable policy layer for Soroban smart accounts.
 
-Perch is a policy library and toolchain on top of [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts). At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, the on-chain doc compiler compiles it, and the account lowers it to rule-core's evaluator (`rule-eval`), whose rules it stores beside the OZ context rules that register their ids and signers and decides every authorization with. Perch accounts can also enroll opt-in recovery (guardians, a zero-knowledge proof, or both) in the same document.
+Perch is a policy library and toolchain for Soroban smart accounts whose signers, authorization payload and context-rule views are wire-compatible with [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts); the account and the recovery controller link none of its code. At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, the on-chain doc compiler compiles it, and the account lowers it to rule-core's evaluator (`rule-eval`), whose rules it stores beside its own rule records (each rule's id, signers and policies) and decides every authorization with. Perch accounts can also enroll opt-in recovery (guardians, a zero-knowledge proof, or both) in the same document.
 
 The motivating use-case is a CI key stored in GitHub that can publish Wasm releases to the [Stellar Registry](https://github.com/stellar-registry) as a smart account, and do nothing else.
 

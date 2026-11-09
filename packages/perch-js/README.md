@@ -7,9 +7,9 @@ golden fixtures), a fluent builder producing validated documents, and the
 consumer interface: revision-consistent account reads, rule selection,
 authorization construction, limits, and the apply lifecycle.
 
-Perch is a composable policy layer for Soroban smart accounts built on
-OpenZeppelin stellar-accounts: policies are declarative canonical-JSON
-documents, compiled onto the account's context rules.
+Perch is a composable policy layer for Soroban smart accounts,
+wire-compatible with OpenZeppelin stellar-accounts: policies are declarative
+canonical-JSON documents, compiled onto the account's context rules.
 
 ## Install
 

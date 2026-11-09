@@ -8,10 +8,9 @@
 //! and validating* (the JSON parser and the checks live here, in one audited
 //! place), while the smart account owns *the policy documents* — the stored
 //! rule set and the applied `doc_hash`. Accounts call [`compile_doc`] from
-//! `apply_doc`, register the returned rules' signers with OpenZeppelin, and
-//! lower the returned model with rule-core's `rule_eval::lower` to the rules
-//! they enforce, so account wasm carries no parser at all, and this contract
-//! no rule lowering.
+//! `apply_doc` and `apply_scope` and lower the returned model with
+//! rule-core's `rule_eval::lower` to the rules they enforce, so account wasm
+//! carries no parser at all, and this contract no rule lowering.
 //!
 //! Fail-closed at every step: non-UTF-8, unparseable, invalid, wrong-network,
 //! or unlowerable documents are typed errors, never partial output.
@@ -175,9 +174,14 @@ pub struct CompiledDoc {
     /// The document as rule-core's lowering reads it (`rule_eval::Doc`, in
     /// host types): one entry. A `Vec` for the same reason as `recovery`.
     /// The applying account lowers it with `rule_eval::lower` and stores the
-    /// result beside its installed rules; `model.rules[i]` is `rules[i]`'s
+    /// result as its installed rules; `model.rules[i]` is `rules[i]`'s
     /// document rule.
     pub model: Vec<CompiledModel>,
+    /// Whether the document is in normal form as far as its text shows
+    /// (`perch_ir::normal_form`): then the rules an account stores for it,
+    /// with its signer ids, give back its canonical text. An account refuses
+    /// a scoped document that is not.
+    pub normal_form: bool,
 }
 
 /// What `derive_target` returns: the recovery target the controller binds
@@ -490,6 +494,7 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         rules,
         recovery,
         model: Vec::from_array(e, [model]),
+        normal_form: perch_ir::normal_form(doc).is_ok(),
     })
 }
 

@@ -56,7 +56,10 @@
 //! document under one scope id, authorized through the admin document's
 //! self-admin rule. Choices name the scope's rules, by their ids in its
 //! record. Perch refuses every scoped document rule-core's lowering refuses
-//! with one error, `ScopeEscalation`.
+//! with one error, `ScopeEscalation`. Perch applies a scoped document only
+//! in normal form: the harness applies the normal form of the trace's
+//! document (`perch_testkit::rebuild::normal`), which stores the same rules,
+//! once the trace's own spelling, where it differs, is refused.
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
@@ -594,7 +597,7 @@ impl<'w> Lab<'w> {
                 Rule {
                     name: "predecessor-cap".into(),
                     scope: Scope::contract(contract.clone()),
-                    principals: Principals::threshold(["owner"], 1),
+                    principals: owner(),
                     functions: Some(vec!["transfer".into()]),
                     args: None,
                     not_after_ledger: None,
@@ -980,7 +983,27 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                     .map_err(|x| format!("apply_scope refuses the predecessor: {x:?}"))?;
                 rule_set("the scoped predecessor", Some(SCOPE))?;
             }
-            match apply_scope(&w, rule, &key, &canonical(&doc)) {
+            // Perch applies a scoped document only in normal form, which
+            // stores the same rules; the trace's own spelling, where it
+            // differs, is refused.
+            let normal = perch_testkit::rebuild::normal(
+                &doc,
+                &support::strkey(&w.account),
+                e.ledger().sequence(),
+            );
+            if normal != doc {
+                match apply_scope(&w, rule, &key, &canonical(&doc)) {
+                    Err(Ok(
+                        PerchAccountError::NotNormalForm | PerchAccountError::ScopeEscalation,
+                    )) => {}
+                    other => {
+                        return Err(format!(
+                            "apply_scope takes the document outside normal form: {other:?}"
+                        ))
+                    }
+                }
+            }
+            match apply_scope(&w, rule, &key, &canonical(&normal)) {
                 Ok(_) => rule_set("the scoped document", Some(SCOPE))?,
                 Err(Ok(PerchAccountError::ScopeEscalation)) => {
                     return Ok(Run {

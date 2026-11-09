@@ -440,7 +440,7 @@ owner's admin rule in the admin document and each grant in its own scope.
 | Capped transfer through a grant | 6.17M, fp 20 | 6.17M | 6.17M | 6.22M, fp 20 |
 | `execute` through the admin rule (long-lived host) | 5.49M, fp 9 | 5.50M | 5.53M | 5.50M to 5.71M, fp 9 |
 
-A whole-document change compiles every rule and rewrites `installed_rules`
+A whole-document change compiles every rule and rewrites the admin records
 and `applied_doc`, about 5.4M per existing grant. A scope compiles and
 rewrites only its own, and writes one credential-index entry per credential
 it names for the first time. The generation gate reads one tag per selected
@@ -471,9 +471,9 @@ A scope's own entries are its record (856 B for one grant, which repeats the
 index entries (212 B), and one credential-index entry (144 B) per
 credential, which stays after the scope is removed: the split account above
 holds 7, for its 6 live grants and the one revoked. The admin document's
-equivalents are its share of `installed_rules` and `applied_doc`. Dropping
-the canonical copy and slimming the record would make a scoped grant
-cheaper at rest than one in the admin document.
+equivalents are its share of the admin records and `applied_doc`.
+[Account storage](#account-storage) measures the layout that stores each
+rule once and drops the scoped canonical copy.
 
 **Many scopes** (`docsplit_many_scopes`, 40 scopes of 8 grants, 321 rules
 installed, fork): a capped transfer through the first or the last scope
@@ -807,6 +807,120 @@ contract spec, 4,509 of data), 131 more, for the two reserved names, and
 30,953 under the 131,072-byte limit. The doc compiler, the pool, the ZK
 adapter and every other tier-0 contract build byte-identical; the factory
 changes only in the account hash it pins.
+
+### Account storage
+
+The account stores each rule once and keeps a scoped document's signer ids
+instead of its text (`implementation.md`, "Delta apply"; `spec.md` §7.6).
+Its entries:
+
+- `RuleSet`: the admin document's records, one `RuleRecord` per rule (id,
+  name, policies, and the stored rule-eval rule, which holds the scope,
+  signers and last ledger);
+- `Scopes(scope)`: a scoped document's generation, `doc_hash`, records,
+  index position, and signer ids;
+- `ScopeTags(id)`: a scoped rule's scope; `ScopeIndex(n)`, what `scopes`
+  lists; `ScopeCredentials`, `SpendRecords`, the applied admin document
+  (`AppliedDocBytes`, `AppliedFingerprints`), and the instance.
+
+Source: 2026-11-05, stacks built with `scripts/build-stack.sh --builder
+contract` from this source, from the source before it, and at each step
+between them.
+
+**The testnet preview account's grant** (`release_stack.rs`'s
+`census_of_the_preview_grant`): the factory's `create_passkey`, two
+`apply_scope`s in the preview's documents' shape, scope ids and expiries,
+then a 1 XLM transfer through the second app's capped rule. The account's
+own entries, host nonces aside, as each change lands; rent at the floor
+(1 000 stroops per KB, denominator 1 215):
+
+| Layout | Bytes | Entries | Rent, XLM a year | 180-day prepay |
+| --- | --- | --- | --- | --- |
+| Before: records beside stored sets, scope text, positions, tags with a generation | 9 536 | 20 | 4.834 | 2.384 |
+| One record per rule (no `InstalledRules`, no `ScopeRuleSets`) | 7 704 | 17 | 3.905 | 1.926 |
+| A tag holds only its scope | 7 496 | 17 | 3.800 | 1.874 |
+| The index position in the scope record (no `ScopePosition`) | 7 320 | 15 | 3.711 | 1.830 |
+| Signer ids for the scope text (no `ScopeDocs`) | **5 296** | **13** | **2.685** | **1.324** |
+
+The constructor alone writes 752 bytes in 2 entries, where it wrote 1 144
+in 3. Each figure equals, to the byte, the size computed beforehand by
+re-encoding the testnet preview account's own entries in that layout.
+
+**At rest** (`docsplit_grant_lifecycle`, the account's own entries plus the
+policy state kept for it), before and after:
+
+| | Before | After |
+| --- | --- | --- |
+| One document, 6 grants | 11 032 | 8 840 |
+| Split, 6 scopes of 1 grant | 17 156 | 9 876 |
+| Split, 8 scopes of 8 grants | 120 784 | 66 856 |
+
+**Every `release_stack.rs` flow** (26 tests, `--skip cap_sweep`, real
+proofs, passkeys, enforcing authorization) passes on both stacks, the source
+before this one running its own copy of the suite. Of the 321 metered rows:
+
+| Row | Instructions | Footprint | Written entries | Write bytes |
+| --- | --- | --- | --- | --- |
+| Compromise completion on the long-lived host (8 signers, 10 rules, 3 thief scopes of 8), the worst of its rows | 165.27M → 161.97M (40.5%) | 61 → 60 | 38 → 37 | 60 172 → 47 852 |
+| The same on the fork | 165.13M → 161.66M (40.4%) | 61 → 60 | 38 → 37 | 60 172 → 47 852 |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked; 8 signers, 10 rules) | 162.64M → 159.67M (39.9%) | 45 → 44 | 30 → 29 | 59 572 → 47 252 |
+| `Protected` reconfiguration, every rule edited (8 signers, 10 rules) | 165.94M → 161.97M (40.5%) | 37 → 36 | 13 → 12 | 55 624 → 43 304 |
+| Lost-key completion (`GuardianOnly`) | 15.93M → 15.65M | 22 → 21 | 14 → 13 | 6 424 → 5 576 |
+| Add a grant (`apply_scope`, fork) | 11.75M → 11.57M | 18 → 14 | 9 → 6 | 2 808 → 1 660 |
+| Capped transfer through a scoped grant (fork) | 5.66M → 5.57M | 14 → 13 | 4 → 4 | 764 → 764 |
+| `execute` through the admin rule (fork) | 5.79M → 5.73M | 9 → 8 | 2 → 2 | 200 → 200 |
+| `gc_scope` of a wiped scope (8 grants) | 2.55M → 2.82M | 25 → 22 | 16 → 13 | 960 → 6 940 |
+| Factory `create_passkey` | 1.95M → 1.90M | 8 → 7 | 3 → 2 | 1 144 → 752 |
+
+- **Every row is within 75%,** and no row's footprint, written entries or
+  events rise. The worst share of each limit: instructions 41.5% → 40.5%,
+  memory 23.6%, write bytes 50.0% (both the capped transfer after 906
+  spends, unchanged), footprint 15.2% → 15.0%, written entries 19.0% →
+  18.5%, events 20.5%.
+- **Every authorization reads one entry fewer** (a scoped rule's record
+  holds its stored rule; an admin rule's position needs no second entry)
+  and costs 0.04M to 0.31M fewer instructions.
+- **Applies write one record per document** instead of records beside a
+  stored set: 231 rows cost fewer instructions, by up to 6.3M.
+- **33 rows cost more instructions:** `gc_scope` of a scope that is not
+  last in the index rewrites the scope moved into its position, whose
+  record now holds that position (+0.27M to +0.29M, and about 6 KB more
+  written for an 8-grant record), where it rewrote an 8-byte position
+  (`remove_scope` does the same); the controller's `begin_lost_key`,
+  `begin_compromise` and `publish_baseline` run the compiler's
+  normal-form check (+0.03M to +0.24M); the scope-size sweep's 8-grant
+  `apply_scope` costs +0.16M; and three evidence rows move by at most
+  0.04M.
+
+`scripts/cap-sweep.py --bytes 0` over every worst-case flow, on stacks of
+this source and the one before it built with the compiler's caps raised
+(15 signers, 32 rules, 32 768 bytes), padded to the larger of 8 192 bytes
+and the document's own size, the worst share of each limit (before →
+after):
+
+| Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| **8** | **10** | **41.5% → 40.5%** | 12.7% → 12.2% | 15.2% → 15.0% | 19.0% → 18.5% | **45.6% → 36.2%** | 20.5% |
+| 8 | 12 | 41.6% → 40.2% | 12.0% → 11.4% | 15.8% → 15.5% | 19.0% → 18.5% | 47.5% → 36.2% | 20.5% |
+| 8 | 16 | 42.4% → 40.1% | 11.5% → 10.6% | 16.8% → 16.5% | 19.0% → 18.5% | 51.4% → 36.1% | 20.5% |
+| 8 | 20 | 47.8% → 44.4% | 12.4% → 11.2% | 17.8% → 17.5% | 19.0% → 18.5% | 60.2% → 40.9% | 20.5% |
+| 8 | 24 | 58.2% → 52.9% | 14.1% → 12.8% | 18.8% → 18.5% | 19.0% → 18.5% | 74.3% → 51.1% | 20.5% |
+| 15 | 10 | 43.5% → 42.4% | 13.0% → 12.9% | 20.5% → 20.2% | 26.0% → 25.5% | 53.5% → 37.3% | 31.8% |
+| 15 | 12 | 49.1% → 47.7% | 13.2% → 13.1% | 21.0% → 20.8% | 26.0% → 25.5% | 63.2% → 43.5% | 31.8% |
+| 15 | 16 | 56.0% → 53.6% | 14.4% → 13.2% | 22.0% → 21.8% | 26.0% → 25.5% | **77.0% → 50.2%** | 31.8% |
+
+Write bytes bound every shape before, in the fork completion whose thief
+kept every rule, since its records and stored sets were rewritten side by
+side; now no shape is past 75% on any limit, and instructions bind. The
+caps are unchanged at 8 signers and 10 rules.
+
+The account wasm is 103,294 bytes as `stellar contract build` builds it
+(71,866 of code, 24,963 of contract spec, 4,529 of data), 3,175 more than
+the source before it (100,119), and 27,778 under the 131,072-byte limit.
+The doc compiler is 107,236 bytes (+1,287, the normal-form check and its
+flag), and the recovery controller 67,753 (+53: it decodes the compiler's
+`CompiledDoc` in `publish_baseline`). The other tier-0 contracts build
+byte-identical; the factory changes only in the account hash it pins.
 
 ### Wasm stack
 

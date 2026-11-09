@@ -259,36 +259,37 @@
       ]
     },
     {
-      "step": "every scenario's setup and every apply_doc that changes the rule set",
-      "cause": "The account stores the rule-eval rules its installed rules enforce (PerchSmartAccount::rule_set), aligned with its installed-rule records, in one new persistent entry, key RuleSet. The constructor writes it with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose lowered rule set differs from the stored one writes it again, and one that leaves it unchanged (a re-apply, a rejected document) writes nothing. Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included.",
+      "step": "every scenario's setup and every apply_doc that changes the rule set: the admin rules' records",
+      "cause": "The account keeps the admin document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. The views give the shapes they did (installed_rules, rule_set, configuration, get_context_rule). Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included.",
       "fields": [
         {
-          "now": {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -300,12 +301,74 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
                   "sym:valid_until",
                   null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -313,32 +376,33 @@
           "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -348,10 +412,6 @@
                       "addr:owner"
                     ]
                   ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
                 ],
                 [
                   "sym:valid_until",
@@ -360,27 +420,27 @@
               ],
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:target"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -392,12 +452,133 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
                   "u32:1"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -405,32 +586,33 @@
           "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -440,60 +622,6 @@
                       "addr:owner"
                     ]
                   ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ]
-            ]
-          },
-          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
-        },
-        {
-          "now": {
-            "live_until": 10000999,
-            "val": [
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
                 ],
                 [
                   "sym:valid_until",
@@ -502,46 +630,27 @@
               ],
               [
                 [
-                  "sym:cap",
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:target2"
+                ],
+                [
+                  "sym:policies",
                   []
                 ],
                 [
-                  "sym:conds",
-                  [
-                    [
-                      "sym:ArgEq",
-                      "u32:0",
-                      [
-                        "sym:Address",
-                        "addr:account"
-                      ]
-                    ],
-                    [
-                      "sym:ArgEq",
-                      "u32:1",
-                      [
-                        "sym:Address",
-                        "addr:payee"
-                      ]
-                    ]
-                  ]
-                ],
-                [
-                  "sym:contract",
-                  "addr:token"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:Only",
-                    [
-                      "sym:transfer"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -553,8 +662,338 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:target2"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:token"
+                  ]
+                ],
+                [
+                  "sym:id",
                   "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:pay"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:031b2376d0f06fdcc08ee56c743ef8c6e11c6eedfb4a4c274f422813c8c83fb9"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:interpreter"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
                 ],
                 [
                   "sym:valid_until",
@@ -563,29 +1002,38 @@
               ],
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:Only",
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:joint"
+                ],
+                [
+                  "sym:policies",
+                  [
                     [
-                      "sym:protected"
+                      [
+                        "sym:params",
+                        "bytes:aa0690bc2757fc9b48b2685ac9d6e7340b3b7f695e7b0f7aa1f135583244bf3b"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:interpreter"
+                      ]
                     ]
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -601,12 +1049,217 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:pay"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      [
+                        [
+                          "sym:ArgEq",
+                          "u32:0",
+                          [
+                            "sym:Address",
+                            "addr:account"
+                          ]
+                        ],
+                        [
+                          "sym:ArgEq",
+                          "u32:1",
+                          [
+                            "sym:Address",
+                            "addr:payee"
+                          ]
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:token"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:Only",
+                        [
+                          "sym:transfer"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      "u32:1049"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
                   "u32:2"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:joint"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:Only",
+                        [
+                          "sym:protected"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ],
+                        [
+                          "sym:Delegated",
+                          "addr:device"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:2"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -614,32 +1267,33 @@
           "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -651,12 +1305,74 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
                   "sym:valid_until",
                   null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -664,130 +1380,320 @@
           "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
           "now": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:Only",
-                    [
-                      "sym:apply_doc"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  []
-                ],
-                [
-                  "sym:threshold",
+                  "sym:id",
                   "u32:0"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:Only",
+                        [
+                          "sym:apply_doc"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      []
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:0"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -795,130 +1701,320 @@
           "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10001009,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:new_owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:new_owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
           "now": {
             "live_until": 10001009,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:new_owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:new_owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:Only",
-                    [
-                      "sym:apply_doc"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  []
-                ],
-                [
-                  "sym:threshold",
+                  "sym:id",
                   "u32:0"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:new_owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:new_owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:Only",
+                        [
+                          "sym:apply_doc"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      []
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:0"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -926,32 +2022,33 @@
           "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -963,12 +2060,74 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
                   "sym:valid_until",
                   null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -976,130 +2135,320 @@
           "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
           "now": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:Only",
-                    [
-                      "sym:apply_doc"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  []
-                ],
-                [
-                  "sym:threshold",
+                  "sym:id",
                   "u32:0"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:Only",
+                        [
+                          "sym:apply_doc"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      []
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:0"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -1107,32 +2456,33 @@
           "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1142,10 +2492,6 @@
                       "addr:owner"
                     ]
                   ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
                 ],
                 [
                   "sym:valid_until",
@@ -1154,27 +2500,27 @@
               ],
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:target"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1186,12 +2532,133 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
                   "u32:1"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -1199,130 +2666,320 @@
           "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:3"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
           "now": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:AnyExcept",
-                    []
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  [
-                    [
-                      "sym:Delegated",
-                      "addr:owner"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
-                  "sym:valid_until",
-                  null
-                ]
-              ],
-              [
-                [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:Only",
-                    [
-                      "sym:apply_doc"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
-                ],
-                [
-                  "sym:signers",
-                  []
-                ],
-                [
-                  "sym:threshold",
+                  "sym:id",
                   "u32:0"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
+                  "u32:3"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:Only",
+                        [
+                          "sym:apply_doc"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      []
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:0"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -1330,32 +2987,33 @@
           "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1367,12 +3025,74 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
-                  "u32:1"
-                ],
-                [
                   "sym:valid_until",
                   null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -1380,32 +3100,33 @@
           "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1415,10 +3136,6 @@
                       "addr:owner"
                     ]
                   ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
                 ],
                 [
                   "sym:valid_until",
@@ -1427,27 +3144,27 @@
               ],
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:target"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:target"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1459,12 +3176,133 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
                   "u32:1"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:target"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -1472,32 +3310,33 @@
           "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent \"sym:RuleSet\""
         },
         {
-          "now": {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
             "live_until": 10000999,
             "val": [
               [
                 [
-                  "sym:cap",
-                  []
-                ],
-                [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:context_type",
                   [
-                    "sym:AnyExcept",
-                    []
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1507,10 +3346,6 @@
                       "addr:owner"
                     ]
                   ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
                 ],
                 [
                   "sym:valid_until",
@@ -1518,8 +3353,7 @@
                 ]
               ]
             ]
-          },
-          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+          }
         },
         {
           "now": {
@@ -1527,27 +3361,95 @@
             "val": [
               [
                 [
-                  "sym:cap",
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
                   []
                 ],
                 [
-                  "sym:conds",
-                  []
-                ],
-                [
-                  "sym:contract",
-                  "addr:account"
-                ],
-                [
-                  "sym:functions",
+                  "sym:rule",
                   [
-                    "sym:AnyExcept",
-                    []
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
                   ]
                 ],
                 [
-                  "sym:generation",
-                  null
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1557,10 +3459,6 @@
                       "addr:owner"
                     ]
                   ]
-                ],
-                [
-                  "sym:threshold",
-                  "u32:1"
                 ],
                 [
                   "sym:valid_until",
@@ -1569,50 +3467,48 @@
               ],
               [
                 [
-                  "sym:cap",
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:token"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:spend"
+                ],
+                [
+                  "sym:policies",
                   [
                     [
                       [
-                        "sym:amount_arg",
-                        "u32:2"
+                        "sym:params",
+                        "bytes:c5390906841b72fb0d22a4b7b51c48ea27a427cc8d91a7edd7b76e558690ed25"
                       ],
                       [
-                        "sym:limit",
-                        "i128:10"
+                        "sym:policy",
+                        "addr:interpreter"
+                      ]
+                    ],
+                    [
+                      [
+                        "sym:params",
+                        "bytes:58e90e510e1a7a35a7680651ea0381b6af240c7a7be59f19369f5448585fafd4"
                       ],
                       [
-                        "sym:period",
-                        "u32:100"
+                        "sym:policy",
+                        "addr:spending_limit"
                       ]
                     ]
                   ]
                 ],
                 [
-                  "sym:conds",
-                  [
-                    [
-                      "sym:ArgI128AtMost",
-                      "u32:2",
-                      "i128:170141183460469231731687303715884105727"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:contract",
-                  "addr:token"
-                ],
-                [
-                  "sym:functions",
-                  [
-                    "sym:Only",
-                    [
-                      "sym:transfer"
-                    ]
-                  ]
-                ],
-                [
-                  "sym:generation",
-                  null
+                  "sym:recovery",
+                  false
                 ],
                 [
                   "sym:signers",
@@ -1624,12 +3520,156 @@
                   ]
                 ],
                 [
-                  "sym:threshold",
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      []
+                    ],
+                    [
+                      "sym:conds",
+                      []
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:account"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:AnyExcept",
+                        []
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
+                ]
+              ],
+              [
+                [
+                  "sym:id",
                   "u32:1"
                 ],
                 [
-                  "sym:valid_until",
-                  null
+                  "sym:name",
+                  "str:spend"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:rule",
+                  [
+                    [
+                      "sym:cap",
+                      [
+                        [
+                          [
+                            "sym:amount_arg",
+                            "u32:2"
+                          ],
+                          [
+                            "sym:limit",
+                            "i128:10"
+                          ],
+                          [
+                            "sym:period",
+                            "u32:100"
+                          ]
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:conds",
+                      [
+                        [
+                          "sym:ArgI128AtMost",
+                          "u32:2",
+                          "i128:170141183460469231731687303715884105727"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:contract",
+                      "addr:token"
+                    ],
+                    [
+                      "sym:functions",
+                      [
+                        "sym:Only",
+                        [
+                          "sym:transfer"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:generation",
+                      null
+                    ],
+                    [
+                      "sym:signers",
+                      [
+                        [
+                          "sym:Delegated",
+                          "addr:owner"
+                        ]
+                      ]
+                    ],
+                    [
+                      "sym:threshold",
+                      "u32:1"
+                    ],
+                    [
+                      "sym:valid_until",
+                      null
+                    ]
+                  ]
                 ]
               ]
             ]
@@ -1788,40 +3828,8 @@
     },
     {
       "step": "policies: owner applies; spending-limit: owner applies a capped rule",
-      "cause": "apply_doc installs a document rule with its contract, signers and last ledger and no policy: what it allows, its interpreter program and its cap included, is the stored rule-eval rule beside it (rule_set). So applying a document with constrained or capped rules writes no policy registry entry (PolicyData, PolicyLookup), no interpreter program and no spending-limit window, and the installed-rule records carry no policies. The same document's stored rule set, which records the programs and caps, is checked after every accepted apply_doc step against the lowering of its model and the compiler's programs and caps (perch_testkit::rule_set). Every event of these steps is unchanged.",
+      "cause": "apply_doc installs a document rule with its contract, signers and last ledger and no policy: what it allows, its interpreter program and its cap included, is the stored rule-eval rule beside it (rule_set). So applying a document with constrained or capped rules writes no policy registry entry (PolicyData, PolicyLookup), no interpreter program and no spending-limit window. The same document's stored rule set, which records the programs and caps, is checked after every accepted apply_doc step against the lowering of its model and the compiler's programs and caps (perch_testkit::rule_set). Every event of these steps is unchanged.",
       "fields": [
-        {
-          "now": [],
-          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\".val[1][3][1]",
-          "recorded": [
-            [
-              [
-                "sym:params",
-                "bytes:031b2376d0f06fdcc08ee56c743ef8c6e11c6eedfb4a4c274f422813c8c83fb9"
-              ],
-              [
-                "sym:policy",
-                "addr:interpreter"
-              ]
-            ]
-          ]
-        },
-        {
-          "now": [],
-          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\".val[2][3][1]",
-          "recorded": [
-            [
-              [
-                "sym:params",
-                "bytes:aa0690bc2757fc9b48b2685ac9d6e7340b3b7f695e7b0f7aa1f135583244bf3b"
-              ],
-              [
-                "sym:policy",
-                "addr:interpreter"
-              ]
-            ]
-          ]
-        },
         {
           "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
           "recorded": {
@@ -1933,32 +3941,6 @@
               ]
             ]
           }
-        },
-        {
-          "now": [],
-          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"sym:InstalledRules\".val[1][3][1]",
-          "recorded": [
-            [
-              [
-                "sym:params",
-                "bytes:c5390906841b72fb0d22a4b7b51c48ea27a427cc8d91a7edd7b76e558690ed25"
-              ],
-              [
-                "sym:policy",
-                "addr:interpreter"
-              ]
-            ],
-            [
-              [
-                "sym:params",
-                "bytes:58e90e510e1a7a35a7680651ea0381b6af240c7a7be59f19369f5448585fafd4"
-              ],
-              [
-                "sym:policy",
-                "addr:spending_limit"
-              ]
-            ]
-          ]
         },
         {
           "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",

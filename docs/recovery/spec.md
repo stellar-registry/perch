@@ -992,14 +992,15 @@ installation parameters as a full replace; its authorization matches a full
 replace except for a kept spending record (see
 [`implementation.md`](implementation.md)) and expiry-sensitive behavior, and
 no apply writes more ledger entries than a full replace. The account's own
-records are its rule registry: one record per installed rule (id, slot,
-valid_until, signers, and each policy with a digest of its install
-parameters), bounded by the rule cap plus the recovery rule, under ids from
+records are its rule registry: one record per installed rule (id, name,
+each policy with a digest of its install parameters, and the rule-eval
+rule that decides what it allows, which holds its scope, valid_until and
+signers), bounded by the rule cap plus the recovery rule, under ids from
 the account's counter, which never gives an id twice. A document rule
 carries no policy, only the recovery rule its controller: what a rule
-allows, its program and cap included, is the rule-eval rule the account
-stores beside the record (`rule_set`), and `__check_auth` decides with
-rule-eval's `authorize` over those rules. A completion (T5) reads the
+allows, its program and cap included, is the rule-eval rule its record
+holds (`rule_set`), and `__check_auth` decides with rule-eval's
+`authorize` over those rules. A completion (T5) reads the
 recovery rule from its record; nothing of OZ's registry is written.
 Installing it calls the controller's `rcv_install`; removing it calls no hook. The apply
 never scans historical rule ids, which grow without bound with every past
@@ -1057,10 +1058,10 @@ says about "the applied document" is about the admin document.
 
 | Entry point | Authorization | Effect |
 | --- | --- | --- |
-| `apply_scope(scope, doc_json)` | Owner | Compiles `doc_json`, refuses it if it reaches past a scope (below), names a revoked credential (`RevokedCredential`, §8), or names a credential a wiped scope named (`WipedCredential`, below), records each credential it names under the current scope generation, reconciles that scope's rules with §7.5's delta against **the scope's own records only**, tags each rule, and stores the scope's record and canonical bytes. Returns the `doc_hash`; emits `ScopeApplied`. |
-| `remove_scope(scope)` | Owner | Removes every rule the scope installed, their tags and spending records, the scope's record, rule-eval rule set, and bytes (`UnknownScope` if none); emits `ScopeRemoved`. This is how a grant is revoked. |
+| `apply_scope(scope, doc_json)` | Owner | Compiles `doc_json`, refuses it if it reaches past a scope (below), is not in normal form (`NotNormalForm`, below), names a revoked credential (`RevokedCredential`, §8), or names a credential a wiped scope named (`WipedCredential`, below), records each credential it names under the current scope generation, reconciles that scope's rules with §7.5's delta against **the scope's own records only**, tags each new rule, and stores the scope's record: its generation, `doc_hash`, rules, index position, and signer ids. Returns the `doc_hash`; emits `ScopeApplied`. |
+| `remove_scope(scope)` | Owner | Removes every rule the scope installed, their tags and spending records, and the scope's record (`UnknownScope` if none); emits `ScopeRemoved`. This is how a grant is revoked. |
 | `gc_scope(scope)` | None | The same removal, for a scope a completion wiped only (`ScopeLive` otherwise). |
-| `scope`, `scope_doc`, `scope_generation`, `scope_count`, `scopes(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A scope's record (generation, `doc_hash`, rules with their ids) and canonical bytes; the scope generation; the index of scope ids; the scope generation a credential was last named under. |
+| `scope`, `scope_rule_set`, `scope_signer_ids`, `scope_generation`, `scope_count`, `scopes(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A scope's record (generation, `doc_hash`, rules with their ids), its rule-eval rules, and its signer ids, which with its rules give back its canonical text; the scope generation; the index of scope ids; the scope generation a credential was last named under. |
 
 None of them calls the controller or changes the applied document, its
 `doc_hash`, the configuration revision (§15), or the recovery generation
@@ -1106,24 +1107,42 @@ whoever approves it. The compiler never emits OZ's `Default` or
 `CreateContract` rules; a `Default` rule in a scoped document would match
 calls on the account too.
 
+**Normal form.** The account keeps no scoped document's text, only what
+the document lowers to and its signer ids, so it applies only documents
+those give back: `apply_scope` refuses (`NotNormalForm`) a document not in
+normal form. The compiler reports what the text shows
+(`CompiledDoc::normal_form`): every external key in lowercase hex, every cap
+limit a plain decimal, no cap token, no `threshold` asking every signer it
+names, every capped rule's functions exactly `["transfer"]`, no `string-in`
+value over 256 bytes, and every declared signer named by a rule, declared
+in the order the rules first name it. The account checks what only it can
+see: no `address-eq` naming the account, and no rule whose
+`not-after-ledger` has already been reached (refused, where the admin
+document's is dropped). On that form the lowering is one-to-one, and
+perch-js's `rebuildScopeDoc` inverts it, trusting its result only once it
+hashes to the record's `doc_hash`. The admin document's text is stored
+(`applied_doc`): the controller reads it, and an admin rule may lawfully
+expire before a recovery target is applied.
+
 **The generation gate.** Every rule a scoped document installs is tagged,
-by rule id, with its scope and the **scope generation** it was applied
-under. The account's scope generation, a `u64`, starts at 0 and advances
-by one on every completed recovery, lost-key or compromise, and on nothing
-else; a completion that would advance it past `u64::MAX` refuses
-(`GenerationExhausted`), and every advance emits `ScopesWiped { gen }`.
-`__check_auth` refuses any selected rule whose tag's generation is not the
-current one (`PerchAuthError::StaleScope`), after the reserved-name guard
-and the freeze and before any rule is evaluated. In the same pass it
-refuses a tagged rule selected for a call on a contract of the excluded
-set: the recovery controller, or the ZK adapter or pool of the applied
-recovery member; and one selected for a guardian approval on any contract
-(`PerchAuthError::ScopeEscalation`). So the `apply_scope` guard above also
-holds for a scope applied before that member, without `apply_doc` scanning
-the scopes. Like the freeze, both hold on every path that reaches
-`__check_auth`, CAP-0071 delegation included.
-A rule without a tag is the admin document's. No rule id is given twice,
-so a tag never applies to a later rule.
+by rule id, with its scope, and its stored rule-eval rule carries the
+**scope generation** it was applied under. The account's scope
+generation, a `u64`, starts at 0 and advances by one on every completed
+recovery, lost-key or compromise, and on nothing else; a completion that
+would advance it past `u64::MAX` refuses (`GenerationExhausted`), and every
+advance emits `ScopesWiped { gen }`. `__check_auth` refuses a tagged rule
+selected for a call on a contract of the excluded set: the recovery
+controller, or the ZK adapter or pool of the applied recovery member; and
+one selected for a guardian approval on any contract
+(`PerchAuthError::ScopeEscalation`), after the reserved-name guard and the
+freeze and before any rule is evaluated. So the `apply_scope` guard above
+also holds for a scope applied before that member, without `apply_doc`
+scanning the scopes. rule-eval's `authorize` then refuses a chosen rule
+whose generation is not the current one, which the account reports as
+`PerchAuthError::StaleScope`. Like the freeze, both hold on every path that
+reaches `__check_auth`, CAP-0071 delegation included. A rule without a tag
+is the admin document's. No rule id is given twice, so a tag never applies
+to a later rule.
 
 A completion therefore wipes every scoped document with one write. Their
 rules stay installed but authorize nothing, until anyone collects them with
@@ -1131,10 +1150,11 @@ rules stay installed but authorize nothing, until anyone collects them with
 which brings the scope to the current generation with the new document's
 rules.
 
-A tag is written with the maximum TTL and extended on read in
-`__check_auth` (to 30 days when fewer than 29 remain). An archived tag is unavailable, never absent (§3.6): a
-transaction that selects its rule restores it first, so a wiped rule never
-passes the gate as an admin rule.
+A tag and its scope's record are written with the maximum TTL and extended
+on read in `__check_auth` (to 30 days when fewer than 29 remain). An
+archived entry is unavailable, never absent (§3.6): a transaction that
+selects a scoped rule restores its tag and record first, so a wiped rule
+is never read as an admin rule.
 
 **Recovery.**
 
@@ -1837,7 +1857,7 @@ on the deployed contract
 | Account | `apply_scope(scope, doc_json)`, `remove_scope(scope)` | Owner authorization (§7.6) |
 | Account | `gc_scope(scope)` | Permissionless; a scope a completion wiped only (§7.6) |
 | Account | `renew(fingerprints, enrollment_ids)` | Permissionless (§3.6) |
-| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `scope`, `scope_rule_set`, `scope_doc`, `scope_count`, `scopes`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
+| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `scope`, `scope_rule_set`, `scope_signer_ids`, `scope_count`, `scopes`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete` (`controller::RecoveryHooksClient`) | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew`, `renew_nullifier` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |

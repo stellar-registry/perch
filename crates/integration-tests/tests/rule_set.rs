@@ -143,8 +143,8 @@ fn reordering_a_rules_signers_reorders_it_everywhere() {
 }
 
 /// The check is not vacuous: a stored set that differs from what is
-/// installed in a signer's order, a threshold, a condition or its length is
-/// reported.
+/// installed in a signer's order, a threshold, a condition or a last ledger
+/// is reported.
 #[test]
 fn the_check_reports_a_stored_set_that_differs() {
     let w = DeltaWorld::new();
@@ -193,8 +193,8 @@ fn the_check_reports_a_stored_set_that_differs() {
                 r.conds = soroban_sdk::vec![e, StoredCond::ArgI128AtMost(0, i128::MAX)];
             })
         }),
-        ("length", &|s| {
-            s.pop_back();
+        ("last ledger", &|s| {
+            edit(s, &|r| r.valid_until = Some(5_000))
         }),
     ];
     for (what, f) in cases {

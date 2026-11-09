@@ -42,6 +42,7 @@ pub mod fixture;
 pub mod manifest;
 pub mod native;
 pub mod passkey;
+pub mod rebuild;
 pub mod rpn;
 pub mod rule_set;
 

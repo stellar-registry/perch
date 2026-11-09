@@ -157,7 +157,20 @@ export {
   accountReader,
   decodeConfiguration,
   decodeCapabilities,
+  decodeStoredRule,
+  decodeStoredScope,
+  readScopeDoc,
   type AccountBindings,
   type CompilerBindings,
+  type ScopeBindings,
   type Simulated,
 } from './bindings.js';
+export {
+  rebuildScopeDoc,
+  ScopeNotRebuilt,
+  type RebuiltScope,
+  type StoredCond,
+  type StoredRule,
+  type StoredScope,
+  type StoredVal,
+} from './scope.js';

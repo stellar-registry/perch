@@ -10,7 +10,8 @@
 //!   so both hold the same documents and keys. After every step, the two
 //!   transcripts hold the same outcome (error codes included), the same
 //!   events, and the same ledger: every contract-data entry with its TTL,
-//!   a contract instance by its storage.
+//!   a contract instance by its storage, and the account's admin rules in
+//!   this source's layout (below).
 //! - **Hooks.** Each completion and install hook called directly, as the
 //!   account, over a grid of rule shapes, contexts and windows. The earlier
 //!   controller's `enforce(context, [], rule, account)` and `install(hash,
@@ -22,6 +23,20 @@
 //!   `enforce` only the rule's own signers that signed, so for a recovery
 //!   rule the authenticated signers are always empty
 //!   (`completion_differential.rs`); the grid passes no other value.
+//!
+//! **The account's layout.** This source's account stores each admin rule
+//! once, as a record `{ id, name, policies, rule }` in its `RuleSet` entry.
+//! The earlier account stored `InstalledRules`, one `InstalledRule { id,
+//! recovery, name, context_type, valid_until, signers, policies }` per rule,
+//! and beside it, in `RuleSet`, the stored rule-eval rule each one
+//! enforces. Its two entries are compared as the one record entry they
+//! amount to ([`admin_records`]), and only if every field the records drop
+//! is the one they derive: `context_type` is `CallContract` of the stored
+//! rule's contract, `valid_until` and `signers` are the stored rule's, and
+//! `recovery` is whether the id is the instance's `RecoveryRule`. The
+//! entry's TTL is the later of the two. Every other entry of every contract,
+//! the account's included, is compared as stored. The flows apply no scoped
+//! document, whose layout also changed (`spec.md` §7.6).
 //!
 //! `#[ignore]`d because it needs those builds:
 //!
@@ -44,7 +59,9 @@ use perch_recovery_interface::RecoveryAction;
 use perch_testkit::delta::render;
 use soroban_sdk::auth::{Context, ContractContext, CreateContractHostFnContext};
 use soroban_sdk::testutils::Events as _;
-use soroban_sdk::xdr::{ContractEventBody, LedgerEntryData, LedgerKey, ScAddress, ScVal};
+use soroban_sdk::xdr::{
+    ContractEventBody, LedgerEntryData, LedgerKey, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal,
+};
 use soroban_sdk::{vec, Address, Bytes, BytesN, ContractExecutable, Env, IntoVal, Symbol, Val};
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -103,9 +120,13 @@ fn events(env: &Env) -> std::vec::Vec<String> {
 
 /// Every contract-data entry with its TTL. A contract instance is read by
 /// its storage alone: its executable and the TTL it was registered with are
-/// a wasm's on one stack and a native contract's on the other.
-fn ledger(env: &Env) -> BTreeMap<String, String> {
-    let snapshot = env.to_ledger_snapshot();
+/// a wasm's on one stack and a native contract's on the other. The
+/// account's admin rules are read in this source's layout
+/// ([`admin_records`]).
+fn ledger(w: &World) -> BTreeMap<String, String> {
+    let snapshot = w.env.to_ledger_snapshot();
+    let account: ScAddress = w.account.clone().into();
+    let (mut installed, mut stored, mut recovery) = (None, None, None);
     let mut out = BTreeMap::new();
     for (key, (entry, ttl)) in snapshot.ledger_entries.iter() {
         let LedgerKey::ContractData(k) = &**key else {
@@ -114,6 +135,30 @@ fn ledger(env: &Env) -> BTreeMap<String, String> {
         let LedgerEntryData::ContractData(d) = &entry.data else {
             continue;
         };
+        if k.contract == account {
+            match (&k.key, &d.val) {
+                (ScVal::Symbol(s), v) if s.to_utf8_string_lossy() == "InstalledRules" => {
+                    installed = Some((v.clone(), *ttl));
+                    continue;
+                }
+                (ScVal::Symbol(s), v) if s.to_utf8_string_lossy() == "RuleSet" => {
+                    stored = Some((v.clone(), *ttl));
+                    continue;
+                }
+                (ScVal::LedgerKeyContractInstance, ScVal::ContractInstance(i)) => {
+                    recovery = i
+                        .storage
+                        .iter()
+                        .flat_map(|m| m.0.iter())
+                        .find(|e| matches!(&e.key, ScVal::Symbol(s) if s.to_utf8_string_lossy() == "RecoveryRule"))
+                        .and_then(|e| match e.val {
+                            ScVal::U32(id) => Some(id),
+                            _ => None,
+                        });
+                }
+                _ => {}
+            }
+        }
         let value = match &d.val {
             ScVal::ContractInstance(i) => format!(
                 "instance {}",
@@ -134,7 +179,97 @@ fn ledger(env: &Env) -> BTreeMap<String, String> {
             value,
         );
     }
+    if let Some((records, ttl)) = admin_records(installed, stored, recovery) {
+        out.insert(
+            format!(
+                "{}/RuleSet Persistent",
+                render(&ScVal::Address(account), None)
+            ),
+            format!("{} ttl {ttl:?}", render(&records, None)),
+        );
+    }
     out
+}
+
+fn field<'a>(v: &'a ScVal, name: &str) -> &'a ScVal {
+    let ScVal::Map(Some(m)) = v else {
+        panic!("not a struct: {v:?}");
+    };
+    &m.0.iter()
+        .find(|e| matches!(&e.key, ScVal::Symbol(s) if s.to_utf8_string_lossy() == name))
+        .unwrap_or_else(|| panic!("no field {name} in {v:?}"))
+        .val
+}
+
+fn symbol(s: &str) -> ScVal {
+    ScVal::Symbol(ScSymbol(s.try_into().unwrap()))
+}
+
+/// The account's admin rules as this source stores them, one `RuleSet`
+/// entry of records, from either layout (module docs): `stored` as it is
+/// when there is no `InstalledRules` entry, and otherwise the records the
+/// earlier account's `InstalledRules` and `RuleSet` amount to, which panics
+/// unless every field the records drop is the one they derive. `recovery`
+/// is the instance's `RecoveryRule`.
+fn admin_records(
+    installed: Option<(ScVal, Option<u32>)>,
+    stored: Option<(ScVal, Option<u32>)>,
+    recovery: Option<u32>,
+) -> Option<(ScVal, Option<u32>)> {
+    let Some((installed, installed_ttl)) = installed else {
+        return stored;
+    };
+    let (rules, rules_ttl) = stored.expect("InstalledRules without a RuleSet");
+    let (ScVal::Vec(Some(installed)), ScVal::Vec(Some(rules))) = (&installed, &rules) else {
+        panic!("InstalledRules or RuleSet is not a vector");
+    };
+    assert_eq!(installed.len(), rules.len(), "records and stored rules");
+    let mut records = std::vec::Vec::new();
+    for (r, rule) in installed.iter().zip(rules.iter()) {
+        let id = field(r, "id");
+        let ScVal::U32(n) = id else {
+            panic!("an id that is no u32: {id:?}");
+        };
+        let context = ScVal::Vec(Some(
+            std::vec![symbol("CallContract"), field(rule, "contract").clone()]
+                .try_into()
+                .unwrap(),
+        ));
+        assert_eq!(field(r, "context_type"), &context, "rule {n}: its scope");
+        assert_eq!(
+            field(r, "valid_until"),
+            field(rule, "valid_until"),
+            "rule {n}: its last ledger"
+        );
+        assert_eq!(
+            field(r, "signers"),
+            field(rule, "signers"),
+            "rule {n}: its signers"
+        );
+        assert_eq!(
+            field(r, "recovery"),
+            &ScVal::Bool(recovery == Some(*n)),
+            "rule {n}: whether it is the recovery rule"
+        );
+        let entry = |k: &str, v: &ScVal| ScMapEntry {
+            key: symbol(k),
+            val: v.clone(),
+        };
+        records.push(ScVal::Map(Some(ScMap(
+            std::vec![
+                entry("id", id),
+                entry("name", field(r, "name")),
+                entry("policies", field(r, "policies")),
+                entry("rule", rule),
+            ]
+            .try_into()
+            .unwrap(),
+        ))));
+    }
+    Some((
+        ScVal::Vec(Some(records.try_into().unwrap())),
+        installed_ttl.max(rules_ttl),
+    ))
 }
 
 /// One stack's transcript of a flow.
@@ -160,7 +295,7 @@ impl Run {
         let events = events(&self.w.env);
         self.lines.push(format!("{what}: {out:?}"));
         self.lines.push(format!("{what} events: {events:?}"));
-        for (key, value) in ledger(&self.w.env) {
+        for (key, value) in ledger(&self.w) {
             self.lines.push(format!("{what} ledger {key} = {value}"));
         }
     }
@@ -633,7 +768,7 @@ fn hook_transcript(prev: bool) -> std::vec::Vec<String> {
     let mut t = std::vec::Vec::new();
     let mut push = |what: String, out: String, w: &World| {
         t.push(format!("{what}: {out}"));
-        for (key, value) in ledger(&w.env) {
+        for (key, value) in ledger(w) {
             t.push(format!("{what} ledger {key} = {value}"));
         }
     };

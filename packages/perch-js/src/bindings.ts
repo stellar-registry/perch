@@ -5,6 +5,7 @@
 // view is a simulation; its `latestLedger` is the ledger the RPC answered at.
 
 import { decodeDocLimits, type FlatDocLimits } from './limits.js';
+import { rebuildScopeDoc, type RebuiltScope, type StoredCond, type StoredRule, type StoredScope, type StoredVal } from './scope.js';
 import type { AccountCapabilities, AccountConfiguration, AccountReader, InstalledRule, Read } from './snapshot.js';
 import type { SignerKey } from './xdr.js';
 
@@ -116,4 +117,120 @@ export function accountReader(account: string, client: AccountBindings, compiler
     capabilities: () => read(client.capabilities(), (v) => decodeCapabilities(v as Record<string, unknown>)),
     limits: () => read(compiler.limits(), (v): FlatDocLimits => decodeDocLimits(v)),
   };
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/** The account's scope views, as the generated client names them. */
+export interface ScopeBindings {
+  scope(args: { scope: number }): Promise<Simulated<any>>;
+  scope_rule_set(args: { scope: number }): Promise<Simulated<any>>;
+  scope_signer_ids(args: { scope: number }): Promise<Simulated<any>>;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+const text = (v: unknown): string => (typeof v === 'string' ? v : new TextDecoder().decode(bytes(v)));
+
+function storedVal(v: Enum): StoredVal {
+  const x = v.values?.[0];
+  switch (v.tag) {
+    case 'Address':
+      return { kind: 'address', address: String(x) };
+    case 'String':
+      return { kind: 'string', value: text(x) };
+    case 'Symbol':
+      return { kind: 'symbol', value: String(x) };
+    case 'Bytes':
+      return { kind: 'bytes', value: bytes(x) };
+    case 'Other':
+      return { kind: 'other', xdr: bytes(x) };
+    case 'I128':
+      return { kind: 'i128', value: BigInt(x as bigint) };
+    case 'U64':
+      return { kind: 'u64', value: BigInt(x as bigint) };
+    case 'Bool':
+      return { kind: 'bool', value: Boolean(x) };
+    default:
+      throw new Error(`unknown stored value ${v.tag}`);
+  }
+}
+
+function storedCond(c: Enum): StoredCond {
+  const index = Number(c.values?.[0]);
+  const x = c.values?.[1];
+  switch (c.tag) {
+    case 'ArgEq':
+      return { kind: 'argEq', index, value: storedVal(x as Enum) };
+    case 'ArgI128AtMost':
+      return { kind: 'argI128AtMost', index, bound: BigInt(x as bigint) };
+    case 'ArgIn':
+      return { kind: 'argIn', index, values: (x as Enum[]).map(storedVal) };
+    case 'ArgStrPrefix':
+      return { kind: 'argStrPrefix', index, prefix: text(x) };
+    default:
+      throw new Error(`unknown stored condition ${c.tag}`);
+  }
+}
+
+/** Decode one `StoredRule` as the bindings return it. */
+export function decodeStoredRule(r: Record<string, unknown>): StoredRule {
+  const functions = r.functions as Enum;
+  if (functions.tag !== 'AnyExcept' && functions.tag !== 'Only') throw new Error(`unknown functions ${functions.tag}`);
+  const cap = (r.cap as { limit: bigint; period: number; amount_arg: number }[])[0];
+  const generation = opt(r.generation as bigint | undefined);
+  return {
+    contract: String(r.contract),
+    functions: {
+      kind: functions.tag === 'AnyExcept' ? 'anyExcept' : 'only',
+      names: (functions.values?.[0] as unknown[]).map(String),
+    },
+    conds: (r.conds as Enum[]).map(storedCond),
+    signers: (r.signers as Enum[]).map(signer),
+    threshold: Number(r.threshold),
+    cap: cap ? { limit: BigInt(cap.limit), period: Number(cap.period), amountArg: Number(cap.amount_arg) } : null,
+    validUntil: opt(r.valid_until as number | undefined),
+    generation: generation === null ? null : BigInt(generation),
+  };
+}
+
+/** Decode what `scope(id)`, `scope_rule_set(id)` and `scope_signer_ids(id)`
+ *  return for the scope of `account` on the network `network` (its
+ *  passphrase); `null` when the account has no scoped document there. */
+export function decodeStoredScope(
+  account: string,
+  network: string,
+  record: Record<string, unknown> | null | undefined,
+  ruleSet: Record<string, unknown>[],
+  signerIds: unknown[] | null | undefined,
+): StoredScope | null {
+  if (record === null || record === undefined) return null;
+  const rules = record.rules as Record<string, unknown>[];
+  if (rules.length !== ruleSet.length) throw new Error(`${rules.length} records and ${ruleSet.length} stored rules`);
+  return {
+    account,
+    network,
+    docHash: bytes(record.doc_hash),
+    signerIds: (signerIds ?? []).map(text),
+    rules: rules.map((r, i) => ({ name: String(r.name), rule: decodeStoredRule(ruleSet[i]!) })),
+  };
+}
+
+/**
+ * Read the scoped document under `scope` from `account`'s views and rebuild
+ * it (`rebuildScopeDoc`); `null` when the account has none there. Throws
+ * `ScopeNotRebuilt` when it does not rebuild to the stored `doc_hash`, which
+ * three reads straddling an `apply_scope` can also cause: read again.
+ */
+export async function readScopeDoc(
+  client: ScopeBindings,
+  account: string,
+  network: string,
+  scope: number,
+): Promise<RebuiltScope | null> {
+  const [record, ruleSet, signerIds] = await Promise.all([
+    client.scope({ scope }),
+    client.scope_rule_set({ scope }),
+    client.scope_signer_ids({ scope }),
+  ]);
+  const stored = decodeStoredScope(account, network, record.result, ruleSet.result, signerIds.result);
+  return stored === null ? null : rebuildScopeDoc(stored);
 }

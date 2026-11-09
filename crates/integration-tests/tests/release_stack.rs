@@ -2979,11 +2979,11 @@ fn cap_sweep() {
 // documents")
 // ---------------------------------------------------------------------------
 
-/// A grant: one session passkey on a 1-of-1 rule scoped to `token`, allowed
-/// `transfer`, with a spending cap.
+/// A grant: one session passkey on an `all` rule of it alone, scoped to
+/// `token`, allowed `transfer`, with a spending cap.
 fn grant_rule(name: &str, signer: &str, token: &Address, limit: u32) -> String {
     format!(
-        r#"{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"threshold","m":1,"signers":["{signer}"]}},"functions":["transfer"],"cap":{{"limit":"{limit}","period-ledgers":1000}}}}"#,
+        r#"{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["{signer}"]}},"functions":["transfer"],"cap":{{"limit":"{limit}","period-ledgers":1000}}}}"#,
         strkey(token)
     )
 }
@@ -3934,4 +3934,176 @@ fn docsplit_spending_history() {
             id
         ));
     }
+}
+
+// ---------------------------------------------------------------------------
+// Storage census: the testnet preview account's grant, entry by entry
+// (`budgets.md`, "Account storage")
+// ---------------------------------------------------------------------------
+
+/// The preview documents' `not-after-ledger`s and signer ids. Every key is a
+/// 65-byte passkey, so sizes match testnet's.
+const CENSUS_NALS: [u32; 2] = [5_581_508, 5_581_591];
+const CENSUS_IDS: [&str; 2] = [
+    "http://localhost:5542#59ee8848",
+    "http://localhost:5543#abbe5266",
+];
+/// The preview's scope ids: candidate 0 of each app's origin.
+const CENSUS_SCOPES: [u32; 2] = [3_395_152_355, 3_943_074_923];
+
+fn census_key(i: u8) -> SoftPasskey {
+    canonical_passkey([0x60 + i; 32])
+}
+
+/// One app's two rules, as the preview's scoped documents spell them.
+fn census_rules(game: &Address, token: &Address, sid: &str, nal: u32, sfx: &str) -> [String; 2] {
+    let (g, t) = (strkey(game), strkey(token));
+    [
+        format!(
+            r#"{{"functions":["guess"],"name":"guess{sfx}","not-after-ledger":{nal},"principals":{{"signers":["{sid}"],"type":"all"}},"scope":{{"address":"{g}","type":"contract"}}}}"#
+        ),
+        format!(
+            r#"{{"args":[{{"index":1,"pred":{{"address":"{g}","type":"address-eq"}}}}],"cap":{{"limit":"20000000","period-ledgers":17280}},"functions":["transfer"],"name":"guess-xlm{sfx}","not-after-ledger":{nal},"principals":{{"signers":["{sid}"],"type":"all"}},"scope":{{"address":"{t}","type":"contract"}}}}"#
+        ),
+    ]
+}
+
+fn census_doc(w: &World, signers: &[String], rules: &[String]) -> Bytes {
+    let json = format!(
+        r#"{{"network":"{FIXTURE_NETWORK}","rules":[{}],"signers":[{}],"version":1}}"#,
+        rules.join(","),
+        signers.join(",")
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+/// An account for `census_key(0)`, the game contract, and a funded token.
+fn census_world() -> (World, Acct, Address, Address) {
+    let w = world();
+    let a = w.new_account(census_key(0));
+    let game = w.env.register(support::Target, ());
+    let token = w
+        .env
+        .register_stellar_asset_contract_v2(w.guardians[0].clone())
+        .address();
+    w.env.mock_all_auths();
+    StellarAssetClient::new(&w.env, &token).mint(&a.address, &100_000_000);
+    w.env.set_auths(&[]);
+    (w, a, game, token)
+}
+
+/// `key` transfers 1 XLM to the game through rule `id`.
+fn census_spend(
+    w: &World,
+    a: &Acct,
+    key: &SoftPasskey,
+    token: &Address,
+    game: &Address,
+    id: u32,
+) -> bool {
+    let amount: i128 = 10_000_000;
+    let root = w.invocation(
+        token,
+        "transfer",
+        std::vec![w.sc(a.address.clone()), w.sc(game.clone()), w.sc(amount)],
+    );
+    let entry = auth_entry(
+        &w.env,
+        &a.address,
+        &w.webauthn,
+        key,
+        id,
+        w.next_nonce(),
+        w.ledger() + 720,
+        root,
+    );
+    w.env.set_auths(&[entry]);
+    let ok = TokenClient::new(&w.env, token)
+        .try_transfer(&a.address, game, &amount)
+        .is_ok();
+    w.env.set_auths(&[]);
+    ok
+}
+
+/// Print every contract-data entry the account owns, and any entry another
+/// contract keeps that names it, one `{"census": ...}` line each, then the
+/// account's own entries' total; returns that total (bytes, entries),
+/// host nonces left out.
+fn census_dump(w: &World, a: &Acct, label: &str) -> (usize, usize) {
+    use soroban_sdk::xdr::{ContractDataDurability, LedgerEntryData, LedgerKey, Limits, WriteXdr};
+    let snapshot = w.env.to_ledger_snapshot();
+    let me: soroban_sdk::xdr::ScAddress = a.address.clone().into();
+    let (mut bytes, mut entries) = (0, 0);
+    for (key, (entry, live_until)) in snapshot.ledger_entries.iter() {
+        let LedgerKey::ContractData(k) = &**key else {
+            continue;
+        };
+        let LedgerEntryData::ContractData(d) = &entry.data else {
+            continue;
+        };
+        let mine = k.contract == me;
+        if !mine && !format!("{:?}", k.key).contains(&format!("{me:?}")) {
+            continue;
+        }
+        let size = entry.to_xdr(Limits::none()).unwrap().len();
+        if mine && !matches!(k.key, ScVal::LedgerKeyNonce(_)) {
+            bytes += size;
+            entries += 1;
+        }
+        let owner = if mine {
+            "account".to_string()
+        } else {
+            strkey(&Address::try_from_val(&w.env, &k.contract).unwrap())
+        };
+        println!(
+            "\n{}",
+            serde_json::json!({
+                "census": label,
+                "owner": owner,
+                "durability": match k.durability {
+                    ContractDataDurability::Persistent => "persistent",
+                    ContractDataDurability::Temporary => "temporary",
+                },
+                "entry_bytes": size,
+                "key_xdr": hex(&k.key.to_xdr(Limits::none()).unwrap()),
+                "val_xdr": hex(&d.val.to_xdr(Limits::none()).unwrap()),
+                "live_until": live_until,
+            })
+        );
+    }
+    println!(
+        "\n{}",
+        serde_json::json!({"census_total": label, "bytes": bytes, "entries": entries})
+    );
+    (bytes, entries)
+}
+
+/// The preview account's grant: the constructor's admin rule, then one
+/// scoped document per app (`guess` on the game contract, and `guess-xlm`, a
+/// capped XLM `transfer` to it), then a 1 XLM transfer through the second
+/// app's capped rule.
+#[test]
+#[ignore = "needs the built stack"]
+fn census_of_the_preview_grant() {
+    let (w, a, game, token) = census_world();
+    census_dump(&w, &a, "constructor");
+    for (i, sid) in CENSUS_IDS.iter().enumerate() {
+        let key = census_key(1 + i as u8);
+        let doc = census_doc(
+            &w,
+            &[format!(
+                r#"{{"id":"{sid}","key":"{}","verifier":"{}"}}"#,
+                hex(&key.key_data()),
+                strkey(&w.webauthn)
+            )],
+            &census_rules(&game, &token, sid, CENSUS_NALS[i], ""),
+        );
+        assert!(w.try_apply_scope(&a, &census_key(0), CENSUS_SCOPES[i], &doc));
+        report_unbudgeted(&format!("census: apply_scope app {}", i + 1), &w.env);
+        w.advance(80);
+    }
+    let id = w.scoped_rule_id(&a, CENSUS_SCOPES[1], "guess-xlm");
+    assert!(census_spend(&w, &a, &census_key(2), &token, &game, id));
+    report_unbudgeted("census: 1 XLM transfer through app 2's guess-xlm", &w.env);
+    census_dump(&w, &a, "grant");
 }

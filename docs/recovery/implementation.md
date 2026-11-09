@@ -16,7 +16,7 @@ it relies on (`crates/perch-smart-account`).
 | §7 permitted changes | `perch_ir::recovery::derive_target`; `PerchDocCompiler::derive_target` | `crates/perch-ir/tests/recovery.rs`, `recovery.rs` |
 | §7.5 delta apply | `crates/perch-smart-account/src/rules.rs` (`desired`, `reconcile`) | [below](#delta-apply-tests) |
 | §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}` | `doc_caps.rs`; `release_stack.rs` `worst_case_*` |
-| §7.6 scoped documents | `crates/perch-smart-account/src/lib.rs` (`apply_scope_doc`, `check_scoped`, `drop_scope`, the scope index, the generation gate in `check_auth`, `complete_recovery`) | `scoped_docs.rs`; `release_stack.rs` `docsplit_*` and the `worst_case_*` compromise flows ([`budgets.md`](budgets.md#scoped-documents)) |
+| §7.6 scoped documents | `crates/perch-smart-account/src/lib.rs` (`apply_scope_doc`, `check_scoped`, `check_normal`, `drop_scope`, the scope index, the excluded-contract gate in `check_auth`, `complete_recovery`), `gate.rs` (the generation check, `StaleScope`) | `scoped_docs.rs`; `release_stack.rs` `docsplit_*` and the `worst_case_*` compromise flows ([`budgets.md`](budgets.md#scoped-documents)) |
 | §13 ZK adapter, §14 membership pool | `crates/perch-zk-adapter`, `crates/perch-zk-pool` | [`docs/zk/README.md`](../zk/README.md#what-is-tested-and-how) |
 | §15 revision binding and the consumer interface: the `revision`/`configuration`/`document`/`capabilities` views, `apply_doc`'s `expected_revision`; the compiler's `limits`/`capabilities` | `PerchSmartAccount::{apply_doc, revision, configuration, document, capabilities}`, `apply` and `execute_upgrade` (`advance_revision`); `PerchDocCompiler::{limits, capabilities}` | `revision.rs`; `auth_vectors.rs` (signing digest and `AuthPayload` vectors for perch-js) |
 
@@ -62,9 +62,9 @@ is named.
 | Baselines and compromise recovery | [§3.5](spec.md#35-baselines), [§7.2](spec.md#72-sources) | controller `publish_baseline`, `begin_compromise` | `compromise_restores_the_baseline_and_revokes_everything_added_since`, `an_old_baseline_cannot_restore_a_revoked_credential` |
 | Upgrades: delay, `Protected` condition over the exact Wasm, the recovery generation (account instance storage) making a queued request stale, a completion clearing it | [§12](spec.md#12-account-upgrades), D11 | account `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade`; controller `rcv_upgrade` | `account_capabilities.rs`: `an_upgrade_waits_out_the_delay_then_replaces_the_code`, `cancelling_or_rescheduling_drops_the_pending_upgrade`, `any_recovery_transition_makes_a_queued_upgrade_stale`, `a_stale_upgrade_is_refused_without_being_cleared`, `a_completed_recovery_clears_the_pending_upgrade`, `enrolling_and_removing_recovery_stales_an_unenrolled_upgrade`, `a_controller_switch_and_an_executed_upgrade_advance_the_generation`, `upgrades_are_blocked_while_an_attempt_is_authorized`, `protected_upgrades_need_the_condition_over_the_exact_wasm` |
 | The scope generation (account instance storage) advances by one on a completed recovery and on nothing else; a completion that would wrap it refuses with `GenerationExhausted` | [§12](spec.md#12-account-upgrades) | account `apply`, `complete_recovery`; view `scope_generation` | `revision.rs`: `the_scope_generation_advances_only_on_a_completed_recovery`; `recovery.rs`: `guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_key`, `a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment`, `a_completion_that_would_wrap_the_scope_generation_is_refused` |
-| Scoped documents: no recovery member, no rule scoped to the account, its recovery controller, or its ZK adapter or pool, and no rule whose `functions` names a guardian approval (`ScopeEscalation`); no scoped rule casts a guardian approval at any controller (`PerchAuthError::ScopeEscalation`, by `GUARDIAN_APPROVAL_FNS`); owner-only `apply_scope` and `remove_scope`; a scope reconciled against its own records; the generation gate (`StaleScope`) and the controller, adapter and pool guard for scopes applied before enrollment (`PerchAuthError::ScopeEscalation`) on every path; every completion wipes every scope; `gc_scope` only for wiped scopes; the credential index refuses a wiped scope's credentials in every later document except a completion's target (`WipedCredential`); tags extended on read and restored, never absent, when archived; the freeze covers scopes and the policy block does not | [§7.6](spec.md#76-scoped-documents), D17 | account `apply_scope_doc`, `check_scoped`, `names_guardian_approval`, `excluded_contract`, `check_unwiped`, `check_auth`, `apply`, `complete_recovery`, `drop_scope`; `perch_recovery_interface::account::is_guardian_approval` | `scoped_docs.rs` (every test); `scoped_guardian_approvals.rs` (every test); `rule_core_documents.rs` (the scoped traces); `release_stack.rs` `docsplit_guards_and_scope_manager` |
-| The rule-eval rule set: the compiled model lowered on the account, stored aligned with the installed-rule records; INV-1 and the anti-brick check on the stored rules | [§7.5](spec.md#75-bounded-completion-cost) | account `rule_set::lowered`, `apply_rules`, `install_admin`; view `rule_set`; doc compiler `compile_parsed` (`model_of`) | `rule_set.rs`; the stored set against the lowering and the installed rules after every apply in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs`, `apply_delta.rs` (`perch_testkit::rule_set`) |
-| Rule-eval in `__check_auth`: `rule_eval::authorize` over the chosen stored rules decides (`RuleEvalRefused`; an unknown id, `ContextRuleNotFound`; the recovery rule outside a completion refused), then the account's `authenticate` checks every signer; a completion left to the controller's `rcv_complete` (`authorize_completion`, over the account's record of the recovery rule, as OZ's `do_check_auth` decided it), and an account storing no set (which the constructor never leaves) authorizing nothing else; a document rule carries no policy; each capped rule's spending record kept while the rule keeps its id and cap | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), [§7.5](spec.md#75-bounded-completion-cost), [§12](spec.md#12-account-upgrades) | account `check_auth`, `gate::{authorize, drop_records}`, `rules::desired`, `apply_rules`, `apply_scope_doc`, `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; every verdict and record against rule-core's model in `rule_core_documents.rs` and against the recorded verdicts and OZ records in `rule_eval_baseline.rs`; `auth_corpus.rs`; the hand-written leaf vectors against rule-eval in `leaf_vectors.rs`; the spending records checked after every accepted authorization (`perch_testkit::rule_set::check_records`) |
+| Scoped documents: no recovery member, no rule scoped to the account, its recovery controller, or its ZK adapter or pool, and no rule whose `functions` names a guardian approval (`ScopeEscalation`); no scoped rule casts a guardian approval at any controller (`PerchAuthError::ScopeEscalation`, by `GUARDIAN_APPROVAL_FNS`); owner-only `apply_scope` and `remove_scope`; a scope only in normal form (`NotNormalForm`), its text rebuilt from its records and signer ids; a scope reconciled against its own records; the generation gate (`StaleScope`) and the controller, adapter and pool guard for scopes applied before enrollment (`PerchAuthError::ScopeEscalation`) on every path; every completion wipes every scope; `gc_scope` only for wiped scopes; the credential index refuses a wiped scope's credentials in every later document except a completion's target (`WipedCredential`); tags extended on read and restored, never absent, when archived; the freeze covers scopes and the policy block does not | [§7.6](spec.md#76-scoped-documents), D17 | account `apply_scope_doc`, `check_scoped`, `names_guardian_approval`, `check_normal`, `excluded_contract`, `check_unwiped`, `check_auth`, `apply`, `complete_recovery`, `drop_scope`; `perch_recovery_interface::account::is_guardian_approval`; doc compiler `CompiledDoc::normal_form` (`perch_ir::normal_form`) | `scoped_docs.rs` (every test); `scoped_guardian_approvals.rs` (every test); `scope_rebuild.rs`; `rule_core_documents.rs` (the scoped traces); `release_stack.rs` `docsplit_guards_and_scope_manager` |
+| The rule-eval rule set: the compiled model lowered on the account, each rule stored in its record; INV-1 and the anti-brick check on the stored rules | [§7.5](spec.md#75-bounded-completion-cost) | account `rule_set::lowered`, `apply_rules`, `install_admin`; view `rule_set`; doc compiler `compile_parsed` (`model_of`) | `rule_set.rs`; the stored set against the lowering and the installed rules after every apply in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs`, `apply_delta.rs` (`perch_testkit::rule_set`) |
+| Rule-eval in `__check_auth`: `rule_eval::authorize` over the chosen stored rules decides (`RuleEvalRefused`; an unknown id, `ContextRuleNotFound`; the recovery rule outside a completion refused), then the account's `authenticate` checks every signer; a completion left to the controller's `rcv_complete` (`authorize_completion`, over the account's record of the recovery rule, as OZ's `do_check_auth` decided it); a document rule carries no policy; each capped rule's spending record kept while the rule keeps its id and cap | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), [§7.5](spec.md#75-bounded-completion-cost), [§12](spec.md#12-account-upgrades) | account `check_auth`, `gate::{authorize, drop_records}`, `rules::desired`, `apply_rules`, `apply_scope_doc`, `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; every verdict and record against rule-core's model in `rule_core_documents.rs` and against the recorded verdicts and OZ records in `rule_eval_baseline.rs`; `auth_corpus.rs`; the hand-written leaf vectors against rule-eval in `leaf_vectors.rs`; the spending records checked after every accepted authorization (`perch_testkit::rule_set::check_records`) |
 | Bounded completion cost: the delta apply and the document caps | [§7.5](spec.md#75-bounded-completion-cost) | [Delta apply](#delta-apply-spec-75) below | [Delta apply tests](#delta-apply-tests); `release_stack.rs` `worst_case_*` ([`budgets.md`](budgets.md#document-caps)) |
 | Configuration revision and `expected_revision`; ordinary signatures bind rule ids, not a revision | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) "Revision binding" | account `advance_revision` (instance storage), `apply` | `revision.rs` |
 | Storage lifetime and renewal | [§3.6](spec.md#36-storage-lifetime) | controller `renew`, `renew_nullifier`; account `renew(fingerprints, enrollment_ids)`; pool `renew_*` | pool: `renew_extends_every_entry_a_witness_needs`; the controller's and the account's `renew` are not pinned by a test |
@@ -125,10 +125,14 @@ What the spec leaves to the implementation, or what only its tests show.
 what is installed (`crates/perch-smart-account/src/rules.rs`).
 
 **Records.** The account's own records are its rule registry. It keeps one
-`InstalledRule` record per installed rule: its id, the recovery flag, name,
-context type, `valid_until`, signers, and each policy with `sha256` of its
-install parameters' XDR. The admin document's records are one persistent
-entry, and each scoped document's are in its scope record. Ids come from
+`RuleRecord` per installed rule: its id, name, each policy with `sha256` of
+its install parameters' XDR, and the rule-eval rule that decides what it
+allows. The rule's context type is `CallContract` of that rule's contract,
+its `valid_until` and signers are that rule's, and it is the recovery rule
+when its id is the instance's `RecoveryRule`, so each rule is stored once;
+the views read records as the `InstalledRule`s they were (`rules::installed`).
+The admin document's records are one persistent entry (`RuleSet`), and each
+scoped document's are in its scope record. Ids come from
 the account's counter (`NextRuleId`, instance storage, `rules::allocate`),
 which never gives an id twice, so a spending record or scope tag keyed by
 id never outlives its rule into another. `get_context_rule(id)` and
@@ -142,10 +146,10 @@ costs the same however many documents came before.
 A compiled document also carries its model (`CompiledDoc::model`, one
 `perch_rule_eval::CompiledModel`). `apply_doc` lowers it on the account
 with `rule_eval::lower`, drops the document rules `rules::desired` drops as
-expired, and stores the rest as `StoredRule`s in a second persistent entry,
-aligned with the records: stored rule `i` is what installed rule `i`
-enforces, the recovery rule last. The constructor stores its admin rule the
-same way, and `rule_set()` returns the set. Before the controller's
+expired, and keeps the rest as `StoredRule`s in the records, which come out
+of the reconcile in its order (`rules::records`): record `i` holds what
+installed rule `i` enforces, the recovery rule last. The constructor stores
+its admin rule the same way, and `rule_set()` returns the stored rules. Before the controller's
 `rcv_sync`, `apply_doc` refuses `ModelInvalid` when the model is missing,
 unreadable, or not one-for-one with the compiled rules and recovery;
 `UnguardedRule` when a rule other than the recovery rule asks for no signer
@@ -157,17 +161,21 @@ n-of-n `threshold` self-admin rule, which the compiled check refuses because
 the compiler gives that rule an interpreter program. `apply_scope` does the same
 for a scoped document with `rule_eval::lower_scoped`, under the account's
 excluded set and the current scope generation, which every stored scoped
-rule carries, and stores the set in `scope_rule_sets[scope]` aligned with
-the scope record's rules (view `scope_rule_set(scope)`); removing the scope
-removes it.
+rule carries, into the scope record's rules (view `scope_rule_set(scope)`).
+Before that it refuses a document not in normal form (`check_normal`:
+`CompiledDoc::normal_form`, an `address-eq` naming the account, a rule
+already expired), so the scope record keeps the document's signer ids
+instead of its text, and `perch_testkit::rebuild` and perch-js's
+`rebuildScopeDoc` give the text back against its `doc_hash`.
 
 **Rule-eval in `__check_auth`** (`crates/perch-smart-account/src/gate.rs`).
 `check_auth` decides an authorization with rule-eval's `authorize` on the
 stored rules of the rules the payload chooses: a rule id is the stored rule
-at its record's position in the admin set (by `installed_rules`) or, when a scope tag
-names it, in that scope's set. It runs at the current ledger and scope
-generation, under every signer the payload names, with the account's own
-spending records, and refuses what it does not accept with
+its record holds, among the admin records or, when a scope tag names its
+scope, that scope's. It runs at the current ledger and scope generation,
+under every signer the payload names, with the account's own spending
+records, and refuses a chosen scoped rule of another generation (a wiped
+scope's) with `StaleScope` and anything else it does not accept with
 `RuleEvalRefused`, as it does a chosen recovery rule or a batch it cannot
 read; a chosen id that names no installed rule fails with
 `ContextRuleNotFound` (#3000), as OZ refused it, which perch-js reads as a
@@ -321,6 +329,7 @@ mid-sequence is outside the oracle's coverage.
 | Adding signers up to the cap is one in-place edit | `adding_several_signers_is_one_edit` |
 | The recovery rule takes a new id for a new configuration at its controller, and keeps its id across a controller switch | `recovery_changes_edit_only_the_recovery_rule`, `a_new_controller_is_swapped_in_place`; `rules.rs` unit test `only_a_recovery_rule_reconfigured_at_its_controller_takes_a_new_id` |
 | After every accepted apply, the recovery rule's record has zero signers, the account as its contract, no last ledger, and the controller as its one policy, and OZ's registry holds no rule | `perch_testkit::rule_set::check`, run by every suite that checks the stored set |
+| Every scoped document `apply_scope` accepts rebuilds byte for byte from its records and signer ids, and each spelling outside normal form is refused and writes nothing | `scope_rebuild.rs`; every scoped apply of every suite through `perch_testkit::rule_set::check_scope`; perch-js `scope.test.ts` over `testdata/scope-rebuild/vectors.json` |
 | A completion's check against OZ's `do_check_auth` over a registry holding only the recovery rule: signers present, a wrong id, an expired rule, a wrong context, a second context, mismatched lengths, a refusing controller, and the order of the checks give the same verdicts and codes and ask the controller about the same contexts with the same rule shape | `completion_differential.rs` |
 | Against the controller built with OZ's `Policy` hooks and the account that calls them (those builds' wasm, `PERCH_PREV_CONTROLLER_WASM`, `PERCH_PREV_ACCOUNT_WASM`): lost-key, compromise under a freeze, ZK rotation, cancellation and expiry, removal and a controller switch give the same outcomes, `__check_auth` codes, events and ledger after every step; `enforce`/`install` and `rcv_complete`/`rcv_install` over rule shapes, contexts, configuration hashes and attempt windows give the same verdicts and ledger, and the accepted marker completes alike | `controller_differential.rs` (`#[ignore]`d: needs the builds) |
 | The constructor's install checks (OZ's codes), and a compiled document never reaching the canonical-duplicate check | `install_checks.rs` |

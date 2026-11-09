@@ -200,6 +200,32 @@ same caller code runs
 against a backend that takes several transactions: a step that already
 landed is skipped when an operation is retried or started again.
 
+### Reading a scoped document
+
+An account keeps no scoped document's text. It keeps each rule's name and
+stored rule (`scope(id)`, `scope_rule_set(id)`) and the document's signer
+ids (`scope_signer_ids(id)`), and applies a scoped document only in normal
+form, so those give the text back:
+
+```ts
+import { readScopeDoc } from '@stellar-registry/perch';
+
+const scope = await readScopeDoc(new account.Client(opts(accountId)), accountId, networkPassphrase, scopeId);
+// null when the account has no scope there; else { doc, canonical, docHash }
+```
+
+`rebuildScopeDoc` rebuilds the document from those three views
+(`decodeStoredScope` decodes them as the generated bindings return them),
+and throws `ScopeNotRebuilt` unless its canonical text hashes to the
+scope's stored `doc_hash`, so a rebuild is never trusted on its own. Write
+scoped documents in normal form: external keys in lowercase hex, cap
+limits as plain decimals, no cap `token`, `all` where a `threshold` asks
+every signer it names, a capped rule's `functions` exactly `["transfer"]`,
+`is-self` rather than `address-eq` naming the account, no `string-in`
+value over 256 bytes, no rule already expired, and every declared signer
+named by a rule, declared in the order the rules first name them. The
+account refuses any other with `NotNormalForm`.
+
 ### Errors
 
 | Error | When |
@@ -210,14 +236,15 @@ landed is skipped when an operation is retried or started again.
 | `AccountFrozen` | A `Protected` recovery attempt is authorized: before signing (with the attempt and its expiry), or the account refusing a submission |
 | `InconsistentRead` | Reads kept disagreeing on the revision, or an RPC went backwards |
 | `CompilerMismatch` | The reader's compiler is not the account's pinned one |
+| `ScopeNotRebuilt` | A scope's stored rules and signer ids do not rebuild to its `doc_hash` |
 | `RuleNotFound`, `UnsupportedCapability`, `Aborted` | As named |
 
 ### Hashes and encodings
 
 `docHash`, `ruleHash`, `configHash`, `statementDigest`, `replacementsHash`,
-`credentialFingerprint`, `zkStatementFields`, `signingDigest`, and
-`buildAuthPayload` are pinned against vectors the Rust suite writes from the
-contracts' own code (`testdata/`).
+`credentialFingerprint`, `zkStatementFields`, `signingDigest`,
+`buildAuthPayload`, and `rebuildScopeDoc` are pinned against vectors the
+Rust suite writes from the contracts' own code (`testdata/`).
 
 perch-js does not compile documents. The account's pinned on-chain doc
 compiler is authoritative; `checkLimits` checks only its caps.

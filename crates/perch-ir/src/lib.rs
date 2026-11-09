@@ -65,6 +65,7 @@ extern crate alloc;
 
 pub mod canon;
 pub mod doc;
+pub mod normal;
 pub mod parse;
 pub mod recovery;
 pub mod validate;
@@ -80,6 +81,7 @@ pub use doc::{
     RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
     SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred, ZkFactor,
 };
+pub use normal::{normal_form, NotNormal};
 pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{
     is_address_shape, is_contract_address_shape, validate, ValidationError, ACK_SENTINEL,

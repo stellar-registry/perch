@@ -643,13 +643,13 @@ completion 7M to 9M more instructions than the host's conversion does.
 
 ### The account's own rule registry
 
-The account keeps its rule ids, rules and signers in its own records, and
-OZ's context-rule registry holds only the two entries of the recovery rule
-that OZ's `do_check_auth` reads for a completion (`implementation.md`,
-"Delta apply"). An apply writes no OZ rule, signer, policy or lookup entry,
-and asks no verifier to canonicalize a key. Source: 2026-11-08, stacks
-built with `scripts/build-stack.sh --builder contract` from this source and
-from the source before it, where OZ's registry held every rule, through
+The account keeps its rule ids, rules and signers in its own records
+(`implementation.md`, "Delta apply"). An apply writes no OZ rule, signer,
+policy or lookup entry, and asks no verifier to canonicalize a key. Source:
+2026-11-08, stacks built with `scripts/build-stack.sh --builder contract`
+from the source that made the records the registry, where OZ's registry
+still held the recovery rule's two entries for `do_check_auth`, and from
+the source before it, where OZ's registry held every rule, through
 every `release_stack.rs` flow (26 tests, `--skip cap_sweep`), real proofs,
 passkeys, enforcing authorization. Both pass. Each of the 264 metered rows
 on both stacks:
@@ -708,10 +708,53 @@ are unchanged at 8 signers and 10 rules. At 8 signers, 16 rules fit the
 75% (write bytes 74.7%) if the byte cap rises to 11 264, so
 `MAX_DOC_RULES` could rise to 16 without another cap changing.
 
-The account wasm is 107,603 bytes as `stellar contract build` builds it
-(75,274 of code, 25,783 of contract spec, 4,604 of data), 12,231 fewer than
-the source before it (119,834), and 23,469 under the 131,072-byte limit.
-The doc compiler, the recovery controller and every other tier-0 contract
+That source's account wasm was 107,603 bytes as `stellar contract build`
+builds it (75,274 of code, 25,783 of contract spec, 4,604 of data), 12,231
+fewer than the source before it (119,834).
+
+### The recovery completion's own check
+
+A recovery completion is decided by the account's `authorize_completion`,
+which calls the controller's `enforce` over the account's record of the
+recovery rule, so a completion reads no entry of OZ's registry and the
+account writes none (`implementation.md`, "Rule-eval in `__check_auth`").
+Source: 2026-11-08, stacks built with `scripts/build-stack.sh --builder
+contract` from this source and from the source before it, where OZ's
+`do_check_auth` decided a completion over two registry entries the account
+kept for the recovery rule, through every `release_stack.rs` flow (26
+tests, `--skip cap_sweep`), real proofs, passkeys, enforcing authorization.
+Both pass. The completion rows:
+
+| Row | Instructions | Footprint | Written entries | Write bytes |
+| --- | --- | --- | --- | --- |
+| Compromise completion on the long-lived host (8 signers, 10 rules), the worst of its rows | 165.83M → 165.34M (41.3%) | 64 → 61 | 41 → 38 | 60,688 → 60,172 |
+| The same on the fork, the worst of its rows | 165.50M → 165.22M (41.3%) | 64 → 61 | 41 → 38 | 60,688 → 60,172 |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked; 8 signers, 10 rules) | 162.97M → 162.73M (40.7%) | 48 → 45 | 33 → 30 | 60,088 → 59,572 |
+| Lost-key completion (`Combined`, ZK rotation) | 59.27M → 58.80M | 34 → 31 | 24 → 21 | 10,396 → 9,880 |
+| Lost-key completion (`GuardianOnly`) | 16.19M → 15.98M | 24 → 22 | 14 → 14 | 6,424 → 6,424 |
+| Compromise completion (revokes the stolen and added keys) | 17.49M → 17.28M | 25 → 23 | 14 → 14 | 6,592 → 6,592 |
+
+- **Every completion's** footprint holds OZ's rule and policy entries for
+  the recovery rule no more, and it costs 0.2M to 0.6M fewer instructions.
+  One that installs the recovery rule again under a new id (a ZK rotation)
+  also drops the new rule's entry from its footprint and writes three
+  entries fewer: the new rule's and the policy's, and the old rule's
+  removal.
+- **Every row is within 75%.** Of the 264 metered rows, 256 cost fewer
+  instructions and 263 less memory. Eight cost more instructions, by
+  0.002M to 0.03M: three evidence submissions (`submit_guardian`
+  `Combined` not promoting, `submit_zk` promoting `Combined`, and
+  `submit_zk_change` `Reconfigure`, which also uses 404 more bytes of
+  memory), the `Combined` cancellation, three capped transfers through a
+  scoped grant, and the eighth `apply_scope` on the long-lived host; the largest is `submit_zk` at
+  29.7%. The cause was not investigated. The worst share of each limit:
+  instructions 41.6% → 41.5%, memory 23.6%, write bytes 50.0%, footprint
+  16.0% → 15.2%, written entries 20.5% → 19.0%, and events 20.5%.
+
+The account wasm is 99,988 bytes as `stellar contract build` builds it
+(68,822 of code, 24,791 of contract spec, 4,453 of data), 7,615 fewer than
+the source before it (107,603), and 31,084 under the 131,072-byte limit.
+The recovery controller, the doc compiler and every other tier-0 contract
 build byte-identical; the factory changes only in the account hash it pins.
 
 ### Wasm stack

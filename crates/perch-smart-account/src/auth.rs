@@ -1,18 +1,20 @@
-//! Signature checks, signer identity, and the boundary with OZ's
-//! `do_check_auth`.
+//! Signature checks, signer identity, and the recovery completion's check.
 //!
 //! [`authenticate`] checks one payload signer's signature, and
 //! [`check_distinct`] refuses two signers that are one key. The account's
 //! authorization types are `perch-account-types`', the XDR and contract-spec
-//! twins of OZ's. OZ's `do_check_auth` still decides a recovery completion
-//! over entries of its own registry, and [`oz`] keeps the ones it reads.
+//! twins of OZ's. [`authorize_completion`] decides a recovery completion:
+//! it calls the recovery controller's `enforce` as OZ's `do_check_auth`
+//! called a policy, over the account's own record of the recovery rule.
 
-use perch_account_types::{AuthPayload, ContextRule, Signer, SmartAccountError};
+use perch_account_types::{AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError};
+use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::{
     contractclient, crypto::Hash, panic_with_error, Address, Bytes, Env, IntoVal, Map, Val, Vec,
 };
 
-use crate::rules::{refuse, InstallError};
+use crate::rules::{expired, refuse, InstallError};
+use crate::{InstalledRule, PerchStorage};
 
 const DAY_IN_LEDGERS: u32 = 17280;
 /// The TTL, in ledgers, that `__check_auth` extends an entry it reads to:
@@ -21,13 +23,11 @@ pub const SMART_ACCOUNT_EXTEND_AMOUNT: u32 = 30 * DAY_IN_LEDGERS;
 /// The TTL below which `__check_auth` extends an entry it reads.
 pub const SMART_ACCOUNT_TTL_THRESHOLD: u32 = SMART_ACCOUNT_EXTEND_AMOUNT - DAY_IN_LEDGERS;
 
-/// Fail the invocation with `error`. While OZ's `do_check_auth` is linked,
-/// OZ's own `SmartAccountError` (these codes and the registry's) is in the
-/// contract spec. Raising the code as a plain `soroban_sdk::Error` keeps a
-/// second spec entry of that name out, as only a `#[contracterror]` type
-/// raised or returned at the boundary gets one.
+/// Fail the invocation with `error`. Raising the `#[contracterror]` type
+/// itself puts its entry in the contract spec, so wallets read every code
+/// `__check_auth` refuses with by name.
 fn fail(e: &Env, error: SmartAccountError) -> ! {
-    panic_with_error!(e, soroban_sdk::Error::from(error))
+    panic_with_error!(e, error)
 }
 
 /// A signature verifier's entry points, as the account calls them.
@@ -38,12 +38,20 @@ trait Verifier {
     fn batch_canonicalize_key(e: &Env, key_data: Vec<Val>) -> Vec<Bytes>;
 }
 
-/// A policy's install hook, as OZ's registry calls it: the recovery
-/// controller's `install` checks the recovery rule it is installed on.
+/// The recovery controller's hooks, as the account calls them: `install`
+/// checks the recovery rule it is installed on, and `enforce` decides a
+/// completion. They are OZ's `Policy` hooks, called with the same values.
 #[allow(unused)]
 #[contractclient(name = "PolicyClient")]
 trait Policy {
     fn install(e: &Env, install_params: Val, context_rule: ContextRule, smart_account: Address);
+    fn enforce(
+        e: &Env,
+        context: Context,
+        authenticated_signers: Vec<Signer>,
+        context_rule: ContextRule,
+        smart_account: Address,
+    );
 }
 
 /// Check `signer`'s signature over `digest`. An `External` signer's
@@ -105,68 +113,63 @@ pub(crate) fn check_distinct(e: &Env, signers: &Vec<Signer>) {
     }
 }
 
-/// What OZ's `do_check_auth` reads to decide a recovery completion
-/// (`check_auth`): the recovery rule's entry in OZ's registry and its one
-/// policy's. The account writes exactly these two, in OZ's storage layout,
-/// whenever its recovery rule is installed, moved to a new id, or given a
-/// new controller, and removes them with it. Nothing else of OZ's registry
-/// is written.
-pub(crate) mod oz {
-    use super::*;
-    use soroban_sdk::{contracttype, String};
-    use stellar_accounts::smart_account::{self as oz, ContextRuleEntry, SmartAccountStorageKey};
-
-    /// The recovery rule's one policy's id in OZ's registry.
-    const RECOVERY_POLICY: u32 = 0;
-
-    /// OZ's registry entry for a policy (`stellar-accounts`' `PolicyEntry`,
-    /// which it does not export): the same fields, so the same XDR.
-    #[contracttype]
-    struct PolicyEntry {
-        policy: Address,
-        count: u32,
+/// Decide a recovery completion, as OZ's `do_check_auth` decided one over a
+/// registry holding the recovery rule `recovery` and no other rule. Every
+/// chosen id must be `recovery` with the account's record of it
+/// (`ContextRuleNotFound`), and every context a call on this account while
+/// that rule is unexpired (`UnvalidatedContext`), as OZ checks each context in
+/// turn; the payload must name no signer, since the rule has none
+/// (`UnauthorizedSigner`). Then each of the rule's policies, the adopted
+/// controller, is asked to `enforce` each context with no authenticated
+/// signer, and its refusal fails the invocation. The rule it is shown is
+/// the record's `ContextRule`, the value OZ's registry gave it.
+pub fn authorize_completion(
+    e: &Env,
+    recovery: u32,
+    payload: &AuthPayload,
+    contexts: &Vec<Context>,
+) -> Result<(), soroban_sdk::Error> {
+    let ids = &payload.context_rule_ids;
+    if ids.len() != contexts.len() {
+        return Err(SmartAccountError::ContextRuleIdsLengthMismatch.into());
     }
-
-    pub(crate) fn payload(e: &Env, p: &AuthPayload) -> oz::AuthPayload {
-        use soroban_sdk::{unwrap::UnwrapInfallible, TryFromVal};
-        oz::AuthPayload {
-            signers: Map::try_from_val(e, &p.signers.to_object()).unwrap_infallible(),
-            context_rule_ids: p.context_rule_ids.clone(),
+    let me = e.current_contract_address();
+    let rule = record(e, recovery);
+    for (i, context) in contexts.iter().enumerate() {
+        let rule = rule
+            .as_ref()
+            .filter(|r| r.id == ids.get_unchecked(i as u32))
+            .ok_or(SmartAccountError::ContextRuleNotFound)?;
+        let on_me = matches!(&context, Context::Contract(ContractContext { contract, .. }) if *contract == me);
+        if expired(e, rule.valid_until)
+            || !on_me
+            || rule.context_type != ContextRuleType::CallContract(me.clone())
+        {
+            return Err(SmartAccountError::UnvalidatedContext.into());
         }
     }
-
-    /// Write the recovery rule `id` with policy `controller`, as OZ's
-    /// `add_context_rule` would: a zero-signer rule scoped to the account.
-    pub(crate) fn install_recovery(e: &Env, id: u32, controller: &Address) {
-        let rule = SmartAccountStorageKey::ContextRuleData(id);
-        let policy = SmartAccountStorageKey::PolicyData(RECOVERY_POLICY);
-        let storage = e.storage().persistent();
-        storage.set(
-            &rule,
-            &ContextRuleEntry {
-                name: String::from_str(e, "recovery"),
-                context_type: oz::ContextRuleType::CallContract(e.current_contract_address()),
-                valid_until: None,
-                signer_ids: Vec::new(e),
-                policy_ids: Vec::from_array(e, [RECOVERY_POLICY]),
-            },
-        );
-        storage.set(
-            &policy,
-            &PolicyEntry {
-                policy: controller.clone(),
-                count: 1,
-            },
-        );
-        let ttl = e.storage().max_ttl();
-        storage.extend_ttl(&rule, ttl, ttl);
-        storage.extend_ttl(&policy, ttl, ttl);
+    if !payload.signers.is_empty() {
+        return Err(SmartAccountError::UnauthorizedSigner.into());
     }
-
-    /// Remove recovery rule `id`'s entries.
-    pub(crate) fn remove_recovery(e: &Env, id: u32) {
-        let storage = e.storage().persistent();
-        storage.remove(&SmartAccountStorageKey::ContextRuleData(id));
-        storage.remove(&SmartAccountStorageKey::PolicyData(RECOVERY_POLICY));
+    if let Some(rule) = rule {
+        let rule = rule.context_rule(e);
+        for context in contexts.iter() {
+            for policy in rule.policies.iter() {
+                PolicyClient::new(e, &policy).enforce(&context, &Vec::new(e), &rule, &me);
+            }
+        }
     }
+    Ok(())
+}
+
+/// The account's record of its recovery rule, if `recovery` is its id. The
+/// records' entry is extended, as OZ extends the rule entry it reads.
+fn record(e: &Env, recovery: u32) -> Option<InstalledRule> {
+    let rules = PerchStorage::get_installed_rules(e)?;
+    PerchStorage::extend_installed_rules_ttl(
+        e,
+        SMART_ACCOUNT_TTL_THRESHOLD,
+        SMART_ACCOUNT_EXTEND_AMOUNT,
+    );
+    rules.iter().find(|r| r.recovery && r.id == recovery)
 }

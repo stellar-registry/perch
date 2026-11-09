@@ -11,13 +11,9 @@
 //! - a chosen id that names no installed rule fails with OZ's
 //!   `ContextRuleNotFound`, and choosing the recovery rule outside a
 //!   completion with `RuleEvalRefused`;
-//! - a recovery completion is left to OZ and the controller, whatever the
-//!   stored set says;
-//! - an account storing no rule set is decided by OZ's `do_check_auth` over
-//!   OZ's registry, which holds none of its rules but the recovery rule, so
-//!   it authorizes nothing but a completion; its next `apply_doc` stores
-//!   the set and starts every spending record empty, and `apply_scope`
-//!   refuses until then (`NoRuleSet`);
+//! - a recovery completion is left to the controller, whatever the stored
+//!   set says, and even with none stored, when nothing else is authorized
+//!   (`RuleEvalRefused`);
 //! - each capped rule's spending record is charged by rule-eval, kept by an
 //!   edit that leaves the rule's id and cap alone, and dropped when the cap
 //!   changes, the rule is replaced or removed, or its scope is removed.
@@ -77,11 +73,6 @@ fn refusal(w: &World) -> Option<ScError> {
 
 fn rule_eval_refused() -> Option<ScError> {
     let e: soroban_sdk::Error = PerchAuthError::RuleEvalRefused.into();
-    Some(e.try_into().unwrap())
-}
-
-fn rule_not_found() -> Option<ScError> {
-    let e = soroban_sdk::Error::from_contract_error(3000);
     Some(e.try_into().unwrap())
 }
 
@@ -272,7 +263,7 @@ fn an_unknown_id_and_the_recovery_rule_outside_a_completion_are_refused() {
 }
 
 #[test]
-fn a_recovery_completion_is_left_to_oz_and_the_controller() {
+fn a_recovery_completion_is_left_to_the_controller() {
     let w = world();
     w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
     // A stored set under which rule-eval allows nothing at all, the
@@ -303,43 +294,25 @@ fn a_recovery_completion_is_left_to_oz_and_the_controller() {
 }
 
 #[test]
-fn an_account_without_a_stored_set_authorizes_nothing_until_its_next_apply_empties_every_record() {
+fn without_a_stored_set_the_account_authorizes_nothing_but_a_completion() {
     let w = world();
-    let token = w.env.register(Token, ());
-    let doc = capped_doc(&w, &token, &["owner"], &[("spend", 10)]);
-    w.apply_bytes(&doc, 0).unwrap();
-    let id = w.rule_id(&w.account, "spend");
-    assert!(spend(&w, &token, &w.owner, id, 6));
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
     w.env.as_contract(&w.account, || remove_rule_set(&w.env));
-
-    // OZ's `do_check_auth` decides, over a registry holding none of the
-    // account's rules but the recovery rule, so the owner authorizes
-    // nothing: no spend, no scoped document, no admin document.
-    assert!(!spend(&w, &token, &w.owner, id, 1));
-    assert_eq!(refusal(&w), rule_not_found());
-    let app = w.new_key();
-    let grant = capped_grant(&w, &token, "allowance", &app, 10);
-    assert!(apply_scope(&w, 3, &grant).is_err());
-    assert_eq!(refusal(&w), rule_not_found());
-    assert!(w.apply_bytes(&doc, 0).is_err());
-    assert_eq!(refusal(&w), rule_not_found());
-
-    // Past authorization (mocked here), scoped rules carry no policy, so
-    // none is installed until rule-eval can check it; the next apply_doc,
-    // of the same document, stores the set and starts every record empty.
-    w.env.mock_all_auths();
-    assert_eq!(
-        w.client().try_apply_scope(&3, &grant),
-        Err(Ok(PerchAccountError::NoRuleSet))
-    );
-    w.client().apply_doc(&doc, &0, &None);
-    perch_testkit::rule_set::check(&w.env, &w.account).unwrap();
-    assert_eq!(w.rule_id(&w.account, "spend"), id);
-    assert!(spend(&w, &token, &w.owner, id, 10));
-    assert!(!spend(&w, &token, &w.owner, id, 1));
+    assert!(!w.activity());
     assert_eq!(refusal(&w), rule_eval_refused());
-    assert_eq!(record(&w, id).1, 10);
-    apply_scope(&w, 3, &grant).unwrap();
+
+    let new_owner = w.new_key();
+    let replacements = w.replacements(&new_owner, None);
+    let source = w.client().applied_doc().unwrap();
+    let id = w.ctl().begin_lost_key(&w.account, &replacements);
+    let target = w.target_bytes(RecoveryAction::LostKey, &source, &replacements);
+    w.guardian(0, id, EvidenceDomain::Initiate);
+    w.guardian(1, id, EvidenceDomain::Initiate);
+    w.advance(DELAY);
+    w.complete(&target)
+        .expect("a completion never reads the stored set");
+    // The completion stored the target's set.
+    assert!(w.activity_as(&new_owner));
 }
 
 #[test]

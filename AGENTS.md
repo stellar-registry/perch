@@ -105,9 +105,9 @@ regardless of which rule, if any, would actually have authorized them.
 To test real rule-selection/policy-enforcement behavior, either call
 `perch_smart_account::check_auth` directly with a hand-built
 `AuthPayload`/`Context`, wrapped in `env.as_contract(&account, || {...})`
-(as `matrix.rs` does; it decides with rule-eval on an account that stores a
-rule-eval rule set, and with OZ's `do_check_auth` and the attached policies
-on one that does not) — this bypasses host-level auth entirely rather than
+(as `auth_binding.rs` does; it decides with rule-eval over the stored rule
+set, and a recovery completion with the controller's `enforce`) — this
+bypasses host-level auth entirely rather than
 depending on it — or install hand-built auth entries with `env.set_auths`,
 which runs the account's real `__check_auth` (as
 `crates/integration-tests/tests/{recovery,account_capabilities}.rs` do

@@ -36,10 +36,9 @@
 //! those records (`rule_set`, `gate`), and the account's `authenticate`
 //! (`auth`) checks the signers. The signer, payload, and context-rule types
 //! are `perch-account-types`', the XDR and contract-spec twins of OZ's. A
-//! recovery completion is decided by OZ's `do_check_auth` and the recovery
-//! controller alone, over the two entries of OZ's registry the account keeps
-//! for the recovery rule (`auth::oz`); an account storing no admin rule set,
-//! which the constructor never leaves, is checked the same way.
+//! recovery completion is decided by the recovery controller alone: the
+//! account calls its `enforce` as OZ's `do_check_auth` called a policy, over
+//! its own record of the recovery rule ([`authorize_completion`]).
 //!
 //! Doc comments on the account's entry points, contract types, events, and
 //! errors are compiled into its wasm's contract spec, which counts against
@@ -74,13 +73,12 @@ use soroban_sdk::{
     Address, Bytes, BytesN, ContractExecutable, Env, String, Symbol, Val, Vec,
 };
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
-use stellar_accounts::smart_account;
 
 mod auth;
 mod gate;
 mod rule_set;
 mod rules;
-pub use auth::{SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD};
+pub use auth::{authorize_completion, SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD};
 pub use perch_account_types::{
     AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError,
 };
@@ -187,10 +185,6 @@ pub enum PerchAccountError {
     ModelInvalid,
     /// A rule other than the recovery rule asks for no signer (INV-1).
     UnguardedRule,
-    /// The account stores no admin rule set until its next `apply_doc`.
-    // docs/account-interface.md, "Errors". Last, so every earlier code is
-    // unchanged.
-    NoRuleSet,
 }
 
 /// Why `__check_auth` refused before evaluating any rule.
@@ -548,8 +542,7 @@ struct PerchStorage {
     next_rule_id: InstanceItem<u32>,
     /// The rule-eval rule set the installed rules enforce, aligned with
     /// `installed_rules` (`rule_set`): written with it by the constructor and
-    /// `apply_doc`. `__check_auth` hands an account storing none to OZ's
-    /// `do_check_auth` (`check_auth`).
+    /// `apply_doc`.
     rule_set: PersistentItem<Vec<StoredRule>>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
@@ -1014,8 +1007,9 @@ pub trait PerchSmartAccount: CustomAccountInterface {
 
 /// The account's `__check_auth`: the reserved-name guard, the `Protected`
 /// freeze, and the scope generation gate run before any rule is evaluated
-/// (spec §7.6, §9, §15); then rule-eval's `authorize` decides over the
-/// stored rule sets and `authenticate` checks every signer (`gate`).
+/// (spec §7.6, §9, §15); then the recovery controller decides a recovery
+/// completion, and rule-eval's `authorize` over the stored rule sets, with
+/// `authenticate` checking every signer, decides anything else (`gate`).
 ///
 /// - Any context naming an invoker-only hook is refused, on any contract,
 ///   so no signature can satisfy a hook's `account.require_auth()`.
@@ -1036,15 +1030,11 @@ pub trait PerchSmartAccount: CustomAccountInterface {
 ///   with `ContextRuleNotFound`); once every signer has authenticated,
 ///   the spending records it charged are stored. A recovery completion (one
 ///   `apply_doc` context on this account selecting the recovery rule) is
-///   left to OZ's `do_check_auth` and the controller's `enforce` alone, so
+///   left to the controller's `enforce` alone ([`authorize_completion`]), so
 ///   recovery never depends on the evaluator; any other authorization
-///   choosing the recovery rule is refused. `do_check_auth` reads the
-///   recovery rule from the two entries of OZ's registry the account keeps
-///   for it (`auth::oz`).
-/// - An account that stores no admin rule set is checked by OZ's
-///   `do_check_auth` over OZ's registry. The constructor stores one and
-///   every `apply_doc` replaces it, so only a test leaves an account
-///   without one.
+///   choosing the recovery rule is refused. The constructor stores the admin
+///   rule set and every `apply_doc` replaces it; without one, nothing but a
+///   completion is authorized (`RuleEvalRefused`).
 pub fn check_auth(
     e: &Env,
     signature_payload: &Hash<32>,
@@ -1092,24 +1082,15 @@ pub fn check_auth(
             );
         }
     }
+    if let Some(id) = recovery.filter(|_| completion) {
+        return authorize_completion(e, id, signatures, auth_contexts);
+    }
+    let admin = PerchStorage::get_rule_set(e).ok_or(PerchAuthError::RuleEvalRefused)?;
     // Bind the digest to this account's address before OZ layers the selected
     // rule ids on top, so an `External` signature cannot be replayed on another
     // account that shares the key and rule ids (`AUTH_ADDR_DOMAIN`).
     let bound = bind_payload(e, signature_payload);
-    let rule_set = if completion {
-        None
-    } else {
-        PerchStorage::get_rule_set(e)
-    };
-    match rule_set {
-        Some(admin) => gate::authorize(e, &admin, recovery, &bound, signatures, auth_contexts),
-        None => Ok(smart_account::do_check_auth(
-            e,
-            &bound,
-            &auth::oz::payload(e, signatures),
-            auth_contexts,
-        )?),
-    }
+    gate::authorize(e, &admin, recovery, &bound, signatures, auth_contexts)
 }
 
 /// One `apply_doc` context on this account, selecting the recovery rule
@@ -1174,10 +1155,6 @@ fn complete_recovery(
 fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
     let me = e.current_contract_address();
     me.require_auth();
-    // A scoped rule carries no policy, so only rule-eval can check it.
-    if !PerchStorage::has_rule_set(e) {
-        return Err(PerchAccountError::NoRuleSet);
-    }
     let compiled: CompiledDoc = DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
         .try_compile_doc(&doc_json)??;
     check_scoped(e, &me, &compiled)?;
@@ -1594,11 +1571,47 @@ pub mod testutils {
         PerchStorage::set_installed_rules(e, rules);
     }
 
-    /// Remove the stored rule set: `__check_auth` then runs OZ's
-    /// `do_check_auth` over OZ's registry until the next `apply_doc`. Run as
-    /// the account (`env.as_contract`).
+    /// Remove the stored rule set, which the constructor and every
+    /// `apply_doc` write. Run as the account (`env.as_contract`).
     pub fn remove_rule_set(e: &Env) {
         PerchStorage::remove_rule_set(e);
+    }
+
+    /// Install `rule` as an admin-document rule named `name`, under a new
+    /// id, which it returns: `rule` is appended to the stored set and its
+    /// record to `installed_rules`, scoped to `rule.contract`, with its
+    /// signers and last ledger and no policy, as `apply_doc` records a
+    /// document rule. Run as the account (`env.as_contract`).
+    pub fn install_rule(e: &Env, name: &str, rule: &StoredRule) -> u32 {
+        let id = rules::allocate(e);
+        let mut records = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
+        let mut set = PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e));
+        records.push_back(InstalledRule {
+            id,
+            recovery: false,
+            name: String::from_str(e, name),
+            context_type: ContextRuleType::CallContract(rule.contract.clone()),
+            valid_until: rule.valid_until,
+            signers: rule.signers.clone(),
+            policies: Vec::new(e),
+        });
+        set.push_back(rule.clone());
+        PerchStorage::set_installed_rules(e, &records);
+        PerchStorage::set_rule_set(e, &set);
+        id
+    }
+
+    /// Remove admin-document rule `id`: its record and its stored rule. Run
+    /// as the account (`env.as_contract`).
+    pub fn remove_rule(e: &Env, id: u32) {
+        let mut records = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
+        let mut set = PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e));
+        if let Some(i) = records.iter().position(|r| r.id == id) {
+            records.remove(i as u32);
+            set.remove(i as u32);
+        }
+        PerchStorage::set_installed_rules(e, &records);
+        PerchStorage::set_rule_set(e, &set);
     }
 
     /// The id the next installed rule gets: every id below it was given
@@ -1715,10 +1728,10 @@ macro_rules! impl_perch_smart_account {
 
             /// Decide whether this account authorizes `auth_contexts`.
             // Refuse reserved invoker-only names and, under a `Protected`
-            // freeze, everything but the authorized completion; then bind
-            // the digest to this account and decide with rule-eval (OZ for a
-            // recovery completion), as `perch_smart_account::check_auth`
-            // documents.
+            // freeze, everything but the authorized completion; then decide
+            // a recovery completion by the controller alone, and anything
+            // else with rule-eval over a digest bound to this account, as
+            // `perch_smart_account::check_auth` documents.
             fn __check_auth(
                 e: $crate::soroban_sdk::Env,
                 signature_payload: $crate::soroban_sdk::crypto::Hash<32>,

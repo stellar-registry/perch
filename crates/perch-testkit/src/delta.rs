@@ -1194,7 +1194,8 @@ type SnapshotEntry = (
     (Box<soroban_sdk::xdr::LedgerEntry>, Option<u32>),
 );
 
-/// Rule, signer, and policy ids of one account, read from its own entries.
+/// Rule, signer, and policy ids of one account, read from its own entries:
+/// its records, and any entry of OZ's registry.
 struct Ids {
     rules: BTreeMap<u32, String>,
     signers: BTreeMap<u32, String>,
@@ -1218,6 +1219,23 @@ impl Ids {
             let LedgerEntryData::ContractData(d) = &entry.data else {
                 continue;
             };
+            // The account's records name its admin rules (the recovery
+            // rule among them).
+            if let (ScVal::Symbol(s), ScVal::Vec(Some(records))) = (&k.key, &d.val) {
+                if s.0.to_utf8_string_lossy() == "InstalledRules" {
+                    for r in records.iter() {
+                        if let Some(ScVal::U32(id)) = field(r, "id") {
+                            let name = field(r, "name").map(|v| render(v, Some(me)));
+                            let ty = field(r, "context_type").map(|v| render(v, Some(me)));
+                            ids.rules.insert(
+                                *id,
+                                format!("{}@{}", name.unwrap_or_default(), ty.unwrap_or_default()),
+                            );
+                        }
+                    }
+                }
+                continue;
+            }
             let Some((kind, id)) = oz_key(&k.key) else {
                 continue;
             };

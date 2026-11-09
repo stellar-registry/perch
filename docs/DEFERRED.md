@@ -184,9 +184,9 @@ caps.
 **Current behaviour:** the account installs each document rule as a record
 of its own (its rule registry) with its contract, signers and last ledger
 and no policy, beside the rule-eval rule it stores for it, which decides
-every authorization through it. OZ's `stellar-accounts` (the pinned fork,
-[`audit-scope.md`](audit-scope.md#explicit-dependency-review)) keeps only
-the recovery rule's two registry entries, for its `do_check_auth`.
+every authorization through it but a recovery completion, which the
+controller's `enforce` decides over the account's record of the recovery
+rule. The account writes nothing to OZ's registry.
 `apply_doc` reconciles the installed rules as a delta (spec §7.5).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
@@ -365,10 +365,9 @@ variants of every context-rule, signer, and policy mutation) and
 on ([#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3)) onto
 upstream OpenZeppelin, and re-pinning to the merged code.
 
-**Current behaviour:** the account calls none of the `_no_events` mutators
-or `reconcile_signers`; it links OZ's `do_check_auth` for a recovery
-completion, and the spending limit's quiet install and uninstall come from
-#4. `Cargo.toml` pins `stellar-accounts` 0.7.1 to git rev
+**Current behaviour:** the account calls none of the `_no_events` mutators,
+`reconcile_signers` or `do_check_auth`, and the spending limit's quiet
+install and uninstall come from #4. `Cargo.toml` pins `stellar-accounts` 0.7.1 to git rev
 `33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` of theahaco/stellar-contracts-OZ,
 the head of #5, which is stacked on #4, which is stacked on #3 (CAP-0071
 delegated authentication). The pinned commit is upstream OpenZeppelin

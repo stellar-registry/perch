@@ -1,6 +1,6 @@
 [package]
 name = "perch-smart-account"
-description = "The doc-only smart-account trait: applying documents (apply_doc, apply_scope) is the sole write path, on OZ evaluation"
+description = "The doc-only smart-account trait: applying documents (apply_doc, apply_scope) is the sole write path"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,8 +13,7 @@ doctest = false
 [dependencies]
 soroban-sdk = { workspace = true }
 soroban-sdk-tools = { workspace = true }
-# OZ's `do_check_auth`, which decides a recovery completion over the two
-# registry entries the account keeps for its recovery rule.
+# Linked by none of this crate's code; removing it is a separate change.
 stellar-accounts = { workspace = true }
 # The signer, the `__check_auth` payload, the context rule, and the error
 # codes: the XDR and contract-spec twins of OZ's.

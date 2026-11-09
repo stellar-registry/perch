@@ -14,8 +14,8 @@
 //!   document rule must carry no policy. The recovery rule's record must be
 //!   a zero-signer rule whose one policy is the adopted controller, and its
 //!   stored rule rule-eval's recovery rule.
-//! - **OZ's registry**: the recovery rule as its record says, the entries
-//!   OZ's `do_check_auth` reads to decide a completion, and no other rule.
+//! - **OZ's registry**: no rule. A completion reads the recovery rule from
+//!   its record.
 //!
 //! The doc compiler's rules for the applied document are checked against the
 //! same RPN lowering first (`rpn::check_compiled`).
@@ -255,8 +255,10 @@ fn compare(
             e.storage()
                 .persistent()
                 .has(&SmartAccountStorageKey::ContextRuleData(record.id))
-                .then(|| stellar_accounts::smart_account::get_context_rule(e, record.id))
         });
+        if oz {
+            return Err(format!("rule {i}: OZ's registry holds the rule"));
+        }
         let denoted = if record.recovery {
             let controller = client
                 .recovery_controller()
@@ -267,25 +269,16 @@ fn compare(
                     "rule {i}: the recovery rule has other signers or policies"
                 ));
             }
-            let held = oz.ok_or(format!("rule {i}: OZ's registry lacks the recovery rule"))?;
-            if !held.signers.is_empty()
-                || held.policies != soroban_sdk::vec![e, controller]
-                || held.valid_until.is_some()
-                || held.context_type
-                    != stellar_accounts::smart_account::ContextRuleType::CallContract(
-                        account.clone(),
-                    )
+            if view.valid_until.is_some()
+                || view.context_type != ContextRuleType::CallContract(account.clone())
             {
                 return Err(format!(
-                    "rule {i}: OZ's registry holds another recovery rule: {held:?}"
+                    "rule {i}: the recovery rule is not an unbounded rule on the account"
                 ));
             }
             checked.recovery = true;
             rule_eval::recovery_rule(&me)
         } else {
-            if oz.is_some() {
-                return Err(format!("rule {i}: OZ's registry holds a document rule"));
-            }
             let ContextRuleType::CallContract(contract) = view.context_type.clone() else {
                 return Err(format!("rule {i}: not a contract-call rule"));
             };

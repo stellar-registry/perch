@@ -1,27 +1,21 @@
 //! Drives the EXPORTED `__check_auth` of the real `PerchAccount` through the
 //! host's check-auth frame (`try_invoke_contract_check_auth`) — the exact path
 //! a production `SorobanAuthorizationEntry` takes, including the real
-//! cross-contract calls into the deployed verifier and interpreter. matrix.rs
-//! exercises the storage-level `do_check_auth` free function; this suite covers
-//! what it can't: the constructor-installed admin rule (id 0), decided by
-//! rule-eval over the rule the constructor stores, the contract-level export,
-//! and the least-privilege boundary of the ci-publish rule, decided by OZ's
-//! `do_check_auth` and the interpreter on an account that stores no rule set.
+//! cross-contract calls into the verifier: the constructor-installed admin
+//! rule (id 0), decided by rule-eval over the rule the constructor stores,
+//! the contract-level export, and the least-privilege boundary of the
+//! fixture's ci-publish rule, stored as `apply_doc` stores it
+//! (`perch_testkit::ci_publish_rule`) and decided by rule-eval.
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_account::PerchAccount;
-use perch_compile::{compile, CompileConfig};
+use perch_account_types::{AuthPayload, Signer, SmartAccountError};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{
-    map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString, Symbol, Val,
-};
-use stellar_accounts::smart_account::{
-    add_context_rule, AuthPayload, ContextRuleType, Signer, SmartAccountError,
-};
+use soroban_sdk::{map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, Symbol};
 
-use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY};
+use perch_testkit::{auth_digest, ci_publish_rule, FIXTURE_REGISTRY};
 
 struct World {
     env: Env,
@@ -35,15 +29,14 @@ struct World {
     ci_rule_id: u32,
 }
 
-/// Deploy the real verifier + interpreter + PerchAccount (constructor installs
-/// admin as rule 0). With `ci`, also install the compiled ci-publish rule in
-/// OZ's registry and remove the stored rule set, so OZ decides.
+/// Deploy the real verifier + PerchAccount (constructor installs admin as
+/// rule 0). With `ci`, also install the fixture's ci-publish rule with the
+/// ci key, as `apply_doc` stores it.
 fn setup(ci: bool) -> World {
     let env = Env::default();
     env.mock_all_auths();
 
     let verifier = env.register(PerchEd25519Verifier, ());
-    let interpreter = env.register(perch_interpreter::PerchInterpreter, ());
 
     let admin_key = SigningKey::from_bytes(&[9u8; 32]);
     let admin_pub = BytesN::from_array(&env, &admin_key.verifying_key().to_bytes());
@@ -56,39 +49,12 @@ fn setup(ci: bool) -> World {
     ];
     let account = env.register(PerchAccount, (admin_signers,));
 
-    // Compile the frozen fixture and install its ci-publish rule, exactly as
-    // matrix.rs does — but on the real account contract.
-    let doc = perch_ir::from_json(&fixture()).expect("parse");
-    perch_ir::validate(&doc).expect("valid");
-    let cfg = CompileConfig {
-        interpreter_wasm_hash: BytesN::from_array(&env, &[0xAB; 32]),
-    };
-    let plan = compile(&env, &doc, &cfg).expect("compile");
-    let install = plan.rules[1]
-        .install
-        .clone()
-        .expect("ci-publish attaches interpreter");
-
     let registry = Address::from_str(&env, FIXTURE_REGISTRY);
     let ci_signer = Signer::External(verifier.clone(), ci_pub.clone().into());
-    let policies: Map<Address, Val> = map![&env, (interpreter.clone(), install.into_val(&env))];
-
-    // The rule is installed in OZ's registry past `apply_doc`, as only a test
-    // can, and the account's rule-eval rule set has no rule for it: the set
-    // is removed, which `__check_auth` leaves to OZ alone (the gate's own
-    // tests are in `gate.rs`).
     let ci_rule_id = if ci {
+        let rule = ci_publish_rule(&env, &account, &registry, vec![&env, ci_signer], None);
         env.as_contract(&account, || {
-            perch_smart_account::testutils::remove_rule_set(&env);
-            add_context_rule(
-                &env,
-                &ContextRuleType::CallContract(registry.clone()),
-                &SString::from_str(&env, "ci-publish"),
-                None,
-                &vec![&env, ci_signer],
-                &policies,
-            )
-            .id
+            perch_smart_account::testutils::install_rule(&env, "ci-publish", &rule)
         })
     } else {
         u32::MAX

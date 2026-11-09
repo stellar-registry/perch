@@ -25,9 +25,8 @@
 //!
 //! Every rule added or edited is held to OZ's install-time limits
 //! ([`check`]), which a compiled document always meets. The recovery rule's
-//! controller is asked to install it, as OZ asks a rule's policies, and the
-//! recovery rule is also written as the two entries of OZ's registry that
-//! OZ's `do_check_auth` reads to decide a completion (`auth::oz`).
+//! controller is asked to install it, as OZ asks a rule's policies; a
+//! completion reads the rule from its record (`auth::authorize_completion`).
 //!
 //! The authorization the result grants is exactly what a full replace of
 //! every rule would grant. One thing differs, deliberately: a rule edited in
@@ -35,7 +34,7 @@
 //! unchanged (`gate::drop_records`). Everything runs in the one `apply_doc`
 //! invocation, so a failure anywhere reverts every edit.
 
-use crate::auth::{self, oz};
+use crate::auth;
 use crate::PerchStorage;
 use perch_account_types::{ContextRule, ContextRuleType, Signer};
 use perch_doc_compiler::{CompiledDoc, CompiledRule, RuleScope};
@@ -316,7 +315,7 @@ pub(crate) fn reconcile(
     let mut sum = DeltaSummary::default();
     for c in current.iter() {
         if !(delta && desired.iter().any(|d| c.same_slot(&d))) {
-            remove(e, &c, &mut sum);
+            sum.rules_removed += 1;
         }
     }
     let mut next = Vec::new(e);
@@ -330,8 +329,8 @@ pub(crate) fn reconcile(
                 edit(e, &c, &d.with_id(c.id), &p, &mut sum);
                 c.id
             }
-            Some(c) => {
-                remove(e, &c, &mut sum);
+            Some(_) => {
+                sum.rules_removed += 1;
                 add(e, &d, &p, &mut sum)
             }
         };
@@ -375,13 +374,6 @@ fn add(e: &Env, rule: &InstalledRule, params: &Vec<Val>, sum: &mut DeltaSummary)
     rule.id
 }
 
-fn remove(e: &Env, rule: &InstalledRule, sum: &mut DeltaSummary) {
-    if rule.recovery {
-        oz::remove_recovery(e, rule.id);
-    }
-    sum.rules_removed += 1;
-}
-
 /// Edit `c` into `d` (which carries `c`'s id).
 fn edit(e: &Env, c: &InstalledRule, d: &InstalledRule, params: &Vec<Val>, sum: &mut DeltaSummary) {
     check(e, d);
@@ -407,15 +399,13 @@ fn edit(e: &Env, c: &InstalledRule, d: &InstalledRule, params: &Vec<Val>, sum: &
 
 /// Install recovery rule `rule` (with its id): its controller's `install`
 /// checks the rule's shape and that it is installed for the configuration
-/// `rcv_sync` stored, and OZ's registry gets the entries a completion reads.
+/// `rcv_sync` stored.
 fn install(e: &Env, rule: &InstalledRule, params: &Vec<Val>) {
-    let controller = rule.policies.get_unchecked(0).policy;
-    auth::PolicyClient::new(e, &controller).install(
+    auth::PolicyClient::new(e, &rule.policies.get_unchecked(0).policy).install(
         &params.get_unchecked(0),
         &rule.context_rule(e),
         &e.current_contract_address(),
     );
-    oz::install_recovery(e, rule.id, &controller);
 }
 
 /// The elements of `from` that `other` lacks.

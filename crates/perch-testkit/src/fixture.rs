@@ -72,6 +72,40 @@ pub fn auth_digest(env: &Env, account: &Address, payload: &BytesN<32>, ids: &Vec
     env.crypto().sha256(&preimage).to_array()
 }
 
+/// The fixture's `ci-publish` rule as an account stores it once the
+/// document is applied (`perch_smart_account::StoredRule`), with `signers` in
+/// place of the fixture's ci key and `valid_until` as its last ledger:
+/// `publish` or `publish_hash` on `registry`, argument 1 (the author) the
+/// account itself, and every signer required. Install it with
+/// `perch_smart_account::testutils::install_rule`; `apply_doc.rs` checks it
+/// against the rule `apply_doc` stores for the fixture.
+pub fn ci_publish_rule(
+    env: &Env,
+    account: &Address,
+    registry: &Address,
+    signers: Vec<perch_account_types::Signer>,
+    valid_until: Option<u32>,
+) -> perch_smart_account::StoredRule {
+    use perch_rule_eval::{StoredCond, StoredFunctions, StoredVal};
+    perch_smart_account::StoredRule {
+        contract: registry.clone(),
+        functions: StoredFunctions::Only(soroban_sdk::vec![
+            env,
+            soroban_sdk::Symbol::new(env, "publish"),
+            soroban_sdk::Symbol::new(env, "publish_hash"),
+        ]),
+        conds: soroban_sdk::vec![
+            env,
+            StoredCond::ArgEq(1, StoredVal::Address(account.clone()))
+        ],
+        threshold: signers.len(),
+        signers,
+        cap: Vec::new(env),
+        valid_until,
+        generation: None,
+    }
+}
+
 /// Stand-in for the fixture's verifier contracts (whose addresses the frozen
 /// document pins but which aren't deployed in a unit env): key handling is
 /// pass-through so OZ's canonical-duplicate check can run.

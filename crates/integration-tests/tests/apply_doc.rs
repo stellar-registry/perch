@@ -7,9 +7,11 @@
 //! `perch_testkit::Bootstrap::native()` call; the stand-in verifier, the
 //! fixture constants and `fixture()` live in the testkit.
 
-use perch_testkit::{fixture, Bootstrap, World, FIXTURE_NETWORK};
+use perch_testkit::{
+    ci_publish_rule, fixture, Bootstrap, World, FIXTURE_NETWORK, FIXTURE_REGISTRY,
+};
 use soroban_sdk::testutils::Ledger;
-use soroban_sdk::{vec, Bytes, BytesN, String as SString, Symbol, Val};
+use soroban_sdk::{vec, Address, Bytes, BytesN, String as SString, Symbol, Val};
 
 fn setup() -> World {
     Bootstrap::native()
@@ -58,6 +60,18 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     // last-valid ledger.
     assert_eq!(ci.valid_until, Some(54_999_999));
     assert_eq!(stored.valid_until, Some(54_999_999));
+    // What the suites that install the rule directly
+    // (`perch_testkit::ci_publish_rule`) hold.
+    assert_eq!(
+        stored,
+        ci_publish_rule(
+            &w.env,
+            &w.account,
+            &Address::from_str(&w.env, FIXTURE_REGISTRY),
+            ci.signers.clone(),
+            Some(54_999_999),
+        )
+    );
 }
 
 #[test]

@@ -100,7 +100,8 @@ impl UpgradeRequest {
 /// past.
 ///
 /// - `install`, `uninstall`, `enforce`: OZ `Policy` lifecycle hooks, called
-///   by the account while (re)installing rules and from `do_check_auth`.
+///   by the account while installing the recovery rule (`install`) and to
+///   decide a completion (`enforce`).
 /// - `rcv_sync`: the controller hook `apply_doc` calls to apply a recovery
 ///   configuration transition (enroll, reconfigure, remove, complete).
 /// - `rcv_cancel`: the controller hook for a `Loss` owner's cancellation.

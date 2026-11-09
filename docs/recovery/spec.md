@@ -364,7 +364,6 @@ points extend existing entries without changing their meaning:
 | Account | Rule-eval spending records, one per capped rule `__check_auth` has charged | Not by `renew`; extended when written and when read |
 | Account | The credential index, one entry per credential fingerprint a scoped document named (§7.6) | Not by `renew`; extended when written |
 | Account | Scope tags, one per scoped rule (§7.6) | Not by `renew`; extended when written, and on read by `__check_auth` (30 days when fewer than 29 remain) |
-| Account (OZ storage) | The recovery rule's context-rule and policy entries, the two OZ's `do_check_auth` reads to decide a completion (§7.5) | Not by `renew`; extended to the maximum when written, and by OZ on read (30 days when fewer than 29 remain), in a completion. Rule-eval's authorizations read neither. |
 | Pool | Tree states, every root, every leaf, enrollment records, the current-tree pointer (§14) | `renew_tree`, `renew_root`, `renew_leaves`, `renew_enrollment` |
 
 Collecting attempts may live in temporary storage with a TTL of at least
@@ -692,8 +691,9 @@ Promotion refuses while another attempt is authorized and live
 (`AttemptAuthorized`).
 
 **T5 Complete** — `apply_doc(target_bytes, …)` selecting the zero-signer
-recovery rule. OZ defers the whole check to the rule's one policy
-(`cap-0071.md` C5), the controller's `enforce`, which requires all of:
+recovery rule. The account defers the whole check to the rule's one
+policy, as OZ's `do_check_auth` defers a zero-signer rule's (`cap-0071.md`
+C5): the controller's `enforce`, which requires all of:
 
 - no signers were authenticated, and the rule has the recovery rule's shape
   (`MalformedContextRule`);
@@ -994,12 +994,9 @@ the account's counter, which never gives an id twice. A document rule
 carries no policy, only the recovery rule its controller: what a rule
 allows, its program and cap included, is the rule-eval rule the account
 stores beside the record (`rule_set`), and `__check_auth` decides with
-rule-eval's `authorize` over those rules. The recovery rule is also kept as
-the two entries of OZ's registry that OZ's `do_check_auth` reads to decide
-a completion (T5): the rule under its id and its controller as its one
-policy, written whenever it is installed or its controller changes and
-removed with it; nothing else of OZ's registry is written. Installing it
-calls the controller's `install`; removing it calls no hook. The apply
+rule-eval's `authorize` over those rules. A completion (T5) reads the
+recovery rule from its record; nothing of OZ's registry is written.
+Installing it calls the controller's `install`; removing it calls no hook. The apply
 never scans historical rule ids, which grow without bound with every past
 apply.
 
@@ -1542,7 +1539,10 @@ its own records and its rule-id counter, which only its constructor
 starts. An account upgraded in place from code that kept its rule ids in
 OZ's registry has records but no counter, so the ids it gives would start
 again at 0 and meet the ids it already holds; this code does not migrate
-such an account. Existing accounts move to a new account instead.
+such an account. Nor does it read OZ's registry: such an account storing
+no rule-eval rule set authorizes nothing but a completion, and a completion
+reads the recovery rule only from the account's records. Existing accounts
+move to a new account instead.
 
 ## 13. ZK adapter boundary
 
@@ -1796,9 +1796,8 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
   submission, through `account::RecoveryAccountClient`.
 - **`__check_auth`'s own checks never read the controller.** The freeze is
   a local mirror (§9). The controller runs beneath `__check_auth` only as
-  the recovery rule's policy: OZ's `do_check_auth` calls its `enforce` when
-  a context selects the recovery rule, which only a completion's
-  `apply_doc` does (T5).
+  the recovery rule's policy: the account calls its `enforce` for a
+  completion, one `apply_doc` context selecting the recovery rule (T5).
 - **Evidence for an account should not be submitted through that account's
   own `execute`.** The account would then be on the stack when the
   controller reads its views or sets its freeze mirror, and the submission
@@ -1819,13 +1818,13 @@ on the deployed contract
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers, held to the install-time limits and refusing two that are one key (§7.5); emits `context_rule_added`. |
-| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion runs OZ's `do_check_auth` instead, over the two OZ registry entries the account keeps for the recovery rule (§7.5), so the controller's `enforce` decides; so does an account storing no rule set, which the constructor never leaves and which then authorizes nothing else. The order of the refusing steps does not matter for security: each only refuses. |
+| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion is decided instead by the controller's `enforce`, called as OZ's `do_check_auth` called a policy, over the account's record of the recovery rule (§7.5; no payload signer, `UnauthorizedSigner`; an expired rule or a context off the account, `UnvalidatedContext`). An account storing no rule set, which the constructor never leaves, authorizes nothing else (`RuleEvalRefused`). The order of the refusing steps does not matter for security: each only refuses. |
 | Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
 | Account | `rcv_gate(attempt_id, frozen_until)` | Invoker-only: the adopted controller's authorization, and the caller must be the adopted controller |
-| Account | `apply_scope(scope, doc_json)`, `remove_scope(scope)` | Owner authorization (§7.6); `apply_scope` refuses (`NoRuleSet`) on an account that stores no admin rule set |
+| Account | `apply_scope(scope, doc_json)`, `remove_scope(scope)` | Owner authorization (§7.6) |
 | Account | `gc_scope(scope)` | Permissionless; a scope a completion wiped only (§7.6) |
 | Account | `renew(fingerprints, enrollment_ids)` | Permissionless (§3.6) |
 | Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `scope`, `scope_rule_set`, `scope_doc`, `scope_count`, `scopes`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |

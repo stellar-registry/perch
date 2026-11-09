@@ -64,7 +64,7 @@ is named.
 | The scope generation (account instance storage) advances by one on a completed recovery and on nothing else; a completion that would wrap it refuses with `GenerationExhausted` | [§12](spec.md#12-account-upgrades) | account `apply`, `complete_recovery`; view `scope_generation` | `revision.rs`: `the_scope_generation_advances_only_on_a_completed_recovery`; `recovery.rs`: `guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_key`, `a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment`, `a_completion_that_would_wrap_the_scope_generation_is_refused` |
 | Scoped documents: no recovery member, no rule scoped to the account, its recovery controller, or its ZK adapter or pool, and no rule whose `functions` names a guardian approval (`ScopeEscalation`); no scoped rule casts a guardian approval at any controller (`PerchAuthError::ScopeEscalation`, by `GUARDIAN_APPROVAL_FNS`); owner-only `apply_scope` and `remove_scope`; a scope reconciled against its own records; the generation gate (`StaleScope`) and the controller, adapter and pool guard for scopes applied before enrollment (`PerchAuthError::ScopeEscalation`) on every path; every completion wipes every scope; `gc_scope` only for wiped scopes; the credential index refuses a wiped scope's credentials in every later document except a completion's target (`WipedCredential`); tags extended on read and restored, never absent, when archived; the freeze covers scopes and the policy block does not | [§7.6](spec.md#76-scoped-documents), D17 | account `apply_scope_doc`, `check_scoped`, `names_guardian_approval`, `excluded_contract`, `check_unwiped`, `check_auth`, `apply`, `complete_recovery`, `drop_scope`; `perch_recovery_interface::account::is_guardian_approval` | `scoped_docs.rs` (every test); `scoped_guardian_approvals.rs` (every test); `rule_core_documents.rs` (the scoped traces); `release_stack.rs` `docsplit_guards_and_scope_manager` |
 | The rule-eval rule set: the compiled model lowered on the account, stored aligned with the installed-rule records; INV-1 and the anti-brick check on the stored rules | [§7.5](spec.md#75-bounded-completion-cost) | account `rule_set::lowered`, `apply_rules`, `install_admin`; view `rule_set`; doc compiler `compile_parsed` (`model_of`) | `rule_set.rs`; the stored set against the lowering and the installed rules after every apply in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs`, `apply_delta.rs` (`perch_testkit::rule_set`) |
-| Rule-eval in `__check_auth`: `rule_eval::authorize` over the chosen stored rules decides (`RuleEvalRefused`; an unknown id, `ContextRuleNotFound`; the recovery rule outside a completion refused), then the account's `authenticate` checks every signer; completions, and an account storing no set (which the constructor never leaves), left to OZ `do_check_auth` over the two OZ registry entries kept for the recovery rule; a document rule carries no policy; each capped rule's spending record kept while the rule keeps its id and cap | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), [§7.5](spec.md#75-bounded-completion-cost), [§12](spec.md#12-account-upgrades) | account `check_auth`, `gate::{authorize, drop_records}`, `rules::desired`, `apply_rules`, `apply_scope_doc`, `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; every verdict and record against rule-core's model in `rule_core_documents.rs` and against the recorded verdicts and OZ records in `rule_eval_baseline.rs`; `auth_corpus.rs`; the hand-written leaf vectors against rule-eval in `leaf_vectors.rs`; the spending records checked after every accepted authorization (`perch_testkit::rule_set::check_records`) |
+| Rule-eval in `__check_auth`: `rule_eval::authorize` over the chosen stored rules decides (`RuleEvalRefused`; an unknown id, `ContextRuleNotFound`; the recovery rule outside a completion refused), then the account's `authenticate` checks every signer; a completion left to the controller's `enforce` (`authorize_completion`, over the account's record of the recovery rule, as OZ's `do_check_auth` decided it), and an account storing no set (which the constructor never leaves) authorizing nothing else; a document rule carries no policy; each capped rule's spending record kept while the rule keeps its id and cap | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), [§7.5](spec.md#75-bounded-completion-cost), [§12](spec.md#12-account-upgrades) | account `check_auth`, `gate::{authorize, drop_records}`, `rules::desired`, `apply_rules`, `apply_scope_doc`, `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; every verdict and record against rule-core's model in `rule_core_documents.rs` and against the recorded verdicts and OZ records in `rule_eval_baseline.rs`; `auth_corpus.rs`; the hand-written leaf vectors against rule-eval in `leaf_vectors.rs`; the spending records checked after every accepted authorization (`perch_testkit::rule_set::check_records`) |
 | Bounded completion cost: the delta apply and the document caps | [§7.5](spec.md#75-bounded-completion-cost) | [Delta apply](#delta-apply-spec-75) below | [Delta apply tests](#delta-apply-tests); `release_stack.rs` `worst_case_*` ([`budgets.md`](budgets.md#document-caps)) |
 | Configuration revision and `expected_revision`; ordinary signatures bind rule ids, not a revision | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) "Revision binding" | account `advance_revision` (instance storage), `apply` | `revision.rs` |
 | Storage lifetime and renewal | [§3.6](spec.md#36-storage-lifetime) | controller `renew`, `renew_nullifier`; account `renew(fingerprints, enrollment_ids)`; pool `renew_*` | pool: `renew_extends_every_entry_a_witness_needs`; the controller's and the account's `renew` are not pinned by a test |
@@ -116,8 +116,7 @@ What the spec leaves to the implementation, or what only its tests show.
   own persistent entry, so the account's `renew` takes the fingerprints and
   enrollment ids to extend; it also extends the instance, the applied
   document, and its fingerprints. It does not extend the installed-rule
-  records, the rule-eval rule set, or the two OZ registry entries kept for
-  the recovery rule (spec §3.6).
+  records or the rule-eval rule set (spec §3.6).
 - **`execute`** returns the called function's value.
 
 ## Delta apply (spec §7.5)
@@ -177,21 +176,21 @@ verdict over the whole stored set. The account's `authenticate` (`auth.rs`)
 then checks every payload signer against OZ's digest (the account-bound
 payload with the chosen ids), calling an `External` signer's verifier and
 handing a `Delegated` one to the host as OZ's does, and the records
-`authorize` charged are stored. A document rule carries no policy. Two
-things stay with OZ's `do_check_auth`: a recovery completion (one
-`apply_doc` context selecting the recovery rule), which the controller's
-`enforce` decides, so recovery never depends on the evaluator; and an
-account storing no admin set, which the constructor never leaves. OZ's
-`do_check_auth` reads its own registry, where the account keeps exactly
-two entries, for the recovery rule (`auth::oz`): the rule (`ContextRuleData`
-under its id: zero signers, `CallContract(self)`, no last ledger, one
-policy) and the policy (`PolicyData`, id 0: the controller), written when
-the recovery rule is installed, moved to a new id, or given a new
-controller, extended to the network maximum, and removed with it. An
-account storing no admin set therefore authorizes nothing but a completion,
-since OZ's registry holds none of its other rules; `apply_scope` would
-refuse on it (`NoRuleSet`), since a scoped rule carries no policy for OZ to
-run. The
+`authorize` charged are stored. A document rule carries no policy. A
+recovery completion (one `apply_doc` context selecting the recovery rule)
+is decided by the controller's `enforce` alone, so recovery never depends
+on the evaluator: `authorize_completion` (`auth.rs`) checks the payload as
+OZ's `do_check_auth` checked it for the recovery rule, from the account's
+record of that rule — every chosen id the recovery rule's
+(`ContextRuleNotFound`), every context a call on the account while the rule
+is unexpired (`UnvalidatedContext`), no payload signer
+(`UnauthorizedSigner`) — then calls the controller's `enforce(context, [],
+rule, account)` for each context, with the record's `ContextRule`, the value
+OZ's registry gave the controller. `tests/completion_differential.rs` runs
+both checks over a grid of payloads and finds the same verdicts and
+controller calls. The account writes nothing to OZ's registry. An account
+storing no admin set, which the constructor never leaves, authorizes
+nothing but a completion (`RuleEvalRefused`). The
 check reads a stored rule or record back from its XDR in one pass
 (`perch_rule_eval::mirror`) and a batch of calls one host value at a time
 (`perch_rule_eval::convert::calls`), so the account links no
@@ -249,13 +248,11 @@ canonical keys, which their verifier cannot map to one
 **Recovery rule.** Installing the recovery rule, under a new id or with a
 new controller, calls the controller's `install(config_hash, rule,
 account)`, which checks the rule's shape and that `rcv_sync` stored that
-configuration, and writes the two OZ registry entries above. Removing it
-calls no controller hook.
+configuration. Removing it calls no controller hook.
 
 **Bounds and state.** An apply writes the admin records and the stored set
-(one entry each, each only when it changes), the instance, the spending
-records it drops, and, when the recovery rule changes, the two OZ entries;
-it never writes more entries or emits more event bytes than a full replace
+(one entry each, each only when it changes), the instance, and the spending
+records it drops; it never writes more entries or emits more event bytes than a full replace
 (tested). The rule set that results has the same normalized structure and
 installation parameters as a full replace would leave; its authorization
 matches a full replace except for a kept spending record and
@@ -318,7 +315,8 @@ mid-sequence is outside the oracle's coverage.
 | A one-signer rule's only signer is swapped in place (the compromise shape) | `a_one_signer_rule_swaps_its_only_signer_in_place` |
 | Adding signers up to the cap is one in-place edit | `adding_several_signers_is_one_edit` |
 | The recovery rule takes a new id for a new configuration at its controller, and keeps its id across a controller switch | `recovery_changes_edit_only_the_recovery_rule`, `a_new_controller_is_swapped_in_place`; `rules.rs` unit test `only_a_recovery_rule_reconfigured_at_its_controller_takes_a_new_id` |
-| After every accepted apply, OZ's registry holds the recovery rule as its record says (zero signers, the account, no last ledger, the controller) and no other rule of the account's | `perch_testkit::rule_set::check`, run by every suite that checks the stored set |
+| After every accepted apply, the recovery rule's record has zero signers, the account as its contract, no last ledger, and the controller as its one policy, and OZ's registry holds no rule | `perch_testkit::rule_set::check`, run by every suite that checks the stored set |
+| A completion's check against OZ's `do_check_auth` over a registry holding only the recovery rule: signers present, a wrong id, an expired rule, a wrong context, a second context, mismatched lengths, a refusing controller, and the order of the checks give the same verdicts and codes and the same `enforce` calls | `completion_differential.rs` |
 | The constructor's install checks (OZ's codes), and a compiled document never reaching the canonical-duplicate check | `install_checks.rs` |
 | Against the OZ-registry account it replaces (that build's wasm, `PERCH_OZ_ACCOUNT_WASM`): generated admin and scoped document sequences give the same outcomes, ids, views and events; generated authorizations get the same verdicts; a recovery flow under enforcing authorization reads the same | `oz_differential.rs` (`#[ignore]`d: needs the build) |
 | Named cases: functions, scope, cap parameters, added and shared signers and policies, rename, remove and re-add, a key swapped under one id, minimal and maximal documents, reordering, expiry, a recovery-only change | the remaining `apply_delta.rs` tests |

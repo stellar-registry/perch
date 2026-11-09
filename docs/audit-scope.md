@@ -131,7 +131,7 @@ published to crates.io; contract releases are on-chain Wasm publishes.
 | Unit | Covers | Who reviews |
 | --- | --- | --- |
 | **Perch core** | Backend-independent: the recovery controller's state machine, the statement, ZK circuit, pool, and adapter, revocation, the freeze, upgrades, the document compiler and CANON, the interpreter, the verifiers, the factory | This audit |
-| **Perch OZ materialization** | How a compiled document becomes the account's installed rules: its own rule registry and the two OZ registry entries kept for the recovery rule, the delta reconcile, the install paths and checks, the document caps, the spending-limit wrapper, and the `stellar-accounts` pin | This audit |
+| **Perch OZ materialization** | How a compiled document becomes the account's installed rules: its own rule registry, the delta reconcile, the install paths and checks, the document caps, the spending-limit wrapper, and the `stellar-accounts` pin | This audit |
 | **Explicit dependency review** | Code Perch does not own line by line but every contract or consumer relies on: the three OZ fork deltas, the UltraHonk ZK-flavour delta, the consumed JS packages, and artifact selection | This audit, as named dependency deltas |
 | **Nido integration and browser review** | How Nido deploys and calls this stack: its factory, wallet, and browser code | Nido's own audit manifest (`nidohq/nido`, `docs/AUDIT_SCOPE.md`) |
 
@@ -168,8 +168,8 @@ backend needs no integration review with the core paths it touches
 | `circuits/perch_zk/**`, `circuits/perch_zk_recovery/**`, `circuits/perch_zk_recovery_d24/**` | The Noir recovery circuit, its depth-32 release and depth-24 variants |
 | `crates/perch-ir/**`, [`CANONICAL.md`](../CANONICAL.md) | The document schema, validation, and CANON v1 canonical bytes |
 | `crates/perch-doc-compiler/**` except the caps | `compile_doc`, `derive_target`, `config_hash`, credential canonicalization |
-| `crates/perch-interpreter/**`, `crates/perch-program/**` | The interpreter policy, which decides the rules of an account upgraded from code that attached it until that account's first `apply_doc` |
-| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth` (with the scope generation gate, rule-eval's `authorize` in `gate.rs` and the account's `authenticate` in `auth.rs`, and OZ's `do_check_auth` for a completion and for an account without a stored rule set), `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, the revision and consumer views, and inside `apply` the revocation, credential-index, and enrollment-id checks, `expected_revision`, and the `rcv_sync` gate |
+| `crates/perch-interpreter/**`, `crates/perch-program/**` | The interpreter policy, for OZ accounts that attach it; the account pins it (`infra`) and calls it from no rule |
+| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth` (with the scope generation gate, rule-eval's `authorize` in `gate.rs` and the account's `authenticate` in `auth.rs`, and `authorize_completion` in `auth.rs`, the controller's `enforce` for a completion), `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, the revision and consumer views, and inside `apply` the revocation, credential-index, and enrollment-id checks, `expected_revision`, and the `rcv_sync` gate |
 | `crates/perch-account-types/**` | The account's signer, `__check_auth` payload, context rule, and refusal codes: the XDR and contract-spec twins of OZ's types |
 | `crates/perch-account/**` | The deployable account contract over `perch-smart-account` |
 | `crates/perch-webauthn-verifier/**`, `crates/perch-ed25519-verifier/**` | Constructorless signature verifiers for external signers (passkey over OZ `webauthn::verify`; ed25519) |
@@ -194,7 +194,7 @@ suffix and key canonicalization matter — is exercised by Nido's suite
 | Path | What |
 | --- | --- |
 | `crates/perch-smart-account/src/rules.rs` | The account's rule registry and the delta reconcile: rules matched by slot, which changed rules keep their id (`keeps_id`), the id counter (`allocate`), the install-time limits (`check`), the recovery rule's controller `install`, the `DeltaSummary` |
-| `crates/perch-smart-account/src/auth.rs`: `check_distinct`, `oz` | The constructor's canonical-duplicate check through the verifiers, and the two OZ registry entries kept for the recovery rule, which OZ's `do_check_auth` reads to decide a completion |
+| `crates/perch-smart-account/src/auth.rs`: `check_distinct` | The constructor's canonical-duplicate check through the verifiers |
 | `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the rule views (`get_context_rule`, `get_context_rules_count`), `install_admin` and its `ContextRuleAdded`; the scoped-document paths `apply_scope_doc`, `check_scoped`, `rule_set::names_guardian_approval`, `excluded_contract`, the credential index (`check_unwiped`), `drop_scope`, and the scope index (spec §7.6) |
 | `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (the account's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
 | `crates/perch-spending-limit/**` | The deployable wrapper of OZ `spending_limit`, installing and uninstalling without events |

@@ -17,7 +17,7 @@
 <div class="callout"><p><strong>One property, four levels of evidence.</strong> A completed recovery stops every earlier grant from authorizing through the account, in the completion transaction.</p><ul>
 <li><strong>Proved.</strong> In rule-core's account model, a grant issued before a completed recovery, or derived from one, accepts no nonempty batch afterwards, and the translated evaluator refuses a stale rule ({{ref:stmt:recovery-invalidation}}).</li>
 <li><strong>Tested.</strong> Perch's integration tests check that every earlier grant is refused after a completion and that anyone can then collect it (<code>a_completion_wipes_every_scope_and_anyone_collects_them</code>).</li>
-<li><strong>Executed in this page.</strong> In the live experiment, completion advances the grant generation, and grant 1 is then refused with <code>StaleScope</code> although its cap has room ({{ref:fig:fig-recovery}}).</li>
+<li><strong>Executed in this page.</strong> In the live experiment, completion advances the grant generation, and grant 1 is then refused with <code>StaleGrant</code> although its cap has room ({{ref:fig:fig-recovery}}).</li>
 <li><strong>Recorded on testnet.</strong> In a scripted run of the Nido preview, completion transaction <code>{{fact:completion-tx-short}}</code> (ledger {{fact:completion-ledger}}) emitted {{fact:completion-event}} from account <code>{{fact:completion-account-short}}</code>. Testnet is reset periodically; {{ref:tab:tab-artifacts}} gives the full identifiers.</li>
 </ul></div>
 <h3 id="factors">The zero-knowledge factor</h3>

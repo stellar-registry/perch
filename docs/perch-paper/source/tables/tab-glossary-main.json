@@ -15,13 +15,13 @@
   [
    "Grant",
    "A bounded set of rules the owner installs so an app can act without a prompt for each call",
-   "scope",
+   "grant",
    "No single object: one context rule per contract, each with its policies"
   ],
   [
    "Grant document",
    "The JSON the owner submits to install a grant",
-   "scope document",
+   "grant document",
    "—"
   ],
   [
@@ -57,7 +57,7 @@
   [
    "Decision function",
    "The pure function that decides an authorization and returns the next spending records; it reads no storage and checks no signature",
-   "`rule_eval::authorize`",
+   "`rule_eval::check_auth`",
    "Each attached policy's `enforce`"
   ],
   [
@@ -77,6 +77,12 @@
    "Another Stellar address that approves through the host, inside the account's own authorization entry (CAP-0071)",
    "`Signer::Delegated`",
    "Approves in an authorization entry of its own, which binds the rule IDs; the only kind on policed rules"
+  ],
+  [
+   "Credential",
+   "The value that fills a signer: a delegated address, or a verifier contract and key; a document names each signer by its signer ID",
+   "`Signer` (`Delegated(address)`, `External(verifier, key)`)",
+   "The same enum, also named `Signer`"
   ],
   [
    "Context",

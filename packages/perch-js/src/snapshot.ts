@@ -128,6 +128,19 @@ export function checkCapabilities(c: AccountCapabilities): void {
   if (c.snapshotVersion !== 1 && c.snapshotVersion !== 2) throw new UnsupportedCapability(`snapshot format ${c.snapshotVersion}`);
 }
 
+/** Which grant entry points the account exposes, from its `applyModes`:
+ *  `grant_v1` for the `apply_grant` family that `readGrantDoc` and the
+ *  generated client call; `scoped_v1` for accounts built before the rename
+ *  (such as the pre-rename testnet preview), which expose the same documents
+ *  only through the `apply_scope` family (`apply_scope`, `remove_scope`,
+ *  `gc_scope`, `scope`, `scopes`, `scope_rule_set`, ...) that neither calls;
+ *  `null` when the account applies no grant documents. */
+export function grantMode(c: AccountCapabilities): 'grant_v1' | 'scoped_v1' | null {
+  if (c.applyModes.includes('grant_v1')) return 'grant_v1';
+  if (c.applyModes.includes('scoped_v1')) return 'scoped_v1';
+  return null;
+}
+
 /**
  * Read a consistent snapshot: `configuration()`, the capabilities and
  * limits, optionally the document, then the revision again. All of it must

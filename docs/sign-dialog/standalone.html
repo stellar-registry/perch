@@ -624,6 +624,9 @@ const TOKEN_FNS = {
 // Perch account entry points that carry a policy document.
 const PERCH_FNS = {
   apply_doc: ['doc_json', 'approval_valid_until', 'expected_revision'],
+  apply_grant: ['grant_id', 'doc_json'],
+  remove_grant: ['grant_id'],
+  // The paper's pinned build names them apply_scope and remove_scope.
   apply_scope: ['grant_id', 'doc_json'],
   remove_scope: ['grant_id'],
   execute: ['target', 'target_fn', 'target_args'],
@@ -1105,8 +1108,8 @@ export class SorobanSignDialog extends HTMLElement {
         default: break;
       }
     }
-    if (c === this.signer && (fn.fn === 'apply_doc' || fn.fn === 'apply_scope')) {
-      return fn.fn === 'apply_scope' ? `Install grant #${esc(fn.args[0]?.v ?? '?')} on your account` : 'Replace your account\'s policy document';
+    if (c === this.signer && (fn.fn === 'apply_doc' || fn.fn === 'apply_grant' || fn.fn === 'apply_scope')) {
+      return fn.fn !== 'apply_doc' ? `Install grant #${esc(fn.args[0]?.v ?? '?')} on your account` : 'Replace your account\'s policy document';
     }
     return `Call <code>${esc(fn.fn)}</code> on ${this.#addr(fn.contract)}`;
   }

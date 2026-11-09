@@ -55,9 +55,10 @@ account's `SpendRecords(1)` entry. The contract reports only error 5.
 ## Not the current Perch
 
 The captured contracts are the paper's pinned build: grants installed with
-`apply_scope`, and spends recorded in the account's own storage. The current
-Perch release that Nido uses installs rules through `apply_doc` and keeps the
-spend window in OpenZeppelin's spending-limit policy contract
+`apply_scope` (since renamed `apply_grant`), and spends recorded in the
+account's own storage. The current Perch release that Nido uses installs
+rules through `apply_doc` and keeps the spend window in OpenZeppelin's
+spending-limit policy contract
 (`AccountContext(account, rule_id)`). The dialog renders both. The engine's
 Perch adapter has to read whichever layout the account has.
 

@@ -15,7 +15,7 @@
    "No"
   ],
   [
-   "`remove_scope`",
+   "`remove_grant`",
    "Owner",
    "That grant's rules",
    "Rules, tags, spending records",
@@ -29,7 +29,7 @@
    "Yes: grant credentials through the credential index, administrative credentials through the revoked set"
   ],
   [
-   "`gc_scope`",
+   "`gc_grant`",
    "Anyone, only for a grant whose generation is older; an expired but current grant is not collectable",
    "Nothing new",
    "Rules, tags, spending records; the credential index is kept",

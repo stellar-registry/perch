@@ -166,7 +166,7 @@ substitute:
   in agreement. See the Perch `DEFERRED.md` CANON v2 entry.
 - **Verifier names and unverified verifiers.** Whether a `verifier-name`
   resolves to its `verifier` in `perch/verifiers` is read from the chain;
-  that an admin document names no verifier by contract id alone, and that a
+  that an account document names no verifier by contract id alone, and that a
   rule holds one signer per such verifier, are the doc compiler's checks
   (`docs/account-interface.md`, "Verifiers").
 - **Signatures and authorization.** Whether an invocation is actually

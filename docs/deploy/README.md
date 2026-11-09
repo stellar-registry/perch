@@ -574,7 +574,7 @@ which no workflow sends yet.
   `PERCH_ADMIN_KEY`, its secret, signs `apply_doc` through this checkout's
   `perch-deploy apply`, the one tool here that signs the `addr_oz_v1` digest a
   design-A account checks. Its account pays for the apply.
-  `--admin-signer delegated` gives a `Delegated(G)` admin instead, and the
+  `--account-signer delegated` gives a `Delegated(G)` admin instead, and the
   script then prints the `apply_doc` for a CAP-71 signer and refuses `--send`
   for it.
 - **`--ci-key`** is the `ci-publish` delegate: the G of

@@ -78,6 +78,6 @@ pub use validate::{
     MAX_SIGNER_KEY_LEN, MAX_STRING_PRED_LEN,
 };
 pub use verifier::{
-    is_admin_document, parse_verifier_name, unverified_reuse, unverified_verifiers,
+    is_account_document, parse_verifier_name, unverified_reuse, unverified_verifiers,
     MAX_VERIFIER_NAME_LEN,
 };

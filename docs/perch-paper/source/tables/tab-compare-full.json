@@ -13,7 +13,7 @@
  "rows": [
   [
    "Where the decision runs",
-   "Linked `rule_eval::authorize` inside `__check_auth` (`gate.rs:93-105`)",
+   "Linked `rule_eval::check_auth` inside `__check_auth` (`gate.rs:93-105`)",
    "The account selects the rule and authenticates, then calls each attached policy's `enforce`; the shared interpreter evaluates the stored predicate (OZ `storage.rs:629-690`; `policy-interpreter/src/lib.rs:192-277`)",
    "V"
   ],
@@ -103,7 +103,7 @@
   ],
   [
    "Install ordering",
-   "`apply_doc` takes an optional expected revision; `apply_scope` takes none (`lib.rs:1000-1006`; `docs/account-interface.md:96-135`)",
+   "`apply_doc` takes an optional expected revision; `apply_grant` takes none (`lib.rs:1000-1006`; `docs/account-interface.md:96-135`)",
    "`install_nonce` must be the stored nonce plus one (`lib.rs:144-145`)",
    "V"
   ],
@@ -127,7 +127,7 @@
   ],
   [
    "What a refusal reports",
-   "`StaleScope` ({{fact:auth-error-stale-scope}}) or `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}}); a wallet re-runs the evaluator off chain for the reason",
+   "`StaleGrant` ({{fact:auth-error-stale-scope}}) or `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}}); a wallet re-runs the evaluator off chain for the reason",
    "A specific deny code per reason (`storage.rs:27-86`)",
    "V"
   ]

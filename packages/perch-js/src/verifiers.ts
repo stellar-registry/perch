@@ -10,8 +10,8 @@
 //   form, so `doc_hash`, binds the name, the version and the address.
 // - by contract id alone: an unverified verifier. Its `verify` decides
 //   whatever the rules holding its signers allow. The compiler refuses one in
-//   an admin document (one with a self-admin rule or a recovery member) and
-//   lets a scoped document hold it, at most once per rule, listing it in the
+//   an account document (one with a self-admin rule or a recovery member) and
+//   lets a grant document hold it, at most once per rule, listing it in the
 //   compile result for the wallet's warning (`unverifiedWarnings`).
 //
 // `resolveVerifierName` finds the address a name resolves to on a network,
@@ -46,9 +46,9 @@ export function parseVerifierName(s: string): { name: string; version: string } 
   return nameOk && versionOk ? { name, version } : null;
 }
 
-/** Whether `doc` is an admin document: it has a `self-admin` rule or a
- *  `recovery` member (perch-ir's `is_admin_document`). */
-export function isAdminDocument(doc: PolicyDoc): boolean {
+/** Whether `doc` is an account document: it has a `self-admin` rule or a
+ *  `recovery` member (perch-ir's `is_account_document`). */
+export function isAccountDocument(doc: PolicyDoc): boolean {
   return doc.recovery !== undefined || doc.rules.some((r) => r.scope.type === 'self-admin');
 }
 
@@ -86,13 +86,13 @@ export function unverifiedReuse(doc: PolicyDoc): { rule: string; verifier: strin
   return null;
 }
 
-/** An admin document names a verifier by contract id alone, which the
+/** An account document names a verifier by contract id alone, which the
  *  compiler refuses (`DocInvalid`). */
 export class UnverifiedVerifier extends PerchError {
   constructor(readonly verifier: string) {
     super(
       'UNVERIFIED_VERIFIER',
-      `an admin document must name its verifiers from perch/verifiers; ${verifier} is named by contract id alone`,
+      `an account document must name its verifiers from perch/verifiers; ${verifier} is named by contract id alone`,
     );
   }
 }
@@ -110,7 +110,7 @@ export class UnverifiedVerifierReused extends PerchError {
 
 /**
  * Refuse what the compiler refuses before it resolves any name: an
- * unverified verifier in an admin document ({@link UnverifiedVerifier}), and
+ * unverified verifier in an account document ({@link UnverifiedVerifier}), and
  * a rule with two signers under one ({@link UnverifiedVerifierReused}). A
  * misspelled `verifier-name` throws too. Whether a name resolves to its
  * address is the chain's: {@link resolveVerifierName}.
@@ -122,7 +122,7 @@ export function checkVerifiers(doc: PolicyDoc): void {
       throw new PerchError('INVALID_VERIFIER_NAME', `signer ${s.id}: verifier-name ${name} is not <name>@<MAJOR>.<MINOR>.<PATCH>`);
     }
   }
-  if (isAdminDocument(doc)) {
+  if (isAccountDocument(doc)) {
     const [first] = unverifiedVerifiers(doc);
     if (first !== undefined) throw new UnverifiedVerifier(first);
   }
@@ -140,7 +140,7 @@ export interface VerifierWarning {
 /**
  * One warning per rule and unverified verifier it holds a signer under:
  * `"Unverified verifier C…: it can approve anything this rule allows"`. A
- * wallet shows them before the owner approves a scoped document; an admin
+ * wallet shows them before the owner approves a grant document; an account
  * document with any is refused ({@link checkVerifiers}).
  */
 export function unverifiedWarnings(doc: PolicyDoc): VerifierWarning[] {

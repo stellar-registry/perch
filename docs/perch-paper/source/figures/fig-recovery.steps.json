@@ -3,7 +3,7 @@
  "steps": [
   {
    "n": "5",
-   "text": "Command 5. Collect grant 1: refused with `ScopeLive` ({{fact:account-error-scope-live}}), because grant 1 is still current. In the experiment: *Collect grant 1*."
+   "text": "Command 5. Collect grant 1: refused with `GrantLive` ({{fact:account-error-scope-live}}), because grant 1 is still current. In the experiment: *Collect grant 1*."
   },
   {
    "n": "6",
@@ -35,7 +35,7 @@
   },
   {
    "n": "13",
-   "text": "Command 13. Spend 1 with grant 1: refused with `StaleScope` ({{fact:auth-error-stale-scope}}); grant 1 is stored but stale. In the experiment: *Attempt spend*, grant 1, amount 1."
+   "text": "Command 13. Spend 1 with grant 1: refused with `StaleGrant` ({{fact:auth-error-stale-scope}}); grant 1 is stored but stale. In the experiment: *Attempt spend*, grant 1, amount 1."
   },
   {
    "n": "14",

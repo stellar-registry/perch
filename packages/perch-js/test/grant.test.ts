@@ -4,22 +4,22 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
-  decodeStoredScope,
+  decodeStoredGrant,
   docHash,
   parsePolicyDocJson,
-  rebuildScopeDoc,
-  ScopeNotRebuilt,
+  rebuildGrantDoc,
+  GrantNotRebuilt,
   type SignerKey,
   type StoredCond,
   type StoredRule,
-  type StoredScope,
+  type StoredGrant,
   type StoredVal,
 } from '../src/index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
-// Written by crates/integration-tests/tests/scope_rebuild.rs from scopes the
+// Written by crates/integration-tests/tests/grant_rebuild.rs from grants the
 // account applied, each with the canonical text it was applied as.
-const vectors = JSON.parse(readFileSync(resolve(here, '../../../testdata/scope-rebuild/vectors.json'), 'utf8'));
+const vectors = JSON.parse(readFileSync(resolve(here, '../../../testdata/grant-rebuild/vectors.json'), 'utf8'));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const signer = (s: any): SignerKey =>
@@ -64,7 +64,7 @@ const rule = (r: any): StoredRule => ({
   generation: r.generation === null ? null : BigInt(r.generation),
 });
 
-const scope = (v: any): StoredScope => ({
+const stored = (v: any): StoredGrant => ({
   account: v.account,
   network: v.network,
   docHash: hexToBytes(v.docHash),
@@ -111,11 +111,11 @@ const native = (v: any) => {
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-describe('Rust parity: rebuildScopeDoc gives back every scoped document the account applied', () => {
+describe('Rust parity: rebuildGrantDoc gives back every grant document the account applied', () => {
   it('has vectors', () => expect(vectors.vectors.length).toBeGreaterThan(50));
   for (const v of vectors.vectors) {
     it(v.name, () => {
-      const rebuilt = rebuildScopeDoc(scope(v));
+      const rebuilt = rebuildGrantDoc(stored(v));
       expect(rebuilt.canonical).toBe(v.canonical);
       expect(rebuilt.docHash).toBe(v.docHash);
       expect(docHash(rebuilt.doc)).toBe(v.docHash);
@@ -125,57 +125,57 @@ describe('Rust parity: rebuildScopeDoc gives back every scoped document the acco
   }
 });
 
-describe('rebuildScopeDoc trusts only what hashes to doc_hash', () => {
+describe('rebuildGrantDoc trusts only what hashes to doc_hash', () => {
   const shared = vectors.vectors.find((v: { name: string }) => v.name === 'a signer shared across rules');
 
   it('refuses other signer ids', () => {
-    const s = scope(shared);
-    expect(() => rebuildScopeDoc({ ...s, signerIds: [...s.signerIds].reverse() })).toThrow(ScopeNotRebuilt);
-    expect(() => rebuildScopeDoc({ ...s, signerIds: s.signerIds.slice(1) })).toThrow(ScopeNotRebuilt);
+    const s = stored(shared);
+    expect(() => rebuildGrantDoc({ ...s, signerIds: [...s.signerIds].reverse() })).toThrow(GrantNotRebuilt);
+    expect(() => rebuildGrantDoc({ ...s, signerIds: s.signerIds.slice(1) })).toThrow(GrantNotRebuilt);
   });
 
   it('refuses another network', () => {
-    expect(() => rebuildScopeDoc({ ...scope(shared), network: 'Public Global Stellar Network ; September 2015' })).toThrow(
-      ScopeNotRebuilt,
+    expect(() => rebuildGrantDoc({ ...stored(shared), network: 'Public Global Stellar Network ; September 2015' })).toThrow(
+      GrantNotRebuilt,
     );
   });
 
   it('refuses verifier names on other signers, or dropped', () => {
     const v = vectors.vectors.find((x: { name: string }) => x.name === 'named and unnamed verifiers side by side');
-    const s = scope(v);
+    const s = stored(v);
     expect(s.verifierNames.some((n) => n !== '')).toBe(true);
     const rotated = [...s.verifierNames.slice(1), s.verifierNames[0]!];
     expect(rotated).not.toEqual(s.verifierNames);
-    expect(() => rebuildScopeDoc({ ...s, verifierNames: rotated })).toThrow(ScopeNotRebuilt);
-    expect(() => rebuildScopeDoc({ ...s, verifierNames: [] })).toThrow(ScopeNotRebuilt);
-    expect(() => rebuildScopeDoc({ ...s, verifierNames: s.verifierNames.slice(1) })).toThrow(ScopeNotRebuilt);
+    expect(() => rebuildGrantDoc({ ...s, verifierNames: rotated })).toThrow(GrantNotRebuilt);
+    expect(() => rebuildGrantDoc({ ...s, verifierNames: [] })).toThrow(GrantNotRebuilt);
+    expect(() => rebuildGrantDoc({ ...s, verifierNames: s.verifierNames.slice(1) })).toThrow(GrantNotRebuilt);
   });
 
   it('refuses rules in another order', () => {
-    const s = scope(shared);
-    expect(() => rebuildScopeDoc({ ...s, rules: [...s.rules].reverse() })).toThrow(ScopeNotRebuilt);
+    const s = stored(shared);
+    expect(() => rebuildGrantDoc({ ...s, rules: [...s.rules].reverse() })).toThrow(GrantNotRebuilt);
   });
 
   it('refuses a cap on anything but a transfer amount', () => {
     const v = vectors.vectors.find((x: { name: string }) => x.name === 'caps at their extremes');
-    const s = scope(v);
+    const s = stored(v);
     const [first, ...rest] = s.rules;
     const capped = { ...first!, rule: { ...first!.rule, conds: [] } };
-    expect(() => rebuildScopeDoc({ ...s, rules: [capped, ...rest] })).toThrow(ScopeNotRebuilt);
+    expect(() => rebuildGrantDoc({ ...s, rules: [capped, ...rest] })).toThrow(GrantNotRebuilt);
   });
 });
 
-describe('decodeStoredScope', () => {
+describe('decodeStoredGrant', () => {
   it('reads the views as the generated bindings return them', () => {
     for (const v of vectors.vectors) {
       const n = native(v);
-      expect(decodeStoredScope(v.account, v.network, n.record, n.ruleSet, n.signerIds, n.verifierNames)).toEqual(
-        scope(v),
+      expect(decodeStoredGrant(v.account, v.network, n.record, n.ruleSet, n.signerIds, n.verifierNames)).toEqual(
+        stored(v),
       );
     }
   });
 
-  it('is null for a scope the account does not have', () => {
-    expect(decodeStoredScope('C', 'n', undefined, [], undefined, undefined)).toBeNull();
+  it('is null for a grant the account does not have', () => {
+    expect(decodeStoredGrant('C', 'n', undefined, [], undefined, undefined)).toBeNull();
   });
 });

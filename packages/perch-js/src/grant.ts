@@ -1,14 +1,14 @@
-// A scoped document's canonical text, rebuilt from what its account keeps.
+// A grant document's canonical text, rebuilt from what its account keeps.
 //
-// The account keeps no scoped document's text. It keeps each rule's name and
-// the rule-eval rule it enforces (`scope(id)`, `scope_rule_set(id)`), the
-// document's signer ids in declaration order (`scope_signer_ids(id)`), and
-// each signer's `verifier-name` (`scope_verifier_names(id)`), and it
+// The account keeps no grant document's text. It keeps each rule's name and
+// the rule-eval rule it enforces (`grant(id)`, `grant_rule_set(id)`), the
+// document's signer ids in declaration order (`grant_signer_ids(id)`), and
+// each signer's `verifier-name` (`grant_verifier_names(id)`), and it
 // applies only documents in normal form (`perch_ir::normal_form`, and its own
-// checks in `apply_scope`): the one spelling, among the documents that store
-// the same rules, those give back. `rebuildScopeDoc` inverts rule-core's
+// checks in `apply_grant`): the one spelling, among the documents that store
+// the same rules, those give back. `rebuildGrantDoc` inverts rule-core's
 // lowering on that form, the same function as `perch_testkit::rebuild`, and
-// trusts its result only once it hashes to the scope's stored `doc_hash`:
+// trusts its result only once it hashes to the grant's stored `doc_hash`:
 //
 // - the signers, in declaration order, are the distinct stored signers in the
 //   order the rules first name them, each under the next stored id, a key in
@@ -23,8 +23,8 @@
 //   account's own address, `address-eq` for another, `u32-eq`, `string-in`
 //   and `string-prefix`.
 //
-// Pinned against testdata/scope-rebuild/vectors.json, which
-// crates/integration-tests/tests/scope_rebuild.rs writes from scopes the
+// Pinned against testdata/grant-rebuild/vectors.json, which
+// crates/integration-tests/tests/grant_rebuild.rs writes from grants the
 // account applied.
 
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -66,26 +66,26 @@ export interface StoredRule {
   generation: bigint | null;
 }
 
-/** What an account keeps for one scoped document. */
-export interface StoredScope {
+/** What an account keeps for one grant document. */
+export interface StoredGrant {
   /** The account's address (`C...`). */
   account: string;
   /** The network passphrase: the document's `network`. */
   network: string;
   docHash: Uint8Array;
-  /** `scope_signer_ids(id)`. */
+  /** `grant_signer_ids(id)`. */
   signerIds: string[];
-  /** `scope_verifier_names(id)`: each signer's `verifier-name`, aligned with
+  /** `grant_verifier_names(id)`: each signer's `verifier-name`, aligned with
    *  `signerIds` (empty where it has none), or none when no signer has one. */
   verifierNames: string[];
-  /** Each rule's name (`scope(id).rules[i].name`) and stored rule
-   *  (`scope_rule_set(id)[i]`), in order. */
+  /** Each rule's name (`grant(id).rules[i].name`) and stored rule
+   *  (`grant_rule_set(id)[i]`), in order. */
   rules: { name: string; rule: StoredRule }[];
 }
 
-/** A scoped document rebuilt from storage: its canonical text hashes to the
- *  scope's stored `doc_hash`. */
-export interface RebuiltScope {
+/** A grant document rebuilt from storage: its canonical text hashes to the
+ *  grant's stored `doc_hash`. */
+export interface RebuiltGrant {
   doc: PolicyDoc;
   canonical: string;
   /** Lowercase hex of the stored `doc_hash`. */
@@ -94,9 +94,9 @@ export interface RebuiltScope {
 
 /** The stored rules are not the lowering of a document in normal form, or
  *  their rebuild does not hash to the stored `doc_hash`. */
-export class ScopeNotRebuilt extends PerchError {
+export class GrantNotRebuilt extends PerchError {
   constructor(why: string) {
-    super('SCOPE_NOT_REBUILT', `the scope's document cannot be rebuilt: ${why}`);
+    super('GRANT_NOT_REBUILT', `the grant's document cannot be rebuilt: ${why}`);
   }
 }
 
@@ -129,7 +129,7 @@ function arg(account: string, c: StoredCond): ArgConstraint {
         const value = new DataView(v.xdr.buffer, v.xdr.byteOffset, 8).getUint32(4);
         return { index: c.index, pred: { type: 'u32-eq', value } };
       }
-      throw new ScopeNotRebuilt(`an equality on argument ${c.index} no predicate lowers to`);
+      throw new GrantNotRebuilt(`an equality on argument ${c.index} no predicate lowers to`);
     }
     case 'argIn':
       return {
@@ -137,7 +137,7 @@ function arg(account: string, c: StoredCond): ArgConstraint {
         pred: {
           type: 'string-in',
           values: c.values.map((v) => {
-            if (v.kind !== 'string') throw new ScopeNotRebuilt(`a set on argument ${c.index} holding a ${v.kind}`);
+            if (v.kind !== 'string') throw new GrantNotRebuilt(`a set on argument ${c.index} holding a ${v.kind}`);
             return v.value;
           }),
         },
@@ -145,36 +145,36 @@ function arg(account: string, c: StoredCond): ArgConstraint {
     case 'argStrPrefix':
       return { index: c.index, pred: { type: 'string-prefix', prefix: c.prefix } };
     case 'argI128AtMost':
-      throw new ScopeNotRebuilt(`a bound on argument ${c.index} no predicate lowers to`);
+      throw new GrantNotRebuilt(`a bound on argument ${c.index} no predicate lowers to`);
   }
 }
 
 /**
- * Rebuild a scoped document from what its account keeps, and check it: its
+ * Rebuild a grant document from what its account keeps, and check it: its
  * canonical text must hash to the stored `doc_hash`. Throws
- * {@link ScopeNotRebuilt} when the stored rules are not the lowering of a
+ * {@link GrantNotRebuilt} when the stored rules are not the lowering of a
  * document in normal form, or the rebuild does not hash to `doc_hash`.
  */
-export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
+export function rebuildGrantDoc(grant: StoredGrant): RebuiltGrant {
   const signers: SignerKey[] = [];
-  for (const { rule } of scope.rules) {
+  for (const { rule } of grant.rules) {
     for (const s of rule.signers) if (!signers.some((x) => sameSigner(x, s))) signers.push(s);
   }
-  if (signers.length !== scope.signerIds.length) {
-    throw new ScopeNotRebuilt(`${scope.signerIds.length} signer ids for ${signers.length} stored signers`);
+  if (signers.length !== grant.signerIds.length) {
+    throw new GrantNotRebuilt(`${grant.signerIds.length} signer ids for ${signers.length} stored signers`);
   }
-  if (scope.verifierNames.length !== 0 && scope.verifierNames.length !== scope.signerIds.length) {
-    throw new ScopeNotRebuilt(`${scope.verifierNames.length} verifier names for ${scope.signerIds.length} signer ids`);
+  if (grant.verifierNames.length !== 0 && grant.verifierNames.length !== grant.signerIds.length) {
+    throw new GrantNotRebuilt(`${grant.verifierNames.length} verifier names for ${grant.signerIds.length} signer ids`);
   }
-  const idOf = (s: SignerKey): string => scope.signerIds[signers.findIndex((x) => sameSigner(x, s))]!;
-  const rules = scope.rules.map(({ name, rule }) => {
+  const idOf = (s: SignerKey): string => grant.signerIds[signers.findIndex((x) => sameSigner(x, s))]!;
+  const rules = grant.rules.map(({ name, rule }) => {
     const ids = rule.signers.map(idOf);
     const conds = [...rule.conds];
     let functions: string[] | undefined;
     let cap: Record<string, unknown> | undefined;
     if (rule.cap === null) {
       if (rule.functions.kind === 'anyExcept' && rule.functions.names.length > 0) {
-        throw new ScopeNotRebuilt(`rule ${name}: every function but some`);
+        throw new GrantNotRebuilt(`rule ${name}: every function but some`);
       }
       functions = rule.functions.kind === 'only' ? [...rule.functions.names] : undefined;
     } else {
@@ -185,11 +185,11 @@ export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
         last.index !== AMOUNT_ARG ||
         last.bound !== I128_MAX
       ) {
-        throw new ScopeNotRebuilt(`rule ${name}: a cap not on a transfer's amount`);
+        throw new GrantNotRebuilt(`rule ${name}: a cap not on a transfer's amount`);
       }
       const fs = rule.functions;
       if (fs.kind !== 'only' || fs.names.length !== 1 || fs.names[0] !== 'transfer') {
-        throw new ScopeNotRebuilt(`rule ${name}: a cap on functions other than transfer`);
+        throw new GrantNotRebuilt(`rule ${name}: a cap on functions other than transfer`);
       }
       functions = ['transfer'];
       cap = { limit: rule.cap.limit.toString(), 'period-ledgers': rule.cap.period };
@@ -202,7 +202,7 @@ export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
           ? { type: 'all', signers: ids }
           : { type: 'threshold', signers: ids, m: rule.threshold },
       functions,
-      args: conds.length > 0 ? conds.map((c) => arg(scope.account, c)) : undefined,
+      args: conds.length > 0 ? conds.map((c) => arg(grant.account, c)) : undefined,
       'not-after-ledger': rule.validUntil === null ? undefined : rule.validUntil + 1,
       cap,
       'auth-root': rule.authRoot ?? undefined,
@@ -210,14 +210,14 @@ export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
   });
   const doc = {
     version: 1,
-    network: scope.network,
+    network: grant.network,
     signers: signers.map((s, i) =>
       s.kind === 'delegated'
-        ? { id: scope.signerIds[i]!, address: s.address }
+        ? { id: grant.signerIds[i]!, address: s.address }
         : {
-            id: scope.signerIds[i]!,
+            id: grant.signerIds[i]!,
             verifier: s.verifier,
-            'verifier-name': scope.verifierNames[i] || undefined,
+            'verifier-name': grant.verifierNames[i] || undefined,
             key: bytesToHex(s.key),
           },
     ),
@@ -225,7 +225,7 @@ export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
   } as PolicyDoc;
   const canonical = canonicalJson(doc);
   const hash = bytesToHex(sha256(new TextEncoder().encode(canonical)));
-  const stored = bytesToHex(scope.docHash);
-  if (hash !== stored) throw new ScopeNotRebuilt(`the rebuild hashes to ${hash}, the scope's doc_hash is ${stored}`);
+  const stored = bytesToHex(grant.docHash);
+  if (hash !== stored) throw new GrantNotRebuilt(`the rebuild hashes to ${hash}, the grant's doc_hash is ${stored}`);
   return { doc, canonical, docHash: stored };
 }

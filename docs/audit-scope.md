@@ -166,10 +166,10 @@ backend needs no integration review with the core paths it touches
 | `crates/perch-recovery-interface/**` | The statement and its encoding; the controller, account, pool, and configuration interfaces; credential fingerprints; `rule_hash` and `config_hash` |
 | `crates/perch-zk-primitives/**`, `crates/perch-zk-pool/**`, `crates/perch-zk-adapter/**` | Host-side Poseidon2 for the circuit's formulas, the membership pool, and the adapter that checks proofs for the controller |
 | `circuits/perch_zk/**`, `circuits/perch_zk_recovery/**`, `circuits/perch_zk_recovery_d24/**` | The Noir recovery circuit, its depth-32 release and depth-24 variants |
-| `crates/perch-ir/**`, [`CANONICAL.md`](../CANONICAL.md) | The document schema, validation, CANON v1 canonical bytes, and the normal form a scoped document must be in (`normal.rs`) |
+| `crates/perch-ir/**`, [`CANONICAL.md`](../CANONICAL.md) | The document schema, validation, CANON v1 canonical bytes, and the normal form a grant document must be in (`normal.rs`) |
 | `crates/perch-doc-compiler/**` except the caps | `compile_doc`, `derive_target`, `config_hash`, credential canonicalization |
 | `crates/perch-interpreter/**`, `crates/perch-program/**` | The interpreter policy, for OZ accounts that attach it; the account pins it (`infra`) and calls it from no rule |
-| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth` (with the scope generation gate, rule-eval's `authorize` in `gate.rs` and the account's `authenticate` in `auth.rs`, and `authorize_completion` in `auth.rs`, the controller's `rcv_complete` for a completion), `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, the revision and consumer views, and inside `apply` the revocation, credential-index, and enrollment-id checks, `expected_revision`, and the `rcv_sync` gate |
+| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth` (with the grant generation gate, rule-eval's `check_auth` in `gate.rs` and the account's `authenticate` in `auth.rs`, and `authorize_completion` in `auth.rs`, the controller's `rcv_complete` for a completion), `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, the revision and consumer views, and inside `apply` the revocation, credential-index, and enrollment-id checks, `expected_revision`, and the `rcv_sync` gate |
 | `crates/perch-account-types/**` | The account's signer, `__check_auth` payload, context rule, and refusal codes: the XDR and contract-spec twins of OZ's types |
 | `crates/perch-account/**` | The deployable account contract over `perch-smart-account` |
 | `crates/perch-webauthn-verifier/**`, `crates/perch-ed25519-verifier/**` | Constructorless signature verifiers for external signers (passkey over OZ `webauthn::verify`; ed25519) |
@@ -195,7 +195,7 @@ suffix and key canonicalization matter — is exercised by Nido's suite
 | --- | --- |
 | `crates/perch-smart-account/src/rules.rs` | The account's rule registry and the delta reconcile: rules matched by slot, which changed rules keep their id (`keeps_id`), the id counter (`allocate`), the install-time limits (`check`), the recovery rule's controller `rcv_install`, the `DeltaSummary` |
 | `crates/perch-smart-account/src/auth.rs`: `check_distinct` | The constructor's canonical-duplicate check through the verifiers |
-| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the rule views (`get_context_rule`, `get_context_rules_count`), `install_admin` and its `ContextRuleAdded`; the scoped-document paths `apply_scope_doc`, `check_scoped`, `rule_set::names_guardian_approval`, the normal-form refusal (`check_normal`), `excluded_contract`, the credential index (`check_unwiped`), `drop_scope`, and the scope index (spec §7.6) |
+| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the rule views (`get_context_rule`, `get_context_rules_count`), `install_account_rules` and its `ContextRuleAdded`; the grant-document paths `apply_grant_doc`, `check_grant`, `rule_set::names_guardian_approval`, the normal-form refusal (`check_normal`), `excluded_contract`, the credential index (`check_unwiped`), `drop_grant`, and the grant index (spec §7.6) |
 | `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (the account's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
 | `crates/perch-spending-limit/**` | The deployable wrapper of OZ `spending_limit`, installing and uninstalling without events |
 | `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it: the interpreter, the spending limit, and the Ed25519, WebAuthn and ML-DSA verifiers. The account, the recovery controller, the factory, the doc compiler, the ZK pool and the ZK adapter link none of it |
@@ -203,11 +203,11 @@ suffix and key canonicalization matter — is exercised by Nido's suite
 **Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps,install_checks}.rs`;
 `oz_differential.rs` against the OZ-registry build it replaces;
 the full-replace oracle `crates/perch-testkit/src/delta.rs` and the fuzz
-target `fuzz/fuzz_targets/apply_doc_delta.rs`. The scoped-document paths:
-`crates/integration-tests/tests/{scoped_docs,scoped_guardian_approvals,apply_scope_delta,rule_core_documents}.rs` and the
-fuzz target `fuzz/fuzz_targets/apply_scope_delta.rs`, which interleave admin
-documents with `apply_scope`/`remove_scope` across several scopes and check
-each scope, the admin document and the other scopes against the model after
+target `fuzz/fuzz_targets/apply_doc_delta.rs`. The grant-document paths:
+`crates/integration-tests/tests/{grant_docs,grant_guardian_approvals,apply_grant_delta,rule_core_documents}.rs` and the
+fuzz target `fuzz/fuzz_targets/apply_grant_delta.rs`, which interleave account
+documents with `apply_grant`/`remove_grant` across several grants and check
+each grant, the account document and the other grants against the model after
 every step; `release_stack.rs` (`docsplit_*`). The full replace shares
 compile and the desired rule set (expiry drop, recovery rule) with the
 delta, so it checks the reconcile only; each accepted step is also checked

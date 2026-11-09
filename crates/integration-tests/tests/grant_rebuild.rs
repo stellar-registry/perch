@@ -1,29 +1,29 @@
-//! A scoped document's canonical text rebuilds from what the account keeps
+//! A grant document's canonical text rebuilds from what the account keeps
 //! for it (`perch_testkit::rebuild`: each rule's name and stored rule, the
 //! document's signer ids, and each signer's `verifier-name`), and
-//! `apply_scope` takes no document it would not rebuild:
+//! `apply_grant` takes no document it would not rebuild:
 //!
-//! - every scoped document `apply_scope` accepts rebuilds byte for byte to
+//! - every grant document `apply_grant` accepts rebuilds byte for byte to
 //!   its canonical text, whose sha256 is the `doc_hash` it returned:
-//!   generated ones (`DocModel::generate_scoped` in normal form,
+//!   generated ones (`DocModel::generate_grant` in normal form,
 //!   `PERCH_REBUILD_DOCS` of them, default 400), targeted ones covering each
 //!   predicate, signer kind, named and unnamed verifier, principals form,
 //!   function list, cap and expiry,
 //!   ones shaped like Nido's app grants (`<origin>#<first 8 hex of
-//!   sha256(key)>` ids), and the testnet preview account's two scopes,
+//!   sha256(key)>` ids), and the testnet preview account's two grants,
 //!   verbatim;
 //! - each spelling a rebuild could not tell from its normal form is refused
-//!   (`NotNormalForm`; a contract scope on the account, `ScopeEscalation`)
+//!   (`NotNormalForm`; a contract scope on the account, `GrantEscalation`)
 //!   and writes nothing, and the same document in normal form is accepted;
-//! - `testdata/scope-rebuild/vectors.json` holds what the account keeps for
-//!   the targeted, Nido-shaped and preview scopes and the first generated
-//!   ones, with each one's text, as perch-js's `StoredScope`:
-//!   `packages/perch-js/test/scope.test.ts` rebuilds each with
-//!   `rebuildScopeDoc`. `PERCH_BLESS=1 cargo test --test scope_rebuild`
+//! - `testdata/grant-rebuild/vectors.json` holds what the account keeps for
+//!   the targeted, Nido-shaped and preview grants and the first generated
+//!   ones, with each one's text, as perch-js's `StoredGrant`:
+//!   `packages/perch-js/test/grant.test.ts` rebuilds each with
+//!   `rebuildGrantDoc`. `PERCH_BLESS=1 cargo test --test grant_rebuild`
 //!   rewrites it; otherwise it must equal what this test computes.
 //!
-//! Every other suite that applies a scoped document checks its stored rules
-//! through the rebuilt text as well (`perch_testkit::rule_set::check_scope`).
+//! Every other suite that applies a grant document checks its stored rules
+//! through the rebuilt text as well (`perch_testkit::rule_set::check_grant`).
 
 use arbitrary::Unstructured;
 use perch_account::{PerchAccountClient, PerchAccountError};
@@ -38,7 +38,7 @@ use sha2::{Digest, Sha256};
 use soroban_sdk::{Address, Bytes};
 use std::path::PathBuf;
 
-const VECTORS: &str = "scope-rebuild/vectors.json";
+const VECTORS: &str = "grant-rebuild/vectors.json";
 /// How many generated documents the vectors keep.
 const GENERATED_VECTORS: usize = 40;
 
@@ -75,35 +75,35 @@ fn text(s: &soroban_sdk::String) -> String {
     String::from_utf8(string_bytes(s)).unwrap()
 }
 
-/// `apply_scope(scope, json)` on `w`'s account.
-fn apply(w: &DeltaWorld, scope: u32, json: &str) -> Result<[u8; 32], PerchAccountError> {
+/// `apply_grant(grant, json)` on `w`'s account.
+fn apply(w: &DeltaWorld, grant: u32, json: &str) -> Result<[u8; 32], PerchAccountError> {
     let bytes = Bytes::from_slice(&w.env, json.as_bytes());
     w.env.cost_estimate().budget().reset_unlimited();
-    match PerchAccountClient::new(&w.env, &w.delta).try_apply_scope(&scope, &bytes) {
+    match PerchAccountClient::new(&w.env, &w.delta).try_apply_grant(&grant, &bytes) {
         Ok(Ok(hash)) => Ok(hash.to_array()),
         Err(Ok(e)) => Err(e),
-        other => panic!("apply_scope({scope}): {other:?}"),
+        other => panic!("apply_grant({grant}): {other:?}"),
     }
 }
 
-/// Apply `json` under `scope`: it must be accepted, and what the account
+/// Apply `json` under `grant`: it must be accepted, and what the account
 /// keeps for it must rebuild its canonical text, which hashes to the
 /// returned `doc_hash`.
-fn accepted(w: &DeltaWorld, scope: u32, json: &str) -> StoredDoc {
-    let hash = apply(w, scope, json).unwrap_or_else(|e| panic!("refused with {e:?}: {json}"));
+fn accepted(w: &DeltaWorld, grant: u32, json: &str) -> StoredDoc {
+    let hash = apply(w, grant, json).unwrap_or_else(|e| panic!("refused with {e:?}: {json}"));
     let canonical = perch_ir::canonical_json(&perch_ir::from_json(json).unwrap());
     assert_eq!(<[u8; 32]>::from(Sha256::digest(&canonical)), hash);
-    let st = rebuild::read(&w.env, &w.delta, scope).unwrap().unwrap();
+    let st = rebuild::read(&w.env, &w.delta, grant).unwrap().unwrap();
     let rebuilt = rebuild::text(&w.env, &st).unwrap_or_else(|x| panic!("{x}\n{json}"));
     assert_eq!(rebuilt, canonical, "the rebuilt text");
     st
 }
 
-/// Apply `json` under `scope`: it must be refused with `error`, and change
+/// Apply `json` under `grant`: it must be refused with `error`, and change
 /// no ledger entry.
-fn refused(w: &DeltaWorld, scope: u32, json: &str, error: PerchAccountError) {
+fn refused(w: &DeltaWorld, grant: u32, json: &str, error: PerchAccountError) {
     let before = raw_entries(&w.env);
-    assert_eq!(apply(w, scope, json), Err(error), "{json}");
+    assert_eq!(apply(w, grant, json), Err(error), "{json}");
     assert!(
         raw_entries(&w.env) == before,
         "the refused document wrote: {json}"
@@ -175,8 +175,8 @@ fn stored_rule(r: &StoredRule) -> J {
     out
 }
 
-/// One vector: what the account keeps for a scope, as perch-js's
-/// `StoredScope`, and the canonical text it rebuilds to.
+/// One vector: what the account keeps for a grant, as perch-js's
+/// `StoredGrant`, and the canonical text it rebuilds to.
 fn vector(name: &str, st: &StoredDoc, canonical: &str) -> J {
     json!({
         "name": name,
@@ -194,17 +194,17 @@ fn vector(name: &str, st: &StoredDoc, canonical: &str) -> J {
 fn render(vectors: &[J]) -> String {
     let lines: Vec<String> = vectors.iter().map(|v| format!("    {v}")).collect();
     format!(
-        "{{\n  \"format\": 1,\n  \"description\": \"What an account keeps for a scoped document, as perch-js's StoredScope, and the canonical text it rebuilds to. Written by crates/integration-tests/tests/scope_rebuild.rs.\",\n  \"vectors\": [\n{}\n  ]\n}}\n",
+        "{{\n  \"format\": 1,\n  \"description\": \"What an account keeps for a grant document, as perch-js's StoredGrant, and the canonical text it rebuilds to. Written by crates/integration-tests/tests/grant_rebuild.rs.\",\n  \"vectors\": [\n{}\n  ]\n}}\n",
         lines.join(",\n")
     )
 }
 
-/// Collects vectors as the test applies scopes.
+/// Collects vectors as the test applies grants.
 struct Vectors(Vec<J>);
 
 impl Vectors {
-    fn keep(&mut self, name: &str, w: &DeltaWorld, scope: u32, json: &str) {
-        let st = accepted(w, scope, json);
+    fn keep(&mut self, name: &str, w: &DeltaWorld, grant: u32, json: &str) {
+        let st = accepted(w, grant, json);
         let canonical = perch_ir::canonical_json(&perch_ir::from_json(json).unwrap());
         self.0.push(vector(name, &st, &canonical));
     }
@@ -214,7 +214,7 @@ impl Vectors {
 // Documents
 // ---------------------------------------------------------------------------
 
-/// A scoped document of `signers` (declarations) and `rules`.
+/// A grant document of `signers` (declarations) and `rules`.
 fn doc(signers: &[String], rules: &[String]) -> String {
     format!(
         r#"{{"version":1,"network":"{}","signers":[{}],"rules":[{}]}}"#,
@@ -281,7 +281,7 @@ fn passkey(seed: u64) -> std::vec::Vec<u8> {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn every_scoped_document_the_account_takes_rebuilds() {
+fn every_grant_document_the_account_takes_rebuilds() {
     let mut vectors = Vectors(Vec::new());
     let w = DeltaWorld::new();
     let (c0, c1) = (strkey(&w.scopes[0]), strkey(&w.scopes[1]));
@@ -524,24 +524,24 @@ fn every_scoped_document_the_account_takes_rebuilds() {
     let (mut generated, mut rules) = (0, 0);
     while generated < n {
         let bytes = rng.bytes(512);
-        let mut d = DocModel::generate_scoped(&mut Unstructured::new(&bytes)).unwrap();
+        let mut d = DocModel::generate_grant(&mut Unstructured::new(&bytes)).unwrap();
         d.rules.retain(|r| r.scope.is_some());
         d.recovery = None;
         d.normalize();
         assert!(d.normal_form(w.env.ledger().sequence()));
         let json = d.json(&w);
-        let scope = 1_000 + (generated % 7) as u32;
+        let grant = 1_000 + (generated % 7) as u32;
         if generated < GENERATED_VECTORS {
-            vectors.keep(&format!("generated {generated}"), &w, scope, &json);
+            vectors.keep(&format!("generated {generated}"), &w, grant, &json);
         } else {
-            accepted(&w, scope, &json);
+            accepted(&w, grant, &json);
         }
         rules += d.rules.len();
         generated += 1;
     }
     println!("{{\"generated\":{generated},\"rules\":{rules}}}");
 
-    // The testnet preview account's two scopes, as Nido wrote them.
+    // The testnet preview account's two grants, as Nido wrote them.
     let preview = DeltaWorld::new();
     preview.advance(5_564_243 - preview.env.ledger().sequence());
     preview.env.register_at(
@@ -549,15 +549,15 @@ fn every_scoped_document_the_account_takes_rebuilds() {
         AnyKeyVerifier,
         (),
     );
-    for (scope, json, hash) in PREVIEW {
+    for (grant, json, hash) in PREVIEW {
         assert_eq!(
-            apply(&preview, scope, json).map(hex::encode),
+            apply(&preview, grant, json).map(hex::encode),
             Ok(hash.to_string())
         );
         vectors.keep(
-            &format!("testnet preview scope {scope}"),
+            &format!("testnet preview grant {grant}"),
             &preview,
-            scope,
+            grant,
             json,
         );
     }
@@ -577,7 +577,7 @@ fn every_scoped_document_the_account_takes_rebuilds() {
 /// The preview's WebAuthn verifier on testnet.
 const PREVIEW_VERIFIER: &str = "CDV5HBEG3UL2YUNYG4RD4J5CARTDVUPHJ7TAADQKIIIRNVHP4EEOAUIF";
 
-/// The testnet preview account's two scopes (`CDCSGFZP…`, scope ids Nido's
+/// The testnet preview account's two grants (`CDCSGFZP…`, grant ids Nido's
 /// candidate 0 of each origin), their text as stored on testnet, and their
 /// `doc_hash`.
 const PREVIEW: [(u32, &str, &str); 2] = [
@@ -596,8 +596,8 @@ const PREVIEW: [(u32, &str, &str); 2] = [
 /// Each spelling of the eleven a stored rule cannot give back is refused,
 /// and the same document in normal form is accepted.
 #[test]
-fn apply_scope_refuses_each_spelling_its_records_cannot_give_back() {
-    use PerchAccountError::{NotNormalForm, ScopeEscalation};
+fn apply_grant_refuses_each_spelling_its_records_cannot_give_back() {
+    use PerchAccountError::{GrantEscalation, NotNormalForm};
     let w = DeltaWorld::new();
     let me = strkey(&w.delta);
     let (c0, c1) = (strkey(&w.scopes[0]), strkey(&w.scopes[1]));
@@ -709,7 +709,7 @@ fn apply_scope_refuses_each_spelling_its_records_cannot_give_back() {
             "contract scope naming the account",
             doc(&[a()], &[rule("r", &me, &all(&["a"]), "")]),
             doc(&[a()], &[rule("r", &c0, &all(&["a"]), "")]),
-            ScopeEscalation,
+            GrantEscalation,
         ),
         (
             "string-in value over 256 bytes",
@@ -787,16 +787,16 @@ fn apply_scope_refuses_each_spelling_its_records_cannot_give_back() {
         ),
     ];
     for (i, (row, spelling, normal, error)) in cases.iter().enumerate() {
-        let scope = i as u32;
+        let grant = i as u32;
         let refused_doc = perch_ir::from_json(spelling).unwrap_or_else(|e| panic!("{row}: {e:?}"));
         assert!(perch_ir::validate(&refused_doc).is_ok(), "{row}: invalid");
-        refused(&w, scope, spelling, *error);
-        accepted(&w, scope, normal);
-        // Over an applied scope, too: the record stays as it was.
-        let before = PerchAccountClient::new(&w.env, &w.delta).scope(&scope);
-        refused(&w, scope, spelling, *error);
+        refused(&w, grant, spelling, *error);
+        accepted(&w, grant, normal);
+        // Over an applied grant, too: the record stays as it was.
+        let before = PerchAccountClient::new(&w.env, &w.delta).grant(&grant);
+        refused(&w, grant, spelling, *error);
         assert_eq!(
-            PerchAccountClient::new(&w.env, &w.delta).scope(&scope),
+            PerchAccountClient::new(&w.env, &w.delta).grant(&grant),
             before,
             "{row}"
         );

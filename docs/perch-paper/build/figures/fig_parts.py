@@ -10,7 +10,7 @@ ACTORS = [
 ]
 INNER = [
     ('tested', [('`__check_auth`', 't'), ('Account shell: guards, digest, signers', 'x'), ('TESTED', 'm tag', 14)]),
-    ('proved', [('`rule_eval`, a linked library', 't'), ('`authorize`, `lower`, `lower_scoped`', 'x', 14), ('PROVED', 'g tag', 14)]),
+    ('proved', [('`rule_eval`, a linked library', 't'), ('`check_auth`, `lower`, `lower_scoped`', 'x', 14), ('PROVED', 'g tag', 14)]),
     ('tested', [('Storage', 't'), ('Rules, grants, spending records, grant generation, credential index', 'x')]),
 ]
 TARGETS = [

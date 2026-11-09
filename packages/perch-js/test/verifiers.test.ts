@@ -6,7 +6,7 @@ import {
   canonicalJson,
   checkVerifiers,
   docHash,
-  isAdminDocument,
+  isAccountDocument,
   named,
   parsePolicyDoc,
   parseVerifierName,
@@ -129,9 +129,9 @@ describe('unverified verifiers', () => {
   const raw = (id: string, verifier = V, key = 'aa') => ({ id, verifier, key });
   const namedSigner = (id: string, key = 'bb') => ({ id, verifier: W, 'verifier-name': NAME, key });
 
-  it('an admin document is one with a self-admin rule or a recovery member', () => {
-    expect(isAdminDocument(doc([namedSigner('a')], [admin]))).toBe(true);
-    expect(isAdminDocument(doc([raw('a')], [app(['a'])]))).toBe(false);
+  it('an account document is one with a self-admin rule or a recovery member', () => {
+    expect(isAccountDocument(doc([namedSigner('a')], [admin]))).toBe(true);
+    expect(isAccountDocument(doc([raw('a')], [app(['a'])]))).toBe(false);
   });
 
   it('are listed once each, in declaration order, as the compile result lists them', () => {
@@ -139,14 +139,14 @@ describe('unverified verifiers', () => {
     expect(unverifiedVerifiers(d)).toEqual([V, W]);
   });
 
-  it('are refused in an admin document', () => {
+  it('are refused in an account document', () => {
     const d = doc([namedSigner('a'), raw('x')], [admin, app(['x'])]);
     expect(() => checkVerifiers(d)).toThrow(UnverifiedVerifier);
     // Even the named verifier's own address, written without its name.
     expect(() => checkVerifiers(doc([raw('a', W)], [admin]))).toThrow(UnverifiedVerifier);
   });
 
-  it('are allowed in a scoped document, one signer per rule, and warned about', () => {
+  it('are allowed in a grant document, one signer per rule, and warned about', () => {
     const d = doc([raw('a'), namedSigner('b'), raw('c', V, 'cc')], [app(['a', 'b'], 1), app(['c'])]);
     expect(() => checkVerifiers(d)).not.toThrow();
     expect(unverifiedWarnings(d)).toEqual([

@@ -16,7 +16,9 @@
 use perch_account::PerchAccountClient;
 use perch_account_types::Signer;
 use perch_doc_compiler::{DocCompilerError, PerchDocCompiler, PerchDocCompilerClient};
-use perch_smart_account::{install_admin, MAX_EXTERNAL_KEY_SIZE, MAX_NAME_SIZE, MAX_SIGNERS};
+use perch_smart_account::{
+    install_account_rules, MAX_EXTERNAL_KEY_SIZE, MAX_NAME_SIZE, MAX_SIGNERS,
+};
 use perch_testkit::passkey::SoftPasskey;
 use perch_testkit::FIXTURE_NETWORK;
 use perch_webauthn_verifier::PerchWebAuthnVerifier;
@@ -36,7 +38,7 @@ fn construct(signers: impl FnOnce(&Env, &Address) -> Vec<Signer>) -> Result<(), 
     let account = env.register(Bare, ());
     let signers = signers(&env, &verifier);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        env.as_contract(&account, || install_admin(&env, &signers))
+        env.as_contract(&account, || install_account_rules(&env, &signers))
     }))
     .map_err(|p| {
         p.downcast_ref::<String>()

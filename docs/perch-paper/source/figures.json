@@ -66,7 +66,7 @@
  },
  "fig-two-spellings": {
   "title": "One intent, two spellings.",
-  "caption": "The intent: the app key may call `guess` on the game, and may send XLM only to the game, at most 2 XLM per {{fact:preview-game-period-ledgers}} ledgers, through ledger *N* − 1. (a) Perch: one grant document, installed by one `apply_scope` call. (b) oz-policy-builder: an Intent, lowered to one predicate per contract. (c) The XLM rule's predicate in wire form, and the `install_policy` arguments that attach OpenZeppelin's `spending_limit`; a second call installs the game rule. `C…`, `G…` and *N* are placeholders; `{ \"...\": \"(b)\" }` stands for the Intent in (b), passed as `intent`. Read from source; these two oz-policy-builder installs were not run.",
+  "caption": "The intent: the app key may call `guess` on the game, and may send XLM only to the game, at most 2 XLM per {{fact:preview-game-period-ledgers}} ledgers, through ledger *N* − 1. (a) Perch: one grant document, installed by one `apply_grant` call. (b) oz-policy-builder: an Intent, lowered to one predicate per contract. (c) The XLM rule's predicate in wire form, and the `install_policy` arguments that attach OpenZeppelin's `spending_limit`; a second call installs the game rule. `C…`, `G…` and *N* are placeholders; `{ \"...\": \"(b)\" }` stands for the Intent in (b), passed as `intent`. Read from source; these two oz-policy-builder installs were not run.",
   "kind": "code",
   "panels": [
    {

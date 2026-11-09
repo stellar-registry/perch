@@ -86,8 +86,8 @@
    "id": "decide",
    "name": "Decision",
    "perch": {
-    "text": "`rule_eval::authorize` decides both contexts: function, recipient, signers, expiry and the window cap.",
-    "direct": "`rule_eval::authorize` decides the transfer alone; the window cap charges it.",
+    "text": "`rule_eval::check_auth` decides both contexts: function, recipient, signers, expiry and the window cap.",
+    "direct": "`rule_eval::check_auth` decides the transfer alone; the window cap charges it.",
     "src": [
      [
       "P",

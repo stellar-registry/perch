@@ -47,8 +47,8 @@ doc = false
 bench = false
 
 [[bin]]
-name = "apply_scope_delta"
-path = "fuzz_targets/apply_scope_delta.rs"
+name = "apply_grant_delta"
+path = "fuzz_targets/apply_grant_delta.rs"
 test = false
 doc = false
 bench = false

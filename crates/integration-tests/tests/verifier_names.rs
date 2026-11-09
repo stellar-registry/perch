@@ -1,9 +1,9 @@
 //! Verifier names end to end: a document's `verifier-name` resolved through
 //! the `perch/verifiers` registry and bound by `doc_hash`; a verifier named
-//! by contract id alone refused in an admin document and a recovery target,
-//! and in a scoped document allowed once per rule and flagged; a repointed
+//! by contract id alone refused in an account document and a recovery target,
+//! and in a grant document allowed once per rule and flagged; a repointed
 //! name leaving an applied account as it was; account creation refusing an
-//! unverified admin verifier; and a scoped document with named verifiers
+//! unverified admin verifier; and a grant document with named verifiers
 //! rebuilt byte for byte from the account's views.
 //!
 //! The registry is `perch_testkit::verifiers`' stand-in unless a test says
@@ -145,14 +145,14 @@ impl World {
         }
     }
 
-    fn apply_scope(&self, scope: u32, json: &str) -> Result<BytesN<32>, PerchAccountError> {
+    fn apply_grant(&self, grant: u32, json: &str) -> Result<BytesN<32>, PerchAccountError> {
         match self
             .client()
-            .try_apply_scope(&scope, &Bytes::from_slice(&self.env, json.as_bytes()))
+            .try_apply_grant(&grant, &Bytes::from_slice(&self.env, json.as_bytes()))
         {
             Ok(Ok(h)) => Ok(h),
             Err(Ok(e)) => Err(e),
-            other => panic!("apply_scope: {other:?}"),
+            other => panic!("apply_grant: {other:?}"),
         }
     }
 
@@ -174,7 +174,7 @@ impl World {
         )
     }
 
-    /// An admin document: `admin` (named) holds the self-admin rule, and
+    /// An account document: `admin` (named) holds the self-admin rule, and
     /// `extra` signers and rules follow.
     fn admin_doc(
         &self,
@@ -194,9 +194,9 @@ impl World {
         )
     }
 
-    /// A scoped document over `target`: `signers` and one rule per entry of
+    /// A grant document over `target`: `signers` and one rule per entry of
     /// `rules` (each a principals object).
-    fn scoped_doc(&self, signers: &[std::string::String], rules: &[&str]) -> std::string::String {
+    fn grant_doc(&self, signers: &[std::string::String], rules: &[&str]) -> std::string::String {
         let rules: std::vec::Vec<std::string::String> = rules
             .iter()
             .enumerate()
@@ -375,7 +375,7 @@ fn the_real_registry_resolves_a_published_name() {
 fn an_admin_document_may_not_name_a_verifier_by_contract_id() {
     let w = world();
     let ci = SigningKey::from_bytes(&[7u8; 32]);
-    // A raw signer in a contract-scoped rule of the admin document, and one
+    // A raw signer in a contract-scoped rule of the account document, and one
     // declared and named by no rule.
     for doc in [
         w.admin_doc(&[w.raw("ci", &ci)], &[&w.target_rule(&["ci"])]),
@@ -474,13 +474,13 @@ fn a_recovery_target_may_not_name_a_verifier_by_contract_id() {
 }
 
 #[test]
-fn a_scoped_document_may_name_one_and_is_flagged() {
+fn a_grant_document_may_name_one_and_is_flagged() {
     let w = world();
     let (a, b) = (
         SigningKey::from_bytes(&[21u8; 32]),
         SigningKey::from_bytes(&[22u8; 32]),
     );
-    let doc = w.scoped_doc(
+    let doc = w.grant_doc(
         &[w.raw("app", &a), w.named("named", &b)],
         &[r#"{"type":"threshold","signers":["app","named"],"m":1}"#],
     );
@@ -494,22 +494,22 @@ fn a_scoped_document_may_name_one_and_is_flagged() {
             SString::from_str(&w.env, ED)
         ]
     );
-    assert_eq!(w.apply_scope(1, &doc), Ok(c.doc_hash));
+    assert_eq!(w.apply_grant(1, &doc), Ok(c.doc_hash));
     assert_eq!(
-        w.client().scope_verifier_names(&1),
+        w.client().grant_verifier_names(&1),
         Some(c.verifier_names.clone())
     );
 
-    // A scope naming no verifier keeps no names.
-    let unnamed = w.scoped_doc(
+    // A grant naming no verifier keeps no names.
+    let unnamed = w.grant_doc(
         &[w.raw("app", &a)],
         &[r#"{"type":"all","signers":["app"]}"#],
     );
     let c = w.compile(&unnamed).unwrap();
     assert_eq!(c.unverified, vec![&w.env, w.raw.clone()]);
-    w.apply_scope(2, &unnamed).unwrap();
+    w.apply_grant(2, &unnamed).unwrap();
     assert_eq!(
-        w.client().scope_verifier_names(&2),
+        w.client().grant_verifier_names(&2),
         Some(soroban_sdk::Vec::new(&w.env))
     );
 }
@@ -528,28 +528,28 @@ fn a_rule_holds_one_signer_per_unverified_verifier() {
         r#"{"type":"threshold","signers":["a","b"],"m":2}"#,
         r#"{"type":"all","signers":["a","b"]}"#,
     ] {
-        let doc = w.scoped_doc(&signers, &[principals]);
+        let doc = w.grant_doc(&signers, &[principals]);
         assert_eq!(w.compile(&doc).err(), Some(DocCompilerError::DocInvalid));
         assert_eq!(
-            w.apply_scope(1, &doc),
+            w.apply_grant(1, &doc),
             Err(PerchAccountError::Compiler(DocCompilerError::DocInvalid))
         );
     }
     // One per rule is allowed.
-    let split = w.scoped_doc(
+    let split = w.grant_doc(
         &signers,
         &[
             r#"{"type":"all","signers":["a"]}"#,
             r#"{"type":"all","signers":["b"]}"#,
         ],
     );
-    assert!(w.apply_scope(1, &split).is_ok());
+    assert!(w.apply_grant(1, &split).is_ok());
     // Named signers under one verifier are not limited.
-    let named = w.scoped_doc(
+    let named = w.grant_doc(
         &[w.named("a", &a), w.named("b", &b)],
         &[r#"{"type":"all","signers":["a","b"]}"#],
     );
-    assert!(w.apply_scope(2, &named).is_ok());
+    assert!(w.apply_grant(2, &named).is_ok());
 }
 
 #[test]
@@ -683,12 +683,12 @@ fn the_factory_creates_only_what_an_admin_document_could_hold() {
 }
 
 #[test]
-fn a_scoped_document_naming_verifiers_rebuilds_exactly() {
+fn a_grant_document_naming_verifiers_rebuilds_exactly() {
     let w = world();
     let keys: std::vec::Vec<SigningKey> = (40u8..43)
         .map(|s| SigningKey::from_bytes(&[s; 32]))
         .collect();
-    let doc = w.scoped_doc(
+    let doc = w.grant_doc(
         &[
             w.named("a", &keys[0]),
             w.raw("b", &keys[1]),
@@ -699,11 +699,11 @@ fn a_scoped_document_naming_verifiers_rebuilds_exactly() {
             r#"{"type":"all","signers":["c"]}"#,
         ],
     );
-    let hash = w.apply_scope(3, &doc).unwrap();
+    let hash = w.apply_grant(3, &doc).unwrap();
     let canonical = perch_ir::canonical_json(&perch_ir::from_json(&doc).unwrap());
     assert_eq!(hash.to_array(), sha256_hex(&canonical));
     assert_eq!(
-        rebuild::scope_text(&w.env, &w.account, 3).unwrap(),
+        rebuild::grant_text(&w.env, &w.account, 3).unwrap(),
         canonical
     );
     // The same rules under the names read back in the wrong order rebuild

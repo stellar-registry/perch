@@ -52,7 +52,7 @@
 #                      deployer(source, sha256("<project>-author"))
 #   --owner A --admin A --manager A   roles of new registries (default: the source)
 #   --admin-key G      the authors' admin ed25519 key (default: the source's key)
-#   --admin-signer external|delegated   External(ed25519 verifier, key), which
+#   --account-signer external|delegated   External(ed25519 verifier, key), which
 #                      perch-deploy apply signs (default); or Delegated(G), which
 #                      this script cannot sign
 #   --ci-key G         the authors' ci-publish delegate (required with --send)
@@ -114,7 +114,7 @@ sha256_text() { printf '%s' "$1" | if command -v sha256sum >/dev/null; then sha2
 # --- arguments ---------------------------------------------------------------
 
 NETWORK="" STEP="" SOURCE="" OWNER="" ADMIN="" MANAGER_ROLE="" NAME="" PROJECT=perch
-ADMIN_KEY="" ADMIN_SIGNER=external CI_KEY="" CI_EXPIRY="" ACCOUNT_WASM="" NIDO=1
+ADMIN_KEY="" ACCOUNT_SIGNER=external CI_KEY="" CI_EXPIRY="" ACCOUNT_WASM="" NIDO=1
 NIDO_NAMES="nido-factory nido-name-registry" SEND=0 I_MEAN_MAINNET=0 REGISTRY_WASM="" ALLOW_UNATTESTED=" "
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -126,7 +126,7 @@ while [ $# -gt 0 ]; do
         --name) NAME="$2"; shift 2 ;;
         --project) PROJECT="$2"; shift 2 ;;
         --admin-key) ADMIN_KEY="$2"; shift 2 ;;
-        --admin-signer) ADMIN_SIGNER="$2"; shift 2 ;;
+        --account-signer) ACCOUNT_SIGNER="$2"; shift 2 ;;
         --ci-key) CI_KEY="$2"; shift 2 ;;
         --ci-expiry-ledger) CI_EXPIRY="$2"; shift 2 ;;
         --account-wasm) ACCOUNT_WASM="$2"; shift 2 ;;
@@ -144,7 +144,7 @@ done
 [ -n "$STEP" ] || { usage; exit 1; }
 [ -n "$SOURCE" ] || die "--source is required: the identity (or G address) that signs and pays"
 case "$PROJECT" in perch|nido) ;; *) die "--project is perch or nido" ;; esac
-case "$ADMIN_SIGNER" in external|delegated) ;; *) die "--admin-signer is external or delegated" ;; esac
+case "$ACCOUNT_SIGNER" in external|delegated) ;; *) die "--account-signer is external or delegated" ;; esac
 [ -z "$CI_EXPIRY" ] || [[ "$CI_EXPIRY" =~ ^[0-9]+$ ]] || die "--ci-expiry-ledger is a ledger number"
 
 # Everything per network is chosen here; the code below never branches on it.
@@ -775,7 +775,7 @@ admin_verifier() {
 # The author document, in the shape of testdata/deploy/perch-testnet.template.json.
 author_doc() { # registry ci expiry
     jq -n --arg net "$PASSPHRASE" --arg reg "$1" --arg verifier "$ADMIN_VERIFIER" --arg name "$ADMIN_VERIFIER_NAME" \
-        --arg mode "$ADMIN_SIGNER" \
+        --arg mode "$ACCOUNT_SIGNER" \
         --arg g "$ADMIN_KEY_G" --arg key "$("$DERIVE" key "$ADMIN_KEY_G")" --arg ci "$2" --argjson until "$3" '
         {version: 1, network: $net,
          signers: [(if $mode == "delegated" then {id: "admin", address: $g}
@@ -854,7 +854,7 @@ cmd_create_author() {
         log "account code: $wasm ($hash)"
         ensure_code perch-account "$hash" "$wasm"
         salt="$(sha256_text "$project-author")"
-        if [ "$ADMIN_SIGNER" = delegated ]; then
+        if [ "$ACCOUNT_SIGNER" = delegated ]; then
             signer="[{\"Delegated\":\"$ADMIN_KEY_G\"}]"
             plan "deploy perch-account $hash from $SRC_G with salt sha256(\"$project-author\") -> $author, admin signer Delegated($ADMIN_KEY_G)"
         else
@@ -863,7 +863,7 @@ cmd_create_author() {
             # The constructor registers the signer through its verifier
             # (batch_canonicalize_key), so an External admin needs it deployed.
             if ! instance_exists "$ADMIN_VERIFIER"; then
-                warn "stops here: an External admin's constructor calls its verifier $ADMIN_VERIFIER, which seed or seed-verifiers deploys (or use --admin-signer delegated)"
+                warn "stops here: an External admin's constructor calls its verifier $ADMIN_VERIFIER, which seed or seed-verifiers deploys (or use --account-signer delegated)"
                 return 1
             fi
         fi
@@ -905,7 +905,7 @@ cmd_create_author() {
     fi
     docfile="$OUT/$project-author.json"
     author_doc "$reg" "$ci" "$expiry" >"$docfile"
-    log "$project author document ($docfile): admin $ADMIN_SIGNER $ADMIN_KEY_G, ci-publish by $ci until ledger $expiry, admin-registry; both on $reg"
+    log "$project author document ($docfile): admin $ACCOUNT_SIGNER $ADMIN_KEY_G, ci-publish by $ci until ledger $expiry, admin-registry; both on $reg"
     hex="$(jq -cj . "$docfile" | od -An -v -tx1 | tr -d ' \n')"
     if ! instance_exists "$COMPILER"; then
         # The same compiler bytes may already run in the registry this
@@ -938,7 +938,7 @@ cmd_create_author() {
     r="$(simulate "$author" apply_doc --doc_json "$hex" --approval_valid_until 0 --expected_revision "$(simulate "$author" revision | unquote)")"
     log "simulated apply_doc: $r"
     [[ "$r" =~ ^\"[0-9a-f]{64}\"$ ]] || die "apply_doc would fail"
-    if [ "$ADMIN_SIGNER" = delegated ]; then
+    if [ "$ACCOUNT_SIGNER" = delegated ]; then
         plan "sign apply_doc on $author for the Delegated admin $ADMIN_KEY_G with a CAP-71 signer; perch-deploy apply signs only External admins"
         [ "$SEND" != 1 ] || die "--send with a Delegated admin: this script has no signer for it"
         return 0

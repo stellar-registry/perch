@@ -76,7 +76,7 @@ pub enum SignerMethod {
         /// compiler resolves it on-chain and refuses the document unless it
         /// resolves to `verifier`, so the canonical form binds the name, the
         /// version and the address together. Absent, the verifier is
-        /// *unverified*: named by its contract id alone, which an admin
+        /// *unverified*: named by its contract id alone, which an account
         /// document may not do ([`crate::verifier`]). Omitted from the
         /// canonical form when `None`.
         verifier_name: Option<String>,

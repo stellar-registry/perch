@@ -4,7 +4,7 @@
 //! target, functions, arguments, authenticated signers, and an exact entry
 //! root when required. The symbolic root and invocation describe one entry;
 //! a satisfying assignment is a screening witness, not a complete authorized
-//! transaction. Only `authorize` checks the whole selection and charges caps.
+//! transaction. Only `rule_eval::check_auth` checks the whole selection and charges caps.
 //!
 //! `dead_rules`, `only_calls` and `can_call` query that predicate. `narrows`
 //! additionally compares expiry, caps and root implication structurally.
@@ -224,7 +224,7 @@ impl Encoder {
     }
 
     /// `rule_allows_in` for a symbolic entry root and invocation. This is
-    /// stateless eligibility, not the complete `authorize` decision.
+    /// stateless eligibility, not the complete `rule_eval::check_auth` decision.
     pub fn rule_allows_in(&mut self, rule: &Rule) -> String {
         let local = self.rule_allows(rule);
         match &rule.auth_root {

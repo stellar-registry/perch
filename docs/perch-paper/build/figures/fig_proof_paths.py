@@ -77,7 +77,7 @@ def wide():
     s.text(124, sy - 7, 'SHIPPING PATH', 't tag', 14)
     hs = 66
     node(s, None, C[0][0], sy, 134, [(f'rustc `{fact("rustc-perch")}` → Wasm', 't')], 'trusted', minh=hs, pad=8)
-    node(s, None, 270, sy, 600 - 270, [('`perch_account.wasm`: the shell around linked `authorize`, `lower`, '
+    node(s, None, 270, sy, 600 - 270, [('`perch_account.wasm`: the shell around linked `check_auth`, `lower`, '
                                         '`lower_scoped`', 'x'), ('TESTED', 'm tag')], 'tested', minh=hs, pad=8)
     node(s, None, kx, sy, kw, [('Simulator and testnet runs', 'x'), ('TESTED', 'm tag')], 'tested', minh=hs, pad=8)
     s.path(f'M258 {sy + 33}H268', 'fl', marker_end='url(#perch-ah)')
@@ -162,7 +162,7 @@ def narrow():
     y += 24
     rustc_y = y
     for items, kind in (([(f'rustc `{fact("rustc-perch")}` → `wasm32v1-none`', 't'), ('from the same source', 'm')], 'trusted'),
-                        ([('`perch_account.wasm`: the shell around linked `authorize`, `lower`, `lower_scoped`', 'x'),
+                        ([('`perch_account.wasm`: the shell around linked `check_auth`, `lower`, `lower_scoped`', 'x'),
                           ('TESTED', 'm tag')], 'tested'),
                         ([('Simulator and testnet runs', 'x'), ('TESTED', 'm tag')], 'tested')):
         h = node(s, None, 20, y, 318, items, kind)

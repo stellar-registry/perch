@@ -16,7 +16,7 @@ RESULT = {
     16: ('Install a fresh credential', 'ok', ''), 17: ('Spend 2 with grant 2', 'ok', ''), 18: ('Collect grant 1', 'ok', ''),
 }
 KEY = {
-    5: f'Collect grant 1: refused, ScopeLive ({fact("account-error-scope-live")})',
+    5: f'Collect grant 1: refused, GrantLive ({fact("account-error-scope-live")})',
     6: 'Enroll recovery: Loss, two guardians',
     7: 'Begin an attempt',
     8: 'Guardian 1 approves',
@@ -24,7 +24,7 @@ KEY = {
     10: f'Complete: refused, NotExecutableYet ({fact("controller-error-not-executable-yet")}, controller)',
     11: 'Advance 11 ledgers: no transaction',
     12: 'Complete: applied in one transaction',
-    13: f'Spend 1 with grant 1: refused, StaleScope ({fact("auth-error-stale-scope")})',
+    13: f'Spend 1 with grant 1: refused, StaleGrant ({fact("auth-error-stale-scope")})',
     14: f'Old owner installs: refused, RuleEvalRefused ({fact("auth-error-rule-eval-refused")})',
     15: f'Re-grant wiped key: refused, WipedCredential ({fact("account-error-wiped-credential")})',
     16: 'Install a fresh credential: grant 2',
@@ -148,7 +148,7 @@ def narrow():
 def steps():
     btn = 'In the experiment: '
     items = [
-        (5, 'Collect grant 1: refused with `ScopeLive` ({{fact:account-error-scope-live}}), because grant 1 is still current. '
+        (5, 'Collect grant 1: refused with `GrantLive` ({{fact:account-error-scope-live}}), because grant 1 is still current. '
             + btn + '*Collect grant 1*.'),
         (6, 'Enroll recovery: applied, with the {{fact:recovery-profile-demo}} profile and {{fact:recovery-guardians-demo}} '
             'guardians. The recovery generation goes from 0 to 1. ' + btn + '*Enroll recovery*.'),
@@ -162,7 +162,7 @@ def steps():
         (12, 'Complete: applied in one transaction. The grant generation goes from 0 to 1, the recovery generation from 1 '
              'to 2, and the replaced owner key is revoked. Grant 1 stops authorizing but stays stored, and its key is '
              'barred. ' + btn + '*Attempt completion*.'),
-        (13, 'Spend 1 with grant 1: refused with `StaleScope` ({{fact:auth-error-stale-scope}}); grant 1 is stored but '
+        (13, 'Spend 1 with grant 1: refused with `StaleGrant` ({{fact:auth-error-stale-scope}}); grant 1 is stored but '
              'stale. ' + btn + '*Attempt spend*, grant 1, amount 1.'),
         (14, 'The old owner installs a grant: refused with `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}}), '
              'because the old owner key is revoked. ' + btn + '*Try old owner*.'),

@@ -97,7 +97,7 @@ def charge(rec, limit, period, now, amount):
 
 
 def authorize(rules, records, contexts, choices, auth, now, gen):
-    """rule_eval::authorize: three passes; returns ok + records, or the first refusal."""
+    """rule_eval::check_auth: three passes; returns ok + records, or the first refusal."""
     if len(choices) != len(contexts):
         return {'ok': False, 'check': 'choices', 'i': None}
     if len(records) != len(rules):
@@ -244,7 +244,7 @@ PROBES = [
     ('t5', 'transfer 5 to the shop', transfer(SHOP, 5), ['app']),
     ('else', 'transfer 1 elsewhere', transfer(ELSEWHERE, 1), ['app']),
     ('approve', '`approve` on XLM', {'contract': XLM, 'fn': 'approve', 'args': [ACCOUNT, SHOP, 5, 2000]}, ['app']),
-    ('account', 'a call to the account', {'contract': ACCOUNT, 'fn': 'apply_scope', 'args': ['grant']}, ['app']),
+    ('account', 'a call to the account', {'contract': ACCOUNT, 'fn': 'apply_grant', 'args': ['grant']}, ['app']),
     ('helper', 'a transfer signed by `helper` alone', transfer(SHOP, 1), ['helper']),
 ]
 # The static form: three steps the table allows, then one move it refuses.
@@ -281,7 +281,7 @@ def e3_request(req, named='right'):
     if req in ('within', 'over'):
         return [transfer(SHOP, 4 if req == 'within' else 5)], ([0] if named == 'right' else [2])
     if req == 'account':
-        return [{'contract': ACCOUNT, 'fn': 'apply_scope', 'args': ['grant']}], ([0] if named == 'right' else [1])
+        return [{'contract': ACCOUNT, 'fn': 'apply_grant', 'args': ['grant']}], ([0] if named == 'right' else [1])
     raise ValueError(req)
 
 

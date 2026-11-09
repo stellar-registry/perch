@@ -17,9 +17,9 @@
 //!
 //! The documents:
 //!
-//! - every admin document of rule-core's document traces at the rev the
+//! - every account document of rule-core's document traces at the rev the
 //!   workspace pins: each admin trace's document and each scoped trace's
-//!   admin document, renamed onto real addresses. For an admin trace the
+//!   account document, renamed onto real addresses. For an admin trace the
 //!   lowering must also equal the trace's own, which rule-core's Lean model
 //!   computed;
 //! - the 500 documents of `tests/corpus/rule-eval-baseline.json`, drawn by
@@ -192,7 +192,7 @@ struct Names<'w> {
 impl<'w> Names<'w> {
     /// The renaming for `d` on a trace whose account is `account`: each
     /// verifier `d` declares is an `AnyKeyVerifier` where `perch/verifiers`
-    /// deploys one, named ([`verifiers::auto_name`]), as an admin document's
+    /// deploys one, named ([`verifiers::auto_name`]), as an account document's
     /// must be.
     fn new(w: &'w DeltaWorld, account: &str, d: &JsonDoc) -> Names<'w> {
         let mut addr = BTreeMap::from([(unhex(account), w.delta.clone())]);
@@ -397,7 +397,7 @@ impl<'w> Names<'w> {
     }
 }
 
-/// Every admin document a trace holds, with the lowering the trace states
+/// Every account document a trace holds, with the lowering the trace states
 /// for it when it states one.
 fn trace_documents(t: &Trace) -> Vec<(&JsonDoc, Option<&Lowered>)> {
     match &t.scoped {
@@ -406,7 +406,7 @@ fn trace_documents(t: &Trace) -> Vec<(&JsonDoc, Option<&Lowered>)> {
     }
 }
 
-/// Checks every admin document of `traces`; returns the failures.
+/// Checks every account document of `traces`; returns the failures.
 fn check_traces(
     w: &DeltaWorld,
     traces: &[(String, Trace)],
@@ -458,7 +458,7 @@ fn every_rule_core_admin_document_lowers_as_perch_installs_it() {
     let mut shape = Shape::default();
     let (documents, against_model, failures) = check_traces(&w, &traces, &mut shape);
     println!(
-        "traces: {}, admin documents: {documents} (with the trace's lowering: {against_model}), \
+        "traces: {}, account documents: {documents} (with the trace's lowering: {against_model}), \
          rules: {}, conditions: {}, capped: {}, with recovery: {} (ZK: {}), differences: {}",
         traces.len(),
         shape.rules,
@@ -468,7 +468,7 @@ fn every_rule_core_admin_document_lowers_as_perch_installs_it() {
         shape.zk,
         failures.len()
     );
-    assert_eq!(documents, traces.len(), "one admin document per trace");
+    assert_eq!(documents, traces.len(), "one account document per trace");
     assert_eq!(against_model, traces.len() - scoped);
     assert!(shape.zk > 0 && shape.capped > 0);
     assert!(failures.is_empty(), "{}", failures.join("\n"));

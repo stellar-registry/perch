@@ -1227,11 +1227,17 @@ dependencies = [
 
 [[package]]
 name = "perch-account"
-version = "0.3.3"
+version = "0.5.1"
 dependencies = [
  "perch-smart-account",
  "soroban-sdk",
- "stellar-accounts",
+]
+
+[[package]]
+name = "perch-account-types"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
 ]
 
 [[package]]
@@ -1245,21 +1251,21 @@ dependencies = [
 
 [[package]]
 name = "perch-doc-compiler"
-version = "0.3.3"
+version = "0.3.5"
 dependencies = [
  "hex",
- "perch-compile",
+ "perch-account-types",
  "perch-ir",
- "perch-program",
  "perch-recovery-interface",
+ "perch-registry-resolve",
+ "perch-rule-eval",
  "soroban-sdk",
  "soroban-sdk-tools",
- "stellar-accounts",
 ]
 
 [[package]]
 name = "perch-ed25519-verifier"
-version = "10.0.1"
+version = "10.0.2"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",
@@ -1279,7 +1285,7 @@ dependencies = [
 
 [[package]]
 name = "perch-interpreter"
-version = "0.1.4"
+version = "0.1.6"
 dependencies = [
  "perch-program",
  "soroban-sdk",
@@ -1305,13 +1311,12 @@ dependencies = [
 
 [[package]]
 name = "perch-recovery"
-version = "0.1.3"
+version = "0.1.5"
 dependencies = [
  "perch-doc-compiler",
  "perch-recovery-interface",
  "soroban-sdk",
  "soroban-sdk-tools",
- "stellar-accounts",
 ]
 
 [[package]]
@@ -1337,24 +1342,39 @@ dependencies = [
  "proc-macro2",
  "quote",
  "sha2",
+ "stellar-strkey 0.0.16",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "perch-rule-eval"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "perch-account-types",
+ "perch-ir",
+ "rule-eval",
+ "soroban-facade",
+ "soroban-sdk",
 ]
 
 [[package]]
 name = "perch-smart-account"
 version = "0.1.1"
 dependencies = [
+ "perch-account-types",
  "perch-doc-compiler",
  "perch-recovery-interface",
  "perch-registry-resolve",
+ "perch-rule-eval",
+ "rule-eval",
  "soroban-sdk",
  "soroban-sdk-tools",
- "stellar-accounts",
 ]
 
 [[package]]
 name = "perch-spending-limit"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "soroban-sdk",
  "stellar-accounts",
@@ -1369,13 +1389,18 @@ dependencies = [
  "hex",
  "p256",
  "perch-account",
+ "perch-account-types",
+ "perch-compile",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",
+ "perch-ir",
  "perch-program",
  "perch-recovery",
+ "perch-rule-eval",
  "perch-smart-account",
  "perch-spending-limit",
+ "rule-eval",
  "sha2",
  "soroban-sdk",
  "stellar-accounts",
@@ -1529,6 +1554,11 @@ dependencies = [
  "hmac",
  "subtle",
 ]
+
+[[package]]
+name = "rule-eval"
+version = "0.1.0"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=fe16e21bb6f145b031c50f60a12b8188d341fc25#fe16e21bb6f145b031c50f60a12b8188d341fc25"
 
 [[package]]
 name = "rustc_version"
@@ -1833,6 +1863,15 @@ dependencies = [
  "serde_json",
  "stellar-xdr",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "soroban-facade"
+version = "0.1.0"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=fe16e21bb6f145b031c50f60a12b8188d341fc25#fe16e21bb6f145b031c50f60a12b8188d341fc25"
+dependencies = [
+ "rule-eval",
+ "soroban-sdk",
 ]
 
 [[package]]

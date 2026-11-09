@@ -10,8 +10,9 @@ use common::{
 };
 use perch_ir::recovery::{derive_target, DeriveAction, Replacement};
 use perch_ir::{
-    canonical_json, doc_hash, from_json, is_admin_document, unverified_reuse, unverified_verifiers,
-    PolicyDoc, Principals, Scope, SignerDecl, SignerMethod, ThresholdPrincipals, ValidationError,
+    canonical_json, doc_hash, from_json, is_account_document, unverified_reuse,
+    unverified_verifiers, PolicyDoc, Principals, Scope, SignerDecl, SignerMethod,
+    ThresholdPrincipals, ValidationError,
 };
 
 const NAME: &str = "perch-webauthn-verifier@0.1.0";
@@ -123,10 +124,10 @@ fn a_misspelled_name_fails_validation() {
 
 #[test]
 fn an_admin_document_has_a_self_admin_rule_or_a_recovery_member() {
-    assert!(is_admin_document(&base_doc()));
+    assert!(is_account_document(&base_doc()));
     let mut scoped = base_doc();
     scoped.rules = vec![rule("app", Scope::contract(REGISTRY), &["admin"])];
-    assert!(!is_admin_document(&scoped));
+    assert!(!is_account_document(&scoped));
     let recovery = from_json(
         &std::fs::read_to_string(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -140,7 +141,7 @@ fn an_admin_document_has_a_self_admin_rule_or_a_recovery_member() {
         .rules
         .retain(|r| !matches!(r.scope, Scope::SelfAdmin(_)));
     assert!(recovery_only.recovery.is_some());
-    assert!(is_admin_document(&recovery_only));
+    assert!(is_account_document(&recovery_only));
 }
 
 #[test]

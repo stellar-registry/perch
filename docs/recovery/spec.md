@@ -40,7 +40,7 @@ Other documents cite these requirements by ID.
 | --- | --- | --- | --- |
 | D1 | Activity during recovery | `Protected`: while an attempt is authorized, the account authorizes nothing except that attempt's completion, on every path. `Loss`: ordinary activity continues. The profile alone fixes this; there is no separate activity setting. | §9 |
 | D2 | Evidence-free attempts | Anyone may open an attempt. Any number of attempts may collect evidence at once, and a collecting attempt blocks nothing. | §6 |
-| D3 | Authorized window | From authorization until completion, cancellation, or expiry, both profiles refuse every change to the applied document except that attempt's completion, and refuse upgrade scheduling and execution. Scoped documents (D17) are not covered; under `Protected` the freeze (D1) refuses them. | §9, §12 |
+| D3 | Authorized window | From authorization until completion, cancellation, or expiry, both profiles refuse every change to the applied document except that attempt's completion, and refuse upgrade scheduling and execution. Grant documents (D17) are not covered; under `Protected` the freeze (D1) refuses them. | §9, §12 |
 | D4 | Reconfiguration | `Loss`: owner authorization. `Protected`: owner authorization plus the enrolled condition's evidence over a `Reconfigure` statement (`Combined`: guardian quorum and a ZK proof). | §5, §10 |
 | D5 | Cancellation | The enrolled condition's evidence over a `Cancel` statement, in both profiles. Under `Loss`, owner authorization alone also cancels, and that veto is never capped. An evidence-based cancellation of an authorized attempt counts toward `max-cancels`. | §6 |
 | D6 | Permitted changes | The target document is derived on-chain from the source and a declared replacement set. For lost-key the source is the applied-document snapshot; for compromise it is the enrolled baseline's signers and rules, with the current recovery section. Nobody chooses a target hash. | §7 |
@@ -49,12 +49,12 @@ Other documents cite these requirements by ID.
 | D9 | Nullifiers | One nullifier per enrolled ZK credential, owned by that `(account, enrollment)`. It is either unspent or spent. Only a completion of that account spends it; nothing ever un-spends it. Proofs for any action need it unspent. Nullifiers are never reserved, so there is nothing to release. | §11 |
 | D10 | Stale state | Leaves and nullifiers bind an enrollment id the configuration names, and the account refuses to re-enroll an id it used before. Every configuration change and every completion bumps the per-account epoch, and evidence or attempts from an older epoch are dead. | §3, §11 |
 | D11 | Upgrades | Owner authorization (plus, under `Protected`, condition evidence over an `Upgrade` statement binding the Wasm hash and the epoch). Executable after 120 960 ledgers. An account-owned **recovery generation** invalidates the request whenever recovery configuration changes, including across unenrolled → enrolled → unenrolled. Executing an upgrade advances it. Blocked during an authorized attempt. | §12 |
-| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete`, `rcv_insert`, `rcv_gate`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. That name guard, not a ban on rules scoped to the controller, is what protects the controller: the admin document may scope rules to a controller so the account can act as a guardian there. No scoped document's rule may cast a guardian approval at any controller (D17). Guardian and ZK evidence is always submitted through non-reserved entry points and recorded; hooks only read the records. | §2, §5, §15 |
+| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete`, `rcv_insert`, `rcv_gate`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. That name guard, not a ban on rules scoped to the controller, is what protects the controller: the account document may grant rules to a controller so the account can act as a guardian there. No grant document's rule may cast a guardian approval at any controller (D17). Guardian and ZK evidence is always submitted through non-reserved entry points and recorded; hooks only read the records. | §2, §5, §15 |
 | D13 | Statement | One `RecoveryStatement`, encoded at fixed width and hashed with SHA-256. Guardians authorize the digest and the circuit binds it. | §4 |
 | D14 | ZK boundary | The controller passes the structured statement to an adapter. The adapter checks the circuit id, field canonicality, root membership in the enrolled pool, and the proof. Public inputs are `root, nullifier, statement_hash`. | §13 |
 | D15 | Pool | Depth 32 (chosen by `budgets.md`'s depth rule; a depth-24 build is the fallback). A full tree rolls over automatically. Roots are accepted as `(tree_id, root)`, and every root a tree has ever had stays acceptable. | §14 |
 | D16 | No re-entry | Soroban refuses to re-enter a contract already on the call stack. No hook calls back into the account; the account passes what hooks need. The `Protected` freeze is a mirror in the account's own storage, set by the controller through the account's invoker-only `rcv_gate`, never a cross-contract read from `__check_auth`. | §9, §15 |
-| D17 | Scoped documents | Grants may live in scoped documents beside the applied document. A scoped document has no recovery member and no rule scoped to the account, to its recovery controller, or to its ZK adapter or pool, and none of its rules casts a guardian approval at any controller. Its rules authorize only under the scope generation they were applied in, and every completion advances it, wiping every scope in one write. A credential a wiped scope named is never named again by any later document but a completion's target. Scoped documents are part of no recovery source, target, or baseline. | §7.6 |
+| D17 | Grant documents | Grants may live in grant documents beside the applied document. A grant document has no recovery member and no rule scoped to the account, to its recovery controller, or to its ZK adapter or pool, and none of its rules casts a guardian approval at any controller. Its rules authorize only under the grant generation they were applied in, and every completion advances it, wiping every grant in one write. A credential a wiped grant named is never named again by any later document but a completion's target. Grant documents are part of no recovery source, target, or baseline. | §7.6 |
 
 ## 1. Scope and vocabulary
 
@@ -78,8 +78,8 @@ account built without recovery support cannot enroll in place.
 | account | A perch smart account built with this spec's recovery support. Always a contract (`C...`) address. |
 | `L` | The current ledger sequence, `e.ledger().sequence()`. All timing is in ledger counts. |
 | owner authorization | The account authorizing through any of its ordinary context rules (in practice the self-admin rule), via `__check_auth`. Never the recovery rule. |
-| applied document | The admin document: the account's policy document as `apply_doc` applied it, with its rules, recovery member, and `doc_hash`. Not its scoped documents (§7.6). |
-| scoped document | A policy document applied under a scope id with `apply_scope`, holding rules scoped to other contracts only (§7.6). |
+| applied document | The account document: the account's policy document as `apply_doc` applied it, with its rules, recovery member, and `doc_hash`. Not its grant documents (§7.6). |
+| grant document | A policy document applied under a grant id with `apply_grant`, holding rules scoped to other contracts only (§7.6). |
 | recovery rule | The zero-signer context rule the account installs while recovery is enrolled. Its only policy is the controller, and it authorizes only a completion (§6.3 T5, §10). |
 | controller | The constructorless, immutable recovery-controller instance named by the applied document's `recovery.controller`. |
 | condition | The enrolled mode's evidence requirement over a given statement (§5). |
@@ -123,14 +123,14 @@ account built without recovery support cannot enroll in place.
   attempt (Transitions T4), and only compromise recovery is immune to that.
   The protocol keeps `baseline` optional; wallets should require one for
   `Protected`.
-- **A rule scoped to a controller is safe in the admin document, and
+- **A rule scoped to a controller is safe in the account document, and
   needed.** An account that is a guardian of other accounts signs those
   approvals in contexts naming the controller the guarded account uses
   (`submit_guardian`, `approve_change`). That may be the controller the
   account uses itself, another deployment, or one it never adopted. Its
-  admin document therefore needs a rule scoped to that controller, or a
+  account document therefore needs a rule scoped to that controller, or a
   `Default` rule. A guardian approval is owner-level authority over the
-  guarded account, so only the admin document may cast one: no scoped
+  guarded account, so only the account document may cast one: no grant
   document's rule may cast a guardian approval at any controller, whatever
   controller the account itself adopted (§7.6).
 
@@ -356,14 +356,14 @@ points extend existing entries without changing their meaning:
 | Controller | Configuration, published baseline, epoch, attempt-id counter, `invalidate_below`, cancellation count, the authorized attempt's id and record | `renew(account)` |
 | Controller | Spent nullifiers, one entry per `(account, nullifier)` (§11) | `renew_nullifier(account, nullifier)` |
 | Controller | Recorded change approvals, one entry per `(account, digest)` (§5) | Not renewed. A write extends the entry only far enough to cover its `valid_until`, after which the approval is stale anyway. |
-| Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, rule-id counter (§7.5), applied ZK factor, freeze mirror (§9), recovery and scope generations, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
+| Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, rule-id counter (§7.5), applied ZK factor, freeze mirror (§9), recovery and grant generations, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
 | Account | Applied document bytes and fingerprints; the revoked set and the enrolled-id set, one entry per fingerprint or id | The same `renew`, for the entries it names |
 | Account | Installed-rule records and the rule-eval rule set aligned with them (§7.5) | Not by `renew`; extended when written, and on read by `__check_auth` (30 days when fewer than 29 remain) |
-| Account | Instance storage: scope count (§7.6) | The same `renew` |
-| Account | Scoped-document records, their rule-eval rule sets, canonical bytes, and index entries (§7.6) | Not by `renew`; extended when written, and records and rule sets on read by `__check_auth` (30 days when fewer than 29 remain) |
+| Account | Instance storage: grant count (§7.6) | The same `renew` |
+| Account | Grant-document records, their rule-eval rule sets, canonical bytes, and index entries (§7.6) | Not by `renew`; extended when written, and records and rule sets on read by `__check_auth` (30 days when fewer than 29 remain) |
 | Account | Rule-eval spending records, one per capped rule `__check_auth` has charged | Not by `renew`; extended when written and when read |
-| Account | The credential index, one entry per credential fingerprint a scoped document named (§7.6) | Not by `renew`; extended when written |
-| Account | Scope tags, one per scoped rule (§7.6) | Not by `renew`; extended when written, and on read by `__check_auth` (30 days when fewer than 29 remain) |
+| Account | The credential index, one entry per credential fingerprint a grant document named (§7.6) | Not by `renew`; extended when written |
+| Account | Grant tags, one per grant rule (§7.6) | Not by `renew`; extended when written, and on read by `__check_auth` (30 days when fewer than 29 remain) |
 | Pool | Tree states, every root, every leaf, enrollment records, the current-tree pointer (§14) | `renew_tree`, `renew_root`, `renew_leaves`, `renew_enrollment` |
 
 Collecting attempts may live in temporary storage with a TTL of at least
@@ -674,7 +674,7 @@ domain). Then:
 is satisfied for a live collecting attempt `A`:
 
 - for lost-key, if the account's current applied-document hash differs from
-  `A.source_doc_hash`, `A` is invalidated (scoped documents, §7.6, are not
+  `A.source_doc_hash`, `A` is invalidated (grant documents, §7.6, are not
   part of it). The evidence call that triggered
   the check **succeeds**, stores `AttemptState::Invalidated`, and emits
   `AttemptInvalidated`. Refusing instead would roll the invalidation back,
@@ -845,7 +845,7 @@ Completers obtain the canonical bytes by simulating the same call.
 
 If a lost-key source changes before the attempt is authorized, the attempt
 must start over (T4). After authorization the source cannot change, because
-policy changes are blocked (§9). Scoped documents (§7.6) are in no source.
+policy changes are blocked (§9). Grant documents (§7.6) are in no source.
 
 ### 7.3 Replacement rules
 
@@ -869,7 +869,7 @@ below holds:
    the one it replaces, so recovery can never route a signer slot through a
    verifier the account had not already adopted for that slot. The target
    takes only the replacement's key: the signer keeps its verifier and its
-   `verifier-name`. A target is an admin document, so the compiler refuses
+   `verifier-name`. A target is an account document, so the compiler refuses
    one naming a verifier by contract id alone
    (`DocCompilerError::DocInvalid`; `docs/account-interface.md`,
    "Verifiers"), a compromise baseline's included.
@@ -1006,7 +1006,7 @@ the account's counter, which never gives an id twice. A document rule
 carries no policy, only the recovery rule its controller: what a rule
 allows, its program and cap included, is the rule-eval rule its record
 holds (`rule_set`), and `__check_auth` decides with rule-eval's
-`authorize` over those rules. A completion (T5) reads the
+`check_auth` over those rules. A completion (T5) reads the
 recovery rule from its record; nothing of OZ's registry is written.
 Installing it calls the controller's `rcv_install`; removing it calls no hook. The apply
 never scans historical rule ids, which grow without bound with every past
@@ -1044,38 +1044,38 @@ Two rules bound that cost:
 - **Bounded revocation writes.** The revoked set is one persistent entry per
   fingerprint, so a completion writes at most one entry per removed
   credential, a number the caps bound.
-- **Scoped documents are not read.** A completion wipes every scoped
+- **Grant documents are not read.** A completion wipes every grant
   document (§7.6) by writing one counter, however many a thief installed,
   so the worst case above holds with any number of them. The `worst_case_*`
-  compromise flows run with a thief's scoped documents installed.
+  compromise flows run with a thief's grant documents installed.
 
-### 7.6 Scoped documents
+### 7.6 Grant documents
 
-Besides its applied document, the **admin document**, an account holds any
-number of **scoped documents**, each under a `u32` scope id its owner
-chooses (one per app grant, say). A scoped document is a policy document in
+Besides its applied document, the **account document**, an account holds any
+number of **grant documents**, each under a `u32` grant id its owner
+chooses (one per app grant, say). A grant document is a policy document in
 the same format, compiled by the account's doc compiler under the same caps
 (§7.5). It holds rules scoped to other contracts only: app grants and
-session keys. The admin document keeps the account's own rules, the
+session keys. The account document keeps the account's own rules, the
 recovery member, and everything a recovery restores; everything this spec
-says about "the applied document" is about the admin document.
+says about "the applied document" is about the account document.
 
 **Entry points.**
 
 | Entry point | Authorization | Effect |
 | --- | --- | --- |
-| `apply_scope(scope, doc_json)` | Owner | Compiles `doc_json`, refuses it if it reaches past a scope (below), is not in normal form (`NotNormalForm`, below), names a revoked credential (`RevokedCredential`, §8), or names a credential a wiped scope named (`WipedCredential`, below), records each credential it names under the current scope generation, reconciles that scope's rules with §7.5's delta against **the scope's own records only**, tags each new rule, and stores the scope's record: its generation, `doc_hash`, rules, index position, and signer ids. Returns the `doc_hash`; emits `ScopeApplied`. |
-| `remove_scope(scope)` | Owner | Removes every rule the scope installed, their tags and spending records, and the scope's record (`UnknownScope` if none); emits `ScopeRemoved`. This is how a grant is revoked. |
-| `gc_scope(scope)` | None | The same removal, for a scope a completion wiped only (`ScopeLive` otherwise). |
-| `scope`, `scope_rule_set`, `scope_signer_ids`, `scope_generation`, `scope_count`, `scopes(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A scope's record (generation, `doc_hash`, rules with their ids), its rule-eval rules, and its signer ids, which with its rules give back its canonical text; the scope generation; the index of scope ids; the scope generation a credential was last named under. |
+| `apply_grant(grant, doc_json)` | Owner | Compiles `doc_json`, refuses it if it reaches past a grant (below), is not in normal form (`NotNormalForm`, below), names a revoked credential (`RevokedCredential`, §8), or names a credential a wiped grant named (`WipedCredential`, below), records each credential it names under the current grant generation, reconciles that grant's rules with §7.5's delta against **the grant's own records only**, tags each new rule, and stores the grant's record: its generation, `doc_hash`, rules, index position, and signer ids. Returns the `doc_hash`; emits `GrantApplied`. |
+| `remove_grant(grant)` | Owner | Removes every rule the grant installed, their tags and spending records, and the grant's record (`UnknownGrant` if none); emits `GrantRemoved`. This is how a grant is revoked. |
+| `gc_grant(grant)` | None | The same removal, for a grant a completion wiped only (`GrantLive` otherwise). |
+| `grant`, `grant_rule_set`, `grant_signer_ids`, `grant_generation`, `grant_count`, `grants(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A grant's record (generation, `doc_hash`, rules with their ids), its rule-eval rules, and its signer ids, which with its rules give back its canonical text; the grant generation; the index of grant ids; the grant generation a credential was last named under. |
 
 None of them calls the controller or changes the applied document, its
 `doc_hash`, the configuration revision (§15), or the recovery generation
-(§12). Adding or removing a scope writes O(1) index entries however many
-scopes exist.
+(§12). Adding or removing a grant writes O(1) index entries however many
+grants exist.
 
-**What a scoped document may not hold.** `apply_scope` refuses
-(`PerchAccountError::ScopeEscalation`), before any rule changes, a document
+**What a grant document may not hold.** `apply_grant` refuses
+(`PerchAccountError::GrantEscalation`), before any rule changes, a document
 with:
 
 - a `recovery` member;
@@ -1090,14 +1090,14 @@ with:
 
 The contracts these name are the **excluded set**: the account, then its
 recovery controller and the adapter and pool of its ZK factor, all read
-from the applied admin document. A scope applied before the admin document
+from the applied account document. A grant applied before the account document
 adopts that controller or enrolls that adapter or pool is refused at
 authorization instead (below).
 
 **Guardian approvals.** The account's guardian approvals for other
 accounts (`submit_guardian`, `approve_change`, which are not reserved
-names) are owner-level authority over those accounts, which only the admin
-document may hold (§2). No scoped document's rule may cast a guardian
+names) are owner-level authority over those accounts, which only the account
+document may hold (§2). No grant document's rule may cast a guardian
 approval at any controller, whatever controller the account itself
 adopted: the account approves at the controller the guarded account uses,
 which need not be its own, so the excluded set does not cover it. Besides
@@ -1107,15 +1107,15 @@ which covers a rule that leaves its functions unrestricted. The names are
 `account::GUARDIAN_APPROVAL_FNS`; a rule on an unrelated contract that
 exports one of them is refused too.
 
-So no scoped document can change the admin document's rules, recovery, or
+So no grant document can change the account document's rules, recovery, or
 upgrades, act at the account's recovery, or cast its guardian approvals,
 whoever approves it. The compiler never emits OZ's `Default` or
-`CreateContract` rules; a `Default` rule in a scoped document would match
+`CreateContract` rules; a `Default` rule in a grant document would match
 calls on the account too.
 
-**Normal form.** The account keeps no scoped document's text, only what
+**Normal form.** The account keeps no grant document's text, only what
 the document lowers to and its signer ids, so it applies only documents
-those give back: `apply_scope` refuses (`NotNormalForm`) a document not in
+those give back: `apply_grant` refuses (`NotNormalForm`) a document not in
 normal form. The compiler reports what the text shows
 (`CompiledDoc::normal_form`): every external key in lowercase hex, every cap
 limit a plain decimal, no cap token, no `threshold` asking every signer it
@@ -1123,95 +1123,95 @@ names, every capped rule's functions exactly `["transfer"]`, no `string-in`
 value over 256 bytes, and every declared signer named by a rule, declared
 in the order the rules first name it. The account checks what only it can
 see: no `address-eq` naming the account, and no rule whose
-`not-after-ledger` has already been reached (refused, where the admin
+`not-after-ledger` has already been reached (refused, where the account
 document's is dropped). On that form the lowering is one-to-one, and
-perch-js's `rebuildScopeDoc` inverts it, trusting its result only once it
-hashes to the record's `doc_hash`. The admin document's text is stored
+perch-js's `rebuildGrantDoc` inverts it, trusting its result only once it
+hashes to the record's `doc_hash`. The account document's text is stored
 (`applied_doc`): the controller reads it, and an admin rule may lawfully
 expire before a recovery target is applied.
 
-**The generation gate.** Every rule a scoped document installs is tagged,
-by rule id, with its scope, and its stored rule-eval rule carries the
-**scope generation** it was applied under. The account's scope
+**The generation gate.** Every rule a grant document installs is tagged,
+by rule id, with its grant, and its stored rule-eval rule carries the
+**grant generation** it was applied under. The account's grant
 generation, a `u64`, starts at 0 and advances by one on every completed
 recovery, lost-key or compromise, and on nothing else; a completion that
 would advance it past `u64::MAX` refuses (`GenerationExhausted`), and every
-advance emits `ScopesWiped { gen }`. `__check_auth` refuses a tagged rule
+advance emits `GrantsWiped { gen }`. `__check_auth` refuses a tagged rule
 selected for a call on a contract of the excluded set: the recovery
 controller, or the ZK adapter or pool of the applied recovery member; and
 one selected for a guardian approval on any contract
-(`PerchAuthError::ScopeEscalation`), after the reserved-name guard and the
-freeze and before any rule is evaluated. So the `apply_scope` guard above
-also holds for a scope applied before that member, without `apply_doc`
-scanning the scopes. rule-eval's `authorize` then refuses a chosen rule
+(`PerchAuthError::GrantEscalation`), after the reserved-name guard and the
+freeze and before any rule is evaluated. So the `apply_grant` guard above
+also holds for a grant applied before that member, without `apply_doc`
+scanning the grants. rule-eval's `check_auth` then refuses a chosen rule
 whose generation is not the current one, which the account reports as
-`PerchAuthError::StaleScope`. Like the freeze, both hold on every path that
+`PerchAuthError::StaleGrant`. Like the freeze, both hold on every path that
 reaches `__check_auth`, CAP-0071 delegation included. A rule without a tag
-is the admin document's. No rule id is given twice, so a tag never applies
+is the account document's. No rule id is given twice, so a tag never applies
 to a later rule.
 
-A completion therefore wipes every scoped document with one write. Their
+A completion therefore wipes every grant document with one write. Their
 rules stay installed but authorize nothing, until anyone collects them with
-`gc_scope` or the owner applies a new document over the same scope id,
-which brings the scope to the current generation with the new document's
+`gc_grant` or the owner applies a new document over the same grant id,
+which brings the grant to the current generation with the new document's
 rules.
 
-A tag and its scope's record are written with the maximum TTL and extended
+A tag and its grant's record are written with the maximum TTL and extended
 on read in `__check_auth` (to 30 days when fewer than 29 remain). An
 archived entry is unavailable, never absent (§3.6): a transaction that
-selects a scoped rule restores its tag and record first, so a wiped rule
+selects a grant rule restores its tag and record first, so a wiped rule
 is never read as an admin rule.
 
 **Recovery.**
 
-- Scoped documents are part of no recovery source or target (§7.2), no
-  baseline, and no `config_hash`. T4 compares the admin document's hash
-  only, so changing a scope never invalidates a collecting lost-key attempt.
-- A completion's revocations (§8) cover the admin document's credentials.
-  The credentials scoped documents name are ended by the **credential
-  index** instead. For every credential fingerprint a scoped document
-  names, `apply_scope` records the scope generation it was named under
+- Grant documents are part of no recovery source or target (§7.2), no
+  baseline, and no `config_hash`. T4 compares the account document's hash
+  only, so changing a grant never invalidates a collecting lost-key attempt.
+- A completion's revocations (§8) cover the account document's credentials.
+  The credentials grant documents name are ended by the **credential
+  index** instead. For every credential fingerprint a grant document
+  names, `apply_grant` records the grant generation it was named under
   (`credential_generation`). Once a completion has advanced the generation
-  past that value, `apply_scope` and `apply_doc` refuse any document naming
-  the credential (`WipedCredential`), whether or not the scope that named
-  it still exists. Re-applying a scope therefore never revives a session
+  past that value, `apply_grant` and `apply_doc` refuse any document naming
+  the credential (`WipedCredential`), whether or not the grant that named
+  it still exists. Re-applying a grant therefore never revives a session
   key or grant-signer instance that a thief, or the owner, issued grants
   under before the completion: after any completion, lost-key included,
-  every credential a wiped scope named is replaced by a fresh one. The
+  every credential a wiped grant named is replaced by a fresh one. The
   index is never cleared.
 - The completion's own target is not checked against the index: the
   controller fixes it (§7.1), and checking it would let a credential once
-  named in a scope refuse every later recovery whose target keeps it. A
-  credential the recovered admin document keeps is therefore kept by the
+  named in a grant refuse every later recovery whose target keeps it. A
+  credential the recovered account document keeps is therefore kept by the
   completion, but no document the owner applies afterwards may name it, so
   the owner rotates it out with their next `apply_doc`.
-- The `Protected` freeze (§9) refuses `apply_scope` and `remove_scope`:
+- The `Protected` freeze (§9) refuses `apply_grant` and `remove_grant`:
   both need the account's authorization. The policy block (D3) does not
-  apply to them, so under `Loss` the owner may change scopes while an
+  apply to them, so under `Loss` the owner may change grants while an
   attempt is authorized.
 
-**What a scope is not.** A self-admin rule limited by `functions` to
-`apply_scope`, with an argument constraint on the scope id, cannot touch the
-admin document or another scope id, but it is not a confined sub-owner:
-through its own scope it can grant itself any authority over other
+**What a grant is not.** A self-admin rule limited by `functions` to
+`apply_grant`, with an argument constraint on the grant id, cannot touch the
+account document or another grant id, but it is not a confined sub-owner:
+through its own grant it can grant itself any authority over other
 contracts outside the excluded set but guardian approvals, an uncapped
 token transfer included.
-Nor is a credential confined to one scope: several live scopes may name the
+Nor is a credential confined to one grant: several live grants may name the
 same credential, and each authorizes it under its own rules. The credential
 index records only the generation that last named it.
 
-**Wallets.** `configuration` and `installed_rules` list the admin
-document's rules only; `scopes` and `scope` list the rest. Rule names
-repeat across scopes, so a wallet selects a scoped rule from its scope's
-record, by `(scope, name)`, and checks `credential_generation` against
-`scope_generation` before naming a credential it did not create in this
-generation. `capabilities().apply_modes` contains `scoped_v1`.
+**Wallets.** `configuration` and `installed_rules` list the account
+document's rules only; `grants` and `grant` list the rest. Rule names
+repeat across grants, so a wallet selects a grant rule from its grant's
+record, by `(grant, name)`, and checks `credential_generation` against
+`grant_generation` before naming a credential it did not create in this
+generation. `capabilities().apply_modes` contains `grant_v1`.
 
-**Cost.** A scope's reconcile reads only its own records, so its cost does
-not depend on other scopes or on the admin document (`budgets.md`, "Scoped
+**Cost.** A grant's reconcile reads only its own records, so its cost does
+not depend on other grants or on the account document (`budgets.md`, "Grant
 documents"). The reconcile's cost model counts registry references within
-the document being reconciled, so a signer or policy that the admin
-document and a scope share is priced as if unshared. That affects only the
+the document being reconciled, so a signer or policy that the account
+document and a grant share is priced as if unshared. That affects only the
 choice between an in-place edit and a replacement, never what the result
 authorizes.
 
@@ -1251,11 +1251,11 @@ authorizes.
     fails §7.3 rule 7.
 - Every `apply_doc`, on every path, refuses a compiled document containing a
   revoked credential (`PerchAccountError::RevokedCredential`), and so does
-  every `apply_scope` (§7.6).
-- A completion revokes the admin document's credentials only. A credential
-  a scoped document names stops authorizing when the completion wipes its
-  scope, and the credential index (§7.6) refuses it in every later
-  `apply_scope` and `apply_doc` except a completion's.
+  every `apply_grant` (§7.6).
+- A completion revokes the account document's credentials only. A credential
+  a grant document names stops authorizing when the completion wipes its
+  grant, and the credential index (§7.6) refuses it in every later
+  `apply_grant` and `apply_doc` except a completion's.
 - Fingerprints are computed over the verifier's canonical key bytes (OZ
   `Verifier::canonicalize_key`, called in its batched form
   `batch_canonicalize_key`), so a revoked key cannot return under a
@@ -1284,8 +1284,8 @@ authorizes.
 | `execute` | allowed | allowed | allowed | **refused** |
 | `apply_doc` under owner authorization, any document | allowed (reconfiguration gated per §5) | allowed | **refused** | **refused** |
 | `apply_doc` completing the authorized attempt | — | — | allowed (T5) | allowed (T5) |
-| `apply_scope`, `remove_scope` (§7.6) | allowed | allowed | allowed | **refused** |
-| `gc_scope` (§7.6) | allowed | allowed | allowed | allowed (needs no authorization) |
+| `apply_grant`, `remove_grant` (§7.6) | allowed | allowed | allowed | **refused** |
+| `gc_grant` (§7.6) | allowed | allowed | allowed | allowed (needs no authorization) |
 | Schedule or execute an upgrade | allowed (§12) | allowed | **refused** | **refused** |
 | Cancel an upgrade | allowed | allowed | allowed | **refused** (no owner authorization exists) |
 | Owner cancellation (T7) | — | `Loss` only | allowed | — |
@@ -1341,7 +1341,7 @@ The freeze covers:
 **The policy block (D3) holds in both profiles.** It is enforced in
 `rcv_sync`, which every `apply_doc` reaches when a controller is adopted.
 While an attempt is authorized and live, `rcv_sync` refuses unless this
-invocation is that attempt's completion (`AttemptAuthorized`). Scoped
+invocation is that attempt's completion (`AttemptAuthorized`). Grant
 documents never reach `rcv_sync`: they are in no recovery source or target,
 so under `Loss` the owner may change them during the window (§7.6).
 
@@ -1391,7 +1391,7 @@ removes it.
 
 | Case | Recognised by | Authorization | Effects |
 | --- | --- | --- | --- |
-| Completion | A completing marker from this invocation's `rcv_complete` (T5) whose target identity equals the `doc_hash` argument (the identity of the document the account compiled) | Already established by the attempt | The compiled configuration must name this controller and its hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared); otherwise `WrongTarget`. Consumes the marker, marks the attempt `Completed`, spends its nullifier, stores the target configuration, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), advances its scope generation, wiping every scoped document (§7.6), clears any pending upgrade, and clears its freeze mirror. |
+| Completion | A completing marker from this invocation's `rcv_complete` (T5) whose target identity equals the `doc_hash` argument (the identity of the document the account compiled) | Already established by the attempt | The compiled configuration must name this controller and its hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared); otherwise `WrongTarget`. Consumes the marker, marks the attempt `Completed`, spends its nullifier, stores the target configuration, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), advances its grant generation, wiping every grant document (§7.6), clears any pending upgrade, and clears its freeze mirror. |
 | No change | `config_hash` and controller unchanged, and not a completion | Owner authorization (already required by `apply_doc`) | Refuses if an attempt is authorized and live (§9); otherwise nothing. |
 | Enroll | No configuration stored | Owner authorization | Refuses unless the configuration names this controller (`InvalidConfiguration`) and passes §3.1's re-checks and §3.4's wiring check. Stores the configuration and bumps the epoch. The account records the enrollment id as used. |
 | Reconfigure | `config_hash` differs, controller unchanged | `Loss`: owner. `Protected`: owner plus the stored configuration's condition over `Reconfigure(Set(new))`, from recorded approvals (§5) | Refuses during an authorized window, and unless the new configuration passes §3.1's re-checks and §3.4. Stores the new configuration, bumps the epoch, and invalidates every attempt. |
@@ -1485,16 +1485,16 @@ controller, exactly as at scheduling, so comparing controllers or epochs
 would let the old request execute. The generation has moved twice, so the
 request is stale.
 
-**Scope generation.** The account also keeps `scope_generation: u64` in its
+**Grant generation.** The account also keeps `grant_generation: u64` in its
 instance storage; an absent entry reads as 0. It never decreases and is
 never reset. It advances by one in `apply_doc` when the controller's
 `rcv_sync` returns `SyncOutcome::Completed`, and on nothing else:
 enrollment, reconfiguration, removal, a controller switch, and an executed
-upgrade advance the recovery generation but leave the scope generation. A
+upgrade advance the recovery generation but leave the grant generation. A
 completion that would advance it past `u64::MAX` refuses
 (`PerchAccountError::GenerationExhausted`) and changes nothing; every
-advance emits `ScopesWiped { gen }`. The `scope_generation` view returns
-it, and the scoped-document gate in `__check_auth` and the credential index
+advance emits `GrantsWiped { gen }`. The `grant_generation` view returns
+it, and the grant-document gate in `__check_auth` and the credential index
 read it (§7.6).
 
 Every account, enrolled or not, upgrades in two steps:
@@ -1762,12 +1762,12 @@ The account must therefore:
 3. **refuse at compile time**, as defence in depth, a rule whose
    `Scope::Contract` is the document's own ZK adapter or pool. The account
    never needs to authorize a call to either. A rule scoped to the
-   document's **own controller is allowed** in the admin document: an
+   document's **own controller is allowed** in the account document: an
    account that is a guardian at the controller it uses itself must
    authorize `submit_guardian` and `approve_change` there (§2). Rule 1 is
    what protects the controller's sensitive entry points, not this
-   compile-time check. A scoped document may hold none of the three, and
-   no scoped rule casts a guardian approval at any controller (§7.6).
+   compile-time check. A grant document may hold none of the three, and
+   no grant rule casts a guardian approval at any controller (§7.6).
 
 `cap-0071.md` pins the host behaviour this relies on (properties C5, C6,
 and C7).
@@ -1813,8 +1813,8 @@ them against the digest the on-chain `check_auth` actually hands a verifier.
 - **I3.** By I1 and I2, a signature path into the controller, whether
   through a rule scoped to it or a `Default` rule, can reach only guardian
   approvals. A rule scoped to a controller is therefore allowed in the
-  admin document, and the reserved-name guard alone protects the hooks. A
-  scoped document's rules reach no guardian approval (§7.6).
+  account document, and the reserved-name guard alone protects the hooks. A
+  grant document's rules reach no guardian approval (§7.6).
 
 **No re-entry (D16).** Soroban refuses any call into a contract already on
 the call stack (`cap-0071.md` C8). The rules that follow from it:
@@ -1841,8 +1841,8 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 - **No configuration may list the account among its own guardians.** The
   controller refuses one with `InvalidConfiguration`.
 
-**Documents are the only write path.** `apply_doc` (the admin document)
-and `apply_scope`, `remove_scope`, and `gc_scope` (scoped documents, §7.6)
+**Documents are the only write path.** `apply_doc` (the account document)
+and `apply_grant`, `remove_grant`, and `gc_grant` (grant documents, §7.6)
 are the only entry points that change the account's context rules, signers,
 or policies. The account has no piecemeal mutation entry point:
 `add_context_rule`, `add_signer`, `add_policy`, and the others do not exist
@@ -1854,16 +1854,16 @@ on the deployed contract
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers, held to the install-time limits and refusing two that are one key (§7.5); emits `context_rule_added`. |
-| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion is decided instead over the account's record of the recovery rule, in OZ's `do_check_auth`'s order (§7.5; no payload signer, `UnauthorizedSigner`; an expired rule or a context off the account, `UnvalidatedContext`), and then by the controller's `rcv_complete` (T5). An account storing no rule set, which the constructor never leaves, authorizes nothing else (`RuleEvalRefused`). The order of the refusing steps does not matter for security: each only refuses. |
-| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
+| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the grant generation gate (§7.6), then rule-eval's `check_auth` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion is decided instead over the account's record of the recovery rule, in OZ's `do_check_auth`'s order (§7.5; no payload signer, `UnauthorizedSigner`; an expired rule or a context off the account, `UnvalidatedContext`), and then by the controller's `rcv_complete` (T5). An account storing no rule set, which the constructor never leaves, authorizes nothing else (`RuleEvalRefused`). The order of the refusing steps does not matter for security: each only refuses. |
+| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the grant generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
 | Account | `rcv_gate(attempt_id, frozen_until)` | Invoker-only: the adopted controller's authorization, and the caller must be the adopted controller |
-| Account | `apply_scope(scope, doc_json)`, `remove_scope(scope)` | Owner authorization (§7.6) |
-| Account | `gc_scope(scope)` | Permissionless; a scope a completion wiped only (§7.6) |
+| Account | `apply_grant(grant, doc_json)`, `remove_grant(grant)` | Owner authorization (§7.6) |
+| Account | `gc_grant(grant)` | Permissionless; a grant a completion wiped only (§7.6) |
 | Account | `renew(fingerprints, enrollment_ids)` | Permissionless (§3.6) |
-| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `scope`, `scope_rule_set`, `scope_signer_ids`, `scope_count`, `scopes`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
+| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `grant_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `grant`, `grant_rule_set`, `grant_signer_ids`, `grant_count`, `grants`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete` (`controller::RecoveryHooksClient`) | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew`, `renew_nullifier` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |
@@ -1876,8 +1876,8 @@ on the deployed contract
 **Revision binding.** The account's configuration revision (`revision`
 view, a `u64`) is 0 after the constructor and advances by one on every
 successful `apply_doc`, including a re-apply of the same document, and on
-every executed upgrade. Nothing else changes it: scoped documents (§7.6)
-leave it alone, so a grant changing never makes an admin document prepared
+every executed upgrade. Nothing else changes it: grant documents (§7.6)
+leave it alone, so a grant changing never makes an account document prepared
 at revision r stale. Only `apply_doc` can be
 bound to a revision, through `expected_revision`, which is checked right
 after authorization and before compiling. Ordinary authorization is not

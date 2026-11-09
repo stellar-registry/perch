@@ -36,7 +36,7 @@
   [
    "5",
    "Collect grant 1",
-   "Refused, `ScopeLive` ({{fact:account-error-scope-live}})",
+   "Refused, `GrantLive` ({{fact:account-error-scope-live}})",
    "—"
   ],
   [
@@ -66,7 +66,7 @@
   [
    "13",
    "Spend 1 with grant 1",
-   "Refused, auth error {{fact:auth-error-stale-scope}} (`StaleScope`)",
+   "Refused, auth error {{fact:auth-error-stale-scope}} (`StaleGrant`)",
    "—"
   ],
   [

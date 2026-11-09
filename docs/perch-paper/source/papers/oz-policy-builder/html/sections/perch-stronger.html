@@ -7,7 +7,7 @@
 <ul>
 <li><strong>State in one contract.</strong> The rules, the spending records and the grant generation are in the account's storage; no other contract keeps part of the decision.</li>
 <li><strong>Decide, then authenticate.</strong> The whole decision, cap included, runs before any verifier is called, so a refused request calls no verifier, and nothing is written unless the signatures also check (<code>crates/perch-smart-account/src/gate.rs:93-113</code>).</li>
-<li><strong>One install across contracts.</strong> A grant whose rules name several contracts installs with one <code>apply_scope</code> call; the threshold is part of each rule.</li>
+<li><strong>One install across contracts.</strong> A grant whose rules name several contracts installs with one <code>apply_grant</code> call; the threshold is part of each rule.</li>
 <li><strong>Passkeys on grant rules.</strong> A grant rule may hold an external signer, such as a passkey checked by a WebAuthn verifier contract, or a delegated one. oz-policy-builder's policed rules take delegated signers only: its interpreter authorizes signers with <code>require_auth</code>, which an external signer's verifier never satisfies (<code>policy-interpreter/src/lib.rs:451-462</code>).</li>
 </ul>
 <p><em>What it does not cover.</em> One decision point is also one place that must be right. A delegated signer does not bind the selected rule IDs. A refusal reports only one of two codes. And an account cannot add someone else's policy beside its rules.</p>

@@ -13,7 +13,7 @@
    "exits": [
     "`ReservedFunction` ({{fact:auth-error-reserved-function}})",
     "`AccountFrozen` ({{fact:auth-error-account-frozen}})",
-    "`ScopeEscalation` ({{fact:auth-error-scope-escalation}})",
+    "`GrantEscalation` ({{fact:auth-error-scope-escalation}})",
     "a completion: decided by the recovery controller"
    ],
    "assurance": "tested"
@@ -28,9 +28,9 @@
   },
   {
    "n": "4",
-   "text": "**Decide.** `rule_eval::authorize` maps the rules, records, contexts, choices, claimed signers, ledger and generation to the next records or a refusal. It reads no storage and checks no signature.",
+   "text": "**Decide.** `rule_eval::check_auth` maps the rules, records, contexts, choices, claimed signers, ledger and generation to the next records or a refusal. It reads no storage and checks no signature.",
    "exits": [
-    "stale grant: `StaleScope` ({{fact:auth-error-stale-scope}})",
+    "stale grant: `StaleGrant` ({{fact:auth-error-stale-scope}})",
     "otherwise `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}})"
    ],
    "assurance": "proved"

@@ -53,7 +53,7 @@ The interpreter's language has
 (\code{each}, \code{some}, \code{total}) (\srcpath{intent.ts:18-49}). Multi-signer
 rules use OpenZeppelin's threshold policies. A refusal reports a specific code
 for each reason (\srcpath{policy-interpreter/src/storage.rs:27-86}), where Perch
-reports \code{StaleScope} (\fact{auth-error-stale-scope}) or
+reports \code{StaleGrant} (\fact{auth-error-stale-scope}) or
 \code{RuleEvalRefused} (\fact{auth-error-rule-eval-refused}). And OpenZeppelin
 \fact{oz-v080-tag} binds the selected rule IDs for both signer kinds
 (\srcpath{storage.rs}, lines 157--175 and 396--412, in \code{stellar-contracts}), where Perch's

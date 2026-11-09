@@ -14,19 +14,19 @@
   [
    "Grant",
    "A bounded set of rules the owner installs so an app can act without a prompt for each call",
-   "scope",
+   "grant",
    "No single object: one context rule per contract, each with its policies"
   ],
   [
    "Grant document",
    "The JSON a wallet submits to install a grant; an input and a hash commitment",
-   "scope document",
+   "grant document",
    "—"
   ],
   [
    "Installed grant",
    "The rules and metadata stored under a grant ID, stamped with the grant generation",
-   "`apply_scope`, `scope(id)`",
+   "`apply_grant`, `grant(id)`",
    "—"
   ],
   [
@@ -66,6 +66,12 @@
    "Same enum case; approves in an authorization entry of its own, binding the rule IDs; the only kind on policed rules"
   ],
   [
+   "Credential",
+   "The value that fills a signer: a delegated address, or a verifier contract and key; a document names each signer by its signer ID",
+   "`Signer` (`Delegated(address)`, `External(verifier, key)`)",
+   "The same enum, also named `Signer`"
+  ],
+  [
    "Verifier",
    "A contract with `verify(digest, key, signature) -> bool`",
    "`perch_ed25519_verifier`, WebAuthn verifier",
@@ -92,7 +98,7 @@
   [
    "Evaluator",
    "The pure function that decides an authorization and returns the next spending records",
-   "`rule_eval::authorize`",
+   "`rule_eval::check_auth`",
    "The interpreter's `enforce`, per policy"
   ],
   [
@@ -128,7 +134,7 @@
   [
    "Grant generation",
    "A counter on the account, 0 at creation, advanced only by a completed recovery; a grant from an older generation refuses",
-   "`scope_generation`, `StaleScope`",
+   "`grant_generation`, `StaleGrant`",
    "—"
   ],
   [
@@ -164,7 +170,7 @@
   [
    "Collection",
    "Removing a stale grant's rules, tags and spending records; anyone may do it",
-   "`gc_scope`",
+   "`gc_grant`",
    "—"
   ],
   [

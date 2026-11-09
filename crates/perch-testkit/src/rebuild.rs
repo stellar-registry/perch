@@ -1,13 +1,13 @@
-//! A scoped document's canonical text, rebuilt from what the account keeps
-//! for it: each rule's name and stored rule-eval rule (`scope`,
-//! `scope_rule_set`), the document's signer ids (`scope_signer_ids`), and
-//! each signer's `verifier-name` (`scope_verifier_names`), trusted only once
-//! its sha256 is the scope's stored `doc_hash`.
+//! A grant document's canonical text, rebuilt from what the account keeps
+//! for it: each rule's name and stored rule-eval rule (`grant`,
+//! `grant_rule_set`), the document's signer ids (`grant_signer_ids`), and
+//! each signer's `verifier-name` (`grant_verifier_names`), trusted only once
+//! its sha256 is the grant's stored `doc_hash`.
 //!
 //! The rebuild inverts rule-core's lowering on the normal form
-//! (`perch_ir::normal_form`, and the account's own checks in `apply_scope`),
+//! (`perch_ir::normal_form`, and the account's own checks in `apply_grant`),
 //! the one document of the many that store the same rules which the
-//! account accepts as a scoped document:
+//! account accepts as a grant document:
 //!
 //! - the signers, in declaration order, are the distinct stored signers in
 //!   the order the rules first name them, each under the next stored id: a
@@ -24,8 +24,8 @@
 //!   `string-in` and `string-prefix`.
 //!
 //! `perch-js`'s `rebuildScopeDoc` is the same function, pinned against the
-//! vectors `crates/integration-tests/tests/scope_rebuild.rs` writes from it.
-//! [`normal`] gives the scoped document in normal form that stores the same
+//! vectors `crates/integration-tests/tests/grant_rebuild.rs` writes from it.
+//! [`normal`] gives the grant document in normal form that stores the same
 //! rules as a given one, for suites that apply documents written otherwise.
 
 use crate::delta::strkey;
@@ -53,7 +53,7 @@ pub const NETWORKS: [&str; 3] = [
     "Standalone Network ; February 2017",
 ];
 
-/// What an account keeps for one scoped document.
+/// What an account keeps for one grant document.
 #[derive(Clone, Debug)]
 pub struct StoredDoc {
     pub account: Address,
@@ -81,27 +81,27 @@ fn utf8(b: Vec<u8>) -> Result<String, String> {
     String::from_utf8(b).map_err(|x| format!("not UTF-8: {x}"))
 }
 
-/// What `account` keeps for its scoped document under `scope`, read through
+/// What `account` keeps for its grant document under `grant`, read through
 /// its views; `None` when it has none.
-pub fn read(e: &Env, account: &Address, scope: u32) -> Result<Option<StoredDoc>, String> {
+pub fn read(e: &Env, account: &Address, grant: u32) -> Result<Option<StoredDoc>, String> {
     let c = PerchAccountClient::new(e, account);
-    let Some(record) = c.scope(&scope) else {
+    let Some(record) = c.grant(&grant) else {
         return Ok(None);
     };
-    let rules = c.scope_rule_set(&scope);
+    let rules = c.grant_rule_set(&grant);
     if rules.len() != record.rules.len() {
         return Err(format!(
-            "scope {scope}: {} records and {} stored rules",
+            "grant {grant}: {} records and {} stored rules",
             record.rules.len(),
             rules.len()
         ));
     }
     let signer_ids = c
-        .scope_signer_ids(&scope)
-        .ok_or(format!("scope {scope}: a record and no signer ids"))?;
+        .grant_signer_ids(&grant)
+        .ok_or(format!("grant {grant}: a record and no signer ids"))?;
     let verifier_names = c
-        .scope_verifier_names(&scope)
-        .ok_or(format!("scope {scope}: a record and no verifier names"))?;
+        .grant_verifier_names(&grant)
+        .ok_or(format!("grant {grant}: a record and no verifier names"))?;
     Ok(Some(StoredDoc {
         account: account.clone(),
         network: network(e).ok_or("a network no known passphrase hashes to")?,
@@ -345,10 +345,10 @@ pub fn text(e: &Env, st: &StoredDoc) -> Result<String, String> {
     Ok(text)
 }
 
-/// The canonical text of `account`'s scoped document under `scope`, rebuilt
+/// The canonical text of `account`'s grant document under `grant`, rebuilt
 /// from storage and checked against its `doc_hash`.
-pub fn scope_text(e: &Env, account: &Address, scope: u32) -> Result<String, String> {
-    let st = read(e, account, scope)?.ok_or(format!("no scope {scope}"))?;
+pub fn grant_text(e: &Env, account: &Address, grant: u32) -> Result<String, String> {
+    let st = read(e, account, grant)?.ok_or(format!("no grant {grant}"))?;
     text(e, &st)
 }
 
@@ -361,7 +361,7 @@ fn principal_ids(p: &Principals) -> &[String] {
     }
 }
 
-/// The scoped document in normal form that stores the same rules as `doc`
+/// The grant document in normal form that stores the same rules as `doc`
 /// on the account `account` (its strkey) at ledger `ledger`: rules already
 /// expired dropped, `all` for a threshold asking every signer it names, a
 /// capped rule's functions `["transfer"]` when they cover it, its limit a

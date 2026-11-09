@@ -1,14 +1,14 @@
-//! Scoped documents never cast guardian approvals (`docs/recovery/spec.md`
+//! Grant documents never cast guardian approvals (`docs/recovery/spec.md`
 //! §2, §7.6). A guardian approval (`submit_guardian`, `approve_change`) is
 //! owner-level authority over the account that lists the guardian, so no
-//! rule a scoped document installs authorizes one, at any controller,
+//! rule a grant document installs authorizes one, at any controller,
 //! whichever controller the guardian account adopted itself:
 //!
-//! - `apply_scope` refuses a scoped rule whose `functions` names one;
-//! - `__check_auth` refuses a scoped rule selected for one, which covers a
-//!   rule that leaves its functions unrestricted and a scope applied before
+//! - `apply_grant` refuses a grant rule whose `functions` names one;
+//! - `__check_auth` refuses a grant rule selected for one, which covers a
+//!   rule that leaves its functions unrestricted and a grant applied before
 //!   the account adopted a controller;
-//! - the admin document's rules still cast them.
+//! - the account document's rules still cast them.
 //!
 //! Every guardian here is a real `PerchAccount` owned by a delegated
 //! stand-in key, the controller is the real `PerchRecovery`, and every
@@ -50,7 +50,7 @@ struct Guardian {
 }
 
 impl Guardian {
-    /// A fresh guardian account whose admin document is its owner alone,
+    /// A fresh guardian account whose account document is its owner alone,
     /// `rules` (each scoped to a contract and signed by the owner), and a
     /// recovery member at the controller `adopted` names.
     fn new(w: &World, adopted: Adopted, rules: &[(&'static str, Address)]) -> Guardian {
@@ -61,7 +61,7 @@ impl Guardian {
         );
         let g = Guardian { account, owner };
         g.apply_doc(w, &g.doc(w, adopted, rules))
-            .expect("the guardian account's admin document");
+            .expect("the guardian account's account document");
         g
     }
 
@@ -105,12 +105,12 @@ impl Guardian {
         out.map(|r| r.unwrap())
     }
 
-    /// `apply_scope(scope, doc)`, signed by the owner through the admin rule.
-    fn apply_scope(&self, w: &World, scope: u32, doc: &Bytes) -> CallResult<BytesN<32>> {
+    /// `apply_grant(grant, doc)`, signed by the owner through the admin rule.
+    fn apply_grant(&self, w: &World, grant: u32, doc: &Bytes) -> CallResult<BytesN<32>> {
         let root = w.invocation(
             &self.account,
-            "apply_scope",
-            std::vec![w.sc(scope), w.sc(doc.clone())],
+            "apply_grant",
+            std::vec![w.sc(grant), w.sc(doc.clone())],
         );
         w.env.set_auths(&[w.delegated_entry(
             &self.account,
@@ -118,17 +118,17 @@ impl Guardian {
             w.rule_id(&self.account, "admin"),
             root,
         )]);
-        let out = self.client(w).try_apply_scope(&scope, doc);
+        let out = self.client(w).try_apply_grant(&grant, doc);
         w.env.set_auths(&[]);
         out.map(|r| r.unwrap())
     }
 
-    /// The OZ id of the one rule the scoped document under `scope` installed.
-    fn scoped_rule(&self, w: &World, scope: u32) -> u32 {
+    /// The OZ id of the one rule the grant document under `grant` installed.
+    fn grant_rule(&self, w: &World, grant: u32) -> u32 {
         let rules = self
             .client(w)
-            .scope(&scope)
-            .expect("the scope has a record")
+            .grant(&grant)
+            .expect("the grant has a record")
             .rules;
         assert_eq!(rules.len(), 1);
         rules.get_unchecked(0).id
@@ -209,7 +209,7 @@ impl Guardian {
     }
 }
 
-/// A scoped document granting the delegated `key` one rule on `contract`,
+/// A grant document granting the delegated `key` one rule on `contract`,
 /// limited to `functions` when given and unrestricted otherwise.
 fn grant(w: &World, key: &Address, contract: &Address, functions: Option<&[&str]>) -> Bytes {
     let functions = functions
@@ -237,7 +237,7 @@ fn guard_with(w: &World, guardians: &[&Guardian]) {
 }
 
 fn escalation() -> Result<(), soroban_sdk::Error> {
-    Err(PerchAuthError::ScopeEscalation.into())
+    Err(PerchAuthError::GrantEscalation.into())
 }
 
 /// A reconfiguration subject and its freshness bound.
@@ -253,12 +253,12 @@ fn change_approvers(w: &World, subject: &StatementSubject, valid_until: u32) -> 
     w.ctl().change_evidence(&w.account, &digest).guardians.len()
 }
 
-/// A scoped rule whose `functions` names a guardian approval is refused at
-/// `apply_scope`, whatever controller the account adopted and whatever
+/// A grant rule whose `functions` names a guardian approval is refused at
+/// `apply_grant`, whatever controller the account adopted and whatever
 /// contract the rule is scoped to. The compiler accepts each: only the
 /// account refuses it.
 #[test]
-fn a_scoped_rule_listing_a_guardian_approval_is_refused_at_apply() {
+fn a_grant_rule_listing_a_guardian_approval_is_refused_at_apply() {
     let w = world();
     let key = w.new_key();
     for adopted in [Adopted::Nothing, Adopted::Another, Adopted::Same] {
@@ -272,23 +272,23 @@ fn a_scoped_rule_listing_a_guardian_approval_is_refused_at_apply() {
                 let doc = grant(&w, &key, contract, Some(functions));
                 assert!(w.compiler().try_compile_doc(&doc).is_ok());
                 assert_eq!(
-                    err(g.apply_scope(&w, 1, &doc)),
-                    PerchAccountError::ScopeEscalation,
+                    err(g.apply_grant(&w, 1, &doc)),
+                    PerchAccountError::GrantEscalation,
                     "{adopted:?} {functions:?}"
                 );
             }
         }
-        assert_eq!(g.client(&w).scope_count(), 0, "nothing was applied");
+        assert_eq!(g.client(&w).grant_count(), 0, "nothing was applied");
 
         // A function list without one is an ordinary grant.
         let ordinary = grant(&w, &key, &w.target, Some(&["protected"]));
-        g.apply_scope(&w, 1, &ordinary).expect("an ordinary grant");
+        g.apply_grant(&w, 1, &ordinary).expect("an ordinary grant");
         // Unrestricted functions on the guarded account's controller pass
-        // `apply_scope` unless the account adopted that controller itself;
+        // `apply_grant` unless the account adopted that controller itself;
         // `__check_auth` refuses their guardian approvals (below).
-        let unrestricted = g.apply_scope(&w, 2, &grant(&w, &key, &w.controller, None));
+        let unrestricted = g.apply_grant(&w, 2, &grant(&w, &key, &w.controller, None));
         match adopted {
-            Adopted::Same => assert_eq!(err(unrestricted), PerchAccountError::ScopeEscalation),
+            Adopted::Same => assert_eq!(err(unrestricted), PerchAccountError::GrantEscalation),
             Adopted::Nothing | Adopted::Another => {
                 unrestricted.expect("not in the excluded set");
             }
@@ -296,13 +296,13 @@ fn a_scoped_rule_listing_a_guardian_approval_is_refused_at_apply() {
     }
 }
 
-/// A scoped rule with unrestricted functions on a controller the account
+/// A grant rule with unrestricted functions on a controller the account
 /// did not adopt is accepted, and refused at authorization for every
 /// guardian approval: through the account's gate, on any contract, and end
 /// to end through the real controller, for both entry points and both
 /// evidence domains. Nothing is counted.
 #[test]
-fn scoped_rules_cannot_cast_guardian_approvals() {
+fn grant_rules_cannot_cast_guardian_approvals() {
     let w = world();
     let unadopted = Guardian::new(&w, Adopted::Nothing, &[]);
     let elsewhere = Guardian::new(&w, Adopted::Another, &[]);
@@ -314,9 +314,9 @@ fn scoped_rules_cannot_cast_guardian_approvals() {
     let (subject, valid_until) = change(&w);
 
     for g in [&unadopted, &elsewhere] {
-        g.apply_scope(&w, 1, &grant(&w, &key, &w.controller, None))
+        g.apply_grant(&w, 1, &grant(&w, &key, &w.controller, None))
             .expect("a controller the account did not adopt is not excluded");
-        let rule = g.scoped_rule(&w, 1);
+        let rule = g.grant_rule(&w, 1);
         for name in GUARDIAN_APPROVAL_FNS {
             for contract in [&w.controller, &w.target] {
                 assert_eq!(g.gate(&w, contract, name, rule), escalation(), "{name}");
@@ -340,7 +340,7 @@ fn scoped_rules_cannot_cast_guardian_approvals() {
     assert_eq!(change_approvers(&w, &subject, valid_until), 0);
 }
 
-/// A scope applied before the account adopted a controller casts no
+/// A grant applied before the account adopted a controller casts no
 /// guardian approval once it has, whether it adopted the guarded account's
 /// controller or another deployment.
 #[test]
@@ -350,7 +350,7 @@ fn a_grant_applied_before_a_controller_was_adopted_casts_no_guardian_approval() 
     let another = Guardian::new(&w, Adopted::Nothing, &[]);
     let key = w.new_key();
     for g in [&same, &another] {
-        g.apply_scope(&w, 1, &grant(&w, &key, &w.controller, None))
+        g.apply_grant(&w, 1, &grant(&w, &key, &w.controller, None))
             .expect("no controller adopted yet");
     }
     same.apply_doc(&w, &same.doc(&w, Adopted::Same, &[]))
@@ -373,7 +373,7 @@ fn a_grant_applied_before_a_controller_was_adopted_casts_no_guardian_approval() 
         .begin_lost_key(&w.account, &w.replacements(&w.new_key(), None));
     let (subject, valid_until) = change(&w);
     for g in [&same, &another] {
-        let rule = g.scoped_rule(&w, 1);
+        let rule = g.grant_rule(&w, 1);
         for name in GUARDIAN_APPROVAL_FNS {
             assert_eq!(
                 g.gate(&w, &w.controller, name, rule),
@@ -391,8 +391,8 @@ fn a_grant_applied_before_a_controller_was_adopted_casts_no_guardian_approval() 
     assert_eq!(change_approvers(&w, &subject, valid_until), 0);
 }
 
-/// The admin document still casts guardian approvals at any controller,
-/// beside a scoped rule on the same controller that cannot: each guardian
+/// The account document still casts guardian approvals at any controller,
+/// beside a grant rule on the same controller that cannot: each guardian
 /// account's owner, through its admin rule scoped to the guarded account's
 /// controller, approves a change and authorizes an attempt.
 #[test]
@@ -407,7 +407,7 @@ fn the_admin_document_still_casts_guardian_approvals() {
     let key = w.new_key();
     let (unadopted, elsewhere) = (&guardians[0], &guardians[1]);
     for g in [unadopted, elsewhere] {
-        g.apply_scope(&w, 1, &grant(&w, &key, &w.controller, None))
+        g.apply_grant(&w, 1, &grant(&w, &key, &w.controller, None))
             .unwrap();
     }
     guard_with(&w, &guardians.iter().collect::<std::vec::Vec<_>>());
@@ -422,12 +422,12 @@ fn the_admin_document_still_casts_guardian_approvals() {
         assert_eq!(change_approvers(&w, &subject, valid_until), n as u32 + 1);
     }
 
-    // The scoped rule is refused where the admin rule is not.
+    // The grant rule is refused where the admin rule is not.
     for g in [unadopted, elsewhere] {
         let id = w
             .ctl()
             .begin_lost_key(&w.account, &w.replacements(&w.new_key(), None));
-        assert!(!g.submit(&w, &key, g.scoped_rule(&w, 1), id, Initiate));
+        assert!(!g.submit(&w, &key, g.grant_rule(&w, 1), id, Initiate));
         assert_eq!(
             w.ctl().attempt(&w.account, &id).unwrap().state,
             AttemptState::Collecting

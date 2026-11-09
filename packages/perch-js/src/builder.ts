@@ -31,7 +31,7 @@ export type SignerSpec =
     };
 
 /** Build an external signer spec whose verifier is named by its contract id
- *  alone: an unverified verifier, which an admin document may not hold (see
+ *  alone: an unverified verifier, which an account document may not hold (see
  *  verifiers.ts). `key` may be raw bytes or an existing hex string. */
 export function external(verifier: string, key: Uint8Array | string): SignerSpec {
   return { kind: 'external', verifier, keyHex: typeof key === 'string' ? key : bytesToHex(key) };

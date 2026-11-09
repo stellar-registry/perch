@@ -203,7 +203,7 @@ document over a cap is refused whole and changes nothing. The account's
 records are the audited backend (the Perch OZ materialization unit).
 The residual limit is product capacity: a document that needs more signers,
 rules, or bytes cannot be applied. The caps apply per document; app grants
-can be spread over any number of scoped documents (spec §7.6), each under
+can be spread over any number of grant documents (spec §7.6), each under
 the same caps.
 
 **Exit criterion and follow-up review:** a backend change is a new account
@@ -296,7 +296,7 @@ reinstallation.
 
 **Current behaviour:** the account keeps one spending record per capped
 rule, keyed by its rule id, which rule-eval charges in `__check_auth`.
-When `apply_doc` or `apply_scope` keeps a rule's id and its cap, the record
+When `apply_doc` or `apply_grant` keeps a rule's id and its cap, the record
 is kept: a signer change or a change to the rule's other text keeps it.
 Changing the cap's own parameters, renaming or rescoping the rule, or
 removing it starts an empty record (spec §7.5). A compromise recovery that

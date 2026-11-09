@@ -30,17 +30,17 @@ STAGES = [
      'A recovery completion leaves here.',
      'Reserved hook names, an account frozen during a recovery, a grant rule on the account\u2019s adopted recovery contracts.',
      ['`ReservedFunction` ({{fact:auth-error-reserved-function}})', '`AccountFrozen` ({{fact:auth-error-account-frozen}})',
-      '`ScopeEscalation` ({{fact:auth-error-scope-escalation}})', 'a completion: decided by the recovery controller'],
+      '`GrantEscalation` ({{fact:auth-error-scope-escalation}})', 'a completion: decided by the recovery controller'],
      'tested'),
     ('select', 'Select rules',
      'Resolve each named rule ID to a stored rule and its spending record; the account does not search.',
      'Look up each named rule and its spending record; no search.',
      ['`ContextRuleNotFound` ({{fact:oz-error-context-rule-not-found}})'], 'tested'),
     ('decide', 'Decide',
-     '`rule_eval::authorize` maps the rules, records, contexts, choices, claimed signers, ledger and generation to the '
+     '`rule_eval::check_auth` maps the rules, records, contexts, choices, claimed signers, ledger and generation to the '
      'next records or a refusal. It reads no storage and checks no signature.',
-     '`rule_eval::authorize`: no storage read, no signature checked.',
-     ['stale grant: `StaleScope` ({{fact:auth-error-stale-scope}})',
+     '`rule_eval::check_auth`: no storage read, no signature checked.',
+     ['stale grant: `StaleGrant` ({{fact:auth-error-stale-scope}})',
       'otherwise `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}})'], 'proved'),
     ('authenticate', 'Authenticate',
      'Hash the payload, the account and the rule IDs into a digest; each external signer’s verifier contract '

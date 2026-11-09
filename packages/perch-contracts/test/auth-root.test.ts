@@ -32,7 +32,7 @@ describe('root-aware and legacy contract ABI boundaries', () => {
   });
 
   it('keeps the capabilities view decodable before selecting a spec', () => {
-    const capabilities = { interface_version: 3, snapshot_version: 2, doc_identity: 'canon_v1', auth_digest: 'addr_oz_v1', apply_modes: ['one_tx', 'scoped_v1'] };
+    const capabilities = { interface_version: 3, snapshot_version: 2, doc_identity: 'canon_v1', auth_digest: 'addr_oz_v1', apply_modes: ['one_tx', 'grant_v1'] };
     const value = current.nativeToScVal(capabilities, udt('AccountCapabilities'));
     expect(legacy.scValToNative(value, udt('AccountCapabilities'))).toEqual(capabilities);
   });

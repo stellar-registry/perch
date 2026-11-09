@@ -142,10 +142,10 @@ pub fn is_reserved_invoker_only(e: &Env, fn_name: &Symbol) -> bool {
 /// authorizes a context naming one of these on that account's controller.
 ///
 /// A guardian approval is owner-level authority over the accounts that list
-/// this one as a guardian, which only the admin document may hold (spec §2,
+/// this one as a guardian, which only the account document may hold (spec §2,
 /// §7.6). The account's `__check_auth` therefore refuses a context naming
-/// one of these for any rule a scoped document installed, on any contract,
-/// and `apply_scope` refuses a scoped rule whose `functions` names one.
+/// one of these for any rule a grant document installed, on any contract,
+/// and `apply_grant` refuses a grant rule whose `functions` names one.
 /// Matching by name covers every controller deployment, not only the one
 /// the account adopted.
 ///

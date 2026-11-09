@@ -139,7 +139,7 @@ States: **Measured** (within budget unless stated; the cell says where);
 | §2 `Protected` reconfiguration, `schedule_upgrade` | Measured: in process (reconfiguration at the caps) and on testnet | Within budget. |
 | §2 `execute_upgrade` | Measured in process only | Within budget. Not run on testnet: the upgrade delay is 120 960 ledgers. |
 | §2 promotion after many collecting attempts | Measured without siblings; bounded by construction | Promotion writes one `invalidate_below` value whatever the number of siblings (spec §6.3 T4); the promoting rows above are within budget. No run with many siblings. |
-| §2 ordinary authorization overhead | Measured on testnet (absolute cost) and in process | Direct authorization and `execute` are within budget ([testnet-exercise.md](../deploy/testnet-exercise.md), "Against the budget"). The scope generation gate adds one footprint entry per selected rule ([Scoped documents](#scoped-documents)). Rule-eval's `authorize` decides an authorization in 5.6M to 6.3M instructions in process, a capped transfer more with a long spending history, up to 47.40M (11.8%) for the longest one window holds ([Rule-eval in `__check_auth`](#rule-eval-in-__check_auth)). |
+| §2 ordinary authorization overhead | Measured on testnet (absolute cost) and in process | Direct authorization and `execute` are within budget ([testnet-exercise.md](../deploy/testnet-exercise.md), "Against the budget"). The grant generation gate adds one footprint entry per selected rule ([Grant documents](#grant-documents)). Rule-eval's `check_auth` decides an authorization in 5.6M to 6.3M instructions in process, a capped transfer more with a long spending history, up to 47.40M (11.8%) for the longest one window holds ([Rule-eval in `__check_auth`](#rule-eval-in-__check_auth)). |
 | §2 disk read bytes, every row | Required before launch | Neither the release-stack suite nor the testnet exercise reports disk read bytes. |
 | §2 transaction size, every row | Measured on testnet | Within budget. The in-process suite does not meter transaction size. |
 | §2 memory, every row | Measured in process | Within budget. The RPC does not report memory, so testnet rows have none. |
@@ -261,9 +261,9 @@ stores the rule-eval rule sets its documents lower to
 ([Rule-eval rule sets](#rule-eval-rule-sets)). The `worst_case_*` tests in `release_stack.rs` run
 all eight worst-case flows at the compiled-in caps and assert each stays
 within budget, so lowering a limit or growing a flow's cost fails CI's
-`release-stack-source` job. The compromise flows run with a thief's scoped
+`release-stack-source` job. The compromise flows run with a thief's grant
 documents installed and budget their completion on a forked host
-([Scoped documents](#scoped-documents)). Rerun `scripts/cap-sweep.py` after a change to
+([Grant documents](#grant-documents)). Rerun `scripts/cap-sweep.py` after a change to
 the reconcile, the account's records, the controller's storage, or a
 network limit.
 
@@ -360,9 +360,9 @@ A custom verifier with keys up to the 256 bytes the IR admits would grow
 the records, the stored sets and the write bytes, and needs its own
 measurement.
 
-### Scoped documents
+### Grant documents
 
-Scoped documents (spec §7.6) move app grants out of the admin document.
+Grant documents (spec §7.6) move app grants out of the account document.
 Source: 2026-11-03, protocol-29 limits, the stack `scripts/build-stack.sh
 --builder contract` built from the source that adds them, real proofs,
 passkeys, and enforcing authorization. The rows come from
@@ -375,33 +375,33 @@ the transaction touches, as a network transaction's does. The long-lived
 test host holds every entry earlier calls wrote, and every later call's
 instructions and memory grow with their number; footprint, written entries,
 write bytes, and events do not. Earlier in-process rows above were all
-measured on the long-lived host, without scoped documents.
+measured on the long-lived host, without grant documents.
 
-**Recovery does not depend on scopes.** The compromise worst cases at the
-caps, with the thief also installing scoped documents of 8 capped grants
-each (its own passkeys), and the owner holding one scope of its own:
+**Recovery does not depend on grant documents.** The compromise worst cases at the
+caps, with the thief also installing grant documents of 8 capped grants
+each (its own passkeys), and the owner holding one grant document of its own:
 
-| Completion (8 × 11, 8 KiB) | Thief scopes | Fork | Long-lived host | Footprint | Written | Write bytes |
+| Completion (8 × 11, 8 KiB) | Thief grant documents | Fork | Long-lived host | Footprint | Written | Write bytes |
 | --- | --- | --- | --- | --- | --- | --- |
 | Names kept, every program changed (binding) | 0 | 284.71M (71.2%), 13.7 MB | 291.41M (72.9%), 16.2 MB | 117 | 99 | 52 408 |
 | Names kept, every program changed | 3 | 284.70M (71.2%), 13.7 MB | 311.52M (77.9%), 21.6 MB | 117 | 99 | 52 408 |
 | Names kept, every program changed | 12 | 284.77M (71.2%), 13.7 MB | 365.95M (91.5%), 37.9 MB | 117 | 99 | 52 408 |
 | Every rule renamed | 0 | 248.52M (62.1%), 15.8 MB | 257.35M, 19.1 MB | 156 | 137 | 55 508 |
 | Every rule renamed | 3 | 248.34M (62.1%), 15.8 MB | 279.19M, 25.6 MB | 156 | 137 | 55 508 |
-| Lean admin document (8 signers, 3 rules), 8 KiB | 0 / 3 / 12 | 185.15M / 185.15M / 185.11M (46.3%), 7.8 MB | 186.92M / 195.62M / 220.82M | 102 | 85 | 37 676 |
-| Lean admin document, 4 KiB | 0 / 3 | 112.53M / 112.56M (28.1%), 5.6 MB | 114.44M / 123.18M | 102 | 85 | 25 388 |
+| Lean account document (8 signers, 3 rules), 8 KiB | 0 / 3 / 12 | 185.15M / 185.15M / 185.11M (46.3%), 7.8 MB | 186.92M / 195.62M / 220.82M | 102 | 85 | 37 676 |
+| Lean account document, 4 KiB | 0 / 3 | 112.53M / 112.56M (28.1%), 5.6 MB | 114.44M / 123.18M | 102 | 85 | 25 388 |
 
-The completion advances one counter whatever the number of scopes, and the
-fork rows are the same to within 0.2M with 0, 3, or 12 thief scopes. The
-`worst_case_*` compromise flows therefore install 3 thief scopes and budget
+The completion advances one counter whatever the number of grant documents, and the
+fork rows are the same to within 0.2M with 0, 3, or 12 thief grant documents. The
+`worst_case_*` compromise flows therefore install 3 thief grant documents and budget
 their completion on the fork; the long-lived host's row is reported,
-unbudgeted. A control with no scopes at all shows the cause: 650 unrelated
+unbudgeted. A control with no grant documents at all shows the cause: 650 unrelated
 entries, written to another contract before the completion and never
 touched by it, take the long-lived row from 291.41M to 344.68M (and the
 lean one from 186.92M to 211.56M), while the fork rows stay at 284.71M and
 185.15M.
 
-Every compromise flow at the caps, with 3 thief scopes of 8 (fork):
+Every compromise flow at the caps, with 3 thief grant documents of 8 (fork):
 
 | Thief | Instructions | Memory | Footprint | Written | Write bytes | Events |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -413,15 +413,15 @@ Every compromise flow at the caps, with 3 thief scopes of 8 (fork):
 
 Their long-lived rows are 311.55M (77.9%), 298.10M (74.5%), 296.80M
 (74.2%), 271.05M, and 279.27M. The other three worst-case flows install no
-scope and are budgeted on the long-lived host: the lost-key completion
+grant document and are budgeted on the long-lived host: the lost-key completion
 251.90M (63.0%), the `Protected` reconfiguration editing every rule 252.01M
 (63.0%), and the one replacing every rule 249.04M (62.3%).
 
-Each thief scope of 8 capped grants costs 68.9M to 77.1M on the long-lived
+Each thief grant document of 8 capped grants costs 68.9M to 77.1M on the long-lived
 host (86 footprint entries, 64 written). After the completion, every
-scope's rules are refused, the owner's included. With 3 thief scopes,
-`gc_scope` of a wiped 8-grant scope costs 18.1M to 19.6M (62 footprint
-entries, 57 or 58 written), and re-granting one grant over a wiped scope,
+grant document's rules are refused, the owner's included. With 3 thief grant documents,
+`gc_grant` of a wiped 8-grant document costs 18.1M to 19.6M (62 footprint
+entries, 57 or 58 written), and re-granting one grant over a wiped grant document,
 to a fresh session key, 16.8M to 19.2M; both rows are on the long-lived
 host.
 
@@ -429,30 +429,30 @@ host.
 (`docsplit_grant_lifecycle_forked`). Each grant is one session passkey on a
 rule scoped to a token, allowed `transfer`, with a spending cap. "One
 document" applies the whole document with `apply_doc`; "split" keeps the
-owner's admin rule in the admin document and each grant in its own scope.
+owner's admin rule in the account document and each grant in its own grant document.
 
-| Operation | One document, 1 grant | 3 grants | 7 grants | Split, 1 to 21 scopes |
+| Operation | One document, 1 grant | 3 grants | 7 grants | Split, 1 to 21 grant documents |
 | --- | --- | --- | --- | --- |
 | Add a grant | 16.45M, fp 28, w 14, 4 812 B | 27.14M | 49.03M, fp 34, 11 428 B | **13.98M to 14.02M**, fp 30, w 15 to 17, 4 324 to 4 596 B |
 | Change a grant's cap | 18.85M | 29.51M | 51.47M, 11 000 B | **16.09M to 16.13M**, fp 26 to 28, w 8 to 13, 3 008 to 3 656 B |
-| Revoke a grant | 11.38M | 21.93M | 43.78M, 8 800 B | **7.02M**, fp 24 to 26, w 14 to 16, 448 to 824 B (`remove_scope`) |
+| Revoke a grant | 11.38M | 21.93M | 43.78M, 8 800 B | **7.02M**, fp 24 to 26, w 14 to 16, 448 to 824 B (`remove_grant`) |
 | Rotate the owner key | 16.21M | 26.85M | 48.80M, 10 328 B | **11.02M**, fp 17, w 10, 2 320 B |
 | Capped transfer through a grant | 6.17M, fp 20 | 6.17M | 6.17M | 6.22M, fp 20 |
 | `execute` through the admin rule (long-lived host) | 5.49M, fp 9 | 5.50M | 5.53M | 5.50M to 5.71M, fp 9 |
 
 A whole-document change compiles every rule and rewrites the admin records
-and `applied_doc`, about 5.4M per existing grant. A scope compiles and
+and `applied_doc`, about 5.4M per existing grant. A grant document compiles and
 rewrites only its own, and writes one credential-index entry per credential
 it names for the first time. The generation gate reads one tag per selected
-rule, present or absent, so every authorization's footprint, the admin
+rule, present or absent, so every authorization's footprint, the account
 document's included, holds one more entry per selected rule than without
-scoped documents. A scoped rule's present tag costs about 0.05M more than
+grant documents. A grant rule's present tag costs about 0.05M more than
 an admin rule's absent one.
 
-**The credential index** costs one persistent entry per credential a scope
+**The credential index** costs one persistent entry per credential a grant document
 names (144 bytes, written once with the maximum TTL and never removed) and
-one read per declared credential in each `apply_scope`. `apply_doc` reads
-it only once a completion has advanced the scope generation, and then for
+one read per declared credential in each `apply_grant`. `apply_doc` reads
+it only once a completion has advanced the grant generation, and then for
 every declared credential (at most 8), except in a completion.
 
 **At rest** (`docsplit_grant_lifecycle`): the account's own entries plus the
@@ -463,38 +463,38 @@ uncalibrated.
 | | Bytes | Rent, XLM a year |
 | --- | --- | --- |
 | One document, 6 grants | 18 860 | 9.56 |
-| Split, 6 scopes of 1 grant | 24 264 | 12.30 |
+| Split, 6 grant documents of 1 grant | 24 264 | 12.30 |
 | Per grant | one document 2 736; split 3 608 (+872, +32%) | 1.39 against 1.83 |
 
-A scope's own entries are its record (856 B for one grant, which repeats the
+A grant document's own entries are its record (856 B for one grant, which repeats the
 `InstalledRule`), its canonical bytes (652 B), the tag (156 B), its two
 index entries (212 B), and one credential-index entry (144 B) per
-credential, which stays after the scope is removed: the split account above
-holds 7, for its 6 live grants and the one revoked. The admin document's
+credential, which stays after the grant document is removed: the split account above
+holds 7, for its 6 live grants and the one revoked. The account document's
 equivalents are its share of the admin records and `applied_doc`.
 [Account storage](#account-storage) measures the layout that stores each
-rule once and drops the scoped canonical copy.
+rule once and drops the grant document's canonical copy.
 
-**Many scopes** (`docsplit_many_scopes`, 40 scopes of 8 grants, 321 rules
-installed, fork): a capped transfer through the first or the last scope
-6.21M (20 entries), the owner key's rotation 11.02M, a new one-grant scope
+**Many grant documents** (`docsplit_many_grants`, 40 grant documents of 8 grants, 321 rules
+installed, fork): a capped transfer through the first or the last grant document
+6.21M (20 entries), the owner key's rotation 11.02M, a new one-grant document
 14.05M; `execute` through the admin rule 7.75M on the long-lived host, 9
 entries. At rest the account then holds 951 840 bytes (483 XLM a year at
-the floor, 3.0 KB per grant). The 40th scope's `apply_scope` on the
-long-lived host, which holds every earlier scope, reads 177.34M and 41.5 MB:
+the floor, 3.0 KB per grant). The 40th grant document's `apply_grant` on the
+long-lived host, which holds every earlier grant document, reads 177.34M and 41.5 MB:
 the host's growth, which the fork rows do not show.
 
-**Scope size.** One `apply_scope` costs about 7M instructions and 7 written
-entries per own-key capped grant (`docsplit_scope_size_sweep`, long-lived
+**Grant document size.** One `apply_grant` costs about 7M instructions and 7 written
+entries per own-key capped grant (`docsplit_grant_size_sweep`, long-lived
 host):
 
-| Grants in one `apply_scope` | Add | Replace every rule in one call | `remove_scope` |
+| Grants in one `apply_grant` | Add | Replace every rule in one call | `remove_grant` |
 | --- | --- | --- | --- |
 | 1 | 14.07M, w 17 | 15.69M, w 23 | 7.05M, w 16 |
 | 4 | 35.35M, w 38 | 44.28M, w 62 | 11.69M, w 34 |
 | 8 | 64.98M, 5.6 MB, w 66 | 88.58M, 9.6 MB, w 114 (57%) | 19.07M, w 58 |
 
-A scoped document is bounded by the compiler's caps like any document: 8
+A grant document is bounded by the compiler's caps like any document: 8
 own-key grants (8 signers) and 10 rules (11 when these rows were measured). Caps above that need a new
 compiler build, and so a new account build, and are not measured here.
 
@@ -513,9 +513,9 @@ export PERCH_STACK_DIR=target/source-stack
 $T worst_case -- --ignored --nocapture --test-threads 1
 PERCH_SPLIT_KS=0,2,6,20 $T docsplit_grant_lifecycle_forked -- --ignored --nocapture --test-threads 1
 PERCH_SPLIT_KS=0,2,6,20 $T docsplit_grant_lifecycle -- --ignored --nocapture --test-threads 1      # at rest
-PERCH_SPLIT_SCOPES=40 $T docsplit_many_scopes -- --ignored --nocapture
-PERCH_SPLIT_NS=1,4,8 $T docsplit_scope_size_sweep -- --ignored --nocapture
-# signers,both,interp,plain,fan,bytes,thief (0 keep, 1 rename, 2 reprogram),scopes,grants per scope
+PERCH_SPLIT_GRANTS=40 $T docsplit_many_grants -- --ignored --nocapture
+PERCH_SPLIT_NS=1,4,8 $T docsplit_grant_size_sweep -- --ignored --nocapture
+# signers,both,interp,plain,fan,bytes,thief (0 keep, 1 rename, 2 reprogram),docs,grants per document
 PERCH_SPLIT_RECOVERY="8,9,0,0,8,8192,2,0,8;8,9,0,0,8,8192,2,3,8;8,9,0,0,8,8192,2,12,8;8,9,0,0,8,8192,1,0,8;8,9,0,0,8,8192,1,3,8;8,0,1,0,8,8192,2,0,8;8,0,1,0,8,8192,2,3,8;8,0,1,0,8,8192,2,12,8;8,0,1,0,8,4096,2,0,8;8,0,1,0,8,4096,2,3,8" \
   $T docsplit_compromise_completion -- --ignored --nocapture --test-threads 1
 PERCH_SPLIT_FILLER=650 PERCH_SPLIT_RECOVERY="8,9,0,0,8,8192,2,0,8;8,0,1,0,8,8192,2,0,8" \
@@ -524,19 +524,19 @@ PERCH_SPLIT_FILLER=650 PERCH_SPLIT_RECOVERY="8,9,0,0,8,8192,2,0,8;8,0,1,0,8,8192
 
 ### Rule-eval rule sets
 
-`apply_doc` lowers the compiled admin document's model with rule-core's
-`rule_eval::lower`, and `apply_scope` a scoped document's with
+`apply_doc` lowers the compiled account document's model with rule-core's
+`rule_eval::lower`, and `apply_grant` a grant document's with
 `rule_eval::lower_scoped`, and each stores the result beside the records it
 installs (`implementation.md`, "Delta apply"). Source: 2026-11-04, the stack
 `scripts/build-stack.sh --builder contract` built from the source that adds
-them on top of scoped documents, real proofs, passkeys, enforcing
-authorization; compromise completions with 3 thief scopes of 8, budgeted on
-the fork ([Scoped documents](#scoped-documents)).
+them on top of grant documents, real proofs, passkeys, enforcing
+authorization; compromise completions with 3 thief grant documents of 8, budgeted on
+the fork ([Grant documents](#grant-documents)).
 
 At the earlier caps of 8 signers and 11 rules, the completions cost about
 24M more instructions:
 
-| Fork completion, 8 × 11, 3 thief scopes | Without the stored sets | With them |
+| Fork completion, 8 × 11, 3 thief grant documents | Without the stored sets | With them |
 | --- | --- | --- |
 | Names kept, every program changed (binding) | 284.79M (71.2%) | 309.05M (77.3%) |
 | Names kept, every program and cap changed | 266.77M (66.7%) | 291.16M (72.8%) |
@@ -570,25 +570,25 @@ source's sweep is in [The account's own rule registry](#the-accounts-own-rule-re
 ### Rule-eval in `__check_auth`
 
 `__check_auth` decides every authorization but a recovery completion with
-rule-eval's `authorize` over the stored rules of the chosen rules, and the
+rule-eval's `check_auth` over the stored rules of the chosen rules, and the
 account's `authenticate` checks the signers (`implementation.md`, "Rule-eval in
 `__check_auth`"). A document rule carries no policy, so an
 authorization calls neither the interpreter nor the spending limit, and an
 apply installs and uninstalls neither. Source: 2026-11-04, stacks built with
 `scripts/build-stack.sh --builder contract` from this source, from the
 source where OZ's `do_check_auth` with the interpreter and the spending
-limit ran first and rule-eval's `authorize` second, and from the source
+limit ran first and rule-eval's `check_auth` second, and from the source
 before rule-eval's check, each through every `release_stack.rs` flow (25
 tests, `--skip cap_sweep`), real proofs, passkeys, enforcing authorization.
 Instructions, as a share of the 400M limit:
 
 | Flow | OZ and its policies | Both, OZ first | Rule-eval |
 | --- | --- | --- | --- |
-| Capped transfer through a grant, 1 grant in the admin document | 6.10M (1.5%) | 7.07M (1.8%) | 5.59M (1.4%) |
+| Capped transfer through a grant, 1 grant in the account document | 6.10M (1.5%) | 7.07M (1.8%) | 5.59M (1.4%) |
 | The same, 7 grants | 6.19M (1.5%) | 7.49M (1.9%) | 5.92M (1.5%) |
-| Capped transfer through a scoped grant, 1 scope | 6.17M (1.5%) | 7.20M (1.8%) | 5.70M (1.4%) |
-| Capped transfer through the last of 8 scopes, 65 rules installed (fork) | 6.25M (1.6%) | 8.00M (2.0%) | 6.33M (1.6%) |
-| `execute` through the admin rule, no scopes | 5.55M (1.4%) | 6.26M (1.6%) | 5.85M (1.5%) |
+| Capped transfer through a grant, 1 grant document | 6.17M (1.5%) | 7.20M (1.8%) | 5.70M (1.4%) |
+| Capped transfer through the last of 8 grant documents, 65 rules installed (fork) | 6.25M (1.6%) | 8.00M (2.0%) | 6.33M (1.6%) |
+| `execute` through the admin rule, no grant documents | 5.55M (1.4%) | 6.26M (1.6%) | 5.85M (1.5%) |
 | `execute` through the admin rule, 65 rules installed | 5.99M (1.5%) | 6.71M (1.7%) | 6.17M (1.5%) |
 | Capped transfer after 100 spends in the window (fork) | 6.98M (1.7%) | 12.66M (3.2%) | 10.31M (2.6%) |
 | Capped transfer after 400 spends in the window (fork) | 9.31M (2.3%) | 28.73M (7.2%) | 24.05M (6.0%) |
@@ -596,7 +596,7 @@ Instructions, as a share of the 400M limit:
 
 - **What an authorization reads and writes.** A capped transfer reads 13
   footprint entries and writes 4, 764 bytes after one spend: the stored
-  set, the admin document's records or the scope's record and set, and the
+  set, the account document's records or the grant document's record and set, and the
   rule's spending record, which it writes. With OZ first it read 23 and
   wrote 5, 1,156 bytes. `execute` through the admin rule reads 9 entries
   (11 with OZ first).
@@ -636,7 +636,7 @@ records from their XDR in one pass and a batch of calls one host value at a
 time, rather than through `#[contracttype]` decoding and soroban-facade's
 context reading, which would add to its code; reading a compiled model
 builds its vectors with plain loops rather than iterator adapters, which
-saves another 2 KB. `apply_doc` and `apply_scope` keep `#[contracttype]` conversion: in
+saves another 2 KB. `apply_doc` and `apply_grant` keep `#[contracttype]` conversion: in
 the account's wasm, where a call costs 67 fuel and a short copy is a byte
 loop, reading the model or writing the set as XDR costs the binding
 completion 7M to 9M more instructions than the host's conversion does.
@@ -656,14 +656,14 @@ on both stacks:
 
 | Row (8 signers, 10 rules, 8 per rule) | Instructions | Footprint | Written entries | Memory |
 | --- | --- | --- | --- | --- |
-| Compromise completion on the long-lived host, the thief kept every name and changed every program and cap (3 thief scopes of 8) | 251.26M (62.8%) → 165.81M (41.5%) | 108 → 64 | 85 → 41 | 14.7 → 5.9 MB |
+| Compromise completion on the long-lived host, the thief kept every name and changed every program and cap (3 thief grant documents of 8) | 251.26M (62.8%) → 165.81M (41.5%) | 108 → 64 | 85 → 41 | 14.7 → 5.9 MB |
 | The same on the fork | 236.93M → 165.50M (41.4%) | 108 → 64 | 85 → 41 | 9.9 → 5.3 MB |
 | Compromise completion on the long-lived host, the thief renamed every rule | 229.71M → 163.71M (40.9%) | 117 → 64 | 94 → 41 | 15.1 → 6.0 MB |
 | Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 235.77M → 162.97M (40.7%) | 92 → 48 | 77 → 33 | 10.3 → 5.1 MB |
 | `Protected` reconfiguration, every rule edited | 238.09M → 166.37M (41.6%) | 84 → 40 | 60 → 16 | 10.4 → 5.4 MB |
 | `Protected` reconfiguration, every rule replaced | 214.84M → 163.88M (41.0%) | 101 → 48 | 69 → 16 | 10.2 → 5.4 MB |
 | Thief's `apply_doc`, names kept, every program and cap changed | 197.02M → 125.68M (31.4%) | 75 → 33 | 48 → 6 | 8.6 → 3.6 MB |
-| `gc_scope` of a wiped scope (8 grants) | 7.79M → 2.57M | 49 → 25 | 40 → 16 | |
+| `gc_grant` of a wiped grant document (8 grants) | 7.79M → 2.57M | 49 → 25 | 40 → 16 | |
 | Factory `create_passkey` | 2.28M → 1.96M | 11 → 8 | 6 → 3 | |
 | Capped transfer through a grant | 5.58M → 5.54M | 13 → 13 | 4 → 4 | |
 
@@ -746,7 +746,7 @@ Both pass. The completion rows:
   `Combined` not promoting, `submit_zk` promoting `Combined`, and
   `submit_zk_change` `Reconfigure`, which also uses 404 more bytes of
   memory), the `Combined` cancellation, three capped transfers through a
-  scoped grant, and the eighth `apply_scope` on the long-lived host; the largest is `submit_zk` at
+  grant, and the eighth `apply_grant` on the long-lived host; the largest is `submit_zk` at
   29.7%. The cause was not investigated. The worst share of each limit:
   instructions 41.6% → 41.5%, memory 23.6%, write bytes 50.0%, footprint
   16.0% → 15.2%, written entries 20.5% → 19.0%, and events 20.5%.
@@ -789,7 +789,7 @@ The completion rows:
   and `execute`, refuse ten reserved names instead of eight. The same
   account built without `rcv_install` and `rcv_complete` in the list costs
   3,000 to 17,300 fewer instructions on those 41 rows and 8,800 to 18,900
-  fewer through `execute`. Rows over scope sweeps and thief scopes move by
+  fewer through `execute`. Rows over grant-document sweeps and thief grant documents move by
   up to ±0.06M between any two of the three builds, which differ in the
   account's code and so in where the factory puts each account; the six
   rows that verify a real ZK proof move by up to ±0.05M between two runs
@@ -810,17 +810,17 @@ changes only in the account hash it pins.
 
 ### Account storage
 
-The account stores each rule once and keeps a scoped document's signer ids
+The account stores each rule once and keeps a grant document's signer ids
 instead of its text (`implementation.md`, "Delta apply"; `spec.md` §7.6).
 Its entries:
 
-- `RuleSet`: the admin document's records, one `RuleRecord` per rule (id,
+- `RuleSet`: the account document's records, one `RuleRecord` per rule (id,
   name, policies, and the stored rule-eval rule, which holds the scope,
   signers and last ledger);
-- `Scopes(scope)`: a scoped document's generation, `doc_hash`, records,
+- `Grants(grant)`: a grant document's generation, `doc_hash`, records,
   index position, and signer ids;
-- `ScopeTags(id)`: a scoped rule's scope; `ScopeIndex(n)`, what `scopes`
-  lists; `ScopeCredentials`, `SpendRecords`, the applied admin document
+- `GrantTags(id)`: a grant rule's grant id; `GrantIndex(n)`, what `grants`
+  lists; `GrantCredentials`, `SpendRecords`, the applied account document
   (`AppliedDocBytes`, `AppliedFingerprints`), and the instance.
 
 Source: 2026-11-05, stacks built with `scripts/build-stack.sh --builder
@@ -829,18 +829,18 @@ between them.
 
 **The testnet preview account's grant** (`release_stack.rs`'s
 `census_of_the_preview_grant`): the factory's `create_passkey`, two
-`apply_scope`s in the preview's documents' shape, scope ids and expiries,
+`apply_grant`s in the preview's documents' shape, grant ids and expiries,
 then a 1 XLM transfer through the second app's capped rule. The account's
 own entries, host nonces aside, as each change lands; rent at the floor
 (1 000 stroops per KB, denominator 1 215):
 
 | Layout | Bytes | Entries | Rent, XLM a year | 180-day prepay |
 | --- | --- | --- | --- | --- |
-| Before: records beside stored sets, scope text, positions, tags with a generation | 9 536 | 20 | 4.834 | 2.384 |
+| Before: records beside stored sets, grant document text, positions, tags with a generation | 9 536 | 20 | 4.834 | 2.384 |
 | One record per rule (no `InstalledRules`, no `ScopeRuleSets`) | 7 704 | 17 | 3.905 | 1.926 |
-| A tag holds only its scope | 7 496 | 17 | 3.800 | 1.874 |
-| The index position in the scope record (no `ScopePosition`) | 7 320 | 15 | 3.711 | 1.830 |
-| Signer ids for the scope text (no `ScopeDocs`) | **5 296** | **13** | **2.685** | **1.324** |
+| A tag holds only its grant id | 7 496 | 17 | 3.800 | 1.874 |
+| The index position in the grant record (no `ScopePosition`) | 7 320 | 15 | 3.711 | 1.830 |
+| Signer ids for the grant document text (no `ScopeDocs`) | **5 296** | **13** | **2.685** | **1.324** |
 
 The constructor alone writes 752 bytes in 2 entries, where it wrote 1 144
 in 3. Each figure equals, to the byte, the size computed beforehand by
@@ -852,8 +852,8 @@ policy state kept for it), before and after:
 | | Before | After |
 | --- | --- | --- |
 | One document, 6 grants | 11 032 | 8 840 |
-| Split, 6 scopes of 1 grant | 17 156 | 9 876 |
-| Split, 8 scopes of 8 grants | 120 784 | 66 856 |
+| Split, 6 grant documents of 1 grant | 17 156 | 9 876 |
+| Split, 8 grant documents of 8 grants | 120 784 | 66 856 |
 
 **Every `release_stack.rs` flow** (26 tests, `--skip cap_sweep`, real
 proofs, passkeys, enforcing authorization) passes on both stacks, the source
@@ -861,15 +861,15 @@ before this one running its own copy of the suite. Of the 321 metered rows:
 
 | Row | Instructions | Footprint | Written entries | Write bytes |
 | --- | --- | --- | --- | --- |
-| Compromise completion on the long-lived host (8 signers, 10 rules, 3 thief scopes of 8), the worst of its rows | 165.27M → 161.97M (40.5%) | 61 → 60 | 38 → 37 | 60 172 → 47 852 |
+| Compromise completion on the long-lived host (8 signers, 10 rules, 3 thief grant documents of 8), the worst of its rows | 165.27M → 161.97M (40.5%) | 61 → 60 | 38 → 37 | 60 172 → 47 852 |
 | The same on the fork | 165.13M → 161.66M (40.4%) | 61 → 60 | 38 → 37 | 60 172 → 47 852 |
 | Lost-key completion (`Combined`, ZK rotation, every signer revoked; 8 signers, 10 rules) | 162.64M → 159.67M (39.9%) | 45 → 44 | 30 → 29 | 59 572 → 47 252 |
 | `Protected` reconfiguration, every rule edited (8 signers, 10 rules) | 165.94M → 161.97M (40.5%) | 37 → 36 | 13 → 12 | 55 624 → 43 304 |
 | Lost-key completion (`GuardianOnly`) | 15.93M → 15.65M | 22 → 21 | 14 → 13 | 6 424 → 5 576 |
-| Add a grant (`apply_scope`, fork) | 11.75M → 11.57M | 18 → 14 | 9 → 6 | 2 808 → 1 660 |
-| Capped transfer through a scoped grant (fork) | 5.66M → 5.57M | 14 → 13 | 4 → 4 | 764 → 764 |
+| Add a grant (`apply_grant`, fork) | 11.75M → 11.57M | 18 → 14 | 9 → 6 | 2 808 → 1 660 |
+| Capped transfer through a grant (fork) | 5.66M → 5.57M | 14 → 13 | 4 → 4 | 764 → 764 |
 | `execute` through the admin rule (fork) | 5.79M → 5.73M | 9 → 8 | 2 → 2 | 200 → 200 |
-| `gc_scope` of a wiped scope (8 grants) | 2.55M → 2.82M | 25 → 22 | 16 → 13 | 960 → 6 940 |
+| `gc_grant` of a wiped grant document (8 grants) | 2.55M → 2.82M | 25 → 22 | 16 → 13 | 960 → 6 940 |
 | Factory `create_passkey` | 1.95M → 1.90M | 8 → 7 | 3 → 2 | 1 144 → 752 |
 
 - **Every row is within 75%,** and no row's footprint, written entries or
@@ -877,19 +877,19 @@ before this one running its own copy of the suite. Of the 321 metered rows:
   memory 23.6%, write bytes 50.0% (both the capped transfer after 906
   spends, unchanged), footprint 15.2% → 15.0%, written entries 19.0% →
   18.5%, events 20.5%.
-- **Every authorization reads one entry fewer** (a scoped rule's record
+- **Every authorization reads one entry fewer** (a grant rule's record
   holds its stored rule; an admin rule's position needs no second entry)
   and costs 0.04M to 0.31M fewer instructions.
 - **Applies write one record per document** instead of records beside a
   stored set: 231 rows cost fewer instructions, by up to 6.3M.
-- **33 rows cost more instructions:** `gc_scope` of a scope that is not
-  last in the index rewrites the scope moved into its position, whose
+- **33 rows cost more instructions:** `gc_grant` of a grant document that is not
+  last in the index rewrites the grant document moved into its position, whose
   record now holds that position (+0.27M to +0.29M, and about 6 KB more
   written for an 8-grant record), where it rewrote an 8-byte position
-  (`remove_scope` does the same); the controller's `begin_lost_key`,
+  (`remove_grant` does the same); the controller's `begin_lost_key`,
   `begin_compromise` and `publish_baseline` run the compiler's
-  normal-form check (+0.03M to +0.24M); the scope-size sweep's 8-grant
-  `apply_scope` costs +0.16M; and three evidence rows move by at most
+  normal-form check (+0.03M to +0.24M); the grant-document size sweep's 8-grant
+  `apply_grant` costs +0.16M; and three evidence rows move by at most
   0.04M.
 
 `scripts/cap-sweep.py --bytes 0` over every worst-case flow, on stacks of
@@ -979,7 +979,7 @@ passkey under a second credential id), and the budget running out at 25,
 
 A document that names a verifier (`verifier-name`, `docs/account-interface.md`,
 "Verifiers") makes the compiler call `perch/verifiers`' `fetch_hash` once per
-distinct name, and `apply_scope` stores each signer's name beside its id. The
+distinct name, and `apply_grant` stores each signer's name beside its id. The
 release-stack suite names the WebAuthn verifier in every passkey document and
 publishes it through the stack's own `perch-constructorless-registry` wasm.
 Source: 2026-11-05, `build-stack.sh --builder contract` stacks of the source
@@ -989,14 +989,14 @@ before this change and this source, all 160 rows common:
   40.7% on instructions and 15.0% to 15.8% on footprint; memory 23.6%,
   written entries 18.5%, write bytes 50.0% and events 20.5% are unchanged.
 - A document naming one verifier: about +0.6M to +2.8M instructions on an
-  `apply_doc` and +5.7M on a thief's 8-grant `apply_scope` (the largest),
+  `apply_doc` and +5.7M on a thief's 8-grant `apply_grant` (the largest),
   +3 footprint entries (the registry's instance, its code, the name's
   entry), and up to +1.0 MB of memory: the registry wasm links rustc's
   default 1 MiB stack ([Wasm stack](#wasm-stack)), unlike the stack
   contracts, and each call instantiates it.
 - `create_passkey` +0.13M instructions: the constructor reads the verifier's
   code hash and derives its content address, with no call.
-- Storage: a scope record holds an empty name list when no signer is named
+- Storage: a grant record holds an empty name list when no signer is named
   (+36 bytes); the testnet preview's grant takes 5,368 bytes in 13 entries
   (5,296 before). A name takes about 40 bytes of the 8,192-byte canonical
   cap per signer, so the cap documents hold fewer `string-in` values and

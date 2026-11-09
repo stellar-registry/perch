@@ -27,7 +27,7 @@
    "n": "4",
    "text": "Refuse a selected grant rule that calls the recovery controller or its zero-knowledge adapter or pool. A completion leaves here: the controller's `rcv_complete` checks the approved document bytes and the completion window.",
    "exits": [
-    "`ScopeEscalation` ({{fact:auth-error-scope-escalation}})",
+    "`GrantEscalation` ({{fact:auth-error-scope-escalation}})",
     "a completion: decided by the recovery controller"
    ],
    "assurance": "tested"
@@ -49,9 +49,9 @@
   },
   {
    "n": "7",
-   "text": "`rule_eval::authorize` maps rules, records, contexts, choices, signers, ledger and generation to the next records. It reads no storage and checks no signature.",
+   "text": "`rule_eval::check_auth` maps rules, records, contexts, choices, signers, ledger and generation to the next records. It reads no storage and checks no signature.",
    "exits": [
-    "stale grant: `StaleScope` ({{fact:auth-error-stale-scope}})",
+    "stale grant: `StaleGrant` ({{fact:auth-error-stale-scope}})",
     "otherwise `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}})"
    ],
    "assurance": "proved"

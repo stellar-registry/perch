@@ -20,6 +20,8 @@ const doc = policy()
   .build();
 ```
 
+A **signer** is a slot a document names by its signer id (`admin` and `ci` above); a **credential** is the `Delegated(address)` or `External(verifier, key)` value that fills it. OpenZeppelin's smart account and Perch's wire types call that value a `Signer`.
+
 ## Status
 
 Recorded deployments are in [`deployments/testnet.json`](./deployments/testnet.json)
@@ -68,8 +70,8 @@ crates/
                       last ledger), the document model the account lowers with
                       rule-eval, doc_hash, config_hash, document caps, and
                       recovery target derivation
-  perch-smart-account/  the account trait: apply_doc and apply_scope (the admin and
-                      scoped documents, the only write paths for rules and signers),
+  perch-smart-account/  the account trait: apply_doc and apply_grant (the account and
+                      grant documents, the only write paths for rules and signers),
                       the delta reconcile of account records, execute, upgrades, the recovery
                       hooks, and the consumer views
   perch-account/      the deployable account contract over perch-smart-account

@@ -35,7 +35,7 @@
 //! rule's contract, `valid_until` and `signers` are the stored rule's, and
 //! `recovery` is whether the id is the instance's `RecoveryRule`. The
 //! entry's TTL is the later of the two. Every other entry of every contract,
-//! the account's included, is compared as stored. The flows apply no scoped
+//! the account's included, is compared as stored. The flows apply no grant
 //! document, whose layout also changed (`spec.md` §7.6).
 //!
 //! `#[ignore]`d because it needs those builds:

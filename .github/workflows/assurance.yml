@@ -135,7 +135,7 @@ jobs:
         env:
           SECONDS_PER_TARGET: ${{ github.event_name == 'pull_request' && '60' || '300' }}
         run: |
-          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta apply_scope_delta recovery_canonical_roundtrip; do
+          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta apply_grant_delta recovery_canonical_roundtrip; do
             dict=()
             if [ -f "fuzz/dicts/$t.dict" ]; then dict=("-dict=fuzz/dicts/$t.dict"); fi
             # Pin the build target to the host gnu triple. cargo-fuzz otherwise

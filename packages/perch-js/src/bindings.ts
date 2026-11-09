@@ -5,7 +5,7 @@
 // view is a simulation; its `latestLedger` is the ledger the RPC answered at.
 
 import { decodeDocLimits, type FlatDocLimits } from './limits.js';
-import { rebuildScopeDoc, type RebuiltScope, type StoredCond, type StoredRule, type StoredScope, type StoredVal } from './scope.js';
+import { rebuildGrantDoc, type RebuiltGrant, type StoredCond, type StoredRule, type StoredGrant, type StoredVal } from './grant.js';
 import type { AccountCapabilities, AccountConfiguration, AccountReader, InstalledRule, Read } from './snapshot.js';
 import type { AuthRoot } from './schema.js';
 import type { SignerKey } from './xdr.js';
@@ -136,12 +136,12 @@ export function accountReader(account: string, client: AccountBindings, compiler
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/** The account's scope views, as the generated client names them. */
-export interface ScopeBindings {
-  scope(args: { scope: number }): Promise<Simulated<any>>;
-  scope_rule_set(args: { scope: number }): Promise<Simulated<any>>;
-  scope_signer_ids(args: { scope: number }): Promise<Simulated<any>>;
-  scope_verifier_names(args: { scope: number }): Promise<Simulated<any>>;
+/** The account's grant views, as the generated client names them. */
+export interface GrantBindings {
+  grant(args: { grant: number }): Promise<Simulated<any>>;
+  grant_rule_set(args: { grant: number }): Promise<Simulated<any>>;
+  grant_signer_ids(args: { grant: number }): Promise<Simulated<any>>;
+  grant_verifier_names(args: { grant: number }): Promise<Simulated<any>>;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -213,18 +213,18 @@ export function decodeStoredRule(r: Record<string, unknown>): StoredRule {
   };
 }
 
-/** Decode what `scope(id)`, `scope_rule_set(id)`, `scope_signer_ids(id)`
- *  and `scope_verifier_names(id)` return for the scope of `account` on the
- *  network `network` (its passphrase); `null` when the account has no scoped
+/** Decode what `grant(id)`, `grant_rule_set(id)`, `grant_signer_ids(id)`
+ *  and `grant_verifier_names(id)` return for the grant of `account` on the
+ *  network `network` (its passphrase); `null` when the account has no grant
  *  document there. */
-export function decodeStoredScope(
+export function decodeStoredGrant(
   account: string,
   network: string,
   record: Record<string, unknown> | null | undefined,
   ruleSet: Record<string, unknown>[],
   signerIds: unknown[] | null | undefined,
   verifierNames: unknown[] | null | undefined,
-): StoredScope | null {
+): StoredGrant | null {
   if (record === null || record === undefined) return null;
   const rules = record.rules as Record<string, unknown>[];
   if (rules.length !== ruleSet.length) throw new Error(`${rules.length} records and ${ruleSet.length} stored rules`);
@@ -239,24 +239,24 @@ export function decodeStoredScope(
 }
 
 /**
- * Read the scoped document under `scope` from `account`'s views and rebuild
- * it (`rebuildScopeDoc`); `null` when the account has none there. Throws
- * `ScopeNotRebuilt` when it does not rebuild to the stored `doc_hash`, which
- * four reads straddling an `apply_scope` can also cause: read again.
+ * Read the grant document under `grant` from `account`'s views and rebuild
+ * it (`rebuildGrantDoc`); `null` when the account has none there. Throws
+ * `GrantNotRebuilt` when it does not rebuild to the stored `doc_hash`, which
+ * four reads straddling an `apply_grant` can also cause: read again.
  */
-export async function readScopeDoc(
-  client: ScopeBindings,
+export async function readGrantDoc(
+  client: GrantBindings,
   account: string,
   network: string,
-  scope: number,
-): Promise<RebuiltScope | null> {
+  grant: number,
+): Promise<RebuiltGrant | null> {
   const [record, ruleSet, signerIds, verifierNames] = await Promise.all([
-    client.scope({ scope }),
-    client.scope_rule_set({ scope }),
-    client.scope_signer_ids({ scope }),
-    client.scope_verifier_names({ scope }),
+    client.grant({ grant }),
+    client.grant_rule_set({ grant }),
+    client.grant_signer_ids({ grant }),
+    client.grant_verifier_names({ grant }),
   ]);
-  const stored = decodeStoredScope(
+  const stored = decodeStoredGrant(
     account,
     network,
     record.result,
@@ -264,5 +264,5 @@ export async function readScopeDoc(
     signerIds.result,
     verifierNames.result,
   );
-  return stored === null ? null : rebuildScopeDoc(stored);
+  return stored === null ? null : rebuildGrantDoc(stored);
 }

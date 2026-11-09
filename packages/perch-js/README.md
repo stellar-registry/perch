@@ -58,9 +58,9 @@ refuses the document unless it is that address. `external(address, key)`
 names it by contract id alone: an *unverified* verifier, whose `verify`
 decides whatever the rules holding its signers allow.
 
-- An admin document (one with a self-admin rule or a `recovery` member) may
+- An account document (one with a self-admin rule or a `recovery` member) may
   name no unverified verifier, and neither may a recovery target.
-- A scoped document may, at most one signer per unverified verifier in a
+- A grant document may, at most one signer per unverified verifier in a
   rule, and the compile result lists them. Show `unverifiedWarnings(doc)`
   before the owner approves it: one `"Unverified verifier C…: it can
   approve anything this rule allows"` per rule and verifier.
@@ -74,7 +74,7 @@ resolves to, as the compiler does: `perch/verifiers` (`verifierRegistryId`)
 publishes a wasm hash under the name and version, deployed at its content
 address there (`verifierAddress`). perch-js depends on no Stellar SDK, so
 `fetchHash` is the caller's simulated call of the registry's `fetch_hash`.
-Verifier resolution and the names retained for scoped-document reconstruction
+Verifier resolution and the names retained for grant-document reconstruction
 are described in [the account interface](../../docs/account-interface.md#verifiers).
 
 Parsing/validating an existing document:
@@ -197,7 +197,10 @@ host render errors, so transports should attach the events.
 compiler would refuse. `readSnapshot` refuses with `UnsupportedCapability`
 an account whose document identity, authorization digest, or snapshot
 format this version does not implement, and a limits format it does not
-know.
+know. `grantMode(snapshot.capabilities)` returns `'grant_v1'` for an account
+that `readGrantDoc` and `apply_grant` serve, `'scoped_v1'` for one built
+before the rename (only its `apply_scope` family applies grants), and
+`null` for one that applies no grant documents.
 
 ### Applying a document
 
@@ -241,26 +244,26 @@ same caller code runs
 against a backend that takes several transactions: a step that already
 landed is skipped when an operation is retried or started again.
 
-### Reading a scoped document
+### Reading a grant document
 
-An account keeps no scoped document's text. It keeps each rule's name and
-stored rule (`scope(id)`, `scope_rule_set(id)`), the document's signer ids
-(`scope_signer_ids(id)`) and each signer's `verifier-name`
-(`scope_verifier_names(id)`), and applies a scoped document only in normal
+An account keeps no grant document's text. It keeps each rule's name and
+stored rule (`grant(id)`, `grant_rule_set(id)`), the document's signer ids
+(`grant_signer_ids(id)`) and each signer's `verifier-name`
+(`grant_verifier_names(id)`), and applies a grant document only in normal
 form, so those give the text back:
 
 ```ts
-import { readScopeDoc } from '@stellar-registry/perch';
+import { readGrantDoc } from '@stellar-registry/perch';
 
-const scope = await readScopeDoc(new account.Client(opts(accountId)), accountId, networkPassphrase, scopeId);
-// null when the account has no scope there; else { doc, canonical, docHash }
+const grant = await readGrantDoc(new account.Client(opts(accountId)), accountId, networkPassphrase, grantId);
+// null when the account has no grant there; else { doc, canonical, docHash }
 ```
 
-`rebuildScopeDoc` rebuilds the document from those four views
-(`decodeStoredScope` decodes them as the generated bindings return them),
-and throws `ScopeNotRebuilt` unless its canonical text hashes to the
-scope's stored `doc_hash`, so a rebuild is never trusted on its own. Write
-scoped documents in normal form: external keys in lowercase hex, cap
+`rebuildGrantDoc` rebuilds the document from those four views
+(`decodeStoredGrant` decodes them as the generated bindings return them),
+and throws `GrantNotRebuilt` unless its canonical text hashes to the
+grant's stored `doc_hash`, so a rebuild is never trusted on its own. Write
+grant documents in normal form: external keys in lowercase hex, cap
 limits as plain decimals, no cap `token`, `all` where a `threshold` asks
 every signer it names, a capped rule's `functions` exactly `["transfer"]`,
 `is-self` rather than `address-eq` naming the account, no `string-in`
@@ -278,15 +281,15 @@ account refuses any other with `NotNormalForm`.
 | `AccountFrozen` | A `Protected` recovery attempt is authorized: before signing (with the attempt and its expiry), or the account refusing a submission |
 | `InconsistentRead` | Reads kept disagreeing on the revision, or an RPC went backwards |
 | `CompilerMismatch` | The reader's compiler is not the account's pinned one |
-| `ScopeNotRebuilt` | A scope's stored rules, signer ids and verifier names do not rebuild to its `doc_hash` |
-| `UnverifiedVerifier`, `UnverifiedVerifierReused` | `checkVerifiers`: an admin document naming a verifier by contract id alone, or a rule holding two signers under one such verifier |
+| `GrantNotRebuilt` | A grant's stored rules, signer ids and verifier names do not rebuild to its `doc_hash` |
+| `UnverifiedVerifier`, `UnverifiedVerifierReused` | `checkVerifiers`: an account document naming a verifier by contract id alone, or a rule holding two signers under one such verifier |
 | `RuleNotFound`, `UnsupportedCapability`, `Aborted` | As named |
 
 ### Hashes and encodings
 
 `docHash`, `ruleHash`, `configHash`, `statementDigest`, `replacementsHash`,
 `credentialFingerprint`, `zkStatementFields`, `signingDigest`,
-`buildAuthPayload`, and `rebuildScopeDoc` are pinned against vectors the
+`buildAuthPayload`, and `rebuildGrantDoc` are pinned against vectors the
 Rust suite writes from the contracts' own code (`testdata/`).
 
 perch-js does not compile documents. The account's pinned on-chain doc

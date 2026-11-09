@@ -16,7 +16,7 @@
 //!   constraint-free rule (no function/arg limits) lowers *policy-free*: it
 //!   allows every function of its scope to all of its signers, with no
 //!   interpreter program. The account stores rule-core's lowering of the
-//!   same rule and decides it with rule-eval's `authorize`
+//!   same rule and decides it with rule-eval's `check_auth`
 //!   (`perch-smart-account`'s `rule_set` and `gate`). A recovery completion
 //!   is left to OZ and the recovery controller, so no deny bug in the
 //!   evaluator can keep an account from recovering.

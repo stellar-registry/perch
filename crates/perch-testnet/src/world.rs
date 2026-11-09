@@ -31,7 +31,7 @@ pub struct Stack {
     /// stack registry's copy.
     pub webauthn: String,
     /// Its `verifier-name` (`perch-webauthn-verifier@<version>`), which an
-    /// admin document needs; `None` with a manifest that predates
+    /// account document needs; `None` with a manifest that predates
     /// `perch/verifiers`, whose compiler takes the contract id alone.
     pub webauthn_name: Option<String>,
     pub compiler: String,
@@ -930,7 +930,7 @@ mod tests {
         m
     }
 
-    /// The owner's admin document as `World::doc` writes it.
+    /// The owner's account document as `World::doc` writes it.
     fn admin_doc(s: &Stack) -> perch_ir::PolicyDoc {
         let key = SoftPasskey::from_seed([3; 32]).public_key();
         let json = format!(
@@ -947,9 +947,9 @@ mod tests {
         let s = Stack::from_manifest(&manifest(true), String::new()).unwrap();
         assert_eq!(s.webauthn, VERIFIERS_WEBAUTHN);
         let doc = admin_doc(&s);
-        assert!(perch_ir::is_admin_document(&doc));
+        assert!(perch_ir::is_account_document(&doc));
         // Named, so the compiler resolves it instead of refusing an
-        // unverified verifier in an admin document.
+        // unverified verifier in an account document.
         assert!(perch_ir::unverified_verifiers(&doc).is_empty());
         match &doc.signers[0].method {
             perch_ir::SignerMethod::External {

@@ -209,7 +209,7 @@
       ['t5', 'transfer 5 to the shop', transfer(SHOP, 5), ['app']],
       ['else', 'transfer 1 elsewhere', transfer(ELSEWHERE, 1), ['app']],
       ['approve', '`approve` on XLM', { contract: XLM, fn: 'approve', args: [ACCOUNT, SHOP, 5, 2000] }, ['app']],
-      ['account', 'a call to the account', { contract: ACCOUNT, fn: 'apply_scope', args: ['grant'] }, ['app']],
+      ['account', 'a call to the account', { contract: ACCOUNT, fn: 'apply_grant', args: ['grant'] }, ['app']],
       ['helper', 'a transfer signed by `helper` alone', transfer(SHOP, 1), ['helper']],
     ],
     steps: [['restrict_functions', 0, ['guess'], 'restrict `play` to `guess`'],
@@ -263,7 +263,7 @@
       const right = named === 'right';
       if (req === 'guess') return { contexts: [{ contract: GAME, fn: 'guess', args: [ACCOUNT, 7] }, transfer(GAME, 1)], choices: right ? [1, 2] : [0, 2] };
       if (req === 'within' || req === 'over') return { contexts: [transfer(SHOP, req === 'within' ? 4 : 5)], choices: right ? [0] : [2] };
-      if (req === 'account') return { contexts: [{ contract: ACCOUNT, fn: 'apply_scope', args: ['grant'] }], choices: right ? [0] : [1] };
+      if (req === 'account') return { contexts: [{ contract: ACCOUNT, fn: 'apply_grant', args: ['grant'] }], choices: right ? [0] : [1] };
       throw new Error(`unknown request ${req}`);
     },
     run(req, signer, grant, named) {

@@ -26,7 +26,7 @@ use std::cell::Cell;
 use support::{strkey, world_with, Opts, World};
 
 const UNIT: i128 = 10_000_000;
-const SCOPE: u32 = 17;
+const GRANT: u32 = 17;
 
 #[contract]
 struct Game;
@@ -141,11 +141,11 @@ impl Lab {
         let bytes = Bytes::from_slice(&self.w.env, doc.to_string().as_bytes());
         let root = self.w.invocation(
             &self.w.account,
-            "apply_scope",
-            vec![self.w.sc(SCOPE), self.w.sc(bytes.clone())],
+            "apply_grant",
+            vec![self.w.sc(GRANT), self.w.sc(bytes.clone())],
         );
         self.w.env.set_auths(&[self.w.owner_entry("admin", root)]);
-        self.w.client().apply_scope(&SCOPE, &bytes);
+        self.w.client().apply_grant(&GRANT, &bytes);
         self.w.env.set_auths(&[]);
     }
     fn mint(&self, to: &Address, amount: i128) {
@@ -169,7 +169,7 @@ impl Lab {
     fn id(&self, name: &str) -> u32 {
         self.w
             .client()
-            .scope(&SCOPE)
+            .grant(&GRANT)
             .unwrap()
             .rules
             .iter()
@@ -271,13 +271,13 @@ impl Lab {
 #[test]
 fn signed_game_loss_and_win_and_document_round_trip() {
     let l = Lab::new("guess", 2 * UNIT);
-    let stored = l.w.client().scope_rule_set(&SCOPE);
+    let stored = l.w.client().grant_rule_set(&GRANT);
     assert!(stored.get_unchecked(2).auth_root.is_some());
-    let rebuilt = perch_testkit::rebuild::scope_text(&l.w.env, &l.w.account, SCOPE).unwrap();
+    let rebuilt = perch_testkit::rebuild::grant_text(&l.w.env, &l.w.account, GRANT).unwrap();
     let parsed = perch_ir::from_json(&l.doc.to_string()).unwrap();
     assert_eq!(rebuilt, perch_ir::canonical_json(&parsed));
     assert_eq!(l.w.client().capabilities().snapshot_version, 2);
-    perch_testkit::rule_set::check_scope(&l.w.env, &l.w.account, SCOPE).unwrap();
+    perch_testkit::rule_set::check_grant(&l.w.env, &l.w.account, GRANT).unwrap();
     let entry = l.entry(
         l.guess(&l.game, "guess", 0),
         &[l.id("game"), l.id("transfer")],
@@ -450,9 +450,9 @@ fn expiry_and_stale_generation_still_refuse_root_matching_batches() {
     for stale in [false, true] {
         let l = Lab::new("guess", 2 * UNIT);
         if stale {
-            let generation = l.w.client().scope(&SCOPE).unwrap().gen + 1;
+            let generation = l.w.client().grant(&GRANT).unwrap().gen + 1;
             l.w.env.as_contract(&l.w.account, || {
-                perch_smart_account::testutils::set_scope_generation(&l.w.env, generation)
+                perch_smart_account::testutils::set_grant_generation(&l.w.env, generation)
             });
         } else {
             l.w.advance(51);
@@ -481,7 +481,7 @@ fn dropping_the_companion_rule_never_erases_the_transfer_root_or_cap_history() {
     assert!(l
         .w
         .client()
-        .scope_rule_set(&SCOPE)
+        .grant_rule_set(&GRANT)
         .get_unchecked(0)
         .auth_root
         .is_some());
@@ -548,7 +548,7 @@ fn recovery_freeze_and_completion_still_gate_exact_root_grants() {
     w.advance(support::DELAY);
     w.complete(&target)
         .expect("generated recovery rule remains eligible");
-    assert_eq!(w.client().scope_generation(), 1);
+    assert_eq!(w.client().grant_generation(), 1);
     let entry = l.entry(l.guess(&l.game, "guess", 0), &old_ids);
     let before = raw_entries(&w.env);
     assert!(!l.call(&l.game, "guess", 0, &[entry]));
@@ -566,7 +566,7 @@ fn changing_a_root_keeps_cap_history_and_enforces_the_new_pair() {
     l.apply(&doc);
     assert_eq!(l.id("transfer"), id);
     assert_eq!(l.spent(), UNIT);
-    perch_testkit::rule_set::check_scope(&l.w.env, &l.w.account, SCOPE).unwrap();
+    perch_testkit::rule_set::check_grant(&l.w.env, &l.w.account, GRANT).unwrap();
     let entry = l.entry(l.guess(&l.game, "guess", 0), &[l.id("game"), id]);
     assert!(!l.call(&l.game, "guess", 0, &[entry]));
     let entry = l.entry(l.guess(&l.game, "other", 0), &[l.id("game"), id]);
@@ -576,7 +576,7 @@ fn changing_a_root_keeps_cap_history_and_enforces_the_new_pair() {
     doc["rules"].as_array_mut().unwrap().reverse();
     doc["rules"][0]["name"] = json!("renamed-transfer");
     l.apply(&doc);
-    let rebuilt = perch_testkit::rebuild::scope_text(&l.w.env, &l.w.account, SCOPE).unwrap();
+    let rebuilt = perch_testkit::rebuild::grant_text(&l.w.env, &l.w.account, GRANT).unwrap();
     assert_eq!(
         rebuilt,
         perch_ir::canonical_json(&perch_ir::from_json(&doc.to_string()).unwrap())
@@ -597,11 +597,11 @@ fn account_gate_reads_legacy_and_malformed_stored_roots_without_lenient_conversi
         l.w.env.as_contract(&l.w.account, || {
             let e = &l.w.env;
             let key: Vec<Val> =
-                soroban_sdk::vec![e, Symbol::new(e, "Scopes").into_val(e), SCOPE.into_val(e)];
-            let mut scope: Map<Symbol, Val> = e.storage().persistent().get(&key).unwrap();
+                soroban_sdk::vec![e, Symbol::new(e, "Grants").into_val(e), GRANT.into_val(e)];
+            let mut grant: Map<Symbol, Val> = e.storage().persistent().get(&key).unwrap();
             let mut records = Vec::<Map<Symbol, Val>>::try_from_val(
                 e,
-                &scope.get(symbol_short!("rules")).unwrap(),
+                &grant.get(symbol_short!("rules")).unwrap(),
             )
             .unwrap();
             let mut record = records.get_unchecked(2);
@@ -626,8 +626,8 @@ fn account_gate_reads_legacy_and_malformed_stored_roots_without_lenient_conversi
             }
             record.set(symbol_short!("rule"), rule.into_val(e));
             records.set(2, record);
-            scope.set(symbol_short!("rules"), records.into_val(e));
-            e.storage().persistent().set(&key, &scope);
+            grant.set(symbol_short!("rules"), records.into_val(e));
+            e.storage().persistent().set(&key, &grant);
         });
         l.w.env.set_auths(&[l.entry(l.transfer(), &[id])]);
         let before = raw_entries(&l.w.env);

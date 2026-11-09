@@ -1,7 +1,7 @@
 //! rule-eval as `__check_auth`'s rule check, under ENFORCING authorization
 //! (`perch_smart_account::check_auth`; see `support/mod.rs` for the world).
 //!
-//! rule-eval's `authorize` over the account's stored rule-eval rules decides
+//! rule-eval's `check_auth` over the account's stored rule-eval rules decides
 //! every authorization but a recovery completion, and the account's
 //! `authenticate` checks the signers:
 //!
@@ -15,7 +15,7 @@
 //!   rules say;
 //! - each capped rule's spending record is charged by rule-eval, kept by an
 //!   edit that leaves the rule's id and cap alone, and dropped when the cap
-//!   changes, the rule is replaced or removed, or its scope is removed.
+//!   changes, the rule is replaced or removed, or its grant is removed.
 
 mod support;
 
@@ -23,7 +23,7 @@ use perch_account::{PerchAccountError, PerchAuthError};
 use perch_account_types::{AuthPayload, Signer};
 use perch_recovery::EvidenceDomain;
 use perch_recovery_interface::RecoveryAction;
-use perch_smart_account::testutils::{set_rule_set, set_scope_rule_set, spend_record};
+use perch_smart_account::testutils::{set_grant_rule_set, set_rule_set, spend_record};
 use perch_testkit::rule_set::{check_records, Records};
 use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScError, ScVal};
 use soroban_sdk::{
@@ -124,7 +124,7 @@ fn capped_doc(w: &World, token: &Address, signers: &[&str], caps: &[(&str, u32)]
     Bytes::from_slice(&w.env, json.as_bytes())
 }
 
-/// A scoped document: one capped `transfer` grant `name` on `token` for
+/// A grant document: one capped `transfer` grant `name` on `token` for
 /// `key`.
 fn capped_grant(w: &World, token: &Address, name: &str, key: &Address, limit: u32) -> Bytes {
     let json = format!(
@@ -136,22 +136,22 @@ fn capped_grant(w: &World, token: &Address, name: &str, key: &Address, limit: u3
     Bytes::from_slice(&w.env, json.as_bytes())
 }
 
-fn apply_scope(w: &World, scope: u32, doc: &Bytes) -> CallResult<BytesN<32>> {
+fn apply_grant(w: &World, grant: u32, doc: &Bytes) -> CallResult<BytesN<32>> {
     let root = w.invocation(
         &w.account,
-        "apply_scope",
-        std::vec![w.sc(scope), w.sc(doc.clone())],
+        "apply_grant",
+        std::vec![w.sc(grant), w.sc(doc.clone())],
     );
     w.env.set_auths(&[w.owner_entry("admin", root)]);
-    let out = w.client().try_apply_scope(&scope, doc);
+    let out = w.client().try_apply_grant(&grant, doc);
     w.env.set_auths(&[]);
     out.map(|r| r.unwrap())
 }
 
-fn remove_scope(w: &World, scope: u32) -> CallResult<()> {
-    let root = w.invocation(&w.account, "remove_scope", std::vec![w.sc(scope)]);
+fn remove_grant(w: &World, grant: u32) -> CallResult<()> {
+    let root = w.invocation(&w.account, "remove_grant", std::vec![w.sc(grant)]);
     w.env.set_auths(&[w.owner_entry("admin", root)]);
-    let out = w.client().try_remove_scope(&scope);
+    let out = w.client().try_remove_grant(&grant);
     w.env.set_auths(&[]);
     out.map(|r| r.unwrap())
 }
@@ -361,13 +361,13 @@ fn a_capped_rules_record_follows_its_id_and_cap() {
 }
 
 #[test]
-fn a_scoped_capped_grant_is_charged_by_rule_eval_and_its_record_leaves_with_its_scope() {
+fn a_capped_grant_is_charged_by_rule_eval_and_its_record_leaves_with_its_grant() {
     let w = world();
     w.enroll(&w.doc(None));
     let token = w.env.register(Token, ());
     let app = w.new_key();
-    apply_scope(&w, 3, &capped_grant(&w, &token, "allowance", &app, 10)).unwrap();
-    let id = w.client().scope(&3).unwrap().rules.get(0).unwrap().id;
+    apply_grant(&w, 3, &capped_grant(&w, &token, "allowance", &app, 10)).unwrap();
+    let id = w.client().grant(&3).unwrap().rules.get(0).unwrap().id;
     assert!(w.client().get_context_rule(&id).policies.is_empty());
     assert!(spend(&w, &token, &app, id, 7));
     assert!(!spend(&w, &token, &app, id, 4), "over the cap");
@@ -380,17 +380,17 @@ fn a_scoped_capped_grant_is_charged_by_rule_eval_and_its_record_leaves_with_its_
         }
     );
 
-    // A scoped rule whose stored rule allows less is refused by rule-eval.
-    let mut set = w.client().scope_rule_set(&3);
+    // A grant rule whose stored rule allows less is refused by rule-eval.
+    let mut set = w.client().grant_rule_set(&3);
     let mut rule = set.get(0).unwrap();
     rule.threshold = 2;
     set.set(0, rule);
     w.env
-        .as_contract(&w.account, || set_scope_rule_set(&w.env, 3, &set));
+        .as_contract(&w.account, || set_grant_rule_set(&w.env, 3, &set));
     assert!(!spend(&w, &token, &app, id, 1));
     assert_eq!(refusal(&w), rule_eval_refused());
 
-    remove_scope(&w, 3).unwrap();
+    remove_grant(&w, 3).unwrap();
     assert_eq!(record(&w, id), (std::vec![], 0));
     assert_eq!(records(&w), Records::default());
 }

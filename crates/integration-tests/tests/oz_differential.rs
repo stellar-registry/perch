@@ -10,14 +10,14 @@
 //! (`PERCH_OZ_CONTROLLER_WASM`), at the address this account's world gives
 //! this source's controller.
 //!
-//! - Generated admin documents, scoped documents and scope removals, applied
+//! - Generated account documents, grant documents and grant removals, applied
 //!   to both: the same outcomes, the same rule ids allocated (the counter
 //!   included), the same views (`configuration`, the records, the stored
-//!   rule sets, every scope, the rule count, and `get_context_rule` for
+//!   rule sets, every grant, the rule count, and `get_context_rule` for
 //!   every id ever given, its signer and policy ids aside), and the same
-//!   events. Each scope's text, which that build stores (`scope_doc`), is
+//!   events. Each grant's text, which that build stores (`scope_doc`), is
 //!   the one this build rebuilds from its records and signer ids
-//!   (`perch_testkit::rebuild`). A scoped document not in normal form, which
+//!   (`perch_testkit::rebuild`). A grant document not in normal form, which
 //!   that build applies and this one refuses (`NotNormalForm`), runs on this
 //!   build alone, and must change nothing.
 //! - Generated authorizations through each account's real `__check_auth`
@@ -50,16 +50,18 @@ use perch_recovery::EvidenceDomain;
 use perch_recovery_interface::account::GUARDIAN_APPROVAL_FNS;
 use perch_recovery_interface::RecoveryAction;
 use perch_rule_eval::StoredFunctions;
-use perch_smart_account::StoredRule;
+use perch_smart_account::{GrantRecord, PerchAccountError, StoredRule};
 use perch_testkit::delta::{
-    external_key, raw_entries, render, DeltaWorld, DocModel, KeyModel, ScopeOp, FUNCTIONS,
-    SCOPE_IDS,
+    external_key, raw_entries, render, DeltaWorld, DocModel, GrantOp, KeyModel, FUNCTIONS,
+    GRANT_IDS,
 };
 use proptest::prelude::*;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::Events as _;
-use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScVal};
-use soroban_sdk::{vec, Address, Bytes, BytesN, Env, IntoVal, Map, Symbol, TryFromVal, Val};
+use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScMap, ScMapEntry, ScSymbol, ScVal};
+use soroban_sdk::{
+    contractclient, vec, Address, Bytes, BytesN, Env, IntoVal, Map, Symbol, TryFromVal, Val,
+};
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 use stellar_accounts::smart_account::SmartAccountStorageKey;
@@ -99,8 +101,10 @@ fn norm<T: IntoVal<Env, Val>>(env: &Env, account: &Address, v: T) -> String {
     render(&ScVal::try_from_val(env, &val).unwrap(), Some(&me))
 }
 
-/// The last invocation's events, every contract's, with `account` as `SELF`.
-fn events(env: &Env, account: &Address) -> std::vec::Vec<String> {
+/// The last invocation's events, every contract's, with `account` as `SELF`;
+/// `oz` for the OZ-backed build, whose grant events are renamed as this
+/// build names them ([`OzGrants`]).
+fn events(env: &Env, account: &Address, oz: bool) -> std::vec::Vec<String> {
     let me: ScAddress = account.clone().into();
     env.events()
         .all()
@@ -108,16 +112,60 @@ fn events(env: &Env, account: &Address) -> std::vec::Vec<String> {
         .iter()
         .map(|e| {
             let ContractEventBody::V0(body) = &e.body;
+            let (topics, data) = if oz {
+                renamed(&body.topics, &body.data)
+            } else {
+                (body.topics.to_vec(), body.data.clone())
+            };
             let topics: std::vec::Vec<String> =
-                body.topics.iter().map(|t| render(t, Some(&me))).collect();
+                topics.iter().map(|t| render(t, Some(&me))).collect();
             let contract = match &e.contract_id {
                 Some(c) if ScAddress::Contract(c.clone()) == me => "SELF".to_string(),
                 Some(c) => hex::encode(c.0 .0),
                 None => String::new(),
             };
-            format!("{contract} {topics:?} {}", render(&body.data, Some(&me)))
+            format!("{contract} {topics:?} {}", render(&data, Some(&me)))
         })
         .collect()
+}
+
+/// An OZ-backed build's event as this build emits it: `scope_applied`,
+/// `scope_removed` and `scopes_wiped` renamed `grant_*`, and the grant id
+/// field `scope` renamed `grant`, its map re-sorted as the host sorts it.
+fn renamed(topics: &[ScVal], data: &ScVal) -> (std::vec::Vec<ScVal>, ScVal) {
+    let sym = |s: &str| ScVal::Symbol(ScSymbol(s.try_into().unwrap()));
+    let name = |v: &ScVal| match v {
+        ScVal::Symbol(s) => s.0.to_utf8_string_lossy(),
+        _ => String::new(),
+    };
+    let old = topics.first().map(name).unwrap_or_default();
+    let new = match old.as_str() {
+        "scope_applied" => "grant_applied",
+        "scope_removed" => "grant_removed",
+        "scopes_wiped" => "grants_wiped",
+        _ => return (topics.to_vec(), data.clone()),
+    };
+    let mut topics = topics.to_vec();
+    topics[0] = sym(new);
+    let data = match data {
+        ScVal::Map(Some(m)) => {
+            let mut entries: std::vec::Vec<ScMapEntry> =
+                m.0.iter()
+                    .map(|e| ScMapEntry {
+                        key: if name(&e.key) == "scope" {
+                            sym("grant")
+                        } else {
+                            e.key.clone()
+                        },
+                        val: e.val.clone(),
+                    })
+                    .collect();
+            entries.sort_by(|a, b| a.key.cmp(&b.key));
+            ScVal::Map(Some(ScMap(entries.try_into().unwrap())))
+        }
+        other => other.clone(),
+    };
+    (topics, data)
 }
 
 /// The id `account` gives its next rule: OZ's `NextId` on the OZ-backed
@@ -136,9 +184,11 @@ fn next_id(env: &Env, account: &Address, oz: bool) -> u32 {
 }
 
 /// Everything the views say about `account`, normalized; `oz` for the
-/// OZ-backed build, which stores each scope's text.
+/// OZ-backed build, which stores each grant's text and names its grant views
+/// as [`OzGrants`] does.
 fn views(env: &Env, account: &Address, oz: bool) -> BTreeMap<String, String> {
     let c = PerchAccountClient::new(env, account);
+    let old = OzGrantClient::new(env, account);
     let mut out = BTreeMap::new();
     out.insert(
         "configuration".into(),
@@ -147,13 +197,20 @@ fn views(env: &Env, account: &Address, oz: bool) -> BTreeMap<String, String> {
     out.insert("rule_set".into(), norm(env, account, c.rule_set()));
     out.insert("applied_doc".into(), format!("{:?}", c.applied_doc()));
     out.insert("count".into(), c.get_context_rules_count().to_string());
-    out.insert("scopes".into(), format!("{:?}", c.scopes(&0, &u32::MAX)));
-    for s in SCOPE_IDS {
-        out.insert(format!("scope {s}"), norm(env, account, c.scope(&s)));
-        out.insert(
-            format!("scope_rule_set {s}"),
-            norm(env, account, c.scope_rule_set(&s)),
-        );
+    let grants = if oz {
+        old.scopes(&0, &u32::MAX)
+    } else {
+        c.grants(&0, &u32::MAX)
+    };
+    out.insert("grants".into(), format!("{grants:?}"));
+    for s in GRANT_IDS {
+        let (record, rule_set) = if oz {
+            (old.scope(&s), old.scope_rule_set(&s))
+        } else {
+            (c.grant(&s), c.grant_rule_set(&s))
+        };
+        out.insert(format!("grant {s}"), norm(env, account, record));
+        out.insert(format!("grant_rule_set {s}"), norm(env, account, rule_set));
         let text: Option<Bytes> = if oz {
             env.invoke_contract(
                 account,
@@ -166,7 +223,7 @@ fn views(env: &Env, account: &Address, oz: bool) -> BTreeMap<String, String> {
                 .map(|st| perch_testkit::rebuild::text(env, &st).unwrap())
                 .map(|t| Bytes::from_slice(env, t.as_bytes()))
         };
-        out.insert(format!("scope_doc {s}"), format!("{text:?}"));
+        out.insert(format!("grant_doc {s}"), format!("{text:?}"));
     }
     out
 }
@@ -211,20 +268,55 @@ fn external(mut doc: DocModel) -> DocModel {
     doc
 }
 
-fn external_op(op: ScopeOp) -> ScopeOp {
+fn external_op(op: GrantOp) -> GrantOp {
     match op {
-        ScopeOp::Admin(d) => ScopeOp::Admin(external(d)),
-        ScopeOp::Apply(s, d) => ScopeOp::Apply(s, external(d)),
+        GrantOp::Admin(d) => GrantOp::Admin(external(d)),
+        GrantOp::Apply(s, d) => GrantOp::Apply(s, external(d)),
         other => other,
     }
 }
 
-fn run(w: &DeltaWorld, account: &Address, op: &ScopeOp) -> Result<(), String> {
+fn run(w: &DeltaWorld, account: &Address, op: &GrantOp) -> Result<(), String> {
     match op {
-        ScopeOp::Admin(d) => w.apply(account, d).map(|_| ()),
-        ScopeOp::Apply(s, d) => w.apply_scope(account, *s, d).map(|_| ()),
-        ScopeOp::Remove(s) => w.remove_scope(account, *s),
+        GrantOp::Admin(d) => w.apply(account, d).map(|_| ()),
+        GrantOp::Apply(s, d) => w.apply_grant(account, *s, d).map(|_| ()),
+        GrantOp::Remove(s) => w.remove_grant(account, *s),
     }
+}
+
+/// [`run`] on the OZ-backed build, through its older grant entry points.
+fn run_oz(ow: &DeltaWorld, oz: &Address, op: &GrantOp) -> Result<(), String> {
+    let c = OzGrantClient::new(&ow.env, oz);
+    match op {
+        GrantOp::Admin(d) => ow.apply(oz, d).map(|_| ()),
+        GrantOp::Apply(s, d) => {
+            let bytes = d.bytes(ow);
+            ow.env.cost_estimate().budget().reset_unlimited();
+            c.try_apply_scope(s, &bytes)
+                .map(|r| r.unwrap())
+                .map(|_| ())
+                .map_err(|e| format!("{e:?}"))
+        }
+        GrantOp::Remove(s) => {
+            ow.env.cost_estimate().budget().reset_unlimited();
+            c.try_remove_scope(s)
+                .map(|r| r.unwrap())
+                .map_err(|e| format!("{e:?}"))
+        }
+    }
+}
+
+/// The OZ-backed build is older than the grant names: its grant entry
+/// points are `apply_scope`, `remove_scope`, `scope`, `scopes` and
+/// `scope_rule_set`, each taking the grant id as `scope`.
+#[contractclient(name = "OzGrantClient")]
+#[allow(dead_code)]
+trait OzGrants {
+    fn apply_scope(e: Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError>;
+    fn remove_scope(e: Env, scope: u32) -> Result<(), PerchAccountError>;
+    fn scope(e: Env, scope: u32) -> Option<GrantRecord>;
+    fn scopes(e: Env, start: u32, count: u32) -> soroban_sdk::Vec<u32>;
+    fn scope_rule_set(e: Env, scope: u32) -> soroban_sdk::Vec<StoredRule>;
 }
 
 /// This build's world (its account is `w.delta`), and the OZ-backed one's:
@@ -240,10 +332,10 @@ fn worlds() -> (DeltaWorld, DeltaWorld, Address) {
 }
 
 /// Run `op` on both accounts and check outcomes, events, ids and views.
-/// Returns how many rules' signer or policy ids differ. A scoped document
+/// Returns how many rules' signer or policy ids differ. A grant document
 /// this build refuses for its form alone runs on it alone.
-fn step(w: &DeltaWorld, ow: &DeltaWorld, oz: &Address, op: &ScopeOp) -> (bool, usize) {
-    if let ScopeOp::Apply(_, d) = op {
+fn step(w: &DeltaWorld, ow: &DeltaWorld, oz: &Address, op: &GrantOp) -> (bool, usize) {
+    if let GrantOp::Apply(_, d) = op {
         let scoped = d.recovery.is_none() && d.rules.iter().all(|r| r.scope.is_some());
         if scoped && !d.normal_form(w.env.ledger().sequence()) {
             let before = raw_entries(&w.env);
@@ -254,9 +346,9 @@ fn step(w: &DeltaWorld, ow: &DeltaWorld, oz: &Address, op: &ScopeOp) -> (bool, u
         }
     }
     let a = run(w, &w.delta, op);
-    let ea = events(&w.env, &w.delta);
-    let b = run(ow, oz, op);
-    let eb = events(&ow.env, oz);
+    let ea = events(&w.env, &w.delta, false);
+    let b = run_oz(ow, oz, op);
+    let eb = events(&ow.env, oz, true);
     assert_eq!(a, b, "outcome of {op:?}");
     assert_eq!(ea, eb, "events of {op:?}");
     let next = next_id(&w.env, &w.delta, false);
@@ -280,7 +372,7 @@ proptest! {
         ..ProptestConfig::default()
     })]
 
-    /// Any interleaving of admin documents, scoped documents and removals
+    /// Any interleaving of account documents, grant documents and removals
     /// leaves both accounts with the same ids, views and events.
     #[test]
     #[ignore = "needs PERCH_OZ_ACCOUNT_WASM (module docs)"]
@@ -289,7 +381,7 @@ proptest! {
     ) {
         let (w, ow, oz) = worlds();
         let mut differ = 0;
-        for (advance, op) in ScopeOp::sequence(&mut Unstructured::new(&bytes), 8).unwrap() {
+        for (advance, op) in GrantOp::sequence(&mut Unstructured::new(&bytes), 8).unwrap() {
             w.advance(advance);
             ow.advance(advance);
             differ += step(&w, &ow, &oz, &op).1;
@@ -306,9 +398,9 @@ proptest! {
     ) {
         let (w, ow, oz) = worlds();
         let mut u = Unstructured::new(&bytes);
-        let ops = ScopeOp::sequence(&mut u, 6).unwrap();
+        let ops = GrantOp::sequence(&mut u, 6).unwrap();
         let (mut accepted, mut refused, mut escalations) = (0, 0, 0);
-        let escalation = format!("{:?}", soroban_sdk::Error::from(PerchAuthError::ScopeEscalation));
+        let escalation = format!("{:?}", soroban_sdk::Error::from(PerchAuthError::GrantEscalation));
         for (advance, op) in ops {
             w.advance(advance);
             ow.advance(advance);
@@ -328,7 +420,7 @@ proptest! {
             }
         }
         println!(
-            "{{\"accepted\":{accepted},\"refused\":{refused},\"scope_escalation\":{escalations}}}"
+            "{{\"accepted\":{accepted},\"refused\":{refused},\"grant_escalation\":{escalations}}}"
         );
     }
 }
@@ -346,7 +438,7 @@ struct Target {
 }
 
 impl Target {
-    /// Every rule of the admin document and the scopes, with its stored rule.
+    /// Every rule of the account document and the grants, with its stored rule.
     fn all(w: &DeltaWorld) -> std::vec::Vec<Target> {
         let c = PerchAccountClient::new(&w.env, &w.delta);
         let mut pairs: std::vec::Vec<(perch_smart_account::InstalledRule, StoredRule)> = c
@@ -354,9 +446,9 @@ impl Target {
             .iter()
             .zip(c.rule_set().iter())
             .collect();
-        for s in c.scopes(&0, &u32::MAX).iter() {
-            if let Some(record) = c.scope(&s) {
-                pairs.extend(record.rules.iter().zip(c.scope_rule_set(&s).iter()));
+        for s in c.grants(&0, &u32::MAX).iter() {
+            if let Some(record) = c.grant(&s) {
+                pairs.extend(record.rules.iter().zip(c.grant_rule_set(&s).iter()));
             }
         }
         let mut out = std::vec::Vec::new();
@@ -594,7 +686,7 @@ fn recovery_transcript(oz: bool) -> std::vec::Vec<String> {
     let mut t = std::vec::Vec::new();
     // The constructor's registry events: OZ's registry also announces each
     // signer it registers, which the account has no registry for.
-    let constructed: std::vec::Vec<String> = events(&w.env, &w.account)
+    let constructed: std::vec::Vec<String> = events(&w.env, &w.account, false)
         .into_iter()
         .filter(|e| !e.contains("signer_registered"))
         .collect();

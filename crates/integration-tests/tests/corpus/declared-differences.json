@@ -171,6 +171,197 @@
           ]
         }
       ]
+    },
+    {
+      "step": "recovery: completion with the derived target",
+      "cause": "A completed recovery advances the scope generation, which ends every scoped document (apply_scope, docs/recovery/spec.md §7.6), and the account publishes ScopesWiped { gen } as it does: the event's topic is scopes_wiped and its data the new generation, here 1. It comes after the controller's epoch_advanced and recovery_completed and before the account's credential_revoked and doc_applied; every other event of the step is unchanged and in the same order. No other step completes a recovery, so no other step publishes it, and the corpus applies no scoped document.",
+      "fields": [
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].events",
+          "recorded": [
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:config_hash",
+                  "bytes:dc3ca0f97f1f3450b1cb83fe14f28448930f376cd94d841720df6099c954e5fc"
+                ],
+                [
+                  "sym:epoch",
+                  "u64:2"
+                ]
+              ],
+              "topics": [
+                "sym:epoch_advanced",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:attempt_id",
+                  "u64:0"
+                ],
+                [
+                  "sym:target_doc_hash",
+                  "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+                ]
+              ],
+              "topics": [
+                "sym:recovery_completed",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [],
+              "topics": [
+                "sym:credential_revoked",
+                "bytes:b3856265f2e804a7eb4739e64fccb74333c6eba5ded7ec1fbab01db2aab67a9b"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [
+                [
+                  "sym:policies_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:policies_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:revision",
+                  "u64:2"
+                ],
+                [
+                  "sym:rules_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:rules_edited",
+                  "u32:2"
+                ],
+                [
+                  "sym:rules_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:signers_added",
+                  "u32:2"
+                ],
+                [
+                  "sym:signers_removed",
+                  "u32:2"
+                ]
+              ],
+              "topics": [
+                "sym:doc_applied",
+                "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+              ]
+            }
+          ],
+          "now": [
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:config_hash",
+                  "bytes:dc3ca0f97f1f3450b1cb83fe14f28448930f376cd94d841720df6099c954e5fc"
+                ],
+                [
+                  "sym:epoch",
+                  "u64:2"
+                ]
+              ],
+              "topics": [
+                "sym:epoch_advanced",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:attempt_id",
+                  "u64:0"
+                ],
+                [
+                  "sym:target_doc_hash",
+                  "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+                ]
+              ],
+              "topics": [
+                "sym:recovery_completed",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [
+                [
+                  "sym:gen",
+                  "u64:1"
+                ]
+              ],
+              "topics": [
+                "sym:scopes_wiped"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [],
+              "topics": [
+                "sym:credential_revoked",
+                "bytes:b3856265f2e804a7eb4739e64fccb74333c6eba5ded7ec1fbab01db2aab67a9b"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [
+                [
+                  "sym:policies_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:policies_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:revision",
+                  "u64:2"
+                ],
+                [
+                  "sym:rules_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:rules_edited",
+                  "u32:2"
+                ],
+                [
+                  "sym:rules_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:signers_added",
+                  "u32:2"
+                ],
+                [
+                  "sym:signers_removed",
+                  "u32:2"
+                ]
+              ],
+              "topics": [
+                "sym:doc_applied",
+                "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

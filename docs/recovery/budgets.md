@@ -139,7 +139,7 @@ States: **Measured** (within budget unless stated; the cell says where);
 | §2 `Protected` reconfiguration, `schedule_upgrade` | Measured: in process (reconfiguration at the caps) and on testnet | Within budget. |
 | §2 `execute_upgrade` | Measured in process only | Within budget. Not run on testnet: the upgrade delay is 120 960 ledgers. |
 | §2 promotion after many collecting attempts | Measured without siblings; bounded by construction | Promotion writes one `invalidate_below` value whatever the number of siblings (spec §6.3 T4); the promoting rows above are within budget. No run with many siblings. |
-| §2 ordinary authorization overhead | Measured on testnet (absolute cost) | Direct authorization and `execute` are within budget ([testnet-exercise.md](../deploy/testnet-exercise.md), "Against the budget"). The overhead versus plain `do_check_auth` is unmeasured. |
+| §2 ordinary authorization overhead | Measured on testnet (absolute cost) | Direct authorization and `execute` are within budget ([testnet-exercise.md](../deploy/testnet-exercise.md), "Against the budget"). The overhead versus plain `do_check_auth` is unmeasured. The scope generation gate adds one footprint entry per selected rule ([Scoped documents](#scoped-documents)). |
 | §2 disk read bytes, every row | Required before launch | Neither the release-stack suite nor the testnet exercise reports disk read bytes. |
 | §2 transaction size, every row | Measured on testnet | Within budget. The in-process suite does not meter transaction size. |
 | §2 memory, every row | Measured in process | Within budget. The RPC does not report memory, so testnet rows have none. |
@@ -259,7 +259,9 @@ MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}`). The generated recovery rule
 is additional to the 11. The `worst_case_*` tests in `release_stack.rs` run
 all eight worst-case flows at the compiled-in caps and assert each stays
 within budget, so lowering a limit or growing a flow's cost fails CI's
-`release-stack-source` job. Rerun `scripts/cap-sweep.py` after a change to
+`release-stack-source` job. The compromise flows run with a thief's scoped
+documents installed and budget their completion on a forked host
+([Scoped documents](#scoped-documents)). Rerun `scripts/cap-sweep.py` after a change to
 the reconcile's cost model, OZ's mutations, the controller's or the
 policies' storage, or a network limit.
 
@@ -358,6 +360,168 @@ OZ's per-rule 15 because the document cannot declare more than 8.
 A custom verifier with keys up to the 256 bytes the IR admits would grow
 every signer's registry entry and the write bytes, and needs its own
 measurement.
+
+### Scoped documents
+
+Scoped documents (spec §7.6) move app grants out of the admin document.
+Source: 2026-11-03, protocol-29 limits, the stack `scripts/build-stack.sh
+--builder contract` built from the source that adds them, real proofs,
+passkeys, and enforcing authorization. The rows come from
+`release_stack.rs`'s `docsplit_*` tests and the `worst_case_*` compromise
+flows; the commands are at the end of this section.
+
+**Two hosts.** "Fork" rows run the one transaction on a fresh host forked
+from the ledger (`Env::from_ledger_snapshot`): its storage holds only what
+the transaction touches, as a network transaction's does. The long-lived
+test host holds every entry earlier calls wrote, and every later call's
+instructions and memory grow with their number; footprint, written entries,
+write bytes, and events do not. Earlier in-process rows above were all
+measured on the long-lived host, without scoped documents.
+
+**Recovery does not depend on scopes.** The compromise worst cases at the
+caps, with the thief also installing scoped documents of 8 capped grants
+each (its own passkeys), and the owner holding one scope of its own:
+
+| Completion (8 × 11, 8 KiB) | Thief scopes | Fork | Long-lived host | Footprint | Written | Write bytes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Names kept, every program changed (binding) | 0 | 284.71M (71.2%), 13.7 MB | 291.41M (72.9%), 16.2 MB | 117 | 99 | 52 408 |
+| Names kept, every program changed | 3 | 284.70M (71.2%), 13.7 MB | 311.52M (77.9%), 21.6 MB | 117 | 99 | 52 408 |
+| Names kept, every program changed | 12 | 284.77M (71.2%), 13.7 MB | 365.95M (91.5%), 37.9 MB | 117 | 99 | 52 408 |
+| Every rule renamed | 0 | 248.52M (62.1%), 15.8 MB | 257.35M, 19.1 MB | 156 | 137 | 55 508 |
+| Every rule renamed | 3 | 248.34M (62.1%), 15.8 MB | 279.19M, 25.6 MB | 156 | 137 | 55 508 |
+| Lean admin document (8 signers, 3 rules), 8 KiB | 0 / 3 / 12 | 185.15M / 185.15M / 185.11M (46.3%), 7.8 MB | 186.92M / 195.62M / 220.82M | 102 | 85 | 37 676 |
+| Lean admin document, 4 KiB | 0 / 3 | 112.53M / 112.56M (28.1%), 5.6 MB | 114.44M / 123.18M | 102 | 85 | 25 388 |
+
+The completion advances one counter whatever the number of scopes, and the
+fork rows are the same to within 0.2M with 0, 3, or 12 thief scopes. The
+`worst_case_*` compromise flows therefore install 3 thief scopes and budget
+their completion on the fork; the long-lived host's row is reported,
+unbudgeted. A control with no scopes at all shows the cause: 650 unrelated
+entries, written to another contract before the completion and never
+touched by it, take the long-lived row from 291.41M to 344.68M (and the
+lean one from 186.92M to 211.56M), while the fork rows stay at 284.71M and
+185.15M.
+
+Every compromise flow at the caps, with 3 thief scopes of 8 (fork):
+
+| Thief | Instructions | Memory | Footprint | Written | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- |
+| Names kept, every program changed (binding) | 284.79M (71.2%) | 13.7 MB | 117 | 99 | 52 408 | 3 364 |
+| Names kept, every program and cap changed | 266.77M (66.7%) | 16.2 MB | 156 | 137 (68.5%) | 55 508 | 3 364 |
+| Names kept, every cap changed | 266.18M (66.5%) | 15.8 MB | 153 | 134 | 55 060 | 3 364 |
+| Every rule kept | 249.52M (62.4%) | 9.6 MB | 100 | 85 | 43 588 | 3 364 |
+| Every rule renamed | 248.45M (62.1%) | 15.8 MB | 156 | 137 (68.5%) | 55 508 | 3 364 |
+
+Their long-lived rows are 311.55M (77.9%), 298.10M (74.5%), 296.80M
+(74.2%), 271.05M, and 279.27M. The other three worst-case flows install no
+scope and are budgeted on the long-lived host: the lost-key completion
+251.90M (63.0%), the `Protected` reconfiguration editing every rule 252.01M
+(63.0%), and the one replacing every rule 249.04M (62.3%).
+
+Each thief scope of 8 capped grants costs 68.9M to 77.1M on the long-lived
+host (86 footprint entries, 64 written). After the completion, every
+scope's rules are refused, the owner's included. With 3 thief scopes,
+`gc_scope` of a wiped 8-grant scope costs 18.1M to 19.6M (62 footprint
+entries, 57 or 58 written), and re-granting one grant over a wiped scope,
+to a fresh session key, 16.8M to 19.2M; both rows are on the long-lived
+host.
+
+**Grant operations are flat.** One transaction each, on the fork
+(`docsplit_grant_lifecycle_forked`). Each grant is one session passkey on a
+rule scoped to a token, allowed `transfer`, with a spending cap. "One
+document" applies the whole document with `apply_doc`; "split" keeps the
+owner's admin rule in the admin document and each grant in its own scope.
+
+| Operation | One document, 1 grant | 3 grants | 7 grants | Split, 1 to 21 scopes |
+| --- | --- | --- | --- | --- |
+| Add a grant | 16.45M, fp 28, w 14, 4 812 B | 27.14M | 49.03M, fp 34, 11 428 B | **13.98M to 14.02M**, fp 30, w 15 to 17, 4 324 to 4 596 B |
+| Change a grant's cap | 18.85M | 29.51M | 51.47M, 11 000 B | **16.09M to 16.13M**, fp 26 to 28, w 8 to 13, 3 008 to 3 656 B |
+| Revoke a grant | 11.38M | 21.93M | 43.78M, 8 800 B | **7.02M**, fp 24 to 26, w 14 to 16, 448 to 824 B (`remove_scope`) |
+| Rotate the owner key | 16.21M | 26.85M | 48.80M, 10 328 B | **11.02M**, fp 17, w 10, 2 320 B |
+| Capped transfer through a grant | 6.17M, fp 20 | 6.17M | 6.17M | 6.22M, fp 20 |
+| `execute` through the admin rule (long-lived host) | 5.49M, fp 9 | 5.50M | 5.53M | 5.50M to 5.71M, fp 9 |
+
+A whole-document change compiles every rule and rewrites `installed_rules`
+and `applied_doc`, about 5.4M per existing grant. A scope compiles and
+rewrites only its own, and writes one credential-index entry per credential
+it names for the first time. The generation gate reads one tag per selected
+rule, present or absent, so every authorization's footprint, the admin
+document's included, holds one more entry per selected rule than without
+scoped documents. A scoped rule's present tag costs about 0.05M more than
+an admin rule's absent one.
+
+**The credential index** costs one persistent entry per credential a scope
+names (144 bytes, written once with the maximum TTL and never removed) and
+one read per declared credential in each `apply_scope`. `apply_doc` reads
+it only once a completion has advanced the scope generation, and then for
+every declared credential (at most 8), except in a completion.
+
+**At rest** (`docsplit_grant_lifecycle`): the account's own entries plus the
+policy state kept for it, after the operations above. Rent at the mainnet
+floor (1 000 stroops per KB, denominator 1 215, 6 307 200 ledgers a year),
+uncalibrated.
+
+| | Bytes | Rent, XLM a year |
+| --- | --- | --- |
+| One document, 6 grants | 18 860 | 9.56 |
+| Split, 6 scopes of 1 grant | 24 264 | 12.30 |
+| Per grant | one document 2 736; split 3 608 (+872, +32%) | 1.39 against 1.83 |
+
+A scope's own entries are its record (856 B for one grant, which repeats the
+`InstalledRule`), its canonical bytes (652 B), the tag (156 B), its two
+index entries (212 B), and one credential-index entry (144 B) per
+credential, which stays after the scope is removed: the split account above
+holds 7, for its 6 live grants and the one revoked. The admin document's
+equivalents are its share of `installed_rules` and `applied_doc`. Dropping
+the canonical copy and slimming the record would make a scoped grant
+cheaper at rest than one in the admin document.
+
+**Many scopes** (`docsplit_many_scopes`, 40 scopes of 8 grants, 321 rules
+installed, fork): a capped transfer through the first or the last scope
+6.21M (20 entries), the owner key's rotation 11.02M, a new one-grant scope
+14.05M; `execute` through the admin rule 7.75M on the long-lived host, 9
+entries. At rest the account then holds 951 840 bytes (483 XLM a year at
+the floor, 3.0 KB per grant). The 40th scope's `apply_scope` on the
+long-lived host, which holds every earlier scope, reads 177.34M and 41.5 MB:
+the host's growth, which the fork rows do not show.
+
+**Scope size.** One `apply_scope` costs about 7M instructions and 7 written
+entries per own-key capped grant (`docsplit_scope_size_sweep`, long-lived
+host):
+
+| Grants in one `apply_scope` | Add | Replace every rule in one call | `remove_scope` |
+| --- | --- | --- | --- |
+| 1 | 14.07M, w 17 | 15.69M, w 23 | 7.05M, w 16 |
+| 4 | 35.35M, w 38 | 44.28M, w 62 | 11.69M, w 34 |
+| 8 | 64.98M, 5.6 MB, w 66 | 88.58M, 9.6 MB, w 114 (57%) | 19.07M, w 58 |
+
+A scoped document is bounded by the compiler's caps like any document: 8
+own-key grants (8 signers) and 11 rules. Caps above that need a new
+compiler build, and so a new account build, and are not measured here.
+
+**Code.** The account wasm grows from 79 321 to 90 681 bytes (+14.3%) under
+`stellar contract build`: code 45 939 to 51 391 bytes, contract spec
+(types, entry points, and their documentation) 28 119 to 33 519 bytes. The
+code entry is shared by every account on one wasm.
+
+**Commands.**
+
+```sh
+scripts/build-stack.sh --builder contract --registry "$(jq -r .registry.id deployments/testnet.json)" --out target/source-stack
+eval "$(scripts/zk-toolchain.sh)"
+T="cargo test -p perch-integration-tests --test release_stack"
+export PERCH_STACK_DIR=target/source-stack
+$T worst_case -- --ignored --nocapture --test-threads 1
+PERCH_SPLIT_KS=0,2,6,20 $T docsplit_grant_lifecycle_forked -- --ignored --nocapture --test-threads 1
+PERCH_SPLIT_KS=0,2,6,20 $T docsplit_grant_lifecycle -- --ignored --nocapture --test-threads 1      # at rest
+PERCH_SPLIT_SCOPES=40 $T docsplit_many_scopes -- --ignored --nocapture
+PERCH_SPLIT_NS=1,4,8 $T docsplit_scope_size_sweep -- --ignored --nocapture
+# signers,both,interp,plain,fan,bytes,thief (0 keep, 1 rename, 2 reprogram),scopes,grants per scope
+PERCH_SPLIT_RECOVERY="8,9,0,0,8,8192,2,0,8;8,9,0,0,8,8192,2,3,8;8,9,0,0,8,8192,2,12,8;8,9,0,0,8,8192,1,0,8;8,9,0,0,8,8192,1,3,8;8,0,1,0,8,8192,2,0,8;8,0,1,0,8,8192,2,3,8;8,0,1,0,8,8192,2,12,8;8,0,1,0,8,4096,2,0,8;8,0,1,0,8,4096,2,3,8" \
+  $T docsplit_compromise_completion -- --ignored --nocapture --test-threads 1
+PERCH_SPLIT_FILLER=650 PERCH_SPLIT_RECOVERY="8,9,0,0,8,8192,2,0,8;8,0,1,0,8,8192,2,0,8" \
+  $T docsplit_compromise_completion -- --ignored --nocapture --test-threads 1
+```
 
 ### Wasm stack
 

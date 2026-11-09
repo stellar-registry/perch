@@ -56,7 +56,7 @@ Every hash claim holds up to a SHA-256 collision.
 
 | Check | Scope | Runs |
 |---|---|---|
-| Fuzzing (`fuzz/fuzz_targets/`) | `eval_fail_closed`, `ir_parse_roundtrip`, `recovery_canonical_roundtrip`, `apply_doc_delta` (the delta apply against the full-replace oracle) | weekly and on dispatch for 300 s per target; 60 s per target on pull requests touching the assurance paths |
+| Fuzzing (`fuzz/fuzz_targets/`) | `eval_fail_closed`, `ir_parse_roundtrip`, `recovery_canonical_roundtrip`, `apply_doc_delta` (the delta apply against the full-replace oracle), `apply_scope_delta` (scoped documents interleaved with admin documents against the model's grant per document) | weekly and on dispatch for 300 s per target; 60 s per target on pull requests touching the assurance paths |
 | Flux refinement types | `perch-program` (`-Fcheck-overflow=strict`); functions Flux cannot check are marked `TRUST:` in the source | every pull request (`flux` job) |
 | `perch-analyze` | SMT proofs about specific documents, e.g. the shipped `ci-publish` fixture can only authorize `publish`/`publish_hash` | every pull request (z3) |
 | Mutation testing, branch coverage | `perch-program`, `perch-compile`, `perch-ir` (every mutant faces the whole workspace's tests) | weekly, on dispatch; findings are not merge gates |
@@ -87,6 +87,44 @@ the release-stack suite, and the testnet exercise cover them.
   (`apply_delta.rs`, the `apply_doc_delta` fuzz target), not proved. The
   revision is account state outside the document, so no proved hash covers
   it: after A → B → A the same `doc_hash` returns at a later revision.
+
+  It also covers scoped documents (spec §7.6): `apply_scope`,
+  `remove_scope`, and `gc_scope`; the scoped-document guards (no recovery
+  member, no rule scoped to the account, its recovery controller, or its
+  ZK adapter or pool, checked at apply and, for a controller or ZK factor
+  applied later, in `__check_auth`; no guardian approval at any
+  controller, refused at apply for a rule's `functions` and in
+  `__check_auth` for every scoped rule); the scope generation gate in
+  `__check_auth` (`StaleScope`) with its tags' TTL; the wipe every recovery
+  completion makes; and the credential index (`WipedCredential`). Tested,
+  not proved:
+  - under enforcing authorization by `scoped_docs.rs`: the gate, the
+    guards, the wipe after lost-key and compromise completions, `gc_scope`,
+    archived tags, the freeze, the `Loss` window, and the credential index
+    across completions;
+  - under enforcing authorization by `scoped_guardian_approvals.rs`: no
+    scoped rule casts a guardian approval at an unadopted controller, a
+    second controller deployment, or the adopted one, for both entry
+    points, with listed or unrestricted functions, or from a scope applied
+    before the controller was adopted, while the admin document's rules
+    still do;
+  - by `rule_core_documents.rs`: rule-core's scoped document traces, whose
+    lowering, verdicts and records its Lean model computed, through the
+    real `apply_scope` and `__check_auth`: every refusal of the scoped
+    lowering, and authorizations in and after the generation a scope was
+    issued in;
+  - by `apply_scope_delta.rs` and the `apply_scope_delta` fuzz target:
+    random interleavings of admin `apply_doc`, `apply_scope`, and
+    `remove_scope` over several scope ids with ledger advances, checking
+    after every step that each scope grants exactly its own document's
+    rules, that scope operations leave the admin document and the other
+    scopes untouched, and that a refused document changes no ledger entry;
+  - by `release_stack.rs`'s `docsplit_*` tests and the `worst_case_*`
+    compromise flows with a thief's scopes installed, on the release wasm.
+
+  No model covers how scoped and admin rules combine in one batch, so the
+  claim that a scoped document cannot reach the account's own entry points
+  rests on OZ's context-type check and these tests.
 - **The ZK circuit, verifier, adapter, and pool** (`circuits/`,
   `vendor/ultrahonk-soroban-verifier`, `crates/perch-zk-adapter`,
   `crates/perch-zk-pool`): real-proof tests and cross-implementation

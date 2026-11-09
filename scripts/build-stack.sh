@@ -41,7 +41,7 @@
 #               current version, and refused unless its sha256 is that hash.
 #               A consumer pins the sha256 of the exact bytes on-chain, which
 #               a rebuild under a different toolchain would not reproduce
-#               (scaffold vs scaffold+optimize, unpinned rustc); so a deploy
+#               (scaffold vs scaffold+optimize, another rustc); so a deploy
 #               into a registry that already holds those names (the infra the
 #               release pipeline published there) pins those bytes. Reads the
 #               chain at $STELLAR_RPC_URL with a throwaway identity, no key.

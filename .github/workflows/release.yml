@@ -1017,7 +1017,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           targets: wasm32v1-none
       # No dependency cache: these bytes are published and pinned on-chain, so
       # nothing a poisoned cache could inject may reach the build.

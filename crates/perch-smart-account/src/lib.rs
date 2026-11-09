@@ -39,10 +39,11 @@
 //! controller alone, and so is every authorization of an account upgraded
 //! from code that kept no stored rule set, until its first `apply_doc`.
 //!
-//! Doc comments on the account's entry points and contract types are
-//! compiled into its wasm's contract spec, which counts against the
-//! network's 131,072-byte contract-size limit. Some field and entry-point
-//! notes are therefore plain `//` comments, which stay out of the wasm.
+//! Doc comments on the account's entry points, contract types, events, and
+//! errors are compiled into its wasm's contract spec, which counts against
+//! the network's contract-size limit. They are kept to a line or two; the
+//! longer notes are in `docs/account-interface.md`, linked from `//`
+//! comments, which stay out of the wasm.
 #![no_std]
 
 extern crate alloc;
@@ -122,19 +123,19 @@ pub mod infra {
 #[scerr]
 pub enum PerchAccountError {
     /// The document keeps no constraint-free, never-expiring self-admin rule
-    /// with a signer. Applying it could lock the admin out; refused
-    /// (anti-brick).
+    /// with a signer (anti-brick).
+    // docs/account-interface.md, "Errors".
     AdminLockout,
-    /// The document names a credential in the account's revoked set
-    /// (`docs/recovery/spec.md` §8).
+    /// The document names a revoked credential.
+    // docs/recovery/spec.md §8.
     RevokedCredential,
-    /// The document names a ZK enrollment id this account enrolled before
-    /// (spec §3.4).
+    /// The document reuses a ZK enrollment id this account enrolled before.
+    // Spec §3.4, like the next one.
     EnrollmentReused,
-    /// The document changes the ZK factor without a new enrollment id
-    /// (spec §3.4: the factor stays unchanged or carries a new id).
+    /// The document changes the ZK factor without a new enrollment id.
     ZkFactorChangedInPlace,
-    /// `execute` was asked to call an invoker-only hook (spec §15).
+    /// `execute` was asked to call an invoker-only hook.
+    // Spec §15.
     ReservedFunction,
     /// The account has no adopted recovery controller.
     RecoveryNotEnrolled,
@@ -146,10 +147,11 @@ pub enum PerchAccountError {
     UpgradeNotReady,
     /// A ledger computation overflowed `u32`.
     TimingOverflow,
-    /// A completion handed back a credential that cannot be fingerprinted.
+    /// A completion returned a credential that cannot be fingerprinted.
     InvalidCredential,
-    /// The recovery generation moved since the upgrade was scheduled
-    /// (spec §12). The request stays pending but can never execute.
+    /// The recovery generation moved since scheduling; the request can never
+    /// execute.
+    // docs/account-interface.md, "Upgrades".
     StaleUpgrade,
     /// The doc compiler refused the document (its `DocCompilerError` says
     /// why).
@@ -159,37 +161,30 @@ pub enum PerchAccountError {
     /// says why).
     #[from_contract_client]
     Recovery(RecoveryError),
-    /// `apply_doc` named an `expected_revision` and the account is at
-    /// another revision: the document was prepared against a configuration
-    /// that has since changed.
+    /// The account is not at `apply_doc`'s `expected_revision`.
     StaleRevision,
-    /// A completed recovery would advance the scope generation past
-    /// `u64::MAX`.
+    /// A completed recovery would overflow the scope generation.
     GenerationExhausted,
-    /// `apply_scope` was given a document a scoped document may not be: it
-    /// has a `recovery` member, a `self-admin` rule, a rule scoped to the
-    /// account itself, its recovery controller, or its ZK adapter or pool,
-    /// or a rule whose `functions` names a guardian approval (spec §7.6).
+    /// A scoped document has a `recovery` member, a self-admin rule, a rule
+    /// on the account or its recovery contracts, or a guardian approval.
+    // docs/account-interface.md, "Errors".
     ScopeEscalation,
     /// No scoped document has this scope id.
     UnknownScope,
-    /// `gc_scope` was asked to remove a scope of the current scope
-    /// generation, which only `remove_scope` removes.
+    /// `gc_scope` was given a live scope; `remove_scope` removes it.
     ScopeLive,
-    /// The document names a credential a scoped document named under a
-    /// scope generation a recovery completion has since ended (spec §7.6).
+    /// The document names a credential from a scope a recovery has wiped.
+    // Spec §7.6.
     WipedCredential,
-    /// The compiled document carries no model, more than one, a model
-    /// soroban-facade cannot read, or one whose rules or recovery do not
-    /// match the compiled rules one for one.
+    /// The compiled document's model is missing, duplicated, unreadable, or
+    /// does not match its rules.
+    // docs/account-interface.md, "Errors".
     ModelInvalid,
-    /// A rule other than the recovery rule asks for no signer (INV-1), so an
-    /// authorization with no signer at all would satisfy it.
+    /// A rule other than the recovery rule asks for no signer (INV-1).
     UnguardedRule,
-    /// `apply_scope` was called on an account that stores no admin rule
-    /// set: one upgraded from code that kept none and not re-applied since.
-    /// Its first `apply_doc` stores it. Last, so every earlier code is
-    /// unchanged.
+    /// The account stores no admin rule set until its next `apply_doc`.
+    // docs/account-interface.md, "Errors". Last, so every earlier code is
+    // unchanged.
     NoRuleSet,
 }
 
@@ -225,37 +220,33 @@ pub struct ScopeTag {
     pub gen: u64,
 }
 
-/// One scoped document as applied: what [`PerchSmartAccount::scope`]
-/// returns.
+/// A scoped document as applied.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScopeRecord {
-    /// The scope generation it was applied under. Once
-    /// [`PerchSmartAccount::scope_generation`] has moved past it, a recovery
-    /// completion has wiped the scope: its rules authorize nothing, and
-    /// anyone may remove them with `gc_scope`.
+    /// The scope generation it was applied under; wiped once
+    /// `scope_generation` moves past it.
+    // docs/account-interface.md, "Types".
     pub gen: u64,
-    /// The scoped document's canonical `doc_hash`.
+    /// Its canonical `doc_hash`.
     pub doc_hash: BytesN<32>,
     /// Every context rule it installed, with its OZ id.
     pub rules: Vec<InstalledRule>,
 }
 
-/// The `Protected` freeze, mirrored from the adopted controller through
-/// [`PerchSmartAccount::rcv_gate`]: while `ledger < until`, the account
-/// authorizes nothing but `attempt_id`'s completion.
+/// The `Protected` freeze: while `ledger < until`, the account authorizes
+/// only `attempt_id`'s completion.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FreezeGate {
-    // The authorized attempt, the only one whose completion the account
-    // authorizes while frozen.
+    /// The authorized attempt.
     pub attempt_id: u64,
     /// The authorized attempt's `expires_at`.
     pub until: u32,
 }
 
-/// The shared infra an account resolves, pinned when it was built (see
-/// [`infra`]): what a deployment check compares with its manifest.
+/// The shared infra contracts this account pins at build time.
+// A deployment check compares them with its manifest; see [`infra`].
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InfraPins {
@@ -264,57 +255,44 @@ pub struct InfraPins {
     pub spending_limit: Address,
 }
 
-/// Everything rule selection and signing need, read at one ledger: what
-/// [`PerchSmartAccount::configuration`] returns.
+/// What rule selection and signing need for the admin document, read at one
+/// ledger.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AccountConfiguration {
-    /// The configuration revision every other field belongs to.
+    /// The revision every other field belongs to.
     pub revision: u64,
-    /// The applied document's `doc_hash`, or `None` before the first apply.
+    /// The applied document's `doc_hash`, if any.
     pub doc_hash: Option<BytesN<32>>,
-    /// Every installed context rule, with its OZ id.
+    /// Every installed admin context rule, with its OZ id.
     pub rules: Vec<InstalledRule>,
-    // The adopted recovery controller, if any.
+    /// The adopted recovery controller, if any.
     pub recovery_controller: Option<Address>,
-    /// The zero-signer recovery rule's OZ id, if one is installed.
+    /// The recovery rule's OZ id, if installed.
     pub recovery_rule: Option<u32>,
-    /// The `Protected` freeze: zero or one entries (a `Vec` because
-    /// `#[contracttype]` has no conversion for `Option` of a custom struct).
-    /// It is in force while the ledger is below its `until`.
+    /// The `Protected` freeze: zero or one entries.
+    // docs/account-interface.md, "Types".
     pub gate: Vec<FreezeGate>,
-    // The recovery generation (spec §12), as
-    // [`PerchSmartAccount::recovery_generation`] returns it.
+    /// The recovery generation.
     pub recovery_generation: u64,
-    // The shared infra the account pins, as [`PerchSmartAccount::infra`]
-    // returns it.
+    /// The shared infra the account pins.
     pub infra: InfraPins,
 }
 
-/// Constants of the deployed account wasm a wallet checks before it builds
-/// anything for this account: what [`PerchSmartAccount::capabilities`]
-/// returns.
+/// Constants of this wasm a wallet checks before building for the account.
+// docs/account-interface.md, "Types".
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AccountCapabilities {
-    /// [`INTERFACE_VERSION`].
+    /// The interface version.
     pub interface_version: u32,
-    /// How the applied `doc_hash` is computed: `canon_v1`, `sha256` of the
-    /// CANON v1 canonical bytes.
+    /// How `doc_hash` is computed: `canon_v1`.
     pub doc_identity: Symbol,
-    /// What a signer signs: `addr_oz_v1`, OZ's
-    /// `sha256(bound_payload || context_rule_ids.to_xdr())`, where
-    /// `bound_payload = sha256(AUTH_ADDR_DOMAIN || account_id ||
-    /// signature_payload)` binds the account's own address so a signature
-    /// cannot be replayed on another account ([`AUTH_ADDR_DOMAIN`]). The
-    /// earlier `oz_rule_ids` scheme omitted the account address; a client
-    /// reads this symbol to tell which digest an account expects.
+    /// What signers sign: `addr_oz_v1`, bound to the account's address.
     pub auth_digest: Symbol,
-    /// How documents are applied: `one_tx`, the admin document in one
-    /// `apply_doc` transaction; `scoped_v1`, scoped documents through
-    /// `apply_scope`, `remove_scope`, and `gc_scope` (spec §7.6).
+    /// `one_tx` (admin document) and `scoped_v1` (scoped documents).
     pub apply_modes: Vec<Symbol>,
-    /// [`SNAPSHOT_VERSION`].
+    /// The `AccountConfiguration` layout version.
     pub snapshot_version: u32,
 }
 
@@ -404,11 +382,9 @@ pub const SNAPSHOT_VERSION: u32 = 1;
 /// generation.
 pub use perch_recovery_interface::account::UpgradeRequest;
 
-/// Emitted after a document is applied: the new canonical `doc_hash`, the
-/// configuration revision it was applied at, and what changed in the rule
-/// set. The rule, signer, and policy mutations emit nothing themselves (OZ's
-/// `_no_events` variants), so this is the whole record of the change;
-/// `applied_doc` serves the document.
+/// Emitted after the admin document is applied: its `doc_hash`, the revision,
+/// and what changed in the rule set.
+// docs/account-interface.md, "Events".
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DocApplied {
@@ -424,10 +400,8 @@ pub struct DocApplied {
     pub policies_removed: u32,
 }
 
-/// Emitted after a scoped document is applied: its scope id, canonical
-/// `doc_hash`, the scope generation it was applied under, and what changed in
-/// its rule set, counted like [`DocApplied`]'s. `scope_doc` serves the
-/// document.
+/// Emitted after a scoped document is applied: its scope, `doc_hash`, scope
+/// generation, and what changed in its rule set.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScopeApplied {
@@ -444,20 +418,18 @@ pub struct ScopeApplied {
     pub policies_removed: u32,
 }
 
-/// Emitted when a scoped document is removed with every rule it installed,
-/// by `remove_scope`, or by `gc_scope` once a completion wiped it.
+/// Emitted when a scoped document and its rules are removed.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScopeRemoved {
     #[topic]
     pub scope: u32,
-    /// The scope generation it had been applied under.
+    /// The scope generation it was applied under.
     pub gen: u64,
     pub rules_removed: u32,
 }
 
-/// Emitted when a recovery completion advances the scope generation to
-/// `gen`: every scoped document applied before stops authorizing.
+/// Emitted when a completed recovery advances the scope generation to `gen`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ScopesWiped {
@@ -472,8 +444,7 @@ pub struct CredentialRevoked {
     pub fingerprint: BytesN<32>,
 }
 
-/// Emitted when the adopted controller sets (`until > 0`) or clears the
-/// `Protected` freeze.
+/// Emitted when the controller sets (`until > 0`) or clears the freeze.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FreezeChanged {
@@ -488,12 +459,12 @@ pub struct UpgradeScheduled {
     #[topic]
     pub request_id: u64,
     pub wasm_hash: BytesN<32>,
-    // The first ledger at which `execute_upgrade` may run it.
+    /// The first ledger it may execute.
     pub executable_at: u32,
 }
 
-/// Emitted when a scheduled upgrade is dropped: cancelled, replaced by a
-/// newer request, found stale at execution, or cleared by a recovery.
+/// Emitted when a scheduled upgrade is dropped.
+// docs/account-interface.md, "Events".
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpgradeDropped {
@@ -604,33 +575,11 @@ struct PerchStorage {
 /// recovery cancellation, and delayed upgrades.
 #[contracttrait]
 pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
-    /// Apply the admin document: the account's own rules, its recovery
-    /// member, and everything a recovery restores. With the scoped-document
-    /// entry points ([`Self::apply_scope`]), **the only way authorization
-    /// changes**. The shared, immutable doc compiler it calls is derived from
-    /// build-time pins (see [`infra`]), never passed in. Brings the installed
-    /// rules to the document in one invocation, changing only the rules that
-    /// differ, and returns the canonical `doc_hash`.
-    ///
-    /// Authorized by the owner (any ordinary rule scoped to the account),
-    /// or, for a recovery completion only, by the zero-signer recovery rule
-    /// whose controller checks the exact target. On an account with an
-    /// adopted controller, the controller's `rcv_sync` classifies the call
-    /// before any rule changes and refuses what the profile does not allow
-    /// (`docs/recovery/spec.md` §10). `approval_valid_until` is the
-    /// freshness bound a `Protected` reconfiguration's recorded approvals
-    /// were given for; it is ignored otherwise.
-    ///
-    /// Refuses (`WipedCredential`) a document naming a credential a scoped
-    /// document named before the last completed recovery, except the
-    /// completion's own target (spec §7.6).
-    ///
-    /// With `expected_revision`, the call refuses with `StaleRevision`
-    /// unless the account is still at that [`Self::revision`], so a document
-    /// prepared against one configuration never overwrites a change made
-    /// since. `None` applies over whatever revision is current. Every
-    /// successful call advances the revision by one, a re-apply of the same
-    /// document included.
+    /// Apply the admin document and return its `doc_hash`. Owner
+    /// authorization, or the recovery rule for a completion. Refuses
+    /// `StaleRevision` unless the account is at `expected_revision`, if given.
+    /// `approval_valid_until` bounds a `Protected` reconfiguration's approvals.
+    // docs/account-interface.md, "apply_doc".
     fn apply_doc(
         e: &Env,
         doc_json: Bytes,
@@ -646,12 +595,9 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         )
     }
 
-    /// Call `target_fn` on `target` as this account (the account becomes
-    /// the invoker, so `target`'s `require_auth` of this account passes).
-    /// Requires the account's authorization of this exact call. Refuses the
-    /// invoker-only hook names: otherwise whoever can authorize `execute`
-    /// could reach a controller, policy, or pool hook as the account
-    /// (spec §15).
+    /// Call `target_fn` on `target` as this account. Owner authorization;
+    /// refuses invoker-only hooks.
+    // docs/account-interface.md, "Calls as the account".
     fn execute(
         e: &Env,
         target: Address,
@@ -665,16 +611,13 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         Ok(e.invoke_contract::<Val>(&target, &target_fn, target_args))
     }
 
-    /// The applied document's canonical bytes, or `None` before the first
-    /// `apply_doc`. Under CANON v1, `sha256` of them is
-    /// [`Self::applied_doc_hash`].
+    /// The applied admin document's canonical bytes, if any.
+    // docs/account-interface.md, "Views".
     fn applied_doc(e: &Env) -> Option<Bytes> {
         PerchStorage::get_applied_doc_bytes(e)
     }
 
-    /// The canonical `doc_hash` of the currently applied policy document, or
-    /// `None` before the first `apply_doc` (only the constructor's admin rule
-    /// exists then). Anyone can check installed == reviewed.
+    /// The applied admin document's canonical `doc_hash`, if any.
     fn applied_doc_hash(e: &Env) -> Option<BytesN<32>> {
         PerchStorage::get_applied_doc(e)
     }
@@ -698,9 +641,9 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         PerchStorage::has_revoked(e, &fingerprint)
     }
 
-    /// The last scope generation a scoped document named this credential
-    /// fingerprint under, if one ever did. Once [`Self::scope_generation`]
-    /// is past it, no document may name the credential (spec §7.6).
+    /// The last scope generation a scoped document named this credential under,
+    /// if any.
+    // docs/account-interface.md, "Views".
     fn credential_generation(e: &Env, fingerprint: BytesN<32>) -> Option<u64> {
         PerchStorage::get_scope_credentials(e, &fingerprint)
     }
@@ -715,18 +658,15 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         PerchStorage::get_recovery_controller(e)
     }
 
-    /// The `Protected` freeze, if one was set and has not been cleared. It
-    /// is in force while the current ledger is below `until`.
+    /// The `Protected` freeze, if set; in force while the ledger is below
+    /// `until`.
     fn recovery_gate(e: &Env) -> Option<FreezeGate> {
         PerchStorage::get_gate(e)
     }
 
-    /// Invoker-only: the adopted controller sets (`frozen_until > 0`) or
-    /// clears (`0`) the `Protected` freeze for `attempt_id`. The account
-    /// mirrors the freeze rather than asking the controller from
-    /// `__check_auth`, because an account approving as a guardian through
-    /// the same controller instance runs `__check_auth` while that
-    /// controller is on the call stack, and the host refuses re-entry.
+    /// Invoker-only: the adopted controller sets (`frozen_until > 0`) or clears
+    /// (`0`) the `Protected` freeze.
+    // docs/account-interface.md, "Recovery hooks".
     fn rcv_gate(e: &Env, attempt_id: u64, frozen_until: u32) -> Result<(), PerchAccountError> {
         let controller = PerchStorage::get_recovery_controller(e)
             .ok_or(PerchAccountError::RecoveryNotEnrolled)?;
@@ -752,8 +692,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         Ok(())
     }
 
-    /// A `Loss` owner's cancellation of a recovery attempt (spec T7). The
-    /// controller refuses it under `Protected`.
+    /// A `Loss` owner's cancellation of a recovery attempt.
+    // docs/account-interface.md, "Recovery hooks".
     fn cancel_recovery(e: &Env, attempt_id: u64) -> Result<(), PerchAccountError> {
         let me = e.current_contract_address();
         me.require_auth();
@@ -763,13 +703,10 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         Ok(())
     }
 
-    /// Schedule an upgrade to `wasm_hash`, executable after
-    /// [`ACCOUNT_UPGRADE_DELAY_LEDGERS`] (spec §12). Owner authorization;
-    /// under `Protected` also the condition's recorded approval of
-    /// `Upgrade { request_id, wasm_hash }` fresh until
-    /// `approval_valid_until` (`next_upgrade_request_id` names the id to
-    /// approve). Refused while a recovery attempt is authorized. Replaces any
-    /// earlier request. Returns the request id.
+    /// Schedule an upgrade to `wasm_hash` after the upgrade delay, replacing
+    /// any pending one, and return its id. Owner authorization; under
+    /// `Protected`, also approvals fresh until `approval_valid_until`.
+    // docs/account-interface.md, "Upgrades".
     fn schedule_upgrade(
         e: &Env,
         wasm_hash: BytesN<32>,
@@ -811,18 +748,10 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         Ok(request_id)
     }
 
-    /// Execute the pending upgrade once its delay has elapsed. Owner
-    /// authorization. If the recovery generation moved since scheduling
-    /// (any enrollment, reconfiguration, removal, controller switch,
-    /// completed recovery, or executed upgrade), the request is stale and
-    /// the call refuses with `StaleUpgrade`. The refusal leaves the request
-    /// in place, since a failed invocation keeps none of its writes; it can
-    /// never execute, because the generation never decreases, and stays
-    /// until `schedule_upgrade` replaces it, `cancel_upgrade` removes it, or
-    /// a completion clears it. Otherwise the controller, if one is adopted,
-    /// checks its epoch and bumps it (refusing during an authorized
-    /// attempt), the generation advances, and the Wasm is replaced after
-    /// this invocation.
+    /// Execute the pending upgrade once its delay has passed. Owner
+    /// authorization. Refuses `StaleUpgrade` if the recovery generation moved
+    /// since scheduling.
+    // docs/account-interface.md, "Upgrades".
     fn execute_upgrade(e: &Env, request_id: u64) -> Result<(), PerchAccountError> {
         let me = e.current_contract_address();
         me.require_auth();
@@ -873,43 +802,32 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         PerchStorage::get_pending_upgrade(e)
     }
 
-    /// The id the next `schedule_upgrade` will assign: what `Protected`
-    /// approvers approve.
+    /// The id the next `schedule_upgrade` assigns.
     fn next_upgrade_request_id(e: &Env) -> u64 {
         PerchStorage::get_next_upgrade_id(e).unwrap_or(0)
     }
 
-    /// The account's recovery generation (spec §12).
+    /// The account's recovery generation.
+    // docs/account-interface.md, "Upgrades".
     fn recovery_generation(e: &Env) -> u64 {
         generation(e)
     }
 
-    /// The account's scope generation: 0 until the first completed
-    /// recovery, then advanced by one by each completed recovery and by
-    /// nothing else (not by enrollment, reconfiguration, removal, a
-    /// controller switch, or an executed upgrade, all of which advance
-    /// [`Self::recovery_generation`]). A scope whose record has another
-    /// generation is wiped.
+    /// The scope generation: advanced only by completed recoveries. A scope
+    /// applied under another is wiped.
+    // docs/account-interface.md, "Views".
     fn scope_generation(e: &Env) -> u64 {
         scope_generation(e)
     }
 
-    /// The configuration revision: 0 after the constructor, advanced by one
-    /// in every successful `apply_doc` (whatever it changes, a re-apply of
-    /// the same document included) and every executed upgrade. Freeze
-    /// changes, recovery attempts, evidence, and cancellations do not
-    /// advance it. Never decreases and never repeats, so unlike `doc_hash` it
-    /// tells A -> B -> A apart. Scoped documents do not advance it: a grant
-    /// changing never makes an admin document prepared against this
-    /// revision stale.
+    /// The configuration revision: advanced by every `apply_doc` and executed
+    /// upgrade; never repeats.
+    // docs/account-interface.md, "Views".
     fn revision(e: &Env) -> u64 {
         revision(e)
     }
 
-    /// Everything rule selection and signing need for the admin document,
-    /// read at one ledger, with the revision it belongs to. Scoped
-    /// documents' rules are not in it: [`Self::scopes`] and [`Self::scope`]
-    /// list them.
+    /// The admin document's configuration, read at one ledger.
     fn configuration(e: &Env) -> AccountConfiguration {
         AccountConfiguration {
             revision: revision(e),
@@ -926,15 +844,14 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         }
     }
 
-    /// The applied document's canonical bytes with the revision they belong
-    /// to; `None` before the first `apply_doc`.
+    /// The applied admin document's canonical bytes, with the revision they
+    /// belong to.
     fn document(e: &Env) -> (u64, Option<Bytes>) {
         (revision(e), PerchStorage::get_applied_doc_bytes(e))
     }
 
-    /// Constants of this account's wasm: interface and snapshot versions,
-    /// the document identity and authorization digest schemes, and the apply
-    /// modes.
+    /// Constants of this wasm: interface and snapshot versions, digest schemes,
+    /// and apply modes.
     fn capabilities(e: &Env) -> AccountCapabilities {
         AccountCapabilities {
             interface_version: INTERFACE_VERSION,
@@ -948,9 +865,9 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         }
     }
 
-    /// Extend the account's instance, the applied document and its credential
-    /// fingerprints, and the named revoked-set and enrolled-id entries to the
-    /// network maximum. Permissionless; changes no meaning.
+    /// Extend the account's instance, document, and the named revoked and
+    /// enrolled entries to the maximum TTL. Permissionless.
+    // docs/account-interface.md, "Views".
     fn renew(e: &Env, fingerprints: Vec<BytesN<32>>, enrollment_ids: Vec<BytesN<32>>) {
         extend_persistent(e, |ttl| {
             e.storage().instance().extend_ttl(ttl, ttl);
@@ -973,58 +890,38 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         });
     }
 
-    /// Every context rule the admin document installed, with its OZ id. The
-    /// document's rules are matched against these by `apply_doc`. A scoped
-    /// document's are in its [`Self::scope`] record.
+    /// Every context rule the admin document installed, with its OZ id.
     fn installed_rules(e: &Env) -> Vec<InstalledRule> {
         PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e))
     }
 
-    /// The rule-eval rules the installed rules enforce, aligned with
-    /// [`Self::installed_rules`]: entry `i` is what installed rule `i`
-    /// enforces, and what `__check_auth` evaluates. Empty on an account that
-    /// has not applied a document since it was upgraded to code that keeps
-    /// them, which OZ's policies still decide.
+    /// The rule-eval rules `__check_auth` evaluates, aligned with
+    /// `installed_rules`.
+    // docs/account-interface.md, "Views".
     fn rule_set(e: &Env) -> Vec<StoredRule> {
         PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e))
     }
 
-    /// OZ's count of the account's context rules, scoped documents' and
-    /// expired ones included.
-    /// Read-only rule surface, re-exposed here because `SmartAccount` itself
-    /// is deliberately not exported by doc-only accounts.
+    /// OZ's count of context rules, scoped and expired ones included.
+    // docs/account-interface.md, "Views".
     fn get_context_rules_count(e: &Env) -> u32 {
         smart_account::get_context_rules_count(e)
     }
 
-    // The OZ context rule with this id; panics if there is none. Re-exposed
-    // like [`Self::get_context_rules_count`].
+    /// The OZ context rule with this id; panics if there is none.
     fn get_context_rule(e: &Env, context_rule_id: u32) -> ContextRule {
         smart_account::get_context_rule(e, context_rule_id)
     }
 
-    /// Apply a scoped document under `scope`, an id the owner chooses (one
-    /// per app grant, say), and return its `doc_hash` (spec §7.6). Owner
-    /// authorization. Refuses (`ScopeEscalation`) a `recovery` member, a
-    /// `self-admin` rule, a rule scoped to the account, its recovery
-    /// controller, or its ZK adapter or pool, or a rule whose `functions`
-    /// names a guardian approval, so no scoped document reaches the admin
-    /// document's rules, recovery, upgrades, or guardian approvals. Refuses
-    /// (`WipedCredential`) a credential a scoped document named before the
-    /// last completed recovery, and records every credential it names under
-    /// the current scope generation. Compiled under the same caps as any
-    /// document and reconciled against this scope's records only. Every
-    /// rule it installs is tagged with the scope and the current scope
-    /// generation, so applying over a wiped scope revives it with the new
-    /// rules. Calls no controller, and leaves the applied `doc_hash` and the
-    /// revision alone. Refuses (`NoRuleSet`) on an account that stores no
-    /// admin rule set, until its first `apply_doc`.
+    /// Apply a scoped document under `scope` and return its `doc_hash`. Owner
+    /// authorization.
+    // docs/account-interface.md, "apply_scope".
     fn apply_scope(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
         apply_scope_doc(e, scope, doc_json)
     }
 
-    /// Remove the scoped document under `scope` and every rule it installed:
-    /// revoking a grant. Owner authorization.
+    /// Remove the scoped document under `scope` and its rules. Owner
+    /// authorization.
     fn remove_scope(e: &Env, scope: u32) -> Result<(), PerchAccountError> {
         e.current_contract_address().require_auth();
         let record = PerchStorage::get_scopes(e, &scope).ok_or(PerchAccountError::UnknownScope)?;
@@ -1032,9 +929,9 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         Ok(())
     }
 
-    /// Remove a scoped document a recovery completion wiped, with every rule
-    /// it installed. Permissionless: the rules already authorize nothing.
-    /// Refuses a scope of the current generation (`ScopeLive`).
+    /// Remove a scoped document a recovery wiped, and its rules.
+    /// Permissionless.
+    // docs/account-interface.md, "Removing scopes".
     fn gc_scope(e: &Env, scope: u32) -> Result<(), PerchAccountError> {
         let record = PerchStorage::get_scopes(e, &scope).ok_or(PerchAccountError::UnknownScope)?;
         if record.gen == scope_generation(e) {
@@ -1044,23 +941,18 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         Ok(())
     }
 
-    /// The scoped document under `scope` as applied, if any: its generation,
-    /// `doc_hash`, and rules with their OZ ids. Rule names repeat across
-    /// scopes, so a wallet selects a scoped rule by `(scope, name)`.
+    /// The scoped document under `scope` as applied, if any.
     fn scope(e: &Env, scope: u32) -> Option<ScopeRecord> {
         PerchStorage::get_scopes(e, &scope)
     }
 
-    /// The rule-eval rules the scoped document under `scope` installs,
-    /// aligned with its record's rules (entry `i` is what rule `i`
-    /// enforces), each carrying the scope generation it was applied under.
-    /// Empty when no scoped document has the id.
+    /// The rule-eval rules of the scoped document under `scope`, aligned with
+    /// its record's rules.
     fn scope_rule_set(e: &Env, scope: u32) -> Vec<StoredRule> {
         PerchStorage::get_scope_rule_sets(e, &scope).unwrap_or(Vec::new(e))
     }
 
     /// The canonical bytes of the scoped document under `scope`, if any.
-    /// `sha256` of them is its `doc_hash`.
     fn scope_doc(e: &Env, scope: u32) -> Option<Bytes> {
         PerchStorage::get_scope_docs(e, &scope)
     }
@@ -1070,11 +962,9 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         PerchStorage::get_scope_count(e).unwrap_or(0)
     }
 
-    /// The scope ids with a record at positions `start..start + count` of
-    /// the index (fewer at its end), wiped ones included. Removing a scope
-    /// moves the last id into its position, so a listing read across
-    /// several calls can miss an id that moved in between; read
-    /// [`Self::scope_count`] again to tell.
+    /// The scope ids at index positions `start..start + count`, wiped ones
+    /// included.
+    // docs/account-interface.md, "Views".
     fn scopes(e: &Env, start: u32, count: u32) -> Vec<u32> {
         let end = Self::scope_count(e).min(start.saturating_add(count));
         let mut ids = Vec::new(e);
@@ -1800,6 +1690,7 @@ macro_rules! impl_perch_smart_account {
             type Error = $crate::soroban_sdk::Error;
             type Signature = $crate::stellar_accounts::smart_account::AuthPayload;
 
+            /// Decide whether this account authorizes `auth_contexts`.
             // Refuse reserved invoker-only names and, under a `Protected`
             // freeze, everything but the authorized completion; then bind
             // the digest to this account and decide with rule-eval (OZ for a

@@ -32,12 +32,9 @@ pub struct PerchAccount;
 
 #[contractimpl]
 impl PerchAccount {
-    /// Deploy-time rule 0, `admin`: a policy-free self-admin rule for the
-    /// admin signers. A rule scoped to the account authorizes every entry
-    /// point that requires the account's own authorization — `apply_doc`,
-    /// `execute` (arbitrary calls as the account), the upgrade entry points,
-    /// and `cancel_recovery` — so this is full owner authority, not
-    /// `apply_doc` alone.
+    /// Install rule 0, `admin`: a self-admin rule for `admin_signers`, with
+    /// full owner authority.
+    // docs/account-interface.md, "Constructor".
     pub fn __constructor(e: &Env, admin_signers: Vec<Signer>) {
         perch_smart_account::install_admin(e, &admin_signers);
     }

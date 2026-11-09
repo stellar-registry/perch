@@ -164,7 +164,7 @@ komet:
     cd komet && komet prove run --wasm target/perch_komet_tests.komet.wasm
 
 # Flux refinement verification of perch-program (nidohq/soroban-flux). Runs
-# under flux's pinned nightly toolchain; the repo's stable pin is untouched —
+# under flux's pinned nightly toolchain; the repo's toolchain pin is untouched —
 # the flux attributes are no-ops in normal builds. Setup: see
 # https://github.com/nidohq/soroban-flux (`just flux-setup` there).
 flux:

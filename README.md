@@ -143,6 +143,8 @@ scripts/              build-stack.sh / deploy-stack.sh: the stack in pin order a
 deployments/          deployment manifests (testnet.json) and the raw testnet exercise
                       record (testnet-exercise.json)
 docs/audit-scope.md   the audit manifest
+docs/account-interface.md  the account's entry points, types, events, and errors: the
+                      notes too long for its contract spec's doc comments
 docs/DEFERRED.md      work deferred until after the audit
 docs/recovery/        account recovery: the authoritative spec, statement layouts,
                       CAP-0071 reliance, the implementation map, budgets, and formal
@@ -177,8 +179,8 @@ manifest, and how a deployment is verified.
 
 Building contract wasm requires the scaffold plugin:
 `cargo install --locked stellar-scaffold-cli` (and `stellar-registry-cli` for
-the deploy flow). `rust-toolchain.toml` selects the stable channel;
-reproducing the deployed hashes needs the rustc version the manifest
+the deploy flow). `rust-toolchain.toml` pins rustc 1.97.1;
+reproducing a deployment's hashes needs the rustc version its manifest
 records ([`docs/audit-scope.md`](./docs/audit-scope.md#toolchains-and-locked-inputs)).
 
 ```sh

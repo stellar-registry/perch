@@ -95,7 +95,7 @@ evidence does not.
 
 | Input | Pin | Where |
 | --- | --- | --- |
-| Rust | channel `stable`, target `wasm32v1-none`. **Not version-pinned**: reproducing the deployed hashes needs the recorded rustc 1.99.0 | `rust-toolchain.toml` |
+| Rust | rustc 1.97.1, target `wasm32v1-none`. A deployment built under another rustc is reproduced with the version its manifest records | `rust-toolchain.toml` |
 | Release profile | `opt-level = "z"`, `overflow-checks = true`, `panic = "abort"`, `lto = true`, `codegen-units = 1` | `Cargo.toml` `[profile.release]` |
 | Wasm stack | 64 KiB per contract, 128 KiB for the ZK adapter (an overflow traps) | `crates/*/build.rs` |
 | Soroban | `soroban-sdk` 29.0.1, `soroban-env-host` 29.0.1 (test host), `stellar-xdr` 28.0.0 | `Cargo.lock` |
@@ -374,8 +374,6 @@ Each is stated in full where linked.
   calls ([`zk/README.md`](zk/README.md)).
 - Client proving on the reference phone and laptop is unmeasured
   ([`recovery/budgets.md`](recovery/budgets.md) §1).
-- `rust-toolchain.toml` does not pin a Rust version (see the toolchain
-  table).
 
 ## Reading order
 

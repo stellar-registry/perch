@@ -214,8 +214,8 @@ proof, and bb.js's ZK verification key to equal the committed VK.
 on-chain, so the browser prover's output is checked against the Soroban
 verifier on every CI run.
 
-The deployable wasm's hash depends on the Rust toolchain that builds it. The
-repository's `rust-toolchain.toml` tracks `stable`, so the wasm hash is
+The deployable wasm's hash depends on the Rust toolchain and the builder that
+build it, so the wasm hash is
 recorded per release build (`deployments/testnet.json` for the testnet
 deployment) rather than in `circuits/manifest.json`.
 

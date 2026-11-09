@@ -321,19 +321,24 @@ fn signer_from_value<N: AsRef<str>, S: AsRef<str>>(
 ) -> Result<SignerDecl, ParseError> {
     let obj = as_object(v, "signer")?;
     // Field-shape discrimination, fail-closed: an `address` field makes the
-    // signer delegated (`verifier`/`key` then reject as unknown fields);
-    // otherwise it is external and `verifier`+`key` are required. Mixed or
-    // incomplete shapes error, never coerce.
+    // signer delegated (`verifier`/`key`/`verifier-name` then reject as
+    // unknown fields); otherwise it is external, `verifier`+`key` are
+    // required, and `verifier-name` is optional. Mixed or incomplete shapes
+    // error, never coerce.
     let method = if field(obj, "address")?.is_some() {
         deny_unknown(obj, &["id", "address"])?;
         SignerMethod::Delegated {
             address: as_str(req_field(obj, "address")?, "address")?,
         }
     } else {
-        deny_unknown(obj, &["id", "verifier", "key"])?;
+        deny_unknown(obj, &["id", "verifier", "verifier-name", "key"])?;
         SignerMethod::External {
             verifier: as_str(req_field(obj, "verifier")?, "verifier")?,
             key: as_str(req_field(obj, "key")?, "key")?,
+            verifier_name: match opt_field(obj, "verifier-name")? {
+                Some(v) => Some(as_str(v, "verifier-name")?),
+                None => None,
+            },
         }
     };
     Ok(SignerDecl {

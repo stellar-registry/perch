@@ -1,8 +1,9 @@
 // A scoped document's canonical text, rebuilt from what its account keeps.
 //
 // The account keeps no scoped document's text. It keeps each rule's name and
-// the rule-eval rule it enforces (`scope(id)`, `scope_rule_set(id)`), and the
-// document's signer ids in declaration order (`scope_signer_ids(id)`), and it
+// the rule-eval rule it enforces (`scope(id)`, `scope_rule_set(id)`), the
+// document's signer ids in declaration order (`scope_signer_ids(id)`), and
+// each signer's `verifier-name` (`scope_verifier_names(id)`), and it
 // applies only documents in normal form (`perch_ir::normal_form`, and its own
 // checks in `apply_scope`): the one spelling, among the documents that store
 // the same rules, those give back. `rebuildScopeDoc` inverts rule-core's
@@ -11,7 +12,7 @@
 //
 // - the signers, in declaration order, are the distinct stored signers in the
 //   order the rules first name them, each under the next stored id, a key in
-//   lowercase hex;
+//   lowercase hex, and the next stored `verifier-name` where it is not empty;
 // - each rule's scope is its stored contract, its principals `all` when it
 //   asks every signer it names and `threshold` otherwise, and its
 //   `not-after-ledger` one past its last ledger;
@@ -72,6 +73,9 @@ export interface StoredScope {
   docHash: Uint8Array;
   /** `scope_signer_ids(id)`. */
   signerIds: string[];
+  /** `scope_verifier_names(id)`: each signer's `verifier-name`, aligned with
+   *  `signerIds` (empty where it has none), or none when no signer has one. */
+  verifierNames: string[];
   /** Each rule's name (`scope(id).rules[i].name`) and stored rule
    *  (`scope_rule_set(id)[i]`), in order. */
   rules: { name: string; rule: StoredRule }[];
@@ -157,6 +161,9 @@ export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
   if (signers.length !== scope.signerIds.length) {
     throw new ScopeNotRebuilt(`${scope.signerIds.length} signer ids for ${signers.length} stored signers`);
   }
+  if (scope.verifierNames.length !== 0 && scope.verifierNames.length !== scope.signerIds.length) {
+    throw new ScopeNotRebuilt(`${scope.verifierNames.length} verifier names for ${scope.signerIds.length} signer ids`);
+  }
   const idOf = (s: SignerKey): string => scope.signerIds[signers.findIndex((x) => sameSigner(x, s))]!;
   const rules = scope.rules.map(({ name, rule }) => {
     const ids = rule.signers.map(idOf);
@@ -204,7 +211,12 @@ export function rebuildScopeDoc(scope: StoredScope): RebuiltScope {
     signers: signers.map((s, i) =>
       s.kind === 'delegated'
         ? { id: scope.signerIds[i]!, address: s.address }
-        : { id: scope.signerIds[i]!, verifier: s.verifier, key: bytesToHex(s.key) },
+        : {
+            id: scope.signerIds[i]!,
+            verifier: s.verifier,
+            'verifier-name': scope.verifierNames[i] || undefined,
+            key: bytesToHex(s.key),
+          },
     ),
     rules,
   } as PolicyDoc;

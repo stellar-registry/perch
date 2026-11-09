@@ -7,15 +7,17 @@
 #   crates/perch-account-factory/wasm/  perch-account, perch-webauthn-verifier
 #
 # Each name gets <name>.wasm (git-ignored; only tests read the bytes) and
-# <name>.sha256 (committed, with registry.path: all a build reads, so a plain
-# checkout builds without this script). scripts/check-pins.sh checks the
-# committed pins against the manifest.
+# <name>.sha256 (committed, with the registry paths: all a build reads, so a
+# plain checkout builds without this script). scripts/check-pins.sh checks
+# the committed pins against the manifest.
 #
-# The registry is not a fetched pin: both crates commit the path they derive
-# it from (wasm/registry.path), and the manifest's registry must be the one
-# that path derives on its network, or a migration
-# deployments/pending-registry.json declares (scripts/manifest-registry.sh).
-# This script refuses any other manifest and never rewrites the path.
+# The registries are not fetched pins. The account commits the path it
+# derives the infra registry from (wasm/registry.path), and the manifest's
+# registry must be the one that path derives on its network, or a migration
+# deployments/pending-registry.json declares (scripts/manifest-registry.sh);
+# this script refuses any other manifest. The factory pins only the WebAuthn
+# verifier's hash, which it resolves in perch/verifiers (wasm/verifiers.path).
+# This script never rewrites a path.
 #
 # Each wasm is fetched from the chain by the exact address (or, for the
 # account, the exact wasm hash) the manifest records, and refused unless
@@ -28,10 +30,11 @@
 #
 # Usage: scripts/fetch-infra-wasm.sh [--manifest <path>] [--stack <dir>]
 #   --manifest  default deployments/${STELLAR_NETWORK:-testnet}.json
-#   --stack     also fetch every manifest contract into <dir> and write
-#               <dir>/build.json, so tests/release_stack.rs runs against the
-#               deployed bytes; it keeps the manifest's zk circuit, which
-#               those bytes compile in
+#   --stack     also fetch every manifest contract, and the registry code
+#               (the manifest's registry.wasm_hash, which perch/verifiers
+#               runs too), into <dir> and write <dir>/build.json, so
+#               tests/release_stack.rs runs against the deployed bytes; it
+#               keeps the manifest's zk circuit, which those bytes compile in
 #
 # Requires the Stellar CLI. After a redeploy, run
 # `cargo test -p perch-integration-tests --test testnet_pins`.
@@ -141,10 +144,20 @@ if [ -n "$stack" ]; then
     for name in $(m '.contracts | keys[]'); do
         fetch "$name" "$stack/${name//-/_}.wasm"
     done
-    jq '{registry: .registry.id, source, toolchain} + (if .zk then {zk} else {} end) + {
-         artifacts: [.contracts | to_entries[] |
+    code="$stack/perch_constructorless_registry.wasm"
+    fetch_retry perch-constructorless-registry "$code" --wasm-hash "$(m .registry.wasm_hash)"
+    [ "$(sha256 "$code")" = "$(m .registry.wasm_hash)" ] || {
+        echo "error: perch-constructorless-registry: fetched $(sha256 "$code"), manifest says $(m .registry.wasm_hash)" >&2
+        exit 1
+    }
+    jq --argjson bytes "$(wc -c <"$code" | tr -d ' ')" \
+        '{registry: .registry.id, source, toolchain} + (if .zk then {zk} else {} end) + {
+         artifacts: ([.contracts | to_entries[] |
            {package: .key, version: .value.version, wasm: (.key | gsub("-"; "_") + ".wasm"),
             sha256: .value.sha256, bytes: .value.bytes, tier: .value.tier,
-            pins: (.value.pins // {})}]}' "$manifest" >"$stack/build.json"
+            pins: (.value.pins // {})}] + [
+           {package: "perch-constructorless-registry", version: .registry.version,
+            wasm: "perch_constructorless_registry.wasm", sha256: .registry.wasm_hash, bytes: $bytes,
+            tier: -1, pins: {}}])}' "$manifest" >"$stack/build.json"
     echo "wrote ${stack%/}/build.json" >&2
 fi

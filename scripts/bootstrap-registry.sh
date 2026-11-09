@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Bootstrap Perch's registry chain on a network: `perch` under the Stellar
 # Registry root, `perch/constructorless` below it, the tier-0 contracts a
-# design-A account resolves there, and an author account per project (perch,
-# and nido in the sibling `nido` registry). One code path for testnet and
-# mainnet: every address is derived from crates/*/wasm/registry.path
-# (scripts/derive-id.py), every hash and version comes from the committed pins
-# and deployments/testnet.json, and every role is read from the chain.
+# design-A account resolves there, `perch/verifiers` beside it with the
+# verifiers a document names from it, and an author account per project
+# (perch, and nido in the sibling `nido` registry). One code path for testnet
+# and mainnet: every address is derived from crates/*/wasm/registry.path and
+# crates/*/wasm/verifiers.path (scripts/derive-id.py), every hash and version
+# comes from the committed pins and deployments/testnet.json, and every role
+# is read from the chain.
 # docs/deploy/README.md, "Bootstrapping a network's registry chain", explains
 # the order and what each step costs.
 #
@@ -23,14 +25,25 @@
 #                     interpreter, spending limit, ed25519 verifier): the first
 #                     publish of their released hashes, authored by the perch
 #                     author, then deploy_stateless
+#   verifiers         perch.deploy(perch-constructorless-registry, ..., "verifiers", ...):
+#                     the managed registry a document's verifier-name resolves in
+#   seed-verifiers    the stack's verifiers (ed25519, WebAuthn) in perch/verifiers:
+#                     the first publish of their released hashes, authored by the
+#                     perch author and approved by its manager, then
+#                     deploy_stateless. The factory's WebAuthn pin is there
 #   create-author     --project perch|nido: deploy a design-A perch-account and
 #                     apply its document (admin, ci-publish and admin-registry on
-#                     that project's registry)
+#                     that project's registry). Where the compiler resolves
+#                     verifier names (its verifier_registry view), the admin
+#                     signer is the ed25519 verifier perch/verifiers deployed,
+#                     named in the document; with an earlier compiler, the one
+#                     in constructorless, by contract id
 #   names             --project perch|nido: bind each remaining name to that
 #                     project's author with a synthetic hash (stellar-registry/perch#142)
 #   all               preflight, code (constructorless registry and account),
-#                     publish-constructorless, constructorless, seed, create-author
-#                     perch, names perch, create-author nido, names nido
+#                     publish-constructorless, constructorless, seed, verifiers,
+#                     seed-verifiers, create-author perch, names perch,
+#                     create-author nido, names nido
 #
 # Options:
 #   --source ID        required: the signer and fee payer (a stellar-cli identity,
@@ -143,12 +156,14 @@ case "$NETWORK" in
         PASSPHRASE="Test SDF Network ; September 2015"
         EXPECT_PERCH=CBZGS6DZP6OQHMX2IMG73S54VJCKVZPAMPDJ26ZNAEUXI5LDSIDCIVT5
         EXPECT_CONSTRUCTORLESS=CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM
+        EXPECT_VERIFIERS=CCHJ7RWPMO33JB5PS74B64N4LVTWCGLEMH5IAKYCV32X56MXGYLHN5HW
         EXPECT_NIDO=CDTMMWLBD2F4OCQXTJYNVUFXOWGAPA3OQBZPPZUINN7VITCKOAVXRG4T ;;
     mainnet)
         RPC_URL="${STELLAR_RPC_URL:-https://mainnet.sorobanrpc.com}"
         PASSPHRASE="Public Global Stellar Network ; September 2015"
         EXPECT_PERCH=CCDXWLV66FRSOAUNDIUWLWFONIQJ7DGG3IFJP76FP6RJYEGIHA56A4HO
         EXPECT_CONSTRUCTORLESS=CC236AK2RX7MUO7BV7JYDDW5KHZ3X7YYJOJKCVDC543BQBNNSUCZB7NN
+        EXPECT_VERIFIERS=CCDCKRUV4W4DQYBWFWT4FNQ2QXQPGUQ7EXOZHIHSSLB6YJHMLHPMGDPH
         EXPECT_NIDO=CDPA3SYNH3V46LYCFM4ORMOUK42AY2N7V7GHPPMQUXCTNWVY2DH4Y5RQ ;;
     *) die "--network testnet or --network mainnet" ;;
 esac
@@ -187,13 +202,24 @@ for n in "${SEEDED[@]}"; do
     TIER0+=("$n $v $h")
 done
 for n in $ALLOW_UNATTESTED; do
-    case " ${SEEDED[*]} perch-account $REGISTRY_NAME " in
+    case " ${SEEDED[*]} perch-webauthn-verifier perch-account $REGISTRY_NAME " in
         *" $n "*) warn "--allow-unattested $n: $n's wasm is used on $NETWORK even if no attestation verifies it" ;;
-        *) die "--allow-unattested names a wasm this script uses: ${SEEDED[*]} perch-account $REGISTRY_NAME (got $n)" ;;
+        *) die "--allow-unattested names a wasm this script uses: ${SEEDED[*]} perch-webauthn-verifier perch-account $REGISTRY_NAME (got $n)" ;;
     esac
 done
 hash_of_seeded() { local row; for row in "${TIER0[@]}"; do [ "${row%% *}" != "$1" ] || { echo "${row##* }"; return; }; done; }
 ED25519_HASH="$(hash_of_seeded perch-ed25519-verifier)"
+ED25519_VERSION="$(jq -r '.contracts["perch-ed25519-verifier"].version' "$MANIFEST")"
+# The verifiers a document names from perch/verifiers, seeded there at their
+# released versions and hashes: the authors' ed25519 admin verifier and the
+# WebAuthn verifier the factory pins.
+VERIFIERS_SEEDED=()
+for n in perch-ed25519-verifier perch-webauthn-verifier; do
+    v="$(jq -r --arg n "$n" '.contracts[$n].version // empty' "$MANIFEST")"
+    h="$(jq -r --arg n "$n" '.contracts[$n].sha256 // empty' "$MANIFEST")"
+    [ -n "$v" ] && [ -n "$h" ] || die "$MANIFEST records no $n"
+    VERIFIERS_SEEDED+=("$n $v $h")
+done
 COMPILER_HASH="$(hash_of_seeded perch-doc-compiler)"
 # Every other name the stack publishes (the account is install-only).
 read -r -a PERCH_SYNTH_NAMES <<<"$(jq -r --arg s " ${SEEDED[*]} " \
@@ -391,10 +417,11 @@ WASM=""
 wasm_file() { # name hash -> WASM
     local f="$WASM_DIR/$1-$2.wasm" row n v h
     if [ ! -f "$f" ]; then
-        for row in "${TIER0[@]}"; do
+        for row in "${TIER0[@]}" "${VERIFIERS_SEEDED[@]}"; do
             read -r n v h <<<"$row"
-            [ "$n" = "$1" ] || continue
+            [ "$n" = "$1" ] && [ "$h" = "$2" ] || continue
             release_asset "$1" "$v" "$f" || true
+            break
         done
         [ -f "$f" ] || testnet_wasm "$2" "$f" || true
     fi
@@ -510,8 +537,15 @@ ADMIN_KEY_G="$(address_of "${ADMIN_KEY:-$SRC_G}")"
 [[ "$ADMIN_KEY_G" == G* ]] || die "--admin-key must be a G address (an ed25519 key)"
 [ -z "$CI_KEY" ] || [[ "$CI_KEY" =~ ^G[A-Z2-7]{55}$ ]] || die "--ci-key must be a G address"
 
-cmp -s "$PINS/registry.path" "$REPO/crates/perch-account-factory/wasm/registry.path" ||
-    die "the account's and the factory's wasm/registry.path differ"
+# Every crate that commits a path commits the same one.
+shopt -s nullglob
+for name in registry.path verifiers.path; do
+    copies=("$REPO"/crates/*/wasm/"$name")
+    for p in "${copies[@]}"; do
+        cmp -s "$p" "${copies[0]}" || die "${p#"$REPO"/} differs from ${copies[0]#"$REPO"/}"
+    done
+done
+shopt -u nullglob
 read -r -a HOPS <<<"$("$DERIVE" chain "$PASSPHRASE" | tr '\n' ' ')"
 [ "${#HOPS[@]}" = 3 ] || die "registry.path derives ${#HOPS[@]} hops; this script creates root/<project>/<registry>"
 ROOT="${HOPS[0]}" PERCH="${HOPS[1]}" CONSTRUCTORLESS="${HOPS[2]}"
@@ -519,6 +553,12 @@ NIDO_REG="$(derive_name "$ROOT" nido)"
 [ "$PERCH" = "$EXPECT_PERCH" ] || die "derived perch $PERCH is not the expected $EXPECT_PERCH"
 [ "$CONSTRUCTORLESS" = "$EXPECT_CONSTRUCTORLESS" ] || die "derived constructorless $CONSTRUCTORLESS is not the expected $EXPECT_CONSTRUCTORLESS"
 [ "$NIDO_REG" = "$EXPECT_NIDO" ] || die "derived nido $NIDO_REG is not the expected $EXPECT_NIDO"
+# perch/verifiers: a sibling of constructorless under the same perch.
+read -r -a VHOPS <<<"$("$DERIVE" chain "$PASSPHRASE" "$PINS/verifiers.path" | tr '\n' ' ')"
+[ "${#VHOPS[@]}" = 3 ] && [ "${VHOPS[0]}" = "$ROOT" ] && [ "${VHOPS[1]}" = "$PERCH" ] ||
+    die "verifiers.path derives ${VHOPS[*]}; this script creates root/perch/<registry>"
+VERIFIERS="${VHOPS[2]}"
+[ "$VERIFIERS" = "$EXPECT_VERIFIERS" ] || die "derived verifiers $VERIFIERS is not the expected $EXPECT_VERIFIERS"
 # The authors' admin verifier and the compiler their apply_doc calls, at
 # their content addresses in constructorless (the account derives them).
 ED25519_VERIFIER="$(content "$CONSTRUCTORLESS" "$ED25519_HASH")"
@@ -572,6 +612,7 @@ cmd_preflight() {
         fi
     done
     log "constructorless will be $CONSTRUCTORLESS = deployer(perch, sha256(\"constructorless\"))"
+    log "verifiers will be $VERIFIERS = deployer(perch, sha256(\"verifiers\"))"
     log "perch author will be $PERCH_AUTHOR, nido author $NIDO_AUTHOR = deployer($SRC_G, sha256(\"<project>-author\"))"
 }
 
@@ -621,78 +662,85 @@ cmd_publish_constructorless() {
     send_invoke "$PERCH" "${args[@]}"
 }
 
-cmd_constructorless() {
-    local init args at r fee
+# A managed sub-registry of perch running the constructorless registry code:
+# constructorless (the infra) or verifiers (the verifiers a document names).
+cmd_subregistry() { # name expected-id
+    local name="$1" expected="$2" init args at r fee
     registry_wasm
     if [ "$PRESENT_perch" != 1 ]; then
         warn "stops here: perch is not on $NETWORK yet"
-        plan "then: $PERCH.deploy(\"$REGISTRY_NAME\", \"$REGISTRY_VERSION\", \"constructorless\", owner $OWNER_G, [admin $ADMIN_G, manager $MANAGER_G, root $ROOT], None) -> $CONSTRUCTORLESS"
+        plan "then: $PERCH.deploy(\"$REGISTRY_NAME\", \"$REGISTRY_VERSION\", \"$name\", owner $OWNER_G, [admin $ADMIN_G, manager $MANAGER_G, root $ROOT], None) -> $expected"
         return 1
     fi
-    at="$(name_in "$PERCH" constructorless)"
-    if [ "$at" = "$CONSTRUCTORLESS" ]; then
-        log "constructorless is at its derived id $CONSTRUCTORLESS"
-        check_roles constructorless "$CONSTRUCTORLESS"
-        [ "$(executable_of "$CONSTRUCTORLESS")" = "$REGISTRY_HASH" ] || die "constructorless does not run $REGISTRY_HASH"
+    at="$(name_in "$PERCH" "$name")"
+    if [ "$at" = "$expected" ]; then
+        log "$name is at its derived id $expected"
+        check_roles "$name" "$expected"
+        [ "$(executable_of "$expected")" = "$REGISTRY_HASH" ] || die "$name does not run $REGISTRY_HASH"
         return
     fi
-    [ -z "$at" ] || die "perch's constructorless points at $at, not $CONSTRUCTORLESS"
+    [ -z "$at" ] || die "perch's $name points at $at, not $expected"
     [ "$(hash_in "$PERCH" "$REGISTRY_NAME" "$REGISTRY_VERSION")" = "$REGISTRY_HASH" ] ||
         { warn "stops here: perch does not publish $REGISTRY_NAME $REGISTRY_VERSION yet (publish-constructorless)"; return 1; }
-    # A named deploy with no deployer: salt sha256("constructorless") from
-    # perch itself, which is what puts it at the derived id.
+    # A named deploy with no deployer: salt sha256(name) from perch itself,
+    # which is what puts it at the derived id.
     init="[{\"address\":\"$ADMIN_G\"},{\"address\":\"$MANAGER_G\"},{\"address\":\"$ROOT\"}]"
-    args=(deploy --wasm_name "$REGISTRY_NAME" --version "\"$REGISTRY_VERSION\"" --contract_name constructorless --admin "$OWNER_G" --init "$init")
+    args=(deploy --wasm_name "$REGISTRY_NAME" --version "\"$REGISTRY_VERSION\"" --contract_name "$name" --admin "$OWNER_G" --init "$init")
     r="$(simulate "$PERCH" "${args[@]}")"
-    [ "$r" = "\"$CONSTRUCTORLESS\"" ] || die "perch.deploy simulated to $r, expected $CONSTRUCTORLESS"
+    [ "$r" = "\"$expected\"" ] || die "perch.deploy simulated to $r, expected $expected"
     fee="$(fee_of "$PERCH" "${args[@]}")"
-    log "simulated: constructorless -> $CONSTRUCTORLESS, fee $(xlm "$fee")"
+    log "simulated: $name -> $expected, fee $(xlm "$fee")"
     [ "$SEND" = 1 ] || return 0
     require_signer "$MANAGER_G" "perch.deploy"
-    mainnet_gate "deploying constructorless" "$fee"
+    mainnet_gate "deploying $name" "$fee"
     send_invoke "$PERCH" "${args[@]}"
 }
 
-# The tier-0 an author's apply_doc needs, at their content addresses. A
-# managed registry's first publish of a name needs only its manager (the
-# author it names does not sign), and deploy_stateless is permissionless.
-cmd_seed() {
-    local row n v h at have args fee
-    for row in "${TIER0[@]}"; do
+cmd_constructorless() { cmd_subregistry constructorless "$CONSTRUCTORLESS"; }
+cmd_verifiers() { cmd_subregistry verifiers "$VERIFIERS"; }
+
+# Contracts at their content addresses in a managed registry: the first
+# publish of each released hash (a managed registry's first publish of a name
+# needs only its manager; the author it names does not sign), then
+# deploy_stateless, which is permissionless.
+seed_into() { # label registry rows...
+    local label="$1" reg="$2" row n v h at have args fee
+    shift 2
+    for row in "$@"; do
         read -r n v h <<<"$row"
         # Deployed at its content address means published and deployed:
         # anything less is still to publish or deploy.
-        [ "$(executable_of "$(content "$CONSTRUCTORLESS" "$h")")" = "$h" ] || wasm_file "$n" "$h"
+        [ "$(executable_of "$(content "$reg" "$h")")" = "$h" ] || wasm_file "$n" "$h"
         ensure_code "$n" "$h"
     done
-    if ! instance_exists "$CONSTRUCTORLESS"; then
-        warn "stops here: constructorless is not on $NETWORK yet"
-        for row in "${TIER0[@]}"; do
+    if ! instance_exists "$reg"; then
+        warn "stops here: $label is not on $NETWORK yet"
+        for row in "$@"; do
             read -r n v h <<<"$row"
-            plan "then: $CONSTRUCTORLESS.publish_hash(\"$n\", $PERCH_AUTHOR, $h, \"$v\") by its manager, then deploy_stateless(\"$n\", \"$v\") -> $(content "$CONSTRUCTORLESS" "$h")"
+            plan "then: $reg.publish_hash(\"$n\", $PERCH_AUTHOR, $h, \"$v\") by its manager, then deploy_stateless(\"$n\", \"$v\") -> $(content "$reg" "$h")"
         done
         return 1
     fi
-    for row in "${TIER0[@]}"; do
+    for row in "$@"; do
         read -r n v h <<<"$row"
-        at="$(content "$CONSTRUCTORLESS" "$h")"
-        have="$(hash_in "$CONSTRUCTORLESS" "$n" "$v")"
+        at="$(content "$reg" "$h")"
+        have="$(hash_in "$reg" "$n" "$v")"
         if [ -z "$have" ]; then
             args=(publish_hash --wasm_name "$n" --author "$PERCH_AUTHOR" --wasm_hash "$h" --version "$v")
-            fee="$(fee_of "$CONSTRUCTORLESS" "${args[@]}")"
-            plan "$n $v: first publish of its released hash $h, author $PERCH_AUTHOR: fee $(xlm "$fee")"
+            fee="$(fee_of "$reg" "${args[@]}")"
+            plan "$n $v in $label: first publish of its released hash $h, author $PERCH_AUTHOR: fee $(xlm "$fee")"
             if [ "$SEND" = 1 ]; then
-                require_signer "$(simulate "$CONSTRUCTORLESS" manager | unquote)" "constructorless's first publish of $n"
+                require_signer "$(simulate "$reg" manager | unquote)" "$label's first publish of $n"
                 mainnet_gate "publishing $n" "$fee"
-                send_invoke "$CONSTRUCTORLESS" "${args[@]}"
+                send_invoke "$reg" "${args[@]}"
             fi
         elif [ "$have" != "$h" ]; then
-            die "constructorless publishes $n $v as $have, not $h"
+            die "$label publishes $n $v as $have, not $h"
         fi
         if [ "$(executable_of "$at")" = "$h" ]; then
-            log "$n is deployed at its content address $at"
+            log "$n is deployed at its content address $at in $label"
         elif [ "$SEND" = 1 ]; then
-            send_invoke "$CONSTRUCTORLESS" deploy_stateless --wasm_name "$n" --version "\"$v\""
+            send_invoke "$reg" deploy_stateless --wasm_name "$n" --version "\"$v\""
             [ "$(executable_of "$at")" = "$h" ] || die "$n is not running $h at $at after deploy_stateless"
         else
             plan "then: deploy_stateless(\"$n\", \"$v\") -> $at (permissionless)"
@@ -700,13 +748,39 @@ cmd_seed() {
     done
 }
 
+# The tier-0 an author's apply_doc needs, at their content addresses.
+cmd_seed() { seed_into constructorless "$CONSTRUCTORLESS" "${TIER0[@]}"; }
+
+# The verifiers a document names, at their content addresses in
+# perch/verifiers.
+cmd_seed_verifiers() { seed_into verifiers "$VERIFIERS" "${VERIFIERS_SEEDED[@]}"; }
+
+# The authors' External admin verifier. A compiler that resolves verifier
+# names (its verifier_registry view is perch/verifiers) refuses an admin
+# document naming a verifier by contract id, and the account built with it
+# admits only a verifier perch/verifiers deployed: the ed25519 verifier
+# there, named. An earlier compiler reads no names: the one in
+# constructorless, by contract id.
+ADMIN_VERIFIER="$ED25519_VERIFIER" ADMIN_VERIFIER_NAME=""
+admin_verifier() {
+    if instance_exists "$COMPILER" && [ "$(simulate "$COMPILER" verifier_registry | unquote)" = "$VERIFIERS" ]; then
+        ADMIN_VERIFIER="$(content "$VERIFIERS" "$ED25519_HASH")"
+        ADMIN_VERIFIER_NAME="perch-ed25519-verifier@$ED25519_VERSION"
+        log "the compiler resolves verifier names: the admin signer is $ADMIN_VERIFIER_NAME at $ADMIN_VERIFIER"
+    else
+        ADMIN_VERIFIER="$ED25519_VERIFIER" ADMIN_VERIFIER_NAME=""
+    fi
+}
+
 # The author document, in the shape of testdata/deploy/perch-testnet.template.json.
 author_doc() { # registry ci expiry
-    jq -n --arg net "$PASSPHRASE" --arg reg "$1" --arg verifier "$ED25519_VERIFIER" --arg mode "$ADMIN_SIGNER" \
+    jq -n --arg net "$PASSPHRASE" --arg reg "$1" --arg verifier "$ADMIN_VERIFIER" --arg name "$ADMIN_VERIFIER_NAME" \
+        --arg mode "$ADMIN_SIGNER" \
         --arg g "$ADMIN_KEY_G" --arg key "$("$DERIVE" key "$ADMIN_KEY_G")" --arg ci "$2" --argjson until "$3" '
         {version: 1, network: $net,
          signers: [(if $mode == "delegated" then {id: "admin", address: $g}
-                    else {id: "admin", verifier: $verifier, key: $key} end),
+                    elif $name == "" then {id: "admin", verifier: $verifier, key: $key}
+                    else {id: "admin", verifier: $verifier, "verifier-name": $name, key: $key} end),
                    {id: "ci", address: $ci}],
          rules: [
            {name: "admin", scope: {type: "self-admin"}, principals: {type: "all", signers: ["admin"]}},
@@ -769,6 +843,7 @@ cmd_create_author() {
     # 1. The account: a design-A perch-account, deployed directly (the factory
     #    is itself deploy_stateless'd into constructorless later).
     local fresh=0
+    admin_verifier
     if instance_exists "$author"; then
         log "$project author already exists, running $(executable_of "$author")"
     else
@@ -783,12 +858,12 @@ cmd_create_author() {
             signer="[{\"Delegated\":\"$ADMIN_KEY_G\"}]"
             plan "deploy perch-account $hash from $SRC_G with salt sha256(\"$project-author\") -> $author, admin signer Delegated($ADMIN_KEY_G)"
         else
-            signer="[{\"External\":[\"$ED25519_VERIFIER\",\"$("$DERIVE" key "$ADMIN_KEY_G")\"]}]"
-            plan "deploy perch-account $hash from $SRC_G with salt sha256(\"$project-author\") -> $author, admin signer External(ed25519 verifier $ED25519_VERIFIER, key of $ADMIN_KEY_G)"
+            signer="[{\"External\":[\"$ADMIN_VERIFIER\",\"$("$DERIVE" key "$ADMIN_KEY_G")\"]}]"
+            plan "deploy perch-account $hash from $SRC_G with salt sha256(\"$project-author\") -> $author, admin signer External(ed25519 verifier $ADMIN_VERIFIER, key of $ADMIN_KEY_G)"
             # The constructor registers the signer through its verifier
             # (batch_canonicalize_key), so an External admin needs it deployed.
-            if ! instance_exists "$ED25519_VERIFIER"; then
-                warn "stops here: an External admin's constructor calls its verifier $ED25519_VERIFIER, which seed deploys (or use --admin-signer delegated)"
+            if ! instance_exists "$ADMIN_VERIFIER"; then
+                warn "stops here: an External admin's constructor calls its verifier $ADMIN_VERIFIER, which seed or seed-verifiers deploys (or use --admin-signer delegated)"
                 return 1
             fi
         fi
@@ -925,6 +1000,8 @@ cmd_all() {
     cmd_publish_constructorless || stopped=1
     [ "$stopped" = 1 ] || cmd_constructorless || stopped=1
     cmd_seed || stopped=1
+    [ "$stopped" = 1 ] || cmd_verifiers || stopped=1
+    [ "$stopped" = 1 ] || cmd_seed_verifiers || stopped=1
     [ "$stopped" = 1 ] || PROJECT=perch cmd_create_author || stopped=1
     [ "$stopped" = 1 ] || PROJECT=perch cmd_names || stopped=1
     if [ "$NIDO" = 1 ]; then
@@ -933,7 +1010,7 @@ cmd_all() {
     fi
     if [ "$stopped" = 1 ]; then
         warn "all stopped at the first step the chain is not ready for; uploads simulated so far: $(xlm "$COST")"
-        plan "remaining, in order: publish-constructorless, constructorless, seed, create-author --project perch, names --project perch, create-author --project nido, names --project nido"
+        plan "remaining, in order: publish-constructorless, constructorless, seed, verifiers, seed-verifiers, create-author --project perch, names --project perch, create-author --project nido, names --project nido"
         return 0
     fi
     log "all done; uploads simulated: $(xlm "$COST")"
@@ -946,6 +1023,8 @@ case "$STEP" in
     publish-constructorless) cmd_preflight; cmd_publish_constructorless ;;
     constructorless) cmd_preflight; cmd_constructorless ;;
     seed) cmd_preflight; cmd_seed ;;
+    verifiers) cmd_preflight; cmd_verifiers ;;
+    seed-verifiers) cmd_preflight; cmd_seed_verifiers ;;
     create-author) cmd_preflight; cmd_create_author ;;
     names) cmd_preflight; cmd_names ;;
     all) cmd_all ;;

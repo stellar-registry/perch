@@ -29,11 +29,11 @@ version must check they are the same code
 ## Usage
 
 ```ts
-import { policy, external, canonicalJson, docHash, ruleHash, configHash } from '@stellar-registry/perch';
+import { policy, named, canonicalJson, docHash, ruleHash, configHash } from '@stellar-registry/perch';
 
 const doc = policy()
   .network('Test SDF Network ; September 2015')
-  .signer('admin', external(VERIFIER_ADDRESS, ADMIN_PUBKEY_HEX))
+  .signer('admin', named('perch-webauthn-verifier@0.1.2', VERIFIER_ADDRESS, ADMIN_PUBKEY_HEX))
   .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
   .build();
 
@@ -47,6 +47,35 @@ configHash(docWithRecovery); // sha256("perch/recovery/config" || recovery bytes
 own domain tag (`CANONICAL.md`, "Fragment hashes"), so callers never need to
 spell the tags themselves; the tags are exported as `RULE_HASH_DOMAIN` and
 `CONFIG_HASH_DOMAIN`.
+
+### Verifiers
+
+An external signer names its verifier one of two ways. `named(name@version,
+address, key)` names one from Perch's managed `perch/verifiers` registry:
+the document carries `"verifier-name"` beside `"verifier"`, `doc_hash` binds
+both, and the doc compiler resolves the name and exact version on-chain and
+refuses the document unless it is that address. `external(address, key)`
+names it by contract id alone: an *unverified* verifier, whose `verify`
+decides whatever the rules holding its signers allow.
+
+- An admin document (one with a self-admin rule or a `recovery` member) may
+  name no unverified verifier, and neither may a recovery target.
+- A scoped document may, at most one signer per unverified verifier in a
+  rule, and the compile result lists them. Show `unverifiedWarnings(doc)`
+  before the owner approves it: one `"Unverified verifier C…: it can
+  approve anything this rule allows"` per rule and verifier.
+
+The compiler refuses either case, and a name that does not resolve to its
+address, with `DocInvalid`. `checkVerifiers(doc)` applies both refusals
+before submission and says which (`UnverifiedVerifier`,
+`UnverifiedVerifierReused`).
+`resolveVerifierName(name, passphrase, fetchHash)` finds the address a name
+resolves to, as the compiler does: `perch/verifiers` (`verifierRegistryId`)
+publishes a wasm hash under the name and version, deployed at its content
+address there (`verifierAddress`). perch-js depends on no Stellar SDK, so
+`fetchHash` is the caller's simulated call of the registry's `fetch_hash`.
+An account stores the address, never the name: a name the registry later
+repoints changes no applied account until it applies a document again.
 
 Parsing/validating an existing document:
 
@@ -203,8 +232,9 @@ landed is skipped when an operation is retried or started again.
 ### Reading a scoped document
 
 An account keeps no scoped document's text. It keeps each rule's name and
-stored rule (`scope(id)`, `scope_rule_set(id)`) and the document's signer
-ids (`scope_signer_ids(id)`), and applies a scoped document only in normal
+stored rule (`scope(id)`, `scope_rule_set(id)`), the document's signer ids
+(`scope_signer_ids(id)`) and each signer's `verifier-name`
+(`scope_verifier_names(id)`), and applies a scoped document only in normal
 form, so those give the text back:
 
 ```ts
@@ -214,7 +244,7 @@ const scope = await readScopeDoc(new account.Client(opts(accountId)), accountId,
 // null when the account has no scope there; else { doc, canonical, docHash }
 ```
 
-`rebuildScopeDoc` rebuilds the document from those three views
+`rebuildScopeDoc` rebuilds the document from those four views
 (`decodeStoredScope` decodes them as the generated bindings return them),
 and throws `ScopeNotRebuilt` unless its canonical text hashes to the
 scope's stored `doc_hash`, so a rebuild is never trusted on its own. Write
@@ -236,7 +266,8 @@ account refuses any other with `NotNormalForm`.
 | `AccountFrozen` | A `Protected` recovery attempt is authorized: before signing (with the attempt and its expiry), or the account refusing a submission |
 | `InconsistentRead` | Reads kept disagreeing on the revision, or an RPC went backwards |
 | `CompilerMismatch` | The reader's compiler is not the account's pinned one |
-| `ScopeNotRebuilt` | A scope's stored rules and signer ids do not rebuild to its `doc_hash` |
+| `ScopeNotRebuilt` | A scope's stored rules, signer ids and verifier names do not rebuild to its `doc_hash` |
+| `UnverifiedVerifier`, `UnverifiedVerifierReused` | `checkVerifiers`: an admin document naming a verifier by contract id alone, or a rule holding two signers under one such verifier |
 | `RuleNotFound`, `UnsupportedCapability`, `Aborted` | As named |
 
 ### Hashes and encodings

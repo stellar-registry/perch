@@ -74,7 +74,7 @@ use soroban_sdk::{
     auth::{Context, ContractContext, CustomAccountInterface},
     contractevent, contracttrait, contracttype,
     crypto::Hash,
-    Address, Bytes, BytesN, ContractExecutable, Env, String, Symbol, Val, Vec,
+    Address, Bytes, BytesN, ContractExecutable, Env, Executable, String, Symbol, Val, Vec,
 };
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
 
@@ -94,6 +94,38 @@ pub use rules::{
 // Re-exported so `impl_perch_smart_account!` can name it via `$crate::…`
 // regardless of the caller's dependency graph.
 pub use soroban_sdk;
+
+/// The registry Perch's verified verifiers are `deploy_stateless`'d from,
+/// `perch/verifiers`, derived like [`constructorless_registry`] from the
+/// committed `wasm/verifiers.path`: the registry a document's
+/// `verifier-name` resolves in (`perch_doc_compiler`).
+pub fn verifier_registry(env: &Env) -> Address {
+    verifiers::registry(env)
+}
+
+/// Whether `verifier` is a contract `perch/verifiers` deployed: its code is
+/// a wasm, and it sits at that wasm's content address in the registry,
+/// where only the registry's `deploy_stateless` of a published hash puts a
+/// contract. No call: the address and the code it runs say it.
+pub fn is_verified_verifier(env: &Env, verifier: &Address) -> bool {
+    match verifier.executable() {
+        Some(Executable::Wasm(hash)) => {
+            env.deployer()
+                .with_address(verifier_registry(env), hash)
+                .deployed_address()
+                == *verifier
+        }
+        _ => false,
+    }
+}
+
+mod verifiers {
+    perch_registry_resolve::registry_contract! {
+        mod: registry,
+        path_file: "wasm/verifiers.path",
+    }
+    pub use registry::registry;
+}
 
 /// The registry the infra was `deploy_stateless`'d from — the content-addressed
 /// deployer the infra derive their address from: the deployment manifest's
@@ -194,6 +226,10 @@ pub enum PerchAccountError {
     /// expired.
     // docs/account-interface.md, "apply_scope".
     NotNormalForm,
+    /// A constructor admin signer's verifier is not one `perch/verifiers`
+    /// deployed.
+    // docs/account-interface.md, "Constructor".
+    UnverifiedVerifier,
 }
 
 /// Why `__check_auth` refused before evaluating any rule.
@@ -221,8 +257,10 @@ pub enum PerchAuthError {
 
 /// A scoped document as the account stores it: [`ScopeRecord`]'s fields,
 /// with each rule's record holding its stored rule, the scope's position in
-/// the scope index, and the document's signer ids in declaration order,
-/// which with the records give back its canonical text.
+/// the scope index, the document's signer ids in declaration order, and
+/// each signer's `verifier-name` (empty where it has none; the list empty
+/// when no signer has one), which with the records give back its canonical
+/// text.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredScope {
@@ -231,6 +269,7 @@ pub struct StoredScope {
     pub pos: u32,
     pub rules: Vec<RuleRecord>,
     pub signer_ids: Vec<String>,
+    pub verifier_names: Vec<String>,
 }
 
 impl StoredScope {
@@ -1011,6 +1050,14 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         PerchStorage::get_scopes(e, &scope).map(|s| s.signer_ids)
     }
 
+    /// Each signer's `verifier-name` in the scoped document under `scope`,
+    /// aligned with `scope_signer_ids`, if any: empty where a signer has
+    /// none, and no entries when no signer has one.
+    // docs/account-interface.md, "Views".
+    fn scope_verifier_names(e: &Env, scope: u32) -> Option<Vec<String>> {
+        PerchStorage::get_scopes(e, &scope).map(|s| s.verifier_names)
+    }
+
     /// How many scope ids have a record, wiped ones included.
     fn scope_count(e: &Env) -> u32 {
         PerchStorage::get_scope_count(e).unwrap_or(0)
@@ -1250,12 +1297,18 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     for s in compiled.model.get_unchecked(0).signers.iter() {
         signer_ids.push_back(s.id);
     }
+    let named = compiled.verifier_names.iter().any(|n| !n.is_empty());
     let applied = StoredScope {
         gen,
         doc_hash: compiled.doc_hash.clone(),
         pos,
         rules: records,
         signer_ids,
+        verifier_names: if named {
+            compiled.verifier_names.clone()
+        } else {
+            Vec::new(e)
+        },
     };
     if record.as_ref() != Some(&applied) {
         PerchStorage::set_scopes(e, &scope, &applied);
@@ -1734,12 +1787,22 @@ fn apply_rules(
 /// entry points), so the admin signers hold full owner authority. Every
 /// other rule arrives via an applied, doc-reviewed document.
 ///
-/// The signers are held to the install-time limits (`rules::check`) and
-/// refused if two are one key (`auth::check_distinct`), and the rule is
-/// announced as OZ's registry announces one (`ContextRuleAdded`).
+/// The signers are held to the install-time limits (`rules::check`),
+/// refused (`UnverifiedVerifier`) if an external one's verifier is not one
+/// `perch/verifiers` deployed ([`is_verified_verifier`]), as an admin
+/// document's must be, and refused if two are one key
+/// (`auth::check_distinct`), and the rule is announced as OZ's registry
+/// announces one (`ContextRuleAdded`).
 pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
     let rule = rules::admin_rule(e, rules::allocate(e), admin_signers);
     rules::check(e, &rule);
+    for signer in admin_signers.iter() {
+        if let Signer::External(verifier, _) = &signer {
+            if !is_verified_verifier(e, verifier) {
+                soroban_sdk::panic_with_error!(e, PerchAccountError::UnverifiedVerifier);
+            }
+        }
+    }
     auth::check_distinct(e, admin_signers);
     let record = RuleRecord {
         id: rule.id,

@@ -22,7 +22,15 @@ use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Vec};
 
 use crate::fixture::{self, AnyKeyVerifier, FIXTURE_VERIFIERS};
-use crate::Bootstrap;
+use crate::{verifiers, Bootstrap};
+
+/// The `verifier-name` [`World::verifier`] is published under.
+pub const ED25519_VERIFIER_NAME: &str = "perch-ed25519-verifier@1.0.0";
+
+/// The `verifier-name`s [`World::fixture`] gives the fixture's admin and ci
+/// verifiers, in [`FIXTURE_VERIFIERS`]'s order.
+pub const FIXTURE_VERIFIER_NAMES: [&str; 2] =
+    ["fixture-admin-verifier@1.0.0", "fixture-ci-verifier@1.0.0"];
 
 /// Register the compiler + interpreter types at the content addresses the
 /// account derives — `deployer(constructorless, pinned_hash)` — under the
@@ -60,8 +68,13 @@ pub struct World {
     pub compiler: Address,
     /// The interpreter, attachable as an OZ policy.
     pub interpreter: Address,
-    /// The ed25519 verifier backing the admin signer.
+    /// The ed25519 verifier backing the admin signer, deployed as
+    /// `perch/verifiers` deploys one and published there as
+    /// [`ED25519_VERIFIER_NAME`].
     pub verifier: Address,
+    /// The [`AnyKeyVerifier`]s [`World::fixture`] names, in
+    /// [`FIXTURE_VERIFIER_NAMES`]'s order, published there likewise.
+    pub fixture_verifiers: [Address; 2],
     /// The `PerchAccount` (constructor-installed admin as rule 0).
     pub account: Address,
     /// The admin signer set handed to the account constructor.
@@ -84,7 +97,32 @@ impl World {
         PerchAccountClient::new(&self.env, &self.account)
     }
 
-    /// The fixture's frozen canonical `doc_hash`, in this world's `Env`.
+    /// The frozen ci-publish fixture as an admin document can hold it: its
+    /// two verifiers named ([`FIXTURE_VERIFIER_NAMES`]), at
+    /// [`Self::fixture_verifiers`] in place of the frozen addresses, and the
+    /// text otherwise as written.
+    pub fn fixture(&self) -> std::string::String {
+        let mut json = fixture::fixture();
+        for (i, frozen) in FIXTURE_VERIFIERS.iter().enumerate() {
+            let named = format!(
+                r#""verifier": "{}", "verifier-name": "{}""#,
+                crate::delta::strkey(&self.fixture_verifiers[i]),
+                FIXTURE_VERIFIER_NAMES[i]
+            );
+            let written = format!(r#""verifier": "{frozen}""#);
+            assert!(json.contains(&written), "the fixture names {frozen}");
+            json = json.replace(&written, &named);
+        }
+        json
+    }
+
+    /// The canonical `doc_hash` of [`Self::fixture`].
+    pub fn fixture_doc_hash(&self) -> BytesN<32> {
+        let doc = perch_ir::from_json(&self.fixture()).expect("the fixture parses");
+        BytesN::from_array(&self.env, &perch_ir::doc_hash(&doc))
+    }
+
+    /// The frozen fixture's canonical `doc_hash`, in this world's `Env`.
     pub fn ci_publish_doc_hash(&self) -> BytesN<32> {
         fixture::ci_publish_doc_hash(&self.env)
     }
@@ -127,7 +165,16 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
     // `apply_doc(doc)` resolves to exactly these, offline, with no registry
     // contract. Network-dependent, so it runs after the network bind above.
     let (compiler, interpreter) = register_infra_at_derived(&env);
-    let verifier = env.register(PerchEd25519Verifier, ());
+    // The verifiers an admin document names, where `perch/verifiers`
+    // deploys them and published there under their names; the frozen
+    // fixture's raw addresses keep a stand-in too.
+    let verifier = verifiers::deploy(&env, PerchEd25519Verifier);
+    verifiers::name(&env, ED25519_VERIFIER_NAME, &verifier);
+    let fixture_verifiers = FIXTURE_VERIFIER_NAMES.map(|name| {
+        let v = verifiers::deploy(&env, AnyKeyVerifier);
+        verifiers::name(&env, name, &v);
+        v
+    });
     for addr in FIXTURE_VERIFIERS {
         env.register_at(&Address::from_str(&env, addr), AnyKeyVerifier, ());
     }
@@ -148,6 +195,7 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
         compiler,
         interpreter,
         verifier,
+        fixture_verifiers,
         account,
         admin_signers,
     }

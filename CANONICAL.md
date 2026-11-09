@@ -27,6 +27,12 @@ explicit, greppable, reviewable event. **Any change here is a breaking change** 
 bump `CANON_VERSION`, re-freeze the conformance vectors, and be treated as a new
 format, never a silent hash drift.
 
+A new optional member of the model is not such a change: it is written when
+present and omitted when absent, by the rules below, so a document without it
+keeps its bytes and its `doc_hash`. The document's `recovery` member and an
+external signer's `verifier-name` (`"<name>@<version>"`, beside its
+`verifier` address, which `doc_hash` then binds with it) are two.
+
 ## Encoding
 
 The canonical form is JSON per RFC 8785 (JSON Canonicalization Scheme),

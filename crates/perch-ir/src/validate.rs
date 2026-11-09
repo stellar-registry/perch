@@ -100,6 +100,15 @@ pub enum ValidationError {
         /// The malformed address string.
         address: String,
     },
+    /// A signer's `verifier-name` is not spelled `<name>@<version>` with a
+    /// registry name and an exact `MAJOR.MINOR.PATCH` version
+    /// ([`crate::verifier::parse_verifier_name`]).
+    InvalidVerifierName {
+        /// The offending signer id.
+        id: String,
+        /// The malformed name.
+        name: String,
+    },
     /// A delegated signer's `address` is not shaped like a G- or C-address
     /// strkey (including the CRC16 checksum).
     InvalidDelegatedAddress {
@@ -448,6 +457,10 @@ impl fmt::Display for ValidationError {
                 f,
                 "signer `{id}`: verifier `{address}` is not a C-address strkey"
             ),
+            E::InvalidVerifierName { id, name } => write!(
+                f,
+                "signer `{id}`: verifier-name `{name}` is not `<name>@<MAJOR>.<MINOR>.<PATCH>`"
+            ),
             E::InvalidDelegatedAddress { id, address } => write!(
                 f,
                 "signer `{id}`: delegated address `{address}` is not a G- or C-address strkey"
@@ -720,7 +733,19 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
             });
         }
         match &signer.method {
-            SignerMethod::External { verifier, key } => {
+            SignerMethod::External {
+                verifier,
+                key,
+                verifier_name,
+            } => {
+                if let Some(name) = verifier_name {
+                    if crate::verifier::parse_verifier_name(name).is_none() {
+                        errors.push(ValidationError::InvalidVerifierName {
+                            id: signer.id.clone(),
+                            name: name.clone(),
+                        });
+                    }
+                }
                 match hex::decode(key) {
                     Err(_) => errors.push(ValidationError::InvalidSignerKeyHex {
                         id: signer.id.clone(),

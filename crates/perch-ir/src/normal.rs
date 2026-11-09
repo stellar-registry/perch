@@ -137,6 +137,7 @@ mod tests {
             method: SignerMethod::External {
                 verifier: V.into(),
                 key: key.into(),
+                verifier_name: None,
             },
         }
     }

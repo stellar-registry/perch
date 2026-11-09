@@ -867,7 +867,12 @@ below holds:
 2. A replacement credential has the same kind as the credential it
    replaces. An external credential must use the same verifier contract as
    the one it replaces, so recovery can never route a signer slot through a
-   verifier the account had not already adopted for that slot.
+   verifier the account had not already adopted for that slot. The target
+   takes only the replacement's key: the signer keeps its verifier and its
+   `verifier-name`. A target is an admin document, so the compiler refuses
+   one naming a verifier by contract id alone
+   (`DocCompilerError::DocInvalid`; `docs/account-interface.md`,
+   "Verifiers"), a compromise baseline's included.
 3. Lost-key attempts replace at least one signer. Compromise attempts may
    replace none, which restores the baseline as is.
 
@@ -966,7 +971,8 @@ role; a document rule by its name and compiled scope (context type)**:
   verifier's canonical form and two signers with one verifier and key, so
   an apply asks no verifier. The constructor, whose signers no compiler has
   seen, refuses two that are one key (3007), asking each verifier's
-  `batch_canonicalize_key` once.
+  `batch_canonicalize_key` once, and an external signer whose verifier
+  `perch/verifiers` did not deploy (`PerchAccountError::UnverifiedVerifier`).
 - An installed rule whose slot the target lacks is removed, before
   anything is added; a target rule whose slot is not installed is added.
 - A document rule whose `not-after-ledger` has already passed at the

@@ -25,7 +25,15 @@ pub const EXPIRY: u32 = 720;
 
 pub struct Stack {
     pub factory: String,
+    /// The WebAuthn verifier the factory pins and every passkey signer
+    /// names: the manifest's `verifiers` entry, in `perch/verifiers`. A
+    /// manifest without one predates `perch/verifiers`; its factory pins the
+    /// stack registry's copy.
     pub webauthn: String,
+    /// Its `verifier-name` (`perch-webauthn-verifier@<version>`), which an
+    /// admin document needs; `None` with a manifest that predates
+    /// `perch/verifiers`, whose compiler takes the contract id alone.
+    pub webauthn_name: Option<String>,
     pub compiler: String,
     pub controller: String,
     pub adapter: String,
@@ -50,9 +58,26 @@ impl Stack {
                 .try_into()
                 .map_err(|_| anyhow::anyhow!("not 32 bytes"))
         };
+        let (webauthn, webauthn_name) =
+            match m["verifiers"]["contracts"].get("perch-webauthn-verifier") {
+                Some(v) => (
+                    v["address"]
+                        .as_str()
+                        .context("perch/verifiers perch-webauthn-verifier address")?
+                        .to_string(),
+                    Some(
+                        v["name"]
+                            .as_str()
+                            .context("perch/verifiers perch-webauthn-verifier name")?
+                            .to_string(),
+                    ),
+                ),
+                None => (addr("perch-webauthn-verifier")?, None),
+            };
         Ok(Self {
             factory: addr("perch-account-factory")?,
-            webauthn: addr("perch-webauthn-verifier")?,
+            webauthn,
+            webauthn_name,
             compiler: addr("perch-doc-compiler")?,
             controller: addr("perch-recovery")?,
             adapter: addr("perch-zk-adapter")?,
@@ -64,6 +89,21 @@ impl Stack {
                 .context("account hash")?)?,
             xlm,
         })
+    }
+
+    /// A document signer `id` verified by the stack's WebAuthn verifier, by
+    /// name when the manifest records one.
+    pub fn passkey_signer(&self, id: &str, key: &[u8]) -> String {
+        let name = self
+            .webauthn_name
+            .as_ref()
+            .map(|n| format!(r#","verifier-name":"{n}""#))
+            .unwrap_or_default();
+        format!(
+            r#"{{"id":"{id}","verifier":"{}"{name},"key":"{}"}}"#,
+            self.webauthn,
+            hexs(key)
+        )
     }
 }
 
@@ -294,13 +334,7 @@ impl<'a> World<'a> {
         let recovery = recovery
             .map(|r| format!(r#","recovery":{}"#, self.recovery_json(r)))
             .unwrap_or_default();
-        let signer = |id: &str, key: &SoftPasskey| {
-            format!(
-                r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
-                self.s.webauthn,
-                hexs(&key.key_data())
-            )
-        };
+        let signer = |id: &str, key: &SoftPasskey| self.s.passkey_signer(id, &key.key_data());
         let xlm_rule = |name: &str, signer: &str| {
             format!(
                 r#"{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["{signer}"]}}}}"#,
@@ -330,9 +364,8 @@ impl<'a> World<'a> {
     /// else.
     pub fn guardian_doc(&self, owner: &SoftPasskey, approver: &str) -> Bytes {
         let json = format!(
-            r#"{{"version":1,"network":"{NETWORK}","signers":[{{"id":"owner","verifier":"{}","key":"{}"}},{{"id":"approver","address":"{approver}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"approve","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["approver"]}}}}]}}"#,
-            self.s.webauthn,
-            hexs(&owner.key_data()),
+            r#"{{"version":1,"network":"{NETWORK}","signers":[{},{{"id":"approver","address":"{approver}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"approve","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["approver"]}}}}]}}"#,
+            self.s.passkey_signer("owner", &owner.key_data()),
             self.s.controller,
         );
         Bytes::from_slice(&self.c.env, json.as_bytes())
@@ -857,5 +890,103 @@ pub fn tamper(e: &soroban_sdk::Env, ev: &ZkEvidence) -> ZkEvidence {
     ZkEvidence {
         proof: Bytes::from_slice(e, &proof),
         ..ev.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    const VERIFIERS_WEBAUTHN: &str = "CA4Q6TWJLLMLHRDQ4ADAVNWKDDDZZXACZPXD4OHPT7VPPTU7HBTZVJQ3";
+    const STACK_WEBAUTHN: &str = "CC4VOQWXWKHJK2K6KN6YZQ4TAXTINSI3WOPWHMFVAJSQXCLMKOH7PUIN";
+
+    /// A manifest as `scripts/deploy-stack.sh` writes it, with
+    /// `perch/verifiers` or, `verifiers: false`, from before it.
+    fn manifest(verifiers: bool) -> serde_json::Value {
+        let at = |a: &str| json!({ "address": a });
+        let mut m = json!({
+            "zk": { "circuit_id": "11".repeat(32), "tree_depth": 20 },
+            "contracts": {
+                "perch-account-factory": at("CCWMWUGLT374GMPX5VTPSSOKCKW3OAAIYSEXDZ34WM6AFQMSGJUH324O"),
+                "perch-webauthn-verifier": at(STACK_WEBAUTHN),
+                "perch-doc-compiler": at("CBGZOAOLGLIHH7IXWKCWU2E2B2L2UNHJE32NQTJMNOZ5AEKYXSN5JKFM"),
+                "perch-recovery": at("CCBNXQZYY5ZU7L4KSLZ2Q5BLIBVIPAYCG5MZXLHWZBNYKQGEZIHZKI5V"),
+                "perch-zk-adapter": at("CAED4MOC2XCO2NGVOBXJ3T3TIYDZQ776VQDXVP4V6SUY27UTFKN4FAX3"),
+                "perch-zk-pool": at("CCI6XU4PHSWBWO6J6KRVQKEEWUDJWK3QQCBKGA6FXYHVUJ6JLOX3RAWP"),
+                "perch-account": { "sha256": "22".repeat(32) },
+            },
+        });
+        if verifiers {
+            m["verifiers"] = json!({
+                "id": "CDQG7KTWPERJ37HRQQCTMPTTQ3EO7OUUCRZBD5W7TMWS6ETPE7GZK4WO",
+                "contracts": { "perch-webauthn-verifier": {
+                    "version": "0.1.2",
+                    "name": "perch-webauthn-verifier@0.1.2",
+                    "address": VERIFIERS_WEBAUTHN,
+                } },
+            });
+        }
+        m
+    }
+
+    /// The owner's admin document as `World::doc` writes it.
+    fn admin_doc(s: &Stack) -> perch_ir::PolicyDoc {
+        let key = SoftPasskey::from_seed([3; 32]).public_key();
+        let json = format!(
+            r#"{{"version":1,"network":"{NETWORK}","signers":[{}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}}]}}"#,
+            s.passkey_signer("owner", &key)
+        );
+        let doc = perch_ir::from_json(&json).expect("parses");
+        perch_ir::validate(&doc).expect("valid");
+        doc
+    }
+
+    #[test]
+    fn passkey_signers_name_the_verifier_the_factory_pins_in_perch_verifiers() {
+        let s = Stack::from_manifest(&manifest(true), String::new()).unwrap();
+        assert_eq!(s.webauthn, VERIFIERS_WEBAUTHN);
+        let doc = admin_doc(&s);
+        assert!(perch_ir::is_admin_document(&doc));
+        // Named, so the compiler resolves it instead of refusing an
+        // unverified verifier in an admin document.
+        assert!(perch_ir::unverified_verifiers(&doc).is_empty());
+        match &doc.signers[0].method {
+            perch_ir::SignerMethod::External {
+                verifier,
+                verifier_name,
+                ..
+            } => {
+                assert_eq!(verifier, VERIFIERS_WEBAUTHN);
+                assert_eq!(
+                    verifier_name.as_deref(),
+                    Some("perch-webauthn-verifier@0.1.2")
+                );
+            }
+            other => panic!("not an external signer: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_manifest_from_before_perch_verifiers_keeps_the_stack_registry_verifier() {
+        let s = Stack::from_manifest(&manifest(false), String::new()).unwrap();
+        assert_eq!(
+            (s.webauthn.as_str(), s.webauthn_name.as_deref()),
+            (STACK_WEBAUTHN, None)
+        );
+        assert_eq!(
+            perch_ir::unverified_verifiers(&admin_doc(&s)),
+            std::vec![STACK_WEBAUTHN]
+        );
+    }
+
+    #[test]
+    fn a_verifiers_entry_without_its_name_is_refused() {
+        let mut m = manifest(true);
+        m["verifiers"]["contracts"]["perch-webauthn-verifier"]
+            .as_object_mut()
+            .unwrap()
+            .remove("name");
+        assert!(Stack::from_manifest(&m, String::new()).is_err());
     }
 }

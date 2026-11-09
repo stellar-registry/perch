@@ -68,6 +68,7 @@ const scope = (v: any): StoredScope => ({
   network: v.network,
   docHash: hexToBytes(v.docHash),
   signerIds: v.signerIds,
+  verifierNames: v.verifierNames,
   rules: v.rules.map((r: any) => ({ name: r.name, rule: rule(r.rule) })),
 });
 
@@ -104,7 +105,7 @@ const native = (v: any) => {
     doc_hash: Buffer.from(hexToBytes(v.docHash)),
     rules: v.rules.map(({ name }: any, id: number) => ({ id, name })),
   };
-  return { record, ruleSet, signerIds: v.signerIds };
+  return { record, ruleSet, signerIds: v.signerIds, verifierNames: v.verifierNames };
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -137,6 +138,17 @@ describe('rebuildScopeDoc trusts only what hashes to doc_hash', () => {
     );
   });
 
+  it('refuses verifier names on other signers, or dropped', () => {
+    const v = vectors.vectors.find((x: { name: string }) => x.name === 'named and unnamed verifiers side by side');
+    const s = scope(v);
+    expect(s.verifierNames.some((n) => n !== '')).toBe(true);
+    const rotated = [...s.verifierNames.slice(1), s.verifierNames[0]!];
+    expect(rotated).not.toEqual(s.verifierNames);
+    expect(() => rebuildScopeDoc({ ...s, verifierNames: rotated })).toThrow(ScopeNotRebuilt);
+    expect(() => rebuildScopeDoc({ ...s, verifierNames: [] })).toThrow(ScopeNotRebuilt);
+    expect(() => rebuildScopeDoc({ ...s, verifierNames: s.verifierNames.slice(1) })).toThrow(ScopeNotRebuilt);
+  });
+
   it('refuses rules in another order', () => {
     const s = scope(shared);
     expect(() => rebuildScopeDoc({ ...s, rules: [...s.rules].reverse() })).toThrow(ScopeNotRebuilt);
@@ -155,11 +167,13 @@ describe('decodeStoredScope', () => {
   it('reads the views as the generated bindings return them', () => {
     for (const v of vectors.vectors) {
       const n = native(v);
-      expect(decodeStoredScope(v.account, v.network, n.record, n.ruleSet, n.signerIds)).toEqual(scope(v));
+      expect(decodeStoredScope(v.account, v.network, n.record, n.ruleSet, n.signerIds, n.verifierNames)).toEqual(
+        scope(v),
+      );
     }
   });
 
   it('is null for a scope the account does not have', () => {
-    expect(decodeStoredScope('C', 'n', undefined, [], undefined)).toBeNull();
+    expect(decodeStoredScope('C', 'n', undefined, [], undefined, undefined)).toBeNull();
   });
 });

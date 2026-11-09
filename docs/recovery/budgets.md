@@ -974,3 +974,30 @@ compiler's caps raised and were not run on this source.
 `a_rejected_signer_transition_changes_nothing` passes: a duplicate key (one
 passkey under a second credential id), and the budget running out at 25,
 50, 75, and 95% of a full rotation, leave every ledger entry unchanged.
+
+### Verifier names
+
+A document that names a verifier (`verifier-name`, `docs/account-interface.md`,
+"Verifiers") makes the compiler call `perch/verifiers`' `fetch_hash` once per
+distinct name, and `apply_scope` stores each signer's name beside its id. The
+release-stack suite names the WebAuthn verifier in every passkey document and
+publishes it through the stack's own `perch-constructorless-registry` wasm.
+Source: 2026-11-05, `build-stack.sh --builder contract` stacks of the source
+before this change and this source, all 160 rows common:
+
+- Every row stays within 75% of every limit. The worst share moves 40.5% to
+  40.7% on instructions and 15.0% to 15.8% on footprint; memory 23.6%,
+  written entries 18.5%, write bytes 50.0% and events 20.5% are unchanged.
+- A document naming one verifier: about +0.6M to +2.8M instructions on an
+  `apply_doc` and +5.7M on a thief's 8-grant `apply_scope` (the largest),
+  +3 footprint entries (the registry's instance, its code, the name's
+  entry), and up to +1.0 MB of memory: the registry wasm links rustc's
+  default 1 MiB stack ([Wasm stack](#wasm-stack)), unlike the stack
+  contracts, and each call instantiates it.
+- `create_passkey` +0.13M instructions: the constructor reads the verifier's
+  code hash and derives its content address, with no call.
+- Storage: a scope record holds an empty name list when no signer is named
+  (+36 bytes); the testnet preview's grant takes 5,368 bytes in 13 entries
+  (5,296 before). A name takes about 40 bytes of the 8,192-byte canonical
+  cap per signer, so the cap documents hold fewer `string-in` values and
+  write up to 2.1 KB less.

@@ -125,6 +125,7 @@ export interface ScopeBindings {
   scope(args: { scope: number }): Promise<Simulated<any>>;
   scope_rule_set(args: { scope: number }): Promise<Simulated<any>>;
   scope_signer_ids(args: { scope: number }): Promise<Simulated<any>>;
+  scope_verifier_names(args: { scope: number }): Promise<Simulated<any>>;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -192,15 +193,17 @@ export function decodeStoredRule(r: Record<string, unknown>): StoredRule {
   };
 }
 
-/** Decode what `scope(id)`, `scope_rule_set(id)` and `scope_signer_ids(id)`
- *  return for the scope of `account` on the network `network` (its
- *  passphrase); `null` when the account has no scoped document there. */
+/** Decode what `scope(id)`, `scope_rule_set(id)`, `scope_signer_ids(id)`
+ *  and `scope_verifier_names(id)` return for the scope of `account` on the
+ *  network `network` (its passphrase); `null` when the account has no scoped
+ *  document there. */
 export function decodeStoredScope(
   account: string,
   network: string,
   record: Record<string, unknown> | null | undefined,
   ruleSet: Record<string, unknown>[],
   signerIds: unknown[] | null | undefined,
+  verifierNames: unknown[] | null | undefined,
 ): StoredScope | null {
   if (record === null || record === undefined) return null;
   const rules = record.rules as Record<string, unknown>[];
@@ -210,6 +213,7 @@ export function decodeStoredScope(
     network,
     docHash: bytes(record.doc_hash),
     signerIds: (signerIds ?? []).map(text),
+    verifierNames: (verifierNames ?? []).map(text),
     rules: rules.map((r, i) => ({ name: String(r.name), rule: decodeStoredRule(ruleSet[i]!) })),
   };
 }
@@ -218,7 +222,7 @@ export function decodeStoredScope(
  * Read the scoped document under `scope` from `account`'s views and rebuild
  * it (`rebuildScopeDoc`); `null` when the account has none there. Throws
  * `ScopeNotRebuilt` when it does not rebuild to the stored `doc_hash`, which
- * three reads straddling an `apply_scope` can also cause: read again.
+ * four reads straddling an `apply_scope` can also cause: read again.
  */
 export async function readScopeDoc(
   client: ScopeBindings,
@@ -226,11 +230,19 @@ export async function readScopeDoc(
   network: string,
   scope: number,
 ): Promise<RebuiltScope | null> {
-  const [record, ruleSet, signerIds] = await Promise.all([
+  const [record, ruleSet, signerIds, verifierNames] = await Promise.all([
     client.scope({ scope }),
     client.scope_rule_set({ scope }),
     client.scope_signer_ids({ scope }),
+    client.scope_verifier_names({ scope }),
   ]);
-  const stored = decodeStoredScope(account, network, record.result, ruleSet.result, signerIds.result);
+  const stored = decodeStoredScope(
+    account,
+    network,
+    record.result,
+    ruleSet.result,
+    signerIds.result,
+    verifierNames.result,
+  );
   return stored === null ? null : rebuildScopeDoc(stored);
 }

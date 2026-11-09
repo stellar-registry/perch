@@ -15,6 +15,17 @@
 //! Fail-closed at every step: non-UTF-8, unparseable, invalid, wrong-network,
 //! or unlowerable documents are typed errors, never partial output.
 //!
+//! **Verifiers.** A signer's `verifier-name` (`<name>@<version>`) names a
+//! verifier in Perch's managed `perch/verifiers` registry: the compiler
+//! resolves it on-chain, `deployer(perch/verifiers, fetch_hash(name,
+//! version))`, and refuses the document unless that is the signer's
+//! `verifier`. A verifier named by its contract id alone is *unverified*:
+//! refused in an admin document (one with a self-admin rule or a recovery
+//! member, which covers every recovery target), and in a scoped document
+//! allowed at most once per rule and listed in [`CompiledDoc::unverified`]
+//! (`perch_ir::verifier`). Each refusal is `DocInvalid`, which keeps every
+//! other code where it was.
+//!
 //! [`compile_doc`]: PerchDocCompiler::compile_doc
 #![no_std]
 
@@ -82,7 +93,11 @@ pub enum DocCompilerError {
     /// unsupported version, duplicate key, …).
     DocParse,
     /// The document failed semantic validation (dangling signer ref,
-    /// malformed address or key, ambiguous empty list, …).
+    /// malformed address or key, ambiguous empty list, …) or names its
+    /// verifiers as the compiler does not take.
+    // An unverified verifier in an admin document, two signers under one in
+    // a rule, or a `verifier-name` that does not resolve to its `verifier`:
+    // docs/account-interface.md, "Verifiers".
     DocInvalid,
     /// The document names no network, or a network that is not this chain.
     WrongNetwork,
@@ -179,9 +194,18 @@ pub struct CompiledDoc {
     pub model: Vec<CompiledModel>,
     /// Whether the document is in normal form as far as its text shows
     /// (`perch_ir::normal_form`): then the rules an account stores for it,
-    /// with its signer ids, give back its canonical text. An account refuses
-    /// a scoped document that is not.
+    /// with its signer ids and [`Self::verifier_names`], give back its
+    /// canonical text. An account refuses a scoped document that is not.
     pub normal_form: bool,
+    /// Every verifier the document names by contract id alone, once each, in
+    /// declaration order: what a wallet warns about ("it can approve anything
+    /// this rule allows"). Always empty for an admin document, which may name
+    /// none.
+    pub unverified: Vec<Address>,
+    /// One entry per declared signer, in declaration order: the
+    /// `verifier-name` its verifier was resolved from, or empty for a
+    /// delegated signer and a verifier named by contract id alone.
+    pub verifier_names: Vec<String>,
 }
 
 /// What `derive_target` returns: the recovery target the controller binds
@@ -321,6 +345,26 @@ trait KeyCanonicalizerInterface {
     fn batch_canonicalize_key(e: &Env, key_data: Vec<Val>) -> Vec<Bytes>;
 }
 
+/// The `perch/verifiers` registry's `Publishable::fetch_hash`: the wasm hash
+/// published under a name and exact version.
+#[cfg(feature = "contract")]
+#[allow(unused)]
+#[contractclient(name = "VerifierRegistryClient")]
+trait VerifierRegistryInterface {
+    fn fetch_hash(e: &Env, wasm_name: String, version: Option<String>) -> BytesN<32>;
+}
+
+/// The registry a `verifier-name` resolves in, derived under the ledger's
+/// network from the committed `wasm/verifiers.path`.
+#[cfg(feature = "contract")]
+pub mod verifiers {
+    perch_registry_resolve::registry_contract! {
+        mod: registry,
+        path_file: "wasm/verifiers.path",
+    }
+    pub use registry::registry;
+}
+
 #[cfg(feature = "contract")]
 #[contract]
 pub struct PerchDocCompiler;
@@ -337,6 +381,12 @@ impl PerchDocCompiler {
     /// named verifier's `batch_canonicalize_key` to check.
     pub fn compile_doc(e: &Env, doc_json: Bytes) -> Result<CompiledDoc, DocCompilerError> {
         compile_parsed(e, &parse(&doc_json)?)
+    }
+
+    /// The `perch/verifiers` registry a `verifier-name` resolves in, on this
+    /// network.
+    pub fn verifier_registry(e: &Env) -> Address {
+        verifiers::registry(e)
     }
 
     /// The document caps every `compile_doc` and `derive_target` enforces.
@@ -469,6 +519,16 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         return Err(DocCompilerError::DocTooLarge);
     }
 
+    // Verifiers: none unverified in an admin document, one signer per
+    // unverified verifier in a rule, and every name resolved.
+    if perch_ir::is_admin_document(doc) && !perch_ir::unverified_verifiers(doc).is_empty() {
+        return Err(DocCompilerError::DocInvalid);
+    }
+    if perch_ir::unverified_reuse(doc).is_some() {
+        return Err(DocCompilerError::DocInvalid);
+    }
+    let verifier_names = resolve_verifier_names(e, &doc.signers)?;
+
     let mut rules: Vec<CompiledRule> = Vec::new(e);
     for rule in &doc.rules {
         rules.push_back(to_compiled(e, doc, rule)?);
@@ -495,7 +555,64 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         recovery,
         model: Vec::from_array(e, [model]),
         normal_form: perch_ir::normal_form(doc).is_ok(),
+        unverified: {
+            let mut out = Vec::new(e);
+            for v in perch_ir::unverified_verifiers(doc) {
+                out.push_back(Address::from_str(e, v));
+            }
+            out
+        },
+        verifier_names,
     })
+}
+
+/// Resolve every signer's `verifier-name` in `perch/verifiers`: the wasm
+/// hash published under the name and exact version, whose content address
+/// there must be the signer's `verifier` (`DocInvalid` otherwise). One
+/// `fetch_hash` per distinct name. Returns each signer's name, empty where
+/// it has none.
+#[cfg(feature = "contract")]
+fn resolve_verifier_names(
+    e: &Env,
+    signers: &[perch_ir::SignerDecl],
+) -> Result<Vec<String>, DocCompilerError> {
+    let mut resolved: Map<String, Address> = Map::new(e);
+    let mut names = Vec::new(e);
+    for s in signers {
+        let perch_ir::SignerMethod::External {
+            verifier,
+            verifier_name: Some(full),
+            ..
+        } = &s.method
+        else {
+            names.push_back(String::from_str(e, ""));
+            continue;
+        };
+        let full_name = String::from_str(e, full);
+        let address = match resolved.get(full_name.clone()) {
+            Some(address) => address,
+            None => {
+                let (name, version) =
+                    perch_ir::parse_verifier_name(full).ok_or(DocCompilerError::DocInvalid)?;
+                let registry = verifiers::registry(e);
+                let hash = VerifierRegistryClient::new(e, &registry)
+                    .try_fetch_hash(
+                        &String::from_str(e, name),
+                        &Some(String::from_str(e, version)),
+                    )
+                    .map_err(|_| DocCompilerError::DocInvalid)?
+                    .map_err(|_| DocCompilerError::DocInvalid)?;
+                let address = e.deployer().with_address(registry, hash).deployed_address();
+                resolved.set(full_name.clone(), address.clone());
+                address
+            }
+        };
+        if address != Address::from_str(e, verifier) {
+            return Err(DocCompilerError::DocInvalid);
+        }
+        names.push_back(full_name);
+    }
+    Ok(names)
 }
 
 /// The credentials `signers` declare, with every external key canonicalized
@@ -515,7 +632,7 @@ fn canonical_credentials(
             perch_ir::SignerMethod::Delegated { address } => {
                 slots.push((Address::from_str(e, address), None));
             }
-            perch_ir::SignerMethod::External { verifier, key } => {
+            perch_ir::SignerMethod::External { verifier, key, .. } => {
                 let verifier = Address::from_str(e, verifier);
                 let mut batch = batches.get(verifier.clone()).unwrap_or(Vec::new(e));
                 slots.push((verifier.clone(), Some(batch.len())));
@@ -601,6 +718,7 @@ fn to_signer_method(c: &Credential) -> perch_ir::SignerMethod {
             perch_ir::SignerMethod::External {
                 verifier: to_std_string(&verifier.to_string()),
                 key: hex::encode(raw),
+                verifier_name: None,
             }
         }
     }
@@ -707,7 +825,7 @@ fn to_compiled(
             perch_ir::SignerMethod::Delegated { address } => {
                 Signer::Delegated(Address::from_str(e, address))
             }
-            perch_ir::SignerMethod::External { verifier, key } => {
+            perch_ir::SignerMethod::External { verifier, key, .. } => {
                 Signer::External(Address::from_str(e, verifier), hex_bytes(e, key)?)
             }
         });

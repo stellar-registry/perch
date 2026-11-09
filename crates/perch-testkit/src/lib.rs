@@ -45,6 +45,7 @@ pub mod passkey;
 pub mod rebuild;
 pub mod rpn;
 pub mod rule_set;
+pub mod verifiers;
 
 pub use fixture::{
     auth_digest, ci_publish_doc_hash, ci_publish_rule, fixture, twin, AnyKeyVerifier,
@@ -54,7 +55,7 @@ pub use manifest::{
     Apply, Author, Backend, BackendError, BootstrapManifest, Deploy, KometBackend, Publish, Rotate,
     TestnetBackend, UnitEnvBackend,
 };
-pub use native::World;
+pub use native::{World, ED25519_VERIFIER_NAME, FIXTURE_VERIFIER_NAMES};
 
 /// Which bootstrap strategy [`Bootstrap::build`] materializes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

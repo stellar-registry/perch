@@ -10,5 +10,5 @@ export * as adapter from './adapter.js';
 export * as webauthnVerifier from './webauthn-verifier.js';
 export * as docCompiler from './doc-compiler.js';
 export { addressOf } from './deployment.js';
-export type { DeployedContract, Deployment } from './deployment.js';
+export type { DeployedContract, DeployedVerifier, Deployment } from './deployment.js';
 export { testnet } from './deployments.js';

@@ -47,6 +47,7 @@ export {
   policy,
   delegated,
   external,
+  named,
   isSelf,
   addressEq,
   stringIn,
@@ -60,6 +61,25 @@ export {
   type RecoverySpec,
   type ZkFactorSpec,
 } from './builder.js';
+export {
+  MAX_VERIFIER_NAME_LEN,
+  VERIFIERS_PATH,
+  UnverifiedVerifier,
+  UnverifiedVerifierReused,
+  checkVerifiers,
+  deployedAddress,
+  isAdminDocument,
+  parseVerifierName,
+  resolveVerifierName,
+  unverifiedReuse,
+  unverifiedVerifiers,
+  unverifiedWarnings,
+  verifierAddress,
+  verifierRegistryId,
+  type FetchHash,
+  type ResolvedVerifier,
+  type VerifierWarning,
+} from './verifiers.js';
 export {
   addressPayload,
   credentialFingerprint,

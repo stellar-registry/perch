@@ -6,6 +6,7 @@ account *source* hardcodes no contract ids.
 | file | committed | used for |
 |---|---|---|
 | `registry.path` | yes | how to derive the registry the infra was `deploy_stateless`'d from, on any network |
+| `verifiers.path` | yes | how to derive `perch/verifiers`, where an admin signer's verifier must have been `deploy_stateless`'d (the constructor's check), on any network |
 | `perch-doc-compiler.sha256` | yes | the wasm hash, the content-address salt |
 | `perch-interpreter.sha256` | yes | the wasm hash, the content-address salt |
 | `perch-spending-limit.sha256` | yes | the wasm hash, the content-address salt |
@@ -56,9 +57,22 @@ the stack under `perch/constructorless` deletes the entry.
 
 The pins are committed so a plain checkout builds, a cargo git dependency on
 perch included, with no fetch and no network
-(`scripts/check-git-dep.sh`). `registry.path` is source: edit it by hand,
-together with the factory's identical copy
-([`../../perch-account-factory/wasm/`](../../perch-account-factory/wasm/README.md)).
+(`scripts/check-git-dep.sh`). `registry.path` is source: edit it by hand.
+
+`verifiers.path` names `perch/verifiers`, a sibling of
+`perch/constructorless` under the same `perch`, and works the same way:
+
+| network | `perch/verifiers` | |
+|---|---|---|
+| testnet | `CCHJ7RWP…N5HW` | not deployed yet: `scripts/bootstrap-registry.sh` `verifiers` creates it, `seed-verifiers` publishes the verifiers there |
+| mainnet | `CCDCKRUV…GDPH` | not deployed yet |
+
+The compiler resolves a document's `verifier-name` there, and the factory
+pins its WebAuthn verifier there; the compiler's and the factory's copies
+([`../../perch-doc-compiler/wasm/`](../../perch-doc-compiler/wasm/verifiers.path),
+[`../../perch-account-factory/wasm/`](../../perch-account-factory/wasm/README.md))
+are the same file, which `registry_path.rs` checks. Edit all three
+together.
 Refresh the hashes one of two ways:
 
 - `scripts/fetch-infra-wasm.sh`: from a deployment manifest

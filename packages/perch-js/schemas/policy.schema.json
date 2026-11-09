@@ -894,6 +894,11 @@
               "description": "Verifier contract (C-address) that checks this signer's signatures.",
               "pattern": "^C[A-Z2-7]{55}$",
               "type": "string"
+            },
+            "verifier-name": {
+              "description": "The verifier's name and exact version in Perch's managed `perch/verifiers` registry. The compiler resolves it and refuses the document unless it names `verifier`. Absent, the verifier is unverified: an admin document may not name one, and a scoped document may hold one signer per unverified verifier in a rule.",
+              "pattern": "^[a-z][a-z0-9-]{0,63}@(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})$",
+              "type": "string"
             }
           },
           "required": [

@@ -7,7 +7,7 @@
 use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_recovery_interface::{config, fragment};
 use soroban_sdk::testutils::Ledger as _;
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, FromVal, Val, Vec};
+use soroban_sdk::{contract, contractimpl, Bytes, BytesN, Env, FromVal, Val, Vec};
 use std::path::PathBuf;
 
 fn testdata(name: &str) -> String {
@@ -86,13 +86,12 @@ fn the_doc_compilers_config_hash_matches_the_pinned_values() {
             "6f44a3313c66ff6bab1719f684e4f58b04b10ec930624f8a6432ba761cd1ae78",
         ),
     ] {
-        let json = testdata(fixture);
-        let doc = perch_ir::from_json(&json).unwrap();
-        for signer in &doc.signers {
-            if let perch_ir::SignerMethod::External { verifier, .. } = &signer.method {
-                e.register_at(&Address::from_str(&e, verifier), IdentityVerifier, ());
-            }
-        }
+        // An admin document names its verifiers: the fixture's, named. The
+        // recovery member, all `config_hash` covers, is the fixture's.
+        let doc = perch_ir::from_json(&testdata(fixture)).unwrap();
+        let named = perch_testkit::verifiers::name_raw(&e, &doc, || IdentityVerifier);
+        assert_eq!(named.recovery, doc.recovery);
+        let json = perch_ir::canonical_json(&named);
         let compiled = compiler.compile_doc(&Bytes::from_slice(&e, json.as_bytes()));
         let got = compiled.recovery.get(0).unwrap().config_hash;
         assert_eq!(got, hex32(&e, want), "{fixture}");

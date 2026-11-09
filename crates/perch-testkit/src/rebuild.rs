@@ -1,7 +1,8 @@
 //! A scoped document's canonical text, rebuilt from what the account keeps
 //! for it: each rule's name and stored rule-eval rule (`scope`,
-//! `scope_rule_set`), and the document's signer ids (`scope_signer_ids`),
-//! trusted only once its sha256 is the scope's stored `doc_hash`.
+//! `scope_rule_set`), the document's signer ids (`scope_signer_ids`), and
+//! each signer's `verifier-name` (`scope_verifier_names`), trusted only once
+//! its sha256 is the scope's stored `doc_hash`.
 //!
 //! The rebuild inverts rule-core's lowering on the normal form
 //! (`perch_ir::normal_form`, and the account's own checks in `apply_scope`),
@@ -10,7 +11,8 @@
 //!
 //! - the signers, in declaration order, are the distinct stored signers in
 //!   the order the rules first name them, each under the next stored id: a
-//!   key in lowercase hex;
+//!   key in lowercase hex, and the next stored `verifier-name` where it is
+//!   not empty;
 //! - each rule's scope is its stored contract, its principals `all` when it
 //!   asks every signer it names and `threshold` otherwise, and its
 //!   `not-after-ledger` one past its last ledger;
@@ -59,6 +61,9 @@ pub struct StoredDoc {
     pub network: String,
     pub doc_hash: [u8; 32],
     pub signer_ids: Vec<String>,
+    /// Each signer's `verifier-name`, aligned with `signer_ids` (empty where
+    /// it has none), or no entries when no signer has one.
+    pub verifier_names: Vec<String>,
     /// Each rule's name and stored rule, in the record's order.
     pub rules: Vec<(String, StoredRule)>,
 }
@@ -94,11 +99,18 @@ pub fn read(e: &Env, account: &Address, scope: u32) -> Result<Option<StoredDoc>,
     let signer_ids = c
         .scope_signer_ids(&scope)
         .ok_or(format!("scope {scope}: a record and no signer ids"))?;
+    let verifier_names = c
+        .scope_verifier_names(&scope)
+        .ok_or(format!("scope {scope}: a record and no verifier names"))?;
     Ok(Some(StoredDoc {
         account: account.clone(),
         network: network(e).ok_or("a network no known passphrase hashes to")?,
         doc_hash: record.doc_hash.to_array(),
         signer_ids: signer_ids
+            .iter()
+            .map(|s| utf8(string_bytes(&s)))
+            .collect::<Result<_, _>>()?,
+        verifier_names: verifier_names
             .iter()
             .map(|s| utf8(string_bytes(&s)))
             .collect::<Result<_, _>>()?,
@@ -130,7 +142,7 @@ fn first_appearance(st: &StoredDoc) -> Vec<Signer> {
     out
 }
 
-fn declaration(id: &str, s: &Signer) -> SignerDecl {
+fn declaration(id: &str, s: &Signer, verifier_name: Option<&String>) -> SignerDecl {
     SignerDecl {
         id: id.to_string(),
         method: match s {
@@ -138,6 +150,7 @@ fn declaration(id: &str, s: &Signer) -> SignerDecl {
             Signer::External(v, k) => SignerMethod::External {
                 verifier: strkey(v),
                 key: hex::encode(bytes_vec(k)),
+                verifier_name: verifier_name.filter(|n| !n.is_empty()).cloned(),
             },
         },
     }
@@ -279,11 +292,19 @@ pub fn rebuild(e: &Env, st: &StoredDoc) -> Result<PolicyDoc, String> {
             signers.len()
         ));
     }
+    if !st.verifier_names.is_empty() && st.verifier_names.len() != st.signer_ids.len() {
+        return Err(format!(
+            "{} verifier names for {} signer ids",
+            st.verifier_names.len(),
+            st.signer_ids.len()
+        ));
+    }
     let decls: Vec<(SignerDecl, Signer)> = st
         .signer_ids
         .iter()
         .zip(signers)
-        .map(|(id, s)| (declaration(id, &s), s))
+        .enumerate()
+        .map(|(i, (id, s))| (declaration(id, &s, st.verifier_names.get(i)), s))
         .collect();
     let rules = st
         .rules

@@ -28,6 +28,7 @@ pub fn signer(id: &str, verifier: &str, key: &str) -> SignerDecl {
         method: SignerMethod::External {
             verifier: verifier.into(),
             key: key.into(),
+            verifier_name: None,
         },
     }
 }

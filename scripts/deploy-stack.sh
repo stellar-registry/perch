@@ -7,9 +7,18 @@
 # scripts/fetch-infra-wasm.sh --stack's (mainnet, which runs the testnet
 # deployment's bytes).
 #
-#   1. Registry: the one crates/*/wasm/registry.path derives on this network
-#      (scripts/derive-id.py), the only registry this source's account and
-#      factory resolve. It must already exist.
+#   1. Registries: the one crates/*/wasm/registry.path derives on this
+#      network (scripts/derive-id.py), the only registry this source's account
+#      resolves its infra in, and perch/verifiers, the one
+#      crates/*/wasm/verifiers.path derives, where a document's verifier-name
+#      resolves and the factory pins its WebAuthn verifier. Both must already
+#      exist, and perch/verifiers must serve the stack's WebAuthn verifier at
+#      its content address deployer(perch/verifiers, sha256(wasm)), or every
+#      account the factory creates refuses its passkey admin
+#      (UnverifiedVerifier). scripts/bootstrap-registry.sh creates and seeds
+#      it (verifiers, seed-verifiers); a later verifier version is its
+#      author's publish_hash there. The stack's ed25519 verifier is recorded
+#      when perch/verifiers serves it, and only warned about otherwise.
 #   2. Tier 0, then the factory (tier 2): scripts/publish-wasm.sh each one
 #      (preflight, upload with a hash check, publish_hash under its crate name
 #      and version authored by --author, deploy_stateless, code-hash check),
@@ -19,11 +28,16 @@
 #      at that content address.
 #   3. The account (tier 1): installed only (publish-wasm.sh --install-only);
 #      the factory deploys it by its pinned hash.
-#   4. The manifest. Run scripts/verify-deployment.sh on it afterwards.
+#   4. The manifest, with `verifiers`: perch/verifiers and each stack
+#      verifier it serves, the addresses a document names and the factory
+#      pins. `contracts.<verifier>.address` is the stack registry's copy, which
+#      no account admits as an admin verifier. Run
+#      scripts/verify-deployment.sh on it afterwards.
 #
 # --plan simulates every transaction steps 2 and 3 would send and prints each
 # with its fee, submits nothing, and writes no manifest. A reused name the
-# registry does not serve yet is reported, and the plan goes on.
+# registry does not serve yet, or a WebAuthn verifier perch/verifiers does not
+# serve yet, is reported, and the plan goes on.
 #
 # The registry has no author transfer, so the name→author binding is
 # permanent. A smart-account author has its publish_hash authorization signed
@@ -109,17 +123,19 @@ artifact() { jq -c --arg p "$1" '.artifacts[] | select(.package == $p)' "$build"
 wasm_of() { printf '%s/%s.wasm' "$stack" "${1//-/_}"; }
 for pkg in $(jq -r '.artifacts[].package' "$build"); do
     [[ "$pkg" =~ ^[a-z0-9-]+$ ]] || die "build.json names a package '$pkg'"
-    [[ "$(artifact "$pkg" | jq -r .version)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "build.json: $pkg has no semver version"
+    # The registry code (tier -1) is not published here, so it needs no version.
+    [ "$(artifact "$pkg" | jq -r .tier)" = -1 ] || [[ "$(artifact "$pkg" | jq -r .version)" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+        || die "build.json: $pkg has no semver version"
     [ "$(sha256 "$(wasm_of "$pkg")")" = "$(artifact "$pkg" | jq -r .sha256)" ] \
         || die "$(wasm_of "$pkg") is not the $pkg bytes build.json records"
 done
-for pkg in perch-account perch-account-factory; do
+for pkg in perch-account perch-account-factory perch-webauthn-verifier; do
     [ -n "$(artifact "$pkg")" ] || die "build.json has no $pkg"
 done
 in_reuse() { case " $reuse " in *" $1 "*) return 0 ;; *) return 1 ;; esac; }
 
 # ---------------------------------------------------------------------------
-# 1. Registry
+# 1. Registries
 # ---------------------------------------------------------------------------
 derive() { "$repo_root/scripts/derive-id.py" "$@"; }
 registry="$(derive registry "$PASSPHRASE")"
@@ -132,6 +148,54 @@ registry_wasm="$(stellar contract info hash --id "$registry")" \
 reg_admin="$(view "$registry" admin | tr -d '"')" || die "cannot read $registry's admin"
 reg_manager="$(view "$registry" manager | tr -d '"')" || die "cannot read $registry's manager"
 log "registry $registry (wasm $registry_wasm)"
+
+verifiers_path="$repo_root/crates/perch-smart-account/wasm/verifiers.path"
+verifiers="$(derive registry "$PASSPHRASE" "$verifiers_path")"
+verifiers_root="$(derive root "$PASSPHRASE" "$verifiers_path")"
+verifiers_wasm="" ver_admin="" ver_manager=""
+if verifiers_wasm="$(stellar contract info hash --id "$verifiers" 2>/dev/null)"; then
+    ver_admin="$(view "$verifiers" admin | tr -d '"')" || die "cannot read $verifiers's admin"
+    ver_manager="$(view "$verifiers" manager | tr -d '"')" || die "cannot read $verifiers's manager"
+    log "perch/verifiers $verifiers (wasm $verifiers_wasm)"
+fi
+verified='{}' why=""
+served() { # package — perch/verifiers serves the stack's bytes for it at their content address; else sets why
+    local pkg="$1" version hash addr onchain
+    version="$(artifact "$pkg" | jq -r .version)"
+    hash="$(artifact "$pkg" | jq -r .sha256)"
+    addr="$(derive content "$verifiers" "$hash" "$PASSPHRASE")"
+    if [ -z "$verifiers_wasm" ]; then
+        why="perch/verifiers ($verifiers, which crates/*/wasm/verifiers.path derives) is not deployed on $STELLAR_NETWORK"
+        return 1
+    fi
+    if ! onchain="$(view "$verifiers" fetch_hash --wasm_name "$pkg" --version "\"$version\"" 2>/dev/null)"; then
+        why="perch/verifiers does not serve $pkg $version"
+        return 1
+    fi
+    if [ "${onchain//\"/}" != "$hash" ]; then
+        why="perch/verifiers serves $pkg $version as ${onchain//\"/}, the stack's is $hash"
+        return 1
+    fi
+    if [ "$(stellar contract info hash --id "$addr" 2>/dev/null)" != "$hash" ]; then
+        why="$pkg $version is published in perch/verifiers but not deployed at its content address $addr"
+        return 1
+    fi
+    log "$pkg $version: perch/verifiers $addr"
+    verified="$(jq -c --arg p "$pkg" --arg a "$addr" --argjson art "$(artifact "$pkg")" \
+        '. + {($p): {version: $art.version, sha256: $art.sha256, bytes: $art.bytes,
+                     name: "\($p)@\($art.version)", address: $a}}' <<<"$verified")"
+}
+for pkg in perch-ed25519-verifier perch-webauthn-verifier; do
+    [ -n "$(artifact "$pkg")" ] || continue
+    served "$pkg" && continue
+    if [ "$pkg" = perch-webauthn-verifier ] && ! $plan; then
+        die "$why: the factory pins its WebAuthn verifier there, so every account it creates would refuse its passkey admin. Seed it first (scripts/bootstrap-registry.sh seed-verifiers, or its author's publish_hash; docs/deploy/README.md)"
+    elif [ "$pkg" = perch-webauthn-verifier ]; then
+        warn "$why; a real run needs it first"
+    else
+        warn "$why: no document can name the stack's $pkg there yet, and the manifest does not record it"
+    fi
+done
 # The first ledger an indexer needs to scan: nothing below was deployed here.
 deployed_ledger="$(curl -fsS "$RPC_URL" -H 'content-type: application/json' \
     -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger"}' | jq -r .result.sequence)"
@@ -213,6 +277,8 @@ jq -n \
     --argjson deployed_ledger "$deployed_ledger" \
     --arg reg "$registry" --arg reg_wasm "$registry_wasm" \
     --arg admin "$reg_admin" --arg manager "$reg_manager" --arg root "$root" \
+    --arg ver "$verifiers" --arg ver_wasm "$verifiers_wasm" --arg ver_admin "$ver_admin" \
+    --arg ver_manager "$ver_manager" --arg ver_root "$verifiers_root" --argjson verified "$verified" \
     --slurpfile build "$build" --argjson contracts "$deployed" \
     --arg circuit_id "$(jq -r '.circuits.perch_zk_recovery.vk_sha256 | ltrimstr("0x")' "$circuit")" \
     --argjson depth "$(jq -r '.circuits.perch_zk_recovery.depth' "$circuit")" \
@@ -227,6 +293,8 @@ jq -n \
       source: $build[0].source,
       toolchain: $build[0].toolchain,
       registry: {id: $reg, wasm_hash: $reg_wasm, admin: $admin, manager: $manager, root: $root},
+      verifiers: {id: $ver, wasm_hash: $ver_wasm, admin: $ver_admin, manager: $ver_manager, root: $ver_root,
+                  contracts: $verified},
       zk: ($build[0].zk // {circuit_id: $circuit_id, tree_depth: $depth, circuit_manifest: "circuits/manifest.json"}),
       contracts: ($contracts | with_entries(.value |= del(.package)))
     }' >"$manifest"

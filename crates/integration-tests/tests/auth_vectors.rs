@@ -218,7 +218,7 @@ impl Recorder {
 #[test]
 fn the_signing_digest_is_the_one_oz_verifies() {
     let e = Env::default();
-    let recorder = e.register(Recorder, ());
+    let recorder = perch_testkit::verifiers::deploy(&e, Recorder);
     let key = Bytes::from_array(&e, &[7; 32]);
     let signer = Signer::External(recorder.clone(), key);
     let account = e.register(PerchAccount, (vec![&e, signer.clone()],));

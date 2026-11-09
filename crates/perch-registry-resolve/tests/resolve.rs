@@ -94,6 +94,22 @@ registry_contract! {
     deploy_name: "My_Sub",
 }
 
+// A registry alone, from a path file: `registry(env)` and its constants.
+registry_contract! {
+    mod: sub,
+    path_file: "tests/fixtures/sub.path",
+}
+
+// Pinned, under the registry a path file derives: `address(env)` and
+// `client(env)` take no registry.
+registry_contract! {
+    mod: under_sub,
+    wasm_name: "fixture",
+    client: crate::FixtureClient,
+    hash_file: "tests/fixtures/deployable_wasm.sha256",
+    path_file: "tests/fixtures/sub.path",
+}
+
 fn hex32(s: &str) -> [u8; 32] {
     let mut out = [0u8; 32];
     let b = s.as_bytes();
@@ -252,4 +268,52 @@ fn runtime_memoized_address_matches_and_is_cacheable() {
         runtime::clear_memo(&env);
         assert_eq!(runtime::address_memoized(&env, &registry), expected);
     });
+}
+
+/// The registry `path_file` names: the root, then one named deploy per
+/// segment, under the current network.
+fn sub_by_hand(env: &Env) -> Address {
+    let sha = |s: &str| {
+        env.crypto()
+            .sha256(&Bytes::from_slice(env, s.as_bytes()))
+            .to_bytes()
+    };
+    let root = env
+        .deployer()
+        .with_address(
+            Address::from_str(
+                env,
+                "GAMPJROHOAW662FINQ4XQOY2ULX5IEGYXCI4SMZYE75EHQBR6PSTJG3M",
+            ),
+            sha("2026-04-24T13:41:00"),
+        )
+        .deployed_address();
+    let perch = env
+        .deployer()
+        .with_address(root, sha("perch"))
+        .deployed_address();
+    env.deployer()
+        .with_address(perch, sha("verifiers"))
+        .deployed_address()
+}
+
+#[test]
+fn a_path_file_alone_derives_its_registry() {
+    let env = Env::default();
+    assert_eq!(sub::registry(&env), sub_by_hand(&env));
+    assert_eq!(sub::REGISTRY_PATH, ["perch", "verifiers"]);
+    assert_eq!(sub::ROOT_DEPLOYER, under_sub::ROOT_DEPLOYER);
+}
+
+#[test]
+fn a_pinned_hash_under_a_path_file_derives_from_that_registry() {
+    let env = Env::default();
+    let registry = sub_by_hand(&env);
+    assert_eq!(under_sub::registry(&env), registry);
+    let expected = env
+        .deployer()
+        .with_address(registry, BytesN::from_array(&env, &hex32(FIXTURE_HASH_HEX)))
+        .deployed_address();
+    assert_eq!(under_sub::address(&env), expected);
+    assert_eq!(under_sub::client(&env).address, expected);
 }

@@ -18,6 +18,8 @@
 #   4. Check, independently of the bootstrap, every derived address on the
 #      fork: perch, nido and constructorless at their registry.path ids, the
 #      four seeded tier-0 at their content addresses running their hashes,
+#      perch/verifiers at its verifiers.path id with the ed25519 and WebAuthn
+#      verifiers at their content addresses there,
 #      both authors running the built account, resolving their infra there
 #      and holding ci-publish, and every name bound. Then a dry rerun of
 #      `all` must find nothing left to do.
@@ -109,7 +111,7 @@ stop_server() { if [ -n "$SERVER_PID" ]; then kill "$SERVER_PID" 2>/dev/null || 
 trap stop_server EXIT
 
 rehearse() {
-    local network="$1" out passphrase url line role_source root perch constructorless nido role
+    local network="$1" out passphrase url line role_source root perch constructorless verifiers nido role
     out="$out_base/$network"
     local w opt flag name wasm_flags=()
     for w in "account_wasm --account-wasm perch-account" "registry_wasm --constructorless-wasm perch-constructorless-registry"; do
@@ -166,6 +168,7 @@ rehearse() {
     local net=(--rpc-url "$url" --network-passphrase "$passphrase")
 
     read -r root perch constructorless <<<"$("$DERIVE" chain "$passphrase" | tr '\n' ' ')"
+    verifiers="$("$DERIVE" registry "$passphrase" "$REPO/crates/perch-smart-account/wasm/verifiers.path")"
     nido="$("$DERIVE" name "$root" nido "$passphrase")"
     role_source="$(awk '$1 == "root-deployer" {print $2}' "$REPO/crates/perch-smart-account/wasm/registry.path")"
     read_call() { # contract fn args... (simulated, from an account the base has)
@@ -259,6 +262,15 @@ rehearse() {
             h="$(jq -r --arg n "$n" '.contracts[$n].sha256' "$MANIFEST")"
             at="$("$DERIVE" content "$constructorless" "$h" "$passphrase")"
             check "constructorless.fetch_hash($n, $v)" "$(read_call "$constructorless" fetch_hash --wasm_name "$n" --version "\"$v\"")" "$h"
+            check "$n at $at" "$(executable "$at")" "$h"
+        done
+        check "perch.fetch_contract_id(verifiers)" "$(read_call "$perch" fetch_contract_id --contract-name verifiers)" "$verifiers"
+        check "verifiers runs perch-constructorless-registry" "$(executable "$verifiers")" "$(sha256_file "$registry_file")"
+        for n in perch-ed25519-verifier perch-webauthn-verifier; do
+            v="$(jq -r --arg n "$n" '.contracts[$n].version' "$MANIFEST")"
+            h="$(jq -r --arg n "$n" '.contracts[$n].sha256' "$MANIFEST")"
+            at="$("$DERIVE" content "$verifiers" "$h" "$passphrase")"
+            check "verifiers.fetch_hash($n, $v)" "$(read_call "$verifiers" fetch_hash --wasm_name "$n" --version "\"$v\"")" "$h"
             check "$n at $at" "$(executable "$at")" "$h"
         done
         for project in perch nido; do

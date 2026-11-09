@@ -20,8 +20,15 @@ const u32 = z.number().int().gte(0).lte(0xffff_ffff);
 // perch-ir): `verifier`+`key` is external, `address` is delegated (CAP-0071 —
 // the host authenticates the address inside the account's own auth entry).
 // Both branches are strict, so a mixed shape matches neither and fails closed.
+// An external signer's optional `verifier-name` (`<name>@<version>`) names its
+// verifier in Perch's `perch/verifiers` registry (see verifiers.ts).
 const externalSignerDecl = z
-  .object({ id: z.string(), verifier: z.string(), key: z.string() })
+  .object({
+    id: z.string(),
+    verifier: z.string(),
+    'verifier-name': z.string().optional(),
+    key: z.string(),
+  })
   .strict();
 const delegatedSignerDecl = z.object({ id: z.string(), address: z.string() }).strict();
 const signerDecl = z.union([externalSignerDecl, delegatedSignerDecl]);

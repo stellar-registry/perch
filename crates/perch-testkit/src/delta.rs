@@ -477,7 +477,7 @@ impl DocModel {
                     format!(r#"{{"id":"{}","address":"{}"}}"#, s.id, strkey(&w.keys[k]))
                 }
                 KeyModel::External(k) => format!(
-                    r#"{{"id":"{}","verifier":"{}","key":"{}"}}"#,
+                    r#"{{"id":"{}","verifier":"{}","verifier-name":"{VERIFIER_NAME}","key":"{}"}}"#,
                     s.id,
                     strkey(&w.verifier),
                     if self.spelling.upper_hex {
@@ -745,6 +745,9 @@ fn granted(w: &DeltaWorld, rule: &ContextRule, stored: Option<&StoredRule>) -> O
     ))
 }
 
+/// The `verifier-name` generated documents give [`DeltaWorld::verifier`].
+pub const VERIFIER_NAME: &str = "delta-verifier@1.0.0";
+
 /// External key `n`: 32 bytes, distinct per `n`.
 pub fn external_key(n: usize) -> String {
     hex::encode([n as u8 + 1; 32])
@@ -825,7 +828,8 @@ impl DeltaWorld {
         env.register_at(&interpreter, PerchInterpreter, ());
         let spending_limit = infra::perch_spending_limit::address(&env);
         env.register_at(&spending_limit, PerchSpendingLimit, ());
-        let verifier = env.register(AnyKeyVerifier, ());
+        let verifier = crate::verifiers::deploy(&env, AnyKeyVerifier);
+        crate::verifiers::name(&env, VERIFIER_NAME, &verifier);
         // A native contract registers at the next generated address; a wasm
         // is put there too, so both worlds name the same controller.
         let controller = match controller {

@@ -1,3 +1,4 @@
+# A registry two named deploys below a root.
 root-deployer GAMPJROHOAW662FINQ4XQOY2ULX5IEGYXCI4SMZYE75EHQBR6PSTJG3M
 root-salt 2026-04-24T13:41:00
-path perch/constructorless
+path perch/verifiers

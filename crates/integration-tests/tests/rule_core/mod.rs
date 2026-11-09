@@ -321,7 +321,9 @@ impl<'w> Lab<'w> {
                 "controller" => w.controller.clone(),
                 "adapter" => w.adapter.clone(),
                 "pool" => w.pool.clone(),
-                "verifier" => e.register(PerchEd25519Verifier, ()),
+                // Where `perch/verifiers` deploys one, named, as an admin
+                // document's must be.
+                "verifier" => perch_testkit::verifiers::deploy_auto(e, PerchEd25519Verifier),
                 "delegate" => e.register(Key, ()),
                 _ => e.register(StandIn, ()),
             };
@@ -439,11 +441,12 @@ impl<'w> Lab<'w> {
                     address: self.strkey(&decode_hex(address)?),
                 },
                 JsonSigner::External { verifier, key } => {
-                    let v = self.strkey(&decode_hex(verifier)?);
+                    let v = self.address(&decode_hex(verifier)?);
                     let k = self.key(&decode_hex(key)?);
                     SignerMethod::External {
-                        verifier: v,
+                        verifier: support::strkey(&v),
                         key: hex::encode(k.verifying_key().to_bytes()),
+                        verifier_name: Some(perch_testkit::verifiers::auto_name(&v)),
                     }
                 }
             };

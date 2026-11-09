@@ -88,12 +88,15 @@ Structural shape and the representable data constraints:
 - the kebab-case field names and `type` tags verbatim; **unknown fields are
   rejected** everywhere (`additionalProperties: false`), including beside a
   tag;
-- shape-discriminated signer methods (`verifier`+`key` external, `address`
-  delegated), required/optional fields, recursive `$ref` definitions;
+- shape-discriminated signer methods (`verifier`+`key` external, with an
+  optional `verifier-name`; `address` delegated), required/optional fields,
+  recursive `$ref` definitions;
 - `version` is exactly `1`; an explicit JSON `null` for an optional field is
   rejected (leave the key out);
 - **formats:** C-/G-address strkey shapes, 64-lowercase-hex digests, the signer
-  `key` hex window (1..=`MAX_SIGNER_KEY_LEN` bytes), the `ack` sentinel, and the
+  `key` hex window (1..=`MAX_SIGNER_KEY_LEN` bytes), a `verifier-name`'s
+  `<name>@<MAJOR>.<MINOR>.<PATCH>` spelling (`perch_ir::parse_verifier_name`,
+  the name at most `MAX_VERIFIER_NAME_LEN` bytes), the `ack` sentinel, and the
   `cap.limit` positive-integer decimal string (rejects `0`, all-zero spellings,
   a sign-minus, and any value wider than an `i128` — see the CANON v2 note
   below for what it deliberately still accepts);
@@ -155,6 +158,11 @@ substitute:
   stricter *canonical* profile deferred to CANON v2 — it becomes correct only
   once the parser itself enforces one spelling, so that schema and parser stay
   in agreement. See the Perch `DEFERRED.md` CANON v2 entry.
+- **Verifier names and unverified verifiers.** Whether a `verifier-name`
+  resolves to its `verifier` in `perch/verifiers` is read from the chain;
+  that an admin document names no verifier by contract id alone, and that a
+  rule holds one signer per such verifier, are the doc compiler's checks
+  (`docs/account-interface.md`, "Verifiers").
 - **Signatures and authorization.** Whether an invocation is actually
   authorized is `__check_auth` / OZ policy enforcement on-chain, nothing a
   document schema can state.

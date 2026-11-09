@@ -10,12 +10,21 @@
 #   tier 2  perch-account-factory                (pins the account wasm and the
 #                                                 WebAuthn verifier)
 #
+# and, as tier -1, perch-constructorless-registry: the code perch's
+# sub-registries run (perch/constructorless, and perch/verifiers, where a
+# document's verifier-name resolves). It is built for the release-stack
+# suite, which publishes the stack's verifiers through it; deploy-stack.sh
+# never publishes it (scripts/bootstrap-registry.sh installs registries).
+#
 # A consumer's pins are the sha256 of the exact bytes built here. The registry
 # the tier-0 contracts are (or will be) `deploy_stateless`'d from is not a
-# build input: the account and the factory compile in the path they derive it
-# from (crates/*/wasm/registry.path: a root deployer and salt, then named
-# deploys), and derive it under the ledger's network id, so the same bytes
-# serve every network. Every address is known before anything is deployed.
+# build input: the account compiles in the path it derives it from
+# (crates/perch-smart-account/wasm/registry.path: a root deployer and salt,
+# then named deploys), and the account, the compiler and the factory the path
+# of perch/verifiers (crates/*/wasm/verifiers.path), each derived under the
+# ledger's network id, so the same bytes serve every network. build.json
+# records both registries on the build's network. Every address is known
+# before anything is deployed.
 # scripts/deploy-stack.sh then publishes the same bytes in the same order.
 #
 # Usage: scripts/build-stack.sh [--registry <C...>] [--network-passphrase <p>]
@@ -80,12 +89,21 @@ TIER0=(perch-doc-compiler perch-interpreter perch-spending-limit perch-ed25519-v
 ACCOUNT_PINS=(perch-doc-compiler perch-interpreter perch-spending-limit)
 FACTORY_PINS=(perch-account perch-webauthn-verifier)
 
-# The registry the committed path derives on this network, by the account's
-# own derivation (scripts/derive-id.py). Both crates must commit one path.
-cmp -s "$repo_root/crates/perch-smart-account/wasm/registry.path" \
-    "$repo_root/crates/perch-account-factory/wasm/registry.path" \
-    || { echo "error: the account's and the factory's wasm/registry.path differ" >&2; exit 1; }
+# The registries the committed paths derive on this network, by the
+# account's own derivation (scripts/derive-id.py). Every crate committing a
+# path must commit the same one.
+shopt -s nullglob
+for name in registry.path verifiers.path; do
+    copies=("$repo_root"/crates/*/wasm/"$name")
+    for p in "${copies[@]}"; do
+        cmp -s "$p" "${copies[0]}" \
+            || { echo "error: ${p#"$repo_root"/} differs from ${copies[0]#"$repo_root"/}" >&2; exit 1; }
+    done
+done
+shopt -u nullglob
 derived="$("$repo_root/scripts/derive-id.py" registry "$passphrase")"
+verifier_registry="$("$repo_root/scripts/derive-id.py" registry "$passphrase" \
+    "$repo_root/crates/perch-smart-account/wasm/verifiers.path")"
 if [ -n "$registry" ] && [ "$registry" != "$derived" ]; then
     echo "error: --registry $registry, but crates/*/wasm/registry.path derives $derived on '$passphrase'" >&2
     exit 1
@@ -162,6 +180,7 @@ stage() { # crate-dir packages...
 }
 
 for pkg in "${TIER0[@]}"; do build "$pkg" 0 '{}'; done
+build perch-constructorless-registry -1 '{}'
 stage perch-smart-account "${ACCOUNT_PINS[@]}"
 build perch-account 1 "$staged"
 stage perch-account-factory "${FACTORY_PINS[@]}"
@@ -169,11 +188,11 @@ build perch-account-factory 2 "$staged"
 
 commit=$(git -C "$repo_root" rev-parse HEAD)
 dirty=$("$repo_root/scripts/source-dirty.sh" "$repo_root")
-jq -n --arg reg "$registry" --arg commit "$commit" --argjson dirty "$dirty" \
+jq -n --arg reg "$registry" --arg vreg "$verifier_registry" --arg commit "$commit" --argjson dirty "$dirty" \
     --arg rustc "$(rustc --version)" --arg stellar "$(stellar --version | head -1)" \
     --arg scaffold "$(stellar scaffold version 2>/dev/null | head -1 || true)" \
     --arg builder "$builder" --argjson artifacts "$artifacts" \
-    '{registry: $reg, source: {commit: $commit, dirty: $dirty},
+    '{registry: $reg, verifier_registry: $vreg, source: {commit: $commit, dirty: $dirty},
       toolchain: {builder: $builder, rustc: $rustc, stellar: $stellar, scaffold: $scaffold},
       artifacts: $artifacts}' >"$out/build.json"
 echo "wrote $out/build.json" >&2

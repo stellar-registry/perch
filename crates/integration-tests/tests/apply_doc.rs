@@ -4,11 +4,13 @@
 //! stored. Piecemeal mutation entry points do not exist on the contract.
 //!
 //! The whole `setup()` this suite used to hand-roll is now one
-//! `perch_testkit::Bootstrap::native()` call; the stand-in verifier, the
-//! fixture constants and `fixture()` live in the testkit.
+//! `perch_testkit::Bootstrap::native()` call; the stand-in verifiers, the
+//! fixture constants and the fixture live in the testkit. An admin document
+//! names its verifiers from `perch/verifiers`, so the suite applies the
+//! frozen fixture with its two verifiers named (`World::fixture`).
 
 use perch_testkit::{
-    ci_publish_rule, fixture, Bootstrap, World, FIXTURE_NETWORK, FIXTURE_REGISTRY,
+    ci_publish_rule, Bootstrap, World, FIXTURE_NETWORK, FIXTURE_REGISTRY, FIXTURE_VERIFIER_NAMES,
 };
 use soroban_sdk::testutils::Ledger;
 use soroban_sdk::{vec, Address, Bytes, BytesN, String as SString, Symbol, Val};
@@ -21,7 +23,7 @@ fn setup() -> World {
 }
 
 fn apply_fixture(w: &World) -> BytesN<32> {
-    let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
+    let doc = Bytes::from_slice(&w.env, w.fixture().as_bytes());
     w.account_client().apply_doc(&doc, &0, &None)
 }
 
@@ -32,9 +34,9 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
 
     let hash = apply_fixture(&w);
 
-    // The stored identity is the CANONICAL doc_hash — the frozen golden
-    // vector — even though the submitted bytes are the pretty-printed file.
-    let expected = w.ci_publish_doc_hash();
+    // The stored identity is the CANONICAL doc_hash, even though the
+    // submitted bytes are the pretty-printed file.
+    let expected = w.fixture_doc_hash();
     assert_eq!(hash, expected);
     assert_eq!(client.applied_doc_hash(), Some(expected));
 
@@ -86,14 +88,16 @@ fn reapply_installs_exactly_the_new_rule_set() {
   "version": 1,
   "network": "{FIXTURE_NETWORK}",
   "signers": [
-    {{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "aa" }}
+    {{ "id": "admin", "verifier": "{}", "verifier-name": "{}", "key": "aa" }}
   ],
   "rules": [
     {{ "name": "admin",
       "scope": {{ "type": "self-admin" }},
       "principals": {{ "type": "all", "signers": ["admin"] }} }}
   ]
-}}"#
+}}"#,
+        perch_testkit::delta::strkey(&w.fixture_verifiers[0]),
+        FIXTURE_VERIFIER_NAMES[0]
     );
     let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()), &0, &None);
 
@@ -182,7 +186,7 @@ fn doc_for_another_network_is_rejected() {
     w.reregister_infra_for_current_network();
 
     let client = w.account_client();
-    let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
+    let doc = Bytes::from_slice(&w.env, w.fixture().as_bytes());
     assert!(client.try_apply_doc(&doc, &0, &None).is_err());
     assert_eq!(client.applied_doc_hash(), None);
 }
@@ -196,7 +200,9 @@ fn garbage_and_unknown_fields_are_rejected() {
         .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"), &0, &None)
         .is_err());
     // Unknown field: fail closed, never skipped.
-    let doc = fixture().replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
+    let doc = w
+        .fixture()
+        .replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
     assert!(client
         .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0, &None)
         .is_err());

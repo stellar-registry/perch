@@ -176,6 +176,7 @@ fn threshold_program_enforces_the_quorum() {
             verifier: "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG".into(),
             // Distinct key material from `ci` (else DuplicateSignerKey).
             key: "1ce6040b0d03232ac6c911b0c375f1a52ebdefff56fd361d13680e23ca578a18".into(),
+            verifier_name: None,
         },
     });
     // Bare 2-of-3 self-admin rule so the program is purely the signer floor.

@@ -49,8 +49,8 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     assert_ne!(admin.signers, w.admin_signers);
     let ci = client.get_context_rule(&installed.get_unchecked(1).id);
     assert_eq!(ci.name, SString::from_str(&w.env, "ci-publish"));
-    // OZ holds the rule's contract, signers and last ledger; its functions
-    // and argument conditions are the stored rule-eval rule's.
+    // The record holds the rule's contract, signers and last ledger; its
+    // functions and argument conditions are the stored rule-eval rule's.
     assert_eq!(ci.policies.len(), 0);
     let stored = client.rule_set().get_unchecked(1);
     assert!(!stored.conds.is_empty());

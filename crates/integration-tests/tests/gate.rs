@@ -5,19 +5,19 @@
 //! every authorization but a recovery completion, and the account's
 //! `authenticate` checks the signers:
 //!
-//! - the stored rule alone decides what its OZ rule id allows: one that
+//! - the stored rule alone decides what its rule id allows: one that
 //!   allows less refuses (`RuleEvalRefused`), and one that names a signer
-//!   OZ's rule does not lets that signer authorize;
+//!   the context rule does not lets that signer authorize;
 //! - a chosen id that names no installed rule fails with OZ's
 //!   `ContextRuleNotFound`, and choosing the recovery rule outside a
 //!   completion with `RuleEvalRefused`;
 //! - a recovery completion is left to OZ and the controller, whatever the
 //!   stored set says;
-//! - an account installed by code that attached the interpreter and the
-//!   spending limit, with no stored set, is decided by OZ and those policies
-//!   until its first `apply_doc`, which removes them and starts every
-//!   spending record empty; `apply_scope` refuses on it until then
-//!   (`NoRuleSet`);
+//! - an account storing no rule set is decided by OZ's `do_check_auth` over
+//!   OZ's registry, which holds none of its rules but the recovery rule, so
+//!   it authorizes nothing but a completion; its next `apply_doc` stores
+//!   the set and starts every spending record empty, and `apply_scope`
+//!   refuses until then (`NoRuleSet`);
 //! - each capped rule's spending record is charged by rule-eval, kept by an
 //!   edit that leaves the rule's id and cap alone, and dropped when the cap
 //!   changes, the rule is replaced or removed, or its scope is removed.
@@ -29,16 +29,13 @@ use perch_account_types::{AuthPayload, Signer};
 use perch_recovery::EvidenceDomain;
 use perch_recovery_interface::RecoveryAction;
 use perch_smart_account::testutils::{
-    remove_rule_set, set_installed_rules, set_rule_set, set_scope_rule_set, spend_record,
+    remove_rule_set, set_rule_set, set_scope_rule_set, spend_record,
 };
-use perch_smart_account::{infra, InstalledPolicy};
 use perch_testkit::rule_set::{check_records, Records};
-use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScError, ScVal, ToXdr};
+use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScError, ScVal};
 use soroban_sdk::{
     contract, contractimpl, symbol_short, vec, Address, Bytes, BytesN, Env, IntoVal, Symbol,
 };
-use stellar_accounts::policies::spending_limit::get_spending_limit_data;
-use stellar_accounts::smart_account;
 use support::*;
 
 type CallResult<T> = Result<T, Result<PerchAccountError, soroban_sdk::InvokeError>>;
@@ -80,6 +77,11 @@ fn refusal(w: &World) -> Option<ScError> {
 
 fn rule_eval_refused() -> Option<ScError> {
     let e: soroban_sdk::Error = PerchAuthError::RuleEvalRefused.into();
+    Some(e.try_into().unwrap())
+}
+
+fn rule_not_found() -> Option<ScError> {
+    let e = soroban_sdk::Error::from_contract_error(3000);
     Some(e.try_into().unwrap())
 }
 
@@ -197,63 +199,8 @@ fn record(w: &World, id: u32) -> (std::vec::Vec<(u32, i128)>, i128) {
         .unwrap_or_default()
 }
 
-/// What OZ's spending limit has recorded spent for rule `id`.
-fn oz_spent(w: &World, id: u32) -> i128 {
-    let spending_limit = infra::perch_spending_limit::address(&w.env);
-    w.env
-        .as_contract(&spending_limit, || {
-            get_spending_limit_data(&w.env, id, &w.account)
-        })
-        .cached_total_spent
-}
-
 fn records(w: &World) -> Records {
     check_records(&w.env, &w.account).unwrap_or_else(|x| panic!("the spending records: {x}"))
-}
-
-/// Leave the account as code that attached the interpreter and the spending
-/// limit to document rules left it: each installed document rule carries
-/// the program and cap Perch's RPN lowering gives it as those two policies,
-/// recorded in the installed-rule records, and no rule-eval rule set is
-/// stored.
-fn legacy(w: &World) {
-    let e = &w.env;
-    let attached = perch_testkit::rpn::policies(e, &w.client().applied_doc().unwrap())
-        .unwrap_or_else(|x| panic!("the RPN lowering: {x}"));
-    let interpreter = infra::perch_interpreter::address(e);
-    let spending_limit = infra::perch_spending_limit::address(e);
-    let digest = |b: Bytes| e.crypto().sha256(&b).to_bytes();
-    let mut records = w.client().installed_rules();
-    for i in 0..records.len() {
-        let mut r = records.get(i).unwrap();
-        let Some(c) = attached
-            .iter()
-            .find(|c| !r.recovery && soroban_sdk::String::from_str(e, &c.name) == r.name)
-        else {
-            continue;
-        };
-        e.as_contract(&w.account, || {
-            if let Some(p) = &c.install {
-                smart_account::add_policy(e, r.id, &interpreter, p.clone().into_val(e));
-                r.policies.push_back(InstalledPolicy {
-                    policy: interpreter.clone(),
-                    params: digest(p.to_xdr(e)),
-                });
-            }
-            if let Some(params) = &c.cap {
-                smart_account::add_policy(e, r.id, &spending_limit, params.clone().into_val(e));
-                r.policies.push_back(InstalledPolicy {
-                    policy: spending_limit.clone(),
-                    params: digest(params.to_xdr(e)),
-                });
-            }
-        });
-        records.set(i, r);
-    }
-    e.as_contract(&w.account, || {
-        set_installed_rules(e, &records);
-        remove_rule_set(e);
-    });
 }
 
 #[test]
@@ -263,16 +210,16 @@ fn the_stored_rule_alone_decides_what_its_oz_rule_allows() {
     assert!(w.activity());
     assert!(
         !w.activity_as(&w.device),
-        "OZ's rule and its stored rule name the owner"
+        "the context rule and its stored rule name the owner"
     );
 
-    // A stored rule that allows less: OZ's rule is unchanged.
+    // A stored rule that allows less: the context rule is unchanged.
     tamper(&w, "target");
     assert!(!w.activity());
     assert_eq!(refusal(&w), rule_eval_refused());
 
-    // A stored rule that names a signer OZ's rule does not: OZ only
-    // authenticates it.
+    // A stored rule that names a signer the context rule does not: the
+    // signer is only authenticated.
     let device = Signer::Delegated(w.device.clone());
     restore(&w, "target", |r| {
         r.signers.push_back(device);
@@ -356,46 +303,43 @@ fn a_recovery_completion_is_left_to_oz_and_the_controller() {
 }
 
 #[test]
-fn an_account_without_a_stored_set_is_decided_by_oz_until_its_first_apply_empties_every_record() {
+fn an_account_without_a_stored_set_authorizes_nothing_until_its_next_apply_empties_every_record() {
     let w = world();
     let token = w.env.register(Token, ());
     let doc = capped_doc(&w, &token, &["owner"], &[("spend", 10)]);
     w.apply_bytes(&doc, 0).unwrap();
-    legacy(&w);
-    assert!(w.client().rule_set().is_empty());
     let id = w.rule_id(&w.account, "spend");
-
-    // OZ, the interpreter and the spending limit decide, and the spending
-    // limit keeps the window.
     assert!(spend(&w, &token, &w.owner, id, 6));
-    assert!(!spend(&w, &token, &w.owner, id, 5), "over OZ's cap");
-    assert_eq!(oz_spent(&w, id), 6);
-    assert_eq!(record(&w, id), (std::vec![], 0));
-    // Scoped rules carry no policy, so none is installed until rule-eval
-    // can check it.
+    w.env.as_contract(&w.account, || remove_rule_set(&w.env));
+
+    // OZ's `do_check_auth` decides, over a registry holding none of the
+    // account's rules but the recovery rule, so the owner authorizes
+    // nothing: no spend, no scoped document, no admin document.
+    assert!(!spend(&w, &token, &w.owner, id, 1));
+    assert_eq!(refusal(&w), rule_not_found());
     let app = w.new_key();
+    let grant = capped_grant(&w, &token, "allowance", &app, 10);
+    assert!(apply_scope(&w, 3, &grant).is_err());
+    assert_eq!(refusal(&w), rule_not_found());
+    assert!(w.apply_bytes(&doc, 0).is_err());
+    assert_eq!(refusal(&w), rule_not_found());
+
+    // Past authorization (mocked here), scoped rules carry no policy, so
+    // none is installed until rule-eval can check it; the next apply_doc,
+    // of the same document, stores the set and starts every record empty.
+    w.env.mock_all_auths();
     assert_eq!(
-        apply_scope(&w, 3, &capped_grant(&w, &token, "allowance", &app, 10)),
+        w.client().try_apply_scope(&3, &grant),
         Err(Ok(PerchAccountError::NoRuleSet))
     );
-
-    // The first apply_doc, of the same document, removes the policies,
-    // stores the set, and starts every record empty: within OZ's window the
-    // cap allows its whole limit again.
-    w.apply_bytes(&doc, 0).unwrap();
-    assert!(w
-        .client()
-        .installed_rules()
-        .iter()
-        .all(|r| r.policies.is_empty()));
+    w.client().apply_doc(&doc, &0, &None);
     perch_testkit::rule_set::check(&w.env, &w.account).unwrap();
-    let id = w.rule_id(&w.account, "spend");
-    assert!(w.client().get_context_rule(&id).policies.is_empty());
+    assert_eq!(w.rule_id(&w.account, "spend"), id);
     assert!(spend(&w, &token, &w.owner, id, 10));
     assert!(!spend(&w, &token, &w.owner, id, 1));
     assert_eq!(refusal(&w), rule_eval_refused());
     assert_eq!(record(&w, id).1, 10);
-    apply_scope(&w, 3, &capped_grant(&w, &token, "allowance", &app, 10)).unwrap();
+    apply_scope(&w, 3, &grant).unwrap();
 }
 
 #[test]

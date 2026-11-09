@@ -993,8 +993,10 @@ fn one_accounts_completion_never_spends_anothers_nullifier() {
 /// sub-invocation that never executes. The marker it leaves must not turn a
 /// later, unrelated `apply_doc` into a (failing) completion. Only an
 /// account that stores no rule-eval rule set, which OZ's `do_check_auth`
-/// decides, still runs `enforce` outside a completion: one that stores a set
-/// refuses every other authorization choosing the recovery rule.
+/// decides over OZ's registry, still runs `enforce` outside a completion:
+/// one that stores a set refuses every other authorization choosing the
+/// recovery rule. The account never leaves itself without a set, nor writes
+/// its admin rule to OZ's registry; this test does both.
 #[test]
 fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
     let w = world();
@@ -1052,10 +1054,21 @@ fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
         "the recovery rule outside a completion"
     );
 
-    // Without a stored set, OZ and the controller accept it, leaving the
-    // marker.
+    // Without a stored set, OZ decides over its own registry, here given the
+    // owner's admin rule under the account's admin id: OZ and the
+    // controller accept it, leaving the marker.
+    let admin = w.rule_id(&w.account, "admin");
     w.env.as_contract(&w.account, || {
-        perch_smart_account::testutils::remove_rule_set(&w.env)
+        perch_smart_account::testutils::remove_rule_set(&w.env);
+        let rule = stellar_accounts::smart_account::add_context_rule(
+            &w.env,
+            &stellar_accounts::smart_account::ContextRuleType::CallContract(w.account.clone()),
+            &soroban_sdk::String::from_str(&w.env, "admin"),
+            None,
+            &vec![&w.env, Signer::Delegated(w.owner.clone())],
+            &soroban_sdk::Map::new(&w.env),
+        );
+        assert_eq!(rule.id, admin);
     });
     w.env.set_auths(&[entry()]);
     w.client().execute(&w.target, &f, &call_args);

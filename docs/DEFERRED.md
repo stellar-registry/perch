@@ -181,17 +181,18 @@ rules and the cross-language parity vectors.
 materialization, selected by version, and document limits above the current
 caps.
 
-**Current behaviour:** the account materializes each document rule as one OZ
-`stellar-accounts` context rule (the pinned fork,
-[`audit-scope.md`](audit-scope.md#explicit-dependency-review)) with its
-contract, signers and last ledger and no policy, beside the rule-eval rule
-it stores for it, which decides every authorization through it.
+**Current behaviour:** the account installs each document rule as a record
+of its own (its rule registry) with its contract, signers and last ledger
+and no policy, beside the rule-eval rule it stores for it, which decides
+every authorization through it. OZ's `stellar-accounts` (the pinned fork,
+[`audit-scope.md`](audit-scope.md#explicit-dependency-review)) keeps only
+the recovery rule's two registry entries, for its `do_check_auth`.
 `apply_doc` reconciles the installed rules as a delta (spec §7.5).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
 (`MAX_DOC_SIGNERS`), more than 10 rules (`MAX_DOC_RULES`), more than 8,192
 canonical bytes (`MAX_DOC_CANONICAL_BYTES`), or a rule name over 20 bytes
-(`MAX_RULE_NAME_BYTES`, OZ's `MAX_NAME_SIZE`). The recovery rule the account
+(`MAX_RULE_NAME_BYTES`, the account's `MAX_NAME_SIZE`). The recovery rule the account
 generates is additional to the 10 document rules. The caps are sized so that
 a worst-case completion, compromise restore, or `Protected` reconfiguration
 stays within 75% of every *measured* per-transaction limit — instructions,
@@ -204,8 +205,8 @@ before mainnet.
 
 **Why it is safe to defer:** the caps exist so that a thief holding the
 owner key cannot make a recovery too expensive to complete (spec §7.5). A
-document over a cap is refused whole and changes nothing. The OZ
-materialization is the audited backend (the Perch OZ materialization unit).
+document over a cap is refused whole and changes nothing. The account's
+records are the audited backend (the Perch OZ materialization unit).
 The residual limit is product capacity: a document that needs more signers,
 rules, or bytes cannot be applied. The caps apply per document; app grants
 can be spread over any number of scoped documents (spec §7.6), each under
@@ -269,10 +270,11 @@ signers).
 **Deferred:** a promise that a rule keeps one numeric id across document
 changes.
 
-**Current behaviour:** rule ids are OZ context-rule ids. An in-place edit
-keeps a rule's id. A replacement gives it a new one: a changed scope, a
-rename, a removal and re-addition, or the cost model choosing replacement
-(spec §7.5). OZ never reuses an id, so A → B → A restores the `doc_hash` but
+**Current behaviour:** rule ids come from the account's counter, as OZ's
+context-rule registry gave them for the same documents. An in-place edit
+keeps a rule's id. A new id comes with a changed scope, a rename, a
+removal and re-addition, or a recovery rule reconfigured at the same
+controller (spec §7.5). No id is given twice, so A → B → A restores the `doc_hash` but
 not the ids (`a_b_a_restores_the_doc_hash_but_not_the_selection` in
 `revision.rs`). Consumers select rules by name and scope from
 `configuration()` at one revision (perch-js `selectRules`) and do not keep
@@ -299,16 +301,13 @@ it. The current audit contract makes no id-stability promise.
 reinstallation.
 
 **Current behaviour:** the account keeps one spending record per capped
-rule, keyed by its OZ context rule id, which rule-eval charges in
-`__check_auth`. When `apply_doc` or `apply_scope` keeps a rule's id and its
-cap, the record is kept: a signer change or a change to the rule's other
-text keeps it. Changing the cap's own parameters, or replacing the rule,
-starts an empty record, and so does the first `apply_doc` after an account
-is upgraded from code that kept the window in OZ's `spending_limit` (spec
-§12). Whether a changed rule is edited or replaced is the cost
-model's choice (spec §7.5), so a document change that touches a capped rule
-can reset its window. A compromise recovery that restores a baseline can
-therefore give the baseline's retained signers a fresh window.
+rule, keyed by its rule id, which rule-eval charges in `__check_auth`.
+When `apply_doc` or `apply_scope` keeps a rule's id and its cap, the record
+is kept: a signer change or a change to the rule's other text keeps it.
+Changing the cap's own parameters, renaming or rescoping the rule, or
+removing it starts an empty record (spec §7.5). A compromise recovery that
+restores a baseline whose capped rule the thief renamed, rescoped or
+recapped therefore gives the baseline's retained signers a fresh window.
 
 **Why it is safe to defer:** every reset needs the authority to change the
 document, and that authority could remove the cap outright, so a reset
@@ -336,7 +335,7 @@ proves T1–T8: the per-invocation evaluator and its lowering, and the CANON
 v1 canonical form and fragment hashes. Its link to the Rust code is
 empirical (shared vectors, round-trips, fuzzing), not deductive. There is no
 formal model of the recovery controller's state machine, account
-authorization (`__check_auth`, OZ rule selection, the delta `apply_doc`, the
+authorization (`__check_auth`, rule selection, the delta `apply_doc`, the
 revision), the ZK circuit, verifier, adapter, and pool, the doc compiler
 beyond canonical bytes and `config_hash` (validation, `derive_target`), or
 the recovery statement encoding. Tests cover these instead
@@ -366,7 +365,10 @@ variants of every context-rule, signer, and policy mutation) and
 on ([#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3)) onto
 upstream OpenZeppelin, and re-pinning to the merged code.
 
-**Current behaviour:** `Cargo.toml` pins `stellar-accounts` 0.7.1 to git rev
+**Current behaviour:** the account calls none of the `_no_events` mutators
+or `reconcile_signers`; it links OZ's `do_check_auth` for a recovery
+completion, and the spending limit's quiet install and uninstall come from
+#4. `Cargo.toml` pins `stellar-accounts` 0.7.1 to git rev
 `33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` of theahaco/stellar-contracts-OZ,
 the head of #5, which is stacked on #4, which is stacked on #3 (CAP-0071
 delegated authentication). The pinned commit is upstream OpenZeppelin

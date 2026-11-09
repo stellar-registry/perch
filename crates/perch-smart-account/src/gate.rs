@@ -9,10 +9,9 @@
 //! signers against OpenZeppelin's digest, so wallets sign the bytes they
 //! sign for an OpenZeppelin account, and the records `authorize` charged are
 //! stored.
-//! OpenZeppelin's context rules are the registry of rule ids and signers:
-//! each chosen OZ id is read as the stored rule at its position, in the
-//! admin document's set when it is one of `installed_rules`, in its scope's
-//! set when a scoped document installed it (its `ScopeTag`). `authorize`
+//! Each chosen rule id is read as the stored rule at its record's position,
+//! in the admin document's set when it is one of `installed_rules`, in its
+//! scope's set when a scoped document installed it (its `ScopeTag`). `authorize`
 //! reads only the rules its choices name, so running it over the chosen
 //! rules alone gives the verdict and records of running it over the whole
 //! stored set. A chosen id that names no installed rule refuses with
@@ -25,11 +24,10 @@
 //! authorization may choose it.
 //!
 //! Each capped rule keeps one record. It is kept across an apply exactly
-//! when its rule keeps both its OZ id and its cap: a changed cap, or a
+//! when its rule keeps both its id and its cap: a changed cap, or a
 //! removed or replaced rule, drops it in `apply_doc` and `apply_scope`
 //! ([`drop_records`]), and removing a scope drops its rules' records. An
-//! account's first `apply_doc` with this code, on rules installed with
-//! OpenZeppelin's spending limit, starts every record empty.
+//! apply over rules stored with no rule set drops every record.
 
 use alloc::vec::Vec;
 
@@ -53,7 +51,7 @@ fn refused() -> soroban_sdk::Error {
 /// Rule-eval's verdict on the authorization, once every payload signer
 /// has authenticated, storing every capped chosen rule's record when it
 /// accepts (module docs). `admin` is the stored admin set, `recovery` the
-/// recovery rule's OZ id, and `bound` the account-bound signature payload.
+/// recovery rule's id, and `bound` the account-bound signature payload.
 pub(crate) fn authorize(
     e: &Env,
     admin: &SVec<StoredRule>,
@@ -132,7 +130,7 @@ fn same(a: &rule_eval::SpendRecord, b: &rule_eval::SpendRecord) -> bool {
             .all(|(x, y)| x.ledger == y.ledger && x.amount == y.amount)
 }
 
-/// The host value of the stored rule OZ rule `id` enforces: the entry at
+/// The host value of the stored rule rule `id` enforces: the entry at
 /// its position in its scope's stored set when a scoped document installed
 /// it, otherwise in `admin` at its position in `installed_rules` (read once,
 /// into `installed`). Every entry read is extended, as the stored sets are
@@ -161,7 +159,7 @@ fn position(rules: &SVec<InstalledRule>, id: u32) -> Option<u32> {
     rules.iter().position(|r| r.id == id).map(|i| i as u32)
 }
 
-/// The spending record the account keeps for OZ rule `id` (absent is
+/// The spending record the account keeps for rule `id` (absent is
 /// nothing spent), read with `mirror::record`.
 fn record(e: &Env, id: u32) -> Option<rule_eval::SpendRecord> {
     let key = PerchStorage::new(e).get_perch_storage_spend_records_key(id);
@@ -175,7 +173,7 @@ fn record(e: &Env, id: u32) -> Option<rule_eval::SpendRecord> {
     }
 }
 
-/// Remove OZ rule `id`'s record, if it has one.
+/// Remove rule `id`'s record, if it has one.
 pub(crate) fn drop_record(e: &Env, id: u32) {
     if PerchStorage::has_spend_records(e, &id) {
         PerchStorage::remove_spend_records(e, &id);

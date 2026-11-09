@@ -10,7 +10,7 @@
 //! The left side is the path an account takes to rule-eval's rules: the
 //! document model and its conversion through `soroban-facade`, then rule-eval's
 //! proven lowering. The right side reads what the compiler emits and the RPN
-//! lowering attaches, as those policies enforce it: OZ's context rule, the
+//! lowering attaches, as those policies enforce it: the context rule, the
 //! interpreter's program and the spending limit's parameters. The compiler's
 //! rules must also equal the RPN lowering's (`perch_testkit::rpn::
 //! check_compiled`), and each model survives the host's XDR.

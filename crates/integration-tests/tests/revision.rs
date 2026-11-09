@@ -159,14 +159,13 @@ fn rule_not_found() -> soroban_sdk::Error {
     soroban_sdk::Error::from_contract_error(SmartAccountError::ContextRuleNotFound as u32)
 }
 
-/// Whether OZ holds no rule `id`.
+/// Whether the account holds no rule `id`: its view refuses with
+/// `ContextRuleNotFound`.
 fn rule_missing(w: &World, id: u32) -> bool {
-    w.env.as_contract(&w.account, || {
-        !w.env
-            .storage()
-            .persistent()
-            .has(&stellar_accounts::smart_account::SmartAccountStorageKey::ContextRuleData(id))
-    })
+    matches!(
+        w.client().try_get_context_rule(&id),
+        Err(Ok(e)) if e == rule_not_found()
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +458,7 @@ fn a_b_a_restores_the_doc_hash_but_not_the_selection() {
     assert_eq!(hash_again, hash_a);
     assert_eq!(w.client().configuration().doc_hash, Some(hash_a));
     let j = select(&w, "app").expect("app at r3");
-    assert_ne!(j, i, "OZ never reuses an id");
+    assert_ne!(j, i, "no rule id is reused");
     assert_ne!(r3, r1, "the revision tells A -> B -> A from A");
 
     // The r1 selection names an id that no longer exists: the transaction

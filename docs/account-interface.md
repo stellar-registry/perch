@@ -17,6 +17,17 @@ authorization: `apply_doc`, `execute` (arbitrary calls as the account), the
 upgrade entry points, and `cancel_recovery`. It is full owner authority, not
 `apply_doc` alone.
 
+The signers get the checks OZ's context-rule registry gave them, with its
+error codes: at least one (3004), at most 15 (3010), external keys of at
+most 256 bytes (3013), and no two that are one key (3007): two delegated
+signers with one address, or external signers their verifier's
+`batch_canonicalize_key` maps to the same bytes, each verifier asked once.
+A rule a document installs gets the same limits; the compiler has already
+refused a non-canonical key and a key declared twice, so applies ask no
+verifier. The constructor emits `context_rule_added` for rule 0, as OZ's
+registry announces a rule: its id, name, contract, no last ledger, its
+signers' positions as their ids, and no policy.
+
 ## Applying documents
 
 ### `apply_doc`
@@ -66,8 +77,8 @@ the owner chooses (one per app grant, say), and returns its `doc_hash`
   revives it with the new rules.
 - It calls no controller, and leaves the applied `doc_hash` and the revision
   alone.
-- It refuses (`NoRuleSet`) on an account that stores no admin rule set, until
-  its first `apply_doc`.
+- It refuses (`NoRuleSet`) on an account that stores no admin rule set,
+  which the constructor never leaves.
 
 ### Removing scopes
 
@@ -105,15 +116,17 @@ as the account (spec §15).
   Scoped documents' rules are not in it; `scopes` and `scope` list them.
 - **`capabilities`.** See `AccountCapabilities` below.
 - **`installed_rules`, `rule_set`.** `installed_rules` is every context rule
-  the admin document installed, with its OZ id; `apply_doc` matches the
+  the admin document installed, with its id; `apply_doc` matches the
   document's rules against these. `rule_set` is aligned with it: entry `i` is
   the rule-eval rule installed rule `i` enforces, and what `__check_auth`
-  evaluates. `rule_set` is empty on an account that has not applied a
-  document since it was upgraded to code that keeps it; OZ's policies still
-  decide for that account.
-- **`get_context_rules_count`, `get_context_rule`.** OZ's read-only rule
-  surface, re-exposed because `SmartAccount` itself is deliberately not
-  exported. The count includes scoped documents' and expired rules.
+  evaluates.
+- **`get_context_rules_count`, `get_context_rule`.** The account's rules in
+  OZ's `ContextRule` shape, read from its records (the admin document's and
+  every scope's). A rule keeps its id while it is edited in place and gets a
+  new one when it is added or installed again; no id is given twice. A
+  rule's `signer_ids` and `policy_ids` are its signers' and policies'
+  positions in it. The count includes scoped documents' and expired
+  rules.
 - **`scope_generation`.** 0 until the first completed recovery, then advanced
   by one by each completed recovery and by nothing else: not by enrollment,
   reconfiguration, removal, a controller switch, or an executed upgrade, all
@@ -224,10 +237,10 @@ recorded when a controller is adopted, and passed back as
 
 ## Events
 
-The rule, signer, and policy mutations emit nothing themselves (OZ's
-`_no_events` variants), so `DocApplied` and `ScopeApplied`, with the applied
-document `applied_doc` or `scope_doc` serves, are the whole record of a
-change. `UpgradeDropped` is emitted when a scheduled upgrade is cancelled,
+Rule changes emit no event of their own, so `DocApplied` and
+`ScopeApplied`, with the applied document `applied_doc` or `scope_doc`
+serves, are the whole record of a change. The constructor emits
+`context_rule_added` for its admin rule (see "Constructor"). `UpgradeDropped` is emitted when a scheduled upgrade is cancelled,
 replaced by a newer request, found stale at execution, or cleared by a
 recovery.
 
@@ -252,8 +265,9 @@ their docs land in the account's spec too.
 - **`UnguardedRule`.** A rule other than the recovery rule asks for no signer
   (INV-1), so an authorization with no signer at all would satisfy it.
 - **`NoRuleSet`.** `apply_scope` was called on an account that stores no
-  admin rule set: one upgraded from code that kept none and not re-applied
-  since. Its first `apply_doc` stores it.
+  admin rule set. The constructor stores one and every `apply_doc` replaces
+  it, and an account without one authorizes nothing but a recovery
+  completion, so a deployed account does not raise it.
 - **`Compiler_KeyNotCanonicalizable`.** Either the verifier could not
   canonicalize the key at all, or the declared bytes differ from the
   canonical form it returns (for example a WebAuthn key carrying a

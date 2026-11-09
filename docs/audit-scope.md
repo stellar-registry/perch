@@ -131,7 +131,7 @@ published to crates.io; contract releases are on-chain Wasm publishes.
 | Unit | Covers | Who reviews |
 | --- | --- | --- |
 | **Perch core** | Backend-independent: the recovery controller's state machine, the statement, ZK circuit, pool, and adapter, revocation, the freeze, upgrades, the document compiler and CANON, the interpreter, the verifiers, the factory | This audit |
-| **Perch OZ materialization** | How a compiled document becomes OZ context rules: the delta reconcile, the install paths, the document caps, the spending-limit wrapper, and the `stellar-accounts` pin | This audit |
+| **Perch OZ materialization** | How a compiled document becomes the account's installed rules: its own rule registry and the two OZ registry entries kept for the recovery rule, the delta reconcile, the install paths and checks, the document caps, the spending-limit wrapper, and the `stellar-accounts` pin | This audit |
 | **Explicit dependency review** | Code Perch does not own line by line but every contract or consumer relies on: the three OZ fork deltas, the UltraHonk ZK-flavour delta, the consumed JS packages, and artifact selection | This audit, as named dependency deltas |
 | **Nido integration and browser review** | How Nido deploys and calls this stack: its factory, wallet, and browser code | Nido's own audit manifest (`nidohq/nido`, `docs/AUDIT_SCOPE.md`) |
 
@@ -193,13 +193,15 @@ suffix and key canonicalization matter — is exercised by Nido's suite
 
 | Path | What |
 | --- | --- |
-| `crates/perch-smart-account/src/rules.rs` | The delta reconcile: rules matched by slot, the cheaper of an in-place edit and a replacement per rule (`Cost`, `Meter`), every OZ mutation through its `_no_events` variant, the `DeltaSummary` |
-| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the OZ rule views, `install_admin`; the scoped-document paths `apply_scope_doc`, `check_scoped`, `names_guardian_approval`, `excluded_contract`, the credential index (`check_unwiped`), `drop_scope`, and the scope index (spec §7.6) |
-| `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (OZ's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
+| `crates/perch-smart-account/src/rules.rs` | The account's rule registry and the delta reconcile: rules matched by slot, which changed rules keep their id (`keeps_id`), the id counter (`allocate`), the install-time limits (`check`), the recovery rule's controller `install`, the `DeltaSummary` |
+| `crates/perch-smart-account/src/auth.rs`: `check_distinct`, `oz` | The constructor's canonical-duplicate check through the verifiers, and the two OZ registry entries kept for the recovery rule, which OZ's `do_check_auth` reads to decide a completion |
+| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the rule views (`get_context_rule`, `get_context_rules_count`), `install_admin` and its `ContextRuleAdded`; the scoped-document paths `apply_scope_doc`, `check_scoped`, `rule_set::names_guardian_approval`, `excluded_contract`, the credential index (`check_unwiped`), `drop_scope`, and the scope index (spec §7.6) |
+| `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (the account's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
 | `crates/perch-spending-limit/**` | The deployable wrapper of OZ `spending_limit`, installing and uninstalling without events |
 | `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it (all but the ZK pool and adapter) |
 
-**Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps}.rs`;
+**Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps,install_checks}.rs`;
+`oz_differential.rs` against the OZ-registry build it replaces;
 the full-replace oracle `crates/perch-testkit/src/delta.rs` and the fuzz
 target `fuzz/fuzz_targets/apply_doc_delta.rs`. The scoped-document paths:
 `crates/integration-tests/tests/{scoped_docs,scoped_guardian_approvals,apply_scope_delta,rule_core_documents}.rs` and the
@@ -210,8 +212,8 @@ every step; `release_stack.rs` (`docsplit_*`). The full replace shares
 compile and the desired rule set (expiry drop, recovery rule) with the
 delta, so it checks the reconcile only; each accepted step is also checked
 against the grant the document model computes on its own
-(`DocModel::expected_rules` against `live_rules`, read from OZ's context
-rules and the policies' stored parameters). The generator reaches the
+(`DocModel::expected_rules` against `live_rules`, read from the account's
+rule views and its stored rules). The generator reaches the
 document caps, permutes signer lists, spells keys in either hex case and cap
 limits with leading zeros or a sign, and advances the ledger past rule
 expiries between documents; `release_stack.rs`

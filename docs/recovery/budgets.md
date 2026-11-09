@@ -133,7 +133,7 @@ States: **Measured** (within budget unless stated; the cell says where);
 | §2 enrollment through `apply_doc` | Measured: in process (at the caps, and sealing a tree) and on testnet | Within budget. Sealing a tree is in process only: a full tree takes 2^32 insertions. |
 | §2 `begin_lost_key`, `begin_compromise`, `publish_baseline` | Measured: in process (at the caps) and on testnet | Within budget. |
 | §2 `submit_guardian`, `submit_zk` (promoting) | Measured: in process and on testnet | Within budget. |
-| §2 completion `apply_doc` | Measured: in process (at the caps, every worst-case flow) and on testnet | Within budget. Binding row at the caps: [Document caps](#document-caps). |
+| §2 completion `apply_doc` | Measured: in process (at the caps, every worst-case flow) and on testnet | Within budget. Binding row at the caps: [The account's own rule registry](#the-accounts-own-rule-registry). |
 | §2 completion after rule churn | Measured without churn; bounded by construction | The reconcile reads only its installed-rule records, never historical rule ids ([implementation.md](implementation.md#delta-apply-spec-75)). `completion_cost_does_not_grow_with_policy_churn` (native contracts, in process) finds the same completion entry count after 1 and after 40 applies of one document near the rule cap; identical re-applies create no new rule ids, so the test does not itself produce churn. |
 | §2 cancellation, `approve_change`, `submit_zk_change` | Measured: in process and on testnet | Within budget. |
 | §2 `Protected` reconfiguration, `schedule_upgrade` | Measured: in process (reconfiguration at the caps) and on testnet | Within budget. |
@@ -253,7 +253,7 @@ at 294.4M (73.6%), and written entries at 141 (70.5%, the renamed thief).
 ### Document caps
 
 **The caps are 8 declared signers, 10 document rules, 8 192 canonical
-bytes, and rule names of at most OZ's 20 bytes**
+bytes, and rule names of at most 20 bytes**
 (`perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES,
 MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}`). The generated recovery rule
 is additional to the 10. The rule cap is 10, not 11, because the account
@@ -264,8 +264,8 @@ within budget, so lowering a limit or growing a flow's cost fails CI's
 `release-stack-source` job. The compromise flows run with a thief's scoped
 documents installed and budget their completion on a forked host
 ([Scoped documents](#scoped-documents)). Rerun `scripts/cap-sweep.py` after a change to
-the reconcile's cost model, OZ's mutations, the controller's or the
-policies' storage, or a network limit.
+the reconcile, the account's records, the controller's storage, or a
+network limit.
 
 **Worst cases.** A completion's cost depends on how its source and target
 differ, so the flows are the ones with the largest difference, every way
@@ -291,11 +291,11 @@ over signer and rule counts and tabulates the worst share of every limit.
 The shape is the costliest the caps admit:
 
 - every signer is a passkey (the longest key the stack's verifiers take),
-  named by some rule, as many per rule as OZ allows;
+  named by some rule, as many per rule as the account allows (15);
 - every rule but `admin` and the owner's activity rule carries both
   policies (the interpreter and a spending cap);
 - the document is padded to the larger of 8 192 bytes and its own size,
-  with a `string-in` argument constraint and rule names at OZ's 20-byte
+  with a `string-in` argument constraint and rule names at the 20-byte
   limit.
 
 `cap-sweep.py --simulate` checks the metered footprint and written entries
@@ -337,30 +337,27 @@ over 75%, or the caps):
   program, and spending window).
 - **The footprint is never above 44.0%; events never above 31.0%.**
 
-At the caps the worst share is instructions at 73.6%, in the reprogram
-thief's completion; written entries are at 70.5% (the renamed thief).
+On that source, at the caps the worst share was instructions at 73.6%, in
+the reprogram thief's completion, and written entries at 70.5% (the
+renamed thief).
 Every shape up to the caps fits the 8 192-byte canonical cap. Other
 frontier points are 2 and 17, 4 and 16, 6 and 14, 10 and 9, 12 and 8, and
 15 and 5.
 
-**Why the reprogram thief binds on instructions.** The reconcile's cost
-model prices ledger writes only ([`implementation.md`](implementation.md#delta-apply-spec-75)).
-For a rule whose name is kept and whose program changed, the in-place edit
-writes fewer entries than a replacement (one `reconcile_signers` and a
-reinstall of the interpreter policy, against a removal and an addition), so
-the reconcile edits the rule in place. Each of those OZ calls re-reads the
-rule and its signers, so the in-place path costs more instructions than the
-replacement would.
+The frontier above was measured when OZ's context-rule registry held the
+account's rules, so every in-place edit re-read the rule and its signers
+through OZ; [The account's own rule registry](#the-accounts-own-rule-registry)
+has this source's costs and its sweep.
 
-**Rule names.** The compiler refuses a rule name longer than OZ's 20-byte
-context-rule limit (`MAX_RULE_NAME_BYTES`), so a document that would fail
+**Rule names.** The compiler refuses a rule name longer than the account's
+20-byte limit (`MAX_RULE_NAME_BYTES`, OZ's), so a document that would fail
 at install never compiles; otherwise a published compromise baseline with
 such a name could never be restored. A rule cannot name more signers than
-OZ's per-rule 15 because the document cannot declare more than 8.
+the account's per-rule 15 because the document cannot declare more than 8.
 
 **Assumption.** Signer keys are at most a passkey's (81 bytes of key data).
 A custom verifier with keys up to the 256 bytes the IR admits would grow
-every signer's registry entry and the write bytes, and needs its own
+the records, the stored sets and the write bytes, and needs its own
 measurement.
 
 ### Scoped documents
@@ -565,16 +562,17 @@ worst share of each limit:
 | 4 | 10 | 64.2% | 39.0% | 30.8% | 54.0% | 57.9% | 14.1% |
 | 2 | 10 | 59.9% | 39.0% | 27.2% | 48.0% | 55.7% | 10.9% |
 
-Instructions bind in every row, in the fork completion whose thief kept
-every name and changed every program. Ten rules is the largest rule cap at
-8 signers within 75%, so `MAX_DOC_RULES` is 10.
+Instructions bound in every row, in the fork completion whose thief kept
+every name and changed every program. Ten rules was the largest rule cap at
+8 signers within 75% on that source, which set `MAX_DOC_RULES` to 10; this
+source's sweep is in [The account's own rule registry](#the-accounts-own-rule-registry).
 
 ### Rule-eval in `__check_auth`
 
 `__check_auth` decides every authorization but a recovery completion with
 rule-eval's `authorize` over the stored rules of the chosen rules, and the
 account's `authenticate` checks the signers (`implementation.md`, "Rule-eval in
-`__check_auth`"). A document rule's OZ context rule carries no policy, so an
+`__check_auth`"). A document rule carries no policy, so an
 authorization calls neither the interpreter nor the spending limit, and an
 apply installs and uninstalls neither. Source: 2026-11-04, stacks built with
 `scripts/build-stack.sh --builder contract` from this source, from the
@@ -630,19 +628,91 @@ Instructions, as a share of the 400M limit:
   ([Rule-eval rule sets](#rule-eval-rule-sets)); `scripts/cap-sweep.py` has
   not been rerun on this source.
 
-The account wasm is 128,188 bytes as `stellar contract build` builds it
-and 128,353 bytes as `stellar scaffold build` builds it for a deployment,
-under the 131,072-byte contract limit. Its contract spec carries the doc
-comments of its entry points and contract types, so some of those are plain
-`//` comments. It reads
-stored rules and records from their XDR in one pass and a batch of calls
-one host value at a time, rather than through `#[contracttype]` decoding and
-soroban-facade's context reading, which would take the account over the
-limit; reading a compiled model builds its vectors with plain loops rather
-than iterator adapters, which saves another 2 KB. `apply_doc` and `apply_scope` keep `#[contracttype]` conversion: in
+The account's size on this source is in
+[The account's own rule registry](#the-accounts-own-rule-registry). Its
+contract spec carries the doc comments of its entry points and contract
+types, so some of those are plain `//` comments. It reads stored rules and
+records from their XDR in one pass and a batch of calls one host value at a
+time, rather than through `#[contracttype]` decoding and soroban-facade's
+context reading, which would add to its code; reading a compiled model
+builds its vectors with plain loops rather than iterator adapters, which
+saves another 2 KB. `apply_doc` and `apply_scope` keep `#[contracttype]` conversion: in
 the account's wasm, where a call costs 67 fuel and a short copy is a byte
 loop, reading the model or writing the set as XDR costs the binding
 completion 7M to 9M more instructions than the host's conversion does.
+
+### The account's own rule registry
+
+The account keeps its rule ids, rules and signers in its own records, and
+OZ's context-rule registry holds only the two entries of the recovery rule
+that OZ's `do_check_auth` reads for a completion (`implementation.md`,
+"Delta apply"). An apply writes no OZ rule, signer, policy or lookup entry,
+and asks no verifier to canonicalize a key. Source: 2026-11-08, stacks
+built with `scripts/build-stack.sh --builder contract` from this source and
+from the source before it, where OZ's registry held every rule, through
+every `release_stack.rs` flow (26 tests, `--skip cap_sweep`), real proofs,
+passkeys, enforcing authorization. Both pass. Each of the 264 metered rows
+on both stacks:
+
+| Row (8 signers, 10 rules, 8 per rule) | Instructions | Footprint | Written entries | Memory |
+| --- | --- | --- | --- | --- |
+| Compromise completion on the long-lived host, the thief kept every name and changed every program and cap (3 thief scopes of 8) | 251.26M (62.8%) → 165.81M (41.5%) | 108 → 64 | 85 → 41 | 14.7 → 5.9 MB |
+| The same on the fork | 236.93M → 165.50M (41.4%) | 108 → 64 | 85 → 41 | 9.9 → 5.3 MB |
+| Compromise completion on the long-lived host, the thief renamed every rule | 229.71M → 163.71M (40.9%) | 117 → 64 | 94 → 41 | 15.1 → 6.0 MB |
+| Lost-key completion (`Combined`, ZK rotation, every signer revoked) | 235.77M → 162.97M (40.7%) | 92 → 48 | 77 → 33 | 10.3 → 5.1 MB |
+| `Protected` reconfiguration, every rule edited | 238.09M → 166.37M (41.6%) | 84 → 40 | 60 → 16 | 10.4 → 5.4 MB |
+| `Protected` reconfiguration, every rule replaced | 214.84M → 163.88M (41.0%) | 101 → 48 | 69 → 16 | 10.2 → 5.4 MB |
+| Thief's `apply_doc`, names kept, every program and cap changed | 197.02M → 125.68M (31.4%) | 75 → 33 | 48 → 6 | 8.6 → 3.6 MB |
+| `gc_scope` of a wiped scope (8 grants) | 7.79M → 2.57M | 49 → 25 | 40 → 16 | |
+| Factory `create_passkey` | 2.28M → 1.96M | 11 → 8 | 6 → 3 | |
+| Capped transfer through a grant | 5.58M → 5.54M | 13 → 13 | 4 → 4 | |
+
+- **Every row is within 75%,** and no row rises on any limit but one row's
+  instructions: `submit_zk_change` for an upgrade, +0.002M at 29.3%. The
+  costliest row is now the `Protected` reconfiguration that edits every
+  rule, at 41.6% of the instruction limit, where the costliest was a
+  compromise completion at 62.8%. The worst shares of the other limits are
+  memory 23.6% and write bytes 50.0% (both the capped transfer after 906
+  spends, [Rule-eval in `__check_auth`](#rule-eval-in-__check_auth)),
+  footprint 16.0%, written entries 20.5%, and events 20.5%, where they were
+  36.1%, 51.6%, 29.2%, 47.0% and 20.5%.
+- **Events.** The constructor no longer announces each signer
+  (`signer_registered`, 260 bytes for one passkey); 50 rows emit fewer
+  bytes, none more.
+- **Authorizations** read no entry of OZ's registry before and after; the
+  32 authorization rows fall by 0.02M to 0.20M instructions.
+
+`scripts/cap-sweep.py --bytes 0` over every worst-case flow, on a stack
+built from this source with the compiler's caps raised (15 signers, 32
+rules, 32 768 bytes) and padded to the larger of 8 192 bytes and the
+document's own size, the worst share of each limit:
+
+| Signers | Rules | Canonical bytes | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **8** | **10** | **8 192** | **41.6%** | **12.9%** | **16.0%** | **20.5%** | **45.9%** | **20.5%** |
+| 8 | 11 | 8 192 | 41.5% | 12.5% | 16.2% | 20.5% | 46.9% | 20.5% |
+| 8 | 12 | 8 192 | 41.7% | 12.2% | 16.5% | 20.5% | 47.9% | 20.5% |
+| 8 | 14 | 8 192 | 42.0% | 11.8% | 17.0% | 20.5% | 49.8% | 20.5% |
+| 8 | 16 | 8 192 | 42.5% | 11.6% | 17.5% | 20.5% | 51.8% | 20.5% |
+| 8 | 20 | 9 216 | 47.9% | 12.4% | 18.5% | 20.5% | 60.6% | 20.5% |
+| 8 | 24 | 11 264 | 58.4% | 14.2% | 19.5% | 20.5% | 74.7% | 20.5% |
+| 15 | 10 | 8 192 | 43.6% | 13.2% | 21.2% | 27.5% | 53.9% | 31.8% |
+| 15 | 12 | 9 216 | 49.2% | 13.4% | 21.8% | 27.5% | 63.6% | 31.8% |
+| 15 | 16 | 10 240 | 56.0% | 14.4% | 22.8% | 27.5% | **77.3%** | 31.8% |
+
+Write bytes now bind in every row, in the fork completion whose thief kept
+every rule: the records and stored sets it rewrites grow with the rules
+and their signers, while instructions barely move up to 16 rules. The caps
+are unchanged at 8 signers and 10 rules. At 8 signers, 16 rules fit the
+8 192-byte cap with every limit at most 51.8%, and 24 rules stay within
+75% (write bytes 74.7%) if the byte cap rises to 11 264, so
+`MAX_DOC_RULES` could rise to 16 without another cap changing.
+
+The account wasm is 107,603 bytes as `stellar contract build` builds it
+(75,274 of code, 25,783 of contract spec, 4,604 of data), 12,231 fewer than
+the source before it (119,834), and 23,469 under the 131,072-byte limit.
+The doc compiler, the recovery controller and every other tier-0 contract
+build byte-identical; the factory changes only in the account hash it pins.
 
 ### Wasm stack
 
@@ -650,9 +720,9 @@ Every stack contract links a 64 KiB wasm stack (`build.rs`,
 `-zstack-size=65536`; 2 pages), and the ZK adapter 128 KiB (3 pages). The
 host charges every cross-contract call's VM its whole initial linear
 memory, and rustc's default 1 MiB stack makes that 17 pages (1 088 KiB) per
-VM. A completion makes dozens of cross-contract calls (OZ canonicalizes
-each rule's signers through their verifier, and installs and uninstalls
-each policy). Measured in process on 2026-10-06: with the default stack a
+VM. A completion makes many cross-contract calls (the compiler, the
+controller's hooks, the ZK adapter and pool, and every verifier it
+authenticates through). Measured in process on 2026-10-06: with the default stack a
 completion at the then-provisional caps of 16 signers and 16 rules took
 107 MB against the 41.9 MB limit, and on the same flows the 64 KiB stack
 takes about a quarter of the default's memory (the largest row then
@@ -670,31 +740,29 @@ the 64 KiB stack.
 ### Signer transitions
 
 `signer_transitions` (`release_stack.rs`) applies one document change per
-row to `pay`, a 1-of-n rule (the interpreter policy), and to the spending
-cap in the capped row. In "full six-key rotation" every declared key
-changes, the owner's (and so `admin`'s) too. Each cost is the whole
-`apply_doc`, compiling the document included. The test asserts that the
-rule ends with exactly the target signers (a joining key acts, a leaving
-key cannot); it reports the path and the costs. Source: stacks built from
-the archive branch's source with the current reconciler and the compiler's
-caps raised so the 15-signer rows run (beyond the released 8-signer cap);
-exact commit not recorded.
+row to `pay`, a 1-of-n rule, and to its spending cap in the capped row. In
+"full six-key rotation" every declared key changes, the owner's (and so
+`admin`'s) too. Each cost is the whole `apply_doc`, compiling the document
+included. The test asserts that the rule ends with exactly the target
+signers (a joining key acts, a leaving key cannot); it reports the path and
+the costs. Source: 2026-11-08, the stacks of
+[The account's own rule registry](#the-accounts-own-rule-registry), this
+source's figure first and the source before it in parentheses:
 
 | Transition | Instructions | Memory | Footprint | Written entries | Events (bytes) | Path (rule id, spending window) |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
-| single addition | 23.08M | 2.41 MB | 27 | 12 | 340 | in place, id kept |
-| several additions | 25.75M | 2.48 MB | 31 | 16 | 340 | in place, id kept |
-| full six-key rotation | 30.40M | 3.02 MB | 50 | 37 | 340 | replaced, new id |
-| one swap in a six-key rule | 28.93M | 2.50 MB | 33 | 14 | 340 | in place, id kept |
-| five swaps in a six-key rule | 31.19M | 2.75 MB | 45 | 30 | 340 | in place, id kept |
-| shared signers | 28.44M | 2.48 MB | 29 | 12 | 340 | in place, id kept |
-| full rotation with an active spending cap | 34.02M | 3.13 MB | 49 | 35 | 340 | in place, id kept, window kept |
-| one swap at OZ's 15 | 54.87M | 2.82 MB | 51 | 14 | 340 | in place, id kept |
-| seven swaps at OZ's 15 | 58.84M | 3.30 MB | 69 | 38 | 340 | in place, id kept |
+| single addition | 18.76M (21.01M) | 1.34 MB | 16 (22) | 6 (9) | 368 | in place, id kept |
+| several additions | 20.88M (23.49M) | 1.35 MB | 17 (26) | 6 (13) | 368 | in place, id kept |
+| full six-key rotation | 23.39M (30.55M) | 1.36 MB | 18 (44) | 6 (32) | 368 | in place, id kept |
+| one swap in a six-key rule | 23.15M (26.65M) | 1.36 MB | 18 (28) | 6 (11) | 368 | in place, id kept |
+| five swaps in a six-key rule | 23.27M (28.67M) | 1.36 MB | 18 (40) | 6 (27) | 368 | in place, id kept |
+| shared signers | 23.00M (25.84M) | 1.36 MB | 17 (25) | 6 (11) | 368 | in place, id kept |
+| full rotation with an active spending cap | 23.81M (31.01M) | 1.36 MB | 18 (44) | 6 (32) | 368 | in place, id kept, window kept |
 
-Retained signers keep their registry ids. `reconcile_signers` reads the
-current signers back from the registry and re-checks duplicates over the
-whole set, which is most of an in-place edit's instruction cost.
+A transition writes the admin records, the stored rule set and the
+instance whatever changes, so its written entries no longer grow with the
+signers that join or leave. The 15-signer rows need a stack with the
+compiler's caps raised and were not run on this source.
 `a_rejected_signer_transition_changes_nothing` passes: a duplicate key (one
 passkey under a second credential id), and the budget running out at 25,
 50, 75, and 95% of a full rotation, leave every ledger entry unchanged.

@@ -356,7 +356,7 @@ points extend existing entries without changing their meaning:
 | Controller | Configuration, published baseline, epoch, attempt-id counter, `invalidate_below`, cancellation count, the authorized attempt's id and record | `renew(account)` |
 | Controller | Spent nullifiers, one entry per `(account, nullifier)` (§11) | `renew_nullifier(account, nullifier)` |
 | Controller | Recorded change approvals, one entry per `(account, digest)` (§5) | Not renewed. A write extends the entry only far enough to cover its `valid_until`, after which the approval is stale anyway. |
-| Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, applied ZK factor, freeze mirror (§9), recovery and scope generations, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
+| Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, rule-id counter (§7.5), applied ZK factor, freeze mirror (§9), recovery and scope generations, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
 | Account | Applied document bytes and fingerprints; the revoked set and the enrolled-id set, one entry per fingerprint or id | The same `renew`, for the entries it names |
 | Account | Installed-rule records and the rule-eval rule set aligned with them (§7.5) | Not by `renew`; extended when written, and on read by `__check_auth` (30 days when fewer than 29 remain) |
 | Account | Instance storage: scope count (§7.6) | The same `renew` |
@@ -364,7 +364,7 @@ points extend existing entries without changing their meaning:
 | Account | Rule-eval spending records, one per capped rule `__check_auth` has charged | Not by `renew`; extended when written and when read |
 | Account | The credential index, one entry per credential fingerprint a scoped document named (§7.6) | Not by `renew`; extended when written |
 | Account | Scope tags, one per scoped rule (§7.6) | Not by `renew`; extended when written, and on read by `__check_auth` (30 days when fewer than 29 remain) |
-| Account (OZ storage) | Context-rule, signer, and policy entries | Not by `renew`. OZ extends an entry it reads to 30 days when fewer than 29 remain: in an apply that touches the rule, a recovery completion, the views, and every authorization of an account without a stored rule set. Rule-eval's authorizations read none of them, so they do not extend them. |
+| Account (OZ storage) | The recovery rule's context-rule and policy entries, the two OZ's `do_check_auth` reads to decide a completion (§7.5) | Not by `renew`; extended to the maximum when written, and by OZ on read (30 days when fewer than 29 remain), in a completion. Rule-eval's authorizations read neither. |
 | Pool | Tree states, every root, every leaf, enrollment records, the current-tree pointer (§14) | `renew_tree`, `renew_root`, `renew_leaves`, `renew_enrollment` |
 
 Collecting attempts may live in temporary storage with a TTL of at least
@@ -936,51 +936,38 @@ target's rules to the installed ones **by slot: the recovery rule by its
 role; a document rule by its name and compiled scope (context type)**:
 
 - A slot whose compiled rule is identical is left untouched. "Compiled
-  rule" means scope, signers as resolved credentials, `valid_until`, and
-  every attached policy with its install parameters: the recovery rule's
-  controller with its configuration hash. A document rule attaches no
-  policy; its program and cap are in the rule-eval rule the apply stores
-  for it, so a change to them alone touches no OZ rule. Equal `rule_hash`
-  (§3.2) alone is not enough: rotating a signer's key leaves the rule text
-  unchanged but changes its compiled signers.
-- A slot that differs is reconciled whichever of two ways a deterministic
-  cost model prices lower, the in-place edit on a tie:
-  - (a) **edited in place** under its existing rule id:
-    - a changed `valid_until` is updated;
-    - signers and policies present in both are kept;
-    - the signer set changes in one `reconcile_signers` call, which checks
-      the final set as a whole and keeps retained signers' registry ids;
-    - when the target has signers, the swap runs first and then the
-      policies, removals first, so their count never exceeds OZ's
-      per-rule limit; when it has none, the policies change first and the
-      signers go last, so the rule is never empty;
-    - a policy whose install parameters change counts as removed and
-      re-added.
-  - or (b) **replaced whole** under a new rule id: the rule is removed and
-    the target rule added.
-
-  The model prices the exact OZ operation sequence each way would run, from
-  the diff and the signer and policy registry reference counts at that point.
-  Every OZ mutation runs through its `_no_events` variant (the account emits
-  one `DocApplied` per apply instead), so the price is the ledger entries
-  each operation writes. An in-place edit costs one rule write for the
-  signer swap plus each changed signer's and policy's entries; a
-  replacement costs a rule removal and addition plus deregistering,
-  re-registering, and reinstalling everything the rule keeps.
-- Replacement is the only way when no in-place order keeps the rule
-  non-empty within OZ's per-rule limits (`MAX_SIGNERS` 15, `MAX_POLICIES`
-  5): neither side has signers, nothing survives, and the new policies
-  cannot be added first. Example: the recovery rule, which has no signers,
-  when its only policy's parameters change. Adding first is impossible (one
-  policy per address) and removing first would empty it. A changed scope
-  is a different slot (removed and added).
+  rule" means scope, signers as resolved credentials (in the document's
+  order), `valid_until`, and every attached policy with its install
+  parameters: the recovery rule's controller with its configuration hash.
+  A document rule attaches no policy; its program and cap are in the
+  rule-eval rule the apply stores for it, so a change to them alone changes
+  no record. Equal `rule_hash` (§3.2) alone is not enough: rotating a
+  signer's key leaves the rule text unchanged but changes its compiled
+  signers.
+- A slot that differs is **edited in place** under its existing rule id,
+  except the recovery rule when its controller stays and its configuration
+  changes: that rule is **installed again** under a new rule id. These are
+  the ids OpenZeppelin's context-rule registry gave the same documents,
+  where the recovery rule (no signer, one policy) could not be edited in
+  place under the same controller without passing through an empty rule or
+  holding the controller twice. A changed scope is a different slot
+  (removed and added).
+- Every rule added or edited is held to the install-time limits OZ's
+  registry set, with its codes: at most 15 signers (3010) and 5 policies
+  (3011), a name of at most 20 bytes (3015), external keys of at most 256
+  bytes (3013), and a signer or a policy (3004). A compiled document meets
+  them (the compiler's caps are within them). Two signers of one compiled
+  rule are never one key: the compiler refuses a key that is not its
+  verifier's canonical form and two signers with one verifier and key, so
+  an apply asks no verifier. The constructor, whose signers no compiler has
+  seen, refuses two that are one key (3007), asking each verifier's
+  `batch_canonicalize_key` once.
 - An installed rule whose slot the target lacks is removed, before
   anything is added; a target rule whose slot is not installed is added.
 - A document rule whose `not-after-ledger` has already passed at the
   applying ledger is **dropped** rather than installed: its lowered
-  `valid_until` is below the current sequence, so it authorizes nothing and
-  OZ's `add_context_rule` would refuse it (`PastValidUntil`). Dropping it
-  instead of trapping is what keeps "a document that compiles also installs"
+  `valid_until` is below the current sequence, so it authorizes nothing.
+  Dropping it is what keeps "a document that compiles also installs"
   true for time-bounded rules, and keeps a recovery target installable when
   one of its bounded rules (a session or CI key) expires between the
   baseline's publish and the completion: the completion installs the
@@ -998,24 +985,26 @@ role; a document rule by its name and compiled scope (context type)**:
 The installed rule set that results has the same normalized structure and
 installation parameters as a full replace; its authorization matches a full
 replace except for a kept spending record (see
-[`implementation.md`](implementation.md)) and expiry-sensitive behavior. A
-full replace takes replacement for every rule and deregisters and
-re-registers every signer and policy, so taking the cheaper way per rule
-means no apply writes more ledger entries than a full replace. Writes are
-not the only limit: the in-place path can cost more instructions than a
-replacement, so the document caps are sized with flows that force each
-path (`budgets.md`). The account keeps one record per installed rule (id,
-slot, valid_until, signers, and each policy with a digest of its install
-parameters), bounded by the rule cap plus the recovery rule. A document
-rule's OZ context rule carries no policy, only the recovery rule its
-controller: what a rule allows, its program and cap included, is the
-rule-eval rule the account stores beside the record (`rule_set`), and
-`__check_auth` decides with rule-eval's `authorize` over those rules. It
+[`implementation.md`](implementation.md)) and expiry-sensitive behavior, and
+no apply writes more ledger entries than a full replace. The account's own
+records are its rule registry: one record per installed rule (id, slot,
+valid_until, signers, and each policy with a digest of its install
+parameters), bounded by the rule cap plus the recovery rule, under ids from
+the account's counter, which never gives an id twice. A document rule
+carries no policy, only the recovery rule its controller: what a rule
+allows, its program and cap included, is the rule-eval rule the account
+stores beside the record (`rule_set`), and `__check_auth` decides with
+rule-eval's `authorize` over those rules. The recovery rule is also kept as
+the two entries of OZ's registry that OZ's `do_check_auth` reads to decide
+a completion (T5): the rule under its id and its controller as its one
+policy, written whenever it is installed or its controller changes and
+removed with it; nothing else of OZ's registry is written. Installing it
+calls the controller's `install`; removing it calls no hook. The apply
 never scans historical rule ids, which grow without bound with every past
 apply.
 
 **Spending records.** The account keeps one spending record per capped
-rule, by OZ rule id, which rule-eval charges. An apply keeps a rule's
+rule, by rule id, which rule-eval charges. An apply keeps a rule's
 record exactly when the rule keeps its id and its cap. A replaced rule gets
 a new id and an empty record, and so does a rule whose cap changes. An
 in-place edit that leaves the cap alone (a signer, program, or expiry
@@ -1033,7 +1022,7 @@ Two rules bound that cost:
   (`DocCompilerError::DocTooLarge`): `perch_doc_compiler::MAX_DOC_SIGNERS` =
   8 declared signers, `MAX_DOC_RULES` = 10 document rules,
   `MAX_DOC_CANONICAL_BYTES` = 8 192 canonical bytes, and
-  `MAX_RULE_NAME_BYTES` = 20 (OZ's context-rule name limit). The recovery
+  `MAX_RULE_NAME_BYTES` = 20 (the account's rule-name limit, OZ's). The recovery
   rule is not a document rule and is installed in addition to the 10. The
   compiler's `limits` view returns these caps. They are sized so that the
   worst-case completion fits the transaction budget: the measurements and
@@ -1069,7 +1058,7 @@ says about "the applied document" is about the admin document.
 | `apply_scope(scope, doc_json)` | Owner | Compiles `doc_json`, refuses it if it reaches past a scope (below), names a revoked credential (`RevokedCredential`, §8), or names a credential a wiped scope named (`WipedCredential`, below), records each credential it names under the current scope generation, reconciles that scope's rules with §7.5's delta against **the scope's own records only**, tags each rule, and stores the scope's record and canonical bytes. Returns the `doc_hash`; emits `ScopeApplied`. |
 | `remove_scope(scope)` | Owner | Removes every rule the scope installed, their tags and spending records, the scope's record, rule-eval rule set, and bytes (`UnknownScope` if none); emits `ScopeRemoved`. This is how a grant is revoked. |
 | `gc_scope(scope)` | None | The same removal, for a scope a completion wiped only (`ScopeLive` otherwise). |
-| `scope`, `scope_doc`, `scope_generation`, `scope_count`, `scopes(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A scope's record (generation, `doc_hash`, rules with their OZ ids) and canonical bytes; the scope generation; the index of scope ids; the scope generation a credential was last named under. |
+| `scope`, `scope_doc`, `scope_generation`, `scope_count`, `scopes(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A scope's record (generation, `doc_hash`, rules with their ids) and canonical bytes; the scope generation; the index of scope ids; the scope generation a credential was last named under. |
 
 None of them calls the controller or changes the applied document, its
 `doc_hash`, the configuration revision (§15), or the recovery generation
@@ -1116,14 +1105,14 @@ whoever approves it. The compiler never emits OZ's `Default` or
 calls on the account too.
 
 **The generation gate.** Every rule a scoped document installs is tagged,
-by OZ rule id, with its scope and the **scope generation** it was applied
+by rule id, with its scope and the **scope generation** it was applied
 under. The account's scope generation, a `u64`, starts at 0 and advances
 by one on every completed recovery, lost-key or compromise, and on nothing
 else; a completion that would advance it past `u64::MAX` refuses
 (`GenerationExhausted`), and every advance emits `ScopesWiped { gen }`.
 `__check_auth` refuses any selected rule whose tag's generation is not the
 current one (`PerchAuthError::StaleScope`), after the reserved-name guard
-and the freeze and before OZ evaluates anything. In the same pass it
+and the freeze and before any rule is evaluated. In the same pass it
 refuses a tagged rule selected for a call on a contract of the excluded
 set: the recovery controller, or the ZK adapter or pool of the applied
 recovery member; and one selected for a guardian approval on any contract
@@ -1131,7 +1120,7 @@ recovery member; and one selected for a guardian approval on any contract
 holds for a scope applied before that member, without `apply_doc` scanning
 the scopes. Like the freeze, both hold on every path that reaches
 `__check_auth`, CAP-0071 delegation included.
-A rule without a tag is the admin document's. OZ never reuses a rule id,
+A rule without a tag is the admin document's. No rule id is given twice,
 so a tag never applies to a later rule.
 
 A completion therefore wipes every scoped document with one write. Their
@@ -1141,8 +1130,7 @@ which brings the scope to the current generation with the new document's
 rules.
 
 A tag is written with the maximum TTL and extended on read in
-`__check_auth` as OZ extends the rule entry it gates (to 30 days when fewer
-than 29 remain). An archived tag is unavailable, never absent (§3.6): a
+`__check_auth` (to 30 days when fewer than 29 remain). An archived tag is unavailable, never absent (§3.6): a
 transaction that selects its rule restores it first, so a wiped rule never
 passes the gate as an admin rule.
 
@@ -1357,8 +1345,9 @@ The call is invoker-only (§15). `rcv_sync` both decides and writes. No
 separate `install` call ever writes configuration. `install` is
 bookkeeping: it checks that the recovery rule has the required shape
 (`MalformedContextRule`) and was installed for the stored configuration's
-hash (`InvalidConfiguration`). `uninstall` writes nothing, because OZ
-discards `uninstall` failures and so `uninstall` can gate nothing.
+hash (`InvalidConfiguration`). `uninstall` writes nothing: removal is
+decided by `rcv_sync` alone, and the account calls no hook when it removes
+the recovery rule.
 
 **The recovery rule.** While the applied document enrolls recovery, the
 account installs one extra context rule: named `recovery`, scoped to the
@@ -1548,21 +1537,12 @@ set, the recovery generation, and the recovery wiring. Whether new code
 honours them cannot be enforced from the old code. That is why `Protected`
 requires the condition to approve the exact Wasm.
 
-**Upgrading to rule-eval.** An account upgraded from code that installed
-document rules with the interpreter and the spending limit keeps those
-rules, their policies, and the spending windows the spending limit keeps for
-them, and stores no rule-eval rule set. Until its first `apply_doc`,
-`__check_auth` runs OZ's `do_check_auth` over those policies exactly as the
-old code did, and `apply_scope` refuses (`NoRuleSet`), since a scoped rule
-would carry no policy for OZ to run. That first `apply_doc`, an owner's or
-a completion, stores the rule-eval rule set, removes the interpreter and
-the spending limit from every document rule (the spending limit's window
-goes with it), and starts every capped rule's spending record empty: no
-window is carried over. Within the window live at that `apply_doc`, each
-capped rule can therefore spend up to its limit once more than the old
-window allowed. An owner who wants no such spend applies the first document
-once the last capped spend is a full period old. From then on rule-eval
-decides every authorization but a completion (§15).
+**Accounts this code did not construct.** The account's rule registry is
+its own records and its rule-id counter, which only its constructor
+starts. An account upgraded in place from code that kept its rule ids in
+OZ's registry has records but no counter, so the ids it gives would start
+again at 0 and meet the ids it already holds; this code does not migrate
+such an account. Existing accounts move to a new account instead.
 
 ## 13. ZK adapter boundary
 
@@ -1739,7 +1719,7 @@ The account must therefore:
 1. **refuse in `__check_auth`** any context whose function name is in
    `account::RESERVED_INVOKER_ONLY_FNS` (`install`, `uninstall`, `enforce`,
    `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_insert`, `rcv_gate`), on
-   any contract, before OZ's `do_check_auth`
+   any contract, before any rule is evaluated
    (`PerchAuthError::ReservedFunction`). Names match exactly. Matching by
    name also covers controllers and policies the account adopted in the
    past;
@@ -1760,12 +1740,12 @@ The account must therefore:
 `cap-0071.md` pins the host behaviour this relies on (properties C5, C6,
 and C7).
 
-**External-signer digest binds the account address.** Before OZ's
-`do_check_auth`, the account's `check_auth` re-binds the host's
+**External-signer digest binds the account address.** Before any rule is
+evaluated, the account's `check_auth` re-binds the host's
 `signature_payload` to the account's own 32-byte contract id —
 `sha256(AUTH_ADDR_DOMAIN || account_id || signature_payload)`, where
-`AUTH_ADDR_DOMAIN = "perch/account/auth-addr-v1"` — and OZ then layers the
-selected rule ids on top. The digest an `External` signer authenticates
+`AUTH_ADDR_DOMAIN = "perch/account/auth-addr-v1"` — and the selected rule
+ids are then layered on top, as OZ's digest does. The digest an `External` signer authenticates
 against is therefore unique to this account, and `capabilities().auth_digest`
 reports the scheme as `addr_oz_v1` so a client knows which digest to sign.
 This is necessary because Soroban's authorization preimage
@@ -1829,17 +1809,17 @@ the call stack (`cap-0071.md` C8). The rules that follow from it:
 **Documents are the only write path.** `apply_doc` (the admin document)
 and `apply_scope`, `remove_scope`, and `gc_scope` (scoped documents, §7.6)
 are the only entry points that change the account's context rules, signers,
-or policies. The account implements OZ's `SmartAccount` without exporting
-it, so `add_context_rule`, `add_signer`, `add_policy`, and the other
-piecemeal mutation entry points do not exist on the deployed contract
+or policies. The account has no piecemeal mutation entry point:
+`add_context_rule`, `add_signer`, `add_policy`, and the others do not exist
+on the deployed contract
 (`apply_doc.rs::piecemeal_mutation_entry_points_do_not_exist`).
 
 **Entry points**
 
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
-| Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers. |
-| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion, and every authorization of an account with no stored rule set (upgraded from code that kept none, until its first `apply_doc`), runs OZ `do_check_auth` instead, with the policies its rules carry. The order of the refusing steps does not matter for security: each only refuses. |
+| Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers, held to the install-time limits and refusing two that are one key (§7.5); emits `context_rule_added`. |
+| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion runs OZ's `do_check_auth` instead, over the two OZ registry entries the account keeps for the recovery rule (§7.5), so the controller's `enforce` decides; so does an account storing no rule set, which the constructor never leaves and which then authorizes nothing else. The order of the refusing steps does not matter for security: each only refuses. |
 | Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |

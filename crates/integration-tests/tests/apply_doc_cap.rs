@@ -1,6 +1,6 @@
 //! `apply_doc` with a cumulative cap: a capped document — once rejected by the
 //! doc-compiler as `CapUnsupported` — now compiles and installs, its cap in
-//! the stored rule-eval rule beside an OZ context rule that carries no
+//! the stored rule-eval rule beside a context rule that carries no
 //! policy. This proves the wiring; the cap's runtime allow/deny semantics
 //! are proven in rule-core's vectors (`perch-rule-eval`'s `vectors.rs`), the
 //! document traces (`rule_core_documents.rs`) and `gate.rs`.
@@ -64,7 +64,8 @@ fn apply_doc_stores_the_cap_in_the_rule_eval_rule() {
     assert_eq!(admin.name, SString::from_str(&w.env, "admin"));
     assert_eq!(admin.policies.len(), 0);
 
-    // Rule 1: OZ holds the capped rule's contract and signers, no policy;
+    // Rule 1: the record holds the capped rule's contract and signers, no
+    // policy;
     // its stored rule allows `transfer` alone, with argument 2 an `i128`,
     // and carries the cap, metered from that argument.
     let capped = client.get_context_rule(&1);

@@ -1,15 +1,18 @@
-//! Signature checks, and the boundary with OZ's context-rule registry.
+//! Signature checks, signer identity, and the boundary with OZ's
+//! `do_check_auth`.
 //!
-//! [`authenticate`] checks one payload signer's signature. The account's
+//! [`authenticate`] checks one payload signer's signature, and
+//! [`check_distinct`] refuses two signers that are one key. The account's
 //! authorization types are `perch-account-types`', the XDR and contract-spec
-//! twins of OZ's; OZ's registry still holds the account's rule ids and
-//! signers, and [`oz`] converts to and from its types at that boundary.
+//! twins of OZ's. OZ's `do_check_auth` still decides a recovery completion
+//! over entries of its own registry, and [`oz`] keeps the ones it reads.
 
-use perch_account_types::{AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError};
-use soroban_sdk::unwrap::UnwrapInfallible;
+use perch_account_types::{AuthPayload, ContextRule, Signer, SmartAccountError};
 use soroban_sdk::{
-    contractclient, crypto::Hash, panic_with_error, Bytes, Env, IntoVal, Map, TryFromVal, Val, Vec,
+    contractclient, crypto::Hash, panic_with_error, Address, Bytes, Env, IntoVal, Map, Val, Vec,
 };
+
+use crate::rules::{refuse, InstallError};
 
 const DAY_IN_LEDGERS: u32 = 17280;
 /// The TTL, in ledgers, that `__check_auth` extends an entry it reads to:
@@ -18,8 +21,8 @@ pub const SMART_ACCOUNT_EXTEND_AMOUNT: u32 = 30 * DAY_IN_LEDGERS;
 /// The TTL below which `__check_auth` extends an entry it reads.
 pub const SMART_ACCOUNT_TTL_THRESHOLD: u32 = SMART_ACCOUNT_EXTEND_AMOUNT - DAY_IN_LEDGERS;
 
-/// Fail the invocation with `error`. While OZ's registry is linked, OZ's
-/// own `SmartAccountError` (these codes and the registry's) is in the
+/// Fail the invocation with `error`. While OZ's `do_check_auth` is linked,
+/// OZ's own `SmartAccountError` (these codes and the registry's) is in the
 /// contract spec. Raising the code as a plain `soroban_sdk::Error` keeps a
 /// second spec entry of that name out, as only a `#[contracterror]` type
 /// raised or returned at the boundary gets one.
@@ -27,11 +30,20 @@ fn fail(e: &Env, error: SmartAccountError) -> ! {
     panic_with_error!(e, soroban_sdk::Error::from(error))
 }
 
-/// A signature verifier's entry point, as `authenticate` calls it.
+/// A signature verifier's entry points, as the account calls them.
 #[allow(unused)]
 #[contractclient(name = "VerifierClient")]
 trait Verifier {
     fn verify(e: &Env, hash: Bytes, key_data: Val, sig_data: Val) -> bool;
+    fn batch_canonicalize_key(e: &Env, key_data: Vec<Val>) -> Vec<Bytes>;
+}
+
+/// A policy's install hook, as OZ's registry calls it: the recovery
+/// controller's `install` checks the recovery rule it is installed on.
+#[allow(unused)]
+#[contractclient(name = "PolicyClient")]
+trait Policy {
+    fn install(e: &Env, install_params: Val, context_rule: ContextRule, smart_account: Address);
 }
 
 /// Check `signer`'s signature over `digest`. An `External` signer's
@@ -55,53 +67,106 @@ pub(crate) fn authenticate(e: &Env, digest: &Hash<32>, signer: &Signer, sig_data
     }
 }
 
-/// OZ's twins of the account's types, for its context-rule registry. Each
-/// pair is the same host value, so a vector or map is passed by its handle
-/// and a struct or enum is rebuilt from its parts: no conversion makes a
-/// host call.
-pub(crate) mod oz {
-    use super::*;
-    use stellar_accounts::smart_account as oz;
-
-    pub(crate) fn signers(e: &Env, signers: &Vec<Signer>) -> Vec<oz::Signer> {
-        Vec::try_from_val(e, &signers.to_object()).unwrap_infallible()
-    }
-
-    pub(crate) fn context_type(t: &ContextRuleType) -> oz::ContextRuleType {
-        match t.clone() {
-            ContextRuleType::Default => oz::ContextRuleType::Default,
-            ContextRuleType::CallContract(a) => oz::ContextRuleType::CallContract(a),
-            ContextRuleType::CreateContract(h) => oz::ContextRuleType::CreateContract(h),
-            ContextRuleType::CreateContractExternalRef(owner, tag) => {
-                oz::ContextRuleType::CreateContractExternalRef(owner, tag)
+/// Refuse (`DuplicateSigner`) two of `signers` that are one key: two
+/// delegated signers with one address, or two external signers whose
+/// verifier canonicalizes their keys to the same bytes. Each verifier is
+/// asked once, with every key it verifies, even a lone one, so a key its
+/// verifier cannot read is refused too. This is OZ's check; the constructor
+/// runs it, since a compiled document's signers already pass it (the
+/// compiler refuses a key that is not its verifier's canonical form and two
+/// signers with one verifier and key).
+pub(crate) fn check_distinct(e: &Env, signers: &Vec<Signer>) {
+    let mut groups: Map<Address, Vec<Val>> = Map::new(e);
+    let mut delegated: Vec<Address> = Vec::new(e);
+    for signer in signers.iter() {
+        match signer {
+            Signer::External(verifier, key) => {
+                let mut group = groups.get(verifier.clone()).unwrap_or(Vec::new(e));
+                group.push_back(key.into_val(e));
+                groups.set(verifier, group);
+            }
+            Signer::Delegated(addr) => {
+                if delegated.contains(&addr) {
+                    refuse(e, InstallError::DuplicateSigner);
+                }
+                delegated.push_back(addr);
             }
         }
     }
+    for (verifier, keys) in groups.iter() {
+        let canonical = VerifierClient::new(e, &verifier).batch_canonicalize_key(&keys);
+        let mut seen: Vec<Bytes> = Vec::new(e);
+        for key in canonical.iter() {
+            if seen.contains(&key) {
+                refuse(e, InstallError::DuplicateSigner);
+            }
+            seen.push_back(key);
+        }
+    }
+}
+
+/// What OZ's `do_check_auth` reads to decide a recovery completion
+/// (`check_auth`): the recovery rule's entry in OZ's registry and its one
+/// policy's. The account writes exactly these two, in OZ's storage layout,
+/// whenever its recovery rule is installed, moved to a new id, or given a
+/// new controller, and removes them with it. Nothing else of OZ's registry
+/// is written.
+pub(crate) mod oz {
+    use super::*;
+    use soroban_sdk::{contracttype, String};
+    use stellar_accounts::smart_account::{self as oz, ContextRuleEntry, SmartAccountStorageKey};
+
+    /// The recovery rule's one policy's id in OZ's registry.
+    const RECOVERY_POLICY: u32 = 0;
+
+    /// OZ's registry entry for a policy (`stellar-accounts`' `PolicyEntry`,
+    /// which it does not export): the same fields, so the same XDR.
+    #[contracttype]
+    struct PolicyEntry {
+        policy: Address,
+        count: u32,
+    }
 
     pub(crate) fn payload(e: &Env, p: &AuthPayload) -> oz::AuthPayload {
+        use soroban_sdk::{unwrap::UnwrapInfallible, TryFromVal};
         oz::AuthPayload {
             signers: Map::try_from_val(e, &p.signers.to_object()).unwrap_infallible(),
             context_rule_ids: p.context_rule_ids.clone(),
         }
     }
 
-    pub(crate) fn context_rule(e: &Env, r: oz::ContextRule) -> ContextRule {
-        ContextRule {
-            id: r.id,
-            context_type: match r.context_type {
-                oz::ContextRuleType::Default => ContextRuleType::Default,
-                oz::ContextRuleType::CallContract(a) => ContextRuleType::CallContract(a),
-                oz::ContextRuleType::CreateContract(h) => ContextRuleType::CreateContract(h),
-                oz::ContextRuleType::CreateContractExternalRef(owner, tag) => {
-                    ContextRuleType::CreateContractExternalRef(owner, tag)
-                }
+    /// Write the recovery rule `id` with policy `controller`, as OZ's
+    /// `add_context_rule` would: a zero-signer rule scoped to the account.
+    pub(crate) fn install_recovery(e: &Env, id: u32, controller: &Address) {
+        let rule = SmartAccountStorageKey::ContextRuleData(id);
+        let policy = SmartAccountStorageKey::PolicyData(RECOVERY_POLICY);
+        let storage = e.storage().persistent();
+        storage.set(
+            &rule,
+            &ContextRuleEntry {
+                name: String::from_str(e, "recovery"),
+                context_type: oz::ContextRuleType::CallContract(e.current_contract_address()),
+                valid_until: None,
+                signer_ids: Vec::new(e),
+                policy_ids: Vec::from_array(e, [RECOVERY_POLICY]),
             },
-            name: r.name,
-            signers: Vec::try_from_val(e, &r.signers.to_object()).unwrap_infallible(),
-            signer_ids: r.signer_ids,
-            policies: r.policies,
-            policy_ids: r.policy_ids,
-            valid_until: r.valid_until,
-        }
+        );
+        storage.set(
+            &policy,
+            &PolicyEntry {
+                policy: controller.clone(),
+                count: 1,
+            },
+        );
+        let ttl = e.storage().max_ttl();
+        storage.extend_ttl(&rule, ttl, ttl);
+        storage.extend_ttl(&policy, ttl, ttl);
+    }
+
+    /// Remove recovery rule `id`'s entries.
+    pub(crate) fn remove_recovery(e: &Env, id: u32) {
+        let storage = e.storage().persistent();
+        storage.remove(&SmartAccountStorageKey::ContextRuleData(id));
+        storage.remove(&SmartAccountStorageKey::PolicyData(RECOVERY_POLICY));
     }
 }

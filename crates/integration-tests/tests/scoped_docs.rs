@@ -82,7 +82,7 @@ fn remove_scope_as(w: &World, key: &Address, scope: u32) -> CallResult<()> {
     out.map(|r| r.unwrap())
 }
 
-/// The OZ id of rule `name` in `scope`'s record.
+/// The id of rule `name` in `scope`'s record.
 fn scoped_id(w: &World, scope: u32, name: &str) -> u32 {
     let wanted = soroban_sdk::String::from_str(&w.env, name);
     w.client()
@@ -345,9 +345,8 @@ fn scopes_and_the_admin_document_share_signers_without_touching_each_other() {
     assert_eq!(w.client().configuration(), configuration);
     assert_eq!(w.client().installed_rules(), configuration.rules);
 
-    // The admin document drops `device`: OZ's registry keeps the signer
-    // the scope still names, and the scope's rules are not in the admin
-    // document's reconcile.
+    // The admin document drops `device`: the scope's rules still name it,
+    // and they are not in the admin document's reconcile.
     let mut lean = w.doc(None);
     lean.signers.truncate(1);
     lean.rules.clear();

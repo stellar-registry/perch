@@ -630,9 +630,11 @@ Instructions, as a share of the 400M limit:
   ([Rule-eval rule sets](#rule-eval-rule-sets)); `scripts/cap-sweep.py` has
   not been rerun on this source.
 
-The account wasm is 128,958 bytes as `stellar contract build` builds it
-(128,423 with OZ first), and 129,123 bytes as `stellar scaffold build`
-builds it for a deployment, under the 131,072-byte contract limit. It reads
+The account wasm is 128,188 bytes as `stellar contract build` builds it
+and 128,353 bytes as `stellar scaffold build` builds it for a deployment,
+under the 131,072-byte contract limit. Its contract spec carries the doc
+comments of its entry points and contract types, so some of those are plain
+`//` comments. It reads
 stored rules and records from their XDR in one pass and a batch of calls
 one host value at a time, rather than through `#[contracttype]` decoding and
 soroban-facade's context reading, which would take the account over the

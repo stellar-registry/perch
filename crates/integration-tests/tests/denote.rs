@@ -3,6 +3,7 @@
 //! rules Perch does produce are checked against rule-eval's lowering in
 //! `tests/perch_rule_eval.rs`.
 
+use perch_account_types::Signer;
 use perch_program::{Op, RpnProgram, PROGRAM_VERSION};
 use perch_rule_eval::convert::address;
 use perch_testkit::denote::{denote, Installed};
@@ -11,7 +12,6 @@ use rule_eval_conformance::rules_eq;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{Address, Env, String, Symbol, Vec};
 use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
-use stellar_accounts::smart_account::Signer;
 
 struct Fixture {
     e: Env,

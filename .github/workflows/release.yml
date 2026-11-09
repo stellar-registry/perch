@@ -345,13 +345,13 @@ jobs:
           # under vendor/).
           paths_for() { case "$1" in
             perch-interpreter) echo "perch-interpreter perch-program vendor/soroban-flux";;
-            perch-doc-compiler) echo "perch-doc-compiler perch-ir perch-recovery-interface perch-rule-eval vendor/soroban-flux vendor/soroban-sdk-tools";;
+            perch-doc-compiler) echo "perch-doc-compiler perch-account-types perch-ir perch-recovery-interface perch-rule-eval vendor/soroban-flux vendor/soroban-sdk-tools";;
             # perch-smart-account depends on perch-recovery-interface (the
             # controller hook, account view, and pool insertion clients), so an
             # interface change re-releases the account too — see AGENTS.md's
             # version-pin sharp edge.
-            perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-ir perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-rule-eval vendor/soroban-flux vendor/soroban-sdk-tools";;
-            perch-recovery) echo "perch-recovery perch-recovery-interface perch-doc-compiler perch-ir perch-rule-eval vendor/soroban-flux vendor/soroban-sdk-tools";;
+            perch-account) echo "perch-account perch-smart-account perch-account-types perch-doc-compiler perch-ir perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-rule-eval vendor/soroban-flux vendor/soroban-sdk-tools";;
+            perch-recovery) echo "perch-recovery perch-recovery-interface perch-account-types perch-doc-compiler perch-ir perch-rule-eval vendor/soroban-flux vendor/soroban-sdk-tools";;
             perch-zk-pool) echo "perch-zk-pool perch-zk-primitives perch-recovery-interface vendor/soroban-poseidon vendor/soroban-sdk-tools";;
             # The verification key the adapter compiles in lives in its own
             # crate (vk/), so a circuit change re-releases it; so does a
@@ -360,7 +360,7 @@ jobs:
             perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface vendor/ultrahonk-soroban-verifier vendor/soroban-poseidon vendor/soroban-sdk-tools";;
             # The factory pins the account wasm and the WebAuthn verifier, so
             # a change to either is a new factory.
-            perch-account-factory) echo "perch-account-factory perch-account perch-smart-account perch-doc-compiler perch-ir perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-rule-eval perch-webauthn-verifier vendor/soroban-flux vendor/soroban-sdk-tools";;
+            perch-account-factory) echo "perch-account-factory perch-account perch-smart-account perch-account-types perch-doc-compiler perch-ir perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-rule-eval perch-webauthn-verifier vendor/soroban-flux vendor/soroban-sdk-tools";;
             # The registry contracttraits and admin-sep it composes are vendored.
             perch-constructorless-registry) echo "perch-constructorless-registry vendor/admin-sep vendor/registry-traits";;
             *) echo "$1";;

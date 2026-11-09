@@ -39,6 +39,7 @@
 use crate::denote::{denote, Installed};
 use crate::rpn::{self, Policies};
 use perch_account::PerchAccountClient;
+use perch_account_types::ContextRuleType;
 use perch_doc_compiler::{CompiledDoc, PerchDocCompilerClient};
 use perch_rule_eval::convert::{address, signers};
 use perch_rule_eval::{doc_of, model_of, StoredRule};
@@ -48,7 +49,6 @@ use soroban_sdk::{Address, Bytes, Env};
 use std::format;
 use std::string::{String, ToString};
 use std::vec::Vec;
-use stellar_accounts::smart_account::ContextRuleType;
 use stellar_accounts::smart_account::SmartAccountStorageKey;
 
 /// What one [`check`] compared.

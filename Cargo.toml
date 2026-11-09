@@ -34,6 +34,7 @@ members = [
     "crates/perch-account-factory",
     "crates/perch-testnet",
     "crates/perch-rule-eval",
+    "crates/perch-account-types",
 ]
 # Vendored third-party source, built only as a path dependency: not linted,
 # tested, or released with the workspace. See vendor/*/NOTICE.

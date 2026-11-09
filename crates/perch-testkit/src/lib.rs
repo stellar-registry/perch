@@ -46,7 +46,7 @@ pub mod rpn;
 pub mod rule_set;
 
 pub use fixture::{
-    auth_digest, ci_publish_doc_hash, fixture, AnyKeyVerifier, CI_PUBLISH_DOC_HASH,
+    auth_digest, ci_publish_doc_hash, fixture, twin, AnyKeyVerifier, CI_PUBLISH_DOC_HASH,
     FIXTURE_NETWORK, FIXTURE_REGISTRY, FIXTURE_VERIFIERS,
 };
 pub use manifest::{

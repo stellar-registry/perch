@@ -8,10 +8,10 @@
 //! conversion refuses (returns `None`) only a value with no exact host form,
 //! so converting a rule to its mirror and back gives the same rule.
 
+use perch_account_types::Signer;
 use soroban_sdk::{
     contracttype, Address, Bytes, Env, IntoVal, String, Symbol, TryFromVal, Val, Vec,
 };
-use stellar_accounts::smart_account::Signer;
 
 use crate::convert::{host_symbol, Decoded, HostForms};
 

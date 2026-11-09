@@ -679,9 +679,12 @@ fn a_controller_scoped_rule_reaches_no_reserved_controller_entry_point() {
     let config = w.ctl().config(&w.account).unwrap();
     let epoch = w.ctl().epoch(&w.account);
     let hash = w.client().applied_doc_hash().unwrap();
-    let recovery_rule = w
-        .client()
-        .get_context_rule(&w.rule_id(&w.account, "recovery"));
+    // The controller's client names OZ's twin of the account's `ContextRule`.
+    let recovery_rule: stellar_accounts::smart_account::ContextRule = perch_testkit::twin(
+        &w.env,
+        w.client()
+            .get_context_rule(&w.rule_id(&w.account, "recovery")),
+    );
     let signed = |fn_name: &str, args: std::vec::Vec<soroban_sdk::xdr::ScVal>| {
         let root = w.invocation(&w.controller, fn_name, args);
         w.env.set_auths(&[w.owner_entry("ctl", root)]);

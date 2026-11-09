@@ -6,7 +6,9 @@
 //! upstream layout change is fixed once, not per test file.
 
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{
+    contract, contractimpl, Address, Bytes, BytesN, Env, IntoVal, TryFromVal, Val, Vec,
+};
 use std::fs;
 use std::path::PathBuf;
 use stellar_accounts::verifiers::Verifier;
@@ -46,6 +48,15 @@ pub fn ci_publish_doc_hash(env: &Env) -> BytesN<32> {
         env,
         &<[u8; 32]>::try_from(bytes.as_slice()).expect("32-byte doc hash"),
     )
+}
+
+/// `v` read as its twin type `T` through its host value: an OZ
+/// `AuthPayload`, `Signer`, or `ContextRule` as the account's
+/// (`perch-account-types`), or the reverse. Panics unless the host value
+/// reads as a `T`.
+pub fn twin<T: TryFromVal<Env, Val>>(env: &Env, v: impl IntoVal<Env, Val>) -> T {
+    let v: Val = v.into_val(env);
+    T::try_from_val(env, &v).unwrap_or_else(|_| panic!("not the twin type's host value"))
 }
 
 /// The digest a Perch account's `check_auth` makes an `External` signer

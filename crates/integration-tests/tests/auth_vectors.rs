@@ -238,7 +238,13 @@ fn the_signing_digest_is_the_one_oz_verifies() {
         context_rule_ids: ids.clone(),
     };
     e.as_contract(&account, || {
-        perch_smart_account::check_auth(&e, &payload, &auth, &vec![&e, context]).unwrap();
+        perch_smart_account::check_auth(
+            &e,
+            &payload,
+            &perch_testkit::twin(&e, auth),
+            &vec![&e, context],
+        )
+        .unwrap();
     });
     let seen = RecorderClient::new(&e, &recorder).seen();
     assert_eq!(

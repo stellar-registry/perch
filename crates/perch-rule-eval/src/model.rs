@@ -6,8 +6,8 @@
 //! [`doc_of`] reads a model as a `rule_eval::Doc`. With the `ir` feature,
 //! [`model_of`] builds one from a validated `perch_ir::PolicyDoc`.
 
+use perch_account_types::Signer;
 use soroban_sdk::{contracttype, Address, Env, String, Symbol, Vec};
-use stellar_accounts::smart_account::Signer;
 
 use crate::convert::{signer_in, string_bytes, symbol_bytes, Addresses};
 
@@ -224,9 +224,9 @@ pub use from_ir::{model_of, ModelError};
 
 #[cfg(feature = "ir")]
 mod from_ir {
+    use perch_account_types::Signer;
     use perch_ir::{ArgPred, PolicyDoc, Principals, RecoveryMode, Scope, SignerMethod};
     use soroban_sdk::{Address, Bytes, Env, String, Symbol, Vec};
-    use stellar_accounts::smart_account::Signer;
 
     use super::{
         CompiledModel, ModelArg, ModelCap, ModelPred, ModelPrincipals, ModelRecovery, ModelRule,

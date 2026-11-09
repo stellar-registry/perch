@@ -572,8 +572,8 @@ every name and changed every program. Ten rules is the largest rule cap at
 ### Rule-eval in `__check_auth`
 
 `__check_auth` decides every authorization but a recovery completion with
-rule-eval's `authorize` over the stored rules of the chosen rules, and OZ's
-`authenticate` checks the signers (`implementation.md`, "Rule-eval in
+rule-eval's `authorize` over the stored rules of the chosen rules, and the
+account's `authenticate` checks the signers (`implementation.md`, "Rule-eval in
 `__check_auth`"). A document rule's OZ context rule carries no policy, so an
 authorization calls neither the interpreter nor the spending limit, and an
 apply installs and uninstalls neither. Source: 2026-11-04, stacks built with

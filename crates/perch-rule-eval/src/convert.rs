@@ -1,7 +1,7 @@
 //! Host values as rule-eval reads them, read through `soroban-facade`, and
 //! back where storage needs the host form.
 //!
-//! An address is its `ScAddress` XDR, a signer is OpenZeppelin's signer with
+//! An address is its `ScAddress` XDR, a signer is the account's [`Signer`] with
 //! each address so encoded, and an argument value is what
 //! `soroban_facade::val_to_rule_eval` makes of it. The account's own address
 //! goes through [`address`] like every other, so rules and contexts share one
@@ -15,11 +15,11 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
+use perch_account_types::Signer;
 use soroban_facade::{xdr, SdkHost, Val as FVal};
 use soroban_sdk::auth::Context;
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Address, Bytes, Env, String, Symbol, Val, Vec as SVec};
-use stellar_accounts::smart_account::Signer;
 
 /// The `ScVal` discriminant of an address.
 const SCV_ADDRESS: [u8; 4] = [0, 0, 0, 18];
@@ -54,7 +54,7 @@ pub fn val(e: &Env, v: Val) -> Option<rule_eval::Val> {
     facade(e, v).map(|v| soroban_facade::val_to_rule_eval(&v))
 }
 
-/// OpenZeppelin's signer `s` as rule-eval reads it.
+/// The signer `s` as rule-eval reads it.
 #[must_use]
 pub fn signer(e: &Env, s: &Signer) -> Option<rule_eval::Signer> {
     signer_in(e, s, &mut Addresses::default())
@@ -76,7 +76,7 @@ pub trait HostForms {
     /// is none.
     fn address(&self, e: &Env, x: &[u8]) -> Option<Address>;
 
-    /// OpenZeppelin's signer for the rule-eval signer `s`, or `None` when
+    /// The account's signer for the rule-eval signer `s`, or `None` when
     /// one of its addresses has no host form.
     fn signer(&self, e: &Env, s: &rule_eval::Signer) -> Option<Signer> {
         Some(match s {
@@ -207,7 +207,7 @@ pub fn host_address(e: &Env, x: &[u8]) -> Option<Address> {
     }
 }
 
-/// OpenZeppelin's signer for the rule-eval signer `s`, or `None` when one of
+/// The account's signer for the rule-eval signer `s`, or `None` when one of
 /// its addresses has no host form.
 #[must_use]
 pub fn host_signer(e: &Env, s: &rule_eval::Signer) -> Option<Signer> {

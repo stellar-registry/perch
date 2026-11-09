@@ -15,11 +15,11 @@
 //! `schedule_upgrade` → `execute_upgrade` path (`docs/recovery/spec.md` §12).
 #![no_std]
 
-#[allow(unused_imports)]
 // These names are used by the trait macro expansions.
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
 #[allow(unused_imports)]
-use stellar_accounts::smart_account::{ContextRule, Signer};
+use perch_smart_account::{ContextRule, Signer};
+#[allow(unused_imports)]
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
 
 #[allow(unused_imports)]
 pub use perch_smart_account::{

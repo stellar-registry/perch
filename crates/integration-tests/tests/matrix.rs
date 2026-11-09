@@ -16,7 +16,7 @@ use stellar_accounts::smart_account::{
     add_context_rule, remove_context_rule, AuthPayload, ContextRuleType, Signer,
 };
 
-use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY as REGISTRY};
+use perch_testkit::{auth_digest, fixture, twin, FIXTURE_REGISTRY as REGISTRY};
 
 // --- the account under test (bare); the verifier is the real deployable -----
 
@@ -131,7 +131,13 @@ fn run(w: &World, payload: &AuthPayload, ctx: Context) -> Result<(), ()> {
             // set, so OZ's `do_check_auth` and the attached interpreter
             // decide, as on an account installed before rule-eval, against
             // the address-bound digest the signer actually signed.
-            perch_smart_account::check_auth(&w.env, &hash, payload, &contexts).unwrap();
+            perch_smart_account::check_auth(
+                &w.env,
+                &hash,
+                &twin(&w.env, payload.clone()),
+                &contexts,
+            )
+            .unwrap();
         });
     }));
     r.map_err(|_| ())

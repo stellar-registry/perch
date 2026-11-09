@@ -242,8 +242,8 @@ fn every_rule_round_trips_through_its_mirror_and_the_host() {
 /// values, and the sample's reads back as the sample.
 #[test]
 fn a_mirror_is_the_contracttype_of_its_fields() {
+    use perch_account_types::Signer as HostSigner;
     use perch_rule_eval::{StoredCond, StoredEntry, StoredFunctions, StoredVal};
-    use stellar_accounts::smart_account::Signer as OzSigner;
     let e = Env::default();
     let p = pools(&e);
     let a = |x: &[u8]| host_address(&e, x).expect("an address");
@@ -278,8 +278,8 @@ fn a_mirror_is_the_contracttype_of_its_fields() {
         signers: SVec::from_array(
             &e,
             [
-                OzSigner::Delegated(a(&p.addresses[0])),
-                OzSigner::External(a(&p.addresses[5]), Bytes::new(&e)),
+                HostSigner::Delegated(a(&p.addresses[0])),
+                HostSigner::External(a(&p.addresses[5]), Bytes::new(&e)),
             ],
         ),
         threshold: 2,

@@ -22,7 +22,7 @@ doctest = false
 # policy-document JSON on-chain (perch-ir is no_std + alloc).
 soroban-sdk = { workspace = true, features = ["alloc"] }
 soroban-sdk-tools = { workspace = true }
-stellar-accounts = { workspace = true }
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
 # The compiled recovery wire types and the replacement set `derive_target`
 # takes. A plain library (no contract), so no deployable pins another.
 perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }

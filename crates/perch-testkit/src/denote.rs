@@ -33,10 +33,10 @@
 
 use std::vec::Vec;
 
+use perch_account_types::Signer;
 use perch_program::{Op, RpnProgram};
 use soroban_sdk::{Address, Env, Vec as SVec};
 use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
-use stellar_accounts::smart_account::Signer;
 
 use perch_rule_eval::convert::{address, signers, string_bytes, symbol_bytes};
 

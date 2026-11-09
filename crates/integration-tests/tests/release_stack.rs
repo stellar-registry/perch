@@ -29,6 +29,7 @@ mod support;
 
 use perch_account::PerchAccountClient;
 use perch_account_factory::PerchAccountFactoryClient;
+use perch_account_types::{AuthPayload, Signer};
 use perch_doc_compiler::{
     PerchDocCompilerClient, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS,
 };
@@ -57,7 +58,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use stellar_accounts::smart_account::{
-    AuthPayload, Signer, SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
+    SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
 };
 use support::{strkey, Key, TargetClient};
 

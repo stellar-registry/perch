@@ -340,7 +340,7 @@ impl<'a> Xdr<'a> {
         })
     }
 
-    /// OpenZeppelin's `Signer`.
+    /// A `perch_account_types::Signer`.
     fn signer(&mut self) -> Option<Signer> {
         match self.variant()? {
             (b"Delegated", 1) => Some(Signer::Delegated(self.address()?)),

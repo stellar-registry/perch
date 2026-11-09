@@ -1,6 +1,6 @@
 name: Pages
 
-# Publishes docs/ (currently the perch slide deck at /slides/) to the gh-pages
+# Publishes docs/ (entry point: docs/index.html) to the gh-pages
 # branch, which GitHub Pages serves. PR previews (deck-preview.yml) live under
 # /pr-preview/ on the same branch — clean-exclude keeps production deploys
 # from wiping them.

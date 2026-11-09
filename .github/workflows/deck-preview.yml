@@ -1,6 +1,6 @@
 name: Deck preview
 
-# Per-PR preview of docs/ (the slide deck): deploys to the gh-pages branch
+# Per-PR preview of docs/: deploys to the gh-pages branch
 # under /pr-preview/pr-<number>/ and maintains a sticky PR comment with the
 # link. The preview is deployed on open/update and removed when the PR closes.
 on:

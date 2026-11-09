@@ -164,7 +164,7 @@ docs/schema.md        the PolicyDoc JSON Schema: generation, drift, release path
                       and the boundary between schema-valid and authorized/canonical
 docs/testnet-deployment.md  the release pipeline's canonical testnet registry and
                       author account
-docs/slides/          the perch story as an HTML deck (served via GitHub Pages)
+docs/index.html       reading hub for the published HTML documentation (GitHub Pages)
 testdata/             golden vectors shared by the Rust, TypeScript, and Lean suites
                       (frozen); see testdata/README.md
 testdata/schema/      shared PolicyDoc JSON Schema conformance cases (Rust + perch-js suites)

@@ -43,3 +43,8 @@ ed25519-dalek = "2"
 fips204 = { workspace = true }
 hex = "0.4"
 serde_json = "1"
+# rule-core's evaluator, Soroban facade and conformance runner (document
+# traces and the rule-eval baseline), at the workspace's one rev.
+rule-eval = { workspace = true }
+rule-eval-conformance = { workspace = true }
+soroban-facade = { workspace = true, features = ["sdk"] }

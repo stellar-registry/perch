@@ -266,6 +266,96 @@ fn an_executed_upgrade_advances_the_revision_and_scheduling_does_not() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// The scope generation
+// ---------------------------------------------------------------------------
+
+/// Every `apply_doc` path other than a completion leaves the scope
+/// generation, including each recovery transition that advances the recovery
+/// generation; a completion advances it by one; an executed upgrade leaves it.
+#[test]
+fn the_scope_generation_advances_only_on_a_completed_recovery() {
+    let w = world();
+    let scope = || w.client().scope_generation();
+    let recovery = || w.client().recovery_generation();
+    assert_eq!(scope(), 0, "after the constructor");
+
+    let plain = w.doc(None).bytes(&w);
+    let loss = w.recovery("loss", Mode::Guardian);
+    let mut quorum3 = loss.clone();
+    quorum3.quorum = 3;
+    let mut switched = loss.clone();
+    switched.controller = w.env.register(perch_recovery::PerchRecovery, ());
+    for (what, bytes, transitions) in [
+        ("owner apply", plain.clone(), 0),
+        ("re-apply of the same document", plain.clone(), 0),
+        ("enrollment", w.doc(Some(loss.clone())).bytes(&w), 1),
+        ("reconfiguration", w.doc(Some(quorum3)).bytes(&w), 1),
+        ("controller switch", w.doc(Some(switched)).bytes(&w), 2),
+        ("removal", plain, 1),
+        ("enrollment again", w.doc(Some(loss)).bytes(&w), 1),
+    ] {
+        let before = recovery();
+        w.apply_bytes(&bytes, 0)
+            .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+        assert_eq!(
+            recovery(),
+            before + transitions,
+            "{what}: recovery generation"
+        );
+        assert_eq!(scope(), 0, "{what}: scope generation");
+    }
+
+    let new_owner = w.new_key();
+    let replacements = w.replacements(&new_owner, None);
+    let source = w.client().applied_doc().unwrap();
+    let attempt = w.ctl().begin_lost_key(&w.account, &replacements);
+    let target = w.target_bytes(RecoveryAction::LostKey, &source, &replacements);
+    w.guardian(0, attempt, Initiate);
+    w.guardian(1, attempt, Initiate);
+    assert_eq!(scope(), 0, "attempt and evidence");
+    w.advance(DELAY);
+    let before = recovery();
+    w.complete(&target).expect("completion");
+    assert_eq!(scope(), 1, "completion");
+    assert_eq!(recovery(), before + 1, "completion: recovery generation");
+
+    // An executed upgrade, signed by the recovered owner.
+    let wasm = w.env.deployer().upload_contract_wasm(Bytes::from_slice(
+        &w.env,
+        include_bytes!("../../perch-smart-account/wasm/perch-spending-limit.wasm"),
+    ));
+    let call = |name: &str, args: std::vec::Vec<soroban_sdk::xdr::ScVal>| {
+        w.env
+            .set_auths(&[w.entry_as(&new_owner, "admin", w.invocation(&w.account, name, args))]);
+    };
+    call(
+        "schedule_upgrade",
+        std::vec![w.sc(wasm.clone()), w.sc(0u32)],
+    );
+    let id = w.client().schedule_upgrade(&wasm, &0);
+    w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    call("execute_upgrade", std::vec![w.sc(id)]);
+    w.client().execute_upgrade(&id);
+    w.env.set_auths(&[]);
+    // The account now runs other code, so read the stored counters.
+    let state = storage_state(&w.env, &w.account, History::Keep);
+    assert_eq!(
+        state
+            .get("account/instance/RecoveryGeneration")
+            .map(String::as_str),
+        Some((before + 2).to_string().as_str()),
+        "the upgrade advanced the recovery generation"
+    );
+    assert_eq!(
+        state
+            .get("account/instance/ScopeGeneration")
+            .map(String::as_str),
+        Some("1"),
+        "the upgrade left the scope generation"
+    );
+}
+
 #[test]
 fn attempts_evidence_freezes_and_cancellations_leave_the_revision() {
     // Protected: the authorizing evidence sets the freeze, the cancelling

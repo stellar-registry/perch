@@ -347,7 +347,7 @@ points extend existing entries without changing their meaning:
 | Controller | Configuration, published baseline, epoch, attempt-id counter, `invalidate_below`, cancellation count, the authorized attempt's id and record | `renew(account)` |
 | Controller | Spent nullifiers, one entry per `(account, nullifier)` (§11) | `renew_nullifier(account, nullifier)` |
 | Controller | Recorded change approvals, one entry per `(account, digest)` (§5) | Not renewed. A write extends the entry only far enough to cover its `valid_until`, after which the approval is stale anyway. |
-| Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, applied ZK factor, freeze mirror (§9), recovery generation, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
+| Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, applied ZK factor, freeze mirror (§9), recovery and scope generations, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
 | Account | Applied document bytes and fingerprints; the revoked set and the enrolled-id set, one entry per fingerprint or id | The same `renew`, for the entries it names |
 | Account | Installed-rule records (§7.5) | Not by `renew`; extended when written |
 | Account (OZ storage) | Context-rule, signer, and policy entries | Not by `renew`. OZ extends an entry it reads to 30 days when fewer than 29 remain; nothing else extends them. |
@@ -1190,7 +1190,7 @@ removes it.
 
 | Case | Recognised by | Authorization | Effects |
 | --- | --- | --- | --- |
-| Completion | A completing marker from this invocation's `enforce` (T5) whose target identity equals the `doc_hash` argument (the identity of the document the account compiled) | Already established by the attempt | The compiled configuration must name this controller and its hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared); otherwise `WrongTarget`. Consumes the marker, marks the attempt `Completed`, spends its nullifier, stores the target configuration, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), clears any pending upgrade, and clears its freeze mirror. |
+| Completion | A completing marker from this invocation's `enforce` (T5) whose target identity equals the `doc_hash` argument (the identity of the document the account compiled) | Already established by the attempt | The compiled configuration must name this controller and its hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared); otherwise `WrongTarget`. Consumes the marker, marks the attempt `Completed`, spends its nullifier, stores the target configuration, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), advances its scope generation (§12), clears any pending upgrade, and clears its freeze mirror. |
 | No change | `config_hash` and controller unchanged, and not a completion | Owner authorization (already required by `apply_doc`) | Refuses if an attempt is authorized and live (§9); otherwise nothing. |
 | Enroll | No configuration stored | Owner authorization | Refuses unless the configuration names this controller (`InvalidConfiguration`) and passes §3.1's re-checks and §3.4's wiring check. Stores the configuration and bumps the epoch. The account records the enrollment id as used. |
 | Reconfigure | `config_hash` differs, controller unchanged | `Loss`: owner. `Protected`: owner plus the stored configuration's condition over `Reconfigure(Set(new))`, from recorded approvals (§5) | Refuses during an authorized window, and unless the new configuration passes §3.1's re-checks and §3.4. Stores the new configuration, bumps the epoch, and invalidates every attempt. |
@@ -1283,6 +1283,16 @@ enrolled and removed again before execution. The final state has no
 controller, exactly as at scheduling, so comparing controllers or epochs
 would let the old request execute. The generation has moved twice, so the
 request is stale.
+
+**Scope generation.** The account also keeps `scope_generation: u64` in its
+instance storage; an absent entry reads as 0. It never decreases and is
+never reset. It advances by one in `apply_doc` when the controller's
+`rcv_sync` returns `SyncOutcome::Completed`, and on nothing else:
+enrollment, reconfiguration, removal, a controller switch, and an executed
+upgrade advance the recovery generation but leave the scope generation. A
+completion that would advance it past `u64::MAX` refuses
+(`PerchAccountError::GenerationExhausted`) and changes nothing. The
+`scope_generation` view returns it; no account check reads it.
 
 Every account, enrolled or not, upgrades in two steps:
 
@@ -1621,13 +1631,13 @@ the deployed contract (`apply_doc.rs::piecemeal_mutation_entry_points_do_not_exi
 | --- | --- | --- |
 | Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers. |
 | Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then OZ `do_check_auth`. The order does not matter for security: each step only refuses. |
-| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), rule reconciliation, leaf insertion, completion effects. Emits `DocApplied`. |
+| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
 | Account | `rcv_gate(attempt_id, frozen_until)` | Invoker-only: the adopted controller's authorization, and the caller must be the adopted controller |
 | Account | `renew(fingerprints, enrollment_ids)` | Permissionless (§3.6) |
-| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `get_context_rules_count`, `get_context_rule` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
+| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `get_context_rules_count`, `get_context_rule` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade` (`controller::RecoveryHooksClient`), `install`, `uninstall`, `enforce` | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew`, `renew_nullifier` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |

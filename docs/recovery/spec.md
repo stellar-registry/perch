@@ -357,9 +357,9 @@ points extend existing entries without changing their meaning:
 | Controller | Recorded change approvals, one entry per `(account, digest)` (§5) | Not renewed. A write extends the entry only far enough to cover its `valid_until`, after which the approval is stale anyway. |
 | Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, applied ZK factor, freeze mirror (§9), recovery and scope generations, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
 | Account | Applied document bytes and fingerprints; the revoked set and the enrolled-id set, one entry per fingerprint or id | The same `renew`, for the entries it names |
-| Account | Installed-rule records (§7.5) | Not by `renew`; extended when written |
+| Account | Installed-rule records and the rule-eval rule set aligned with them (§7.5) | Not by `renew`; extended when written |
 | Account | Instance storage: scope count (§7.6) | The same `renew` |
-| Account | Scoped-document records, canonical bytes, and index entries (§7.6) | Not by `renew`; extended when written |
+| Account | Scoped-document records, their rule-eval rule sets, canonical bytes, and index entries (§7.6) | Not by `renew`; extended when written |
 | Account | The credential index, one entry per credential fingerprint a scoped document named (§7.6) | Not by `renew`; extended when written |
 | Account | Scope tags, one per scoped rule (§7.6) | Not by `renew`; extended when written, and on read by `__check_auth` as OZ extends the rule entry |
 | Account (OZ storage) | Context-rule, signer, and policy entries | Not by `renew`. OZ extends an entry it reads to 30 days when fewer than 29 remain; nothing else extends them. |
@@ -1021,10 +1021,10 @@ Two rules bound that cost:
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps
   (`DocCompilerError::DocTooLarge`): `perch_doc_compiler::MAX_DOC_SIGNERS` =
-  8 declared signers, `MAX_DOC_RULES` = 11 document rules,
+  8 declared signers, `MAX_DOC_RULES` = 10 document rules,
   `MAX_DOC_CANONICAL_BYTES` = 8 192 canonical bytes, and
   `MAX_RULE_NAME_BYTES` = 20 (OZ's context-rule name limit). The recovery
-  rule is not a document rule and is installed in addition to the 11. The
+  rule is not a document rule and is installed in addition to the 10. The
   compiler's `limits` view returns these caps. They are sized so that the
   worst-case completion fits the transaction budget: the measurements and
   the choice are in `budgets.md`, and `release_stack.rs`'s `worst_case_*`
@@ -1814,7 +1814,7 @@ piecemeal mutation entry points do not exist on the deployed contract
 | --- | --- | --- |
 | Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers. |
 | Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then OZ `do_check_auth`. The order does not matter for security: each step only refuses. |
-| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
+| Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
 | Account | `cancel_recovery(attempt_id)` | Owner authorization; `Loss` only |
@@ -1822,7 +1822,7 @@ piecemeal mutation entry points do not exist on the deployed contract
 | Account | `apply_scope(scope, doc_json)`, `remove_scope(scope)` | Owner authorization (§7.6) |
 | Account | `gc_scope(scope)` | Permissionless; a scope a completion wiped only (§7.6) |
 | Account | `renew(fingerprints, enrollment_ids)` | Permissionless (§3.6) |
-| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `get_context_rules_count`, `get_context_rule`, `scope`, `scope_doc`, `scope_count`, `scopes`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
+| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `scope`, `scope_rule_set`, `scope_doc`, `scope_count`, `scopes`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade` (`controller::RecoveryHooksClient`), `install`, `uninstall`, `enforce` | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew`, `renew_nullifier` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |

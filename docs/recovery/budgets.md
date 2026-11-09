@@ -252,11 +252,13 @@ at 294.4M (73.6%), and written entries at 141 (70.5%, the renamed thief).
 
 ### Document caps
 
-**The caps are 8 declared signers, 11 document rules, 8 192 canonical
+**The caps are 8 declared signers, 10 document rules, 8 192 canonical
 bytes, and rule names of at most OZ's 20 bytes**
 (`perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES,
 MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}`). The generated recovery rule
-is additional to the 11. The `worst_case_*` tests in `release_stack.rs` run
+is additional to the 10. The rule cap is 10, not 11, because the account
+stores the rule-eval rule sets its documents lower to
+([Rule-eval rule sets](#rule-eval-rule-sets)). The `worst_case_*` tests in `release_stack.rs` run
 all eight worst-case flows at the compiled-in caps and assert each stays
 within budget, so lowering a limit or growing a flow's cost fails CI's
 `release-stack-source` job. The compromise flows run with a thief's scoped
@@ -496,7 +498,7 @@ host):
 | 8 | 64.98M, 5.6 MB, w 66 | 88.58M, 9.6 MB, w 114 (57%) | 19.07M, w 58 |
 
 A scoped document is bounded by the compiler's caps like any document: 8
-own-key grants (8 signers) and 11 rules. Caps above that need a new
+own-key grants (8 signers) and 10 rules (11 when these rows were measured). Caps above that need a new
 compiler build, and so a new account build, and are not measured here.
 
 **Code.** The account wasm grows from 79 321 to 90 681 bytes (+14.3%) under
@@ -522,6 +524,50 @@ PERCH_SPLIT_RECOVERY="8,9,0,0,8,8192,2,0,8;8,9,0,0,8,8192,2,3,8;8,9,0,0,8,8192,2
 PERCH_SPLIT_FILLER=650 PERCH_SPLIT_RECOVERY="8,9,0,0,8,8192,2,0,8;8,0,1,0,8,8192,2,0,8" \
   $T docsplit_compromise_completion -- --ignored --nocapture --test-threads 1
 ```
+
+### Rule-eval rule sets
+
+`apply_doc` lowers the compiled admin document's model with rule-core's
+`rule_eval::lower`, and `apply_scope` a scoped document's with
+`rule_eval::lower_scoped`, and each stores the result beside the records it
+installs (`implementation.md`, "Delta apply"). Source: 2026-11-04, the stack
+`scripts/build-stack.sh --builder contract` built from the source that adds
+them on top of scoped documents, real proofs, passkeys, enforcing
+authorization; compromise completions with 3 thief scopes of 8, budgeted on
+the fork ([Scoped documents](#scoped-documents)).
+
+At the earlier caps of 8 signers and 11 rules, the completions cost about
+24M more instructions:
+
+| Fork completion, 8 × 11, 3 thief scopes | Without the stored sets | With them |
+| --- | --- | --- |
+| Names kept, every program changed (binding) | 284.79M (71.2%) | 309.05M (77.3%) |
+| Names kept, every program and cap changed | 266.77M (66.7%) | 291.16M (72.8%) |
+| Names kept, every cap changed | 266.18M (66.5%) | 290.38M (72.6%) |
+| Every rule kept | 249.52M (62.4%) | 273.81M (68.5%) |
+| Every rule renamed | 248.45M (62.1%) | 272.48M (68.1%) |
+
+In the binding row, about 15M of the increase is wasm execution in the
+account: reading the model, `rule_eval::lower`, and converting the lowered
+rules back to host values. The rest is the model in the compiled document
+and the stored set's write.
+
+`scripts/cap-sweep.py` over every worst-case flow, 8 KiB documents, the
+worst share of each limit:
+
+| Signers | Rules | Instructions | Memory | Footprint | Written entries | Write bytes | Events |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 8 | 11 | **77.3%** | 42.8% | 39.2% | 69.0% | 63.8% | 20.5% |
+| **8** | **10** | **74.2%** | **40.5%** | **37.8%** | **66.0%** | **62.2%** | **20.5%** |
+| 8 | 9 | 71.3% | 38.4% | 36.2% | 63.0% | 60.7% | 20.5% |
+| 8 | 8 | 68.3% | 36.5% | 34.8% | 60.0% | 59.1% | 20.5% |
+| 6 | 10 | 68.9% | 39.6% | 34.2% | 60.0% | 60.0% | 17.3% |
+| 4 | 10 | 64.2% | 39.0% | 30.8% | 54.0% | 57.9% | 14.1% |
+| 2 | 10 | 59.9% | 39.0% | 27.2% | 48.0% | 55.7% | 10.9% |
+
+Instructions bind in every row, in the fork completion whose thief kept
+every name and changed every program. Ten rules is the largest rule cap at
+8 signers within 75%, so `MAX_DOC_RULES` is 10.
 
 ### Wasm stack
 

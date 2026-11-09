@@ -26,6 +26,12 @@ perch-spending-limit = { version = "0.1.4", path = "../perch-spending-limit" }
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account", features = ["testutils"] }
 # The controller generated recovery documents adopt (`delta`).
 perch-recovery = { version = "0.1.5", path = "../perch-recovery" }
+# The stored rule-eval rule set's check (`rule_set`): the applied
+# document's model, rule-eval's lowering, and the denotation of what is
+# installed.
+perch-ir = { workspace = true }
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }
+rule-eval = { workspace = true }
 # Shared document generator for proptest and cargo-fuzz (`delta`).
 arbitrary = "1"
 hex = "0.4"

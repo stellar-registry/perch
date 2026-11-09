@@ -12,6 +12,10 @@
 //!   exactly what the rule diff predicts, and nothing touches an unchanged
 //!   rule.
 //! - Named cases for the diffs most likely to go wrong.
+//! - After every generated apply, on both accounts, the stored rule-eval
+//!   rule set equals the lowering of the document's model and the
+//!   denotation of what OZ, the interpreter and the spending limit hold
+//!   (`perch_testkit::rule_set`), signer order included.
 //!
 //! Proptest case counts default low enough for CI; set `PERCH_DELTA_CASES`
 //! to run more.
@@ -77,6 +81,11 @@ fn apply_both(w: &DeltaWorld, d: &DocModel) {
     // The oracle shares compile and the desired rule set with the delta;
     // the model's own grant shares neither.
     if delta.is_ok() {
+        for account in [&w.delta, &w.oracle] {
+            if let Err(x) = perch_testkit::rule_set::check(&w.env, account) {
+                panic!("the stored rule set for {d:?}: {x}");
+            }
+        }
         assert_eq!(
             live_rules(w, &w.delta),
             d.expected_rules(w, &w.delta),
@@ -342,6 +351,9 @@ fn transition(w: &DeltaWorld, a: &DocModel, b: &DocModel) {
         priced(&plan),
         "the model prices the events exactly"
     );
+    if let Err(x) = perch_testkit::rule_set::check(&w.env, &w.delta) {
+        panic!("the stored rule set after {b:?} over {a:?}: {x}");
+    }
     w.apply(&w.oracle, b).unwrap();
     let (_, oracle_bytes) = event_bytes(&w.env);
     let oracle_writes = w.env.cost_estimate().resources().write_entries;

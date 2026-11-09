@@ -31,6 +31,10 @@ perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interf
 # honored — cargo ignores it on workspace-inherited deps. Keeps both no_std.
 perch-ir = { version = "0.1.1", path = "../perch-ir", default-features = false, optional = true }
 perch-compile = { version = "0.1.1", path = "../perch-compile", default-features = false, optional = true }
+# `CompiledModel`, the document model a `CompiledDoc` carries for the
+# account's rule-eval lowering, and (with `ir`, under `contract`) `model_of`,
+# which builds it. No evaluator code is linked: the account lowers.
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval" }
 # Spells a recovery replacement's key and ZK enrollment as the lowercase hex
 # the document schema uses (see `derive_target`).
 hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
@@ -40,7 +44,7 @@ hex = { version = "0.4", default-features = false, features = ["alloc"], optiona
 # need the wire types and DocCompilerClient (i.e. smart accounts) disable
 # this so their wasm links no compiler code.
 default = ["contract"]
-contract = ["dep:perch-ir", "dep:perch-compile", "dep:hex"]
+contract = ["dep:perch-ir", "dep:perch-compile", "dep:hex", "perch-rule-eval/ir"]
 # Test-only compilers with other document identities (`testutils` module).
 # Never enabled by a deployable.
 testutils = ["contract"]

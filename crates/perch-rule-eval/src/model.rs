@@ -9,7 +9,7 @@
 use soroban_sdk::{contracttype, Address, Env, String, Symbol, Vec};
 use stellar_accounts::smart_account::Signer;
 
-use crate::convert::{address, signer, string_bytes, symbol_bytes};
+use crate::convert::{signer_in, string_bytes, symbol_bytes, Addresses};
 
 /// `rule_eval::Scope`.
 #[contracttype]
@@ -107,17 +107,17 @@ fn strings(list: &Vec<String>) -> alloc::vec::Vec<alloc::vec::Vec<u8>> {
     list.iter().map(|s| string_bytes(&s)).collect()
 }
 
-fn pred(e: &Env, p: &ModelPred) -> Option<rule_eval::Pred> {
+fn pred(e: &Env, p: &ModelPred, known: &mut Addresses) -> Option<rule_eval::Pred> {
     Some(match p {
         ModelPred::IsSelf => rule_eval::Pred::IsSelf,
-        ModelPred::AddressEq(a) => rule_eval::Pred::AddressEq(address(e, a)?),
+        ModelPred::AddressEq(a) => rule_eval::Pred::AddressEq(known.read(e, a)?),
         ModelPred::StringIn(vs) => rule_eval::Pred::StringIn(strings(vs)),
         ModelPred::StringPrefix(p) => rule_eval::Pred::StringPrefix(string_bytes(p)),
         ModelPred::U32Eq(v) => rule_eval::Pred::U32Eq(*v),
     })
 }
 
-fn rule(e: &Env, r: &ModelRule) -> Option<rule_eval::DocRule> {
+fn rule(e: &Env, r: &ModelRule, known: &mut Addresses) -> Option<rule_eval::DocRule> {
     if r.cap.len() > 1 {
         return None;
     }
@@ -135,7 +135,7 @@ fn rule(e: &Env, r: &ModelRule) -> Option<rule_eval::DocRule> {
                 .map(|a| {
                     Some(rule_eval::ArgConstraint {
                         index: a.index,
-                        pred: pred(e, &a.pred)?,
+                        pred: pred(e, &a.pred, known)?,
                     })
                 })
                 .collect::<Option<_>>()?,
@@ -144,7 +144,7 @@ fn rule(e: &Env, r: &ModelRule) -> Option<rule_eval::DocRule> {
     };
     Some(rule_eval::DocRule {
         scope: match &r.scope {
-            ModelScope::Contract(a) => rule_eval::Scope::Contract(address(e, a)?),
+            ModelScope::Contract(a) => rule_eval::Scope::Contract(known.read(e, a)?),
             ModelScope::SelfAdmin => rule_eval::Scope::SelfAdmin,
         },
         principals: match &r.principals {
@@ -163,19 +163,19 @@ fn rule(e: &Env, r: &ModelRule) -> Option<rule_eval::DocRule> {
     })
 }
 
-fn recovery(e: &Env, r: &ModelRecovery) -> Option<rule_eval::Recovery> {
+fn recovery(e: &Env, r: &ModelRecovery, known: &mut Addresses) -> Option<rule_eval::Recovery> {
     if r.zk.len() > 1 {
         return None;
     }
     let zk = match r.zk.first() {
         Some(z) => Some(rule_eval::ZkFactor {
-            adapter: address(e, &z.adapter)?,
-            pool: address(e, &z.pool)?,
+            adapter: known.read(e, &z.adapter)?,
+            pool: known.read(e, &z.pool)?,
         }),
         None => None,
     };
     Some(rule_eval::Recovery {
-        controller: address(e, &r.controller)?,
+        controller: known.read(e, &r.controller)?,
         zk,
     })
 }
@@ -185,11 +185,18 @@ fn recovery(e: &Env, r: &ModelRecovery) -> Option<rule_eval::Recovery> {
 /// or an address the facade refuses.
 #[must_use]
 pub fn doc_of(e: &Env, m: &CompiledModel) -> Option<rule_eval::Doc> {
+    doc_of_in(e, m, &mut Addresses::default())
+}
+
+/// [`doc_of`], recording every address it reads in `known`, so the rules
+/// rule-eval lowers the document to convert back to host values by lookup
+/// (`StoredRule::from_rule_by`).
+pub fn doc_of_in(e: &Env, m: &CompiledModel, known: &mut Addresses) -> Option<rule_eval::Doc> {
     if m.recovery.len() > 1 {
         return None;
     }
     let recovery = match m.recovery.first() {
-        Some(r) => Some(recovery(e, &r)?),
+        Some(r) => Some(recovery(e, &r, known)?),
         None => None,
     };
     Some(rule_eval::Doc {
@@ -199,11 +206,15 @@ pub fn doc_of(e: &Env, m: &CompiledModel) -> Option<rule_eval::Doc> {
             .map(|d| {
                 Some(rule_eval::SignerDecl {
                     id: string_bytes(&d.id),
-                    signer: signer(e, &d.signer)?,
+                    signer: signer_in(e, &d.signer, known)?,
                 })
             })
             .collect::<Option<_>>()?,
-        rules: m.rules.iter().map(|r| rule(e, &r)).collect::<Option<_>>()?,
+        rules: m
+            .rules
+            .iter()
+            .map(|r| rule(e, &r, known))
+            .collect::<Option<_>>()?,
         recovery,
     })
 }

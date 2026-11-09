@@ -46,12 +46,80 @@ pub fn val(e: &Env, v: Val) -> Option<rule_eval::Val> {
 /// OpenZeppelin's signer `s` as rule-eval reads it.
 #[must_use]
 pub fn signer(e: &Env, s: &Signer) -> Option<rule_eval::Signer> {
+    signer_in(e, s, &mut Addresses::default())
+}
+
+/// [`signer`], recording its addresses in `known`.
+pub(crate) fn signer_in(e: &Env, s: &Signer, known: &mut Addresses) -> Option<rule_eval::Signer> {
     Some(match s {
-        Signer::Delegated(a) => rule_eval::Signer::Delegated(address(e, a)?),
+        Signer::Delegated(a) => rule_eval::Signer::Delegated(known.read(e, a)?),
         Signer::External(verifier, key) => {
-            rule_eval::Signer::External(address(e, verifier)?, bytes(key))
+            rule_eval::Signer::External(known.read(e, verifier)?, bytes(key))
         }
     })
+}
+
+/// How a rule-eval value's addresses and signers get their host form.
+pub trait HostForms {
+    /// The host address whose `ScAddress` XDR is `x`, or `None` when there
+    /// is none.
+    fn address(&self, e: &Env, x: &[u8]) -> Option<Address>;
+
+    /// OpenZeppelin's signer for the rule-eval signer `s`, or `None` when
+    /// one of its addresses has no host form.
+    fn signer(&self, e: &Env, s: &rule_eval::Signer) -> Option<Signer> {
+        Some(match s {
+            rule_eval::Signer::Delegated(a) => Signer::Delegated(self.address(e, a)?),
+            rule_eval::Signer::External(verifier, key) => {
+                Signer::External(self.address(e, verifier)?, Bytes::from_slice(e, key))
+            }
+        })
+    }
+}
+
+/// Host forms decoded from the XDR ([`host_address`]).
+pub struct Decoded;
+
+impl HostForms for Decoded {
+    fn address(&self, e: &Env, x: &[u8]) -> Option<Address> {
+        host_address(e, x)
+    }
+}
+
+/// Host addresses with their `ScAddress` XDR, recorded as a document's
+/// model is read ([`crate::doc_of_in`]), so the rules rule-eval lowers it to
+/// convert back to host values by lookup rather than by decoding XDR: every
+/// address a lowered rule holds is the account's own (read with
+/// [`Addresses::read`]) or one the model names.
+#[derive(Clone, Debug, Default)]
+pub struct Addresses {
+    known: Vec<(Vec<u8>, Address)>,
+}
+
+impl Addresses {
+    /// `a`'s `ScAddress` XDR ([`address`]), recorded.
+    pub fn read(&mut self, e: &Env, a: &Address) -> Option<Vec<u8>> {
+        let x = address(e, a)?;
+        if self.host(&x).is_none() {
+            self.known.push((x.clone(), a.clone()));
+        }
+        Some(x)
+    }
+
+    /// The recorded host address whose XDR is `x`.
+    #[must_use]
+    pub fn host(&self, x: &[u8]) -> Option<Address> {
+        self.known
+            .iter()
+            .find(|(k, _)| k.as_slice() == x)
+            .map(|(_, a)| a.clone())
+    }
+}
+
+impl HostForms for Addresses {
+    fn address(&self, _e: &Env, x: &[u8]) -> Option<Address> {
+        self.host(x)
+    }
 }
 
 /// Every signer of `list`, in order, or `None` when one has no rule-eval
@@ -86,12 +154,7 @@ pub fn host_address(e: &Env, x: &[u8]) -> Option<Address> {
 /// its addresses has no host form.
 #[must_use]
 pub fn host_signer(e: &Env, s: &rule_eval::Signer) -> Option<Signer> {
-    Some(match s {
-        rule_eval::Signer::Delegated(a) => Signer::Delegated(host_address(e, a)?),
-        rule_eval::Signer::External(verifier, key) => {
-            Signer::External(host_address(e, verifier)?, Bytes::from_slice(e, key))
-        }
-    })
+    Decoded.signer(e, s)
 }
 
 /// The host symbol with the bytes `b`, or `None` when the host holds no such

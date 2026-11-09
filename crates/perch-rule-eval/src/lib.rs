@@ -14,6 +14,8 @@
 //! - [`denote`]: the `rule_eval::Rule` an installed Perch rule enforces (an
 //!   OpenZeppelin context rule, the interpreter's program and the spending
 //!   limit's parameters).
+//! - [`admin_survives`] and [`guarded`]: the account's anti-brick check and
+//!   its signer-sufficiency invariant, on rule-eval's rules.
 //!
 //! Its tests check the mirrors round-trip and, in `perch-integration-tests`
 //! (`tests/perch_rule_eval.rs`), that `rule_eval::lower(doc_of(model_of(d)))`
@@ -24,15 +26,17 @@
 
 extern crate alloc;
 
+mod admin;
 pub mod convert;
 mod denote;
 mod model;
 mod stored;
 
+pub use admin::{admin_survives, guarded};
 pub use denote::{denote, Installed};
 pub use model::{
-    doc_of, CompiledModel, ModelArg, ModelCap, ModelPred, ModelPrincipals, ModelRecovery,
-    ModelRule, ModelScope, ModelSigner, ModelZk,
+    doc_of, doc_of_in, CompiledModel, ModelArg, ModelCap, ModelPred, ModelPrincipals,
+    ModelRecovery, ModelRule, ModelScope, ModelSigner, ModelZk,
 };
 #[cfg(feature = "ir")]
 pub use model::{model_of, ModelError};

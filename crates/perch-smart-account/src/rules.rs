@@ -131,7 +131,7 @@ pub(crate) fn admin_rule(e: &Env, id: u32, signers: &Vec<Signer>) -> InstalledRu
 /// bounded rules expired between publish and completion. The anti-brick
 /// check (`admin_survives`) refuses any document whose only admin rule is
 /// bounded, so this drop can never remove the account's sole admin rule.
-fn expired(e: &Env, valid_until: Option<u32>) -> bool {
+pub(crate) fn expired(e: &Env, valid_until: Option<u32>) -> bool {
     valid_until.is_some_and(|v| v < e.ledger().sequence())
 }
 

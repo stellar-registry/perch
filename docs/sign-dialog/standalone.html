@@ -57,7 +57,7 @@
 </head>
 <body>
 <div class="wrap">
-  <p class="notice"><b>Mock.</b> The dialog is the real <code>&lt;soroban-sign-dialog&gt;</code> module, and its authorization tree is decoded from each order's real transaction XDR. <b>Preview effects</b> returns canned results captured from a native soroban-sim run of the pinned Perch contracts (account with grant 1: 10 XLM per 100 ledgers, 3 XLM already spent). The 0.7 s delay is artificial. See <code>NOTICE.md</code>.</p>
+  <p class="notice"><b>Demo.</b> The dialog is the real <code>&lt;soroban-sign-dialog&gt;</code> component (soroban-sim fb38b9c), and its authorization tree is decoded from each order's real transaction XDR. The outcome preview returns results recorded from a native soroban-sim run of the pinned Perch contracts (account with grant 1: 10 XLM per 100 ledgers, 3 XLM already spent). The 0.7 s delay is artificial. See <code>NOTICE.md</code>.</p>
 
   <header class="shop">
     <h1><small>A toy dapp</small>Café Perch</h1>
@@ -103,587 +103,15 @@ if (r.approved) wallet.sign(r.entries);  // keys stay in the wallet</pre>
 <soroban-sign-dialog id="dialog"></soroban-sign-dialog>
 
 <script type="module">
-// <soroban-sign-dialog> — review a Soroban request before a wallet signs it.
-//
-// The authorization tree is decoded from XDR alone, so it renders instantly
-// with no network and no simulator. "Preview effects" is opt-in: it calls a
-// preview provider (by default a lazily imported simulator engine module)
-// that re-records the tree independently and reports balance changes,
-// events, the account's verdict and any spending budget.
-//
-// The component never holds keys. Approval emits the exact entries to sign,
-// with the hash of each reviewed invocation, and the wallet signs them.
-//
-// One-line embed:
-//   <script type="module" src="soroban-sign-dialog.js"><\/script>
-// then either markup (<soroban-sign-dialog transaction="AAAA…">) or
-//   const r = await SorobanSignDialog.request({ transaction, signer, dapp });
-
-export const VERSION = '0.1.0';
-
-// ---------------------------------------------------------------------------
-// XDR: a reader for the subset a signing review needs.
-// ---------------------------------------------------------------------------
-
-export class XdrError extends Error {}
-
-const MAX_DEPTH = 64;
-const td = new TextDecoder('utf-8', { fatal: false });
-
-class Reader {
-  constructor(bytes) {
-    this.b = bytes;
-    this.v = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    this.o = 0;
-  }
-  need(n) {
-    if (n < 0 || this.o + n > this.b.length) throw new XdrError('truncated XDR');
-  }
-  u32() { this.need(4); const x = this.v.getUint32(this.o); this.o += 4; return x; }
-  i32() { this.need(4); const x = this.v.getInt32(this.o); this.o += 4; return x; }
-  u64() { this.need(8); const x = this.v.getBigUint64(this.o); this.o += 8; return x; }
-  i64() { this.need(8); const x = this.v.getBigInt64(this.o); this.o += 8; return x; }
-  bool() {
-    const x = this.u32();
-    if (x > 1) throw new XdrError('bad bool');
-    return x === 1;
-  }
-  fixed(n) {
-    const padded = (n + 3) & ~3;
-    this.need(padded);
-    const x = this.b.subarray(this.o, this.o + n);
-    for (let i = this.o + n; i < this.o + padded; i++) if (this.b[i]) throw new XdrError('non-zero padding');
-    this.o += padded;
-    return x;
-  }
-  var(max = Infinity) {
-    const n = this.u32();
-    if (n > max) throw new XdrError(`length ${n} over limit ${max}`);
-    return this.fixed(n);
-  }
-  str(max) { return td.decode(this.var(max)); }
-  arr(f, max = Infinity) {
-    const n = this.u32();
-    if (n > max || n > this.b.length - this.o) throw new XdrError('bad array length');
-    const out = new Array(n);
-    for (let i = 0; i < n; i++) out[i] = f();
-    return out;
-  }
-  opt(f) { return this.bool() ? f() : null; }
-  span(f) {
-    const start = this.o;
-    const value = f();
-    return [value, this.b.subarray(start, this.o)];
-  }
-  done() {
-    if (this.o !== this.b.length) throw new XdrError(`${this.b.length - this.o} trailing bytes`);
-  }
-}
-
-const fromB64 = (s) => {
-  const bin = atob(String(s).trim());
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-};
-const toB64 = (bytes) => {
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
-};
-export const hex = (bytes) => Array.from(bytes, (x) => x.toString(16).padStart(2, '0')).join('');
-const bytesOf = (x) => (x instanceof Uint8Array ? x : fromB64(x));
-
-function readPublicKey(r) {
-  const t = r.u32();
-  if (t !== 0) throw new XdrError(`public key type ${t}`);
-  return r.fixed(32);
-}
-
-function readScAddress(r) {
-  const t = r.u32();
-  switch (t) {
-    case 0: return address('account', readPublicKey(r));
-    case 1: return address('contract', r.fixed(32));
-    case 2: { const id = r.u64(); return address('muxed', r.fixed(32), id); }
-    case 3: {
-      const ct = r.u32();
-      if (ct !== 0) throw new XdrError(`claimable balance id type ${ct}`);
-      return address('claimable', r.fixed(32));
-    }
-    case 4: return address('pool', r.fixed(32));
-    default: throw new XdrError(`unsupported address type ${t}`);
-  }
-}
-
-function address(kind, key, id) {
-  return { t: 'address', kind, key, id, str: strkeyFor(kind, key, id) };
-}
-
-function readScVal(r, depth = 0) {
-  if (depth > MAX_DEPTH) throw new XdrError('ScVal nested too deeply');
-  const t = r.u32();
-  const next = () => readScVal(r, depth + 1);
-  switch (t) {
-    case 0: return { t: 'bool', v: r.bool() };
-    case 1: return { t: 'void' };
-    case 2: {
-      const type = r.u32();
-      return { t: 'error', type, code: r.u32() };
-    }
-    case 3: return { t: 'u32', v: r.u32() };
-    case 4: return { t: 'i32', v: r.i32() };
-    case 5: return { t: 'u64', v: r.u64() };
-    case 6: return { t: 'i64', v: r.i64() };
-    case 7: return { t: 'timepoint', v: r.u64() };
-    case 8: return { t: 'duration', v: r.u64() };
-    case 9: { const hi = r.u64(); return { t: 'u128', v: (hi << 64n) | r.u64() }; }
-    case 10: { const hi = r.i64(); return { t: 'i128', v: (hi << 64n) | r.u64() }; }
-    case 11: case 12: {
-      const hh = t === 12 ? r.i64() : r.u64();
-      const hl = r.u64(), lh = r.u64(), ll = r.u64();
-      return { t: t === 12 ? 'i256' : 'u256', v: (hh << 192n) | (hl << 128n) | (lh << 64n) | ll };
-    }
-    case 13: return { t: 'bytes', v: r.var() };
-    case 14: return { t: 'string', v: r.str() };
-    case 15: return { t: 'symbol', v: r.str(32) };
-    case 16: return { t: 'vec', v: r.opt(() => r.arr(next)) ?? [] };
-    case 17: return { t: 'map', v: r.opt(() => r.arr(() => ({ k: next(), v: next() }))) ?? [] };
-    case 18: return readScAddress(r);
-    case 19: {
-      const executable = readExecutable(r);
-      const storage = r.opt(() => r.arr(() => ({ k: next(), v: next() })));
-      return { t: 'instance', executable, storage };
-    }
-    case 20: return { t: 'instanceKey' };
-    case 21: return { t: 'nonceKey', v: r.i64() };
-    case 22: return { t: 'executableTag', v: r.str() };
-    default: throw new XdrError(`unsupported ScVal type ${t}`);
-  }
-}
-
-function readExecutable(r) {
-  const t = r.u32();
-  if (t === 0) return { kind: 'wasm', hash: r.fixed(32) };
-  if (t === 1) return { kind: 'stellar-asset' };
-  if (t === 2) return { kind: 'external', owner: readScAddress(r), tag: r.str() };
-  throw new XdrError(`executable type ${t}`);
-}
-
-function readAsset(r) {
-  const t = r.u32();
-  if (t === 0) return { native: true, code: 'XLM' };
-  if (t === 1 || t === 2) {
-    const code = td.decode(r.fixed(t === 1 ? 4 : 12)).replace(/\0+$/, '');
-    return { native: false, code, issuer: strkeyFor('account', readPublicKey(r)) };
-  }
-  throw new XdrError(`asset type ${t}`);
-}
-
-function readInvokeArgs(r) {
-  const contract = readScAddress(r);
-  const fn = r.str(32);
-  const args = r.arr(() => readScVal(r));
-  return { kind: 'call', contract, fn, args };
-}
-
-function readPreimage(r) {
-  const t = r.u32();
-  if (t === 0) return { from: 'address', address: readScAddress(r), salt: r.fixed(32) };
-  if (t === 1) return { from: 'asset', asset: readAsset(r) };
-  throw new XdrError(`contract id preimage ${t}`);
-}
-
-function readCreate(r, v2) {
-  const preimage = readPreimage(r);
-  const executable = readExecutable(r);
-  const args = v2 ? r.arr(() => readScVal(r)) : [];
-  return { kind: 'create', preimage, executable, args };
-}
-
-function readAuthorizedInvocation(r, depth = 0) {
-  if (depth > MAX_DEPTH) throw new XdrError('invocation nested too deeply');
-  const [node, raw] = r.span(() => {
-    const t = r.u32();
-    let fn;
-    if (t === 0) fn = readInvokeArgs(r);
-    else if (t === 1) fn = readCreate(r, false);
-    else if (t === 2) fn = readCreate(r, true);
-    else throw new XdrError(`authorized function type ${t}`);
-    const subs = r.arr(() => readAuthorizedInvocation(r, depth + 1));
-    return { fn, subs };
-  });
-  node.raw = raw;
-  return node;
-}
-
-function readAddressCredentials(r) {
-  const [addr, addrRaw] = r.span(() => readScAddress(r));
-  return { address: addr, addressRaw: addrRaw, nonce: r.i64(), expiration: r.u32(), signature: readScVal(r) };
-}
-
-function readDelegate(r, depth = 0) {
-  if (depth > MAX_DEPTH) throw new XdrError('delegates nested too deeply');
-  return { address: readScAddress(r), signature: readScVal(r), nested: r.arr(() => readDelegate(r, depth + 1)) };
-}
-
-function readCredentials(r) {
-  const t = r.u32();
-  if (t === 0) return { type: 'source-account' };
-  if (t === 1) return { type: 'address', ...readAddressCredentials(r) };
-  if (t === 2) return { type: 'address-v2', ...readAddressCredentials(r) };
-  if (t === 3) {
-    const c = readAddressCredentials(r);
-    return { type: 'address-with-delegates', ...c, delegates: r.arr(() => readDelegate(r)) };
-  }
-  throw new XdrError(`credentials type ${t}`);
-}
-
-function readAuthEntry(r) {
-  const [entry, raw] = r.span(() => ({ credentials: readCredentials(r), root: readAuthorizedInvocation(r) }));
-  entry.raw = raw;
-  return entry;
-}
-
-function readHostFunction(r) {
-  const t = r.u32();
-  if (t === 0) return readInvokeArgs(r);
-  if (t === 1) return readCreate(r, false);
-  if (t === 2) return { kind: 'upload', wasm: r.var() };
-  if (t === 3) return readCreate(r, true);
-  throw new XdrError(`host function type ${t}`);
-}
-
-function readMuxed(r) {
-  const t = r.u32();
-  if (t === 0) return address('account', r.fixed(32));
-  if (t === 0x100) { const id = r.u64(); return address('muxed', r.fixed(32), id); }
-  throw new XdrError(`muxed account type ${t}`);
-}
-
-function readLedgerKey(r) {
-  const [key, raw] = r.span(() => {
-    const t = r.u32();
-    switch (t) {
-      case 0: return { type: 'account', account: strkeyFor('account', readPublicKey(r)) };
-      case 1: {
-        const account = strkeyFor('account', readPublicKey(r));
-        const at = r.u32();
-        let asset;
-        if (at === 3) asset = { pool: hex(r.fixed(32)) };
-        else if (at === 0) asset = { native: true, code: 'XLM' };
-        else {
-          const code = td.decode(r.fixed(at === 1 ? 4 : 12)).replace(/\0+$/, '');
-          asset = { code, issuer: strkeyFor('account', readPublicKey(r)) };
-        }
-        return { type: 'trustline', account, asset };
-      }
-      case 2: return { type: 'offer', seller: strkeyFor('account', readPublicKey(r)), id: r.i64() };
-      case 3: return { type: 'data', account: strkeyFor('account', readPublicKey(r)), name: r.str(64) };
-      case 4: { r.u32(); return { type: 'claimable-balance', id: hex(r.fixed(32)) }; }
-      case 5: return { type: 'liquidity-pool', id: hex(r.fixed(32)) };
-      case 6: return { type: 'contract-data', contract: readScAddress(r), key: readScVal(r), durability: r.u32() ? 'persistent' : 'temporary' };
-      case 7: return { type: 'contract-code', hash: hex(r.fixed(32)) };
-      case 8: return { type: 'config-setting', id: r.u32() };
-      case 9: return { type: 'ttl', hash: hex(r.fixed(32)) };
-      default: throw new XdrError(`ledger key type ${t}`);
-    }
-  });
-  key.xdr = toB64(raw);
-  return key;
-}
-
-function readSorobanData(r) {
-  const ext = r.u32();
-  const archived = ext === 1 ? r.arr(() => r.u32()) : [];
-  if (ext > 1) throw new XdrError(`soroban data ext ${ext}`);
-  const readOnly = r.arr(() => readLedgerKey(r));
-  const readWrite = r.arr(() => readLedgerKey(r));
-  return { readOnly, readWrite, archived, instructions: r.u32(), diskReadBytes: r.u32(), writeBytes: r.u32(), resourceFee: r.i64() };
-}
-
-function skipPreconditions(r) {
-  const t = r.u32();
-  if (t === 0) return null;
-  if (t === 1) return { minTime: r.u64(), maxTime: r.u64() };
-  if (t !== 2) throw new XdrError(`preconditions ${t}`);
-  const tb = r.opt(() => ({ minTime: r.u64(), maxTime: r.u64() }));
-  const lb = r.opt(() => ({ minLedger: r.u32(), maxLedger: r.u32() }));
-  r.opt(() => r.i64());
-  r.u64();
-  r.u32();
-  r.arr(() => {
-    const k = r.u32();
-    r.fixed(32);
-    if (k === 3) r.var(64);
-  }, 2);
-  return { ...tb, ...lb };
-}
-
-function readMemo(r) {
-  const t = r.u32();
-  if (t === 0) return null;
-  if (t === 1) return { text: r.str(28) };
-  if (t === 2) return { id: r.u64() };
-  if (t === 3 || t === 4) return { hash: hex(r.fixed(32)) };
-  throw new XdrError(`memo ${t}`);
-}
-
-function readOperation(r) {
-  const source = r.opt(() => readMuxed(r));
-  const t = r.u32();
-  if (t === 24) return { type: 'invoke', source, hostFunction: readHostFunction(r), auth: r.arr(() => readAuthEntry(r)) };
-  if (t === 25) { r.u32(); return { type: 'extend-ttl', source, extendTo: r.u32() }; }
-  if (t === 26) { r.u32(); return { type: 'restore', source }; }
-  // A classic operation: Soroban transactions carry exactly one operation,
-  // so the review stops here and says so instead of guessing.
-  throw new XdrError(`operation type ${t} is not a Soroban operation`);
-}
-
-function readTransaction(r) {
-  const [tx, raw] = r.span(() => {
-    const source = readMuxed(r);
-    const fee = r.u32();
-    const seq = r.i64();
-    const cond = skipPreconditions(r);
-    const memo = readMemo(r);
-    const operations = r.arr(() => readOperation(r), 100);
-    const ext = r.u32();
-    const soroban = ext === 1 ? readSorobanData(r) : null;
-    if (ext > 1) throw new XdrError(`transaction ext ${ext}`);
-    return { source, fee, seq, cond, memo, operations, soroban };
-  });
-  tx.raw = raw;
-  return tx;
-}
-
-/** Decode a base64 or byte TransactionEnvelope. Fee bumps unwrap to the inner transaction. */
-export function decodeEnvelope(xdr) {
-  const r = new Reader(bytesOf(xdr));
-  const t = r.u32();
-  let tx, feeBump = null;
-  if (t === 2) {
-    tx = readTransaction(r);
-  } else if (t === 5) {
-    const feeSource = readMuxed(r);
-    const fee = r.i64();
-    if (r.u32() !== 2) throw new XdrError('fee bump inner envelope type');
-    tx = readTransaction(r);
-    r.arr(() => { r.fixed(4); r.var(64); }, 20);
-    r.u32();
-    feeBump = { feeSource, fee };
-  } else {
-    throw new XdrError(t === 0 ? 'v0 envelopes cannot carry Soroban operations' : `envelope type ${t}`);
-  }
-  const signatures = r.arr(() => ({ hint: hex(r.fixed(4)), signature: r.var(64) }), 20);
-  r.done();
-  return { tx, feeBump, signatures };
-}
-
-/** Decode one base64 or byte SorobanAuthorizationEntry. */
-export function decodeAuthEntry(xdr) {
-  const r = new Reader(bytesOf(xdr));
-  const e = readAuthEntry(r);
-  r.done();
-  return e;
-}
-
-/** Decode one base64 or byte ScVal. */
-export function decodeScVal(xdr) {
-  const r = new Reader(bytesOf(xdr));
-  const v = readScVal(r);
-  r.done();
-  return v;
-}
-
-/** Decode one base64 or byte ContractEvent. */
-export function decodeEvent(xdr) {
-  const r = new Reader(bytesOf(xdr));
-  r.u32();
-  const contract = r.opt(() => address('contract', r.fixed(32)));
-  const type = r.u32();
-  if (r.u32() !== 0) throw new XdrError('event body version');
-  const topics = r.arr(() => readScVal(r));
-  const data = readScVal(r);
-  r.done();
-  return { contract, type, topics, data };
-}
-
-// ---------------------------------------------------------------------------
-// StrKey, hashing, preimages.
-// ---------------------------------------------------------------------------
-
-const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-
-function crc16(bytes) {
-  let crc = 0;
-  for (const b of bytes) {
-    crc ^= b << 8;
-    for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
-  }
-  return crc;
-}
-
-function strkey(version, payload) {
-  const data = new Uint8Array(payload.length + 3);
-  data[0] = version;
-  data.set(payload, 1);
-  const c = crc16(data.subarray(0, payload.length + 1));
-  data[payload.length + 1] = c & 0xff;
-  data[payload.length + 2] = c >> 8;
-  let bits = 0, value = 0, out = '';
-  for (const b of data) {
-    value = (value << 8) | b;
-    bits += 8;
-    while (bits >= 5) { out += B32[(value >>> (bits - 5)) & 31]; bits -= 5; }
-  }
-  if (bits > 0) out += B32[(value << (5 - bits)) & 31];
-  return out;
-}
-
-export function strkeyFor(kind, key, id) {
-  switch (kind) {
-    case 'account': return strkey(6 << 3, key);
-    case 'contract': return strkey(2 << 3, key);
-    case 'muxed': {
-      const p = new Uint8Array(40);
-      p.set(key);
-      new DataView(p.buffer).setBigUint64(32, id);
-      return strkey(12 << 3, p);
-    }
-    case 'claimable': { const p = new Uint8Array(33); p.set(key, 1); return strkey(1 << 3, p); }
-    case 'pool': return strkey(11 << 3, key);
-    default: return hex(key);
-  }
-}
-
-const sha256 = async (bytes) => new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
-const u32be = (n) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n); return b; };
-const i64be = (n) => { const b = new Uint8Array(8); new DataView(b.buffer).setBigInt64(0, BigInt(n)); return b; };
-const concat = (...parts) => {
-  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
-  let o = 0;
-  for (const p of parts) { out.set(p, o); o += p.length; }
-  return out;
-};
-
-export const NETWORKS = {
-  testnet: 'Test SDF Network ; September 2015',
-  mainnet: 'Public Global Stellar Network ; September 2015',
-  futurenet: 'Test SDF Future Network ; October 2022',
-  local: 'Standalone Network ; February 2017',
-};
-
-export const networkId = (passphrase) => sha256(new TextEncoder().encode(passphrase));
-
-/** The native asset's Stellar Asset Contract id on a network. */
-export async function nativeAssetContract(passphrase) {
-  // HashIdPreimage::ContractId { networkId, ContractIdPreimage::FromAsset(Asset::Native) }
-  const pre = concat(u32be(8), await networkId(passphrase), u32be(1), u32be(0));
-  return strkeyFor('contract', await sha256(pre));
-}
-
-/**
- * The 32-byte payload an address credential signs, for a given expiration
- * ledger: sha256(HashIdPreimage::SorobanAuthorization[WithAddress]).
- */
-export async function authPayloadHash(entry, passphrase, expirationLedger) {
-  const c = entry.credentials;
-  if (!c.address) return null;
-  const nid = await networkId(passphrase);
-  const exp = u32be(expirationLedger ?? c.expiration);
-  const pre = c.type === 'address'
-    ? concat(u32be(9), nid, i64be(c.nonce), exp, entry.root.raw)
-    : concat(u32be(10), nid, i64be(c.nonce), exp, c.addressRaw, entry.root.raw);
-  return sha256(pre);
-}
-
-/** The transaction hash the source account signs. */
-export async function transactionHash(decoded, passphrase) {
-  return sha256(concat(await networkId(passphrase), u32be(2), decoded.tx.raw));
-}
-
-// ---------------------------------------------------------------------------
-// Readable labels.
-// ---------------------------------------------------------------------------
-
-// SEP-41 token interface (and the Stellar Asset Contract's admin calls):
-// argument names, used only for contracts known to be tokens.
-const TOKEN_FNS = {
-  transfer: ['from', 'to', 'amount'],
-  transfer_from: ['spender', 'from', 'to', 'amount'],
-  approve: ['from', 'spender', 'amount', 'expiration_ledger'],
-  burn: ['from', 'amount'],
-  burn_from: ['spender', 'from', 'amount'],
-  mint: ['to', 'amount'],
-  clawback: ['from', 'amount'],
-  set_admin: ['new_admin'],
-  set_authorized: ['id', 'authorize'],
-};
-
-// Perch account entry points that carry a policy document.
-const PERCH_FNS = {
-  apply_doc: ['doc_json', 'approval_valid_until', 'expected_revision'],
-  apply_grant: ['grant_id', 'doc_json'],
-  remove_grant: ['grant_id'],
-  // The paper's pinned build names them apply_scope and remove_scope.
-  apply_scope: ['grant_id', 'doc_json'],
-  remove_scope: ['grant_id'],
-  execute: ['target', 'target_fn', 'target_args'],
-};
-
-export function formatAmount(v, decimals = 7) {
-  const neg = v < 0n;
-  let s = (neg ? -v : v).toString().padStart(decimals + 1, '0');
-  const whole = s.slice(0, s.length - decimals).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  const frac = decimals ? s.slice(s.length - decimals).replace(/0+$/, '') : '';
-  return (neg ? '−' : '') + whole + (frac ? '.' + frac : '');
-}
-
-const short = (s) => (s && s.length > 14 ? `${s.slice(0, 4)}…${s.slice(-4)}` : s);
-
-function tryJson(bytes) {
-  if (!bytes || bytes.length < 2 || bytes[0] !== 0x7b) return null;
-  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { return null; }
-}
-
-// ---------------------------------------------------------------------------
-// Authorization tree comparison (supplied vs independently recorded).
-// ---------------------------------------------------------------------------
-
-const sameBytes = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
-const credAddress = (e) => e.credentials.address?.str ?? 'source-account';
-
-/**
- * Pair supplied entries with recorded ones. An entry matches when the signer
- * and the whole invocation tree are byte-identical; nonces, expirations and
- * signatures are ignored because the recording invents its own.
- */
-export function compareAuth(supplied, recorded) {
-  const left = recorded.map((e, i) => ({ e, i, used: false }));
-  const result = supplied.map((e, index) => {
-    const exact = left.find((x) => !x.used && credAddress(x.e) === credAddress(e) && sameBytes(x.e.root.raw, e.root.raw));
-    if (exact) { exact.used = true; return { index, status: 'match', recorded: exact.i }; }
-    return { index, status: 'unmatched' };
-  });
-  for (const r of result) {
-    if (r.status !== 'unmatched') continue;
-    const e = supplied[r.index];
-    const same = left.find((x) => !x.used && credAddress(x.e) === credAddress(e));
-    if (same) { same.used = true; r.status = 'differs'; r.recorded = same.i; } else r.status = 'extra';
-  }
-  const missing = left.filter((x) => !x.used).map((x) => x.i);
-  return { entries: result, missing };
-}
-
-// ---------------------------------------------------------------------------
-// The element.
-// ---------------------------------------------------------------------------
-
-const STYLE = `
+var Et=Object.defineProperty;var zt=(e,t)=>{for(var s in t)Et(e,s,{get:t[s],enumerable:!0})};var rt={};zt(rt,{NETWORKS:()=>B,STRINGS:()=>K,SorobanSignDialog:()=>T,TAG:()=>z,VERSION:()=>Ut,XdrError:()=>u,authPayloadHash:()=>mt,compareAuth:()=>H,decodeAuthEntry:()=>j,decodeEnvelope:()=>O,decodeEvent:()=>U,decodeLedgerEntry:()=>pt,decodeLedgerKey:()=>lt,decodeScVal:()=>ht,define:()=>R,formatAmount:()=>b,fromStrkey:()=>gt,nativeAssetContract:()=>F,networkId:()=>M,request:()=>wt,strkeyFor:()=>g,transactionHash:()=>D});var u=class extends Error{},Q=64,L=new TextDecoder("utf-8",{fatal:!1}),$=class{constructor(t){this.b=t,this.v=new DataView(t.buffer,t.byteOffset,t.byteLength),this.o=0}need(t){if(t<0||this.o+t>this.b.length)throw new u("truncated XDR")}u32(){this.need(4);let t=this.v.getUint32(this.o);return this.o+=4,t}i32(){this.need(4);let t=this.v.getInt32(this.o);return this.o+=4,t}u64(){this.need(8);let t=this.v.getBigUint64(this.o);return this.o+=8,t}i64(){this.need(8);let t=this.v.getBigInt64(this.o);return this.o+=8,t}bool(){let t=this.u32();if(t>1)throw new u("bad bool");return t===1}fixed(t){let s=t+3&-4;this.need(s);let r=this.b.subarray(this.o,this.o+t);for(let a=this.o+t;a<this.o+s;a++)if(this.b[a])throw new u("non-zero padding");return this.o+=s,r}var(t=1/0){let s=this.u32();if(s>t)throw new u(`length ${s} over limit ${t}`);return this.fixed(s)}str(t){return L.decode(this.var(t))}arr(t,s=1/0){let r=this.u32();if(r>s||r>this.b.length-this.o)throw new u("bad array length");let a=new Array(r);for(let n=0;n<r;n++)a[n]=t();return a}opt(t){return this.bool()?t():null}span(t){let s=this.o;return[t(),this.b.subarray(s,this.o)]}done(){if(this.o!==this.b.length)throw new u(`${this.b.length-this.o} trailing bytes`)}},Tt=e=>{let t=atob(String(e).trim()),s=new Uint8Array(t.length);for(let r=0;r<t.length;r++)s[r]=t.charCodeAt(r);return s},P=e=>{let t="";for(let s=0;s<e.length;s+=32768)t+=String.fromCharCode(...e.subarray(s,s+32768));return btoa(t)},f=e=>Array.from(e,t=>t.toString(16).padStart(2,"0")).join(""),S=e=>e instanceof Uint8Array?e:Tt(e);function v(e){let t=e.u32();if(t!==0)throw new u(`public key type ${t}`);return e.fixed(32)}function x(e){let t=e.u32();switch(t){case 0:return y("account",v(e));case 1:return y("contract",e.fixed(32));case 2:{let s=e.u64();return y("muxed",e.fixed(32),s)}case 3:{let s=e.u32();if(s!==0)throw new u(`claimable balance id type ${s}`);return y("claimable",e.fixed(32))}case 4:return y("pool",e.fixed(32));case 5:{let s=e.u64(),r=y("contract",e.fixed(32));return{...r,kind:"muxed-contract",id:s,str:r.str,muxId:s}}default:throw new u(`unsupported address type ${t}`)}}function y(e,t,s){return{t:"address",kind:e,key:t,id:s,str:g(e,t,s)}}function m(e,t=0){if(t>Q)throw new u("ScVal nested too deeply");let s=e.u32(),r=()=>m(e,t+1);switch(s){case 0:return{t:"bool",v:e.bool()};case 1:return{t:"void"};case 2:return{t:"error",type:e.u32(),code:e.u32()};case 3:return{t:"u32",v:e.u32()};case 4:return{t:"i32",v:e.i32()};case 5:return{t:"u64",v:e.u64()};case 6:return{t:"i64",v:e.i64()};case 7:return{t:"timepoint",v:e.u64()};case 8:return{t:"duration",v:e.u64()};case 9:return{t:"u128",v:e.u64()<<64n|e.u64()};case 10:return{t:"i128",v:e.i64()<<64n|e.u64()};case 11:case 12:{let a=s===12?e.i64():e.u64(),n=e.u64(),o=e.u64(),c=e.u64();return{t:s===12?"i256":"u256",v:a<<192n|n<<128n|o<<64n|c}}case 13:return{t:"bytes",v:e.var()};case 14:return{t:"string",v:e.str()};case 15:return{t:"symbol",v:e.str(32)};case 16:return{t:"vec",v:e.opt(()=>e.arr(r))??[]};case 17:return{t:"map",v:e.opt(()=>e.arr(()=>({k:r(),v:r()})))??[]};case 18:return x(e);case 19:{let a=ot(e),n=e.opt(()=>e.arr(()=>({k:r(),v:r()})));return{t:"instance",executable:a,storage:n}}case 20:return{t:"instanceKey"};case 21:return{t:"nonceKey",v:e.i64()};case 22:return{t:"executableTag",v:e.str()};default:throw new u(`unsupported ScVal type ${s}`)}}function ot(e){let t=e.u32();if(t===0)return{kind:"wasm",hash:e.fixed(32)};if(t===1)return{kind:"stellar-asset"};if(t===2)return{kind:"external",owner:x(e),tag:e.str()};throw new u(`executable type ${t}`)}function Ct(e){let t=e.u32();if(t===0)return{native:!0,code:"XLM"};if(t===1||t===2)return{native:!1,code:L.decode(e.fixed(t===1?4:12)).replace(/\0+$/,""),issuer:g("account",v(e))};throw new u(`asset type ${t}`)}function it(e){let t=x(e),s=e.str(32),r=e.arr(()=>m(e));return{kind:"call",contract:t,fn:s,args:r}}function Pt(e){let t=e.u32();if(t===0)return{from:"address",address:x(e),salt:e.fixed(32)};if(t===1)return{from:"asset",asset:Ct(e)};throw new u(`contract id preimage ${t}`)}function N(e,t){let s=Pt(e),r=ot(e),a=t?e.arr(()=>m(e)):[];return{kind:"create",preimage:s,executable:r,args:a}}function dt(e,t=0){if(t>Q)throw new u("invocation nested too deeply");let[s,r]=e.span(()=>{let a=e.u32(),n;if(a===0)n=it(e);else if(a===1)n=N(e,!1);else if(a===2)n=N(e,!0);else throw new u(`authorized function type ${a}`);let o=e.arr(()=>dt(e,t+1));return{fn:n,subs:o}});return s.raw=r,s}function G(e){let[t,s]=e.span(()=>x(e));return{address:t,addressRaw:s,nonce:e.i64(),expiration:e.u32(),signature:m(e)}}function ct(e,t=0){if(t>Q)throw new u("delegates nested too deeply");return{address:x(e),signature:m(e),nested:e.arr(()=>ct(e,t+1))}}function jt(e){let t=e.u32();if(t===0)return{type:"source-account"};if(t===1)return{type:"address",...G(e)};if(t===2)return{type:"address-v2",...G(e)};if(t===3)return{type:"address-with-delegates",...G(e),delegates:e.arr(()=>ct(e))};throw new u(`credentials type ${t}`)}function ut(e){let[t,s]=e.span(()=>({credentials:jt(e),root:dt(e)}));return t.raw=s,t}function Bt(e){let t=e.u32();if(t===0)return it(e);if(t===1)return N(e,!1);if(t===2)return{kind:"upload",wasm:e.var()};if(t===3)return N(e,!0);throw new u(`host function type ${t}`)}function Z(e){let t=e.u32();if(t===0)return y("account",e.fixed(32));if(t===256){let s=e.u64();return y("muxed",e.fixed(32),s)}throw new u(`muxed account type ${t}`)}function Y(e){let[t,s]=e.span(()=>{let r=e.u32();switch(r){case 0:return{type:"account",account:g("account",v(e))};case 1:{let a=g("account",v(e)),n=e.u32(),o;return n===3?o={pool:f(e.fixed(32))}:n===0?o={native:!0,code:"XLM"}:o={code:L.decode(e.fixed(n===1?4:12)).replace(/\0+$/,""),issuer:g("account",v(e))},{type:"trustline",account:a,asset:o}}case 2:return{type:"offer",seller:g("account",v(e)),id:e.i64()};case 3:return{type:"data",account:g("account",v(e)),name:e.str(64)};case 4:return e.u32(),{type:"claimable-balance",id:f(e.fixed(32))};case 5:return{type:"liquidity-pool",id:f(e.fixed(32))};case 6:return{type:"contract-data",contract:x(e),key:m(e),durability:e.u32()?"persistent":"temporary"};case 7:return{type:"contract-code",hash:f(e.fixed(32))};case 8:return{type:"config-setting",id:e.u32()};case 9:return{type:"ttl",hash:f(e.fixed(32))};default:throw new u(`ledger key type ${r}`)}});return t.xdr=P(s),t}function Mt(e){let t=e.u32(),s=t===1?e.arr(()=>e.u32()):[];if(t>1)throw new u(`soroban data ext ${t}`);let r=e.arr(()=>Y(e)),a=e.arr(()=>Y(e));return{readOnly:r,readWrite:a,archived:s,instructions:e.u32(),diskReadBytes:e.u32(),writeBytes:e.u32(),resourceFee:e.i64()}}function Rt(e){let t=e.u32();if(t===0)return null;if(t===1)return{minTime:e.u64(),maxTime:e.u64()};if(t!==2)throw new u(`preconditions ${t}`);let s=e.opt(()=>({minTime:e.u64(),maxTime:e.u64()})),r=e.opt(()=>({minLedger:e.u32(),maxLedger:e.u32()}));return e.opt(()=>e.i64()),e.u64(),e.u32(),e.arr(()=>{let a=e.u32();e.fixed(32),a===3&&e.var(64)},2),{...s,...r}}function It(e){let t=e.u32();if(t===0)return null;if(t===1)return{text:e.str(28)};if(t===2)return{id:e.u64()};if(t===3||t===4)return{hash:f(e.fixed(32))};throw new u(`memo ${t}`)}function Nt(e){let t=e.opt(()=>Z(e)),s=e.u32();if(s===24)return{type:"invoke",source:t,hostFunction:Bt(e),auth:e.arr(()=>ut(e))};if(s===25)return e.u32(),{type:"extend-ttl",source:t,extendTo:e.u32()};if(s===26)return e.u32(),{type:"restore",source:t};throw new u(`operation type ${s} is not a Soroban operation`)}function nt(e){let[t,s]=e.span(()=>{let r=Z(e),a=e.u32(),n=e.i64(),o=Rt(e),c=It(e),d=e.arr(()=>Nt(e),100),l=e.u32(),p=l===1?Mt(e):null;if(l>1)throw new u(`transaction ext ${l}`);return{source:r,fee:a,seq:n,cond:o,memo:c,operations:d,soroban:p}});return t.raw=s,t}function O(e){let t=new $(S(e)),s=t.u32(),r,a=null;if(s===2)r=nt(t);else if(s===5){let o=Z(t),c=t.i64();if(t.u32()!==2)throw new u("fee bump inner envelope type");r=nt(t),t.arr(()=>{t.fixed(4),t.var(64)},20),t.u32(),a={feeSource:o,fee:c}}else throw new u(s===0?"v0 envelopes cannot carry Soroban operations":`envelope type ${s}`);let n=t.arr(()=>({hint:f(t.fixed(4)),signature:t.var(64)}),20);return t.done(),{tx:r,feeBump:a,signatures:n}}function j(e){let t=new $(S(e)),s=ut(t);return t.done(),s}function lt(e){let t=new $(S(e)),s=Y(t);return t.done(),s}function ht(e){let t=new $(S(e)),s=m(t);return t.done(),s}function U(e){let t=new $(S(e));t.u32();let s=t.opt(()=>y("contract",t.fixed(32))),r=t.u32();if(t.u32()!==0)throw new u("event body version");let a=t.arr(()=>m(t)),n=m(t);return t.done(),{contract:s,type:r,topics:a,data:n}}function pt(e){let t=new $(S(e)),s=t.u32(),r=t.u32();switch(r){case 0:return{type:"account",lastModified:s,account:g("account",v(t)),balance:t.i64()};case 1:{let a=g("account",v(t)),n=t.u32(),o;return n===3?o={pool:f(t.fixed(32))}:n===0?o={native:!0,code:"XLM"}:o={code:L.decode(t.fixed(n===1?4:12)).replace(/\0+$/,""),issuer:g("account",v(t))},{type:"trustline",lastModified:s,account:a,asset:o,balance:t.i64()}}case 6:{if(t.u32()!==0)throw new u("contract data ext");let a=x(t),n=m(t),o=t.u32()?"persistent":"temporary";return{type:"contract-data",lastModified:s,contract:a,key:n,durability:o,val:m(t)}}case 7:{let a=t.u32();if(a===1)t.fixed(48);else if(a!==0)throw new u(`contract code ext ${a}`);let n=f(t.fixed(32));return{type:"contract-code",lastModified:s,hash:n,code:t.var()}}default:return{type:["account","trustline","offer","data","claimable-balance","liquidity-pool","contract-data","contract-code","config-setting","ttl"][r]??`type-${r}`,lastModified:s}}}var J="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";function ft(e){let t=0;for(let s of e){t^=s<<8;for(let r=0;r<8;r++)t=t&32768?(t<<1^4129)&65535:t<<1&65535}return t}function C(e,t){let s=new Uint8Array(t.length+3);s[0]=e,s.set(t,1);let r=ft(s.subarray(0,t.length+1));s[t.length+1]=r&255,s[t.length+2]=r>>8;let a=0,n=0,o="";for(let c of s)for(n=n<<8|c,a+=8;a>=5;)o+=J[n>>>a-5&31],a-=5;return a>0&&(o+=J[n<<5-a&31]),o}function gt(e){let t={G:48,C:16},s=0,r=0,a=[];for(let c of String(e)){let d=J.indexOf(c);if(d<0)throw new u(`not a StrKey: ${e}`);s=s<<5|d,r+=5,r>=8&&(r-=8,a.push(s>>r&255))}let n=Uint8Array.from(a);if(n.length!==35||n[0]!==t[e[0]])throw new u(`not an account or contract StrKey: ${e}`);let o=ft(n.subarray(0,33));if(n[33]!==(o&255)||n[34]!==o>>8)throw new u(`bad StrKey checksum: ${e}`);return n.subarray(1,33)}function g(e,t,s){switch(e){case"account":return C(48,t);case"contract":return C(16,t);case"muxed":{let r=new Uint8Array(40);return r.set(t),new DataView(r.buffer).setBigUint64(32,s),C(96,r)}case"claimable":{let r=new Uint8Array(33);return r.set(t,1),C(8,r)}case"pool":return C(88,t);default:return f(t)}}var E=async e=>new Uint8Array(await crypto.subtle.digest("SHA-256",e)),k=e=>{let t=new Uint8Array(4);return new DataView(t.buffer).setUint32(0,e),t},at=e=>{let t=new Uint8Array(8);return new DataView(t.buffer).setBigInt64(0,BigInt(e)),t},q=(...e)=>{let t=new Uint8Array(e.reduce((r,a)=>r+a.length,0)),s=0;for(let r of e)t.set(r,s),s+=r.length;return t},B={testnet:"Test SDF Network ; September 2015",mainnet:"Public Global Stellar Network ; September 2015",futurenet:"Test SDF Future Network ; October 2022",local:"Standalone Network ; February 2017"},M=e=>E(new TextEncoder().encode(e));async function F(e){let t=q(k(8),await M(e),k(1),k(0));return g("contract",await E(t))}async function mt(e,t,s){let r=e.credentials;if(!r.address)return null;let a=await M(t),n=k(s??r.expiration),o=r.type==="address"?q(k(9),a,at(r.nonce),n,e.root.raw):q(k(10),a,at(r.nonce),n,r.addressRaw,e.root.raw);return E(o)}async function D(e,t){return E(q(await M(t),k(2),e.tx.raw))}var _={transfer:["from","to","amount"],transfer_from:["spender","from","to","amount"],approve:["from","spender","amount","expiration_ledger"],burn:["from","amount"],burn_from:["spender","from","amount"],mint:["to","amount"],clawback:["from","amount"],set_admin:["new_admin"],set_authorized:["id","authorize"]},tt={apply_doc:["doc_json","approval_valid_until","expected_revision"],apply_scope:["grant_id","doc_json"],remove_scope:["grant_id"],execute:["target","target_fn","target_args"]};function b(e,t=7){let s=e<0n,r=(s?-e:e).toString().padStart(t+1,"0"),a=r.slice(0,r.length-t).replace(/\B(?=(\d{3})+(?!\d))/g,","),n=t?r.slice(r.length-t).replace(/0+$/,""):"";return(s?"\u2212":"")+a+(n?"."+n:"")}var A=e=>e&&e.length>14?`${e.slice(0,4)}\u2026${e.slice(-4)}`:e;function vt(e){if(!e||e.length<2||e[0]!==123)return null;try{return JSON.parse(new TextDecoder("utf-8",{fatal:!0}).decode(e))}catch{return null}}var qt=(e,t)=>e.length===t.length&&e.every((s,r)=>s===t[r]),I=e=>e.credentials.address?.str??"source-account";function H(e,t){let s=t.map((n,o)=>({e:n,i:o,used:!1})),r=e.map((n,o)=>{let c=s.find(d=>!d.used&&I(d.e)===I(n)&&qt(d.e.root.raw,n.root.raw));return c?(c.used=!0,{index:o,status:"match",recorded:c.i}):{index:o,status:"unmatched"}});for(let n of r){if(n.status!=="unmatched")continue;let o=e[n.index],c=s.find(d=>!d.used&&I(d.e)===I(o));c?(c.used=!0,n.status="differs",n.recorded=c.i):n.status="extra"}let a=s.filter(n=>!n.used).map(n=>n.i);return{entries:r,missing:a}}var K={networks:{testnet:"Testnet",mainnet:"Mainnet",futurenet:"Futurenet",local:"Local network"},customNetwork:"Custom network",requestFrom:e=>`Request from <b>${e.dapp}</b>`,titleOne:"Authorize this call",titleMany:e=>`Authorize ${e.count} calls`,titleTransaction:"Approve this transaction",titleUnreadable:"This request could not be read",titleEmpty:"No request",summary:e=>`Fee up to ${e.fee} XLM, paid by ${e.payer}`,reject:"Reject",approveButton:"Approve",approveAnyway:"Approve anyway",confirmApproveAnyway:"Confirm: approve anyway",summarySend:e=>`Send ${e.amount} to ${e.to}`,summaryUnusedTag:"not used",summaryBudget:e=>e.over?`Over the cap: ${e.left} of ${e.limit} ${e.code} left this window`:`${e.left} of ${e.limit} ${e.code} left this window after this`,statusSuccess:"Will succeed",statusRefused:"Will be refused",statusUnknown:"Outcome unknown",statusChecking:"Checking the outcome\u2026",statusIdle:"Outcome not checked yet",simulatedOk:"The simulation against current ledger state completed.",notSimulated:"This request was not simulated.",unusedWarning:e=>`This request also asks you to sign an authorization the transaction does not use: ${e.what}. If you approve, the signature is published with the transaction and anyone can submit that authorization later, until it expires.`,differsWarning:"The simulation needs a different authorization from the one you are asked to sign.",missingWarning:"The transaction needs an authorization this request does not include, so it is likely to fail.",details:"Details",nothingToReview:"Nothing to review.",unreadable:e=>`${e.error}. Nothing has been signed. Reject the request.`,whatYouAuthorize:"What you authorize",authorizedBy:e=>`${e.index}. Authorized by <b>${e.who}</b>`,sourceAccount:"the transaction source account",addressBound:"address-bound",sourceAuthority:"Runs with the source account\u2019s authority",operation:e=>`${e.type} operation`,you:"you",nativeAsset:"XLM (native asset)",argument:e=>`arg ${e.index}`,argumentCount:e=>e.count===1?"1 argument":`${e.count} arguments`,contract:"contract",none:"none",yes:"yes",no:"no",bytes:e=>`${e.length} bytes`,seconds:e=>`${e.value} s`,send:e=>`Send ${e.amount} from ${e.from} to ${e.to}`,approve:e=>`Let ${e.spender} spend up to ${e.amount} of ${e.from}\u2019s balance until ledger ${e.until}`,transferFrom:e=>`${e.spender} sends ${e.amount} from ${e.from} to ${e.to}`,burn:e=>`Burn ${e.amount} from ${e.from}`,mint:e=>`Mint ${e.amount} to ${e.to}`,deployAsset:e=>`Deploy the ${e.code} asset contract`,deploy:e=>e.code?`Deploy a new contract from code ${e.code}`:"Deploy a new contract",upload:e=>`Upload contract code (${e.length} bytes)`,installGrant:e=>`Install grant #${e.grant} on your account`,replacePolicy:"Replace your account\u2019s policy document",call:e=>`Call <code>${e.fn}</code> on ${e.contract}`,policyDocument:e=>`Policy document (${e.network??"network not named"})`,rules:"Rules",signers:"Signers",anyFunction:"any function",ruleLine:e=>`<b>${e.name}</b>: ${e.functions} on ${e.scope}${e.by?` by ${e.by}`:""}${e.cap?`; at most <b>${e.cap}</b> per ${e.period} ledgers`:""}`,signerKey:e=>`key ${e.key}`,badgeMatch:"\u2713 Matches simulation",badgeExtra:"\u26A0 Not used by this transaction",badgeDiffers:"\u26A0 Differs from simulation",extraNote:"This entry is not needed to run the transaction. If you sign it, the signature is published with the transaction and anyone can submit it later, until it expires.",differsNote:"The simulation recorded a different authorization for this signer. Compare the trees before signing.",authMatch:"\u2713 The simulation recorded the same authorization tree independently.",authMismatch:e=>`\u26A0 The simulation\u2019s own recording of the authorization tree does not match the request: ${e.extra} not used, ${e.differs} different, ${e.missing} missing.`,neededNotSupplied:"Needed but not supplied:",effects:"Effects",previewButton:"Check outcome",previewUnavailable:"Preview unavailable.",treeStillExact:"The authorization tree in Details is still exact.",previewFailed:e=>`Preview failed: ${e.error}`,wouldAccept:e=>`<b>Would be accepted</b> by ${e.account}${e.rule?` under rule <code>${e.rule}</code>`:""}.`,wouldRefuse:e=>`<b>Would be refused</b> by ${e.account}${e.rule?` under rule <code>${e.rule}</code>`:""}.`,verdictUnknown:e=>`<b>Verdict unknown</b> for ${e.account}.`,contractError:e=>`Contract error ${e.code}`,spendingCap:"Spending cap",capRule:e=>` \xB7 rule <code>${e.rule}</code>`,capMeter:e=>`${e.spent} spent of ${e.limit}; this request ${e.amount}`,capLeft:e=>`${e.remaining} of ${e.limit} left in the current window of ${e.period} ledgers.`,capAfter:e=>`After this: <b>${e.after}</b> left.`,capOver:e=>`<b>This request (${e.amount}) is over the remaining cap.</b>`,capRelease:e=>`The oldest spend leaves the window at ledger ${e.ledger}${e.minutes!=null?` (about ${e.minutes} min)`:""}.`,balanceChanges:"Balance changes",balanceHeaders:["Account","Asset","Before","After","Change"],noBalanceChanges:"No balance changes.",events:"Events",transferEvent:e=>`<b>transfer</b> ${e.amount} from ${e.from} to ${e.to}`,undecodableEvent:e=>`undecodable event (${e.error})`,wouldFail:e=>`The transaction would fail: ${e.error}${e.codes?` (contract error ${e.codes})`:""}`,footnote:e=>`Simulated locally${e.ledger?` at ledger ${e.ledger}`:""}, protocol ${e.protocol}, with ledger state from ${e.source}. The result is a prediction, not a guarantee.`,notices:{protocol:e=>`The network is on protocol ${e.protocol}, and this preview supports protocols ${e.builds.join(" and ")}. Effects are not shown, because a simulation under other rules can be wrong.`,"no-rpc":"No RPC is configured for this network, so ledger state cannot be read.","no-transaction":"A preview needs the whole transaction. For bare authorization entries the dialog shows the tree only.","fee-bump":"Preview the inner transaction of a fee bump.","not-invoke":e=>`This ${e.operation} operation authorizes nothing; there is nothing to preview.`,"no-hint":"No signer hint was given, so the account\u2019s own policy was not evaluated; effects assume every authorization passes."},reasons:{accepted:e=>`Accepted${e.rule?` under ${e.grant!=null?`grant ${e.grant}, `:""}rule \u2018${e.rule}\u2019`:""}, assuming a valid signature from this key.`,refused:e=>`The account refuses it${e.cause?` because of ${e.cause}`:""} (contract error ${e.code}).`,"refused-over-cap":e=>`The account refuses it${e.cause?` because of ${e.cause}`:""} (contract error ${e.code}). The request is more than the cap has left in this window.`,failed:e=>`The enforcing simulation failed: ${e.error}.`,"unsigned-others":"Other parties have not signed yet, so this account\u2019s verdict is unknown."}};function et(e={}){let t={...K,...e};for(let s of["networks","notices","reasons"])t[s]={...K[s],...e[s]??{}};return t}var bt=`
+  --ssd-bg: #17191e; --ssd-surface: #20232a; --ssd-fg: #eceef2; --ssd-muted: #a3aab6;
+  --ssd-border: #33373f; --ssd-accent: #7f9cff; --ssd-accent-fg: #0d1020;
+  --ssd-ok: #6fd39a; --ssd-ok-bg: #173323; --ssd-warn: #f2c063; --ssd-warn-bg: #3a2c10;
+  --ssd-danger: #ff8a7e; --ssd-danger-bg: #3d1c19; --ssd-danger-fg: #1a0705;
+  --ssd-backdrop: rgba(0, 0, 0, 0.65); --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;`,st=`
 :host {
-  --ssd-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --ssd-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* Colour */
   --ssd-bg: #ffffff;
   --ssd-surface: #f5f6f8;
   --ssd-fg: #16181d;
@@ -697,664 +125,167 @@ const STYLE = `
   --ssd-warn-bg: #fdf1d8;
   --ssd-danger: #b42318;
   --ssd-danger-bg: #fde8e6;
-  --ssd-radius: 12px;
-  --ssd-width: 34rem;
+  --ssd-danger-fg: #ffffff;
   --ssd-backdrop: rgba(10, 12, 16, 0.55);
+  /* Typography */
+  --ssd-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ssd-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ssd-font-size: 15px;
+  --ssd-line-height: 1.45;
+  --ssd-title-size: 1.12rem;
+  --ssd-small-size: 0.84rem;
+  --ssd-weight-strong: 600;
+  /* Shape */
+  --ssd-radius: 12px;
+  --ssd-radius-sm: 8px;
+  --ssd-radius-pill: 999px;
+  --ssd-border-width: 1px;
+  --ssd-width: 34rem;
+  /* Spacing */
+  --ssd-space-1: 0.25rem;
+  --ssd-space-2: 0.5rem;
+  --ssd-space-3: 0.75rem;
+  --ssd-space-4: 1.25rem;
+  /* Elevation */
   --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+  /* Motion */
+  --ssd-duration: 160ms;
+  --ssd-easing: cubic-bezier(0.2, 0, 0, 1);
   display: contents;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
-  :host(:not([theme="light"])) {
-    --ssd-bg: #17191e; --ssd-surface: #20232a; --ssd-fg: #eceef2; --ssd-muted: #a3aab6;
-    --ssd-border: #33373f; --ssd-accent: #7f9cff; --ssd-accent-fg: #0d1020;
-    --ssd-ok: #6fd39a; --ssd-ok-bg: #173323; --ssd-warn: #f2c063; --ssd-warn-bg: #3a2c10;
-    --ssd-danger: #ff8a7e; --ssd-danger-bg: #3d1c19; --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
-    color-scheme: dark;
+  :host(:not([theme="light"])) {${bt}
   }
 }
-:host([theme="dark"]) {
-  --ssd-bg: #17191e; --ssd-surface: #20232a; --ssd-fg: #eceef2; --ssd-muted: #a3aab6;
-  --ssd-border: #33373f; --ssd-accent: #7f9cff; --ssd-accent-fg: #0d1020;
-  --ssd-ok: #6fd39a; --ssd-ok-bg: #173323; --ssd-warn: #f2c063; --ssd-warn-bg: #3a2c10;
-  --ssd-danger: #ff8a7e; --ssd-danger-bg: #3d1c19; --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
-  color-scheme: dark;
+:host([theme="dark"]) {${bt}
 }
 dialog {
   box-sizing: border-box; width: min(var(--ssd-width), calc(100vw - 2rem)); max-height: min(46rem, calc(100dvh - 2rem));
-  padding: 0; border: 1px solid var(--ssd-border); border-radius: var(--ssd-radius);
-  background: var(--ssd-bg); color: var(--ssd-fg); font: 15px/1.45 var(--ssd-font); box-shadow: var(--ssd-shadow);
-  overflow: hidden;
+  padding: 0; border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius);
+  background: var(--ssd-bg); color: var(--ssd-fg); font-family: var(--ssd-font); font-size: var(--ssd-font-size);
+  line-height: var(--ssd-line-height); box-shadow: var(--ssd-shadow); overflow: hidden;
 }
-dialog[open] { display: flex; flex-direction: column; }
+dialog[open] { display: flex; flex-direction: column; animation: ssd-in var(--ssd-duration) var(--ssd-easing); }
 dialog::backdrop { background: var(--ssd-backdrop); }
-:host([inline]) dialog { position: static; width: 100%; max-height: none; box-shadow: none; margin: 0; }
+@keyframes ssd-in { from { opacity: 0; transform: translateY(0.5rem); } }
+:host([inline]) dialog { position: static; width: 100%; max-height: none; box-shadow: none; margin: 0; animation: none; }
 @media (max-width: 560px) {
   :host(:not([inline])) dialog {
     width: 100vw; max-width: 100vw; max-height: 92dvh; margin: auto 0 0; border-radius: var(--ssd-radius) var(--ssd-radius) 0 0;
   }
 }
-header { padding: 1rem 1.25rem 0.75rem; border-bottom: 1px solid var(--ssd-border); }
-.meta { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; color: var(--ssd-muted); font-size: 0.82rem; }
-.chip { border: 1px solid var(--ssd-border); border-radius: 999px; padding: 0.05rem 0.55rem; background: var(--ssd-surface); }
-h2 { margin: 0.4rem 0 0.15rem; font-size: 1.12rem; line-height: 1.3; }
-.sub { margin: 0; color: var(--ssd-muted); font-size: 0.88rem; }
-.body { overflow: auto; padding: 0.75rem 1.25rem 1rem; flex: 1 1 auto; min-height: 0; }
-h3 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ssd-muted); margin: 0.9rem 0 0.4rem; }
-.entry { border: 1px solid var(--ssd-border); border-radius: calc(var(--ssd-radius) - 4px); padding: 0.6rem 0.75rem; margin: 0 0 0.6rem; background: var(--ssd-bg); }
+header { padding: calc(var(--ssd-space-4) - var(--ssd-space-1)) var(--ssd-space-4) var(--ssd-space-3); border-bottom: var(--ssd-border-width) solid var(--ssd-border); }
+.meta { display: flex; flex-wrap: wrap; gap: var(--ssd-space-2); align-items: center; color: var(--ssd-muted); font-size: var(--ssd-small-size); }
+::slotted([slot="logo"]) { max-height: 1.5rem; }
+.chip { border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-pill); padding: 0 var(--ssd-space-2); background: var(--ssd-surface); }
+h2 { margin: var(--ssd-space-2) 0 var(--ssd-space-1); font-size: var(--ssd-title-size); line-height: 1.3; font-weight: var(--ssd-weight-strong); }
+.sub { margin: 0; color: var(--ssd-muted); font-size: var(--ssd-small-size); }
+.body { overflow: auto; padding: var(--ssd-space-3) var(--ssd-space-4) var(--ssd-space-4); flex: 1 1 auto; min-height: 0; }
+h3 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ssd-muted); margin: var(--ssd-space-4) 0 var(--ssd-space-2); }
+h3:first-child { margin-top: var(--ssd-space-2); }
+b { font-weight: var(--ssd-weight-strong); }
+.what ul { list-style: none; margin: var(--ssd-space-2) 0; padding: 0; }
+.what li { font-size: var(--ssd-title-size); font-weight: var(--ssd-weight-strong); line-height: 1.35; overflow-wrap: anywhere; margin: 0 0 var(--ssd-space-1); }
+.budget-line { margin: 0 0 var(--ssd-space-2); color: var(--ssd-muted); font-size: var(--ssd-small-size); }
+.budget-line[data-over="true"] { color: var(--ssd-danger); font-weight: var(--ssd-weight-strong); }
+.status { display: flex; gap: var(--ssd-space-2); align-items: flex-start; border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: var(--ssd-space-2) 0; background: var(--ssd-surface); }
+.status .icon { font-weight: 700; font-size: 1.1rem; line-height: 1.2; color: var(--ssd-muted); }
+.status[data-state="success"] { background: var(--ssd-ok-bg); border-color: color-mix(in srgb, var(--ssd-ok) 45%, transparent); }
+.status[data-state="success"] .icon { color: var(--ssd-ok); }
+.status[data-state="refused"] { background: var(--ssd-danger-bg); border-color: color-mix(in srgb, var(--ssd-danger) 45%, transparent); }
+.status[data-state="refused"] .icon { color: var(--ssd-danger); }
+.status .spinner { margin-top: 0.25em; }
+.status button { margin-top: var(--ssd-space-2); }
+details.more { margin-top: var(--ssd-space-3); border-top: var(--ssd-border-width) solid var(--ssd-border); padding-top: var(--ssd-space-2); }
+details.more > summary { font-size: var(--ssd-font-size); font-weight: var(--ssd-weight-strong); color: var(--ssd-fg); padding: var(--ssd-space-1) 0; }
+.entry { border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: 0 0 var(--ssd-space-2); background: var(--ssd-bg); min-width: 0; }
 .entry[data-status="extra"], .entry[data-status="differs"] { border-color: var(--ssd-danger); background: var(--ssd-danger-bg); }
 .entry[data-status="match"] { border-color: color-mix(in srgb, var(--ssd-ok) 55%, var(--ssd-border)); }
-.entry-head { display: flex; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--ssd-muted); }
-.entry-head b { color: var(--ssd-fg); font-weight: 600; }
-.badge { font-size: 0.75rem; font-weight: 600; border-radius: 999px; padding: 0.05rem 0.5rem; white-space: nowrap; }
+.entry-head { display: flex; justify-content: space-between; gap: var(--ssd-space-2); flex-wrap: wrap; font-size: var(--ssd-small-size); color: var(--ssd-muted); }
+.entry-head b { color: var(--ssd-fg); }
+.badge { font-size: 0.75rem; font-weight: var(--ssd-weight-strong); border-radius: var(--ssd-radius-pill); padding: 0 var(--ssd-space-2); white-space: nowrap; }
 .badge.ok { color: var(--ssd-ok); background: var(--ssd-ok-bg); }
-.badge.warn { color: var(--ssd-warn); background: var(--ssd-warn-bg); }
 .badge.bad { color: var(--ssd-danger); background: var(--ssd-danger-bg); }
 ol.tree, ol.tree ol { list-style: none; margin: 0; padding: 0; }
-ol.tree ol { margin-left: 0.55rem; padding-left: 0.85rem; border-left: 2px solid var(--ssd-border); }
-li.node { margin: 0.45rem 0 0; }
-.sentence { font-weight: 600; overflow-wrap: anywhere; }
-details { margin-top: 0.15rem; }
-summary { cursor: pointer; color: var(--ssd-muted); font-size: 0.84rem; overflow-wrap: anywhere; }
+ol.tree ol { margin-left: var(--ssd-space-2); padding-left: var(--ssd-space-3); border-left: 2px solid var(--ssd-border); }
+li.node { margin: var(--ssd-space-2) 0 0; min-width: 0; }
+.sentence { font-weight: var(--ssd-weight-strong); overflow-wrap: anywhere; }
+details { margin-top: var(--ssd-space-1); }
+summary { cursor: pointer; color: var(--ssd-muted); font-size: var(--ssd-small-size); overflow-wrap: anywhere; }
 summary:focus-visible, button:focus-visible { outline: 2px solid var(--ssd-accent); outline-offset: 2px; }
-dl.args { display: grid; grid-template-columns: minmax(5rem, max-content) minmax(0, 1fr); gap: 0.2rem 0.75rem; margin: 0.35rem 0 0.2rem; font-size: 0.86rem; }
+dl.args { display: grid; grid-template-columns: minmax(4rem, max-content) minmax(0, 1fr); gap: var(--ssd-space-1) var(--ssd-space-3); margin: var(--ssd-space-2) 0 var(--ssd-space-1); font-size: var(--ssd-small-size); }
 dt { color: var(--ssd-muted); }
 dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
 code, .mono { font-family: var(--ssd-mono); font-size: 0.82em; }
 .addr { white-space: nowrap; }
-.doc { border: 1px dashed var(--ssd-border); border-radius: 8px; padding: 0.45rem 0.6rem; margin-top: 0.25rem; background: var(--ssd-surface); }
-.doc ul { margin: 0.2rem 0 0; padding-left: 1.1rem; }
-.notice { border-radius: 8px; padding: 0.55rem 0.7rem; margin: 0.5rem 0; font-size: 0.88rem; background: var(--ssd-warn-bg); color: var(--ssd-fg); border: 1px solid color-mix(in srgb, var(--ssd-warn) 45%, transparent); }
+.doc { border: var(--ssd-border-width) dashed var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin-top: var(--ssd-space-1); background: var(--ssd-surface); }
+.doc ul { margin: var(--ssd-space-1) 0 0; padding-left: var(--ssd-space-4); }
+.notice { border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: var(--ssd-space-2) 0; font-size: var(--ssd-small-size); background: var(--ssd-warn-bg); color: var(--ssd-fg); border: var(--ssd-border-width) solid color-mix(in srgb, var(--ssd-warn) 45%, transparent); }
 .notice.bad { background: var(--ssd-danger-bg); border-color: color-mix(in srgb, var(--ssd-danger) 45%, transparent); }
 .notice.ok { background: var(--ssd-ok-bg); border-color: color-mix(in srgb, var(--ssd-ok) 45%, transparent); }
-.preview { border-top: 1px solid var(--ssd-border); margin-top: 0.8rem; padding-top: 0.2rem; }
-.card { border: 1px solid var(--ssd-border); border-radius: 8px; padding: 0.6rem 0.75rem; margin: 0.45rem 0; background: var(--ssd-surface); }
-.verdict { display: flex; gap: 0.6rem; align-items: flex-start; }
+.preview { border-top: var(--ssd-border-width) solid var(--ssd-border); margin-top: var(--ssd-space-3); padding-top: var(--ssd-space-1); }
+.card { border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: var(--ssd-space-2) 0; background: var(--ssd-surface); }
+.verdict { display: flex; gap: var(--ssd-space-2); align-items: flex-start; }
 .verdict .icon { font-weight: 700; font-size: 1.1rem; line-height: 1.2; }
 .verdict[data-allowed="true"] .icon { color: var(--ssd-ok); }
 .verdict[data-allowed="false"] .icon { color: var(--ssd-danger); }
-.meter { height: 0.6rem; border-radius: 999px; background: var(--ssd-border); overflow: hidden; display: flex; margin: 0.45rem 0 0.3rem; }
-.meter span { display: block; height: 100%; }
+.verdict[data-allowed="null"] .icon { color: var(--ssd-muted); }
+.meter { height: 0.6rem; border-radius: var(--ssd-radius-pill); background: var(--ssd-border); overflow: hidden; display: flex; margin: var(--ssd-space-2) 0 var(--ssd-space-1); }
+.meter span { display: block; height: 100%; width: 0; transition: width var(--ssd-duration) var(--ssd-easing); }
 .meter .spent { background: var(--ssd-muted); }
 .meter .this { background: var(--ssd-accent); }
 .meter .over { background: var(--ssd-danger); }
-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-th, td { text-align: left; padding: 0.25rem 0.35rem; border-bottom: 1px solid var(--ssd-border); vertical-align: top; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: var(--ssd-small-size); }
+th, td { text-align: left; padding: var(--ssd-space-1) var(--ssd-space-2); border-bottom: var(--ssd-border-width) solid var(--ssd-border); vertical-align: top; }
 th { color: var(--ssd-muted); font-weight: 500; }
-td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .neg { color: var(--ssd-danger); }
 .pos { color: var(--ssd-ok); }
-ul.events { margin: 0; padding-left: 1.1rem; font-size: 0.88rem; }
+ul.events { margin: 0; padding-left: var(--ssd-space-4); font-size: var(--ssd-small-size); }
 .muted { color: var(--ssd-muted); }
-.small { font-size: 0.82rem; }
-footer { display: flex; gap: 0.6rem; justify-content: flex-end; flex-wrap: wrap; padding: 0.75rem 1.25rem; border-top: 1px solid var(--ssd-border); background: var(--ssd-surface); }
-button { font: inherit; font-weight: 600; border-radius: 8px; padding: 0.5rem 1rem; border: 1px solid var(--ssd-border); background: var(--ssd-bg); color: var(--ssd-fg); cursor: pointer; min-height: 2.5rem; }
+.small { font-size: var(--ssd-small-size); }
+footer { display: flex; gap: var(--ssd-space-2); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--ssd-space-3) var(--ssd-space-4); border-top: var(--ssd-border-width) solid var(--ssd-border); background: var(--ssd-surface); }
+.footer-slot { color: var(--ssd-muted); font-size: var(--ssd-small-size); min-width: 0; }
+.actions { display: flex; gap: var(--ssd-space-2); margin-left: auto; }
+button { font: inherit; font-weight: var(--ssd-weight-strong); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-4); border: var(--ssd-border-width) solid var(--ssd-border); background: var(--ssd-bg); color: var(--ssd-fg); cursor: pointer; min-height: 2.5rem; transition: background-color var(--ssd-duration) var(--ssd-easing), border-color var(--ssd-duration) var(--ssd-easing); }
 button.primary { background: var(--ssd-accent); color: var(--ssd-accent-fg); border-color: var(--ssd-accent); }
-button.danger { background: var(--ssd-danger); color: #fff; border-color: var(--ssd-danger); }
+button.danger { background: var(--ssd-danger); color: var(--ssd-danger-fg); border-color: var(--ssd-danger); }
 button[disabled] { opacity: 0.55; cursor: not-allowed; }
-button.link { border: 0; background: none; padding: 0.3rem 0; color: var(--ssd-accent); min-height: 0; }
-.spinner { display: inline-block; width: 0.9em; height: 0.9em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; vertical-align: -0.1em; margin-right: 0.35em; }
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-`;
-
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-export class SorobanSignDialog extends HTMLElement {
-  static observedAttributes = ['transaction', 'auth-entries', 'network', 'signer', 'dapp', 'open', 'preview', 'engine', 'rpc-url'];
-
-  #root;
-  #labels = new Map();
-  #tokens = new Map();
-  #provider = null;
-  #decoded = null;
-  #entries = [];
-  #error = null;
-  #preview = null;
-  #previewState = 'idle';
-  #comparison = null;
-  #pending = null;
-  #confirming = false;
-  #nativeSac = null;
-  #renderQueued = false;
-  #abort = null;
-
-  constructor() {
-    super();
-    this.#root = this.attachShadow({ mode: 'open' });
-    this.#root.innerHTML = `<style>${STYLE}</style><dialog part="dialog" aria-labelledby="ssd-title" aria-describedby="ssd-sub"></dialog>`;
-    this.dialog = this.#root.querySelector('dialog');
-    this.dialog.addEventListener('cancel', (e) => { e.preventDefault(); this.#finish(false, 'dismissed'); });
-    this.dialog.addEventListener('click', (e) => this.#onClick(e));
-    this.dialog.addEventListener('keydown', (e) => this.#trapFocus(e));
-  }
-
-  connectedCallback() {
-    this.#queue();
-    if (this.hasAttribute('open')) queueMicrotask(() => this.show());
-  }
-
-  attributeChangedCallback(name, oldValue, value) {
-    if (oldValue === value) return;
-    if (name === 'transaction' || name === 'auth-entries' || name === 'network') this.#reset();
-    if (name === 'open') {
-      if (value !== null && !this.dialog.open) this.show();
-      if (value === null && this.dialog.open) this.dialog.close();
-    }
-    this.#queue();
-  }
-
-  // --- properties -----------------------------------------------------------
-
-  get transaction() { return this.getAttribute('transaction'); }
-  set transaction(v) { v ? this.setAttribute('transaction', v) : this.removeAttribute('transaction'); }
-
-  /** Base64 SorobanAuthorizationEntry list, for a bare auth-entry request. */
-  get authEntries() { const a = this.getAttribute('auth-entries'); return a ? a.split(/[\s,]+/).filter(Boolean) : []; }
-  set authEntries(list) { list?.length ? this.setAttribute('auth-entries', list.join(' ')) : this.removeAttribute('auth-entries'); }
-
-  get networkPassphrase() {
-    const n = this.getAttribute('network') ?? 'testnet';
-    return NETWORKS[n] ?? n;
-  }
-  set networkPassphrase(v) { this.setAttribute('network', v); }
-
-  /** Address the wallet signs for; its entries are highlighted. */
-  get signer() { return this.getAttribute('signer'); }
-  set signer(v) { v ? this.setAttribute('signer', v) : this.removeAttribute('signer'); }
-
-  /**
-   * Names for addresses: { "C…": "Café Perch" } or { "C…": { name, token: { code, decimals } } }.
-   * Labels come from the embedder (wallet address book, dapp manifest); the
-   * component adds only the native asset contract, which it derives itself.
-   */
-  get labels() { return Object.fromEntries(this.#labels); }
-  set labels(map) {
-    this.#labels = new Map();
-    this.#tokens = new Map();
-    for (const [k, v] of Object.entries(map ?? {})) {
-      if (typeof v === 'string') this.#labels.set(k, v);
-      else { this.#labels.set(k, v.name); if (v.token) this.#tokens.set(k, v.token); }
-    }
-    this.#queue();
-  }
-
-  /**
-   * async (request) => PreviewResult. The default imports the module named by
-   * the `engine` attribute on first use and calls its `preview(request)`.
-   */
-  get previewProvider() { return this.#provider; }
-  set previewProvider(fn) { this.#provider = fn; this.#queue(); }
-
-  get previewResult() { return this.#preview; }
-
-  // --- methods --------------------------------------------------------------
-
-  show() {
-    if (!this.isConnected) document.body.append(this);
-    this.#render();
-    if (this.dialog.open) return;
-    if (this.hasAttribute('inline')) this.dialog.show();
-    else this.dialog.showModal();
-    this.#root.querySelector('[data-act="reject"]')?.focus();
-    this.dispatchEvent(new CustomEvent('open', { bubbles: true, composed: true }));
-    if (this.getAttribute('preview') === 'auto') this.runPreview();
-  }
-
-  close() { this.#finish(false, 'closed'); }
-
-  /**
-   * Open the dialog for one request and resolve when the user decides:
-   * { approved: true, ...approveDetail } or { approved: false, reason }.
-   */
-  request(opts = {}) {
-    if (opts.labels) this.labels = opts.labels;
-    if (opts.previewProvider) this.previewProvider = opts.previewProvider;
-    for (const [k, attr] of [['network', 'network'], ['networkPassphrase', 'network'], ['signer', 'signer'], ['dapp', 'dapp']]) {
-      if (opts[k]) this.setAttribute(attr, opts[k]);
-    }
-    if (opts.transaction) { this.removeAttribute('auth-entries'); this.transaction = opts.transaction; }
-    if (opts.authEntries) { this.removeAttribute('transaction'); this.authEntries = opts.authEntries; }
-    this.#reset();
-    this.#pending?.resolve({ approved: false, reason: 'superseded' });
-    return new Promise((resolve) => {
-      this.#pending = { resolve };
-      this.show();
-    });
-  }
-
-  async runPreview() {
-    if (this.#previewState === 'loading' || !this.#decoded) return;
-    this.#abort?.abort();
-    this.#abort = new AbortController();
-    this.#previewState = 'loading';
-    this.#render();
-    try {
-      const provider = this.#provider ?? (await this.#engineProvider());
-      const result = await provider({
-        transaction: this.transaction,
-        authEntries: this.#entries.map((e) => toB64(e.raw)),
-        networkPassphrase: this.networkPassphrase,
-        signer: this.signer,
-        rpcUrl: this.getAttribute('rpc-url'),
-        decoded: this.#decoded,
-        signal: this.#abort.signal,
-      });
-      this.#setPreview(result);
-    } catch (err) {
-      if (err?.name === 'AbortError') return;
-      this.#setPreview({ status: 'error', notice: `Preview failed: ${err?.message ?? err}` });
-    }
-  }
-
-  // --- internals ------------------------------------------------------------
-
-  async #engineProvider() {
-    const url = this.getAttribute('engine');
-    if (!url) throw new Error('no preview engine configured (set the engine attribute or previewProvider)');
-    const mod = await import(new URL(url, document.baseURI).href);
-    return (req) => mod.preview(req);
-  }
-
-  #setPreview(result) {
-    this.#preview = result;
-    this.#previewState = result?.status === 'ok' ? 'done' : (result?.status ?? 'error');
-    if (result?.recordedAuth) {
-      try {
-        const recorded = result.recordedAuth.map(decodeAuthEntry);
-        this.#comparison = compareAuth(this.#entries, recorded);
-        this.#comparison.recorded = recorded;
-      } catch (err) {
-        this.#comparison = null;
-        result.notice = `${result.notice ?? ''} Recorded tree could not be decoded: ${err.message}`.trim();
-      }
-    }
-    this.#confirming = false;
-    this.#render();
-    this.dispatchEvent(new CustomEvent('preview', { bubbles: true, composed: true, detail: { result, flags: this.#flags() } }));
-  }
-
-  #reset() {
-    this.#decoded = null;
-    this.#entries = [];
-    this.#error = null;
-    this.#preview = null;
-    this.#comparison = null;
-    this.#previewState = 'idle';
-    this.#confirming = false;
-    this.#abort?.abort();
-    try {
-      if (this.transaction) {
-        const env = decodeEnvelope(this.transaction);
-        const op = env.tx.operations[0];
-        if (env.tx.operations.length !== 1) throw new XdrError('a Soroban transaction carries exactly one operation');
-        this.#decoded = { kind: 'transaction', envelope: env, op };
-        this.#entries = op.type === 'invoke' ? op.auth : [];
-      } else if (this.authEntries.length) {
-        this.#entries = this.authEntries.map(decodeAuthEntry);
-        this.#decoded = { kind: 'auth-entries' };
-      }
-    } catch (err) {
-      this.#error = err;
-    }
-    nativeAssetContract(this.networkPassphrase).then((id) => {
-      if (id !== this.#nativeSac) { this.#nativeSac = id; this.#queue(); }
-    }, () => {});
-  }
-
-  #queue() {
-    if (this.#renderQueued) return;
-    this.#renderQueued = true;
-    queueMicrotask(() => { this.#renderQueued = false; this.#render(); });
-  }
-
-  #flags() {
-    const flags = [];
-    const p = this.#preview;
-    if (this.#comparison) {
-      for (const e of this.#comparison.entries) if (e.status !== 'match') flags.push({ kind: e.status, entry: e.index });
-      for (const i of this.#comparison.missing) flags.push({ kind: 'missing', recorded: i });
-    }
-    for (const v of p?.verdicts ?? []) if (!v.allowed) flags.push({ kind: 'refused', address: v.address, code: v.code });
-    if (p?.outcome && !p.outcome.ok && !(p.verdicts ?? []).some((v) => !v.allowed)) flags.push({ kind: 'fails', error: p.outcome.error });
-    return flags;
-  }
-
-  #label(addr) {
-    if (!addr) return '';
-    if (addr === this.#nativeSac) return this.#labels.get(addr) ?? 'XLM (native asset)';
-    return this.#labels.get(addr) ?? null;
-  }
-
-  #token(addr) {
-    if (addr === this.#nativeSac) return { code: 'XLM', decimals: 7 };
-    return this.#tokens.get(addr) ?? null;
-  }
-
-  #addr(a) {
-    const s = typeof a === 'string' ? a : a.str;
-    const label = this.#label(s);
-    const you = s === this.signer ? ' (you)' : '';
-    return label
-      ? `<span class="addr" title="${esc(s)}">${esc(label)}${you} <span class="mono muted">${esc(short(s))}</span></span>`
-      : `<span class="addr mono" title="${esc(s)}">${esc(short(s))}${you}</span>`;
-  }
-
-  #val(v, hint, token) {
-    switch (v.t) {
-      case 'address': return this.#addr(v);
-      case 'i128': case 'u128': case 'i256': case 'u256': case 'i64': case 'u64':
-        if (token && /amount|limit/.test(hint ?? '')) return `<b>${esc(formatAmount(v.v, token.decimals))} ${esc(token.code)}</b> <span class="muted small">(${esc(v.v.toString())})</span>`;
-        return `<span class="mono">${esc(v.v.toString())}</span>`;
-      case 'u32': case 'i32': return `<span class="mono">${v.v}</span>`;
-      case 'timepoint': return `${esc(new Date(Number(v.v) * 1000).toISOString())}`;
-      case 'duration': return `${esc(v.v.toString())} s`;
-      case 'bool': return v.v ? 'yes' : 'no';
-      case 'void': return '<span class="muted">none</span>';
-      case 'symbol': return `<code>${esc(v.v)}</code>`;
-      case 'string': return `“${esc(v.v)}”`;
-      case 'bytes': {
-        const doc = tryJson(v.v);
-        if (doc) return this.#doc(doc);
-        const h = hex(v.v);
-        return `<span class="mono" title="${esc(h)}">0x${esc(h.length > 32 ? h.slice(0, 32) + '…' : h)}</span> <span class="muted small">(${v.v.length} bytes)</span>`;
-      }
-      case 'vec': return v.v.length ? `[${v.v.map((x) => this.#val(x)).join(', ')}]` : '[ ]';
-      case 'map': return `{ ${v.v.map((e) => `${this.#val(e.k)}: ${this.#val(e.v, e.k.v)}`).join(', ')} }`;
-      case 'error': return `<span class="mono">error(${v.type}, ${v.code})</span>`;
-      default: return `<span class="mono">${esc(v.t)}</span>`;
-    }
-  }
-
-  /** A policy document carried in bytes (Perch apply_doc / grant install). */
-  #doc(doc) {
-    const rules = Array.isArray(doc.rules) ? doc.rules : [];
-    const signers = Array.isArray(doc.signers) ? doc.signers : [];
-    const items = rules.map((rule) => {
-      const scope = rule.scope?.type === 'contract' ? this.#addr(String(rule.scope.address)) : esc(rule.scope?.type ?? 'any');
-      const fns = Array.isArray(rule.functions) ? rule.functions.map((f) => `<code>${esc(f)}</code>`).join(', ') : 'any function';
-      let cap = '';
-      if (rule.cap?.limit) {
-        const token = this.#token(rule.cap.token ?? rule.scope?.address) ?? { code: 'units', decimals: 0 };
-        cap = `; at most <b>${esc(formatAmount(BigInt(rule.cap.limit), token.decimals))} ${esc(token.code)}</b> per ${esc(rule.cap['period-ledgers'])} ledgers`;
-      }
-      const who = rule.principals?.signers ? ` by ${rule.principals.signers.map((s) => `<code>${esc(s)}</code>`).join(' + ')}` : '';
-      return `<li><b>${esc(rule.name ?? 'rule')}</b>: ${fns} on ${scope}${who}${cap}</li>`;
-    }).join('');
-    const keys = signers.map((s) => `<li><code>${esc(s.id)}</code>: ${s.key ? `key <span class="mono">${esc(short(String(s.key)))}</span>` : this.#addr(String(s.address ?? ''))}</li>`).join('');
-    return `<div class="doc" part="doc"><div class="small muted">Policy document (${esc(doc.network ?? 'network not named')})</div>
-      ${items ? `<div class="small">Rules</div><ul>${items}</ul>` : ''}${keys ? `<div class="small">Signers</div><ul>${keys}</ul>` : ''}</div>`;
-  }
-
-  #sentence(fn) {
-    if (fn.kind === 'create') {
-      const from = fn.preimage.from === 'asset' ? `the ${esc(fn.preimage.asset.code)} asset contract` : 'a new contract';
-      return `Deploy ${from}${fn.executable.kind === 'wasm' ? ` from code ${esc(short(hex(fn.executable.hash)))}` : ''}`;
-    }
-    if (fn.kind === 'upload') return `Upload contract code (${fn.wasm.length} bytes)`;
-    const c = fn.contract.str;
-    const token = this.#token(c);
-    const names = token ? TOKEN_FNS[fn.fn] : null;
-    const arg = (n) => fn.args[names.indexOf(n)];
-    if (token && names && fn.args.length === names.length) {
-      const amt = (v) => (v && /128|64/.test(v.t) ? `${esc(formatAmount(v.v, token.decimals))} ${esc(token.code)}` : '?');
-      switch (fn.fn) {
-        case 'transfer': return `Send ${amt(arg('amount'))} from ${this.#addr(arg('from'))} to ${this.#addr(arg('to'))}`;
-        case 'approve': return `Let ${this.#addr(arg('spender'))} spend up to ${amt(arg('amount'))} of ${this.#addr(arg('from'))}'s balance until ledger ${esc(arg('expiration_ledger').v)}`;
-        case 'transfer_from': return `${this.#addr(arg('spender'))} sends ${amt(arg('amount'))} from ${this.#addr(arg('from'))} to ${this.#addr(arg('to'))}`;
-        case 'burn': return `Burn ${amt(arg('amount'))} from ${this.#addr(arg('from'))}`;
-        case 'mint': return `Mint ${amt(arg('amount'))} to ${this.#addr(arg('to'))}`;
-        default: break;
-      }
-    }
-    if (c === this.signer && (fn.fn === 'apply_doc' || fn.fn === 'apply_grant' || fn.fn === 'apply_scope')) {
-      return fn.fn !== 'apply_doc' ? `Install grant #${esc(fn.args[0]?.v ?? '?')} on your account` : 'Replace your account\'s policy document';
-    }
-    return `Call <code>${esc(fn.fn)}</code> on ${this.#addr(fn.contract)}`;
-  }
-
-  #argNames(fn) {
-    if (fn.kind !== 'call') return [];
-    if (this.#token(fn.contract.str) && TOKEN_FNS[fn.fn]?.length === fn.args.length) return TOKEN_FNS[fn.fn];
-    if (fn.contract.str === this.signer && PERCH_FNS[fn.fn]?.length === fn.args.length) return PERCH_FNS[fn.fn];
-    return [];
-  }
-
-  #node(inv) {
-    const fn = inv.fn;
-    const names = this.#argNames(fn);
-    const token = fn.kind === 'call' ? this.#token(fn.contract.str) : null;
-    const args = fn.args.map((a, i) => `<dt>${esc(names[i] ?? `arg ${i + 1}`)}</dt><dd>${this.#val(a, names[i], token)}</dd>`).join('');
-    const where = fn.kind === 'call' ? `<code>${esc(fn.fn)}</code> on ${esc(this.#label(fn.contract.str) ?? short(fn.contract.str))}` : esc(fn.kind);
-    const details = `<details part="node-details"><summary>${where}${fn.args.length ? ` · ${fn.args.length} argument${fn.args.length > 1 ? 's' : ''}` : ''}</summary>
-      ${fn.kind === 'call' ? `<dl class="args"><dt>contract</dt><dd class="mono">${esc(fn.contract.str)}</dd>${args}</dl>` : args ? `<dl class="args">${args}</dl>` : ''}</details>`;
-    const kids = inv.subs.length ? `<ol role="list">${inv.subs.map((s) => this.#node(s)).join('')}</ol>` : '';
-    return `<li class="node" part="node"><div class="sentence">${this.#sentence(fn)}</div>${details}${kids}</li>`;
-  }
-
-  #entry(e, i) {
-    const c = e.credentials;
-    const who = c.type === 'source-account' ? 'the transaction source account' : this.#addr(c.address);
-    const cmp = this.#comparison?.entries[i];
-    const badge = !cmp ? ''
-      : cmp.status === 'match' ? '<span class="badge ok">✓ matches simulation</span>'
-      : cmp.status === 'extra' ? '<span class="badge bad">⚠ not used by this transaction</span>'
-      : '<span class="badge bad">⚠ differs from simulation</span>';
-    const extraNote = cmp?.status === 'extra'
-      ? `<div class="notice bad small">This entry is not needed to run the transaction. If you sign it, the signature is published with the transaction and anyone can submit it later, until it expires.</div>`
-      : cmp?.status === 'differs' ? `<div class="notice bad small">The simulator recorded a different authorization for this signer. Compare the trees before signing.</div>` : '';
-    const mine = c.address?.str === this.signer;
-    return `<article class="entry" part="entry" data-status="${cmp?.status ?? 'unchecked'}" data-mine="${mine}">
-      <div class="entry-head"><span>${i + 1}. Authorized by <b>${who}</b>${c.type === 'address-v2' ? ' · address-bound' : ''}</span>${badge}</div>
-      ${extraNote}<ol class="tree" role="list">${this.#node(e.root)}</ol></article>`;
-  }
-
-  #previewHtml() {
-    const state = this.#previewState;
-    const p = this.#preview;
-    if (state === 'idle') {
-      const canPreview = this.#provider || this.hasAttribute('engine');
-      if (this.getAttribute('preview') === 'off' || !canPreview) return '';
-      return `<div class="preview" part="preview"><h3>Effects</h3>
-        <p class="small muted">The tree above is decoded from the request itself. A preview runs the transaction in a local simulator against current ledger state.</p>
-        <button data-act="preview" part="preview-button">Preview effects</button></div>`;
-    }
-    if (state === 'loading') return `<div class="preview" part="preview"><h3>Effects</h3><p role="status"><span class="spinner" aria-hidden="true"></span>Running the simulator…</p></div>`;
-    if (state !== 'done') {
-      return `<div class="preview" part="preview"><h3>Effects</h3><div class="notice ${state === 'error' ? 'bad' : ''}" part="notice" role="status">${esc(p?.notice ?? 'Preview unavailable.')} The authorization tree above is still exact.</div></div>`;
-    }
-    const parts = [];
-    if (p.notice) parts.push(`<div class="notice" part="notice">${esc(p.notice)}</div>`);
-    const cmp = this.#comparison;
-    if (cmp) {
-      const bad = cmp.entries.filter((e) => e.status !== 'match').length + cmp.missing.length;
-      parts.push(bad
-        ? `<div class="notice bad" part="auth-check">⚠ The simulator's own recording of the authorization tree does not match the request: ${cmp.entries.filter((e) => e.status === 'extra').length} extra, ${cmp.entries.filter((e) => e.status === 'differs').length} different, ${cmp.missing.length} missing.</div>`
-        : `<div class="notice ok" part="auth-check">✓ The simulator recorded the same authorization tree independently.</div>`);
-      if (cmp.missing.length) {
-        parts.push(`<div class="small">Needed but not supplied:</div>${cmp.missing.map((i) => this.#entry(cmp.recorded[i], -1)).join('')}`);
-      }
-    }
-    for (const v of p.verdicts ?? []) {
-      parts.push(`<div class="card verdict" part="verdict" data-allowed="${!!v.allowed}"><span class="icon" aria-hidden="true">${v.allowed ? '✓' : '✕'}</span>
-        <div><b>${v.allowed ? 'Would be accepted' : 'Would be refused'}</b> by ${this.#addr(v.address)}${v.rule ? ` under rule <code>${esc(v.rule.name ?? v.rule.id)}</code>` : ''}.
-        ${v.reason ? `<div class="small">${esc(v.reason)}</div>` : ''}${v.code != null ? `<div class="small muted">Contract error ${esc(v.code)}</div>` : ''}</div></div>`);
-    }
-    for (const b of p.budgets ?? []) parts.push(this.#budget(b));
-    if (p.balances?.length) {
-      const rows = p.balances.map((b) => {
-        const before = BigInt(b.before ?? 0), after = BigInt(b.after ?? 0), d = after - before;
-        const tok = b.asset ?? { code: '', decimals: 0 };
-        return `<tr><td>${this.#addr(b.address)}</td><td>${esc(tok.code)}</td><td class="num">${esc(formatAmount(before, tok.decimals))}</td><td class="num">${esc(formatAmount(after, tok.decimals))}</td><td class="num ${d < 0n ? 'neg' : 'pos'}">${d > 0n ? '+' : ''}${esc(formatAmount(d, tok.decimals))}</td></tr>`;
-      }).join('');
-      parts.push(`<h3>Balance changes</h3><table part="balances"><thead><tr><th>Account</th><th>Asset</th><th class="num">Before</th><th class="num">After</th><th class="num">Change</th></tr></thead><tbody>${rows}</tbody></table>`);
-    } else if (p.outcome?.ok) {
-      parts.push('<p class="small muted">No balance changes.</p>');
-    }
-    if (p.events?.length) {
-      const items = p.events.map((x) => { try { return `<li>${this.#event(decodeEvent(x))}</li>`; } catch (err) { return `<li class="muted">undecodable event (${esc(err.message)})</li>`; } }).join('');
-      parts.push(`<h3>Events</h3><ul class="events" part="events">${items}</ul>`);
-    }
-    if (p.outcome && !p.outcome.ok && !(p.verdicts ?? []).length) {
-      parts.push(`<div class="notice bad">The transaction would fail: ${esc(p.outcome.error ?? 'unknown error')}${p.outcome.codes?.length ? ` (contract error ${esc(p.outcome.codes.join(', '))})` : ''}</div>`);
-    }
-    const eng = p.engine ? `${esc(p.engine.name ?? 'simulator')} ${esc(p.engine.host ?? '')}, protocol ${esc(p.engine.protocol ?? '?')}` : 'simulator';
-    const led = p.ledger ? ` at ledger ${esc(p.ledger.sequence)}` : '';
-    parts.push(`<p class="small muted">Simulated with ${eng}${led}. Ledger state comes from ${esc(p.stateSource ?? 'RPC')}; the result is a prediction, not a guarantee.</p>`);
-    return `<div class="preview" part="preview" aria-live="polite"><h3>Effects</h3>${parts.join('')}</div>`;
-  }
-
-  #budget(b) {
-    const tok = b.token ?? { code: '', decimals: 0 };
-    const limit = BigInt(b.limit), spent = BigInt(b.spentInWindow), amount = BigInt(b.amount ?? 0);
-    const remaining = limit - spent;
-    const fits = amount <= remaining;
-    const pct = (x) => (limit > 0n ? Math.max(0, Math.min(100, Number((x * 10000n) / limit) / 100)) : 0);
-    const f = (x) => `${formatAmount(x, tok.decimals)} ${tok.code}`;
-    const minutes = b.nextReleaseLedger && b.ledger ? Math.round(((b.nextReleaseLedger - b.ledger) * 5) / 60) : null;
-    return `<div class="card" part="budget"><b>Spending cap</b>${b.rule ? ` · rule <code>${esc(b.rule.name ?? b.rule.id)}</code>` : ''}
-      <div class="meter" role="img" aria-label="${esc(`${f(spent)} spent of ${f(limit)}; this request ${f(amount)}`)}">
-        <span class="spent" style="width:${pct(spent)}%"></span><span class="${fits ? 'this' : 'over'}" style="width:${pct(fits ? amount : remaining > 0n ? remaining : 0n)}%"></span></div>
-      <div class="small">${esc(f(remaining))} of ${esc(f(limit))} left in the current window of ${esc(b.periodLedgers)} ledgers.
-      ${fits ? `After this: <b>${esc(f(remaining - amount))}</b> left.` : `<b>This request (${esc(f(amount))}) is over the remaining cap.</b>`}
-      ${b.nextReleaseLedger ? `<span class="muted">The oldest spend leaves the window at ledger ${esc(b.nextReleaseLedger)}${minutes != null ? ` (about ${minutes} min)` : ''}.</span>` : ''}</div></div>`;
-  }
-
-  #event(ev) {
-    const [name, ...rest] = ev.topics;
-    const token = ev.contract ? this.#token(ev.contract.str) : null;
-    if (name?.t === 'symbol' && name.v === 'transfer' && rest.length >= 2) {
-      const amount = ev.data.t === 'map' ? ev.data.v.find((e) => e.k.v === 'amount')?.v : ev.data;
-      const amt = amount && token ? `${formatAmount(amount.v, token.decimals)} ${token.code}` : amount?.v?.toString() ?? '?';
-      return `<b>transfer</b> ${esc(amt)} from ${this.#val(rest[0])} to ${this.#val(rest[1])} <span class="muted small">(${esc(this.#label(ev.contract?.str) ?? short(ev.contract?.str ?? ''))})</span>`;
-    }
-    return `<code>${esc(name?.v ?? name?.t ?? '?')}</code> ${rest.map((t) => this.#val(t)).join(' ')} → ${this.#val(ev.data)} <span class="muted small">(${esc(this.#label(ev.contract?.str) ?? short(ev.contract?.str ?? ''))})</span>`;
-  }
-
-  #render() {
-    const d = this.dialog;
-    const dapp = this.getAttribute('dapp');
-    const net = Object.entries(NETWORKS).find(([, v]) => v === this.networkPassphrase)?.[0] ?? 'custom network';
-    let body, title, sub = '';
-    if (this.#error) {
-      title = 'This request could not be read';
-      body = `<div class="notice bad" role="alert">${esc(this.#error.message)}. Nothing has been signed. Reject the request.</div>`;
-    } else if (!this.#decoded) {
-      title = 'No request';
-      body = '<p class="muted">Nothing to review.</p>';
-    } else {
-      const n = this.#entries.length;
-      const op = this.#decoded.op;
-      title = n === 1 ? 'Authorize this call' : n ? `Authorize ${n} calls` : 'Approve this transaction';
-      const tx = this.#decoded.envelope?.tx;
-      if (tx) sub = `Fee up to ${esc(formatAmount(BigInt(tx.fee), 7))} XLM, paid by ${this.#addr(tx.source)}`;
-      const entries = n ? this.#entries.map((e, i) => this.#entry(e, i)).join('')
-        : op?.type === 'invoke' ? `<article class="entry"><div class="entry-head"><span>Runs with the source account's authority</span></div><ol class="tree" role="list">${this.#node({ fn: op.hostFunction, subs: [] })}</ol></article>`
-        : `<p>${esc(op?.type ?? 'unknown')} operation</p>`;
-      body = `<h3>What you authorize</h3><div part="tree">${entries}</div>${this.#previewHtml()}`;
-    }
-    const flags = this.#flags();
-    const risky = flags.length > 0 || !!this.#error;
-    const strict = this.hasAttribute('strict');
-    const approveLabel = this.#error ? 'Sign' : this.#confirming ? 'Confirm: sign anyway' : risky ? 'Sign anyway' : 'Sign';
-    d.innerHTML = `<header part="header">
-        <div class="meta"><span class="chip" part="network">${esc(net)}</span>${dapp ? `<span>Request from <b>${esc(dapp)}</b></span>` : ''}</div>
-        <h2 id="ssd-title" part="title">${esc(title)}</h2>
-        <p id="ssd-sub" class="sub" part="summary">${sub}</p></header>
-      <div class="body">${body}</div>
+.spinner { display: inline-block; width: 0.9em; height: 0.9em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ssd-spin 0.8s linear infinite; vertical-align: -0.1em; margin-right: 0.35em; }
+@keyframes ssd-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  dialog[open], .spinner { animation: none; }
+  .meter span, button { transition: none; }
+}
+`;var z="soroban-sign-dialog",i=e=>String(e).replace(/[&<>"']/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[t]),W=null;function Lt(e){if(typeof CSSStyleSheet=="function"&&"adoptedStyleSheets"in e)try{W||(W=new CSSStyleSheet,W.replaceSync(st)),e.adoptedStyleSheets=[W];return}catch{}let t=document.createElement("style");t.textContent=st,e.append(t)}var Ot=globalThis.HTMLElement??class{},T=class extends Ot{static observedAttributes=["transaction","auth-entries","network","signer","dapp","open","preview","engine","rpc-url","strict","details"];#c;#h=new Map;#p=new Map;#u=et();#y=null;#e=null;#s=[];#a=null;#o=null;#i="idle";#r=null;#l=null;#w=!1;#$=null;#E=!1;#x=null;#k=null;#z=null;constructor(){super(),this.#c=this.attachShadow({mode:"open"}),Lt(this.#c),this.dialog=document.createElement("dialog"),this.dialog.setAttribute("part","dialog"),this.dialog.setAttribute("aria-labelledby","ssd-title"),this.dialog.setAttribute("aria-describedby","ssd-what ssd-status"),this.#c.append(this.dialog),this.dialog.addEventListener("cancel",t=>{t.preventDefault(),this.#S("dismissed")}),this.dialog.addEventListener("click",t=>this.#G(t)),this.dialog.addEventListener("keydown",t=>this.#Q(t))}connectedCallback(){this.#f(),this.hasAttribute("open")&&queueMicrotask(()=>this.show())}attributeChangedCallback(t,s,r){s!==r&&((t==="transaction"||t==="auth-entries"||t==="network"||t==="signer")&&this.#I(),t==="open"&&(r!==null&&!this.dialog.open&&this.show(),r===null&&this.dialog.open&&this.#S("closed")),this.#f())}get transaction(){return this.getAttribute("transaction")}set transaction(t){t?this.setAttribute("transaction",t):this.removeAttribute("transaction")}get authEntries(){let t=this.getAttribute("auth-entries");return t?t.split(/[\s,]+/).filter(Boolean):[]}set authEntries(t){t?.length?this.setAttribute("auth-entries",t.join(" ")):this.removeAttribute("auth-entries")}get network(){return this.networkPassphrase}set network(t){this.setAttribute("network",t)}get networkPassphrase(){let t=this.getAttribute("network")??"testnet";return B[t]??t}set networkPassphrase(t){this.setAttribute("network",t)}get signer(){return this.getAttribute("signer")}set signer(t){t?this.setAttribute("signer",t):this.removeAttribute("signer")}get dapp(){return this.getAttribute("dapp")}set dapp(t){t?this.setAttribute("dapp",t):this.removeAttribute("dapp")}get engine(){return this.getAttribute("engine")}set engine(t){t?this.setAttribute("engine",t):this.removeAttribute("engine")}get rpcUrl(){return this.getAttribute("rpc-url")}set rpcUrl(t){t?this.setAttribute("rpc-url",t):this.removeAttribute("rpc-url")}get strict(){return this.hasAttribute("strict")}set strict(t){this.toggleAttribute("strict",!!t)}get labels(){return Object.fromEntries([...this.#h].map(([t,s])=>[t,this.#p.has(t)?{name:s,token:this.#p.get(t)}:s]))}set labels(t){this.#h=new Map,this.#p=new Map;for(let[s,r]of Object.entries(t??{}))typeof r=="string"?this.#h.set(s,r):r&&(r.name&&this.#h.set(s,r.name),r.token&&this.#p.set(s,r.token));this.#f()}get strings(){return this.#u}set strings(t){this.#u=et(t??{}),this.#f()}get previewProvider(){return this.#y}set previewProvider(t){this.#y=t,this.#f(),queueMicrotask(()=>this.#T())}get previewResult(){return this.#o}get flags(){return this.#g()}get open(){return!!this.dialog?.open}show(){this.isConnected||document.body.append(this),this.#b(),!this.dialog.open&&(this.hasAttribute("inline")?this.dialog.show():this.dialog.showModal(),this.#c.querySelector('[data-act="reject"]')?.focus(),this.dispatchEvent(new CustomEvent("open",{bubbles:!0,composed:!0})),this.#T())}get#B(){return this.getAttribute("preview")??"auto"}get#M(){return!!(this.#y||this.hasAttribute("engine"))&&this.#B!=="off"}#T(){this.dialog?.open&&this.#B==="auto"&&this.#M&&this.#i==="idle"&&this.runPreview()}close(){this.#S("closed")}request(t={}){t.labels&&(this.labels=t.labels),t.strings&&(this.strings=t.strings),t.previewProvider&&(this.previewProvider=t.previewProvider);let s={network:t.network??t.networkPassphrase,signer:t.signer,dapp:t.dapp,transaction:t.authEntries?.length?null:t.transaction,"auth-entries":t.authEntries?.join(" ")};for(let[r,a]of Object.entries(s))a?this.setAttribute(r,a):this.removeAttribute(r);for(let[r,a]of[["engine","engine"],["rpcUrl","rpc-url"],["theme","theme"],["preview","preview"]])t[r]&&this.setAttribute(a,t[r]);return t.strict!=null&&(this.strict=t.strict),this.#I(),this.#l?.resolve({approved:!1,reason:"superseded"}),new Promise(r=>{this.#l={resolve:r},this.show()})}async runPreview(){if(this.#i==="loading"||!this.#e)return;this.#x?.abort();let t=this.#x=new AbortController;this.#i="loading",this.#b();try{let r=await(this.#y??await this.#O())({transaction:this.transaction,authEntries:this.#s.map(a=>P(a.raw)),networkPassphrase:this.networkPassphrase,signer:this.signer,rpcUrl:this.getAttribute("rpc-url"),decoded:this.#e,signal:t.signal});if(t.signal.aborted)return;this.#R(r)}catch(s){if(s?.name==="AbortError"||t.signal.aborted)return;this.#R({status:"error",code:"error",params:{error:s?.message??String(s)},notice:`Preview failed: ${s?.message??s}`})}}async#O(){let t=this.getAttribute("engine");if(!t)throw new Error("no preview engine configured (set the engine attribute or previewProvider)");let s=await import(new URL(t,document.baseURI).href);return r=>s.preview(r)}#R(t){if(this.#o=t,this.#i=t?.status==="ok"?"done":t?.status??"error",this.#r=null,t?.recordedAuth)try{let s=t.recordedAuth.map(j);this.#r=H(this.#s,s),this.#r.recorded=s}catch(s){t.notice=`${t.notice??""} Recorded tree could not be decoded: ${s.message}`.trim()}this.#w=!1,this.#b(),this.dispatchEvent(new CustomEvent("preview",{bubbles:!0,composed:!0,detail:{result:t,flags:this.#g()}}))}#I(){this.#e=null,this.#s=[],this.#a=null,this.#o=null,this.#r=null,this.#i="idle",this.#w=!1,this.#z=null,this.#x?.abort();try{if(this.transaction){let t=O(this.transaction),s=t.tx.operations[0];if(t.tx.operations.length!==1)throw new u("a Soroban transaction carries exactly one operation");this.#e={kind:"transaction",envelope:t,op:s},this.#s=s.type==="invoke"?s.auth:[]}else this.authEntries.length&&(this.#s=this.authEntries.map(j),this.#e={kind:"auth-entries"})}catch(t){this.#a=t}this.#k=this.#a||!this.#e?null:this.#Y(),this.#k?.catch(()=>{}),this.dialog?.open&&queueMicrotask(()=>this.#T()),F(this.networkPassphrase).then(t=>{t!==this.#$&&(this.#$=t,this.#f())},()=>{})}#f(){this.#E||(this.#E=!0,queueMicrotask(()=>{this.#E=!1,this.#b()}))}#g(){let t=[],s=this.#o;if(this.#r){for(let r of this.#r.entries)r.status!=="match"&&t.push({kind:r.status,entry:r.index});for(let r of this.#r.missing)t.push({kind:"missing",recorded:r})}for(let r of s?.verdicts??[])r.allowed===!1&&t.push({kind:"refused",address:r.address,code:r.code});return s?.outcome&&!s.outcome.ok&&!(s.verdicts??[]).some(r=>r.allowed===!1)&&t.push({kind:"fails",error:s.outcome.error}),t}#t(t,s={}){let r=this.#u[t];return typeof r=="function"?r(s):r}#A(t,s,r,a){let n=s!=null?this.#u[t]?.[s]:void 0;if(n==null)return i(a??"");let o=Object.fromEntries(Object.entries(r??{}).map(([c,d])=>[c,Array.isArray(d)?d.map(i):d==null?d:i(d)]));return typeof n=="function"?n(o):n}#C(t){return t?t===this.#$?this.#h.get(t)??this.#t("nativeAsset"):this.#h.get(t)??null:""}#m(t){return t===this.#$?this.#p.get(t)??{code:"XLM",decimals:7}:this.#p.get(t)??null}#n(t){let s=typeof t=="string"?t:t?.str??"",r=this.#C(s),a=(s&&s===this.signer?` (${i(this.#t("you"))})`:"")+(t?.muxId!=null?` #${i(t.muxId)}`:"");return r?`<span class="addr" title="${i(s)}">${i(r)}${a} <span class="mono muted">${i(A(s))}</span></span>`:`<span class="addr mono" title="${i(s)}">${i(A(s))}${a}</span>`}#v(t,s){return`${i(b(t,s.decimals))} ${i(s.code)}`}#d(t,s,r){switch(t.t){case"address":return this.#n(t);case"i128":case"u128":case"i256":case"u256":case"i64":case"u64":return r&&/amount|limit/.test(s??"")?`<b>${this.#v(t.v,r)}</b> <span class="muted small">(${i(t.v.toString())})</span>`:`<span class="mono">${i(t.v.toString())}</span>`;case"u32":case"i32":return`<span class="mono">${t.v}</span>`;case"timepoint":return i(new Date(Number(t.v)*1e3).toISOString());case"duration":return this.#t("seconds",{value:i(t.v.toString())});case"bool":return this.#t(t.v?"yes":"no");case"void":return`<span class="muted">${this.#t("none")}</span>`;case"symbol":return`<code>${i(t.v)}</code>`;case"string":return`\u201C${i(t.v)}\u201D`;case"bytes":{let a=vt(t.v);if(a)return this.#U(a);let n=f(t.v);return`<span class="mono" title="${i(n)}">0x${i(n.length>32?n.slice(0,32)+"\u2026":n)}</span> <span class="muted small">(${this.#t("bytes",{length:t.v.length})})</span>`}case"vec":return t.v.length?`[${t.v.map(a=>this.#d(a)).join(", ")}]`:"[ ]";case"map":return`{ ${t.v.map(a=>`${this.#d(a.k)}: ${this.#d(a.v,a.k.v)}`).join(", ")} }`;case"error":return`<span class="mono">error(${t.type}, ${t.code})</span>`;default:return`<span class="mono">${i(t.t)}</span>`}}#U(t){let s=Array.isArray(t.rules)?t.rules:[],r=Array.isArray(t.signers)?t.signers:[],a=s.map(o=>{let c=o.scope?.type==="contract"?this.#n(String(o.scope.address)):i(o.scope?.type??"any"),d=Array.isArray(o.functions)?o.functions.map(h=>`<code>${i(h)}</code>`).join(", "):this.#t("anyFunction"),l=null;if(o.cap?.limit){let h=this.#m(o.cap.token??o.scope?.address)??{code:"units",decimals:0};try{l=this.#v(BigInt(o.cap.limit),h)}catch{l=i(o.cap.limit)}}let p=Array.isArray(o.principals?.signers)?o.principals.signers.map(h=>`<code>${i(h)}</code>`).join(" + "):null;return`<li>${this.#t("ruleLine",{name:i(o.name??"rule"),functions:d,scope:c,by:p,cap:l,period:i(o.cap?.["period-ledgers"]??"?")})}</li>`}).join(""),n=r.map(o=>`<li><code>${i(o.id)}</code>: ${o.key?this.#t("signerKey",{key:`<span class="mono">${i(A(String(o.key)))}</span>`}):this.#n(String(o.address??""))}</li>`).join("");return`<div class="doc" part="doc"><div class="small muted">${this.#t("policyDocument",{network:t.network==null?null:i(t.network)})}</div>
+      ${a?`<div class="small">${this.#t("rules")}</div><ul>${a}</ul>`:""}${n?`<div class="small">${this.#t("signers")}</div><ul>${n}</ul>`:""}</div>`}#N(t){if(t.kind==="create")return t.preimage.from==="asset"?this.#t("deployAsset",{code:i(t.preimage.asset.code)}):this.#t("deploy",{code:t.executable.kind==="wasm"?i(A(f(t.executable.hash))):null});if(t.kind==="upload")return this.#t("upload",{length:t.wasm.length});let s=t.contract.str,r=this.#m(s),a=r?_[t.fn]:null;if(r&&a&&t.args.length===a.length){let n=d=>t.args[a.indexOf(d)],o=d=>d&&/128|64/.test(d.t)?this.#v(d.v,r):"?",c=d=>this.#n(n(d));switch(t.fn){case"transfer":return this.#t("send",{amount:o(n("amount")),from:c("from"),to:c("to")});case"approve":return this.#t("approve",{spender:c("spender"),amount:o(n("amount")),from:c("from"),until:i(n("expiration_ledger").v)});case"transfer_from":return this.#t("transferFrom",{spender:c("spender"),amount:o(n("amount")),from:c("from"),to:c("to")});case"burn":return this.#t("burn",{amount:o(n("amount")),from:c("from")});case"mint":return this.#t("mint",{amount:o(n("amount")),to:c("to")});default:break}}return s===this.signer&&t.fn==="apply_scope"?this.#t("installGrant",{grant:i(t.args[0]?.v??"?")}):s===this.signer&&t.fn==="apply_doc"?this.#t("replacePolicy"):this.#t("call",{fn:i(t.fn),contract:this.#n(t.contract)})}#F(t){return t.kind!=="call"?[]:this.#m(t.contract.str)&&_[t.fn]?.length===t.args.length?_[t.fn]:t.contract.str===this.signer&&tt[t.fn]?.length===t.args.length?tt[t.fn]:[]}#P(t){let s=t.fn,r=this.#F(s),a=s.kind==="call"?this.#m(s.contract.str):null,n=s.args.map((p,h)=>`<dt>${r[h]?i(r[h]):this.#t("argument",{index:h+1})}</dt><dd>${this.#d(p,r[h],a)}</dd>`).join(""),o=s.kind==="call"?`<code>${i(s.fn)}</code> \xB7 ${i(this.#C(s.contract.str)??A(s.contract.str))}`:i(s.kind),c=s.args.length?` \xB7 ${this.#t("argumentCount",{count:s.args.length})}`:"",d=`<details part="node-details"><summary>${o}${c}</summary>
+      ${s.kind==="call"?`<dl class="args"><dt>${this.#t("contract")}</dt><dd class="mono">${i(s.contract.str)}</dd>${n}</dl>`:n?`<dl class="args">${n}</dl>`:""}</details>`,l=t.subs.length?`<ol role="list">${t.subs.map(p=>this.#P(p)).join("")}</ol>`:"";return`<li class="node" part="node"><div class="sentence">${this.#N(s)}</div>${d}${l}</li>`}#q(t,s){let r=t.credentials,a=r.type==="source-account"?this.#t("sourceAccount"):this.#n(r.address),n=s>=0?this.#r?.entries[s]:null,o=n?n.status==="match"?`<span class="badge ok">${this.#t("badgeMatch")}</span>`:n.status==="extra"?`<span class="badge bad">${this.#t("badgeExtra")}</span>`:`<span class="badge bad">${this.#t("badgeDiffers")}</span>`:"",c=n?.status==="extra"?`<div class="notice bad small" part="unused-entry">${this.#t("extraNote")}</div>`:n?.status==="differs"?`<div class="notice bad small">${this.#t("differsNote")}</div>`:"",d=!!r.address&&r.address.str===this.signer,l=s>=0?this.#t("authorizedBy",{index:s+1,who:a}):`<b>${a}</b>`;return`<article class="entry" part="entry" data-status="${n?.status??"unchecked"}" data-mine="${d}">
+      <div class="entry-head"><span>${l}${r.type==="address-v2"?` \xB7 ${this.#t("addressBound")}`:""}</span>${o}</div>
+      ${c}<ol class="tree" role="list">${this.#P(t.root)}</ol></article>`}#D(){let t=this.#o;if(this.#i!=="done")return"";let s=[];(t.notice||t.code&&this.#u.notices[t.code])&&s.push(`<div class="notice" part="notice">${this.#A("notices",t.code,t.params,t.notice)}</div>`);let r=this.#r;if(r){let a=o=>r.entries.filter(c=>c.status===o).length,n=r.entries.length-a("match")+r.missing.length;s.push(n?`<div class="notice bad" part="auth-check">${this.#t("authMismatch",{extra:a("extra"),differs:a("differs"),missing:r.missing.length})}</div>`:`<div class="notice ok" part="auth-check">${this.#t("authMatch")}</div>`),r.missing.length&&s.push(`<div class="small">${this.#t("neededNotSupplied")}</div>${r.missing.map(o=>this.#q(r.recorded[o],-1)).join("")}`)}for(let a of t.verdicts??[]){let n={account:this.#n(a.address),rule:a.rule?i(a.rule.name??a.rule.id):null},o=a.reasonCode||a.reason?this.#A("reasons",a.reasonCode,a.params,a.reason):"",c=typeof a.allowed=="boolean";s.push(`<div class="card verdict" part="verdict" data-allowed="${c?a.allowed:"null"}"><span class="icon" aria-hidden="true">${c?a.allowed?"\u2713":"\u2715":"?"}</span>
+        <div>${this.#t(c?a.allowed?"wouldAccept":"wouldRefuse":"verdictUnknown",n)}
+        ${o?`<div class="small">${o}</div>`:a.code!=null?`<div class="small muted">${this.#t("contractError",{code:i(a.code)})}</div>`:""}</div></div>`)}for(let a of t.budgets??[])s.push(this.#V(a));if(t.balances?.length){let a=t.balances.map(o=>{let c=BigInt(o.before??0),d=BigInt(o.after??0),l=d-c,p=o.asset??{code:"",decimals:0};return`<tr><td>${this.#n(o.address)}</td><td>${i(p.code)}</td><td class="num">${i(b(c,p.decimals))}</td><td class="num">${i(b(d,p.decimals))}</td><td class="num ${l<0n?"neg":"pos"}">${l>0n?"+":""}${i(b(l,p.decimals))}</td></tr>`}).join(""),n=this.#u.balanceHeaders;s.push(`<h3>${this.#t("balanceChanges")}</h3><div class="scroll"><table part="balances"><thead><tr><th>${n[0]}</th><th>${n[1]}</th><th class="num">${n[2]}</th><th class="num">${n[3]}</th><th class="num">${n[4]}</th></tr></thead><tbody>${a}</tbody></table></div>`)}else t.outcome?.ok&&s.push(`<p class="small muted">${this.#t("noBalanceChanges")}</p>`);if(t.events?.length){let a=t.events.map(n=>{try{return`<li>${this.#X(U(n))}</li>`}catch(o){return`<li class="muted">${this.#t("undecodableEvent",{error:i(o.message)})}</li>`}}).join("");s.push(`<h3>${this.#t("events")}</h3><ul class="events" part="events">${a}</ul>`)}if(t.outcome&&!t.outcome.ok&&!(t.verdicts??[]).length){let a=(t.outcome.codes??[]).map(n=>`${i(n.code)}${n.contract?` (${this.#n(n.contract)})`:""}`).join(", ");s.push(`<div class="notice bad">${this.#t("wouldFail",{error:i(t.outcome.error??"unknown error"),codes:a||null})}</div>`)}return s.push(`<p class="small muted">${this.#t("footnote",{ledger:t.ledger?i(t.ledger.sequence):null,protocol:i(t.ledger?.protocol??t.engine?.protocol??"?"),source:i(t.stateSource??"RPC")})}</p>`),`<section class="preview" part="preview"><h3>${this.#t("effects")}</h3>${s.join("")}</section>`}#_(){let t=this.#i,s=this.#o;if(t==="loading")return{state:"checking"};if(t==="idle")return this.#M?{state:"idle"}:{state:"unknown",reason:this.#t("notSimulated")};if(t!=="done")return{state:"unknown",reason:`${s?.code==="error"?this.#t("previewFailed",{error:i(s.params?.error??"")}):this.#A("notices",s?.code,s?.params,s?.notice??this.#t("previewUnavailable"))} ${this.#t("treeStillExact")}`};let r=d=>d.reasonCode||d.reason?this.#A("reasons",d.reasonCode,d.params,d.reason):"",a=s.verdicts??[],n=a.find(d=>d.allowed===!1);if(n)return{state:"refused",reason:r(n)||this.#t("contractError",{code:i(n.code??"?")})};let o=a.find(d=>d.allowed==null);if(s.outcome&&!s.outcome.ok&&!o){let d=(s.outcome.codes??[]).map(l=>i(l.code??l)).join(", ");return{state:"refused",reason:this.#t("wouldFail",{error:i(s.outcome.error??"unknown error"),codes:d||null})}}if(o)return{state:"unknown",reason:r(o)};let c=a.find(d=>d.allowed);return{state:"success",reason:c&&r(c)||this.#t("simulatedOk")}}#H(){let t=this.#_(),s={success:"\u2713",refused:"\u2715",unknown:"?",idle:"\u2022"}[t.state],r=this.#t({success:"statusSuccess",refused:"statusRefused",unknown:"statusUnknown",checking:"statusChecking",idle:"statusIdle"}[t.state]),a=t.state==="checking"?'<span class="spinner" aria-hidden="true"></span>':`<span class="icon" aria-hidden="true">${s}</span>`,n=t.state==="idle"?`<button type="button" data-act="preview" part="preview-button">${this.#t("previewButton")}</button>`:"";return`<section id="ssd-status" class="status" part="status" data-state="${t.state}" role="status" aria-live="polite">${a}
+      <div><b>${r}</b>${t.reason?`<div class="small" part="status-reason">${t.reason}</div>`:""}${n}</div></section>`}#j(t){if(t.kind==="call"&&t.fn==="transfer"&&t.args.length===3){let s=this.#m(t.contract.str),[r,a,n]=t.args;if(s&&r?.str===this.signer&&/128|64/.test(n?.t??""))return this.#t("summarySend",{amount:this.#v(n.v,s),to:this.#n(a)})}return this.#N(t)}#K(){let t=this.#e.op,s=this.#r,r=this.#s.length?this.#s.map((n,o)=>`<li>${this.#j(n.root.fn)}${s?.entries[o]?.status==="extra"?` <span class="badge bad">${this.#t("summaryUnusedTag")}</span>`:""}</li>`):t?.type==="invoke"?[`<li>${this.#j(t.hostFunction)}</li>`]:[`<li>${this.#t("operation",{type:i(t?.type??"unknown")})}</li>`],a=(this.#i==="done"?this.#o.budgets??[]:[]).map(n=>{let o=n.token??{code:"",decimals:0},c=BigInt(n.limit),d=c-BigInt(n.spentInWindow),l=BigInt(n.amount??0),p=l>d,h=p?d>0n?d:0n:d-l;return`<p class="budget-line" part="budget-line" data-over="${p}">${this.#t("summaryBudget",{left:i(b(h,o.decimals)),limit:i(b(c,o.decimals)),code:i(o.code),over:p})}</p>`}).join("");return`<section id="ssd-what" class="what" part="what"><ul>${r.join("")}</ul>${a}</section>`}#W(){let t=this.#r;if(!t)return"";let s=[];for(let r of t.entries)r.status==="extra"&&s.push(this.#t("unusedWarning",{what:this.#j(this.#s[r.index].root.fn)})),r.status==="differs"&&s.push(this.#t("differsWarning"));return t.missing.length&&s.push(this.#t("missingWarning",{count:t.missing.length})),s.map(r=>`<div class="notice bad" part="warning" role="alert">${r}</div>`).join("")}#V(t){let s=t.token??{code:"",decimals:0},r=BigInt(t.limit),a=BigInt(t.spentInWindow),n=BigInt(t.amount??0),o=r-a,c=n<=o,d=h=>r>0n?Math.max(0,Math.min(100,Number(h*10000n/r)/100)):0,l=h=>this.#v(h,s),p=t.nextReleaseLedger&&t.ledger?Math.round((t.nextReleaseLedger-t.ledger)*5/60):null;return`<div class="card" part="budget"><b>${this.#t("spendingCap")}</b>${t.rule?this.#t("capRule",{rule:i(t.rule.name??t.rule.id)}):""}
+      <div class="meter" role="img" aria-label="${i(this.#t("capMeter",{spent:l(a),limit:l(r),amount:l(n)}).replace(/<[^>]*>/g,""))}">
+        <span class="spent" data-pct="${d(a)}"></span><span class="${c?"this":"over"}" data-pct="${d(c?n:o>0n?o:0n)}"></span></div>
+      <div class="small">${this.#t("capLeft",{remaining:l(o),limit:l(r),period:i(t.periodLedgers)})}
+      ${c?this.#t("capAfter",{after:l(o-n)}):this.#t("capOver",{amount:l(n)})}
+      ${t.nextReleaseLedger?`<span class="muted">${this.#t("capRelease",{ledger:i(t.nextReleaseLedger),minutes:p})}</span>`:""}</div></div>`}#X(t){let[s,...r]=t.topics,a=t.contract?this.#m(t.contract.str):null,n=`<span class="muted small">(${i(this.#C(t.contract?.str)??A(t.contract?.str??""))})</span>`;if(s?.t==="symbol"&&s.v==="transfer"&&r.length>=2){let o=t.data.t==="map"?t.data.v.find(d=>d.k.v==="amount")?.v:t.data,c=o&&a&&typeof o.v=="bigint"?this.#v(o.v,a):i(o?.v?.toString()??"?");return`${this.#t("transferEvent",{amount:c,from:this.#d(r[0]),to:this.#d(r[1])})} ${n}`}return`<code>${i(s?.v??s?.t??"?")}</code> ${r.map(o=>this.#d(o)).join(" ")} \u2192 ${this.#d(t.data)} ${n}`}#b(){let t=this.dialog;if(!t)return;let s=this.#c.activeElement?.closest?.("[data-act]")?.dataset.act,r=t.querySelector('details[part="details"]');r&&(this.#z=r.open);let a=this.getAttribute("dapp"),n=Object.entries(B).find(([,w])=>w===this.networkPassphrase)?.[0],o=n?this.#u.networks[n]??n:this.#t("customNetwork"),c,d,l="";if(this.#a)d=this.#t("titleUnreadable"),c=`<div class="notice bad" role="alert">${this.#t("unreadable",{error:i(this.#a.message)})}</div>`;else if(!this.#e)d=this.#t("titleEmpty"),c=`<p class="muted">${this.#t("nothingToReview")}</p>`;else{let w=this.#s.length,V=this.#e.op;d=w===1?this.#t("titleOne"):w?this.#t("titleMany",{count:w}):this.#t("titleTransaction");let X=this.#e.envelope?.tx;X&&(l=this.#t("summary",{fee:i(b(BigInt(X.fee),7)),payer:this.#n(X.source)}));let xt=w?this.#s.map((At,St)=>this.#q(At,St)).join(""):V?.type==="invoke"?`<article class="entry" part="entry"><div class="entry-head"><span>${this.#t("sourceAuthority")}</span></div><ol class="tree" role="list">${this.#P({fn:V.hostFunction,subs:[]})}</ol></article>`:`<p>${this.#t("operation",{type:i(V?.type??"unknown")})}</p>`,kt=this.#z??this.getAttribute("details")==="open";c=`${this.#K()}${this.#H()}${this.#W()}
+        <details class="more" part="details"${kt?" open":""}><summary part="details-summary">${this.#t("details")}</summary>
+        <h3>${this.#t("whatYouAuthorize")}</h3><div part="tree">${xt}</div>${this.#D()}</details>`}let h=this.#g().length>0||!!this.#a,yt=this.hasAttribute("strict"),$t=this.#a?this.#t("approveButton"):this.#w?this.#t("confirmApproveAnyway"):h?this.#t("approveAnyway"):this.#t("approveButton");t.innerHTML=`<header part="header">
+        <div class="meta"><slot name="logo"></slot><span class="chip" part="network">${i(o)}</span>${a?`<span part="dapp">${this.#t("requestFrom",{dapp:i(a)})}</span>`:""}</div>
+        <h2 id="ssd-title" part="title">${d}</h2>
+        <p id="ssd-sub" class="sub" part="fee">${l}</p>
+        <slot name="header"></slot></header>
+      <div class="body" part="body">${c}</div>
       <footer part="footer">
-        <button data-act="reject" part="reject">Reject</button>
-        <button data-act="approve" part="approve" class="${risky ? 'danger' : 'primary'}" ${this.#error || (strict && risky) || !this.#decoded ? 'disabled' : ''}>${approveLabel}</button>
-      </footer>`;
-  }
-
-  #onClick(e) {
-    const act = e.target.closest?.('[data-act]')?.dataset.act;
-    if (act === 'reject') this.#finish(false, 'rejected');
-    else if (act === 'preview') this.runPreview();
-    else if (act === 'approve') {
-      if (this.#flags().length && !this.#confirming) {
-        this.#confirming = true;
-        this.#render();
-        this.#root.querySelector('[data-act="approve"]')?.focus();
-        return;
-      }
-      this.#approve();
-    }
-  }
-
-  async #approve() {
-    const passphrase = this.networkPassphrase;
-    const entries = await Promise.all(this.#entries.map(async (e, index) => ({
-      index,
-      address: e.credentials.address?.str ?? null,
-      credentials: e.credentials.type,
-      nonce: e.credentials.nonce?.toString() ?? null,
-      entryXdr: toB64(e.raw),
-      invocationXdr: toB64(e.root.raw),
-      invocationHash: hex(await sha256(e.root.raw)),
-      forSigner: !!this.signer && e.credentials.address?.str === this.signer,
-    })));
-    const tx = this.#decoded?.envelope;
-    const detail = {
-      transaction: this.transaction ?? null,
-      transactionHash: tx ? hex(await transactionHash(tx, passphrase)) : null,
-      networkPassphrase: passphrase,
-      signer: this.signer,
-      entries,
-      flags: this.#flags(),
-      preview: this.#preview,
-    };
-    const ok = this.dispatchEvent(new CustomEvent('approve', { bubbles: true, composed: true, cancelable: true, detail }));
-    if (!ok) return;
-    this.#close();
-    this.#pending?.resolve({ approved: true, ...detail });
-    this.#pending = null;
-  }
-
-  #finish(approved, reason) {
-    if (!this.dialog.open && !this.#pending) return;
-    this.dispatchEvent(new CustomEvent('reject', { bubbles: true, composed: true, detail: { reason, flags: this.#flags() } }));
-    this.#close();
-    this.#pending?.resolve({ approved: false, reason });
-    this.#pending = null;
-  }
-
-  #close() {
-    this.#abort?.abort();
-    if (this.dialog.open) this.dialog.close();
-    this.removeAttribute('open');
-    this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }));
-  }
-
-  #trapFocus(e) {
-    if (e.key !== 'Tab' || this.hasAttribute('inline')) return;
-    const items = [...this.dialog.querySelectorAll('button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')].filter((x) => x.offsetParent !== null);
-    if (!items.length) return;
-    const first = items[0], last = items[items.length - 1];
-    const active = this.#root.activeElement;
-    if (e.shiftKey && active === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
-  }
-}
-
-if (!customElements.get('soroban-sign-dialog')) customElements.define('soroban-sign-dialog', SorobanSignDialog);
-
-/** Open a shared dialog for one request: the one-call embed. */
-export function request(opts) {
-  let el = document.querySelector('soroban-sign-dialog[data-shared]');
-  if (!el) {
-    el = document.createElement('soroban-sign-dialog');
-    el.dataset.shared = '';
-    if (opts?.engine) el.setAttribute('engine', opts.engine);
-    if (opts?.theme) el.setAttribute('theme', opts.theme);
-    document.body.append(el);
-  }
-  return el.request(opts);
-}
-
-globalThis.SorobanSignDialog ??= { request, decodeEnvelope, decodeAuthEntry, decodeEvent, compareAuth, authPayloadHash, VERSION };
+        <div class="footer-slot"><slot name="footer"></slot></div>
+        <div class="actions">
+          <button type="button" data-act="reject" part="reject">${this.#t("reject")}</button>
+          <button type="button" data-act="approve" part="approve" class="${h?"danger":"primary"}" ${this.#a||yt&&h||!this.#e?"disabled":""}>${$t}</button>
+        </div>
+      </footer>`;for(let w of t.querySelectorAll("[data-pct]"))w.style.width=`${w.dataset.pct}%`;s&&t.open&&(t.querySelector(`[data-act="${s}"]:not([disabled])`)??t.querySelector('[data-act="reject"]'))?.focus()}#G(t){let s=t.target.closest?.("[data-act]")?.dataset.act;if(s==="reject")this.#S("rejected");else if(s==="preview")this.runPreview();else if(s==="approve"){if(this.#g().length&&!this.#w){this.#w=!0,this.#b(),this.#c.querySelector('[data-act="approve"]')?.focus();return}this.#J()}}async#Y(){let t=this.networkPassphrase,s=this.signer,r=await Promise.all(this.#s.map(async(n,o)=>({index:o,address:n.credentials.address?.str??null,credentials:n.credentials.type,nonce:n.credentials.nonce?.toString()??null,entryXdr:P(n.raw),invocationXdr:P(n.root.raw),invocationHash:f(await E(n.root.raw)),forSigner:!!s&&n.credentials.address?.str===s}))),a=this.#e?.envelope;return{transaction:this.transaction??null,transactionHash:a?f(await D(a,t)):null,networkPassphrase:t,signer:s,entries:r}}async#J(){let t=this.#k,s;try{s=await t}catch(n){this.#a=n,this.#b();return}if(!s||t!==this.#k)return;let r={...s,flags:this.#g(),preview:this.#o};this.dispatchEvent(new CustomEvent("approve",{bubbles:!0,composed:!0,cancelable:!0,detail:r}))&&(this.#L(),this.#l?.resolve({approved:!0,...r}),this.#l=null)}#S(t){!this.dialog.open&&!this.#l||(this.dispatchEvent(new CustomEvent("reject",{bubbles:!0,composed:!0,detail:{reason:t,flags:this.#g()}})),this.#L(),this.#l?.resolve({approved:!1,reason:t}),this.#l=null)}#L(){this.#x?.abort(),this.dialog.open&&this.dialog.close(),this.removeAttribute("open"),this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}#Q(t){if(t.key!=="Tab"||this.hasAttribute("inline"))return;let s=[...this.dialog.querySelectorAll('button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')].filter(o=>o.offsetParent!==null);if(!s.length)return;let r=s[0],a=s[s.length-1],n=this.#c.activeElement;t.shiftKey&&n===r?(t.preventDefault(),a.focus()):!t.shiftKey&&n===a&&(t.preventDefault(),r.focus())}};function R(e=z){let t=globalThis.customElements;t&&(t.get(e)||t.define(e,e===z?T:class extends T{}))}function wt(e={}){R();let t=document.querySelector(`${z}[data-shared]`);return t||(t=document.createElement(z),t.dataset.shared="",document.body.append(t)),t.request(e)}var Ut="0.1.0";R();globalThis.SorobanSignDialog??=rt;export{B as NETWORKS,K as STRINGS,T as SorobanSignDialog,z as TAG,Ut as VERSION,u as XdrError,mt as authPayloadHash,H as compareAuth,j as decodeAuthEntry,O as decodeEnvelope,U as decodeEvent,pt as decodeLedgerEntry,lt as decodeLedgerKey,ht as decodeScVal,R as define,b as formatAmount,gt as fromStrkey,F as nativeAssetContract,M as networkId,wt as request,g as strkeyFor,D as transactionHash};
 
 </script>
 <script type="module">

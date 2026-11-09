@@ -1,13 +1,22 @@
-# Café Perch sign mock: what is real and what is canned
+# Café Perch sign demo: what is real and what is recorded
 
 Open `index.html` over HTTP, or open `standalone.html` straight from disk: it
-holds the same three modules inlined, so it works from `file://`.
+holds the same three modules inlined, so it works from `file://`. `nido.html`
+is the same page in Nido's look (`nido/NOTICE.md`).
 
 ## Real
 
-- `soroban-sign-dialog.js` is the component itself, not a mock. The element
-  name, attributes, properties, methods, events, `::part` names and `--ssd-*`
-  custom properties are the API the real component keeps (see `API.md`).
+- `soroban-sign-dialog.js` is the `@theahaco/soroban-sign-dialog` component,
+  vendored unchanged from theahaco/soroban-sim at commit
+  `fb38b9c835e66dcaacf293d1f166bf2da45c1a91`
+  (`packages/soroban-sign-dialog`, version 0.1.0): its `dist/soroban-sign-dialog.js`,
+  SHA-256 `a5239ec1a2e49ec5491c968d19eb62a975f5188e868cd2213bf296f98de072ee`,
+  which `node scripts/build.mjs --js-only` reproduces byte for byte from that
+  commit. `API.md` is the package's, from the same commit. Both are under the
+  Apache License 2.0 (`LICENSE`, soroban-sim's licence at that commit). Its
+  default layout leads with what the user approves in plain words, the grant
+  budget left, and the simulated outcome, with the full authorization tree,
+  arguments and events under one Details disclosure.
 - Each order's transaction is a real `TransactionEnvelope`, built the way a
   dapp builds one: a recording simulation, then an unsigned envelope with the
   recorded authorization entries and resources. The dialog decodes the tree
@@ -15,9 +24,9 @@ holds the same three modules inlined, so it works from `file://`.
 - The approve event's `invocationHash` is sha256 of each entry's
   `SorobanAuthorizedInvocation` XDR, computed in the page.
 
-## Canned
+## Recorded
 
-**Preview effects** does not run a simulator in this mock. The page sets
+The outcome preview does not run a simulator in this demo. The page sets
 `previewProvider` to a function that returns a stored `PreviewResult` for the
 transaction after an artificial 0.7 s delay. Each stored result was captured
 from a native soroban-sim run (`perch-capture capture`):
@@ -52,19 +61,16 @@ The verdict's wording ("the cap has 7 XLM left and the request is 8 XLM")
 combines the contract error with the spend window that the capture read from the
 account's `SpendRecords(1)` entry. The contract reports only error 5.
 
-## Not the current Perch
+## The design it previews
 
-The captured contracts are the paper's pinned build: grants installed with
-`apply_scope` (since renamed `apply_grant`), and spends recorded in the
-account's own storage. The current Perch release that Nido uses installs
-rules through `apply_doc` and keeps the spend window in OpenZeppelin's
-spending-limit policy contract
-(`AccountContext(account, rule_id)`). The dialog renders both. The engine's
-Perch adapter has to read whichever layout the account has.
+The captured contracts are the Perch design the paper presents. Grant 1 was
+installed through the account's own grant flow, and its spend window is kept
+in the account's own storage: the `SpendRecords(1)` entry that the capture read
+before and after each order.
 
 ## Regenerate
 
-From the prototype sources (`../prototype/`): build `perch-fixture`, run
-`perch-capture capture > capture.json`, then run
-`python3 mock/make-canned.py capture.json > mock/canned-previews.js` and
-`python3 mock/build.py <out-dir>`.
+`canned-previews.js` is a fixed snapshot generated outside this repository from
+the soroban-sim run named above, and is not regenerated here.
+`build-standalone.py` writes `standalone.html` from `index.html` and the three
+modules, and `nido/build.py` writes `nido.html` from `standalone.html`.

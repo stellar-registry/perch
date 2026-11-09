@@ -1,32 +1,46 @@
-//! rule-eval as `__check_auth`'s second check, under ENFORCING authorization
+//! rule-eval as `__check_auth`'s rule check, under ENFORCING authorization
 //! (`perch_smart_account::check_auth`; see `support/mod.rs` for the world).
 //!
-//! OZ's `do_check_auth` runs first, then rule-eval's `authorize` over the
-//! account's stored rule-eval rules, and both must accept:
+//! rule-eval's `authorize` over the account's stored rule-eval rules decides
+//! every authorization but a recovery completion, and OZ authenticates the
+//! signers:
 //!
-//! - a stored rule that allows less than its OZ rule refuses what OZ
-//!   accepts, with `RuleEvalRefused`, so the second check is live;
-//! - an account with no stored set is left to OZ alone until its next
-//!   `apply_doc` stores one;
+//! - the stored rule alone decides what its OZ rule id allows: one that
+//!   allows less refuses (`RuleEvalRefused`), and one that names a signer
+//!   OZ's rule does not lets that signer authorize;
+//! - a chosen id that names no installed rule fails with OZ's
+//!   `ContextRuleNotFound`, and choosing the recovery rule outside a
+//!   completion with `RuleEvalRefused`;
 //! - a recovery completion is left to OZ and the controller, whatever the
 //!   stored set says;
-//! - each capped rule's spending record follows the window OZ's spending
-//!   limit keeps for it (`perch_testkit::rule_set::check_records`): charged
-//!   by the same spends, kept by an edit that leaves the cap alone, and
-//!   dropped when the cap changes, the rule is replaced or removed, or its
-//!   scope is removed.
+//! - an account installed by code that attached the interpreter and the
+//!   spending limit, with no stored set, is decided by OZ and those policies
+//!   until its first `apply_doc`, which removes them and starts every
+//!   spending record empty; `apply_scope` refuses on it until then
+//!   (`NoRuleSet`);
+//! - each capped rule's spending record is charged by rule-eval, kept by an
+//!   edit that leaves the rule's id and cap alone, and dropped when the cap
+//!   changes, the rule is replaced or removed, or its scope is removed.
 
 mod support;
 
 use perch_account::{PerchAccountError, PerchAuthError};
+use perch_doc_compiler::PerchDocCompilerClient;
 use perch_recovery::EvidenceDomain;
 use perch_recovery_interface::RecoveryAction;
 use perch_smart_account::testutils::{
-    remove_rule_set, set_rule_set, set_scope_rule_set, spend_record,
+    remove_rule_set, set_installed_rules, set_rule_set, set_scope_rule_set, spend_record,
 };
+use perch_smart_account::{infra, InstalledPolicy};
 use perch_testkit::rule_set::{check_records, Records};
-use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScError, ScVal};
-use soroban_sdk::{contract, contractimpl, symbol_short, Address, Bytes, BytesN, Env};
+use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScError, ScVal, ToXdr};
+use soroban_sdk::{
+    contract, contractimpl, symbol_short, vec, Address, Bytes, BytesN, Env, IntoVal, Symbol,
+};
+use stellar_accounts::policies::spending_limit::{
+    get_spending_limit_data, SpendingLimitAccountParams,
+};
+use stellar_accounts::smart_account::{self, AuthPayload, Signer};
 use support::*;
 
 type CallResult<T> = Result<T, Result<PerchAccountError, soroban_sdk::InvokeError>>;
@@ -71,9 +85,8 @@ fn rule_eval_refused() -> Option<ScError> {
     Some(e.try_into().unwrap())
 }
 
-/// The stored rule set with the rule installed as `name` asking for one
-/// more signer than it has, so rule-eval allows nothing through it.
-fn tamper(w: &World, name: &str) {
+/// Replace the stored rule of the rule installed as `name` with `f` of it.
+fn restore(w: &World, name: &str, f: impl FnOnce(&mut perch_smart_account::StoredRule)) {
     let wanted = soroban_sdk::String::from_str(&w.env, name);
     let at = w
         .client()
@@ -83,9 +96,15 @@ fn tamper(w: &World, name: &str) {
         .expect("the rule is installed") as u32;
     let mut set = w.client().rule_set();
     let mut rule = set.get(at).unwrap();
-    rule.threshold = rule.signers.len() + 1;
+    f(&mut rule);
     set.set(at, rule);
     w.env.as_contract(&w.account, || set_rule_set(&w.env, &set));
+}
+
+/// The stored rule of `name` asking for one more signer than it has, so
+/// rule-eval allows nothing through it.
+fn tamper(w: &World, name: &str) {
+    restore(w, name, |r| r.threshold = r.signers.len() + 1);
 }
 
 /// A document: the owner's admin rule, the default `target` rule, and the
@@ -180,44 +199,136 @@ fn record(w: &World, id: u32) -> (std::vec::Vec<(u32, i128)>, i128) {
         .unwrap_or_default()
 }
 
-fn parity(w: &World) -> Records {
-    check_records(&w.env, &w.account).unwrap_or_else(|x| panic!("records parity: {x}"))
+/// What OZ's spending limit has recorded spent for rule `id`.
+fn oz_spent(w: &World, id: u32) -> i128 {
+    let spending_limit = infra::perch_spending_limit::address(&w.env);
+    w.env
+        .as_contract(&spending_limit, || {
+            get_spending_limit_data(&w.env, id, &w.account)
+        })
+        .cached_total_spent
+}
+
+fn records(w: &World) -> Records {
+    check_records(&w.env, &w.account).unwrap_or_else(|x| panic!("the spending records: {x}"))
+}
+
+/// Leave the account as code that attached the interpreter and the spending
+/// limit to document rules left it: each installed document rule carries
+/// the program and cap the compiler emits for it as those two policies,
+/// recorded in the installed-rule records, and no rule-eval rule set is
+/// stored.
+fn legacy(w: &World) {
+    let e = &w.env;
+    let compiled = PerchDocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
+        .compile_doc(&w.client().applied_doc().unwrap());
+    let interpreter = infra::perch_interpreter::address(e);
+    let spending_limit = infra::perch_spending_limit::address(e);
+    let digest = |b: Bytes| e.crypto().sha256(&b).to_bytes();
+    let mut records = w.client().installed_rules();
+    for i in 0..records.len() {
+        let mut r = records.get(i).unwrap();
+        let Some(c) = compiled
+            .rules
+            .iter()
+            .find(|c| !r.recovery && c.name == r.name)
+        else {
+            continue;
+        };
+        e.as_contract(&w.account, || {
+            if let Some(p) = c.install.first() {
+                smart_account::add_policy(e, r.id, &interpreter, p.clone().into_val(e));
+                r.policies.push_back(InstalledPolicy {
+                    policy: interpreter.clone(),
+                    params: digest(p.to_xdr(e)),
+                });
+            }
+            if let Some(cap) = c.cap.first() {
+                let params = SpendingLimitAccountParams {
+                    spending_limit: cap.spending_limit,
+                    period_ledgers: cap.period_ledgers,
+                };
+                smart_account::add_policy(e, r.id, &spending_limit, params.clone().into_val(e));
+                r.policies.push_back(InstalledPolicy {
+                    policy: spending_limit.clone(),
+                    params: digest(params.to_xdr(e)),
+                });
+            }
+        });
+        records.set(i, r);
+    }
+    e.as_contract(&w.account, || {
+        set_installed_rules(e, &records);
+        remove_rule_set(e);
+    });
 }
 
 #[test]
-fn rule_eval_refuses_what_its_stored_rule_does_not_allow() {
+fn the_stored_rule_alone_decides_what_its_oz_rule_allows() {
     let w = world();
-    w.enroll(&w.doc(None));
-    assert!(w.activity(), "OZ and rule-eval both accept");
-
-    // The OZ rule still asks for the owner alone; its stored rule asks for
-    // two signers it has not got.
-    tamper(&w, "target");
-    assert!(!w.activity());
-    assert_eq!(refusal(&w), rule_eval_refused());
-    // Other rules are unaffected: the admin rule still applies documents,
-    // and applying one stores the set anew.
     w.enroll(&w.doc(None));
     assert!(w.activity());
+    assert!(
+        !w.activity_as(&w.device),
+        "OZ's rule and its stored rule name the owner"
+    );
+
+    // A stored rule that allows less: OZ's rule is unchanged.
+    tamper(&w, "target");
+    assert!(!w.activity());
+    assert_eq!(refusal(&w), rule_eval_refused());
+
+    // A stored rule that names a signer OZ's rule does not: OZ only
+    // authenticates it.
+    let device = Signer::Delegated(w.device.clone());
+    restore(&w, "target", |r| {
+        r.signers.push_back(device);
+        r.threshold = 1;
+    });
+    let oz = w
+        .client()
+        .get_context_rule(&w.rule_id(&w.account, "target"));
+    assert_eq!(oz.signers.len(), 1);
+    assert!(w.activity_as(&w.device));
+
+    // Applying a document stores the set anew.
+    w.enroll(&w.doc(None));
+    assert!(w.activity());
+    assert!(!w.activity_as(&w.device));
 }
 
 #[test]
-fn an_account_without_a_stored_set_is_left_to_oz_until_its_next_apply() {
+fn an_unknown_id_and_the_recovery_rule_outside_a_completion_are_refused() {
     let w = world();
-    w.enroll(&w.doc(None));
-    tamper(&w, "target");
-    assert!(!w.activity());
-
-    // Upgraded from code that kept no set, and not re-applied since.
-    w.env.as_contract(&w.account, || remove_rule_set(&w.env));
-    assert!(w.client().rule_set().is_empty());
-    assert!(w.activity(), "OZ alone accepts");
-
-    w.enroll(&w.doc(None));
-    assert!(!w.client().rule_set().is_empty());
-    tamper(&w, "target");
-    assert!(!w.activity(), "the next apply_doc brings rule-eval back");
-    assert_eq!(refusal(&w), rule_eval_refused());
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    let check = |ids: soroban_sdk::Vec<u32>| {
+        let context = soroban_sdk::auth::Context::Contract(soroban_sdk::auth::ContractContext {
+            contract: w.target.clone(),
+            fn_name: Symbol::new(&w.env, "protected"),
+            args: vec![&w.env, w.account.clone().into_val(&w.env)],
+        });
+        let payload = AuthPayload {
+            signers: soroban_sdk::Map::new(&w.env),
+            context_rule_ids: ids,
+        };
+        w.env.try_invoke_contract_check_auth::<soroban_sdk::Error>(
+            &w.account,
+            &BytesN::from_array(&w.env, &[5; 32]),
+            payload.into_val(&w.env),
+            &vec![&w.env, context],
+        )
+    };
+    // As OZ refuses a selection the configuration has left.
+    assert_eq!(
+        check(vec![&w.env, 999]),
+        Err(Ok(soroban_sdk::Error::from_contract_error(3000)))
+    );
+    // The recovery rule's stored form allows any `apply_doc`; only the
+    // controller decides one, in a completion.
+    assert_eq!(
+        check(vec![&w.env, w.rule_id(&w.account, "recovery")]),
+        Err(Ok(PerchAuthError::RuleEvalRefused.into()))
+    );
 }
 
 #[test]
@@ -252,7 +363,50 @@ fn a_recovery_completion_is_left_to_oz_and_the_controller() {
 }
 
 #[test]
-fn a_capped_rules_record_follows_the_spending_limits_window() {
+fn an_account_without_a_stored_set_is_decided_by_oz_until_its_first_apply_empties_every_record() {
+    let w = world();
+    let token = w.env.register(Token, ());
+    let doc = capped_doc(&w, &token, &["owner"], &[("spend", 10)]);
+    w.apply_bytes(&doc, 0).unwrap();
+    legacy(&w);
+    assert!(w.client().rule_set().is_empty());
+    let id = w.rule_id(&w.account, "spend");
+
+    // OZ, the interpreter and the spending limit decide, and the spending
+    // limit keeps the window.
+    assert!(spend(&w, &token, &w.owner, id, 6));
+    assert!(!spend(&w, &token, &w.owner, id, 5), "over OZ's cap");
+    assert_eq!(oz_spent(&w, id), 6);
+    assert_eq!(record(&w, id), (std::vec![], 0));
+    // Scoped rules carry no policy, so none is installed until rule-eval
+    // can check it.
+    let app = w.new_key();
+    assert_eq!(
+        apply_scope(&w, 3, &capped_grant(&w, &token, "allowance", &app, 10)),
+        Err(Ok(PerchAccountError::NoRuleSet))
+    );
+
+    // The first apply_doc, of the same document, removes the policies,
+    // stores the set, and starts every record empty: within OZ's window the
+    // cap allows its whole limit again.
+    w.apply_bytes(&doc, 0).unwrap();
+    assert!(w
+        .client()
+        .installed_rules()
+        .iter()
+        .all(|r| r.policies.is_empty()));
+    perch_testkit::rule_set::check(&w.env, &w.account).unwrap();
+    let id = w.rule_id(&w.account, "spend");
+    assert!(w.client().get_context_rule(&id).policies.is_empty());
+    assert!(spend(&w, &token, &w.owner, id, 10));
+    assert!(!spend(&w, &token, &w.owner, id, 1));
+    assert_eq!(refusal(&w), rule_eval_refused());
+    assert_eq!(record(&w, id).1, 10);
+    apply_scope(&w, 3, &capped_grant(&w, &token, "allowance", &app, 10)).unwrap();
+}
+
+#[test]
+fn a_capped_rules_record_follows_its_id_and_cap() {
     let w = world();
     let token = w.env.register(Token, ());
     w.apply_bytes(&capped_doc(&w, &token, &["owner"], &[("spend", 10)]), 0)
@@ -260,21 +414,22 @@ fn a_capped_rules_record_follows_the_spending_limits_window() {
     let id = w.rule_id(&w.account, "spend");
     let now = w.ledger();
 
-    // Both evaluators charge the same spends.
+    // rule-eval charges the spends.
     assert!(spend(&w, &token, &w.owner, id, 6));
     assert!(spend(&w, &token, &w.owner, id, 4));
     assert_eq!(record(&w, id), (std::vec![(now, 6), (now, 4)], 10));
     assert!(!spend(&w, &token, &w.owner, id, 1), "over the cap");
+    assert_eq!(refusal(&w), rule_eval_refused());
     assert!(spend(&w, &token, &w.owner, id, 0), "a zero amount");
     assert_eq!(
-        parity(&w),
+        records(&w),
         Records {
             capped: 1,
             charged: 1
         }
     );
 
-    // A signer edit keeps the rule, its cap and both windows.
+    // A signer edit keeps the rule, its cap and its record.
     w.apply_bytes(
         &capped_doc(&w, &token, &["owner", "device"], &[("spend", 10)]),
         0,
@@ -282,10 +437,10 @@ fn a_capped_rules_record_follows_the_spending_limits_window() {
     .unwrap();
     assert_eq!(w.rule_id(&w.account, "spend"), id);
     assert_eq!(record(&w, id).1, 10);
-    parity(&w);
+    records(&w);
     assert!(!spend(&w, &token, &w.device, id, 1), "still at the cap");
 
-    // A changed cap starts both windows anew.
+    // A changed cap starts the record anew.
     w.apply_bytes(
         &capped_doc(&w, &token, &["owner", "device"], &[("spend", 20)]),
         0,
@@ -293,15 +448,14 @@ fn a_capped_rules_record_follows_the_spending_limits_window() {
     .unwrap();
     assert_eq!(w.rule_id(&w.account, "spend"), id);
     assert_eq!(record(&w, id), (std::vec![], 0));
-    parity(&w);
     assert!(spend(&w, &token, &w.device, id, 15));
-    parity(&w);
+    records(&w);
 
     // The window rolls: an entry older than the period is evicted.
     w.advance(100);
     assert!(spend(&w, &token, &w.owner, id, 20));
     assert_eq!(record(&w, id), (std::vec![(now + 100, 20)], 20));
-    parity(&w);
+    records(&w);
 
     // A rule replaced under a new name, then removed: no record outlives
     // its rule.
@@ -314,26 +468,27 @@ fn a_capped_rules_record_follows_the_spending_limits_window() {
     assert_ne!(renamed, id);
     assert_eq!(record(&w, id), (std::vec![], 0));
     assert!(spend(&w, &token, &w.owner, renamed, 3));
-    parity(&w);
+    records(&w);
     w.apply_bytes(&capped_doc(&w, &token, &["owner"], &[]), 0)
         .unwrap();
     assert_eq!(record(&w, renamed), (std::vec![], 0));
-    assert_eq!(parity(&w), Records::default());
+    assert_eq!(records(&w), Records::default());
 }
 
 #[test]
-fn a_scoped_capped_grant_is_charged_by_both_and_its_record_leaves_with_its_scope() {
+fn a_scoped_capped_grant_is_charged_by_rule_eval_and_its_record_leaves_with_its_scope() {
     let w = world();
     w.enroll(&w.doc(None));
     let token = w.env.register(Token, ());
     let app = w.new_key();
     apply_scope(&w, 3, &capped_grant(&w, &token, "allowance", &app, 10)).unwrap();
     let id = w.client().scope(&3).unwrap().rules.get(0).unwrap().id;
+    assert!(w.client().get_context_rule(&id).policies.is_empty());
     assert!(spend(&w, &token, &app, id, 7));
     assert!(!spend(&w, &token, &app, id, 4), "over the cap");
     assert_eq!(record(&w, id).1, 7);
     assert_eq!(
-        parity(&w),
+        records(&w),
         Records {
             capped: 1,
             charged: 1
@@ -352,5 +507,5 @@ fn a_scoped_capped_grant_is_charged_by_both_and_its_record_leaves_with_its_scope
 
     remove_scope(&w, 3).unwrap();
     assert_eq!(record(&w, id), (std::vec![], 0));
-    assert_eq!(parity(&w), Records::default());
+    assert_eq!(records(&w), Records::default());
 }

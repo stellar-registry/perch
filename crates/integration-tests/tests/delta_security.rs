@@ -291,16 +291,15 @@ fn a_delta_inside_an_authorized_window_is_refused_and_changes_nothing() {
 /// policy install leaves nothing behind.
 #[test]
 fn a_policy_install_failing_mid_delta_reverts_every_edit() {
-    let w = world_with(Opts {
-        failing_spending_limit: true,
-        ..Opts::default()
-    });
-    let (a, b, c) = (w.new_key(), w.new_key(), w.new_key());
+    let w = world();
+    let (a, b) = (w.new_key(), w.new_key());
+    let mut failing = w.recovery("loss", Mode::Guardian);
+    failing.controller = w.env.register(FailingPolicy, ());
     w.apply_bytes(
         &json(
             &w,
             &w.owner,
-            &[("r1", &a, &["owner"], false), ("r2", &b, &["owner"], false)],
+            &[("r1", &a, &["owner"], false), ("r2", &b, &["owner"], true)],
             None,
         ),
         0,
@@ -310,32 +309,24 @@ fn a_policy_install_failing_mid_delta_reverts_every_edit() {
     let installed = w.client().installed_rules();
     let applied = w.client().applied_doc_hash();
 
-    // r2 goes (removed first), r1 gains a signer (edited in place), then r3's
-    // spending-limit install fails.
-    let failing = json(
-        &w,
-        &w.owner,
-        &[
-            ("r1", &a, &["owner", "device"], false),
-            ("r3", &c, &["owner"], true),
-        ],
-        None,
-    );
-    assert!(w.apply_bytes(&failing, 0).is_err());
+    // r2 goes (removed first), r1 gains a signer (edited in place), then the
+    // recovery rule's controller refuses its install.
+    let edits = [("r1", &a, &["owner", "device"][..], false)];
+    assert!(w
+        .apply_bytes(&json(&w, &w.owner, &edits, Some(&failing)), 0)
+        .is_err());
     assert_eq!(raw_entries(&w.env), before, "every edit reverted");
     assert_eq!(w.client().installed_rules(), installed);
     assert_eq!(w.client().applied_doc_hash(), applied);
 
-    // The account is still usable: the same edits without the cap apply.
+    // The account is still usable: the same edits under a real controller
+    // apply.
     w.apply_bytes(
         &json(
             &w,
             &w.owner,
-            &[
-                ("r1", &a, &["owner", "device"], false),
-                ("r3", &c, &["owner"], false),
-            ],
-            None,
+            &edits,
+            Some(&w.recovery("loss", Mode::Guardian)),
         ),
         0,
     )

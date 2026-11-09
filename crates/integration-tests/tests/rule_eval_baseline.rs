@@ -18,10 +18,12 @@
 //! verdicts, records or lowering, when the account's stored rule-eval rule
 //! set after an apply differs from the lowering of the document's model or
 //! from the denotation of what is installed (`perch_testkit::rule_set`), and
-//! when, after an accepted authorization, a capped rule's rule-eval spending
-//! record differs from OZ's (`rule_core/mod.rs`, records parity). The file is
-//! the behaviour of the build it was recorded on; it is not re-recorded to
-//! absorb a change.
+//! when, after an accepted authorization, the account keeps a spending
+//! record for a rule stored without a cap or no longer installed
+//! (`rule_core/mod.rs`). The file is the behaviour of the build it was
+//! recorded on, where OZ's spending limit kept the records; it is not
+//! re-recorded to absorb a change, so the account's own records are
+//! compared with the ones OZ recorded.
 //! `PERCH_RECORD_BASELINE=1 cargo test -p perch-integration-tests --test
 //! rule_eval_baseline` writes it from the current build. The test also
 //! checks that the generator still produces the recorded inputs.

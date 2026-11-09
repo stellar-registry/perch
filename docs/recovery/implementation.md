@@ -27,7 +27,8 @@ selection, and the controller's `enforce` all run. The one exception is
 `the_controller_itself_refuses_a_zk_factor_changed_in_place`, which mocks
 the authorization of a plain address standing in for a non-Perch account
 that calls `rcv_sync` directly. The world uses the real account, compiler,
-interpreter, controller, and membership pool. Keys and guardians are
+interpreter and spending limit (which only accounts without a stored
+rule-eval rule set run), controller, and membership pool. Keys and guardians are
 stand-in custom accounts. The ZK adapter is a mock that accepts only a
 proof bound to the exact statement digest, enrollment id, and nullifier,
 against a root the enrolled pool knows. Flows with real proofs on the
@@ -63,7 +64,7 @@ is named.
 | The scope generation (account instance storage) advances by one on a completed recovery and on nothing else; a completion that would wrap it refuses with `GenerationExhausted` | [§12](spec.md#12-account-upgrades) | account `apply`, `complete_recovery`; view `scope_generation` | `revision.rs`: `the_scope_generation_advances_only_on_a_completed_recovery`; `recovery.rs`: `guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_key`, `a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment`, `a_completion_that_would_wrap_the_scope_generation_is_refused` |
 | Scoped documents: no recovery member, no rule scoped to the account, its recovery controller, or its ZK adapter or pool, and no rule whose `functions` names a guardian approval (`ScopeEscalation`); no scoped rule casts a guardian approval at any controller (`PerchAuthError::ScopeEscalation`, by `GUARDIAN_APPROVAL_FNS`); owner-only `apply_scope` and `remove_scope`; a scope reconciled against its own records; the generation gate (`StaleScope`) and the controller, adapter and pool guard for scopes applied before enrollment (`PerchAuthError::ScopeEscalation`) on every path; every completion wipes every scope; `gc_scope` only for wiped scopes; the credential index refuses a wiped scope's credentials in every later document except a completion's target (`WipedCredential`); tags extended on read and restored, never absent, when archived; the freeze covers scopes and the policy block does not | [§7.6](spec.md#76-scoped-documents), D17 | account `apply_scope_doc`, `check_scoped`, `names_guardian_approval`, `excluded_contract`, `check_unwiped`, `check_auth`, `apply`, `complete_recovery`, `drop_scope`; `perch_recovery_interface::account::is_guardian_approval` | `scoped_docs.rs` (every test); `scoped_guardian_approvals.rs` (every test); `rule_core_documents.rs` (the scoped traces); `release_stack.rs` `docsplit_guards_and_scope_manager` |
 | The rule-eval rule set: the compiled model lowered on the account, stored aligned with the installed-rule records; INV-1 and the anti-brick check on the stored rules | [§7.5](spec.md#75-bounded-completion-cost) | account `rule_set::lowered`, `apply_rules`, `install_admin`; view `rule_set`; doc compiler `compile_parsed` (`model_of`) | `rule_set.rs`; the stored set against the lowering and the installed rules after every apply in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs`, `apply_delta.rs` (`perch_testkit::rule_set`) |
-| Rule-eval in `__check_auth`: after OZ accepts, `rule_eval::authorize` over the chosen stored rules must accept too (`RuleEvalRefused`); completions and accounts without a stored set left to OZ; each capped rule's spending record kept with OZ's window | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) | account `check_auth`, `gate::authorize`, `rules::Apply` (`remove_policy`, `remove_rule`), `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; records parity after every accepted authorization in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs` (`perch_testkit::rule_set::check_records`) |
+| Rule-eval in `__check_auth`: `rule_eval::authorize` over the chosen stored rules decides (`RuleEvalRefused`; an unknown id, OZ's `ContextRuleNotFound`; the recovery rule outside a completion refused), then OZ authenticates every signer; completions, and accounts without a stored set until their first `apply_doc`, left to OZ `do_check_auth`; a document rule's OZ rule carries no policy; each capped rule's spending record kept while the rule keeps its id and cap | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), [§7.5](spec.md#75-bounded-completion-cost), [§12](spec.md#12-account-upgrades) | account `check_auth`, `gate::{authorize, drop_records}`, `rules::desired`, `apply_rules`, `apply_scope_doc`, `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; every verdict and record against rule-core's model in `rule_core_documents.rs` and against the recorded verdicts and OZ records in `rule_eval_baseline.rs`; `auth_corpus.rs`; the hand-written leaf vectors against rule-eval in `leaf_vectors.rs`; the spending records checked after every accepted authorization (`perch_testkit::rule_set::check_records`) |
 | Bounded completion cost: the delta apply and the document caps | [§7.5](spec.md#75-bounded-completion-cost) | [Delta apply](#delta-apply-spec-75) below | [Delta apply tests](#delta-apply-tests); `release_stack.rs` `worst_case_*` ([`budgets.md`](budgets.md#document-caps)) |
 | Configuration revision and `expected_revision`; ordinary signatures bind rule ids, not a revision | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) "Revision binding" | account `advance_revision` (instance storage), `apply` | `revision.rs` |
 | Storage lifetime and renewal | [§3.6](spec.md#36-storage-lifetime) | controller `renew`, `renew_nullifier`; account `renew(fingerprints, enrollment_ids)`; pool `renew_*` | pool: `renew_extends_every_entry_a_witness_needs`; the controller's and the account's `renew` are not pinned by a test |
@@ -89,9 +90,10 @@ What the spec leaves to the implementation, or what only its tests show.
 - **Per-rule program provenance.** An interpreter program's
   `InstallParams.doc_hash` field carries its rule's `rule_hash`
   (`sha256("perch/rule" || rule bytes)`, spec §3.2), so a rule whose text
-  is unchanged keeps byte-identical install parameters and is not
-  reinstalled. The interpreter only stores the field: the source document
-  never reaches it, so it cannot recompute the hash.
+  is unchanged keeps byte-identical install parameters. The account no
+  longer installs programs (its stored rule-eval rule holds what the
+  program says); the field matters to the off-chain checks below and to
+  accounts installed before rule-eval, whose interpreter only stores it.
   `perch-compile::verify_plan_matches_doc` and `perch-deploy verify` check
   each installed program against its own rule's hash, and that no program
   is left over.
@@ -144,7 +146,7 @@ signers for every function of the account with no condition, cap, or last
 ledger. That check comes after the compiled-rule check (`admin_survives`),
 and every document the compiled check accepts passes it. It also accepts an
 n-of-n `threshold` self-admin rule, which the compiled check refuses because
-Perch installs that rule with the interpreter. `apply_scope` does the same
+the compiler gives that rule an interpreter program. `apply_scope` does the same
 for a scoped document with `rule_eval::lower_scoped`, under the account's
 excluded set and the current scope generation, which every stored scoped
 rule carries, and stores the set in `scope_rule_sets[scope]` aligned with
@@ -152,30 +154,44 @@ the scope record's rules (view `scope_rule_set(scope)`); removing the scope
 removes it.
 
 **Rule-eval in `__check_auth`** (`crates/perch-smart-account/src/gate.rs`).
-After OZ's `do_check_auth` accepts an authorization, `check_auth` runs
-rule-eval's `authorize` on the stored rules of the rules the payload
-chooses: an OZ id is the stored rule at its position in the admin set (by
-`installed_rules`) or, when a scope tag names it, in that scope's set. It
-runs at the current ledger and scope generation, under every signer the
-payload names, with the account's own spending records, and refuses what it
-does not accept with `RuleEvalRefused`, as it does a chosen rule with no
-stored rule or a batch it cannot read. `authorize` reads only the chosen
-rules, so this is its verdict over the whole stored set. Two things stay
-with OZ alone: a recovery completion (one `apply_doc` context selecting the
-recovery rule), so recovery never depends on the evaluator, and an account
-with no stored admin set, until its next `apply_doc` stores one. The check
-reads a stored rule or record back from its XDR in one pass
+`check_auth` decides an authorization with rule-eval's `authorize` on the
+stored rules of the rules the payload chooses: an OZ id is the stored rule
+at its position in the admin set (by `installed_rules`) or, when a scope tag
+names it, in that scope's set. It runs at the current ledger and scope
+generation, under every signer the payload names, with the account's own
+spending records, and refuses what it does not accept with
+`RuleEvalRefused`, as it does a chosen recovery rule or a batch it cannot
+read; a chosen id that names no installed rule fails with OZ's
+`ContextRuleNotFound`, as OZ refused it, which perch-js reads as a stale
+selection. `authorize` reads only the chosen rules, so this is its verdict
+over the whole stored set. OZ's `authenticate` then checks every payload
+signer against OZ's digest (the account-bound payload with the chosen ids),
+and the records `authorize` charged are stored. A document rule's OZ
+context rule carries no policy: OZ's context rules are the registry of rule
+ids and signers. Two things stay with OZ's `do_check_auth`: a recovery
+completion (one `apply_doc` context selecting the recovery rule), which the
+controller's `enforce` decides, so recovery never depends on the evaluator;
+and an account with no stored admin set (upgraded from code that attached
+the interpreter and the spending limit, and not re-applied since), whose
+rules still carry those policies, until its first `apply_doc` removes them
+and stores the set. `apply_scope` refuses on such an account
+(`NoRuleSet`), since a scoped rule carries no policy for OZ to run. The
+check reads a stored rule or record back from its XDR in one pass
 (`perch_rule_eval::mirror`) and a batch of calls one host value at a time
 (`perch_rule_eval::convert::calls`), so the account links no
 `#[contracttype]` decoding of the mirrors and none of soroban-facade's
 context decoding. Each capped rule's spending record (`SpendRecords(rule
-id)`, one persistent entry, written when a charge changes it) follows OZ's
-spending-limit window for the rule: it is dropped wherever the spending
-limit is uninstalled from the rule, by a cap change or the rule's removal in
-`apply_doc` or `apply_scope` (`rules::Apply`) and by removing its scope.
-`gate.rs` in the integration tests shows the check refusing what OZ
-accepts, and records parity is checked after every accepted authorization
-in `rule_core_documents.rs`, `rule_eval_baseline.rs`, and `auth_corpus.rs`.
+id)`, one persistent entry, written when a charge changes it) is kept by an
+apply exactly when the rule keeps its OZ id and its stored cap
+(`gate::drop_records`, which compares the old and new stored caps): a cap
+change, a replacement or a removal in `apply_doc` or `apply_scope` drops
+it, and so does removing its scope. With no old stored set (the first
+`apply_doc` after the upgrade) every rule's record is dropped, so every cap
+starts empty. `gate.rs` in the integration tests shows the stored rule
+deciding against OZ's registry both ways, the migration, and the records'
+lifecycle; `rule_core_documents.rs` and `rule_eval_baseline.rs` compare
+every verdict and record with rule-core's model and with the recorded
+verdicts and OZ records of the code that installed the policies.
 
 **Matching and order.** Rules are matched by slot: the recovery rule by its
 flag, a document rule by name and context type (its scope). A changed scope
@@ -231,12 +247,13 @@ are the only priced resource: an in-place edit can cost more instructions
 than a replacement, which is what binds at the document caps
 ([`budgets.md`](budgets.md#document-caps)). The rule set that results has the
 same normalized structure and installation parameters as a full replace would
-leave; its authorization matches a full replace except for retained runtime
-policy state (a kept spending-limit window) and expiry-sensitive behavior. An
-in-place edit keeps the rule id, the retained signers' registry ids, and the
-kept policies' state.
-A replaced rule gets a new id and its policies are reinstalled, which
-resets a spending limit's window.
+leave; its authorization matches a full replace except for a kept spending
+record and expiry-sensitive behavior. A document rule carries no policy
+(only rules installed before rule-eval do, until an apply removes them), so
+the policy steps above run for the recovery rule's controller and for
+those removals. An in-place edit keeps the rule id and the retained
+signers' registry ids, and with the id the rule's spending record when its
+stored cap is unchanged. A replaced rule gets a new id and an empty record.
 
 **Events.** The account emits one `DocApplied` per application: `doc_hash`
 as its topic; the configuration revision and the delta's counts as data
@@ -274,10 +291,10 @@ equivalence and accounting; authorization and atomicity are
 `delta_security.rs`'s, under enforcing authorization.
 
 Equivalence is over normalized rule structure and installation parameters,
-not over retained per-policy runtime state. A kept rule's spending-limit
-window survives an in-place edit but a full replace reinstalls its policy and
-resets the window, so on a rule whose cap is already partly spent the delta
-and the oracle diverge by construction. The generator applies to fresh state,
+not over spending records. A kept rule's record survives an in-place edit
+but a full replace gives the rule a new id and an empty record, so on a
+rule whose cap is already partly spent the delta and the oracle diverge by
+construction. The generator applies to fresh state,
 where no window is yet spent; persistent spending budgets across replacements
 are deferred ([`DEFERRED.md`](../DEFERRED.md)). The generator also never
 advances the ledger between steps, so a rule whose `not-after-ledger` expires
@@ -297,8 +314,8 @@ mid-sequence is outside the oracle's coverage.
 | Per-operation prices; adding first stays within OZ's five policies per rule | `rules.rs` unit tests: `signers_are_priced_by_their_registry_reference_count`, `a_signer_swap_writes_the_rule_once`, `policies_are_priced_with_their_own_hooks`, `whole_rules_and_expiries_are_priced_by_their_writes`, `an_in_place_order_exists_up_to_the_policy_limit`, `events_outrank_writes` |
 | Named cases: functions, scope, cap parameters, added and shared signers and policies, rename, remove and re-add, a key swapped under one id, minimal and maximal documents, reordering, expiry, a recovery-only change | the remaining `apply_delta.rs` tests |
 | Revoked credentials stay refused after an in-place edit; the freeze and generation behave as under the full replace; reserved names stay closed; a delta in the authorized window changes nothing | `delta_security.rs`: `a_revoked_credential_cannot_return_through_an_in_place_edit`, `the_freeze_and_the_generation_behave_as_under_the_full_replace`, `reserved_names_hold_after_a_controller_scoped_rule_is_edited_in_place`, `a_delta_inside_an_authorized_window_is_refused_and_changes_nothing` |
-| A policy install failing mid-delta, and the budget running out at 20, 40, 60, 80, 90, 95, and 99% of the delta's instructions, revert everything under enforcing authorization | `a_policy_install_failing_mid_delta_reverts_every_edit`, `budget_exhaustion_mid_delta_reverts_every_edit` |
-| Changing one rule reinstalls only that rule's program | `apply_delta.rs::new_cap_parameters_edit_only_that_rule`, `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
+| A policy install failing mid-delta (the recovery rule's controller, after a removal and an in-place edit), and the budget running out at 20, 40, 60, 80, 90, 95, and 99% of the delta's instructions, revert everything under enforcing authorization | `a_policy_install_failing_mid_delta_reverts_every_edit`, `budget_exhaustion_mid_delta_reverts_every_edit` |
+| Changing one rule's functions or cap changes only that rule's stored rule, and touches no OZ rule | `apply_delta.rs`: `a_rule_keeping_its_name_with_new_functions_changes_only_its_stored_rule`, `new_cap_parameters_change_only_that_rules_stored_cap`, `a_changed_rule_leaves_the_other_stored_rules_alone`; `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
 | On the release wasm: each signer transition leaves exactly the target signers (a joining key acts, a leaving key cannot); a rejected transition (a duplicate key, or the budget running out at 25, 50, 75, and 95% of a full rotation) leaves every ledger entry unchanged | `release_stack.rs`: `signer_transitions` (paths and costs in [`budgets.md`](budgets.md#signer-transitions)), `a_rejected_signer_transition_changes_nothing` |
 | Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |
 | Scoped documents interleaved with admin documents (spec §7.6): each scope grants exactly its own document's rules, scope operations leave the admin document and other scopes untouched, refused operations change nothing | `apply_scope_delta.rs` (proptest and a named sequence); `fuzz/fuzz_targets/apply_scope_delta.rs`, in the assurance fuzz pass |

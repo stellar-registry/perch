@@ -119,10 +119,25 @@ impl Target {
     }
 }
 
-/// A policy whose `install` always fails: stands in for a policy install
-/// that fails partway through an `apply_doc`.
+/// A recovery controller whose `rcv_sync` enrolls any configuration and
+/// whose policy `install` always fails: the recovery rule's install, the
+/// last step of an `apply_doc` that adds it, fails after every other rule
+/// edit.
 #[contract]
 pub struct FailingPolicy;
+
+#[contractimpl]
+impl FailingPolicy {
+    pub fn rcv_sync(
+        _e: Env,
+        _account: Address,
+        _doc_hash: BytesN<32>,
+        _recovery: Val,
+        _approval_valid_until: u32,
+    ) -> perch_recovery_interface::controller::SyncOutcome {
+        perch_recovery_interface::controller::SyncOutcome::Enrolled
+    }
+}
 
 #[contractimpl]
 impl stellar_accounts::policies::Policy for FailingPolicy {
@@ -404,9 +419,6 @@ pub struct World {
 pub struct Opts {
     /// The account is the full-replace oracle (`perch_testkit::delta`).
     pub oracle: bool,
-    /// [`FailingPolicy`] sits at the spending-limit address: any capped
-    /// rule's install fails.
-    pub failing_spending_limit: bool,
     /// Which compiler sits at the compiler's address.
     pub compiler: TestCompiler,
     /// Every contract the world registers, and every [`World::new_key`],
@@ -500,19 +512,11 @@ pub fn world_with(opts: Opts) -> World {
         PerchInterpreter,
         (),
     );
-    if opts.failing_spending_limit {
-        env.register_at(
-            &infra::perch_spending_limit::address(&env),
-            FailingPolicy,
-            (),
-        );
-    } else {
-        env.register_at(
-            &infra::perch_spending_limit::address(&env),
-            PerchSpendingLimit,
-            (),
-        );
-    }
+    env.register_at(
+        &infra::perch_spending_limit::address(&env),
+        PerchSpendingLimit,
+        (),
+    );
 
     let fixed = opts.fixed_addresses.then(|| Cell::new(0u8));
     macro_rules! register {

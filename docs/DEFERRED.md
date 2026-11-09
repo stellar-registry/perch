@@ -183,9 +183,10 @@ caps.
 
 **Current behaviour:** the account materializes each document rule as one OZ
 `stellar-accounts` context rule (the pinned fork,
-[`audit-scope.md`](audit-scope.md#explicit-dependency-review)): policy-free,
-or with the Perch interpreter, plus OZ `spending_limit` for a rule with a
-`cap`. `apply_doc` reconciles the installed rules as a delta (spec §7.5).
+[`audit-scope.md`](audit-scope.md#explicit-dependency-review)) with its
+contract, signers and last ledger and no policy, beside the rule-eval rule
+it stores for it, which decides every authorization through it.
+`apply_doc` reconciles the installed rules as a delta (spec §7.5).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
 (`MAX_DOC_SIGNERS`), more than 10 rules (`MAX_DOC_RULES`), more than 8,192
@@ -297,14 +298,14 @@ it. The current audit contract makes no id-stability promise.
 **Deferred:** a spending budget that survives rule replacement and policy
 reinstallation.
 
-**Current behaviour:** a rule with a `cap` carries OZ `spending_limit`
-(deployed as `perch-spending-limit`), which keys its rolling window by
-`(account, context rule id)` and starts an empty window on `install`. When
-`apply_doc` edits a rule in place, every policy whose install parameters are
-unchanged keeps its state: a signer change or a change to the rule's other
-text keeps the window. Changing the cap's own parameters reinstalls the
-spending limit, and replacing the rule reinstalls every policy; both start
-an empty window. Whether a changed rule is edited or replaced is the cost
+**Current behaviour:** the account keeps one spending record per capped
+rule, keyed by its OZ context rule id, which rule-eval charges in
+`__check_auth`. When `apply_doc` or `apply_scope` keeps a rule's id and its
+cap, the record is kept: a signer change or a change to the rule's other
+text keeps it. Changing the cap's own parameters, or replacing the rule,
+starts an empty record, and so does the first `apply_doc` after an account
+is upgraded from code that kept the window in OZ's `spending_limit` (spec
+§12). Whether a changed rule is edited or replaced is the cost
 model's choice (spec §7.5), so a document change that touches a capped rule
 can reset its window. A compromise recovery that restores a baseline can
 therefore give the baseline's retained signers a fresh window.

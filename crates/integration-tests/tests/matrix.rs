@@ -127,8 +127,10 @@ fn run(w: &World, payload: &AuthPayload, ctx: Context) -> Result<(), ()> {
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         w.env.as_contract(&w.account, || {
             // The account's own `check_auth` (which binds the digest to the
-            // account address) around OZ's `do_check_auth`, so rule selection
-            // runs against the address-bound digest the signer actually signed.
+            // account address). This bare account stores no rule-eval rule
+            // set, so OZ's `do_check_auth` and the attached interpreter
+            // decide, as on an account installed before rule-eval, against
+            // the address-bound digest the signer actually signed.
             perch_smart_account::check_auth(&w.env, &hash, payload, &contexts).unwrap();
         });
     }));

@@ -1775,6 +1775,7 @@ dependencies = [
  "perch-account",
  "perch-account-factory",
  "perch-compile",
+ "perch-conformance",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",

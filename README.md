@@ -2,7 +2,7 @@
 
 A composable policy layer for Soroban smart accounts.
 
-Perch is a policy library and toolchain on top of [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts). At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, and the on-chain doc compiler lowers it onto OZ context rules: stock OZ policies where the shape fits, and one small interpreter contract for what they can't express. Perch accounts can also enroll opt-in recovery (guardians, a zero-knowledge proof, or both) in the same document.
+Perch is a policy library and toolchain on top of [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts). At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, the on-chain doc compiler compiles it, and the account lowers it to rule-core's evaluator (`rule-eval`), whose rules it stores beside the OZ context rules that register their ids and signers and decides every authorization with. Perch accounts can also enroll opt-in recovery (guardians, a zero-knowledge proof, or both) in the same document.
 
 The motivating use-case is a CI key stored in GitHub that can publish Wasm releases to the [Stellar Registry](https://github.com/stellar-registry) as a smart account, and do nothing else.
 
@@ -34,15 +34,14 @@ security audit:
 
 ## Stateless predicates and cumulative caps
 
-Every interpreter constraint is a stateless predicate over a *single*
+Every argument constraint is a stateless predicate over a *single*
 invocation: this call's contract, function, arguments, signer count, and
 ledger. A numeric argument bound limits one call, not a running total, so a
 signer can call repeatedly to exceed any intended total. A cumulative limit
-is a rule's `cap`: the compiler lowers it onto OZ's stateful
-`spending_limit` policy (deployed as `perch-spending-limit`), attached to the
-same context rule beside the interpreter, and OZ enforces every attached
-policy, so both must pass. Replacing a capped rule, or changing its cap,
-starts an empty spending window
+is a rule's `cap`: the rule allows only a metered `transfer`, and the
+account keeps the rule's spending record, which rule-eval charges with
+every transfer it allows. Replacing a capped rule, or changing its cap,
+starts an empty spending record
 ([`docs/DEFERRED.md`](./docs/DEFERRED.md#persistent-spending-budgets-across-replacements)).
 [`docs/verification/THEORY.md`](./docs/verification/THEORY.md) states which
 policies a stateless monitor can enforce.

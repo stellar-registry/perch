@@ -103,9 +103,11 @@ built on it (the whole `apply_doc*.rs`/`cap_matrix.rs` suite) proves
 context-rule *selection*/`Policy::enforce` mechanics — those calls succeed
 regardless of which rule, if any, would actually have authorized them.
 To test real rule-selection/policy-enforcement behavior, either call
-`stellar_accounts::smart_account::do_check_auth` directly with a hand-built
+`perch_smart_account::check_auth` directly with a hand-built
 `AuthPayload`/`Context`, wrapped in `env.as_contract(&account, || {...})`
-(as `matrix.rs` does) — this bypasses host-level auth entirely rather than
+(as `matrix.rs` does; it decides with rule-eval on an account that stores a
+rule-eval rule set, and with OZ's `do_check_auth` and the attached policies
+on one that does not) — this bypasses host-level auth entirely rather than
 depending on it — or install hand-built auth entries with `env.set_auths`,
 which runs the account's real `__check_auth` (as
 `crates/integration-tests/tests/{recovery,account_capabilities}.rs` do

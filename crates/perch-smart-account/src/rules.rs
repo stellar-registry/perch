@@ -1,18 +1,27 @@
-//! Rule-set reconciliation for `apply_doc` (`docs/recovery/spec.md` §7.5).
+//! Rule-set reconciliation for `apply_doc` and `apply_scope`
+//! (`docs/recovery/spec.md` §7.5).
 //!
 //! The account records every context rule it installs ([`InstalledRule`]).
-//! `apply_doc` matches the compiled document's rules against those records
-//! (document rules by name and scope, the recovery rule by role) and changes
-//! only what differs:
+//! OpenZeppelin's context rules are the registry of rule ids and signers:
+//! a document rule is installed with its contract, signers and last ledger
+//! and no policy, and what it allows is the stored rule-eval rule beside it
+//! (`rule_set`). The recovery rule carries the adopted controller as its one
+//! policy. `apply_doc` matches the compiled document's rules against those
+//! records (document rules by name and scope, the recovery rule by role) and
+//! changes only what differs:
 //!
-//! - a rule present in both, with the same signers, policy parameters, and
-//!   expiry, is not touched at all: no OZ call, no storage access, no event;
+//! - a rule present in both, with the same signers, policies, and expiry, is
+//!   not touched at all: no OZ call, no storage access, no event;
 //! - a rule present in both that differs is either edited in place (one
 //!   `reconcile_signers` swap, then per-policy and expiry updates), keeping
 //!   its id, or replaced whole under a new id, whichever [`Cost`] prices
 //!   lower;
 //! - a rule only in the record is removed; a rule only in the document is
 //!   added.
+//!
+//! A rule installed by code that attached the interpreter and the spending
+//! limit to document rules carries them until its first apply after the
+//! upgrade, which removes them like any other changed policy.
 //!
 //! The cost model prices the exact operation sequence each path would run
 //! (the same code drives the pricing and the operations). Every OZ mutation
@@ -27,16 +36,15 @@
 //! apply at or below the cost of replacing every rule.
 //!
 //! The authorization the result grants is exactly what a full replace of
-//! every rule would grant. Two things differ, deliberately: a rule edited in
-//! place keeps its id, and its kept policies keep their state (a spending
-//! cap's window is not reset by a signer change). Everything runs in the one
-//! `apply_doc` invocation, so a failure anywhere reverts every edit.
+//! every rule would grant. One thing differs, deliberately: a rule edited in
+//! place keeps its id, and with it its spending record when its cap is
+//! unchanged (`gate::drop_records`). Everything runs in the one `apply_doc`
+//! invocation, so a failure anywhere reverts every edit.
 
 use crate::infra;
 use perch_doc_compiler::{CompiledDoc, CompiledRule, RuleScope};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, Map, String, Val, Vec};
-use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 use stellar_accounts::smart_account::{self, ContextRuleType, Signer, MAX_POLICIES};
 
 /// One policy attached to an installed rule.
@@ -143,12 +151,11 @@ pub(crate) fn desired(e: &Env, compiled: &CompiledDoc) -> (Vec<InstalledRule>, V
     let mut rules = Vec::new(e);
     let mut params = Vec::new(e);
     for rule in compiled.rules.iter() {
-        let (r, p) = document_rule(e, &rule);
-        if expired(e, r.valid_until) {
+        if expired(e, rule.valid_until) {
             continue;
         }
-        rules.push_back(r);
-        params.push_back(p);
+        rules.push_back(document_rule(e, &rule));
+        params.push_back(Vec::new(e));
     }
     if let Some(recovery) = compiled.recovery.first() {
         let mut p: Vec<Val> = Vec::new(e);
@@ -173,49 +180,23 @@ pub(crate) fn desired(e: &Env, compiled: &CompiledDoc) -> (Vec<InstalledRule>, V
     (rules, params)
 }
 
-/// A compiled document rule: its scope, signers, and the interpreter and
-/// spending-limit policies its program and cap need.
-fn document_rule(e: &Env, rule: &CompiledRule) -> (InstalledRule, Vec<Val>) {
+/// A compiled document rule as OZ's registry holds it: its scope, signers
+/// and last ledger, and no policy. Its program and cap are the stored
+/// rule-eval rule's (`rule_set`).
+fn document_rule(e: &Env, rule: &CompiledRule) -> InstalledRule {
     let context_type = match &rule.scope {
         RuleScope::SelfAdmin => ContextRuleType::CallContract(e.current_contract_address()),
         RuleScope::Contract(addr) => ContextRuleType::CallContract(addr.clone()),
     };
-    let mut policies = Vec::new(e);
-    let mut params = Vec::new(e);
-    if let Some(install) = rule.install.first() {
-        policies.push_back(InstalledPolicy {
-            policy: infra::perch_interpreter::address(e),
-            params: digest(e, install.clone().to_xdr(e)),
-        });
-        params.push_back(install.into_val(e));
-    }
-    // A capped rule also attaches OZ `spending_limit` (the stateful cumulative
-    // cap the interpreter cannot express), keyed by its content-addressed
-    // address — resolved offline like the interpreter, never admin-supplied. OZ
-    // enforces every attached policy (AND): the interpreter's per-call program
-    // AND the rolling cap must pass. The metered token is this rule's
-    // `CallContract` scope (validation pins `token == scope`).
-    if let Some(cap) = rule.cap.first() {
-        let cap = SpendingLimitAccountParams {
-            spending_limit: cap.spending_limit,
-            period_ledgers: cap.period_ledgers,
-        };
-        policies.push_back(InstalledPolicy {
-            policy: infra::perch_spending_limit::address(e),
-            params: digest(e, cap.clone().to_xdr(e)),
-        });
-        params.push_back(cap.into_val(e));
-    }
-    let installed = InstalledRule {
+    InstalledRule {
         id: 0,
         recovery: false,
         name: rule.name.clone(),
         context_type,
         valid_until: rule.valid_until,
         signers: rule.signers.clone(),
-        policies,
-    };
-    (installed, params)
+        policies: Vec::new(e),
+    }
 }
 
 fn digest(e: &Env, xdr: soroban_sdk::Bytes) -> BytesN<32> {
@@ -352,7 +333,6 @@ fn run(
         e,
         sum: DeltaSummary::default(),
         rule: None,
-        spending_limit: hooks.spending_limit.clone(),
     };
     let mut record =
         |r: &InstalledRule, step: Step, cost: Cost, in_place: Option<Cost>, replace: Cost| {
@@ -435,7 +415,9 @@ fn run(
 
 /// The policies whose own `install` and `uninstall` cost something: the
 /// interpreter writes its program, the spending limit writes its window
-/// (quietly). The recovery controller's hooks write nothing.
+/// (quietly). The recovery controller's hooks write nothing. A document rule
+/// carries the first two only when code that attached them installed it, so
+/// only their removal is priced in practice.
 struct Hooks {
     interpreter: Address,
     spending_limit: Address,
@@ -606,17 +588,13 @@ impl Effects for Meter<'_> {
     }
 }
 
-/// Performs operations through OZ, quietly, and counts them. Uninstalling
-/// a rule's spending limit, by removing the policy or the rule, also drops
-/// the spending record `__check_auth` keeps for it (`gate`), as the
-/// uninstall ends the window OZ's spending limit keeps.
+/// Performs operations through OZ, quietly, and counts them.
 struct Apply<'a> {
     e: &'a Env,
     sum: DeltaSummary,
     /// The rule being edited, read before its first removal: removals need
     /// OZ's registry ids, which no addition in the same edit changes.
     rule: Option<smart_account::ContextRule>,
-    spending_limit: Address,
 }
 
 impl Apply<'_> {
@@ -647,9 +625,6 @@ impl Effects for Apply<'_> {
             .get_unchecked(oz.policies.first_index_of(policy).unwrap());
         smart_account::remove_policy_no_events(self.e, rule.id, id);
         self.sum.policies_removed += 1;
-        if *policy == self.spending_limit {
-            crate::gate::drop_record(self.e, rule.id);
-        }
     }
 
     fn set_valid_until(&mut self, rule: &InstalledRule, valid_until: Option<u32>) {
@@ -659,13 +634,6 @@ impl Effects for Apply<'_> {
     fn remove_rule(&mut self, rule: &InstalledRule) {
         smart_account::remove_context_rule_no_events(self.e, rule.id);
         self.sum.rules_removed += 1;
-        if rule
-            .policies
-            .iter()
-            .any(|p| p.policy == self.spending_limit)
-        {
-            crate::gate::drop_record(self.e, rule.id);
-        }
     }
 
     fn add_rule(&mut self, rule: &InstalledRule, params: &Vec<Val>) -> u32 {
@@ -804,7 +772,6 @@ fn replace_all(
         e,
         sum: DeltaSummary::default(),
         rule: None,
-        spending_limit: infra::perch_spending_limit::address(e),
     };
     for c in current.iter() {
         apply.remove_rule(&c);

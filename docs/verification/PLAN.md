@@ -159,9 +159,10 @@ the release-stack suite, and the testnet exercise cover them.
 - Rule expiry (`not-after-ledger`) lowers to OZ `valid_until = X - 1`
   outside the program. T6 is stated over the program semantics, and the
   expiry boundary is pinned by vectors and compile tests.
-- Cumulative caps (`cap`) lower to the stateful OZ `spending_limit` beside
-  the interpreter. They are outside the stateless model by construction
-  ([`THEORY.md`](./THEORY.md) explains why this boundary is a theorem).
+- Cumulative caps (`cap`) lower to a rule-eval cap, charged against a
+  spending record the account keeps. They are outside the stateless model by
+  construction ([`THEORY.md`](./THEORY.md) explains why this boundary is a
+  theorem); rule-core's model covers them.
 
 ## Not established
 

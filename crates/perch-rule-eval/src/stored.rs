@@ -13,9 +13,7 @@ use soroban_sdk::{
 };
 use stellar_accounts::smart_account::Signer;
 
-use crate::convert::{
-    address, bytes, host_symbol, signers, string_bytes, symbol_bytes, Decoded, HostForms,
-};
+use crate::convert::{host_symbol, Decoded, HostForms};
 
 /// `rule_eval::Val`.
 #[contracttype]
@@ -112,21 +110,6 @@ impl StoredVal {
             rule_eval::Val::Other(x) => StoredVal::Other(Bytes::from_slice(e, x)),
         })
     }
-
-    /// The value this mirrors.
-    #[must_use]
-    pub fn to_val(&self, e: &Env) -> Option<rule_eval::Val> {
-        Some(match self {
-            StoredVal::I128(x) => rule_eval::Val::I128(*x),
-            StoredVal::U64(x) => rule_eval::Val::U64(*x),
-            StoredVal::Bool(x) => rule_eval::Val::Bool(*x),
-            StoredVal::Bytes(x) => rule_eval::Val::Bytes(bytes(x)),
-            StoredVal::Address(x) => rule_eval::Val::Address(address(e, x)?),
-            StoredVal::Symbol(x) => rule_eval::Val::Symbol(symbol_bytes(e, x)?),
-            StoredVal::String(x) => rule_eval::Val::String(string_bytes(x)),
-            StoredVal::Other(x) => rule_eval::Val::Other(bytes(x)),
-        })
-    }
 }
 
 /// The host vector of `xs`, each converted by `f`.
@@ -142,10 +125,6 @@ fn host_vec<T, U: IntoVal<Env, Val> + TryFromVal<Env, Val>>(
     Some(out)
 }
 
-fn names(e: &Env, symbols: &Vec<Symbol>) -> Option<alloc::vec::Vec<alloc::vec::Vec<u8>>> {
-    symbols.iter().map(|s| symbol_bytes(e, &s)).collect()
-}
-
 impl StoredFunctions {
     #[must_use]
     pub fn from_functions(e: &Env, f: &rule_eval::Functions) -> Option<StoredFunctions> {
@@ -153,14 +132,6 @@ impl StoredFunctions {
         Some(match f {
             rule_eval::Functions::AnyExcept(xs) => StoredFunctions::AnyExcept(symbols(xs)?),
             rule_eval::Functions::Only(xs) => StoredFunctions::Only(symbols(xs)?),
-        })
-    }
-
-    #[must_use]
-    pub fn to_functions(&self, e: &Env) -> Option<rule_eval::Functions> {
-        Some(match self {
-            StoredFunctions::AnyExcept(xs) => rule_eval::Functions::AnyExcept(names(e, xs)?),
-            StoredFunctions::Only(xs) => rule_eval::Functions::Only(names(e, xs)?),
         })
     }
 }
@@ -189,18 +160,6 @@ impl StoredCond {
             rule_eval::Cond::ArgStrPrefix(i, p) => {
                 StoredCond::ArgStrPrefix(*i, String::from_bytes(e, p))
             }
-        })
-    }
-
-    #[must_use]
-    pub fn to_cond(&self, e: &Env) -> Option<rule_eval::Cond> {
-        Some(match self {
-            StoredCond::ArgEq(i, v) => rule_eval::Cond::ArgEq(*i, v.to_val(e)?),
-            StoredCond::ArgI128AtMost(i, bound) => rule_eval::Cond::ArgI128AtMost(*i, *bound),
-            StoredCond::ArgIn(i, vs) => {
-                rule_eval::Cond::ArgIn(*i, vs.iter().map(|v| v.to_val(e)).collect::<Option<_>>()?)
-            }
-            StoredCond::ArgStrPrefix(i, p) => rule_eval::Cond::ArgStrPrefix(*i, string_bytes(p)),
         })
     }
 }
@@ -241,31 +200,11 @@ impl StoredRule {
         })
     }
 
-    /// The rule this mirrors, or `None` when it holds more than one cap or an
-    /// address the facade refuses.
+    /// The rule this mirrors, or `None` when it holds more than one cap
+    /// ([`crate::mirror::rule`] of its host value).
     #[must_use]
     pub fn to_rule(&self, e: &Env) -> Option<rule_eval::Rule> {
-        if self.cap.len() > 1 {
-            return None;
-        }
-        Some(rule_eval::Rule {
-            contract: address(e, &self.contract)?,
-            functions: self.functions.to_functions(e)?,
-            conds: self
-                .conds
-                .iter()
-                .map(|c| c.to_cond(e))
-                .collect::<Option<_>>()?,
-            signers: signers(e, &self.signers)?,
-            threshold: self.threshold,
-            cap: self.cap.first().map(|c| rule_eval::Cap {
-                limit: c.limit,
-                period: c.period,
-                amount_arg: c.amount_arg,
-            }),
-            valid_until: self.valid_until,
-            generation: self.generation,
-        })
+        crate::mirror::rule(e, self.clone().into_val(e))
     }
 }
 

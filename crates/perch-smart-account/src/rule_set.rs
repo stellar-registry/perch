@@ -8,7 +8,8 @@
 //! records the document installs: the stored rule at index `i` is what the
 //! installed rule at index `i` enforces, the admin document's recovery rule
 //! last when there is one. The constructor stores its admin rule the same
-//! way. Nothing evaluates the stored sets yet; `__check_auth` is unchanged.
+//! way. `__check_auth` evaluates the rules a payload chooses with
+//! `rule_eval::authorize` after OZ (`gate`).
 
 use perch_doc_compiler::CompiledDoc;
 use perch_rule_eval::convert::Addresses;

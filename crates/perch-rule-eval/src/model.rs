@@ -122,24 +122,26 @@ fn rule(e: &Env, r: &ModelRule, known: &mut Addresses) -> Option<rule_eval::DocR
         return None;
     }
     let functions = match &r.functions {
-        Some(fs) => Some(
-            fs.iter()
-                .map(|f| symbol_bytes(e, &f))
-                .collect::<Option<_>>()?,
-        ),
+        Some(fs) => {
+            let mut names = alloc::vec::Vec::new();
+            for f in fs.iter() {
+                names.push(symbol_bytes(e, &f)?);
+            }
+            Some(names)
+        }
         None => None,
     };
     let args = match &r.args {
-        Some(args) => Some(
-            args.iter()
-                .map(|a| {
-                    Some(rule_eval::ArgConstraint {
-                        index: a.index,
-                        pred: pred(e, &a.pred, known)?,
-                    })
-                })
-                .collect::<Option<_>>()?,
-        ),
+        Some(list) => {
+            let mut args = alloc::vec::Vec::new();
+            for a in list.iter() {
+                args.push(rule_eval::ArgConstraint {
+                    index: a.index,
+                    pred: pred(e, &a.pred, known)?,
+                });
+            }
+            Some(args)
+        }
         None => None,
     };
     Some(rule_eval::DocRule {
@@ -199,22 +201,20 @@ pub fn doc_of_in(e: &Env, m: &CompiledModel, known: &mut Addresses) -> Option<ru
         Some(r) => Some(recovery(e, &r, known)?),
         None => None,
     };
+    let mut signers = alloc::vec::Vec::new();
+    for d in m.signers.iter() {
+        signers.push(rule_eval::SignerDecl {
+            id: string_bytes(&d.id),
+            signer: signer_in(e, &d.signer, known)?,
+        });
+    }
+    let mut rules = alloc::vec::Vec::new();
+    for r in m.rules.iter() {
+        rules.push(rule(e, &r, known)?);
+    }
     Some(rule_eval::Doc {
-        signers: m
-            .signers
-            .iter()
-            .map(|d| {
-                Some(rule_eval::SignerDecl {
-                    id: string_bytes(&d.id),
-                    signer: signer_in(e, &d.signer, known)?,
-                })
-            })
-            .collect::<Option<_>>()?,
-        rules: m
-            .rules
-            .iter()
-            .map(|r| rule(e, &r, known))
-            .collect::<Option<_>>()?,
+        signers,
+        rules,
         recovery,
     })
 }

@@ -81,6 +81,14 @@ fn setup() -> World {
             &policies,
         )
     });
+    // The rule is installed past `apply_doc`, as only a test can, so the
+    // account's rule-eval rule set has no rule for it: the set is removed,
+    // leaving the account as one upgraded to code that keeps a set and not
+    // re-applied since, which `__check_auth` leaves to OZ alone (the gate's
+    // own tests are in `gate.rs`).
+    env.as_contract(&account, || {
+        perch_smart_account::testutils::remove_rule_set(&env)
+    });
     assert_eq!(rule.id, 1, "constructor must have claimed rule id 0");
 
     World {

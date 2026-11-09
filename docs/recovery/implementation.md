@@ -63,6 +63,7 @@ is named.
 | The scope generation (account instance storage) advances by one on a completed recovery and on nothing else; a completion that would wrap it refuses with `GenerationExhausted` | [§12](spec.md#12-account-upgrades) | account `apply`, `complete_recovery`; view `scope_generation` | `revision.rs`: `the_scope_generation_advances_only_on_a_completed_recovery`; `recovery.rs`: `guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_key`, `a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment`, `a_completion_that_would_wrap_the_scope_generation_is_refused` |
 | Scoped documents: no recovery member, no rule scoped to the account, its recovery controller, or its ZK adapter or pool, and no rule whose `functions` names a guardian approval (`ScopeEscalation`); no scoped rule casts a guardian approval at any controller (`PerchAuthError::ScopeEscalation`, by `GUARDIAN_APPROVAL_FNS`); owner-only `apply_scope` and `remove_scope`; a scope reconciled against its own records; the generation gate (`StaleScope`) and the controller, adapter and pool guard for scopes applied before enrollment (`PerchAuthError::ScopeEscalation`) on every path; every completion wipes every scope; `gc_scope` only for wiped scopes; the credential index refuses a wiped scope's credentials in every later document except a completion's target (`WipedCredential`); tags extended on read and restored, never absent, when archived; the freeze covers scopes and the policy block does not | [§7.6](spec.md#76-scoped-documents), D17 | account `apply_scope_doc`, `check_scoped`, `names_guardian_approval`, `excluded_contract`, `check_unwiped`, `check_auth`, `apply`, `complete_recovery`, `drop_scope`; `perch_recovery_interface::account::is_guardian_approval` | `scoped_docs.rs` (every test); `scoped_guardian_approvals.rs` (every test); `rule_core_documents.rs` (the scoped traces); `release_stack.rs` `docsplit_guards_and_scope_manager` |
 | The rule-eval rule set: the compiled model lowered on the account, stored aligned with the installed-rule records; INV-1 and the anti-brick check on the stored rules | [§7.5](spec.md#75-bounded-completion-cost) | account `rule_set::lowered`, `apply_rules`, `install_admin`; view `rule_set`; doc compiler `compile_parsed` (`model_of`) | `rule_set.rs`; the stored set against the lowering and the installed rules after every apply in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs`, `apply_delta.rs` (`perch_testkit::rule_set`) |
+| Rule-eval in `__check_auth`: after OZ accepts, `rule_eval::authorize` over the chosen stored rules must accept too (`RuleEvalRefused`); completions and accounts without a stored set left to OZ; each capped rule's spending record kept with OZ's window | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) | account `check_auth`, `gate::authorize`, `rules::Apply` (`remove_policy`, `remove_rule`), `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; records parity after every accepted authorization in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs` (`perch_testkit::rule_set::check_records`) |
 | Bounded completion cost: the delta apply and the document caps | [§7.5](spec.md#75-bounded-completion-cost) | [Delta apply](#delta-apply-spec-75) below | [Delta apply tests](#delta-apply-tests); `release_stack.rs` `worst_case_*` ([`budgets.md`](budgets.md#document-caps)) |
 | Configuration revision and `expected_revision`; ordinary signatures bind rule ids, not a revision | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) "Revision binding" | account `advance_revision` (instance storage), `apply` | `revision.rs` |
 | Storage lifetime and renewal | [§3.6](spec.md#36-storage-lifetime) | controller `renew`, `renew_nullifier`; account `renew(fingerprints, enrollment_ids)`; pool `renew_*` | pool: `renew_extends_every_entry_a_witness_needs`; the controller's and the account's `renew` are not pinned by a test |
@@ -148,7 +149,33 @@ for a scoped document with `rule_eval::lower_scoped`, under the account's
 excluded set and the current scope generation, which every stored scoped
 rule carries, and stores the set in `scope_rule_sets[scope]` aligned with
 the scope record's rules (view `scope_rule_set(scope)`); removing the scope
-removes it. Nothing evaluates the stored sets; `__check_auth` is unchanged.
+removes it.
+
+**Rule-eval in `__check_auth`** (`crates/perch-smart-account/src/gate.rs`).
+After OZ's `do_check_auth` accepts an authorization, `check_auth` runs
+rule-eval's `authorize` on the stored rules of the rules the payload
+chooses: an OZ id is the stored rule at its position in the admin set (by
+`installed_rules`) or, when a scope tag names it, in that scope's set. It
+runs at the current ledger and scope generation, under every signer the
+payload names, with the account's own spending records, and refuses what it
+does not accept with `RuleEvalRefused`, as it does a chosen rule with no
+stored rule or a batch it cannot read. `authorize` reads only the chosen
+rules, so this is its verdict over the whole stored set. Two things stay
+with OZ alone: a recovery completion (one `apply_doc` context selecting the
+recovery rule), so recovery never depends on the evaluator, and an account
+with no stored admin set, until its next `apply_doc` stores one. The check
+reads a stored rule or record back from its XDR in one pass
+(`perch_rule_eval::mirror`) and a batch of calls one host value at a time
+(`perch_rule_eval::convert::calls`), so the account links no
+`#[contracttype]` decoding of the mirrors and none of soroban-facade's
+context decoding. Each capped rule's spending record (`SpendRecords(rule
+id)`, one persistent entry, written when a charge changes it) follows OZ's
+spending-limit window for the rule: it is dropped wherever the spending
+limit is uninstalled from the rule, by a cap change or the rule's removal in
+`apply_doc` or `apply_scope` (`rules::Apply`) and by removing its scope.
+`gate.rs` in the integration tests shows the check refusing what OZ
+accepts, and records parity is checked after every accepted authorization
+in `rule_core_documents.rs`, `rule_eval_baseline.rs`, and `auth_corpus.rs`.
 
 **Matching and order.** Rules are matched by slot: the recovery rule by its
 flag, a document rule by name and context type (its scope). A changed scope

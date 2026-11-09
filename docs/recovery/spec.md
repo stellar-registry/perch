@@ -357,9 +357,10 @@ points extend existing entries without changing their meaning:
 | Controller | Recorded change approvals, one entry per `(account, digest)` (§5) | Not renewed. A write extends the entry only far enough to cover its `valid_until`, after which the approval is stale anyway. |
 | Account | Instance storage: applied `doc_hash`, adopted controller, recovery-rule id, applied ZK factor, freeze mirror (§9), recovery and scope generations, pending upgrade and request counter (§12), configuration revision (§15) | `renew(fingerprints, enrollment_ids)`; writes do not extend the instance |
 | Account | Applied document bytes and fingerprints; the revoked set and the enrolled-id set, one entry per fingerprint or id | The same `renew`, for the entries it names |
-| Account | Installed-rule records and the rule-eval rule set aligned with them (§7.5) | Not by `renew`; extended when written |
+| Account | Installed-rule records and the rule-eval rule set aligned with them (§7.5) | Not by `renew`; extended when written, and on read by `__check_auth` as OZ extends the rule entry |
 | Account | Instance storage: scope count (§7.6) | The same `renew` |
-| Account | Scoped-document records, their rule-eval rule sets, canonical bytes, and index entries (§7.6) | Not by `renew`; extended when written |
+| Account | Scoped-document records, their rule-eval rule sets, canonical bytes, and index entries (§7.6) | Not by `renew`; extended when written, and records and rule sets on read by `__check_auth` as OZ extends the rule entry |
+| Account | Rule-eval spending records, one per capped rule `__check_auth` has charged | Not by `renew`; extended when written and when read |
 | Account | The credential index, one entry per credential fingerprint a scoped document named (§7.6) | Not by `renew`; extended when written |
 | Account | Scope tags, one per scoped rule (§7.6) | Not by `renew`; extended when written, and on read by `__check_auth` as OZ extends the rule entry |
 | Account (OZ storage) | Context-rule, signer, and policy entries | Not by `renew`. OZ extends an entry it reads to 30 days when fewer than 29 remain; nothing else extends them. |
@@ -1813,7 +1814,7 @@ piecemeal mutation entry points do not exist on the deployed contract
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers. |
-| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then OZ `do_check_auth`. The order does not matter for security: each step only refuses. |
+| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then OZ `do_check_auth`, then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`), except for a recovery completion and on an account with no stored rule set. The order does not matter for security: each step only refuses. |
 | Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |

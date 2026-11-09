@@ -13,10 +13,12 @@ permissions: {}
 concurrency: preview-${{ github.ref }}
 
 jobs:
-  # The papers' PDF editions are built here, without write access, and handed to
-  # the preview job, which publishes them beside the HTML editions that link them.
+  # The papers' PDF editions are built here, without write access, and uploaded
+  # as the perch-paper-pdf build artifact. Fork PRs get the artifact too; for
+  # same-repo PRs the preview job also publishes the PDFs beside the HTML
+  # editions that link them.
   paper-pdf:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.action != 'closed'
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     permissions:
       contents: read

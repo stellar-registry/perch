@@ -615,7 +615,7 @@ Instructions, as a share of the 400M limit:
   entry. The binding fork completion at the caps (the thief kept every name
   and changed every program) went from 297.45M (74.4%) to 263.48M (65.9%),
   its footprint from 116 to 100 entries and its memory from 14.7 MB to 10.3
-  MB. The costliest budgeted row is now the `Protected` reconfiguration that
+  MB. The costliest budgeted row became the `Protected` reconfiguration that
   edits every rule, 265.93M (66.5%). Every budgeted completion and
   reconfiguration over 200M fell by 2.5M to 35.4M. On the long-lived host
   the compromise completions at the caps went from 285.37M to 321.61M
@@ -669,14 +669,14 @@ on both stacks:
 
 - **Every row is within 75%,** and no row rises on any limit but one row's
   instructions: `submit_zk_change` for an upgrade, +0.002M at 29.3%. The
-  costliest row is now the `Protected` reconfiguration that edits every
-  rule, at 41.6% of the instruction limit, where the costliest was a
+  costliest row became the `Protected` reconfiguration that edits every
+  rule, at 41.6% of the instruction limit, where the costliest had been a
   compromise completion at 62.8%. The worst shares of the other limits are
   memory 23.6% and write bytes 50.0% (both the capped transfer after 906
   spends, [Rule-eval in `__check_auth`](#rule-eval-in-__check_auth)),
   footprint 16.0%, written entries 20.5%, and events 20.5%, where they were
   36.1%, 51.6%, 29.2%, 47.0% and 20.5%.
-- **Events.** The constructor no longer announces each signer
+- **Events.** The constructor stopped announcing each signer
   (`signer_registered`, 260 bytes for one passkey); 50 rows emit fewer
   bytes, none more.
 - **Authorizations** read no entry of OZ's registry before and after; the
@@ -700,7 +700,7 @@ document's own size, the worst share of each limit:
 | 15 | 12 | 9 216 | 49.2% | 13.4% | 21.8% | 27.5% | 63.6% | 31.8% |
 | 15 | 16 | 10 240 | 56.0% | 14.4% | 22.8% | 27.5% | **77.3%** | 31.8% |
 
-Write bytes now bind in every row, in the fork completion whose thief kept
+Write bytes bind in every row, in the fork completion whose thief kept
 every rule: the records and stored sets it rewrites grow with the rules
 and their signers, while instructions barely move up to 16 rules. The caps
 are unchanged at 8 signers and 10 rules. At 8 signers, 16 rules fit the
@@ -911,7 +911,7 @@ after):
 
 Write bytes bound every shape before, in the fork completion whose thief
 kept every rule, since its records and stored sets were rewritten side by
-side; now no shape is past 75% on any limit, and instructions bind. The
+side. After it no shape is past 75% on any limit, and instructions bind. The
 caps are unchanged at 8 signers and 10 rules.
 
 The account wasm is 103,294 bytes as `stellar contract build` builds it
@@ -925,7 +925,8 @@ byte-identical; the factory changes only in the account hash it pins.
 ### Wasm stack
 
 Every stack contract links a 64 KiB wasm stack (`build.rs`,
-`-zstack-size=65536`; 2 pages), and the ZK adapter 128 KiB (3 pages). The
+`-zstack-size=65536`; 2 pages), except the ZK adapter, 128 KiB (3 pages),
+and the ML-DSA verifier, 256 KiB (its `build.rs` has the measurement). The
 host charges every cross-contract call's VM its whole initial linear
 memory, and rustc's default 1 MiB stack makes that 17 pages (1 088 KiB) per
 VM. A completion makes many cross-contract calls (the compiler, the

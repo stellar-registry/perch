@@ -1,4 +1,4 @@
-//! Per-policy SMT prover (PLAN.md phase 4, the `cedar-policy-symcc` shape).
+//! Per-policy SMT prover (the `cedar-policy-symcc` shape).
 //!
 //! Encodes a rule's stateless eligibility as `rule_eval::rule_allows_in`:
 //! target, functions, arguments, authenticated signers, and an exact entry

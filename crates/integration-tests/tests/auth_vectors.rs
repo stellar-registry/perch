@@ -15,6 +15,7 @@
 //! not a copy.
 
 use perch_account::PerchAccount;
+use perch_testkit::delta::strkey;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
@@ -63,13 +64,6 @@ fn raw(b: &Bytes) -> std::vec::Vec<u8> {
     let mut out = std::vec![0u8; b.len() as usize];
     b.copy_into_slice(&mut out);
     out
-}
-
-fn strkey(a: &Address) -> std::string::String {
-    let s = a.to_string();
-    let mut buf = std::vec![0u8; s.len() as usize];
-    s.copy_into_slice(&mut buf);
-    std::string::String::from_utf8(buf).unwrap()
 }
 
 fn ids_json(ids: &Vec<u32>) -> serde_json::Value {

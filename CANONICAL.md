@@ -22,9 +22,9 @@ The version is a format identifier, exported as a constant in each
 implementation (`perch_ir::CANON_VERSION`, `perch-js` `CANON_VERSION`). It is
 **not** part of the hash preimage. The bytes below contain no version marker,
 so `doc_hash` is exactly `SHA-256` of the canonical serialization and nothing
-else. The constant exists so that any change to the rules in this document is an
-explicit, greppable, reviewable event. **Any change here is a breaking change** that must
-bump `CANON_VERSION`, re-freeze the conformance vectors, and be treated as a new
+else. The constant exists so that a change to the rules in this document is explicit and
+greppable. Any change here is a breaking change: it must
+bump `CANON_VERSION`, re-freeze the conformance vectors, and is a new
 format, never a silent hash drift.
 
 A new optional member of the model is not such a change: it is written when
@@ -48,16 +48,16 @@ cannot carry (arbitrary precision, binary fields) would be a
 ## The bytes
 
 The canonical serialization of a document value is defined recursively. There is
-**no insignificant whitespace** anywhere: no spaces, no newlines, no
+no insignificant whitespace anywhere: no spaces, no newlines, no
 indentation.
 
 ### Objects
 
 `{` then each member `key:value` joined by `,` then `}`. Members are sorted in
-**ascending order by the UTF-16 code units of the (unescaped) key**. Keys in the
-model are fixed ASCII field names, so this coincides with byte order; the
-ordering is still specified over UTF-16 code units so it remains well-defined if
-a non-ASCII key ever enters the model. The key is serialized with the **string**
+ascending order by the UTF-16 code units of the (unescaped) key. Keys in the
+model are fixed ASCII field names, so this coincides with byte order. The
+ordering is specified over UTF-16 code units so it stays defined if
+a non-ASCII key enters the model. The key is serialized with the string
 rules below; `value` recurses.
 
 ```
@@ -66,13 +66,13 @@ rules below; `value` recurses.
 
 ### Arrays
 
-`[` then elements joined by `,` then `]`. **Element order is preserved** (arrays
-are ordered; only object members are sorted).
+`[` then elements joined by `,` then `]`. Element order is preserved: arrays
+are ordered, and only object members are sorted.
 
 ### Numbers
 
-Every number a `PolicyDoc` can hold is a `u32`. It is serialized as **plain
-decimal ASCII digits**: no sign, no exponent, no decimal point, no leading zero
+Every number a `PolicyDoc` can hold is a `u32`. It is serialized as plain
+decimal ASCII digits: no sign, no exponent, no decimal point, no leading zero
 (except the value `0`, which is `0`). A non-integer or out-of-range number is a
 bug, not input. Implementations fail closed rather than emit an exponent form.
 
@@ -93,8 +93,7 @@ A string is `"` … `"` with the contents UTF-8, escaping **only** what RFC 8785
 | any other control char U+0000–U+001F | `\u00xx` (lowercase hex) |
 | everything else | emitted literally |
 
-Consequences worth stating explicitly, because they are where naive
-implementations differ:
+Naive implementations differ on these:
 
 - **Forward slash `/` is not escaped.**
 - **Non-ASCII is not escaped.** It is emitted as literal UTF-8, never `\uXXXX`.
@@ -106,14 +105,14 @@ implementations differ:
 ### Booleans and null
 
 `true` / `false` are defined for completeness but are unreachable from the
-current model. **`null` never appears.** An absent optional field is omitted
+current model. `null` never appears. An absent optional field is omitted
 from its object entirely, not serialized as `null`. Encountering `null` while
 canonicalizing is malformed input and fails closed.
 
 ## Fragment hashes
 
 `doc_hash` identifies a whole document. Two other hashes identify one
-**fragment** of it: the exact bytes that member contributes to the
+fragment of it: the exact bytes that member contributes to the
 document's canonical serialization above, cut out unchanged and hashed
 under a domain tag of its own.
 
@@ -151,7 +150,7 @@ compiled from; it does not identify the document. Only `doc_hash` does.
 Fragment hashes are definitions over the bytes above, not new
 canonicalization rules, so they do not change `CANON_VERSION`. Changing a
 tag or the fragment boundaries is a breaking change to every recorded
-value, and must be treated like one.
+value.
 
 Code:
 

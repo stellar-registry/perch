@@ -1,6 +1,6 @@
 # @stellar-registry/perch
 
-TypeScript surface for [perch](https://github.com/stellar-registry/perch) policy
+TypeScript library for [perch](https://github.com/stellar-registry/perch) policy
 documents and accounts: the fail-closed PolicyDoc schema, canonical JSON +
 `doc_hash` (byte-identical to the Rust model, parity-tested against shared
 golden fixtures), a fluent builder producing validated documents, and the
@@ -38,7 +38,7 @@ const doc = policy()
   .build();
 
 canonicalJson(doc); // the canonical wire form (what gets applied on-chain)
-docHash(doc);       // sha256 of the canonical form, hex — the document identity
+docHash(doc);       // hex sha256 of the canonical form: the document identity
 ruleHash(doc.rules[0]); // sha256("perch/rule" || rule bytes): a program's provenance
 configHash(docWithRecovery); // sha256("perch/recovery/config" || recovery bytes)
 ```
@@ -82,7 +82,7 @@ Parsing/validating an existing document:
 ```ts
 import { parsePolicyDocJson } from '@stellar-registry/perch';
 
-const doc = parsePolicyDocJson(jsonText); // throws on any deviation — fail closed
+const doc = parsePolicyDocJson(jsonText); // throws on any deviation (fails closed)
 ```
 
 ### Pinning a grant to the account
@@ -103,8 +103,11 @@ a refusal. A grant never calls a token's admin functions (`mint`,
 - `canonicalJson`, `docHash`, `ruleHash`, and `configHash` are byte-identical
   to the Rust implementation; all are pinned against committed golden vectors
   in CI.
-- The schema rejects unknown fields, out-of-range values, and non-canonical
-  encodings rather than normalizing them.
+- The schema rejects unknown fields and out-of-range values rather than
+  normalizing them. It does not yet enforce one spelling per value: a cap
+  `limit` with a leading `+` or leading zeros, and signer-key hex in either
+  case, are accepted as written
+  ([`docs/DEFERRED.md`](../../docs/DEFERRED.md#canonical-value-spellings)).
 
 ## Using a Perch account
 
@@ -308,11 +311,6 @@ Rust suite writes from the contracts' own code (`testdata/`).
 perch-js does not compile documents. The account's pinned on-chain doc
 compiler is authoritative; `checkLimits` checks only its caps.
 
-## License
-
-Apache-2.0
-
-
 ### Exact authorization-entry roots
 
 `.authRoot(gameAddress, 'guess')` on a rule adds an exact entry-root
@@ -338,5 +336,9 @@ that entry root. General ancestry and root arguments are outside this feature.
 `readSnapshot` accepts legacy snapshot 1 and root-aware snapshot 2; every
 snapshot-2 rule must include root metadata. Applying root-bearing documents
 requires interface >=3 and snapshot >=2. Canonical bytes/hashes of documents
-without `auth-root` are unchanged. Existing deployments require a deliberate
-new build/upgrade before accepting it. See [root semantics and compatibility](../../docs/auth-root.md).
+without `auth-root` are unchanged. An existing deployment accepts
+root-bearing documents only after a new build and upgrade. See [root semantics and compatibility](../../docs/auth-root.md).
+
+## License
+
+Apache-2.0

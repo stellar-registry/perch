@@ -3,10 +3,10 @@
 // authorize, submit, confirm) and reports each through callbacks: progress,
 // fee estimates, signing prompts, and what to do on an error.
 //
-// The transactions come from an `ApplyBackend`. Today an apply is one
-// `apply_doc` transaction (`oneTransactionBackend`), which names the revision
-// it was prepared at as `expected_revision`, so it executes only at that
-// revision (RFC #109 §3c). The same caller code runs against a backend that
+// The transactions come from an `ApplyBackend`. `oneTransactionBackend`
+// applies in one `apply_doc` transaction, which names the revision it was
+// prepared at as `expected_revision`, so it executes only at that revision
+// (RFC #109 §3c). The same caller code runs against a backend that
 // takes several transactions: a step already landed is skipped when an
 // operation is retried or started again, and a revision change or a freeze
 // between steps is refused before anything more is signed.
@@ -289,8 +289,9 @@ export interface ApplyDocTransport {
 }
 
 /**
- * Today's backend: one `apply_doc` transaction carrying the snapshot's
- * revision as `expected_revision`, so it executes only at that revision.
+ * The single-transaction backend: one `apply_doc` transaction carrying the
+ * snapshot's revision as `expected_revision`, so it executes only at that
+ * revision.
  */
 export function oneTransactionBackend(reader: AccountReader, transport: ApplyDocTransport): ApplyBackend {
   return {

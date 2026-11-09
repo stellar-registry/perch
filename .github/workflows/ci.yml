@@ -171,10 +171,9 @@ jobs:
   # pins must equal deployments/testnet.json (its registry the one the path
   # derives, or a migration deployments/pending-registry.json declares), the
   # release scripts' derivation must be the account's own, and
-  # perch-smart-account,
-  # perch-account, and perch-account-factory, depended on by git rev, must
-  # build offline from cargo's clean checkout, to the same wasm as this
-  # checkout.
+  # perch-smart-account, perch-account, and perch-account-factory, depended on
+  # by git rev, must build offline from cargo's clean checkout, to the same
+  # wasm as this checkout.
   committed-pins:
     runs-on: ubuntu-latest
     permissions:
@@ -206,7 +205,6 @@ jobs:
 
   # Flux refinement verification of perch-program (nidohq/soroban-flux).
   # Runs under flux's pinned nightly; the deploy/test toolchain stays 1.97.1.
-  # Graduated from burn-in: a flux failure now fails CI.
   flux:
     runs-on: ubuntu-latest
     permissions:
@@ -225,7 +223,7 @@ jobs:
             --profile minimal
       # restore/save split (not actions/cache): the post-job save of the combined
       # action caches whatever exists even when the install step died midway,
-      # poisoning the immutable key with a partial toolchain. Save is now an
+      # poisoning the immutable key with a partial toolchain. Save is an
       # explicit step that only runs after a successful install, and the presence
       # check re-installs if a restored cache is missing any binary.
       - name: Restore flux toolchain cache

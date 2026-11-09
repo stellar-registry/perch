@@ -37,14 +37,13 @@ bytecode under the K semantics.
 
 **`komet prove run` (symbolic) is local-only.** It is the stronger check, a
 proof for every `u32`, but takes well over 30 minutes on these properties,
-too long for the CI job. CI runs the fuzzer; the symbolic proof is a
-documented local command (below). This is a performance limit of symbolic execution, not a gap
-in what the properties assert.
+too long for the CI job, so it is a local command (below). The properties
+are the same; only the run time differs.
 
 ### Two compatibility fixes the CI job applies
 
-Komet v0.1.88's toolchain predates soroban-sdk 27 (this crate builds on 29), so the job bridges two gaps
-(both handled automatically in CI; relevant if you run locally):
+Komet v0.1.88's toolchain predates soroban-sdk 27, and this crate builds on 29.
+The CI job bridges two gaps, which a local run must bridge too:
 
 1. **DataCount section.** Modern `wasm32v1-none` output carries a DataCount
    section (id `0x0c`, from the bulk-memory feature) that Komet's `pykwasm`
@@ -57,7 +56,7 @@ Komet v0.1.88's toolchain predates soroban-sdk 27 (this crate builds on 29), so 
    `stellar contract info interface --wasm` even when given `--wasm`, so the job
    installs stellar-cli v27.1.0 (the version Komet v0.1.88's flake tracks).
 
-**A plain local Homebrew setup can't build the semantics**, which is why CI
+A plain local Homebrew setup can't build the semantics, which is why CI
 uses Nix. Komet v0.1.88 pins K 7.1.323 (`deps/k_release`), but Homebrew's
 `runtimeverification/k/kframework` bottle is 7.1.282, and building the
 Soroban semantics against the mismatched K fails at link time (`Undefined
@@ -70,7 +69,7 @@ automatically, the same path CI takes.
 
 ```sh
 # 1. Install Komet, version-matched, via Nix (pulls prebuilt from the
-#    k-framework Cachix cache — no source build, no komet-kdist step):
+#    k-framework Cachix cache; no source build, no komet-kdist step):
 nix profile install github:runtimeverification/komet/v0.1.88
 
 # 2. Install stellar-cli (komet reads the ABI via `stellar contract info`):

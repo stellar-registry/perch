@@ -64,8 +64,13 @@ crates/
                       (draft 2020-12), derived from perch-ir's constants; see docs/schema.md
   perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)
   perch-interpreter/  the deployable OZ Policy contract that evaluates programs
+                      (legacy accounts; current accounts attach no policy to a rule)
   perch-compile/      RPN lowering: PolicyDoc → OZ rules with interpreter programs
                       (off-chain: the differential suites and legacy accounts)
+  perch-rule-eval/    Perch's rules as rule-core's evaluator reads them: host-value
+                      conversions, storage mirrors, the anti-brick checks
+  perch-account-types/  the account's signer, `__check_auth` payload, context rule,
+                      and error codes, XDR- and spec-identical to OZ's
   perch-doc-compiler/ deployable, stateless: doc JSON → compiled rules (signers,
                       last ledger), the document model the account lowers with
                       rule-eval, doc_hash, config_hash, document caps, and
@@ -77,7 +82,8 @@ crates/
   perch-account/      the deployable account contract over perch-smart-account
   perch-account-factory/  deployable factory: deploys the build-time-pinned account
                       wasm at an address bound to its admin signers
-  perch-spending-limit/  deployable wrapper of OZ spending_limit (cumulative caps)
+  perch-spending-limit/  deployable wrapper of OZ spending_limit (legacy accounts'
+                      cumulative caps; current accounts keep a rule's spending record)
   perch-ed25519-verifier/  deployable ed25519 verifier for External signers
   perch-mldsa-verifier/  deployable ML-DSA-65 (FIPS 204, post-quantum) verifier for
                       External signers; constructorless, no admin
@@ -133,8 +139,9 @@ packages/
                       zk-toolchain.sh as files, copied at build time
 circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
                       artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
-vendor/               vendored audited UltraHonk verifier plus perch's ZK-flavor delta
-                      (see its README and NOTICE)
+vendor/               vendored third-party crates, each with its NOTICE: the audited
+                      UltraHonk verifier plus perch's ZK-flavor delta, soroban-sdk-tools,
+                      soroban-flux, soroban-poseidon, registry-traits, admin-sep
 formal/               Lean 4 model of the v1 evaluator and CANON v1, with
                       machine-checked theorems; replays the conformance and canonical
                       vectors (`just drt`)
@@ -153,6 +160,8 @@ docs/audit-scope.md   the audit manifest
 docs/account-interface.md  the account's entry points, types, events, and errors: the
                       notes too long for its contract spec's doc comments
 docs/DEFERRED.md      work deferred until after the audit
+docs/auth-root.md     exact-root authorization semantics and client/deployment
+                      compatibility
 docs/recovery/        account recovery: the authoritative spec, statement layouts,
                       CAP-0071 reliance, the implementation map, budgets, and formal
                       coverage
@@ -164,9 +173,11 @@ docs/verification/    what is proved, differentially tested, and tested only (PL
                       enforceability theory (THEORY.md)
 docs/schema.md        the PolicyDoc JSON Schema: generation, drift, release path, versioning,
                       and the boundary between schema-valid and authorized/canonical
-docs/testnet-deployment.md  the release pipeline's canonical testnet registry and
-                      author account
-docs/index.html       reading hub for the published HTML documentation (GitHub Pages)
+docs/testnet-deployment.md  the `unverified/perch` testnet registry and author account
+                      that deployments before 2026-10-22 resolve their infra in
+docs/index.html       reading hub for the published HTML documentation (GitHub Pages):
+                      docs/perch-paper/, docs/oz-walkthrough/, docs/cedar-walkthrough/,
+                      docs/slides/
 testdata/             golden vectors shared by the Rust, TypeScript, and Lean suites
                       (frozen); see testdata/README.md
 testdata/schema/      shared PolicyDoc JSON Schema conformance cases (Rust + perch-js suites)

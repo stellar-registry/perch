@@ -1,4 +1,4 @@
-//! The configuration revision and the consumer views (#108), and
+//! The configuration revision and the consumer views, and
 //! `apply_doc`'s `expected_revision` (RFC #109 §3c), under ENFORCING
 //! authorization: every call below runs the account's real `__check_auth`
 //! (`support/mod.rs`).

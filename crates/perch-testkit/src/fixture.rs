@@ -1,9 +1,7 @@
 //! Frozen conformance fixtures and the shared cryptographic helpers the e2e
-//! suites depend on. This module absorbs what used to be
-//! `integration-tests/tests/common/mod.rs` (`fixture`, `auth_digest`) plus the
-//! stand-ins and constants that `apply_doc.rs` kept locally (`AnyKeyVerifier`,
-//! `FIXTURE_VERIFIERS`, `FIXTURE_NETWORK`, `CI_PUBLISH_DOC_HASH`), so an
-//! upstream layout change is fixed once, not per test file.
+//! suites depend on (`fixture`, `auth_digest`, `AnyKeyVerifier`,
+//! `FIXTURE_VERIFIERS`, `FIXTURE_NETWORK`, `CI_PUBLISH_DOC_HASH`), in one place
+//! so an upstream layout change is fixed once, not per test file.
 
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
@@ -62,7 +60,7 @@ pub fn twin<T: TryFromVal<Env, Val>>(env: &Env, v: impl IntoVal<Env, Val>) -> T 
 /// The digest a Perch account's `check_auth` makes an `External` signer
 /// authenticate against: `sha256(bound_payload || rule_ids.to_xdr())`, where
 /// `bound_payload = sha256(AUTH_ADDR_DOMAIN || account_id || payload)` folds
-/// the account's own address in (the `addr_oz_v1` scheme). THE reference copy;
+/// the account's own address in (the `addr_oz_v1` scheme). The reference copy;
 /// `integration-tests/tests/auth_vectors.rs` pins it against the digest the
 /// on-chain `check_auth` actually hands a verifier.
 pub fn auth_digest(env: &Env, account: &Address, payload: &BytesN<32>, ids: &Vec<u32>) -> [u8; 32] {

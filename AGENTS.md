@@ -46,8 +46,10 @@ and — only once the contract is actually meant to auto-publish on-chain when
 tagged — the `publish-plan` job's `ALLOW` list and `DISPATCH_TAG` regex (and
 `release-mainnet.yml`'s `MAINNET_ALLOW`, which `scripts/test-release-scripts.py`
 keeps equal to `ALLOW`).
-`ALLOW` publishes into `unverified/perch/constructorless`, perch's one
-canonical testnet registry: an account or factory derives one registry per
+`ALLOW` publishes into `perch/constructorless`, perch's one canonical
+testnet registry (`scripts/registry-target.sh`: the registry
+`crates/*/wasm/registry.path` derives, unless
+`deployments/pending-registry.json` declares a migration): an account or factory derives one registry per
 network and every infra address from it, so all infra must share that
 registry. Mainnet's is published to only by `release-mainnet.yml`'s manual
 dispatch (`docs/deploy/README.md`, "Mainnet"). The testnet registry is
@@ -127,7 +129,8 @@ longer chain of recovered panics in one `Env`; prefer a fresh `Env` (a new
 The host charges every cross-contract call's VM its whole initial linear
 memory, and rustc's default wasm stack is 1 MiB (17 pages). Each stack
 contract crate therefore has a `build.rs` linking `-zstack-size=65536` for
-its cdylib. A new deployable contract crate needs the same `build.rs`, or
+its cdylib (the ML-DSA verifier 262144 and the ZK adapter 131072, whose
+verifiers need more). A new deployable contract crate needs the same `build.rs`, or
 every call to it costs over 1 MB of the transaction's 41.9 MB. Measure with
 `release_stack.rs` (`cap_sweep`, the `worst_case_*` tests) before changing
 the document caps; `docs/recovery/budgets.md` "Document caps" has the

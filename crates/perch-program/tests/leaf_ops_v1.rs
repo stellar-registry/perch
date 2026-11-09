@@ -1,4 +1,4 @@
-//! Per-op tests for the v1 leaf ops added in #5 (string / bytes / i128 / count),
+//! Per-op tests for the v1 string, bytes, i128 and count leaf ops,
 //! each in allow and deny direction plus the fail-closed decode-failure case
 //! (asserted in both polarities: bare and under `Not`).
 

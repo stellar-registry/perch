@@ -8,7 +8,7 @@
 //!
 //! The contracts are the real ones (`PerchAccount`, the doc compiler and
 //! interpreter at their pinned content addresses, the `PerchRecovery`
-//! controller, the WS2 membership pool), except:
+//! controller, the membership pool), except:
 //!
 //! - the owner's key and the guardians are [`Key`] stand-ins: custom
 //!   accounts whose `__check_auth` approves until [`Key::deny`] is called.
@@ -231,12 +231,7 @@ pub fn enrollment(e: &Env, n: u8) -> ZkEnrollment {
 // Documents
 // ---------------------------------------------------------------------------
 
-pub fn strkey(a: &Address) -> String {
-    let s = a.to_string();
-    let mut buf = std::vec![0u8; s.len() as usize];
-    s.copy_into_slice(&mut buf);
-    String::from_utf8(buf).unwrap()
-}
+pub use perch_testkit::delta::strkey;
 
 pub fn hex32(b: &BytesN<32>) -> String {
     hex::encode(b.to_array())

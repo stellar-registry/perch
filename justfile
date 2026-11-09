@@ -4,8 +4,8 @@ test:
 build:
     cargo build --workspace
 
-# Builds every cdylib package (interpreter, account, verifier, bench-rpn) to
-# target/stellar/$STELLAR_NETWORK/ ("local" when unset). The three deployable
+# Builds every cdylib package (the deployable contracts and bench-rpn) to
+# target/stellar/$STELLAR_NETWORK/ ("local" when unset). The deployable
 # crates carry [package.metadata.stellar] cargo_inherit, so scaffold injects
 # their name/binver wasm meta; bench-rpn has no metadata section (it is never
 # published) and builds meta-less. Plain `stellar contract build` would produce

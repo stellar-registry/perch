@@ -1,9 +1,8 @@
-// @stellar-registry/perch — TypeScript surface for perch policy documents.
-//
-// Shipped (this milestone): fail-closed schema mirroring perch-ir, canonical
-// JSON + doc_hash and the rule_hash/config_hash fragment hashes byte-identical
-// to the Rust model (parity-tested against the shared golden fixtures), and a
-// fluent builder producing validated documents.
+// @stellar-registry/perch — TypeScript surface for perch policy documents:
+// fail-closed schema mirroring perch-ir, canonical JSON + doc_hash and the
+// rule_hash/config_hash fragment hashes byte-identical to the Rust model
+// (parity-tested against the shared golden fixtures), and a fluent builder
+// producing validated documents.
 //
 // The consumer interface (#108): revision-consistent account reads, rule
 // selection by name and scope, the signing digest and AuthPayload, document
@@ -11,8 +10,8 @@
 // authorization encoding a wallet needs lives here, pinned against vectors the
 // Rust suite writes.
 //
-// Planned (tracking issue #8, gated on perch-compile #7 + the interpreter):
-//   - compile() with byte-identical output vs the Rust compiler
+// Not here yet (tracking issue #8): compile() with byte-identical output vs
+// the Rust compiler.
 
 export {
   canonicalJson,

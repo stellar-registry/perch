@@ -1,9 +1,8 @@
 //! `perch-testkit` — one-call bootstrap of the perch registry + constructorless infra
 //! + account for tests.
 //!
-//! Every perch e2e suite used to re-implement a `struct World`/`fn setup()` to
-//! register the doc-compiler, interpreter, ed25519 verifier and account and
-//! wire them together. This crate gives them one call:
+//! Registering the doc-compiler, interpreter, ed25519 verifier and account and
+//! wiring them together is one call:
 //!
 //! ```no_run
 //! use perch_testkit::{Bootstrap, FIXTURE_NETWORK};
@@ -18,28 +17,17 @@
 //! let _hash = w.account_client().apply_doc(&doc, &0, &None);
 //! ```
 //!
-//! # Modes
-//!
-//! - [`Bootstrap::native`] — **implemented.** Registers the four contract
-//!   *types* into a unit [`Env`], wires addresses, binds the network, mocks
-//!   auth. No upstream dependency, no wasm artifact. See [`native`].
-//! - [`Bootstrap::faithful`] — **stub (phase 2).** Publishes + deploys the
-//!   helpers through a real imported `registry.wasm` so wasm-hash-as-salt
-//!   resolution is genuinely exercised. See [`faithful`] for its prerequisites.
-//!
-//! # Cross-network vision
-//!
-//! [`manifest`] declares a [`BootstrapManifest`] + a [`Backend`] trait and
-//! implements only [`UnitEnvBackend`]; [`KometBackend`]/[`TestnetBackend`] are
-//! stubs, with `scripts/bootstrap-testnet.sh`'s six phases as the testnet spec.
+//! [`Bootstrap::native`] registers the four contract *types* into a unit
+//! [`Env`], wires addresses, binds the network, and mocks auth, with no
+//! upstream dependency and no wasm artifact; see [`native`]. The suites that
+//! publish and `deploy_stateless` through a real registry are
+//! `crates/integration-tests/tests/release_stack.rs` and `crates/perch-testnet`.
 //!
 //! [`Env`]: soroban_sdk::Env
 
 pub mod delta;
 pub mod denote;
-pub mod faithful;
 pub mod fixture;
-pub mod manifest;
 pub mod native;
 pub mod passkey;
 pub mod rebuild;
@@ -51,48 +39,23 @@ pub use fixture::{
     auth_digest, ci_publish_doc_hash, ci_publish_rule, fixture, twin, AnyKeyVerifier,
     CI_PUBLISH_DOC_HASH, FIXTURE_NETWORK, FIXTURE_REGISTRY, FIXTURE_VERIFIERS,
 };
-pub use manifest::{
-    Apply, Author, Backend, BackendError, BootstrapManifest, Deploy, KometBackend, Publish, Rotate,
-    TestnetBackend, UnitEnvBackend,
-};
 pub use native::{World, ED25519_VERIFIER_NAME, FIXTURE_VERIFIER_NAMES};
-
-/// Which bootstrap strategy [`Bootstrap::build`] materializes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Mode {
-    /// Register native contract types into a unit `Env`.
-    Native,
-    /// Publish + deploy through a real imported `registry.wasm` (phase 2).
-    Faithful,
-}
 
 /// Builder for a wired test [`World`].
 ///
-/// Start with [`Bootstrap::native`] (or [`Bootstrap::faithful`]), configure the
-/// network passphrase and admin key, then [`build`](Bootstrap::build).
+/// Start with [`Bootstrap::native`], configure the network passphrase and
+/// admin key, then [`build`](Bootstrap::build).
 #[derive(Clone, Debug)]
 pub struct Bootstrap {
-    mode: Mode,
     pub(crate) network: Option<String>,
     pub(crate) admin_ed25519: [u8; 32],
 }
 
 impl Bootstrap {
-    /// Native mode: register the four contract types into a unit `Env`. The
-    /// fast, ship-first path with no upstream dependency.
+    /// Native mode: register the four contract types into a unit `Env`, with
+    /// no upstream dependency.
     pub fn native() -> Self {
         Self {
-            mode: Mode::Native,
-            network: None,
-            admin_ed25519: [0u8; 32],
-        }
-    }
-
-    /// Faithful mode (**stub**): publish + deploy the helpers through a real
-    /// imported `registry.wasm`. See [`faithful`] for its prerequisites.
-    pub fn faithful() -> Self {
-        Self {
-            mode: Mode::Faithful,
             network: None,
             admin_ed25519: [0u8; 32],
         }
@@ -113,9 +76,6 @@ impl Bootstrap {
 
     /// Materialize the configured [`World`].
     pub fn build(self) -> World {
-        match self.mode {
-            Mode::Native => native::build(self),
-            Mode::Faithful => faithful::build(self),
-        }
+        native::build(self)
     }
 }

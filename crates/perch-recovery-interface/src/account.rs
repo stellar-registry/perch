@@ -204,10 +204,10 @@ mod test {
         assert_eq!(ACCOUNT_UPGRADE_DELAY_LEDGERS, 120_960);
     }
 
-    /// The sequence reproduced against the WS3 implementation: schedule
-    /// while unenrolled, enroll `Loss` recovery, remove it, wait out the
-    /// delay, execute. The final state has no controller, as at scheduling,
-    /// but the account's generation moved twice, so the request is stale.
+    /// Schedule while unenrolled, enroll `Loss` recovery, remove it, wait
+    /// out the delay, execute. The final state has no controller, as at
+    /// scheduling, but the account's generation moved twice, so the request
+    /// is stale.
     #[test]
     fn enroll_then_remove_stales_an_unenrolled_upgrade() {
         use crate::controller::SyncOutcome;

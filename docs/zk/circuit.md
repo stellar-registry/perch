@@ -72,10 +72,11 @@ here (spec §13.3).
 | Proof / VK size | 16,224 B / 1,760 B |
 | Circuit size | about 5,700 gates at depth 32 and 4,400 at depth 24, which bb pads to 2^14 and 2^13 (the VK's `log_circuit_size`); exact counts in [`measurements.md`](measurements.md#circuit-identities) |
 
-The release circuit pads to `log_circuit_size` 14. The verifier's
-fold-commitment padding convention (`vendor/ultrahonk-soroban-verifier/src/utils.rs`)
-is accompanied by a comment confirming it only at `log_circuit_size` 12 and 13;
-confirming it at 14 for the release VK is an open verifier-review item.
+The release circuit pads to `log_circuit_size` 14. The comment on the
+verifier's fold-commitment padding convention
+(`vendor/ultrahonk-soroban-verifier/src/utils.rs`, `validate_gemini_padding`)
+confirms it only at `log_circuit_size` 12 and 13. Confirming it at 14 for the
+release VK is an open verifier-review item.
 
 ## Three implementations, one set of vectors
 

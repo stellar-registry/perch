@@ -116,46 +116,48 @@ JSON Schema structurally cannot state.
 [`packages/perch-js/schemas/policy.schema.json`](../packages/perch-js/schemas/policy.schema.json)
 (generator `crates/perch-schema`, drift-checked by `cargo test`), describes
 document `version: 1`. `@stellar-registry/perch` lists `schemas/` in its
-published files; npm release 0.3.2 predates the schema and does not contain
-it. By design the schema accepts what `perch-ir`'s parser accepts,
+published files; npm releases from 0.4.0 contain it, and 0.3.2 and earlier
+predate it. By design the schema accepts what `perch-ir`'s parser accepts,
 so that schema validation and the parser agree (a schema that rejected a
 document the parser accepts would mislead an offline editor). It therefore
 accepts the same non-canonical spellings the "Canonical value spellings" entry
 above lists: a `cap.limit` with a leading `+` or leading zeros, and signer-key
 hex in either case. It *does* pin the 64-lowercase-hex digest fields
 (`doc-hash`, `circuit-id`, `enrollment-id`, `commitment`) because the parser
-already requires that form. These checks stay outside the schema, with the
-authority unchanged:
+already requires that form. These checks stay outside the schema, each
+with its authority unchanged:
 
-- duplicate raw JSON keys, which a validator of already-parsed JSON cannot
-  see — `perch-ir`'s parser;
-- uniqueness of signer ids and of rule names, compared by key across siblings —
-  `perch-ir::validate`;
-- reference resolution (a principal/`replaceable` id resolving to a declared
-  signer; a cap `token` matching the rule's contract scope) — `perch-ir::validate`;
-- the CRC16 checksum of every address strkey (the schema pins only the shape) —
-  `perch-ir::validate`;
-- each `functions` entry being a Soroban `Symbol` (1–32 characters from
-  `[a-zA-Z0-9_]`), and a `string-prefix` prefix of at most
-  `MAX_STRING_PRED_LEN` (256) bytes — `perch-ir::validate`. Both are
-  expressible in JSON Schema; the generator does not emit them yet;
-- the canonical-byte budget (`max_canonical_bytes`), a property of the
-  canonically-encoded bytes rather than the parsed tree — the compiler
-  (`perch-doc-compiler`), mirrored client-side by perch-js `checkLimits`;
-- the BN254 field-element range on a recovery `commitment`, and the exact
-  `i128` upper bound on a `cap.limit` — `perch-ir::validate`;
-- guardian `quorum <= count` for guardian sets larger than the schema's
-  enumerated depth (guardians have no dedicated cap constant today) —
-  `perch-ir::validate`;
-- signatures and authorization — `__check_auth` / OZ policy enforcement.
+- `perch-ir`'s parser: duplicate raw JSON keys, which a validator of
+  already-parsed JSON cannot see;
+- `perch-ir::validate`: uniqueness of signer ids and of rule names, compared
+  by key across siblings;
+- `perch-ir::validate`: reference resolution (a principal/`replaceable` id
+  resolving to a declared signer; a cap `token` matching the rule's contract
+  scope);
+- `perch-ir::validate`: the CRC16 checksum of every address strkey (the
+  schema pins only the shape);
+- `perch-ir::validate`: each `functions` entry being a Soroban `Symbol`
+  (1–32 characters from `[a-zA-Z0-9_]`), and a `string-prefix` prefix of at
+  most `MAX_STRING_PRED_LEN` (256) bytes. Both are expressible in JSON
+  Schema; the generator does not emit them yet;
+- the compiler (`perch-doc-compiler`), mirrored client-side by perch-js
+  `checkLimits`: the canonical-byte budget (`max_canonical_bytes`), a
+  property of the canonically-encoded bytes rather than the parsed tree;
+- `perch-ir::validate`: the BN254 field-element range on a recovery
+  `commitment`, and the exact `i128` upper bound on a `cap.limit`;
+- `perch-ir::validate`: guardian `quorum <= count` for guardian sets larger
+  than the schema's enumerated depth (guardians have no dedicated cap
+  constant);
+- `__check_auth` and OZ policy enforcement: signatures and authorization.
 
 **Why it is safe to defer:** the parser, compiler, and account remain the
-authority for every check the schema leaves out, so no check is lost — only
-not yet mirrored into the schema. A schema-valid document that fails one of
-them is refused by `compile_doc` with a typed error (`DocParse`,
+authority for every check the schema leaves out, so no check is lost, only
+not yet mirrored into the schema. `compile_doc` refuses a schema-valid
+document that fails one of them with a typed error (`DocParse`,
 `DocInvalid`, or `DocTooLarge`), so the gap fails closed: an editor can
-accept a document the chain will refuse, never the reverse. Tightening the schema to a canonical profile before the parser
-enforces one spelling would make it reject documents the chain still accepts.
+accept a document the chain will refuse, never the reverse. Tightening the
+schema to a canonical profile before the parser enforces one spelling would
+make it reject documents the chain still accepts.
 
 **Exit criterion and follow-up review:** add the `Symbol` pattern for
 `functions` entries and a `string-prefix` bound to the generator (the byte
@@ -163,9 +165,9 @@ bound needs the same ASCII-or-stricter treatment as rule names, because
 `maxLength` counts code points), regenerate the committed artifact, and extend
 the conformance cases so schema and validator reject them together. Once
 "Canonical value spellings" lands (one valid spelling enforced in
-`perch-ir::validate` and `perch-js`), add the matching strict profile —
-lowercase-only signer-key hex, a `cap.limit` with no sign and no leading zeros,
-and the settled integer number-form spelling — and extend the
+`perch-ir::validate` and `perch-js`), add the matching strict profile
+(lowercase-only signer-key hex, a `cap.limit` with no sign and no leading
+zeros, and the settled integer number-form spelling) and extend the
 drift/parity/conformance suites so the strict schema and the parser still agree
 in both directions. A dedicated guardian-count cap would let the schema encode
 `quorum <= count` fully. Review the regenerated schema against the parser's
@@ -189,7 +191,7 @@ canonical bytes (`MAX_DOC_CANONICAL_BYTES`), or a rule name over 20 bytes
 (`MAX_RULE_NAME_BYTES`, the account's `MAX_NAME_SIZE`). The recovery rule the account
 generates is additional to the 10 document rules. The caps are sized so that
 a worst-case completion, compromise restore, or `Protected` reconfiguration
-stays within 75% of every *measured* per-transaction limit — instructions,
+stays within 75% of every *measured* per-transaction limit: instructions,
 memory, write bytes, and write entries
 ([`budgets.md`](recovery/budgets.md), "Document caps"; the `worst_case_*`
 tests in `crates/integration-tests/tests/release_stack.rs`). Disk read bytes
@@ -360,16 +362,20 @@ on ([#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3)) onto
 upstream OpenZeppelin, and re-pinning to the merged code.
 
 **Current behaviour:** the account calls none of the `_no_events` mutators,
-`reconcile_signers` or `do_check_auth`, and the spending limit's quiet
-install and uninstall come from #4. `Cargo.toml` pins `stellar-accounts` 0.7.1 to git rev
-`33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` of theahaco/stellar-contracts-OZ,
-the head of #5, which is stacked on #4, which is stacked on #3 (CAP-0071
-delegated authentication). The pinned commit is upstream OpenZeppelin
-`fbfde38` (the fork's `main`) plus three commits, one per pull request. All
-three pull requests are open. Cargo builds the pinned commit
-whatever their state (`Cargo.lock` records it), so the audited code is that
-rev: the fork's changes are reviewed as the diff from upstream `fbfde38` to
-`33726766` ([`audit-scope.md`](audit-scope.md#explicit-dependency-review)).
+`reconcile_signers` or `do_check_auth`. The spending limit's quiet install
+and uninstall come from #4. `Cargo.toml` pins `stellar-accounts` 0.7.1 to
+git rev `42089fc90684fdab33a85eac3e8311259b69a61b` of
+bitswell-hq/theahaco__stellar-contracts-OZ. That rev is theahaco/stellar-contracts-OZ
+`33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` (the head of #5, which is stacked
+on #4, which is stacked on #3, CAP-0071 delegated authentication) moved to
+soroban-sdk 29.0.1
+([bitswell-hq #1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1)).
+`33726766` is upstream OpenZeppelin `fbfde38` (the fork's `main`) plus one
+commit per pull request. All three theahaco pull requests are open. Cargo
+builds the pinned commit whatever their state (`Cargo.lock` records it), so
+the audited code is that rev, and the fork's changes are reviewed as the
+diff from upstream `fbfde38` to `42089fc9`
+([`audit-scope.md`](audit-scope.md#explicit-dependency-review)).
 
 **Why it is safe to defer:** the state of a pull request does not change the
 pinned bytes. The residual risk is that the code that eventually merges
@@ -379,7 +385,7 @@ upstream code.
 **Exit criterion and follow-up review:** the pull requests merge, into the
 fork or upstream into OpenZeppelin/stellar-contracts (the CAP-0071 change
 re-based onto upstream), and Perch re-pins.
-Review the diff from `33726766` to the new pin. If the source differs, every
+Review the diff from `42089fc9` to the new pin. If the source differs, every
 contract that links `stellar-accounts` gets a new Wasm: new builds, a new
 deployment and manifest, and an account upgrade for deployed accounts.
 
@@ -412,7 +418,7 @@ canonical target can consume it and be classified as a completion rather than
 refused as an ordinary write (recovery [`spec.md`](recovery/spec.md) §10 T5).
 
 **Why it is safe to defer:** the completed document is still the authorized
-canonical target, so the identity is bound — this neither installs a different
+canonical target, so the identity is bound. This neither installs a different
 policy nor bypasses the `Protected` freeze. The effect is a misclassification:
 an owner-authorized ordinary write over the authorized target, in the same
 ledger as a leftover marker, runs the completion's revocation,
@@ -426,7 +432,7 @@ input bytes) and requires it to equal the authorized attempt's
 regression gains an active attempt and a second owner-authorized, differently
 formatted target in the same ledger, which must be refused. This changes the
 account↔controller `rcv_sync` ABI, so it reaches only newly-built accounts
-(infra is pinned by wasm hash) — a coordinated redeploy, not a live upgrade.
+(infra is pinned by wasm hash). It is a coordinated redeploy, not a live upgrade.
 
 **Owner:** Perch.
 
@@ -434,26 +440,28 @@ account↔controller `rcv_sync` ABI, so it reaches only newly-built accounts
 
 ## Contract-admin governance behind a multisig and timelock
 
-**Deferred:** moving the mutable contract-admin surfaces — the publishing
-registry's admin and the Nido factory's upgrade — behind a 2-of-3
+**Deferred:** moving the mutable contract-admin surfaces (the publishing
+registry's admin and the Nido factory's upgrade) behind a 2-of-3
 Perch-account multisig and an admin timelock (a visible, cancelable delay on
 admin actions).
 
 **Current behaviour:** the publishing registry's `admin`/`manager` is a single
-human-held key, backed up encrypted in 1Password. The deployment is testnet
-only; no mainnet deployment lands before the audit. The registry's
+human-held key, backed up encrypted in 1Password. The same key
+(`GAMPJROH…`) is the registry's `admin` and `manager` in both
+[`deployments/testnet.json`](../deployments/testnet.json) and
+[`deployments/mainnet.json`](../deployments/mainnet.json) (mainnet deployed
+2026-10-26, ledger 65138427). The registry's
 `upgrade`/`set_admin`/`set_manager`/`remove_manager` take effect the moment
 that key authorizes them.
 
 **Why it is safe to defer:** the admin key is human-held and backed up
-encrypted in 1Password, and the only live deployment is on testnet, so no
-mainnet value is governed by it before the audit. The deferred change hardens
+encrypted in 1Password. The deferred change hardens
 key custody and adds a delay; it does not alter any audited on-chain
 authorization path.
 
 **Exit criterion and follow-up review:** adopt the multisig + timelock before
 any mainnet deployment, and review the timelock contract, the multisig policy
-document, and the admin cutover. Driving the multisig on-chain additionally
+document, and the admin cutover. Driving the multisig on-chain also
 needs multi-sig signing tooling (noted in the tracked PR).
 
 **Owner:** Perch and Nido.

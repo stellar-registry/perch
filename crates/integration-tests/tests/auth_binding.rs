@@ -11,7 +11,7 @@
 //! selected rule ids into the signed digest
 //! (`sha256(signature_payload || rule_ids.to_xdr())`), still with no account
 //! address. Two accounts with the same `External` key and matching rule ids
-//! therefore demand a byte-identical digest — a legacy signature is replayable.
+//! therefore demand a byte-identical digest, so a signature over it is replayable.
 //!
 //! The `Signer::Delegated` (CAP-0071 / `AddressWithDelegates`) path is
 //! unaffected: it never consumes this digest (the host validates it under

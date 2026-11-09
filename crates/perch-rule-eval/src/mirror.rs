@@ -190,9 +190,9 @@ impl<'a> Xdr<'a> {
 
     /// A `StoredRule`.
     fn rule(&mut self) -> Option<Rule> {
-        // Only the exact legacy eight-key layout is unrestricted by omission.
-        // New layouts must name auth_root explicitly; unknown/missing keys,
-        // malformed tuples and trailing bytes are never ignored.
+        // Only the exact eight-key layout (no `auth_root` key) has no root.
+        // The nine-key layout names `auth_root` explicitly; unknown or missing
+        // keys, malformed tuples and trailing bytes are never ignored.
         let fields = self.len(SCV_MAP)?;
         let auth_root = match fields {
             8 => None,

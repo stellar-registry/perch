@@ -4,10 +4,6 @@ This file identifies the Perch code under audit, separates it from the
 deployment it was measured on, assigns every component to a review unit or
 a named exclusion, and gives the reading order.
 
-**Deferred until after the audit:** [`DEFERRED.md`](DEFERRED.md) lists the
-work deliberately outside this audit, each item with the current behaviour
-that is audited, its residual risk, its exit criterion, and its owner.
-
 ## Audit identity
 
 ### Reviewed source
@@ -36,11 +32,11 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 
 | Field | Manifest field | Value in the manifest at this commit |
 | --- | --- | --- |
-| Build commit | `source.commit`, `source.dirty` | `4e7ae8044b761c7e7ee8b82d3dd5d135f9905fd5`, the release commit on `main`; `dirty: true` (below) |
+| Build commit | `source.commit`, `source.dirty` | `c135aca277745434f2abf679edd9868c95204b51`, the release commit on `main`; `dirty: false` |
 | Network, channel | `network_passphrase`, `channel` | testnet (`Test SDF Network ; September 2015`), `beta` |
-| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-15T06:43:23Z, from ledger 5204567 |
-| Build toolchain | `toolchain` | rustc 1.99.0 (b940084d7 2026-09-28), stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork), scaffold 0.0.27 (`builder`: `scaffold`) |
-| Registry | `registry.id`, `registry.wasm_hash` | `CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7`, the canonical `constructorless` registry ([`testnet-deployment.md`](testnet-deployment.md)) |
+| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-22T13:41:43Z, from ledger 5330546 |
+| Build toolchain | `toolchain` | rustc 1.99.1 (58cf8f9c3 2026-10-13), stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork), scaffold 0.0.27 (`builder`: `scaffold`) |
+| Registry | `registry.id`, `registry.wasm_hash` | `CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM`, `perch/constructorless` under the testnet Stellar Registry root, the registry `crates/*/wasm/registry.path` derives ([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)); code `0acc4da2…` |
 | ZK circuit | `zk.circuit_id`, `zk.tree_depth` | the circuit in `circuits/manifest.json`, tree depth 32 |
 | Contracts | `contracts.<name>.version`, `.sha256`, `.address`, `.pins` | the ten below |
 
@@ -51,7 +47,9 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 | 2 | `perch-account-factory` | the account and the WebAuthn verifier |
 
 A redeploy rewrites the manifest, and the third column of the first table
-changes with it.
+changes with it. [`deployments/mainnet.json`](../deployments/mainnet.json)
+records the same ten hashes, from the same build commit, deployed to mainnet
+on 2026-10-26 into the registry `registry.path` derives there.
 
 **How these bytes were built.** `release.yml`'s `deploy-stack` job made
 this deployment in canonical mode
@@ -61,17 +59,13 @@ the ed25519 verifier. It reused the bytes the registry already serves for
 them, which `release.yml`'s attested release build produced. It built the
 other six with `scripts/build-stack.sh` on a GitHub-hosted Linux runner,
 using the manifest's toolchain, and attested each one's build provenance.
-`source.dirty` is `true`: when it built, the job's checkout had uncommitted
-changes in an input `scripts/source-dirty.sh` checks. The manifest does not
-record which input changed.
 
 **Reproduction record.** No reproduction of this manifest's hashes has been
-recorded. Because the tree was dirty, rebuilding `4e7ae80` is not
-guaranteed to give the six built hashes. The four reused contracts come
-from the attested release build, not from `build-stack.sh`, so rebuilding
-them with `build-stack.sh` gives other bytes
+recorded. The four reused contracts come from the attested release build,
+not from `build-stack.sh`, so rebuilding them with `build-stack.sh` gives
+other bytes
 ([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)).
-The previous deployment (build commit `7b164b6`, clean tree, manifest
+An earlier deployment (build commit `7b164b6`, clean tree, manifest
 [`deployments/testnet.json` at `845c49a`](https://github.com/stellar-registry/perch/blob/845c49a376c08aeeed9f5d3c63356b753dc617f4/deployments/testnet.json))
 was reproduced in full on 2026-10-14. On a macOS arm64 host with that
 manifest's toolchain, `scripts/build-stack.sh` built a `git archive` export
@@ -109,14 +103,14 @@ evidence does not.
 
 ### Packages
 
-| npm package | Path | Manifest version | Published |
+| npm package | Path | Manifest version | Latest release tag |
 | --- | --- | --- | --- |
-| `@stellar-registry/perch` | `packages/perch-js` | 0.4.0 | 0.4.0 (2026-10-15), from tag `perch-js-v0.4.0`; `src/` there equals this source |
-| `@stellar-registry/perch-interpreter` | `packages/perch-interpreter-js` | 0.1.0 | 0.1.0 (2026-09-09) |
-| `@stellar-registry/perch-zk` | `packages/perch-zk` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-zk-v0.1.0`; `src/` there equals this source |
-| `@stellar-registry/perch-relay` | `packages/perch-relay` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-relay-v0.1.0`; `src/` there equals this source |
-| `@stellar-registry/perch-contracts` | `packages/perch-contracts` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-contracts-v0.1.0`, which predates the current deployment: its bindings and manifest name the previous one, so it differs from this source |
-| `@stellar-registry/perch-artifacts` | `packages/perch-artifacts` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-artifacts-v0.1.0`, which predates the current deployment: its `deployments/testnet.json` is the previous one, so it differs from this source |
+| `@stellar-registry/perch` | `packages/perch-js` | 0.4.1 | `perch-js-v0.4.1`; `src/` has changed since |
+| `@stellar-registry/perch-interpreter` | `packages/perch-interpreter-js` | 0.1.1 | `perch-interpreter-js-v0.1.1`; `src/` there equals this source |
+| `@stellar-registry/perch-zk` | `packages/perch-zk` | 0.1.0 | `perch-zk-v0.1.0`; `src/` there equals this source |
+| `@stellar-registry/perch-relay` | `packages/perch-relay` | 0.1.0 | `perch-relay-v0.1.0`; `src/` there equals this source |
+| `@stellar-registry/perch-contracts` | `packages/perch-contracts` | 0.1.2 | `perch-contracts-v0.1.2`, which ships the current testnet deployment's bindings; `src/` has changed since |
+| `@stellar-registry/perch-artifacts` | `packages/perch-artifacts` | 0.2.2 | `perch-artifacts-v0.2.2`, which ships both current manifests; `src/` has changed since |
 
 `release.yml`'s `npm-publish` job publishes each package, with
 `npm publish --provenance`, when a merge bumps its manifest version.
@@ -156,7 +150,7 @@ backend needs no integration review with the core paths it touches
 | Generated contract clients | `packages/perch-contracts`, `packages/perch-interpreter-js` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Guardian-approval relay | `packages/perch-relay` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Deployment and release execution | `scripts/deploy-stack.sh`, `scripts/derive-id.py`, `scripts/bindings-contracts.sh`, `scripts/bootstrap-testnet.sh`, `.github/workflows/release.yml`, `crates/perch-deploy`, `crates/perch-derive-id` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
-| Registry contract | Wasm `4b2d9ea4…` (manifest `registry`), built from `crates/perch-stateless-registry` (since renamed `crates/perch-constructorless-registry`) at an unrecorded commit | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
+| Registry contract | Wasm `0acc4da2…` (manifest `registry.wasm_hash`), a `crates/perch-constructorless-registry` build at an unrecorded commit | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 
 ## Perch core
 
@@ -184,9 +178,9 @@ statement vectors `testdata/recovery/statement-v2.json`; the Lean model
 (`formal/`); `release_stack.rs` on real Wasm with real proofs. The map from
 each spec requirement to its code and tests is
 [`recovery/implementation.md`](recovery/implementation.md). Coverage note:
-Perch's recovery integration world uses delegated stand-in keys, so recovery
-target binding with External (WebAuthn) credentials — where the credential-id
-suffix and key canonicalization matter — is exercised by Nido's suite
+Perch's recovery integration world uses delegated stand-in keys. Recovery
+target binding with External (WebAuthn) credentials, where the credential-id
+suffix and key canonicalization matter, is exercised by Nido's suite
 (`crates/integration-tests` in the superproject), not Perch's.
 
 ## Perch OZ materialization
@@ -265,7 +259,7 @@ any file outside the delta differs from upstream's `UPSTREAM.sha256` bytes; it
 does not re-audit the delta. No audit covered the delta
 before this one ([`zk/README.md`](zk/README.md)). For an offline handoff, a
 review of the delta needs the Barretenberg v0.87.0 reference sources the
-README maps to (the ZK-flavour reference files — e.g. `honk_zk_contract.hpp`,
+README maps to (the ZK-flavour reference files, such as `honk_zk_contract.hpp`,
 `small_subgroup_ipa.hpp`, `shplemini.hpp`, `sumcheck.hpp`, and
 `row_disabling_polynomial.hpp`) at their exact upstream commit, not only the
 `v0.87.0` release tag, plus the generated Solidity verifier for the committed
@@ -321,9 +315,8 @@ checked by hash. They are not reviewed line by line.
   they choose what is deployed and published. The deployed bytes are checked
   by hash against the manifest, and the manifest's hashes are reproducible
   from source ([Deployment provenance](#deployment-provenance)).
-- **The registry contract** (Wasm `4b2d9ea4…`): a
-  `crates/perch-stateless-registry` build (the crate is now
-  `crates/perch-constructorless-registry`) the canonical registries run;
+- **The registry contract** (Wasm `0acc4da2…`): a
+  `crates/perch-constructorless-registry` build the canonical registries run;
   `deploy-stack.sh` publishes into the instance `registry.path` derives and
   never deploys or rebuilds one, and this repository does not record which
   commit built it. Its `deploy_stateless` places code

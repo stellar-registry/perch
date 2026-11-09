@@ -3,8 +3,8 @@
 //! smart-account approvals (AuthPayload selecting a rule id). `apply` submits
 //! a policy document to the account's `apply_doc` signed by the admin key; CI
 //! publishes wasm to the registry signed by the scoped CI key. Everything
-//! else — and eventually all of this — is the stock `stellar` CLI. Key
-//! material comes ONLY from PERCH_ADMIN_KEY / PERCH_CI_KEY env variables.
+//! else is the stock `stellar` CLI. Key material comes ONLY from
+//! PERCH_ADMIN_KEY / PERCH_CI_KEY env variables.
 
 use perch_deploy::{apply, compose, publish, rpc, verify};
 

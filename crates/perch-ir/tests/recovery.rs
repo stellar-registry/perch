@@ -618,10 +618,8 @@ fn zk_rotation_is_required_exactly_for_zk_modes() {
 
 #[test]
 fn recovery_absent_documents_hash_exactly_as_before_this_field_existed() {
-    // The load-bearing regression: base_doc() (no `recovery`) must canonicalize
-    // with no "recovery" key at all, and its hash must be unaffected — this is
-    // the same document every other perch-ir test already exercises, so this
-    // just makes the guarantee explicit and named.
+    // A document without `recovery` canonicalizes with no "recovery" key, so
+    // its hash is the one every other perch-ir test pins.
     let doc = base_doc();
     let canon = canonical_json(&doc);
     assert!(!canon.contains("recovery"), "{canon}");

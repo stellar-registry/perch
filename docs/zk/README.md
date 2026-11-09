@@ -47,10 +47,9 @@ results against them, and the depth decision are in
    are required before launch
    ([`budgets.md`](../recovery/budgets.md#results)).
 
-The full-transaction measurements are substantially complete but not
-finished: every recovery transaction is measured in process on the release
-wasm and on testnet against the deployed wasm, and every measured row is
-within budget. Rows still open before launch are disk read bytes (every row),
+Every recovery transaction is measured in process on the release wasm and
+on testnet against the deployed wasm, and every measured row is within
+budget. Rows still open before launch are disk read bytes (every row),
 §3 end-to-end latency, and the §4 controller-state and `renew`-fee rows; a few
 rows (completion after rule churn, promotion with many siblings) are bounded
 by construction rather than measured.
@@ -111,13 +110,13 @@ The adapter's `circuit_id()` is `sha256` of its compiled-in verification key.
 A configuration names it in its ZK binding, and the adapter refuses any
 binding that names another circuit.
 
-**The verifier is compiled into the adapter**, not a second contract the
+The verifier is compiled into the adapter, not a second contract the
 adapter calls. The public-input layout belongs to the VK, so a new circuit
 means a new adapter anyway, and an embedded verifier leaves no address to
 pin or misconfigure. The adapter also exports the raw verifier as
 `verify_proof(public_inputs, proof)`, implementing
 `ProofVerifierInterface` (spec §13.2). Nothing in Perch calls it: the
-controller uses `verify`. It is stateless, but it is audited surface that
+controller uses `verify`. It is stateless, but it is an audited entry point that
 accepts caller-chosen public inputs.
 
 ## Which verifier
@@ -214,9 +213,8 @@ proof, and bb.js's ZK verification key to equal the committed VK.
 on-chain, so the browser prover's output is checked against the Soroban
 verifier on every CI run.
 
-The deployable wasm's hash depends on the Rust toolchain and the builder that
-build it, so the wasm hash is
-recorded per release build (`deployments/testnet.json` for the testnet
+The deployable wasm's hash depends on the Rust toolchain and the builder, so
+the wasm hash is recorded per release build (`deployments/testnet.json` for the testnet
 deployment) rather than in `circuits/manifest.json`.
 
 ## What is tested, and how
@@ -241,8 +239,8 @@ tested under enforcing authorization in `crates/integration-tests`.
   configuration hash, delay, expiry, validity bound, attempt, source, target,
   replacements), the account, the enrollment id, the nullifier, the tree id,
   or the pool refuses the evidence. So do a fabricated or unknown root (one the
-  tree never had — roots are never evicted; every historical root stays valid,
-  §14.3), a non-canonical root or nullifier, a malformed proof, a tampered
+  tree never had; roots are never evicted, and every historical root stays
+  valid, §14.3), a non-canonical root or nullifier, a malformed proof, a tampered
   proof, and a binding for another circuit.
 - **Replay**: evidence cannot be redirected to another attempt, action,
   configuration, or epoch, because the statement binds them. A replay of

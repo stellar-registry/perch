@@ -48,7 +48,7 @@ is named.
 | A lost-key source is compared at promotion; a changed source is stored as `Invalidated` | [§6.3](spec.md#63-transitions) T4 | controller promotion | `a_lost_key_attempt_whose_source_changed_needs_a_fresh_attempt` |
 | Attempt storage: temporary while collecting, persistent once authorized or when the evidence window exceeds the maximum TTL; `NoSuchAttempt` once the entry is gone | [§3.6](spec.md#36-storage-lifetime), [§6.2](spec.md#62-attempt-states) | controller `save` | not pinned by a test |
 | Two-digest target binding: `target_doc_hash` and `target_bytes_hash` from one `derive_target`; `rcv_complete` checks the bytes, `rcv_sync` the identity | [§6.3](spec.md#63-transitions) T1, T5 | controller `begin_*`, `rcv_complete`, `rcv_sync` | `target_binding.rs`, `completion_must_submit_exactly_the_target_inside_its_window` |
-| Completion marker: temporary, bound to `(attempt_id, target_doc_hash, ledger)`; a marker left by an unexecuted sub-invocation is ignored | [§6.3](spec.md#63-transitions) T5 | controller `rcv_complete`, `rcv_sync` (`CompletionMarker`) | `a_marker_left_by_an_unexecuted_sub_invocation_is_ignored` |
+| Completion marker: temporary, bound to `(attempt_id, target_doc_hash, ledger)`; `rcv_sync` removes any marker and treats the call as a completion only for that identity, in that ledger, while that attempt is the authorized one, so a leftover marker can still be consumed in the same ledger (spec T5); a perch account leaves none, because it refuses the recovery rule for a sub-invocation that never executes before any controller call | [§6.3](spec.md#63-transitions) T5 | controller `rcv_complete`, `rcv_sync` (`CompletionMarker`); account `check_auth` | `the_recovery_rule_for_an_unexecuted_sub_invocation_leaves_no_marker` |
 | Invoker-only hooks: reserved names refused in `__check_auth` and `execute`; the controller's configuration written only by `rcv_sync` | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), D12 | account `check_auth`, `execute`; `perch_recovery_interface::account::is_reserved_invoker_only` | `hooks_are_unreachable_except_from_the_accounts_own_flows`, `account_capabilities.rs::execute_calls_as_the_account_and_refuses_invoker_only_hooks` |
 | Account-document rules may be scoped to a controller, the account's own included (so it can act as a guardian there), not to its own ZK adapter or pool; a controller-scoped rule reaches only guardian approvals (I1–I3) | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) | doc compiler validation; reserved-name guard | `a_controller_scoped_rule_reaches_no_reserved_controller_entry_point`, `a_perch_account_guards_another_at_its_own_controller_until_it_is_frozen` |
 | The controller re-checks timing, quorum range, and the account not among its own guardians (`InvalidConfiguration`), the §3.4 factor rule (`RecoveryError::ZkFactorChangedInPlace`), and the circuit id and depth, because any contract can call `rcv_sync` for itself | [§3.1](spec.md#31-schema), [§3.4](spec.md#34-enrollment-ids), [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) | controller `check_config`, `check_zk_wiring` | `an_account_cannot_be_its_own_guardian`, `the_controller_itself_refuses_a_zk_factor_changed_in_place`, `zk_enrollments_are_fresh_wired_and_never_changed_in_place` |
@@ -188,10 +188,10 @@ recovery completion (one `apply_doc` context selecting the recovery rule)
 is decided by the controller's `rcv_complete` alone, so recovery never depends
 on the evaluator: `authorize_completion` (`auth.rs`) checks the payload as
 OZ's `do_check_auth` checked it for the recovery rule, from the account's
-record of that rule — every chosen id the recovery rule's
-(`ContextRuleNotFound`), every context a call on the account while the rule
-is unexpired (`UnvalidatedContext`), no payload signer
-(`UnauthorizedSigner`) — then calls the controller's
+record of that rule: every chosen id is the recovery rule's
+(`ContextRuleNotFound`), every context is a call on the account while the
+rule is unexpired (`UnvalidatedContext`), and the payload has no signer
+(`UnauthorizedSigner`). It then calls the controller's
 `rcv_complete(account, context, rule)` for each context, with the record's
 signer count and scope as the `RecoveryRule`.
 `tests/completion_differential.rs` runs this check and OZ's over a grid of

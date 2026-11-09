@@ -20,8 +20,7 @@
 //! - the **limits-parity** test feeds real inputs through perch-ir's own
 //!   `from_json` + `validate` and asserts the schema accepts/rejects exactly at
 //!   the boundary where each limit sits (so the schema and the validator cannot
-//!   silently disagree — the brief's sanctioned alternative to generating the
-//!   numbers straight from the constants).
+//!   silently disagree).
 //!
 //! # What this generator is *not* in the build graph of
 //!

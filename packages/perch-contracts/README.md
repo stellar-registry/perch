@@ -10,13 +10,14 @@ npm install @stellar-registry/perch-contracts
 
 | Module | Contract |
 | --- | --- |
-| `account` | `perch-account`: `apply_doc`, `execute`, `applied_doc`, `infra`, upgrades, `cancel_recovery`, and the consumer views `revision`, `configuration`, `document`, `capabilities` |
+| `account` | `perch-account`: `apply_doc`, `apply_grant`, `execute`, `applied_doc`, `infra`, upgrades, `cancel_recovery`, the consumer views `revision`, `configuration`, `document`, `capabilities`, and the grant views |
 | `factory` | `perch-account-factory`: `create`, `create_passkey`, `address_of`, `passkey_address` |
 | `recovery` | `perch-recovery`: attempts, guardian and ZK evidence, change approvals, statements |
 | `pool` | `perch-zk-pool`: trees, leaves, roots, enrollments |
 | `adapter` | `perch-zk-adapter`: `verify`, `circuit_id`, `tree_depth` |
 | `webauthnVerifier` | `perch-webauthn-verifier` |
 | `docCompiler` | `perch-doc-compiler`: `compile_doc`, `derive_target`, `limits`, `capabilities` |
+| `legacyAccount`, `legacyDocCompiler` | the deployed `perch-account` and `perch-doc-compiler` specs (snapshot 1; see below) |
 
 ```ts
 import { factory, addressOf, testnet } from '@stellar-registry/perch-contracts';
@@ -37,8 +38,9 @@ from; `npm test` fails if it, or `testnet`, drifts from
 after a deployment. A module regenerated from a stack built from source
 (`scripts/bindings-contracts.sh --undeployed <stack> <module>...`), for a
 contract change not deployed yet, exports `DEPLOYED = false` and is exempt
-from that check until the next deployment regenerates it. `PERCH_LIVE=1 npm test` also calls the deployed
-contracts through the bindings.
+from that check until the next deployment regenerates it.
+`PERCH_LIVE=1 npm test` also calls the deployed contracts through the
+bindings.
 
 A recovery completion (`apply_doc` through the zero-signer recovery rule)
 must be simulated with its recovery-rule authorization entry already in the
@@ -47,16 +49,15 @@ controller's `rcv_complete` never marks the call as the completion and
 `rcv_sync` refuses it as a change during the authorized window. See
 [`docs/deploy/README.md`](../../docs/deploy/README.md#simulating-a-recovery-completion).
 
-
 The exact-root build's `account` and `docCompiler` bindings are marked
 undeployed. `legacyAccount` / `legacyDocCompiler` (also the
 `/legacy-account` and `/legacy-doc-compiler` package exports) retain the
 recorded deployed spec. Read `capabilities()` before `configuration()`:
-snapshot 1 uses the legacy account spec, snapshot 2 the new spec. Select a
-compiler binding matching that account's pinned compiler. Unknown snapshot
-versions must be refused.
+snapshot 1 uses the legacy account spec, snapshot 2 the exact-root spec.
+Select a compiler binding matching that account's pinned compiler, and
+refuse unknown snapshot versions.
 
-The Stellar SDK decodes struct fields by position. The new spec cannot
-safely decode old rule maps, even though Rust's account storage reader can.
+The Stellar SDK decodes struct fields by position. The exact-root spec
+cannot safely decode old rule maps, even though Rust's account storage reader can.
 `perch-js`'s `readSnapshot` supports both layouts through a matching
 `AccountReader`; it cannot repair a result already misdecoded by the SDK.

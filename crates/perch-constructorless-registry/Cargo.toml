@@ -5,10 +5,6 @@ version = "0.1.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-# No cargo-manifest `publish = false`: release-plz's `release` command skips
-# manifest-unpublishable packages (no tag ever — the missing-4-tags bug of the
-# v0.1.0 release). crates.io publish is blocked workspace-wide in
-# release-plz.toml instead.
 
 [package.metadata.stellar]
 cargo_inherit = true
@@ -37,7 +33,7 @@ registry-traits = { version = "0.1.0", path = "../../vendor/registry-traits", op
 # (`registry_traits::admin::ADMIN_KEY`, documented as byte-identical), so the
 # two interoperate on a single admin key. Vendored at 0.28.1, moved to
 # soroban-sdk 29 (vendor/admin-sep/NOTICE). Optional + gated behind `contract`
-# for the same empty-skeleton reason as above.
+# for the same reason as above.
 admin-sep = { version = "0.28.1", path = "../../vendor/admin-sep", optional = true }
 
 [dev-dependencies]
@@ -46,7 +42,7 @@ soroban-sdk = { workspace = true, features = ["testutils"] }
 [features]
 # Mirrors the perch-doc-compiler template: the deployable contract lives behind
 # `contract`, on by default. `contract` pulls in `registry-traits` + `admin-sep`
-# and gates the composition module. Build the empty skeleton (no git dep) with
-# `--no-default-features`.
+# and gates the composition module. `--no-default-features` builds an empty
+# library.
 default = ["contract"]
 contract = ["dep:registry-traits", "dep:admin-sep"]

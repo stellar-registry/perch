@@ -21,6 +21,7 @@
 
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { strkey } from './diagnostics.js';
 import { PerchError } from './errors.js';
 import type { PolicyDoc } from './schema.js';
 import { addressPayload } from './statement.js';
@@ -173,32 +174,7 @@ export const VERIFIERS_PATH = {
   path: ['perch', 'verifiers'],
 } as const;
 
-const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
 const enc = new TextEncoder();
-
-function crc16(bytes: Uint8Array): number {
-  let crc = 0;
-  for (const b of bytes) {
-    crc ^= b << 8;
-    for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff;
-  }
-  return crc;
-}
-
-function contractStrkey(id: Uint8Array): string {
-  const head = Uint8Array.of(2 << 3, ...id);
-  const crc = crc16(head);
-  const data = Uint8Array.of(...head, crc & 0xff, crc >> 8);
-  let out = '';
-  let bits = 0;
-  let acc = 0;
-  for (const b of data) {
-    acc = (acc << 8) | b;
-    bits += 8;
-    while (bits >= 5) out += BASE32[(acc >> (bits -= 5)) & 31];
-  }
-  return bits ? out + BASE32[(acc << (5 - bits)) & 31] : out;
-}
 
 function u32(n: number): Uint8Array {
   return Uint8Array.of(n >>> 24, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff);
@@ -223,7 +199,7 @@ export function deployedAddress(deployer: string, salt: Uint8Array, passphrase: 
   // ScAddress: an account is its ed25519 public key (PublicKey type 0).
   const address = tag === 0 ? concat([u32(0), u32(0), payload]) : concat([u32(1), payload]);
   const preimage = concat([u32(8), sha256(enc.encode(passphrase)), u32(0), address, salt]);
-  return contractStrkey(sha256(preimage));
+  return strkey('contract', sha256(preimage));
 }
 
 /** The `perch/verifiers` registry on the network `passphrase` names. */

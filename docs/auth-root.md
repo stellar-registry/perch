@@ -12,8 +12,8 @@ expiry and cumulative cap. A separate game rule authorizes `guess` itself.
 The root condition travels with the transfer rule; removing or renaming a
 companion game rule cannot erase it.
 
-The account derives the root from `contexts[0]` in **this account's current
-host-authenticated authorization entry**. Soroban's pinned 29.0.1 host supplies
+The account derives the root from `contexts[0]` in this account's current
+host-authenticated authorization entry. Soroban's pinned 29.0.1 host supplies
 that entry in preorder. A losing game call uses `[game.guess, token.transfer]`
 and selects one rule id per context. Its transfer consumes the cap. A winning
 game call still authenticates the guesser, but the game pays by invoker
@@ -50,9 +50,9 @@ The host representations (`StoredRule`, `ModelRule`, `CompiledRule`,
 `InstalledRule`) use `auth_root: Option<Vec<StoredAuthRoot>>`: `None` is
 unrestricted; `Some` must contain exactly one `{contract, function}`. The
 optional wrapper permits decoding the positively identified old eight-key
-stored-rule map. New stored maps have nine exact keys; malformed roots,
-unknown/missing keys and trailing XDR never fall back to unrestricted. New
-writes include the field. Existing cap history and grant-generation data keep
+stored-rule map. A current stored map has exactly nine keys; malformed roots,
+unknown/missing keys and trailing XDR never fall back to unrestricted. Every
+write includes the field. Existing cap history and grant-generation data keep
 their formats. Reconciliation still keeps a matched rule's id and unchanged
 cap history, including when an unrelated rule is removed.
 
@@ -70,8 +70,8 @@ cap history, including when an unrelated rule is removed.
 | Deployed accounts | Existing compiler/account addresses remain pinned. Publishing source does not enable roots on deployed accounts. A new compiler/account build and a deliberate delayed account upgrade or new account are required. |
 | Proofs | New root semantics live in rule-core; Perch's canonical model includes the optional member. Old per-invocation interpreter proofs do not cover root enforcement. |
 
-No deployment manifest, mainnet account or testnet account is migrated by
-this change. Build-stack stages new compiler/account pins to test the new
+`auth-root` migrates no deployment manifest, mainnet account or testnet
+account. Build-stack stages new compiler/account pins to test the new
 artifacts; committed deployed pins remain tied to their deployment manifest.
 Generated clients for the new interface are marked undeployed.
 `legacyAccount` and `legacyDocCompiler` retain the recorded deployed ABI.
@@ -106,7 +106,7 @@ project out the condition only to independently compare local predicates,
 then compose the original root back into the batch rule; this is test evidence,
 not an installable legacy policy.
 
-The new `integration-tests/tests/auth_root.rs` suite uses enforcing host auth
+`crates/integration-tests/tests/auth_root.rs` uses enforcing host auth
 and real Ed25519 session signatures. Its native deterministic game reproduces
 the relevant win/loss behavior of Guess the Number commit
 `df80831ac6bc2a2110cab15654726456b53cc8f3`; it is not the production game's Wasm.

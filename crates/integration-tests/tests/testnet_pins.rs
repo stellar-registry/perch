@@ -1,4 +1,4 @@
-//! Guards the build-time pins every consumer **actually compiled in** against
+//! Guards the build-time pins every consumer actually compiled in against
 //! the deployment manifest (`deployments/testnet.json`):
 //!
 //! - the account's registry path (`crates/perch-smart-account/wasm/

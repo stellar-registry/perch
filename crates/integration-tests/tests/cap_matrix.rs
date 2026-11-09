@@ -1,4 +1,4 @@
-//! End-to-end cap proof (#19 PR6): compile a document carrying a cumulative
+//! End-to-end cap proof: compile a document carrying a cumulative
 //! `cap`, attach BOTH the perch interpreter and OZ's `spending_limit` policy to
 //! one OZ context rule, and drive the real `do_check_auth` with real ed25519
 //! signatures. OZ enforces every attached policy (AND), so a transfer within the
@@ -120,7 +120,6 @@ fn setup() -> World {
         .expect("interpreter attached (INV-1)");
     let cap = lowered.cap.clone().expect("cap attached");
 
-    // Map the CapSpec onto OZ spending_limit params.
     let sl_params = SpendingLimitAccountParams {
         spending_limit: cap.limit,
         period_ledgers: cap.period_ledgers,

@@ -136,10 +136,10 @@ account built without recovery support cannot enroll in place.
 
   The reserved-name guard (§15, invariant I1) is what keeps such a rule's
   signers away from the controller's sensitive entry points. It refuses all
-  ten reserved names — `install`, `uninstall`, `enforce`, `rcv_sync`,
-  `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete`, `rcv_insert`,
-  and `rcv_gate` (D12, §15) — on any contract, whatever rule is selected. What such a rule
-  grants is exactly what it says: its signers approve, as this account,
+  ten reserved names (D12, §15) on any contract, whatever rule is selected:
+  `install`, `uninstall`, `enforce`, `rcv_sync`, `rcv_cancel`,
+  `rcv_upgrade`, `rcv_install`, `rcv_complete`, `rcv_insert`, and
+  `rcv_gate`. What such a rule grants is exactly what it says: its signers approve, as this account,
   statements for accounts that list this account as a guardian. The account
   cannot list itself (§15), so the rule never touches the account's own
   recovery.
@@ -231,12 +231,11 @@ is exactly the bytes the rule contributes to the canonical document: one
 element of the `rules` array (`CANONICAL.md`, "Fragment hashes"; vectors in
 `testdata/rule-hashes.json`).
 
-- **Provenance.** A compiled interpreter program carries its rule's
-  `rule_hash` as provenance, instead of the whole document's `doc_hash`.
-  Editing one rule, or any non-rule member, then leaves every other rule's
-  compiled form unchanged, which let `apply_doc` reinstall only the rules
-  that changed when the account installed programs. Current accounts store
-  rule-eval rules instead; see §7.5 for reconciliation.
+- **Provenance.** A compiled interpreter program (`perch-compile`) carries
+  its rule's `rule_hash` as provenance, instead of the whole document's
+  `doc_hash`, so editing one rule, or any non-rule member, leaves every
+  other rule's compiled form unchanged. The account stores rule-eval rules,
+  not programs; §7.5 covers how `apply_doc` reconciles them.
 - **Scope.** A `rule_hash` covers the rule text and its signer ids, not the
   signers' credentials. Only `doc_hash` identifies the whole document.
 - **Domain separation.** The `perch/rule` and `perch/recovery/config` tags
@@ -417,7 +416,7 @@ a non-reserved controller entry point that records their approval:
 `submit_guardian` for attempts, `approve_change` for reconfiguration and
 upgrades. Reserved hooks only read recorded approvals.
 
-This placement matters. A guardian's `__check_auth` sees the function its
+The names must be non-reserved: a guardian's `__check_auth` sees the function its
 approval is collected in, and a guardian that is itself a perch account
 refuses every reserved name (§15; `cap-0071.md` C7). The ZK circuit binds the
 digest through the `statement_hash` public input (§13). In `Combined` mode
@@ -556,9 +555,9 @@ The stored states are `Collecting`, `Authorized`, `Completed`,
   `AttemptState::Invalidated`, and emits `AttemptInvalidated`.
 
   The attempt was still collecting, so the record sits in temporary
-  storage (§3.6) and lasts **at least its evidence window** — unless its
-  evidence window is longer than the network's maximum TTL, in which case
-  §3.6 stores it persistently. For a temporary record, after the entry
+  storage (§3.6) and lasts **at least its evidence window**. If its
+  evidence window is longer than the network's maximum TTL, §3.6 stores it
+  persistently instead. For a temporary record, after the entry
   expires evidence naming that attempt is refused as `NoSuchAttempt`. A
   persistent record is archived rather than deleted, is restored on access,
   and stays refused as `AttemptNotLive`. Either way the attempt can never be
@@ -592,7 +591,7 @@ All additions are checked; an overflowing `u32` refuses the transition
 
 ### 6.3 Transitions
 
-**T1 Begin** — `begin_lost_key(account, replacements)` or
+**T1 Begin.** `begin_lost_key(account, replacements)` or
 `begin_compromise(account, replacements)`. Permissionless. Returns the
 attempt id.
 
@@ -645,7 +644,7 @@ Opening an attempt grants nothing and blocks nothing (D2). Opening many
 costs their openers fees and rent, and has no effect on the account or on
 other attempts.
 
-**T2 Guardian evidence** — `submit_guardian(account, attempt_id, domain,
+**T2 Guardian evidence.** `submit_guardian(account, attempt_id, domain,
 guardian)`, where `domain` is `Initiate` or `Cancel`. Requires `guardian`'s
 `require_auth_for_args((digest,))` for the attempt's statement in that
 domain. Refuses if any of the following hold:
@@ -659,7 +658,7 @@ domain. Refuses if any of the following hold:
 
 Records the approval, then attempts promotion (T4) or cancellation (T6).
 
-**T3 ZK evidence** — `submit_zk(account, attempt_id, domain, evidence)`.
+**T3 ZK evidence.** `submit_zk(account, attempt_id, domain, evidence)`.
 Permissionless. Same refusals as T2 for the ZK factor (`ModeHasNoZk` in
 place of the guardian checks; `AlreadyCounted` once a proof counted in that
 domain). Then:
@@ -670,7 +669,7 @@ domain). Then:
 3. Records the factor (for `Initiate`, with its nullifier), then attempts T4
    or T6.
 
-**T4 Promote** — internal, after any initiation evidence. If the condition
+**T4 Promote.** Internal, after any initiation evidence. If the condition
 is satisfied for a live collecting attempt `A`:
 
 - for lost-key, if the account's current applied-document hash differs from
@@ -690,7 +689,7 @@ is satisfied for a live collecting attempt `A`:
 Promotion refuses while another attempt is authorized and live
 (`AttemptAuthorized`).
 
-**T5 Complete** — `apply_doc(target_bytes, …)` selecting the zero-signer
+**T5 Complete.** `apply_doc(target_bytes, …)` selecting the zero-signer
 recovery rule. Once the account has checked the selection (§7.5: the
 recovery rule's id, no payload signer, a context on the account, the rule
 unexpired), it defers the whole check to the rule's controller
@@ -728,14 +727,14 @@ consumption is by identity, within the same ledger and authorized window an
 `apply_doc` under ordinary owner authorization that carries a differently
 formatted spelling of the same canonical target can consume such a leftover
 marker and be classified as a completion rather than refused as an ordinary
-write. The completed document is still the authorized canonical target — the
+write. The completed document is still the authorized canonical target. The
 identity is bound, so this neither installs a different policy nor bypasses the
-`Protected` freeze — but the exact-input-byte / same-invocation guarantee
-across a leftover marker is **not** enforced today. Tightening it (have
-`rcv_sync` receive the completing invocation's input-byte hash and require it
-to equal `A.target_bytes_hash`) is tracked in
-[`../DEFERRED.md`](../DEFERRED.md) ("Completion input-byte binding"); it is an
-account↔controller ABI change, so it reaches only newly-built accounts.
+`Protected` freeze. What is **not** enforced across a leftover marker is the
+exact-input-byte, same-invocation guarantee. Tightening it (have `rcv_sync`
+receive the completing invocation's input-byte hash and require it to equal
+`A.target_bytes_hash`) is tracked in [`../DEFERRED.md`](../DEFERRED.md)
+("Completion input-byte binding"); it is an account↔controller ABI change, so
+it reaches only newly built accounts.
 
 Application therefore binds the identity, not the exact input bytes. If the two
 digests ever disagreed (a faulty compiler), the only bytes `rcv_complete` accepts
@@ -752,7 +751,7 @@ evidence and timelock are satisfied. Nobody can change what it installs,
 because the target, the new credentials, and the new ZK commitment are all
 fixed by `A`.
 
-**T6 Cancel by evidence** — when the cancellation condition is satisfied for
+**T6 Cancel by evidence.** When the cancellation condition is satisfied for
 a live attempt `A`:
 
 1. `A` becomes `Cancelled`. If `A` was authorized under `Protected`, the
@@ -769,7 +768,7 @@ a live attempt `A`:
 Cancelling a collecting attempt never counts: it blocks nothing, so
 cancelling it only tidies state.
 
-**T7 Cancel by owner (`Loss` only)** — the account's
+**T7 Cancel by owner (`Loss` only).** The account's
 `cancel_recovery(attempt_id)` under owner authorization invokes the
 controller's `rcv_cancel`. The controller refuses under `Protected`
 (`OwnerCancelRefused`), and the account refuses when no controller is
@@ -781,12 +780,12 @@ that the owner could no longer stop. Once the attempt is cancelled the
 window has ended, so the owner may then reconfigure, for example to remove a
 guardian set that opened it.
 
-**T8 Expire** — derived. No transaction is needed. The first transition
+**T8 Expire.** Derived. No transaction is needed. The first transition
 that touches an expired attempt treats it as terminal.
 
-**T9 Enroll, reconfigure, remove** — through `apply_doc` only (§10).
+**T9 Enroll, reconfigure, remove.** Through `apply_doc` only (§10).
 
-**T10 Renew** — permissionless TTL extension of existing entries (§3.6).
+**T10 Renew.** Permissionless TTL extension of existing entries (§3.6).
 Changes no meaning.
 
 ### 6.4 Attempt replacement
@@ -801,7 +800,7 @@ Changes no meaning.
 - After it ends, any number of new attempts may open. Each needs its full
   condition from scratch.
 - Guardian non-response never relaxes a requirement. An attempt whose
-  evidence does not arrive simply expires.
+  evidence does not arrive expires.
 
 ## 7. Permitted document changes
 
@@ -985,10 +984,10 @@ role; a document rule by its name and compiled scope (context type)**:
   baseline minus the dead rule. The drop depends only on the applying
   ledger, so the delta and a full replace still install the same set. A
   thief who holds the owner key therefore cannot brick compromise recovery
-  by deleting a baseline rule that later expires — the completion drops it
+  by deleting a baseline rule that later expires: the completion drops it
   deterministically. The anti-brick check (§3.5, §7.3) keeps this from ever
-  stranding the account: a constraint-free self-admin rule that carries any
-  `not-after-ledger` — already past or still in the future — does **not**
+  stranding the account. A constraint-free self-admin rule that carries any
+  `not-after-ledger`, already past or still in the future, does **not**
   count as the surviving admin rule, so a document whose only admin rule is
   bounded is refused outright rather than installed and later dropped into a
   brick.
@@ -1298,13 +1297,13 @@ authorizes.
 - **A document's declared external keys must already be canonical.** The
   doc compiler refuses any signer whose `key` is not byte-for-byte its
   verifier-canonical form (`DocCompilerError::KeyNotCanonicalizable`) rather
-  than silently canonicalizing it — CANON refuses non-canonical input, it does
-  not repair it. This holds for an applied document and for a recovery
+  than canonicalizing it: CANON refuses non-canonical input instead of
+  repairing it. This holds for an applied document and for a recovery
   attempt's replacement keys alike (`derive_target` compiles the target the
   same way). Two consequences: a document's `doc_hash` and a recovery
   attempt's `replacements_hash` bind exactly the key bytes the installed
-  credential uses, never a spelling the credential drops; and two signers can
-  no longer hide one physical key under two encodings (e.g. a WebAuthn key
+  credential uses, never a spelling the credential drops; and two signers
+  cannot hide one physical key under two encodings (e.g. a WebAuthn key
   with and without its credential-id suffix), which would otherwise read as an
   independent co-signer. The credential-id a wallet needs to select a passkey
   is client-side metadata; it is not part of the on-chain key.
@@ -1438,8 +1437,8 @@ Consequences:
   signer's key leaves the recovery text, and therefore `config_hash`,
   unchanged.
 - **A completion is never routed through reconfiguration checks.** A ZK
-  rotation that is part of a completion is allowed precisely because the
-  attempt declared it.
+  rotation that is part of a completion is allowed because the attempt
+  declared it.
 - **Omitting the recovery section is removal.** It is gated like any
   removal. A completion's derived target always carries the recovery
   section, so a completion is never mistaken for a removal.
@@ -1534,7 +1533,7 @@ read it (§7.6).
 
 Every account, enrolled or not, upgrades in two steps:
 
-1. **`schedule_upgrade(wasm_hash, approval_valid_until)`** — owner
+1. **`schedule_upgrade(wasm_hash, approval_valid_until)`**: owner
    authorization. If a controller is adopted, the account calls
    `rcv_upgrade(account, UpgradeStep::Schedule(UpgradeSubject { request_id,
    wasm_hash }, approval_valid_until))`. That call refuses during an
@@ -1556,7 +1555,7 @@ Every account, enrolled or not, upgrades in two steps:
    One request at a time; scheduling another drops the previous one
    (`UpgradeDropped`). `request_id` comes from a per-account counter and is
    never reused.
-2. **`execute_upgrade(request_id)`** — owner authorization. The account
+2. **`execute_upgrade(request_id)`**: owner authorization. The account
    refuses, in this order:
    - no pending request (`NoPendingUpgrade`), or a `request_id` other than
      the pending one's (`UpgradeRequestMismatch`);
@@ -1809,24 +1808,23 @@ and C7).
 
 **External-signer digest binds the account address.** Before any rule is
 evaluated, the account's `check_auth` re-binds the host's
-`signature_payload` to the account's own 32-byte contract id —
-`sha256(AUTH_ADDR_DOMAIN || account_id || signature_payload)`, where
-`AUTH_ADDR_DOMAIN = "perch/account/auth-addr-v1"` — and the selected rule
-ids are then layered on top, as OZ's digest does. The digest an `External` signer authenticates
-against is therefore unique to this account, and `capabilities().auth_digest`
+`signature_payload` to the account's own 32-byte contract id, as
+`sha256(AUTH_ADDR_DOMAIN || account_id || signature_payload)` with
+`AUTH_ADDR_DOMAIN = "perch/account/auth-addr-v1"`, then layers the selected
+rule ids on top, as OZ's digest does. The digest an `External` signer
+authenticates against is therefore unique to this account, and `capabilities().auth_digest`
 reports the scheme as `addr_oz_v1` so a client knows which digest to sign.
-This is necessary because Soroban's authorization preimage
+The fold is needed because Soroban's authorization preimage
 (`HashIdPreimage::SorobanAuthorization`, for a non-delegated custom-account
 credential) binds the invocation, nonce, network and expiration but **not** the
 address of the account whose `__check_auth` runs, and the host's per-account
 nonce namespace prevents reuse only within one account. Without the fold, an
 `External` signature collected for one account is replayable on another that
 shares the key and the selected rule ids. `Signer::Delegated` (CAP-0071)
-signers never consume this digest — the host validates them under
-`SorobanAuthorizationWithAddress`, which is already address-bound — so they are
-unaffected. Off-chain signers (`perch-js`'s `signingDigest`, `perch-deploy`'s
+signers never consume this digest: the host validates them under
+`SorobanAuthorizationWithAddress`, which is already address-bound. Off-chain signers (`perch-js`'s `signingDigest`, `perch-deploy`'s
 `perch_auth_digest`) reproduce the fold byte-for-byte; `auth_vectors.rs` pins
-them against the digest the on-chain `check_auth` actually hands a verifier.
+them against the digest the on-chain `check_auth` hands a verifier.
 
 **Invariants this section maintains.**
 
@@ -1944,10 +1942,10 @@ controller    adapter (embeds verifier and VK)   pool    account ──pins─�
 - **Build-time pins.** The account pins its doc compiler, interpreter, and
   spending-limit policy (`registry_contract!`, each address derived from
   the build-time wasm hash); a new version of any of them reaches an
-  account only through an account upgrade (§12). The interpreter and the
-  spending limit run only for an account upgraded from code that installed
-  them, until its first `apply_doc` (§12). The adapter compiles in
-  its verifier and verification key.
+  account only through an account upgrade (§12). This code calls neither
+  the interpreter nor the spending limit; its `infra` view reports their
+  pinned addresses. The adapter compiles in its verifier and verification
+  key.
 - **Derivation uses the account's compiler.** The controller calls
   `derive_target` and `publish_baseline` through the compiler the account
   reports (`doc_compiler` view), so derived targets and applied documents

@@ -1,4 +1,4 @@
-//! End-to-end matrix (#9): compile the ci-publish document, install the real
+//! End-to-end matrix: compile the ci-publish document, install the real
 //! interpreter as an OZ policy, and drive the real `do_check_auth` with real
 //! ed25519 signatures. No mocked auth for the signer under test — the ci key is
 //! verified on-chain by a real verifier contract.
@@ -55,7 +55,6 @@ fn setup(valid_until: Option<u32>) -> World {
     let signing_key = SigningKey::from_bytes(&[7u8; 32]);
     let pubkey = BytesN::from_array(&env, &signing_key.verifying_key().to_bytes());
 
-    // Compile the real document → the ci-publish install params.
     let doc = perch_ir::from_json(&fixture()).expect("parse");
     perch_ir::validate(&doc).expect("valid");
     let cfg = CompileConfig {

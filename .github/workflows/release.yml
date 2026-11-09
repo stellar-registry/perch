@@ -6,10 +6,10 @@ name: Release
 #      whose crate manifest `version` has no matching `<contract>-v<version>`
 #      tag yet (i.e. it was bumped in the merged PR). Releases are ON-CHAIN
 #      wasm publishes, not crates.io, so this is pure git — NO release-plz /
-#      `cargo package`, which couldn't resolve the workspace's git-only +
-#      intra-workspace path deps against the crates.io index and also packaged
-#      the immutable last-release tags as its diff baseline, wedging the
-#      pipeline. To release a contract, bump its version in a PR.
+#      `cargo package`, which cannot resolve the workspace's git-only +
+#      intra-workspace path deps against the crates.io index and packages the
+#      immutable last-release tags as its diff baseline. To release a
+#      contract, bump its version in a PR.
 #   2. The infra publishes (`publish-plan` → `constructorless-build` →
 #      `constructorless-publish`) — a generic, contract-AGNOSTIC fan-out:
 #      whichever infra contracts this run released (the ALLOW list in
@@ -29,9 +29,8 @@ name: Release
 #      the tested commit (scripts/registry-target.sh): the registry the path
 #      derives, or, while deployments/pending-registry.json declares a
 #      migration that has not switched, unverified/perch/constructorless,
-#      which the deployment still records. (The spending limit used to have
-#      its own chain into unverified/perch/stateless; that registry is
-#      retired and keeps only perch-spending-limit <= 0.1.1.)
+#      which the deployment still records. (unverified/perch/stateless is a
+#      retired registry holding only perch-spending-limit <= 0.1.1.)
 #
 # A third, off-chain leg — `npm-publish` — mirrors the same convention for
 # the TypeScript packages: detect-releases also tags `<pkg>-v<version>` when a
@@ -80,8 +79,7 @@ name: Release
 # All publish halves hang off `needs:` in the SAME run (gated on the
 # detect-releases `releases` output) instead of a tag/release trigger, so they
 # fire even though the tag was pushed with the default GITHUB_TOKEN — no GitHub
-# App required. (This is why the old per-contract publish.yml, which needed the
-# App token's tag push to retrigger, was folded in here and removed.)
+# App required.
 #
 # ONE-TIME BOOTSTRAP (manager-signed), once per NEW wasm name: the
 # constructorless registry is MANAGED — while its manager is set, the INITIAL
@@ -185,17 +183,11 @@ jobs:
             echo "CI passed on $HEAD_SHA, but main is now at $TIP_SHA — that commit's CI run releases any pending bump" >>"$GITHUB_STEP_SUMMARY"
           fi
 
-  # Detect which contracts to release — WITHOUT release-plz or `cargo package`.
-  # Perch never publishes to crates.io (releases are on-chain wasm publishes), so
-  # release-plz's `cargo package --workspace` change-detection was a structural
-  # mismatch: the workspace's git-only + intra-workspace path deps can't all
-  # resolve on the crates.io index, and release-plz also packages the immutable
-  # last-release tags as its diff baseline — commits whose manifests can't be
-  # retroactively fixed — which permanently wedged the pipeline. Instead: a
-  # contract is "released" when its crate manifest `version` has no matching
-  # `<contract>-v<version>` tag yet (i.e. someone bumped it in a merged PR). Pure
-  # git, no packaging. Emits the same `releases` shape the publish halves consume,
-  # so everything downstream is unchanged.
+  # Detect which contracts to release — WITHOUT release-plz or `cargo package`
+  # (see the header). A contract is "released" when its crate manifest
+  # `version` has no matching `<contract>-v<version>` tag yet (i.e. someone
+  # bumped it in a merged PR). Pure git, no packaging. Emits the `releases`
+  # shape the publish halves consume.
   detect-releases:
     needs: ci-green
     if: needs.ci-green.outputs.go == 'true'
@@ -309,8 +301,8 @@ jobs:
   # crate tree + the intra-workspace libs it embeds), bumps the manifest,
   # regenerates crates/<c>/CHANGELOG.md, and opens/updates one "chore: release"
   # PR. Merging that PR bumps the versions on main, which detect-releases then
-  # tags + publishes. This is release-plz's UX (auto semver bump + changelog +
-  # release PR) rebuilt on git history, sidestepping the cargo-package wedge.
+  # tags + publishes: release-plz's flow (auto semver bump + changelog +
+  # release PR) from git history alone.
   # (The PR is opened with GITHUB_TOKEN, so its own CI checks don't run — the
   # bumps are mechanical; real CI ran on the feature PRs.)
   release-pr:
@@ -372,7 +364,7 @@ jobs:
           # release of their own. The registry path beside them
           # (crates/*/wasm/registry.path) is source no deployment rewrites,
           # and an edit to it changes the contract's bytes, so it is a
-          # release. The soroban-sdk test snapshots (test_snapshots/, now
+          # release. The soroban-sdk test snapshots (test_snapshots/,
           # gitignored) are test output that never reaches a wasm, so
           # deleting them is no release either.
           pins=(--exclude-path "crates/*/wasm/*.sha256" --exclude-path "crates/*/wasm/README.md" --exclude-path "crates/**/test_snapshots/**")
@@ -417,8 +409,7 @@ jobs:
           # (breaking, under Cargo's caret rules) leaves a dependent's pin
           # stale and `cargo metadata` fails workspace-wide the next time
           # anything touches that dependent — see AGENTS.md's version-pin
-          # sharp edge (this used to be a manual "grep and bump every match"
-          # step, which is exactly how that failure mode happened before).
+          # sharp edge.
           if [ -n "$bumped" ]; then
             while IFS='=' read -r name ver; do
               [ -n "$name" ] || continue

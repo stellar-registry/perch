@@ -9,7 +9,7 @@ import type { PolicyDoc } from '../src/schema.js';
 
 // The same source-of-truth parity the Rust `limits_parity` suite runs, node
 // side: perch-js mirrors the compiler's per-document caps at runtime in
-// `checkLimits`, and the shipped schema now encodes the representable ones
+// `checkLimits`, and the shipped schema encodes the representable ones
 // (maxItems / maxLength). This proves the schema's encoded caps and
 // `checkLimits` REJECT THE SAME over-cap documents when fed the same caps — so
 // the schema an offline editor reads and the client-side limit check cannot

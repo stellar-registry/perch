@@ -21,9 +21,9 @@ but recovery never runs through it; see the last section.)
   §6): attempts, evidence, the `Protected` freeze, cancellation and the
   cancel cap, epochs, nullifier spending, baselines, upgrade approvals, and
   the two-digest target binding.
-- Account authorization (`crates/perch-smart-account`): `__check_auth`, OZ
-  context-rule selection, `execute`, `apply_doc` and its delta, the
-  reserved-name guard, upgrades, and the configuration revision.
+- Account authorization (`crates/perch-smart-account`): `__check_auth`,
+  rule selection and rule-eval's `check_auth`, `execute`, `apply_doc` and
+  its delta, the reserved-name guard, upgrades, and the configuration revision.
 - The ZK circuit (`circuits/`), the vendored UltraHonk verifier and its ZK
   delta, the adapter (`crates/perch-zk-adapter`), and the membership pool
   (`crates/perch-zk-pool`).
@@ -32,7 +32,7 @@ but recovery never runs through it; see the last section.)
   configuration.
 
 These are covered by tests, not proofs ([Contract tests](#contract-tests)).
-Broader formal models are not part of this revision
+Broader formal models are deferred
 ([`DEFERRED.md`](../DEFERRED.md#additional-formal-models)).
 
 ## What is proved
@@ -64,9 +64,8 @@ Proved in `formal/PerchFormal/CanonProofs.lean`, with no `sorry`
   member is a substring of its document's canonical form, so `config_hash`
   ignores everything outside it (a key rotation is not a reconfiguration).
 
-These are statements about the Lean model's emitter. They say nothing
-about the Rust code on their own; the next section is what ties the two
-together.
+These are statements about the Lean model's emitter and say nothing about
+the Rust code on their own. The next section ties the two together.
 
 ## Empirical Rust/Lean parity (evidence, not proof)
 
@@ -148,10 +147,10 @@ doc compiler maps `perch_ir::RecoveryConfig` directly to
 interpreter programs, has no recovery input. So T1–T6 and the eval vectors
 cover no recovery behaviour, and recovery leaves them unchanged.
 
-This is by design. Recovery state stays outside the stateless interpreter:
+Recovery state stays outside the stateless interpreter on purpose.
 `docs/verification/THEORY.md` shows that no execution monitor can enforce
 "the account can always recover" (a liveness property), and that Perch
-addresses the adjacent risk structurally, by keeping INV-2's policy-free
-admin path independent of the interpreter. The recovery controller is
+handles the adjacent risk by keeping INV-2's policy-free admin path
+independent of the interpreter. The recovery controller is
 ordinary stateful contract logic outside that enforceable fragment, so it
 was never a candidate for the per-invocation safety model.

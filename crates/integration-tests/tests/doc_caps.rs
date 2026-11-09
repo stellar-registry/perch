@@ -10,21 +10,15 @@ use perch_doc_compiler::{
     DocCompilerError, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS,
     MAX_RULE_CONSTRAINTS, MAX_RULE_NAME_BYTES,
 };
+use perch_testkit::delta::strkey;
 use perch_testkit::{Bootstrap, World, ED25519_VERIFIER_NAME, FIXTURE_NETWORK};
-use soroban_sdk::{Address, Bytes};
+use soroban_sdk::Bytes;
 
 fn setup() -> World {
     Bootstrap::native()
         .network(FIXTURE_NETWORK)
         .admin_ed25519([9u8; 32])
         .build()
-}
-
-fn strkey(a: &Address) -> String {
-    let s = a.to_string();
-    let mut buf = vec![0u8; s.len() as usize];
-    s.copy_into_slice(&mut buf);
-    String::from_utf8(buf).unwrap()
 }
 
 /// `signers` signers and `rules` rules (the admin rule first), the last

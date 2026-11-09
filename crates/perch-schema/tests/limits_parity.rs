@@ -1,8 +1,6 @@
-//! Criterion 1 + the constraint source-of-truth: every limit the schema
-//! encodes is checked against its single declared source, in both directions.
-//! If a limit tightens or loosens without the schema moving with it, one of
-//! these assertions fails — "a test that fails when the validator constants and
-//! the schema disagree".
+//! Every limit the schema encodes is checked against its single declared
+//! source, in both directions. If a limit tightens or loosens without the
+//! schema moving with it, one of these assertions fails.
 //!
 //! Two source boundaries:
 //!
@@ -10,8 +8,7 @@
 //!   behaviourally via `agree`: perch-ir's `from_json` + `validate` and the
 //!   schema accept/reject the same documents. This covers `m <= N`, guardian
 //!   `quorum <= count`, the `limit` positivity/overflow shape, and the hex
-//!   shapes (the brief's motivating example: a string-length rule in
-//!   `validate.rs`).
+//!   shapes.
 //! - **the compiler's per-document caps** (`perch_doc_compiler`'s
 //!   `MAX_DOC_SIGNERS` / `MAX_DOC_RULES` / `MAX_RULE_NAME_BYTES`). These are the
 //!   compiler's, not perch-ir's, so they are checked by *constant equality*: the

@@ -395,6 +395,8 @@ pub struct World {
     pub target: Address,
     pub guardians: std::vec::Vec<Address>,
     nonce: Cell<i64>,
+    /// The last [`fixed_address`] handed out, when [`Opts::fixed_addresses`].
+    fixed: Option<Cell<u8>>,
 }
 
 /// How [`world_with`] departs from the default world.
@@ -407,6 +409,23 @@ pub struct Opts {
     pub failing_spending_limit: bool,
     /// Which compiler sits at the compiler's address.
     pub compiler: TestCompiler,
+    /// Every contract the world registers, and every [`World::new_key`],
+    /// sits at a [`fixed_address`] instead of one from the SDK's test
+    /// address generator, so documents naming them hash the same under any
+    /// SDK version.
+    pub fixed_addresses: bool,
+    /// The env writes no `test_snapshots/` file when dropped.
+    pub skip_snapshot: bool,
+}
+
+/// The `n`th fixed contract address: `C` strkey of `[0xF1; 31] ++ [n]`.
+pub fn fixed_address(e: &Env, n: u8) -> Address {
+    let mut id = [0xF1; 32];
+    id[31] = n;
+    let sc = soroban_sdk::xdr::ScAddress::Contract(soroban_sdk::xdr::ContractId(
+        soroban_sdk::xdr::Hash(id),
+    ));
+    Address::try_from_val(e, &ScVal::Address(sc)).unwrap()
 }
 
 /// The compiler a world runs (`perch_doc_compiler::testutils`).
@@ -443,7 +462,13 @@ pub fn world() -> World {
 }
 
 pub fn world_with(opts: Opts) -> World {
-    let env = Env::default();
+    let env = if opts.skip_snapshot {
+        Env::new_with_config(soroban_sdk::testutils::EnvTestConfig {
+            capture_snapshot_at_drop: false,
+        })
+    } else {
+        Env::default()
+    };
     let network_id = env
         .crypto()
         .sha256(&Bytes::from_slice(&env, FIXTURE_NETWORK.as_bytes()))
@@ -489,18 +514,30 @@ pub fn world_with(opts: Opts) -> World {
         );
     }
 
-    let owner = env.register(Key, ());
-    let device = env.register(Key, ());
-    let guardians = (0..3).map(|_| env.register(Key, ())).collect();
-    let controller = env.register(PerchRecovery, ());
-    let adapter = env.register(MockAdapter, ());
-    let pool = env.register(PerchZkPool, ());
-    let target = env.register(Target, ());
+    let fixed = opts.fixed_addresses.then(|| Cell::new(0u8));
+    macro_rules! register {
+        ($contract:expr, $args:expr) => {
+            match &fixed {
+                Some(n) => {
+                    n.set(n.get() + 1);
+                    env.register_at(&fixed_address(&env, n.get()), $contract, $args)
+                }
+                None => env.register($contract, $args),
+            }
+        };
+    }
+    let owner = register!(Key, ());
+    let device = register!(Key, ());
+    let guardians = (0..3).map(|_| register!(Key, ())).collect();
+    let controller = register!(PerchRecovery, ());
+    let adapter = register!(MockAdapter, ());
+    let pool = register!(PerchZkPool, ());
+    let target = register!(Target, ());
     let admin = vec![&env, Signer::Delegated(owner.clone())];
     let account = if opts.oracle {
-        env.register(perch_testkit::delta::OracleAccount, (admin,))
+        register!(perch_testkit::delta::OracleAccount, (admin,))
     } else {
-        env.register(PerchAccount, (admin,))
+        register!(PerchAccount, (admin,))
     };
 
     // Enforcing authorization from here on: only explicit entries pass.
@@ -517,6 +554,7 @@ pub fn world_with(opts: Opts) -> World {
         target,
         guardians,
         nonce: Cell::new(0),
+        fixed,
     }
 }
 
@@ -990,7 +1028,14 @@ impl World {
     }
 
     pub fn new_key(&self) -> Address {
-        self.env.register(Key, ())
+        match &self.fixed {
+            Some(n) => {
+                n.set(n.get() + 1);
+                self.env
+                    .register_at(&fixed_address(&self.env, n.get()), Key, ())
+            }
+            None => self.env.register(Key, ()),
+        }
     }
 }
 

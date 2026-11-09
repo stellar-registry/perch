@@ -265,15 +265,18 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           tar -xzf /tmp/stellar.tar.gz -C "$HOME/.local/bin" stellar
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      # Build with cargo, then strip the DataCount section komet v0.1.88's
-      # pykwasm parser rejects (id 0xc; emitted by the bulk-memory feature,
-      # unused by soroban's memory model). The soroban custom sections —
-      # including the contractspecv0 ABI komet reads — are preserved. `komet
-      # test --wasm` consumes the prepared wasm and skips its own build.
+      # Build with `stellar contract build` (soroban-sdk 28+ refuses a wasm
+      # build by any build system that does not shake the contract spec;
+      # `--optimize=false` keeps the bytes cargo emits), then strip the
+      # DataCount section komet v0.1.88's pykwasm parser rejects (id 0xc;
+      # emitted by the bulk-memory feature, unused by soroban's memory model).
+      # The soroban custom sections — including the contractspecv0 ABI komet
+      # reads — are preserved. `komet test --wasm` consumes the prepared wasm
+      # and skips its own build.
       - name: Build + prepare the contract wasm
         working-directory: komet
         run: |
-          cargo build --release --target wasm32v1-none
+          stellar contract build --optimize=false
           python3 strip_datacount.py \
             target/wasm32v1-none/release/perch_komet_tests.wasm \
             target/perch_komet_tests.komet.wasm

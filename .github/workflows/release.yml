@@ -341,26 +341,28 @@ jobs:
           # contract that ships it. Update these lists if a contract's perch deps
           # change: scripts/test-release-scripts.py (CI) fails when a list
           # misses a crate the contract links. A bare name is a crate under
-          # crates/; an entry with a slash is a repo path (perch-zk-adapter
-          # compiles in vendor/'s verifier).
+          # crates/; an entry with a slash is a repo path (a vendored crate
+          # under vendor/).
           paths_for() { case "$1" in
-            perch-interpreter) echo "perch-interpreter perch-program";;
-            perch-doc-compiler) echo "perch-doc-compiler perch-compile perch-ir perch-program perch-recovery-interface";;
+            perch-interpreter) echo "perch-interpreter perch-program vendor/soroban-flux";;
+            perch-doc-compiler) echo "perch-doc-compiler perch-compile perch-ir perch-program perch-recovery-interface vendor/soroban-flux vendor/soroban-sdk-tools";;
             # perch-smart-account depends on perch-recovery-interface (the
             # controller hook, account view, and pool insertion clients), so an
             # interface change re-releases the account too — see AGENTS.md's
             # version-pin sharp edge.
-            perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface";;
-            perch-recovery) echo "perch-recovery perch-recovery-interface perch-doc-compiler perch-compile perch-ir perch-program";;
-            perch-zk-pool) echo "perch-zk-pool perch-zk-primitives perch-recovery-interface";;
+            perch-account) echo "perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface vendor/soroban-flux vendor/soroban-sdk-tools";;
+            perch-recovery) echo "perch-recovery perch-recovery-interface perch-doc-compiler perch-compile perch-ir perch-program vendor/soroban-flux vendor/soroban-sdk-tools";;
+            perch-zk-pool) echo "perch-zk-pool perch-zk-primitives perch-recovery-interface vendor/soroban-poseidon vendor/soroban-sdk-tools";;
             # The verification key the adapter compiles in lives in its own
             # crate (vk/), so a circuit change re-releases it; so does a
             # change to the vendored verifier it links (a path with a `/` is
             # taken from the repository root).
-            perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface vendor/ultrahonk-soroban-verifier";;
+            perch-zk-adapter) echo "perch-zk-adapter perch-zk-primitives perch-recovery-interface vendor/ultrahonk-soroban-verifier vendor/soroban-poseidon vendor/soroban-sdk-tools";;
             # The factory pins the account wasm and the WebAuthn verifier, so
             # a change to either is a new factory.
-            perch-account-factory) echo "perch-account-factory perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-webauthn-verifier";;
+            perch-account-factory) echo "perch-account-factory perch-account perch-smart-account perch-doc-compiler perch-compile perch-ir perch-program perch-registry-resolve perch-registry-resolve-macro perch-recovery-interface perch-webauthn-verifier vendor/soroban-flux vendor/soroban-sdk-tools";;
+            # The registry contracttraits and admin-sep it composes are vendored.
+            perch-stateless-registry) echo "perch-stateless-registry vendor/admin-sep vendor/registry-traits";;
             *) echo "$1";;
           esac; }
           CONTRACTS="perch-interpreter perch-doc-compiler perch-ed25519-verifier perch-spending-limit perch-account perch-constructorless-registry perch-recovery perch-webauthn-verifier perch-zk-pool perch-zk-adapter perch-account-factory perch-mldsa-verifier"

@@ -1,0 +1,71 @@
+{
+  "differences": [
+    {
+      "step": "rule-selection: an auth payload with an unknown field",
+      "cause": "soroban-sdk 28 (carried into 29) unpacks a #[contracttype] struct leniently: a map key the struct does not define is ignored instead of failing the conversion (soroban-sdk _migrating::v28_contracttype_unpacking). The account's __check_auth takes its signature as stellar-accounts' AuthPayload, so an auth entry whose signature map carries an extra key, which soroban-sdk 27 refused while decoding (WasmVm InvalidAction), now decodes and is checked like the same payload without the key: the signers and context_rule_ids it does carry are verified as before, and the call is authorized. No other step differs.",
+      "fields": [
+        {
+          "now": [],
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].auth-failures",
+          "recorded": [
+            "account: WasmVm(InvalidAction)"
+          ]
+        },
+        {
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].outcome.err",
+          "recorded": "Context(InvalidAction)"
+        },
+        {
+          "now": "u32:2",
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].outcome.ok"
+        },
+        {
+          "now": {
+            "live_until": 1001000,
+            "val": null
+          },
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].storage.set.account Temporary \"nonce:6\""
+        },
+        {
+          "now": {
+            "live_until": 1000999,
+            "val": {
+              "instance-storage": [
+                [
+                  "sym:hits",
+                  "u32:2"
+                ]
+              ]
+            }
+          },
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].storage.set.target Persistent \"instance\""
+        }
+      ]
+    },
+    {
+      "step": "recovery-removal: owner removes recovery",
+      "cause": "soroban-sdk 28 (carried into 29) publishes a #[contractevent] whose data format is a map without its void fields (soroban-sdk _migrating::v28_contractevent_packing). perch-recovery's EpochAdvanced { account, epoch, config_hash: Option<BytesN<32>> } is published with config_hash None when an account's recovery configuration is removed; its data map now holds only epoch, where soroban-sdk 27 also carried config_hash as void. Readers that treat an absent config_hash as None see the same event. The same applies to any Perch event with an Option field that is None; EpochAdvanced is the only one with such a field.",
+      "fields": [
+        {
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].events[0].data",
+          "recorded": [
+            [
+              "sym:config_hash",
+              null
+            ],
+            [
+              "sym:epoch",
+              "u64:2"
+            ]
+          ],
+          "now": [
+            [
+              "sym:epoch",
+              "u64:2"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

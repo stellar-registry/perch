@@ -14,8 +14,8 @@
 members = ["."]
 
 [workspace.dependencies]
-soroban-sdk = "27.0.2"
-soroban-flux = { git = "https://github.com/nidohq/soroban-flux.git", rev = "3170467" }
+soroban-sdk = "29.0.1"
+soroban-flux = { version = "0.1.0", path = "../vendor/soroban-flux" }
 
 [package]
 name = "perch-komet-tests"

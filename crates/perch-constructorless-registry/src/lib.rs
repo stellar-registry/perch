@@ -39,13 +39,13 @@
 //! [`registry-traits`](https://github.com/stellar-registry/contracts) (PR #33):
 //! [`Publishable`], [`Manageable`], and the content-addressed
 //! [`StatelessDeployable`]; plus [`Administratable`] and [`Upgradable`] from
-//! [`admin-sep`](https://github.com/theahaco/admin-sep) (`v0.27.0`).
+//! [`admin-sep`](https://github.com/theahaco/admin-sep) (`v0.28.1`, vendored).
 //!
 //! ## Admin: a single `ADMIN` key shared with registry-traits
 //!
 //! The canonical `registry` contract composes `Administratable` and
-//! `Upgradable` from **`admin-sep`**. That crate now ships on soroban-sdk 27
-//! (`v0.27.0`), so this sdk-27 workspace composes the same real
+//! `Upgradable` from **`admin-sep`**. This workspace builds a vendored copy
+//! (`vendor/admin-sep`, moved to soroban-sdk 29), so it composes the same real
 //! `#[contracttrait]`s for its public `admin` / `set_admin` / `upgrade` entry
 //! points — no local glue.
 //!
@@ -141,7 +141,7 @@ mod contract {
         /// `Administratable::set_admin` (which, at construction time, has no
         /// prior admin to auth against and simply writes the `ADMIN` key).
         pub fn __constructor(env: &Env, admin: Address, manager: Address, root: Address) {
-            Self::set_admin(env, admin);
+            Self::set_admin(env, &admin);
             Storage::set_manager_no_auth(env, &manager);
             Storage::set_root_registry(env, &root);
         }
@@ -193,7 +193,8 @@ mod test {
     /// Self-contained, green: constructing the subregistry wires `admin`,
     /// `manager`, and `root` through the composed registry-traits seams. Also
     /// exercises the composed ABI (the `#[contracttrait]` glue) at compile time,
-    /// which is what validates the soroban-sdk 27 ⇄ registry-traits `<28` pin.
+    /// which is what validates the vendored registry-traits against this
+    /// workspace's soroban-sdk.
     #[test]
     fn constructor_wires_admin_manager_and_root() {
         let env = Env::default();

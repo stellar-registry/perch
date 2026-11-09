@@ -153,7 +153,7 @@ fn pinned_address_matches_actual_deployment() {
     let deployed = env
         .deployer()
         .with_address(registry.clone(), wasm_hash.clone())
-        .deploy_v2(wasm_hash, ());
+        .deploy_contract(soroban_sdk::ContractExecutable::Wasm(wasm_hash), ());
 
     // The macro-derived address equals the actually-deployed instance address.
     assert_eq!(pinned::address(&env, &registry), deployed);

@@ -1,5 +1,5 @@
 //! Small constructors for the ScVal shapes this tool emits. soroban-env-common
-//! pins stellar-xdr `=27.0.0`, so the ScVals built here are the same types the
+//! pins stellar-xdr `=28.0.0`, so the ScVals built here are the same types the
 //! sdk's `#[contracttype]` encoding produces — byte compatibility is pinned by
 //! the golden tests in `auth`.
 

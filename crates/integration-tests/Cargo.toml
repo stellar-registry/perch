@@ -37,7 +37,7 @@ stellar-accounts = { workspace = true }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 # `e2e_invoke` (simulation in recording mode) for release_stack.rs's footprint
 # check; the same version soroban-sdk pins.
-soroban-env-host = { version = "=27.0.1", features = ["recording_mode"] }
+soroban-env-host = { version = "=29.0.1", features = ["recording_mode"] }
 ed25519-dalek = "2"
 # Signs as an ML-DSA-65 key for perch-mldsa-verifier (deterministic, no RNG).
 fips204 = { workspace = true }

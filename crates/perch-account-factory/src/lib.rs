@@ -17,7 +17,8 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, Vec,
+    contract, contractevent, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN,
+    ContractExecutable, Env, Vec,
 };
 use stellar_accounts::smart_account::Signer;
 
@@ -81,7 +82,10 @@ impl PerchAccountFactory {
         let account = e
             .deployer()
             .with_current_contract(deploy_salt(e, &salt, &admin_signers))
-            .deploy_v2(pins::account::hash(e), (admin_signers.clone(),));
+            .deploy_contract(
+                ContractExecutable::Wasm(pins::account::hash(e)),
+                (admin_signers.clone(),),
+            );
         AccountCreated {
             account: account.clone(),
             salt,

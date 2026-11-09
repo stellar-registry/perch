@@ -31,8 +31,9 @@ pinned to release v0.1.88 and pulls the whole prebuilt closure (K, the
 haskell backend, and the bundled Soroban semantics) from RV's public
 `k-framework` Cachix cache. Nothing compiles from source and no separate
 `komet-kdist build` step is needed. The job then builds the contract with
-`cargo`, strips the DataCount section (next section), and runs `komet test
---wasm …`, executing the real evaluator bytecode under the K semantics.
+`stellar contract build --optimize=false`, strips the DataCount section (next
+section), and runs `komet test --wasm …`, executing the real evaluator
+bytecode under the K semantics.
 
 **`komet prove run` (symbolic) is local-only.** It is the stronger check, a
 proof for every `u32`, but takes well over 30 minutes on these properties,
@@ -40,9 +41,9 @@ too long for the CI job. CI runs the fuzzer; the symbolic proof is a
 documented local command (below). This is a performance limit of symbolic execution, not a gap
 in what the properties assert.
 
-### Two soroban-sdk-27 compatibility fixes the CI job applies
+### Two compatibility fixes the CI job applies
 
-Komet v0.1.88's toolchain predates soroban-sdk 27, so the job bridges two gaps
+Komet v0.1.88's toolchain predates soroban-sdk 27 (this crate builds on 29), so the job bridges two gaps
 (both handled automatically in CI; relevant if you run locally):
 
 1. **DataCount section.** Modern `wasm32v1-none` output carries a DataCount
@@ -77,7 +78,7 @@ nix profile install github:runtimeverification/komet/v0.1.88
 
 # 3. Build + prepare the wasm and run, from this directory:
 cd komet
-cargo build --release --target wasm32v1-none
+stellar contract build --optimize=false
 python3 strip_datacount.py \
   target/wasm32v1-none/release/perch_komet_tests.wasm \
   target/perch_komet_tests.komet.wasm

@@ -98,8 +98,9 @@ evidence does not.
 | Rust | channel `stable`, target `wasm32v1-none`. **Not version-pinned**: reproducing the deployed hashes needs the recorded rustc 1.99.0 | `rust-toolchain.toml` |
 | Release profile | `opt-level = "z"`, `overflow-checks = true`, `panic = "abort"`, `lto = true`, `codegen-units = 1` | `Cargo.toml` `[profile.release]` |
 | Wasm stack | 64 KiB per contract, 128 KiB for the ZK adapter (an overflow traps) | `crates/*/build.rs` |
-| Soroban | `soroban-sdk` 27.0.6, `soroban-env-host` 27.0.1 (test host), `soroban-poseidon` 27.0.0 | `Cargo.lock` |
-| OpenZeppelin accounts | `stellar-accounts` 0.7.1 at theahaco/stellar-contracts-OZ `33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` | `Cargo.toml`, `Cargo.lock` |
+| Soroban | `soroban-sdk` 29.0.1, `soroban-env-host` 29.0.1 (test host), `stellar-xdr` 28.0.0 | `Cargo.lock` |
+| Vendored, moved to soroban-sdk 29 | `soroban-sdk-tools` 0.1.4, `soroban-poseidon` 28.0.0, `soroban-flux` 0.1.0, `admin-sep` 0.28.1, `registry-traits` at stellar-registry/contracts `884c1f94cbfcce249a5b8fa6325fb9052a90bd61`; each differs from upstream only by its documented SDK 29 delta | `vendor/*/NOTICE`, `UPSTREAM.sha256` |
+| OpenZeppelin accounts | `stellar-accounts` 0.7.1 at bitswell-hq/theahaco__stellar-contracts-OZ `42089fc90684fdab33a85eac3e8311259b69a61b`: theahaco/stellar-contracts-OZ `33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` moved to soroban-sdk 29.0.1 | `Cargo.toml`, `Cargo.lock` |
 | Stellar CLI | deployment build: stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork) and scaffold 0.0.27, SHA-256-checked by `release.yml`'s `deploy-stack` (manifest `toolchain`); CI: stellar-cli 27.1.0, SHA-256-checked | `.github/workflows/release.yml`, `.github/actions/setup-stellar` |
 | ZK proving | nargo 1.0.0-beta.9, bb 0.87.0, every download SHA-256-pinned per platform; proofs are `UltraKeccakZKFlavor` | `scripts/zk-toolchain.sh`, `circuits/manifest.json` |
 | ZK proving (JS) | `@noir-lang/noir_js` 1.0.0-beta.9, `@aztec/bb.js` 0.87.0, exact versions | `packages/perch-zk/package.json` |
@@ -146,6 +147,7 @@ backend needs no integration review with the core paths it touches
 | OZ fork PR [#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3): CAP-0071 delegated auth | in theahaco/stellar-contracts-OZ `33726766` | Explicit dependency review |
 | OZ fork PR [#4](https://github.com/theahaco/stellar-contracts-OZ/pull/4): `_no_events` variants | in `33726766` | Explicit dependency review |
 | OZ fork PR [#5](https://github.com/theahaco/stellar-contracts-OZ/pull/5): `reconcile_signers` | head `33726766` | Explicit dependency review |
+| OZ fork soroban-sdk 29 move ([bitswell-hq #1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1)) | `33726766..42089fc9` | Explicit dependency review |
 | UltraHonk `UltraKeccakZKFlavor` delta | `vendor/ultrahonk-soroban-verifier/src/zk.rs` and the visibility-only changes NOTICE lists | Explicit dependency review |
 | Upstream UltraHonk verifier (non-ZK base) | `vendor/ultrahonk-soroban-verifier/**` except the delta | Named exclusion: covered by upstream's internal review and OpenZeppelin audit (NOTICE, `VERIFIER_PROVENANCE.md`); its bytes are checked against `UPSTREAM.sha256` by `crates/perch-zk-adapter/tests/vendor.rs` |
 | `@stellar-registry/perch` | `packages/perch-js` | Explicit dependency review |
@@ -216,17 +218,21 @@ the caps.
 
 ### The OZ fork
 
-`stellar-accounts` is pinned to theahaco/stellar-contracts-OZ at
-`33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9`: upstream OpenZeppelin
-`fbfde38` (the fork's `main`) plus three commits, one for each of three
-open, stacked fork pull requests. Review the fork's changes as the diff
-from `fbfde38` to `33726766`.
+`stellar-accounts` is pinned to bitswell-hq/theahaco__stellar-contracts-OZ at
+`42089fc90684fdab33a85eac3e8311259b69a61b`. That is theahaco/stellar-contracts-OZ
+`33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` (upstream OpenZeppelin `fbfde38`,
+the fork's `main`, plus three commits, one for each of three open, stacked
+fork pull requests) followed by a documentation commit and the move to
+soroban-sdk 29.0.1 (bitswell-hq/theahaco__stellar-contracts-OZ
+[#1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1)).
+Review the fork's changes as the diff from `fbfde38` to `42089fc9`.
 
 | Fork PR | What its commit changes |
 | --- | --- |
 | [#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3) | `Signer::Delegated` authenticates through `delegate_account_auth` (CAP-0071): one `AddressWithDelegates` auth entry instead of a separate `require_auth_for_args` entry per delegate |
 | [#4](https://github.com/theahaco/stellar-contracts-OZ/pull/4) | `_no_events` variants of every context-rule, signer, and policy mutation, and of `spending_limit`'s install and uninstall |
 | [#5](https://github.com/theahaco/stellar-contracts-OZ/pull/5) | `reconcile_signers[_no_events]`: one validated, atomic signer-set update |
+| bitswell-hq [#1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1) | soroban-sdk 29.0.1: `ContextRuleType::CreateContractExternalRef` for CAP-0085 executable references, soroban-poseidon vendored |
 
 None of this code is in the Perch repository. It is in scope because every
 Perch contract except the ZK pool and adapter links it. The host and OZ behaviour the recovery design

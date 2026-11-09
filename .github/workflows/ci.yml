@@ -119,7 +119,7 @@ jobs:
             --skip cap_sweep
       # Wasm leg of the conformance vectors: the compiled artifact must agree
       # with the vectors under the soroban host (rustc/LLVM/wasmi in the loop).
-      - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release
+      - run: stellar contract build --package perch-bench-rpn --optimize=false
       - run: cargo test -p perch-conformance --test wasm_leg -- --ignored
       # The ML-DSA verifier verifies in guest wasm, so its cost is its own
       # code: the release wasm's metered instructions and memory, within the
@@ -374,6 +374,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # scripts/zk-toolchain.sh installs the pinned nargo/bb under target/
       # (checksummed) on first use and prints NARGO/BB; later calls are no-ops.
+      # The Stellar CLI builds the pool and adapter wasm below.
+      - uses: ./.github/actions/setup-stellar
       - name: Circuit tests
         run: |
           eval "$(scripts/zk-toolchain.sh)"
@@ -386,10 +388,12 @@ jobs:
         run: |
           eval "$(scripts/zk-toolchain.sh)"
           cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- bench 1
-          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter
-          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter \
-            --features perch-zk-pool/tree-depth-24,perch-zk-adapter/tree-depth-24 \
-            --target-dir target/zk-d24
+          zk_wasm() {
+            stellar contract build --package perch-zk-pool --optimize=false "$@"
+            stellar contract build --package perch-zk-adapter --optimize=false "$@"
+          }
+          zk_wasm
+          CARGO_TARGET_DIR=target/zk-d24 zk_wasm --features tree-depth-24
           cargo test -q -p perch-zk-adapter --test costs -- --ignored --nocapture --test-threads 1
 
   zizmor:

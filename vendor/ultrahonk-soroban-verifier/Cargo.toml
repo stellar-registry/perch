@@ -8,7 +8,7 @@ description = "Rust verifier for UltraHonk proofs"
 repository  = "https://github.com/yugocabrio/rs-soroban-ultrahonk"
 
 [dependencies]
-soroban-sdk = { version = "27.0.6", default-features = false }
+soroban-sdk = { version = "29.0.1", default-features = false }
 
 [features]
 default = []

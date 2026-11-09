@@ -28,9 +28,10 @@ upstream file at the commit above (checked against GitHub when recorded).
 Cargo.toml differs from upstream in two places, both because the crate is
 built here as a path dependency outside its own workspace:
 
-  - `soroban-sdk = { workspace = true }` became the version the upstream
-    workspace pins at that commit, `{ version = "27.0.6", default-features =
-    false }`;
+  - `soroban-sdk = { workspace = true }` became the soroban-sdk perch builds
+    with, `{ version = "29.0.1", default-features = false }` (the upstream
+    workspace pins 27.0.6 at that commit; the verifier's source builds
+    unchanged on 29);
   - the `[dev-dependencies]` table (upstream's test-utils crate and fixtures,
     which are not vendored) was dropped.
 

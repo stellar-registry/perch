@@ -10,7 +10,12 @@ holds the full recovery transactions.
 **Provenance.** Measured 2026-10-06 on an Apple M5 Max (18 cores, 128 GB,
 macOS 26), a shared machine at a load average of about 3.5. The toolchain
 was nargo 1.0.0-beta.9, bb 0.87.0, bb.js 0.87.0, noir_js 1.0.0-beta.9,
-soroban-sdk 27.0.6, rustc 1.97.1, and Node 24.18. Proofs are zero-knowledge
+soroban-sdk 27.0.6, rustc 1.97.1, and Node 24.18. The workspace now builds
+with soroban-sdk 29.0.1 / soroban-env-host 29.0.1; under them the metered
+on-chain costs are lower than the tables below (instructions: about 5% for
+`rcv_insert`, 9% for `is_known_root`, 12% for `verify`; resource fees in
+proportion; entries, bytes, and rent unchanged), and `just zk-bench` prints
+the current values. Proofs are zero-knowledge
 (`UltraKeccakZKFlavor`: `bb prove --zk`, bb.js `keccakZK`), and the adapter
 verifies them with the vendored verifier's ZK delta
 ([`README.md`](README.md)). The source is pre-merge commit

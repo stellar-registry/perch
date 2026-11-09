@@ -6,14 +6,17 @@
 //!   rules `apply_doc` does not install); before any document, the
 //!   constructor's admin rule;
 //! - **the installed rules**: for each installed-rule record, in order, the
-//!   denotation (`perch_rule_eval::denote`) of OZ's context rule
+//!   denotation (`denote`) of OZ's context rule
 //!   (`get_context_rule`: contract, signers in OZ's order, last ledger) with
-//!   the interpreter program and spending cap the doc compiler emits for the
-//!   same document rule (`compile_doc` of the applied canonical document):
-//!   what the interpreter and the spending limit enforced when the account
-//!   attached them. A document rule's OZ rule must carry no policy. The
-//!   recovery rule's record must be a zero-signer rule whose one policy is
-//!   the adopted controller, and its stored rule rule-eval's recovery rule.
+//!   the interpreter program and spending cap Perch's RPN lowering gives the
+//!   same document rule (`rpn::policies` of the applied canonical document):
+//!   what the interpreter and the spending limit enforce when attached. A
+//!   document rule's OZ rule must carry no policy. The recovery rule's record
+//!   must be a zero-signer rule whose one policy is the adopted controller,
+//!   and its stored rule rule-eval's recovery rule.
+//!
+//! The doc compiler's rules for the applied document are checked against the
+//! same RPN lowering first (`rpn::check_compiled`).
 //!
 //! Rules are compared as `StoredRule`s, whose conversion from a
 //! `rule_eval::Rule` is one-to-one, so equal mirrors are equal rules.
@@ -33,17 +36,18 @@
 //! model records and the recorded baseline (`rule_core_documents.rs`,
 //! `rule_eval_baseline.rs`).
 
+use crate::denote::{denote, Installed};
+use crate::rpn::{self, Policies};
 use perch_account::PerchAccountClient;
 use perch_doc_compiler::{CompiledDoc, PerchDocCompilerClient};
 use perch_rule_eval::convert::{address, signers};
-use perch_rule_eval::{denote, doc_of, model_of, Installed, StoredRule};
+use perch_rule_eval::{doc_of, model_of, StoredRule};
 use perch_smart_account::infra;
 use perch_smart_account::{InstalledRule, PerchSmartAccount};
 use soroban_sdk::{Address, Bytes, Env};
 use std::format;
 use std::string::{String, ToString};
 use std::vec::Vec;
-use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 use stellar_accounts::smart_account::ContextRuleType;
 use stellar_accounts::smart_account::SmartAccountStorageKey;
 
@@ -52,7 +56,7 @@ use stellar_accounts::smart_account::SmartAccountStorageKey;
 pub struct Checked {
     /// Stored rules, the recovery rule included.
     pub rules: usize,
-    /// Rules whose compiled form carries an interpreter program or a cap.
+    /// Rules the RPN lowering gives an interpreter program or a cap.
     pub constrained: usize,
     pub capped: usize,
     pub recovery: bool,
@@ -134,14 +138,17 @@ pub fn check(e: &Env, account: &Address) -> Result<Checked, String> {
     };
 
     let lowered = lowering(e, account, &me)?;
-    let compiled = client.applied_doc().map(|d| compile(e, &d));
+    let attached = match client.applied_doc() {
+        Some(d) => Some(attached(e, &d)?),
+        None => None,
+    };
     compare(
         e,
         account,
         &stored,
         &records,
         &lowered,
-        compiled.as_ref(),
+        attached.as_deref(),
         None,
         &mut checked,
     )?;
@@ -152,6 +159,14 @@ pub fn check(e: &Env, account: &Address) -> Result<Checked, String> {
 /// compiler.
 fn compile(e: &Env, canonical: &Bytes) -> CompiledDoc {
     PerchDocCompilerClient::new(e, &infra::perch_doc_compiler::address(e)).compile_doc(canonical)
+}
+
+/// The RPN lowering's policies for each rule of `canonical`, once the doc
+/// compiler's rules for it are checked against the same lowering.
+fn attached(e: &Env, canonical: &Bytes) -> Result<Vec<Policies>, String> {
+    let doc = rpn::doc(canonical)?;
+    rpn::check_compiled(e, &doc, &compile(e, canonical))?;
+    rpn::policies_of(e, &doc)
 }
 
 /// The stored rule set of the scoped document under `scope` equals both
@@ -183,7 +198,7 @@ pub fn check_scope(e: &Env, account: &Address, scope: u32) -> Result<Checked, St
         &stored,
         &record.rules,
         &lowered,
-        Some(&compile(e, &canonical)),
+        Some(&attached(e, &canonical)?),
         Some(record.gen),
         &mut checked,
     )?;
@@ -191,9 +206,9 @@ pub fn check_scope(e: &Env, account: &Address, scope: u32) -> Result<Checked, St
 }
 
 /// `stored` against `lowered` and against the denotation of each of
-/// `records`, read back from OZ with the program and cap `compiled` (the
-/// applied document compiled, `None` before any document) emits for it,
-/// carrying `generation`.
+/// `records`, read back from OZ with the program and cap `attached` (the
+/// RPN lowering of the applied document, `None` before any document) gives
+/// it, carrying `generation`.
 #[allow(clippy::too_many_arguments)]
 fn compare(
     e: &Env,
@@ -201,19 +216,18 @@ fn compare(
     stored: &[StoredRule],
     records: &soroban_sdk::Vec<InstalledRule>,
     lowered: &[StoredRule],
-    compiled: Option<&CompiledDoc>,
+    attached: Option<&[Policies]>,
     generation: Option<u64>,
     checked: &mut Checked,
 ) -> Result<(), String> {
     let client = PerchAccountClient::new(e, account);
     let me = address(e, account).ok_or("the account's address")?;
-    // The compiled rules the account installs, in its order: those whose
+    // The document rules the account installs, in its order: those whose
     // last ledger has not passed.
     let now = e.ledger().sequence();
-    let installed: Vec<_> = compiled
-        .map(|c| {
-            c.rules
-                .iter()
+    let installed: Vec<&Policies> = attached
+        .map(|p| {
+            p.iter()
                 .filter(|r| r.valid_until.is_none_or(|v| v >= now))
                 .collect()
         })
@@ -262,18 +276,17 @@ fn compare(
                 program: None,
                 cap: None,
             };
-            if compiled.is_some() {
+            if attached.is_some() {
                 let c = installed
                     .get(i)
-                    .ok_or(format!("rule {i}: no compiled rule installs it"))?;
-                if c.name != record.name || c.valid_until != oz.valid_until {
-                    return Err(format!("rule {i}: the compiled rule is another"));
+                    .ok_or(format!("rule {i}: no document rule installs it"))?;
+                if soroban_sdk::String::from_str(e, &c.name) != record.name
+                    || c.valid_until != oz.valid_until
+                {
+                    return Err(format!("rule {i}: the document rule is another"));
                 }
-                rule.program = c.install.first().map(|p| p.program);
-                rule.cap = c.cap.first().map(|cap| SpendingLimitAccountParams {
-                    spending_limit: cap.spending_limit,
-                    period_ledgers: cap.period_ledgers,
-                });
+                rule.program = c.install.as_ref().map(|p| p.program.clone());
+                rule.cap = c.cap.clone();
             }
             checked.constrained += usize::from(rule.program.is_some() || rule.cap.is_some());
             checked.capped += usize::from(rule.cap.is_some());

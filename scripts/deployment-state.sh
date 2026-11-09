@@ -47,7 +47,7 @@ manifest="${1:-$repo_root/deployments/${STELLAR_NETWORK:-testnet}.json}"
 # the contracts link.
 paths=(
     crates/perch-interpreter crates/perch-program
-    crates/perch-doc-compiler crates/perch-compile crates/perch-ir
+    crates/perch-doc-compiler crates/perch-ir
     crates/perch-recovery-interface
     crates/perch-ed25519-verifier
     crates/perch-mldsa-verifier

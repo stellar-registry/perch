@@ -11,7 +11,7 @@
 //! contract call (OZ refuses any other for the contract-call rules Perch
 //! installs, before a policy runs). That must equal
 //! rule-eval's `rule_allows` for the program's denotation
-//! (`perch_rule_eval::denote`) on the context as the account reads it
+//! (`perch_testkit::denote`) on the context as the account reads it
 //! (`convert::calls`), under `signer_count` of the rule's signers. For a
 //! single-leaf case on a contract call, the leaf's verdict must also equal
 //! `cond_holds` of its one condition, `functions_match` of its functions, or
@@ -21,7 +21,7 @@
 use perch_conformance::{cases, materialize, AddrBook, CtxKind, OpSpec};
 use perch_program::{Op, RpnProgram, Verdict};
 use perch_rule_eval::convert::{calls, signers};
-use perch_rule_eval::{denote, Installed};
+use perch_testkit::denote::{denote, Installed};
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{Address, Env, Vec as SVec};
 use stellar_accounts::smart_account::Signer;

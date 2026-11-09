@@ -2,16 +2,18 @@
 //! document `d`,
 //!
 //! `rule_eval::lower(doc_of(model_of(d)), me)` equals the denotation
-//! (`perch_rule_eval::denote`) of each rule the doc compiler's real
-//! `compile_doc` returns for `d`, installed on `me` as the account installed
-//! it with the interpreter and the spending limit, then rule-eval's recovery
-//! rule when `d` configures recovery.
+//! (`perch_testkit::denote`) of each rule the doc compiler's real
+//! `compile_doc` returns for `d`, installed on `me` with the interpreter
+//! program and spending cap Perch's RPN lowering (`perch_compile::compile`)
+//! gives it, then rule-eval's recovery rule when `d` configures recovery.
 //!
 //! The left side is the path an account takes to rule-eval's rules: the
 //! document model and its conversion through `soroban-facade`, then rule-eval's
-//! proven lowering. The right side reads what the compiler emits, as those
-//! policies enforced it: OZ's context rule, the interpreter's program and the
-//! spending limit's parameters. Each model also survives the host's XDR.
+//! proven lowering. The right side reads what the compiler emits and the RPN
+//! lowering attaches, as those policies enforce it: OZ's context rule, the
+//! interpreter's program and the spending limit's parameters. The compiler's
+//! rules must also equal the RPN lowering's (`perch_testkit::rpn::
+//! check_compiled`), and each model survives the host's XDR.
 //!
 //! The documents:
 //!
@@ -37,9 +39,11 @@ use perch_ir::{
 };
 use perch_recovery_interface::config::CompiledRecoveryMode;
 use perch_rule_eval::convert::address;
-use perch_rule_eval::{denote, doc_of, model_of, CompiledModel, Installed};
+use perch_rule_eval::{doc_of, model_of, CompiledModel};
 use perch_smart_account::infra;
 use perch_testkit::delta::{strkey, DeltaWorld, DocModel};
+use perch_testkit::denote::{denote, Installed};
+use perch_testkit::rpn::{self, Policies};
 use perch_testkit::{AnyKeyVerifier, FIXTURE_NETWORK};
 use rule_eval::{Cond, Rule as ERule, Signer as ESigner, Val as EVal};
 use rule_eval_conformance::documents::{
@@ -50,7 +54,6 @@ use serde_json::Value as J;
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::xdr::{FromXdr, ToXdr};
 use soroban_sdk::{Address, Bytes};
-use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 
 const BASELINE: &str = "tests/corpus/rule-eval-baseline.json";
 /// How many `DocModel` documents to draw; `PERCH_RULE_EVAL_DOCS` sets more.
@@ -60,8 +63,9 @@ const GENERATED: usize = 256;
 // The check
 // ---------------------------------------------------------------------------
 
-/// `r`, installed on `me` as the account's `document_rule` installs it.
-fn installed(me: &Address, r: &CompiledRule) -> Installed {
+/// `r`, installed on `me` as the account's `document_rule` installs it,
+/// with the policies `p` attached.
+fn installed(me: &Address, r: &CompiledRule, p: &Policies) -> Installed {
     Installed {
         contract: match &r.scope {
             RuleScope::SelfAdmin => me.clone(),
@@ -69,11 +73,8 @@ fn installed(me: &Address, r: &CompiledRule) -> Installed {
         },
         signers: r.signers.clone(),
         valid_until: r.valid_until,
-        program: r.install.first().map(|p| p.program),
-        cap: r.cap.first().map(|c| SpendingLimitAccountParams {
-            spending_limit: c.spending_limit,
-            period_ledgers: c.period_ledgers,
-        }),
+        program: p.install.as_ref().map(|i| i.program.clone()),
+        cap: p.cap.clone(),
     }
 }
 
@@ -111,9 +112,12 @@ fn check(
     let me_x = address(e, me).expect("the account's XDR");
     let lowered = rule_eval::lower(&doc_of(e, &model).ok_or("doc_of refuses")?, &me_x);
 
+    rpn::check_compiled(e, d, &compiled)?;
+    let attached = rpn::policies_of(e, d)?;
     let mut denoted = vec![];
-    for (i, r) in compiled.rules.iter().enumerate() {
-        denoted.push(denote(e, me, &installed(me, &r)).ok_or(format!("denote refuses rule {i}"))?);
+    for (i, (r, p)) in compiled.rules.iter().zip(&attached).enumerate() {
+        denoted
+            .push(denote(e, me, &installed(me, &r, p)).ok_or(format!("denote refuses rule {i}"))?);
     }
     let n = denoted.len();
     let recovery = !compiled.recovery.is_empty();

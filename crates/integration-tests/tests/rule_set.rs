@@ -283,17 +283,19 @@ fn generated_rule(r: &mut Rng, w: &DeltaWorld, i: usize, pool: &[&str]) -> (Stri
     (out, n_of_n_threshold)
 }
 
-/// The account refuses a document unless the compiled rules keep a
-/// policy-free, never-expiring self-admin rule with a signer
-/// (`perch_doc_compiler::admin_survives`) and the stored rules keep a rule
+/// The account refuses a document unless it declares a constraint-free,
+/// never-expiring self-admin `all` rule with a signer
+/// (`perch_rule_eval::admin_declared` on the document the account reads,
+/// which equals `perch_doc_compiler::admin_survives` on the compiled
+/// document for every generated document) and the stored rules keep a rule
 /// on the account asking every one of its signers for every function, with
 /// no condition, cap or last ledger (`perch_rule_eval::admin_survives`).
 ///
 /// On generated documents the first implies the second, and the second holds
 /// without the first exactly when the document's only such rule is a
 /// `threshold` rule asking all `n` of its `n` signers: rule-eval's rules do
-/// not tell it from `all`, while Perch installs it with the interpreter and
-/// so does not count it as an admin rule.
+/// not tell it from `all`, while the compiled check counts only `all`
+/// rules.
 #[test]
 fn the_anti_brick_check_on_stored_rules_agrees_with_the_compiled_one() {
     let w = DeltaWorld::new();
@@ -322,9 +324,11 @@ fn the_anti_brick_check_on_stored_rules_agrees_with_the_compiled_one() {
             continue;
         };
         compiled_docs += 1;
-        let old = admin_survives(&compiled.rules);
+        let old = admin_survives(&compiled);
         let model = compiled.model.get_unchecked(0);
-        let lowered = rule_eval::lower(&doc_of(e, &model).unwrap(), &me);
+        let doc = doc_of(e, &model).unwrap();
+        assert_eq!(perch_rule_eval::admin_declared(&doc), old, "{json}");
+        let lowered = rule_eval::lower(&doc, &me);
         let new = perch_rule_eval::admin_survives(&lowered, &me);
         assert_eq!(new, old || n_of_n, "{json}");
         match (old, new) {

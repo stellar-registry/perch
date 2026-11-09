@@ -21,13 +21,14 @@
 mod support;
 
 use perch_account::PerchAccountError;
-use perch_doc_compiler::{admin_survives, CompiledRule, RuleScope};
+use perch_doc_compiler::{admin_survives, CompiledDoc, CompiledModel, CompiledRule, RuleScope};
 use perch_recovery::EvidenceDomain::Initiate;
 use perch_recovery_interface::RecoveryAction;
+use perch_rule_eval::{ModelPrincipals, ModelRule, ModelScope};
 use perch_testkit::delta::{DeltaWorld, DocModel, KeyModel, RuleModel, SignerModel, Spelling};
 use perch_testkit::FIXTURE_NETWORK;
 use soroban_sdk::testutils::{Address as _, Ledger as _};
-use soroban_sdk::{Bytes, Env, String, Vec};
+use soroban_sdk::{Bytes, BytesN, Env, String, Symbol, Vec};
 use support::*;
 
 /// A baseline document of `owner` (admin) + `device`, an `admin` self-admin
@@ -157,32 +158,80 @@ fn an_expiring_admin_rule_is_refused_by_the_anti_brick_check() {
     );
 }
 
-/// Unit check of the anti-brick predicate itself: a bounded self-admin rule
-/// never counts as a surviving admin rule, an unbounded one does.
+/// Unit check of the anti-brick predicate itself: an unbounded
+/// constraint-free self-admin rule survives; a bounded one, a `threshold`
+/// one (even asking all of its signers), one with a function list, and a
+/// document whose model does not match its rules do not.
 #[test]
 fn admin_survives_requires_an_unbounded_admin_rule() {
     let env = Env::default();
     let signer =
         stellar_accounts::smart_account::Signer::Delegated(soroban_sdk::Address::generate(&env));
-    let make = |valid_until: Option<u32>| CompiledRule {
-        name: String::from_str(&env, "admin"),
-        scope: RuleScope::SelfAdmin,
-        signers: soroban_sdk::vec![&env, signer.clone()],
-        valid_until,
-        install: Vec::new(&env),
+    let ids = soroban_sdk::vec![&env, String::from_str(&env, "owner")];
+    let all = ModelRule {
+        scope: ModelScope::SelfAdmin,
+        principals: ModelPrincipals::All(ids.clone()),
+        functions: None,
+        args: None,
+        not_after_ledger: None,
         cap: Vec::new(&env),
     };
+    let doc = |valid_until: Option<u32>, rule: &ModelRule, models: u32| CompiledDoc {
+        doc_hash: BytesN::from_array(&env, &[0; 32]),
+        canonical: Bytes::new(&env),
+        fingerprints: Vec::new(&env),
+        rules: soroban_sdk::vec![
+            &env,
+            CompiledRule {
+                name: String::from_str(&env, "admin"),
+                scope: RuleScope::SelfAdmin,
+                signers: soroban_sdk::vec![&env, signer.clone()],
+                valid_until,
+            }
+        ],
+        recovery: Vec::new(&env),
+        model: (0..models)
+            .map(|_| CompiledModel {
+                signers: Vec::new(&env),
+                rules: soroban_sdk::vec![&env, rule.clone()],
+                recovery: Vec::new(&env),
+            })
+            .fold(Vec::new(&env), |mut v, m| {
+                v.push_back(m);
+                v
+            }),
+    };
     assert!(
-        admin_survives(&soroban_sdk::vec![&env, make(None)]),
-        "an unbounded policy-free self-admin rule survives"
+        admin_survives(&doc(None, &all, 1)),
+        "an unbounded constraint-free self-admin rule survives"
     );
     assert!(
-        !admin_survives(&soroban_sdk::vec![&env, make(Some(1_000_000))]),
+        !admin_survives(&doc(Some(1_000_000), &all, 1)),
         "a bounded self-admin rule — even far in the future — does not survive"
     );
     assert!(
-        !admin_survives(&soroban_sdk::vec![&env, make(Some(0))]),
+        !admin_survives(&doc(Some(0), &all, 1)),
         "a bounded self-admin rule does not survive"
+    );
+    let n_of_n = ModelRule {
+        principals: ModelPrincipals::Threshold(ids, 1),
+        ..all.clone()
+    };
+    assert!(
+        !admin_survives(&doc(None, &n_of_n, 1)),
+        "a threshold self-admin rule does not survive, even one asking every signer"
+    );
+    let listed = ModelRule {
+        functions: Some(soroban_sdk::vec![&env, Symbol::new(&env, "apply_doc")]),
+        ..all.clone()
+    };
+    assert!(
+        !admin_survives(&doc(None, &listed, 1)),
+        "a self-admin rule with a function list does not survive"
+    );
+    assert!(
+        !admin_survives(&doc(None, &all, 0)),
+        "a document with no model keeps no admin rule"
     );
 }
 

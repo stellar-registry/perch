@@ -57,9 +57,12 @@ crates/
                       (draft 2020-12), derived from perch-ir's constants; see docs/schema.md
   perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)
   perch-interpreter/  the deployable OZ Policy contract that evaluates programs
-  perch-compile/      lowering: PolicyDoc → OZ rules, each policy-free or with a program
-  perch-doc-compiler/ deployable, stateless: doc JSON → compiled rules, doc_hash,
-                      config_hash, document caps, and recovery target derivation
+  perch-compile/      RPN lowering: PolicyDoc → OZ rules with interpreter programs
+                      (off-chain: the differential suites and legacy accounts)
+  perch-doc-compiler/ deployable, stateless: doc JSON → compiled rules (signers,
+                      last ledger), the document model the account lowers with
+                      rule-eval, doc_hash, config_hash, document caps, and
+                      recovery target derivation
   perch-smart-account/  the account trait: apply_doc and apply_scope (the admin and
                       scoped documents, the only write paths for rules and signers),
                       the delta reconcile onto OZ, execute, upgrades, the recovery
@@ -94,8 +97,9 @@ crates/
   perch-derive-id/    offline content-address and name-salt contract id derivation
   perch-conformance/  eval-semantics conformance vectors + compile→eval differential
                       + wasm-leg suites
-  perch-analyze/      per-policy SMT prover (PolicyDoc → SMT-LIB, z3): dead rules,
-                      intent conformance (only-calls), semantic attenuation (narrows)
+  perch-analyze/      per-policy SMT prover (a document's rule-eval rules →
+                      SMT-LIB, z3): dead rules, intent conformance (only-calls),
+                      semantic attenuation (narrows)
   perch-golden/       golden XDR vectors of the on-chain wire format
   perch-bench/, perch-bench-rpn/  metered instruction-count canary for the program
                       encoding (crates/perch-program/BENCH.md)

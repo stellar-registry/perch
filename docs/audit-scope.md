@@ -168,7 +168,7 @@ backend needs no integration review with the core paths it touches
 | `circuits/perch_zk/**`, `circuits/perch_zk_recovery/**`, `circuits/perch_zk_recovery_d24/**` | The Noir recovery circuit, its depth-32 release and depth-24 variants |
 | `crates/perch-ir/**`, [`CANONICAL.md`](../CANONICAL.md) | The document schema, validation, and CANON v1 canonical bytes |
 | `crates/perch-doc-compiler/**` except the caps | `compile_doc`, `derive_target`, `config_hash`, credential canonicalization |
-| `crates/perch-compile/**`, `crates/perch-interpreter/**`, `crates/perch-program/**` | Lowering rules to interpreter programs (with per-rule provenance) and the interpreter policy |
+| `crates/perch-interpreter/**`, `crates/perch-program/**` | The interpreter policy, which decides the rules of an account upgraded from code that attached it until that account's first `apply_doc` |
 | `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth` (with the scope generation gate, rule-eval's `authorize` and OZ's `authenticate` in `gate.rs`, and OZ's `do_check_auth` for a completion and for an account without a stored rule set), `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, the revision and consumer views, and inside `apply` the revocation, credential-index, and enrollment-id checks, `expected_revision`, and the `rcv_sync` gate |
 | `crates/perch-account/**` | The deployable account contract over `perch-smart-account` |
 | `crates/perch-webauthn-verifier/**`, `crates/perch-ed25519-verifier/**` | Constructorless signature verifiers for external signers (passkey over OZ `webauthn::verify`; ed25519) |
@@ -330,8 +330,9 @@ checked by hash. They are not reviewed line by line.
 - **Off-chain tooling and harnesses** (`crates/perch-testnet`,
   `crates/perch-zk-prover`, `crates/perch-testkit`, `crates/perch-bench*`,
   `crates/perch-conformance`, `crates/perch-golden`, `crates/perch-analyze`,
-  `crates/integration-tests`): evidence and tools, not deployed contract
-  code.
+  `crates/perch-compile`, `crates/integration-tests`): evidence and tools,
+  not deployed contract code. `perch-compile` lowers rules to interpreter
+  programs with per-rule provenance; no deployable links it.
 - **Documentation and slides** (`docs/**`, `*.md`). The recovery spec is
   normative for both Perch units.
 

@@ -36,11 +36,13 @@
 //! [`Env`]: soroban_sdk::Env
 
 pub mod delta;
+pub mod denote;
 pub mod faithful;
 pub mod fixture;
 pub mod manifest;
 pub mod native;
 pub mod passkey;
+pub mod rpn;
 pub mod rule_set;
 
 pub use fixture::{

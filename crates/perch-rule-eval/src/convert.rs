@@ -227,7 +227,7 @@ pub fn host_symbol(e: &Env, b: &[u8]) -> Option<Symbol> {
 }
 
 /// The bytes of `s`, a symbol, as the facade reads them.
-pub(crate) fn symbol_bytes(e: &Env, s: &Symbol) -> Option<Vec<u8>> {
+pub fn symbol_bytes(e: &Env, s: &Symbol) -> Option<Vec<u8>> {
     match facade(e, s.to_val())? {
         FVal::Symbol(b) => Some(b),
         _ => None,
@@ -242,7 +242,7 @@ pub(crate) fn bytes(b: &Bytes) -> Vec<u8> {
 }
 
 /// The bytes of `s`.
-pub(crate) fn string_bytes(s: &String) -> Vec<u8> {
+pub fn string_bytes(s: &String) -> Vec<u8> {
     let mut out = vec![0u8; s.len() as usize];
     s.copy_into_slice(&mut out);
     out

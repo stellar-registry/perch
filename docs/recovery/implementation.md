@@ -90,13 +90,16 @@ What the spec leaves to the implementation, or what only its tests show.
 - **Per-rule program provenance.** An interpreter program's
   `InstallParams.doc_hash` field carries its rule's `rule_hash`
   (`sha256("perch/rule" || rule bytes)`, spec §3.2), so a rule whose text
-  is unchanged keeps byte-identical install parameters. The account no
-  longer installs programs (its stored rule-eval rule holds what the
-  program says); the field matters to the off-chain checks below and to
-  accounts installed before rule-eval, whose interpreter only stores it.
-  `perch-compile::verify_plan_matches_doc` and `perch-deploy verify` check
-  each installed program against its own rule's hash, and that no program
-  is left over.
+  is unchanged keeps byte-identical install parameters. Neither the doc
+  compiler nor the account produces programs: the compiler returns each
+  rule's signers and last ledger with the document's model, and the
+  account stores the rule-eval rule the model lowers to. Programs exist
+  only off chain (`perch-compile`, which the differential suites compare
+  with rule-eval's lowering) and on accounts installed before rule-eval,
+  whose interpreter stores them; `perch-compile::verify_plan_matches_doc`
+  checks a plan's programs against their rules' hashes. `perch-deploy
+  verify` checks each installed rule's stored rule-eval rule against the
+  reviewed document's lowering, and that no rule is left over.
 - **Configuration revision.** A `u64` in the account's instance storage,
   advanced at the end of every successful `apply` and in every executed
   upgrade. It is not `doc_hash`, which A -> B -> A restores while OZ gives

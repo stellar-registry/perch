@@ -471,8 +471,7 @@ deploy_env=(env STELLAR_RPC_URL="$RPC_URL" STELLAR_NETWORK_PASSPHRASE="$PASSPHRA
 # compose is offline review tooling; run it for real even in dry-run so verify
 # has an expectation file to reconcile against.
 "${deploy_env[@]}" "$PERCH_DEPLOY" compose \
-    --doc "$DOC" --account "$SA" --interpreter "$INTERPRETER" \
-    --interpreter-wasm-hash "$INTERP_HASH" \
+    --doc "$DOC" --account "$SA" \
     > "$RULES_OUT" || die "compose failed"
 # ONE transaction: apply_doc sends the document to the stateless compiler
 # contract (parse, validate, network binding, compile — all on-chain), checks
@@ -481,7 +480,7 @@ deploy_env=(env STELLAR_RPC_URL="$RPC_URL" STELLAR_NETWORK_PASSPHRASE="$PASSPHRA
 run "${deploy_env[@]}" "$PERCH_DEPLOY" apply \
     --account "$SA" --doc "$DOC" --compiler "$COMPILER" --interpreter "$INTERPRETER"
 run "${deploy_env[@]}" "$PERCH_DEPLOY" verify \
-    --account "$SA" --interpreter "$INTERPRETER" --rules "$RULES_OUT"
+    --account "$SA" --rules "$RULES_OUT"
 # The rule id CI signs under comes from the CHAIN, never hard-coded: rule ids
 # are assigned when a rule is added and change when it is replaced, so select
 # it by name in the account's configuration() snapshot with the stock stellar

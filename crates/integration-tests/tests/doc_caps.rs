@@ -1,11 +1,13 @@
 //! The document caps (`docs/recovery/spec.md` §7.5) at their boundaries:
 //! the compiler admits a document at every cap and refuses one past any of
-//! them, and every rule name it admits OZ installs. The release-stack suite
+//! them, and every rule name it admits OZ installs. The per-rule constraint
+//! cap admits exactly the rules an interpreter program holds. The release-stack suite
 //! measures the costliest document the caps admit against the budget
 //! (`docs/recovery/budgets.md`, "Document caps").
 
 use perch_doc_compiler::{
-    DocCompilerError, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS, MAX_RULE_NAME_BYTES,
+    DocCompilerError, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS,
+    MAX_RULE_CONSTRAINTS, MAX_RULE_NAME_BYTES,
 };
 use perch_testkit::{Bootstrap, World, FIXTURE_NETWORK};
 use soroban_sdk::{Address, Bytes};
@@ -128,4 +130,48 @@ fn rule_names_are_capped_where_oz_caps_them() {
         &w,
         &doc(&w, 1, 2, &"n".repeat(MAX_RULE_NAME_BYTES as usize + 1), 0)
     ));
+}
+
+/// A rule with `args` `is-self` argument constraints, and a function list
+/// when `functions`.
+fn constrained(w: &World, args: u32, functions: bool) -> Bytes {
+    let verifier = strkey(&w.verifier);
+    let preds: Vec<String> = (0..args)
+        .map(|i| format!(r#"{{"index":{i},"pred":{{"type":"is-self"}}}}"#))
+        .collect();
+    let functions = if functions {
+        r#","functions":["f"]"#
+    } else {
+        ""
+    };
+    let json = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{{"id":"s0","verifier":"{verifier}","key":"{key}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["s0"]}}}},{{"name":"r","scope":{{"type":"contract","address":"{verifier}"}},"principals":{{"type":"all","signers":["s0"]}}{functions},"args":[{}]}}]}}"#,
+        preds.join(","),
+        key = "01".repeat(32),
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+/// A rule at [`MAX_RULE_CONSTRAINTS`] compiles and one past it is refused,
+/// counting a function list as one constraint; and the compiler accepts a
+/// rule exactly when Perch's RPN lowering fits it in an interpreter program.
+#[test]
+fn the_constraint_cap_is_what_an_interpreter_program_holds() {
+    let w = setup();
+    let compiles = |args: u32, functions: bool| {
+        let doc = constrained(&w, args, functions);
+        let compiled = match w.compiler_client().try_compile_doc(&doc) {
+            Ok(Ok(_)) => true,
+            Err(Ok(DocCompilerError::DocCompile)) => false,
+            other => panic!("{args} args: {other:?}"),
+        };
+        let program = perch_testkit::rpn::policies(&w.env, &doc).is_ok();
+        assert_eq!(compiled, program, "{args} args, functions: {functions}");
+        compiled
+    };
+    let cap = MAX_RULE_CONSTRAINTS;
+    assert!(compiles(cap, false));
+    assert!(!compiles(cap + 1, false));
+    assert!(compiles(cap - 1, true));
+    assert!(!compiles(cap, true));
 }

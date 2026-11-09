@@ -32,6 +32,10 @@ perch-recovery = { version = "0.1.5", path = "../perch-recovery" }
 perch-ir = { workspace = true }
 perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }
 rule-eval = { workspace = true }
+# What Perch's RPN lowering attaches to each rule (`rpn`): the denotation
+# the stored set is checked against, and the policies of an account upgraded
+# from code that attached them.
+perch-compile = { version = "0.1.1", path = "../perch-compile" }
 # Shared document generator for proptest and cargo-fuzz (`delta`).
 arbitrary = "1"
 hex = "0.4"

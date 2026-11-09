@@ -1,43 +1,38 @@
 //! Per-policy SMT prover (PLAN.md phase 4, the `cedar-policy-symcc` shape).
 //!
-//! Encodes the **doc-level meaning** of each rule — the same semantics the
-//! Lean model states and the differential suite tests — as a quantifier-free
-//! SMT formula over one symbolic invocation, and asks z3:
+//! Encodes what each rule of a document allows **as the account decides
+//! it**: the `rule_eval::Rule` the rule lowers to on the account
+//! (`rule_eval::lower` of the document's model, read through soroban-facade,
+//! as the account stores it), whose `rule_allows` `__check_auth` evaluates.
+//! The rule becomes a quantifier-free SMT formula over one symbolic
+//! invocation, and z3 is asked:
 //!
 //! - [`dead_rules`] — can this rule *ever* authorize an invocation? `unsat`
-//!   is a proof of deadness (stronger than
-//!   `perch_compile::can_ever_authorize`, which reads op shapes only);
-//!   `sat` comes with a witness invocation to eyeball.
+//!   is a proof of deadness; `sat` comes with a witness invocation to
+//!   eyeball.
 //! - [`only_calls`] — intent conformance: on a given contract scope, can the
 //!   document authorize any function outside an allowlist? `unsat` per rule
 //!   proves "this policy can only ever call these functions here" — the
 //!   flagship CI-key question.
 //! - [`narrows`] — semantic attenuation: does the child document authorize
-//!   any invocation the parent would refuse, rule by rule? Catches arg-level
-//!   widening that the coarse `(scope, function-set)` check in
-//!   `perch_compile::attenuation` cannot see, plus expiry extensions and cap
-//!   loosening (checked structurally).
+//!   any invocation the parent would refuse, rule by rule? Catches
+//!   argument-level widening and signer changes, plus expiry extensions and
+//!   cap loosening (checked structurally).
 //!
 //! The encoding is decidable (booleans, bounded integers, and z3's string
-//! theory restricted to equality/prefix/length over literals). Soundness
-//! assumptions, stated once:
-//!
-//! - The smart account's own address (`is-self`) is distinct from every
-//!   address literal in the documents (interning gives them distinct ids).
-//! - String lengths are measured in *characters* by SMT `str.len` but in
-//!   *bytes* by the on-chain `MAX_STR_ARG_LEN` cap; the two agree on ASCII.
-//!   Non-ASCII constants near the 256 cap could diverge — kept honest by
-//!   [`encode_doc_warnings`].
+//! theory restricted to equality and prefix over literals). It is exact for
+//! `rule_allows` under one soundness assumption: the account's own address
+//! is distinct from every address a document names (interning gives the
+//! account id 0 and every other address its own id). A rule's last ledger,
+//! generation and cap are not part of `rule_allows`; [`narrows`] compares the
+//! last ledger and cap structurally.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 
-use perch_ir::{ArgPred, PolicyDoc, Principals, Rule, Scope};
-
-/// On-chain string-argument cap (`perch_program::MAX_STR_ARG_LEN`), mirrored
-/// here so the library stays soroban-free.
-const MAX_STR_ARG_LEN: usize = 256;
+use perch_ir::{PolicyDoc, Scope};
+use rule_eval::{Cond, Functions, Rule, Signer, Val};
 
 // --- z3 driver ----------------------------------------------------------------
 
@@ -92,21 +87,80 @@ pub fn run_z3(script: &str) -> Z3Verdict {
     }
 }
 
+// --- lowering ------------------------------------------------------------------
+
+/// The account the rules are lowered on: a contract id no document names,
+/// as its `ScAddress` XDR (the `SC_ADDRESS_TYPE_CONTRACT` discriminant, then
+/// the id).
+const ACCOUNT: [u8; 36] = {
+    let mut x = [0xee; 36];
+    x[0] = 0;
+    x[1] = 0;
+    x[2] = 0;
+    x[3] = 1;
+    x
+};
+
+/// One document rule and the rule-eval rule it lowers to.
+pub struct LoweredRule {
+    pub name: String,
+    /// The document rule's scope contract, `None` for a self-admin rule.
+    pub contract: Option<String>,
+    pub rule: Rule,
+}
+
+/// The rules of `doc`, each with the rule-eval rule it lowers to on the
+/// account: `rule_eval::lower` of the document's model, read as the doc
+/// compiler and the account read it. The recovery rule a document with
+/// recovery also gets is not listed: its controller decides its calls.
+///
+/// # Panics
+/// Panics if `doc` is not valid (`perch_ir::validate`), which every caller
+/// checks first, or has self-authenticating principals, which no Perch
+/// account installs.
+#[must_use]
+pub fn lowered(doc: &PolicyDoc) -> Vec<LoweredRule> {
+    let e = soroban_sdk::Env::default();
+    let model = perch_rule_eval::model_of(&e, doc).expect("a document the doc compiler lowers");
+    let model = perch_rule_eval::doc_of(&e, &model).expect("a model soroban-facade reads");
+    doc.rules
+        .iter()
+        .zip(rule_eval::lower(&model, &ACCOUNT))
+        .map(|(r, rule)| LoweredRule {
+            name: r.name.clone(),
+            contract: match &r.scope {
+                Scope::Contract(c) => Some(c.address.clone()),
+                Scope::SelfAdmin(_) => None,
+            },
+            rule,
+        })
+        .collect()
+}
+
 // --- encoding ------------------------------------------------------------------
 
 /// Argument type tags in the encoding.
 const T_ADDR: u32 = 0;
 const T_U32: u32 = 1;
 const T_STR: u32 = 2;
-/// Anything no doc-level predicate can decode (symbols, bytes, i128, void…).
-const T_OTHER: u32 = 3;
+const T_I128: u32 = 3;
+/// Every other value (symbols, bytes, `u64`, `bool`, vectors, …), compared
+/// by interned identity.
+const T_OTHER: u32 = 4;
+
+/// The `ScVal` XDR discriminant of `u32` (`SCV_U32`).
+const SCV_U32: [u8; 4] = [0, 0, 0, 3];
 
 /// Encodes one symbolic invocation plus the allow-conditions of rules from up
 /// to two documents (two are needed for [`narrows`]).
 pub struct Encoder {
-    /// Address-literal interning; the account's own address is id 0.
-    addr_ids: BTreeMap<String, u32>,
-    /// Every argument index any encoded predicate inspects.
+    /// Address interning; the account's own address is id 0.
+    addr_ids: BTreeMap<Vec<u8>, u32>,
+    /// Interning of every other value a condition compares with.
+    other_ids: BTreeMap<Vec<u8>, u32>,
+    /// Signer interning: one authentication flag per distinct signer.
+    signer_ids: BTreeMap<Vec<u8>, u32>,
+    /// Every argument index any encoded condition inspects.
     arg_indexes: BTreeSet<u32>,
 }
 
@@ -116,120 +170,161 @@ impl Default for Encoder {
     }
 }
 
+fn intern(ids: &mut BTreeMap<Vec<u8>, u32>, key: Vec<u8>) -> u32 {
+    let next = ids.len() as u32;
+    *ids.entry(key).or_insert(next)
+}
+
+/// `bytes`, each prefixed with its length, after `tag`: an injective key.
+fn key(tag: u8, parts: &[&[u8]]) -> Vec<u8> {
+    let mut out = vec![tag];
+    for p in parts {
+        out.extend_from_slice(&(p.len() as u32).to_be_bytes());
+        out.extend_from_slice(p);
+    }
+    out
+}
+
 impl Encoder {
     #[must_use]
     pub fn new() -> Encoder {
+        let mut addr_ids = BTreeMap::new();
+        addr_ids.insert(ACCOUNT.to_vec(), 0);
         Encoder {
-            addr_ids: BTreeMap::new(),
+            addr_ids,
+            other_ids: BTreeMap::new(),
+            signer_ids: BTreeMap::new(),
             arg_indexes: BTreeSet::new(),
         }
     }
 
-    fn addr_id(&mut self, address: &str) -> u32 {
-        if let Some(id) = self.addr_ids.get(address) {
-            return *id;
-        }
-        let id = self.addr_ids.len() as u32 + 1; // 0 is reserved for self
-        self.addr_ids.insert(address.to_string(), id);
-        id
+    fn addr_id(&mut self, address: &[u8]) -> u32 {
+        intern(&mut self.addr_ids, address.to_vec())
     }
 
-    /// The SMT Bool term for "this rule's program-level semantics authorize
-    /// the symbolic invocation" — the Kleene conjunction being definitely
-    /// `True`: signer floor met, function in the allowlist (when present),
-    /// every argument predicate definitely satisfied.
-    ///
-    /// Expiry and caps are deliberately absent: they lower outside the
-    /// program (OZ `valid_until` / the stateful sibling policy) and are
-    /// compared structurally by [`narrows`].
-    pub fn rule_allows(&mut self, rule: &Rule) -> String {
-        let mut conj: Vec<String> = Vec::new();
-
-        let n = match &rule.principals {
-            Principals::All(a) => a.signers.len().max(1),
-            // M-of-N: the floor is the quorum `m`, matching the `MinSigners(m)`
-            // the compiler emits (validation guarantees 1 <= m <= N).
-            Principals::Threshold(t) => (t.m.max(1)) as usize,
-            // Not lowerable in v1 (perch-compile rejects it); encode as the
-            // signer floor 1 so analysis still says something sensible.
-            Principals::SelfAuthenticating(_) => 1,
+    fn signer_id(&mut self, s: &Signer) -> u32 {
+        let k = match s {
+            Signer::Delegated(a) => key(0, &[a]),
+            Signer::External(v, k) => key(1, &[v, k]),
         };
-        conj.push(format!("(>= signer_count {n})"));
+        intern(&mut self.signer_ids, k)
+    }
 
-        if let Some(fns) = &rule.functions {
-            conj.push("ctx_contract".into());
-            let alts: Vec<String> = fns
-                .iter()
-                .map(|f| format!("(= fn_name {})", smt_string(f)))
-                .collect();
-            conj.push(disj(&alts));
-        }
-
-        if let Some(args) = &rule.args {
-            for c in args {
-                conj.push("ctx_contract".into());
-                conj.push(self.pred_holds(c.index, &c.pred));
+    /// The SMT Bool term for `rule_eval::rule_allows(rule, ctx, signers)` on
+    /// the symbolic invocation: a contract call to the rule's contract, its
+    /// function matched, every condition holding on its arguments, and at
+    /// least the rule's threshold of its distinct signers authenticated.
+    pub fn rule_allows(&mut self, rule: &Rule) -> String {
+        let contract = self.addr_id(&rule.contract);
+        let mut conj = vec!["ctx_call".to_string(), format!("(= contract {contract})")];
+        conj.push(match &rule.functions {
+            Functions::AnyExcept(xs) => {
+                let named: Vec<String> = xs
+                    .iter()
+                    .map(|f| format!("(= fn_name {})", smt_string(f)))
+                    .collect();
+                format!("(not {})", disj(&named))
             }
+            Functions::Only(xs) => disj(
+                &xs.iter()
+                    .map(|f| format!("(= fn_name {})", smt_string(f)))
+                    .collect::<Vec<_>>(),
+            ),
+        });
+        for c in &rule.conds {
+            conj.push(self.cond_holds(c));
         }
-
+        conj.push(self.signers_met(rule));
         conj_term(&conj)
     }
 
-    fn pred_holds(&mut self, i: u32, pred: &ArgPred) -> String {
+    fn signers_met(&mut self, rule: &Rule) -> String {
+        if rule.threshold == 0 {
+            return "true".into();
+        }
+        let ids: BTreeSet<u32> = rule.signers.iter().map(|s| self.signer_id(s)).collect();
+        let terms: Vec<String> = ids.iter().map(|k| format!("(ite signer{k} 1 0)")).collect();
+        let sum = match terms.len() {
+            0 => "0".to_string(),
+            1 => terms[0].clone(),
+            _ => format!("(+ {})", terms.join(" ")),
+        };
+        format!("(>= {sum} {})", rule.threshold)
+    }
+
+    fn cond_holds(&mut self, cond: &Cond) -> String {
+        let (i, body) = match cond {
+            Cond::ArgEq(i, v) => (*i, self.val_eq(*i, v)),
+            Cond::ArgIn(i, vs) => (
+                *i,
+                disj(&vs.iter().map(|v| self.val_eq(*i, v)).collect::<Vec<_>>()),
+            ),
+            Cond::ArgStrPrefix(i, p) => (
+                *i,
+                format!(
+                    "(and (= arg{i}_type {T_STR}) (str.prefixof {} arg{i}_str))",
+                    smt_string(p)
+                ),
+            ),
+            Cond::ArgI128AtMost(i, bound) => (
+                *i,
+                format!(
+                    "(and (= arg{i}_type {T_I128}) (<= arg{i}_i128 {}))",
+                    smt_int(*bound)
+                ),
+            ),
+        };
         self.arg_indexes.insert(i);
-        let present = format!("(< {i} arg_count)");
-        let body = match pred {
-            ArgPred::IsSelf(_) => {
-                format!("(and (= arg{i}_type {T_ADDR}) (= arg{i}_addr 0))")
-            }
-            ArgPred::AddressEq(p) => {
-                let id = self.addr_id(&p.address);
+        format!("(and (< {i} arg_count) {body})")
+    }
+
+    /// Argument `i` equals `v`: the same type and the same value.
+    fn val_eq(&mut self, i: u32, v: &Val) -> String {
+        match v {
+            Val::Address(a) => {
+                let id = self.addr_id(a);
                 format!("(and (= arg{i}_type {T_ADDR}) (= arg{i}_addr {id}))")
             }
-            ArgPred::U32Eq(p) => {
-                format!("(and (= arg{i}_type {T_U32}) (= arg{i}_u32 {}))", p.value)
+            Val::String(s) => format!(
+                "(and (= arg{i}_type {T_STR}) (= arg{i}_str {}))",
+                smt_string(s)
+            ),
+            Val::I128(x) => format!(
+                "(and (= arg{i}_type {T_I128}) (= arg{i}_i128 {}))",
+                smt_int(*x)
+            ),
+            Val::Other(x) if x.len() == 8 && x[..4] == SCV_U32 => {
+                let value = u32::from_be_bytes([x[4], x[5], x[6], x[7]]);
+                format!("(and (= arg{i}_type {T_U32}) (= arg{i}_u32 {value}))")
             }
-            ArgPred::StringIn(p) => {
-                // Over-long candidates can never match a decodable argument
-                // (the on-chain comparator skips them), so drop them here too.
-                let alts: Vec<String> = p
-                    .values
-                    .iter()
-                    .filter(|v| v.len() <= MAX_STR_ARG_LEN)
-                    .map(|v| format!("(= arg{i}_str {})", smt_string(v)))
-                    .collect();
-                format!(
-                    "(and (= arg{i}_type {T_STR}) (<= (str.len arg{i}_str) {MAX_STR_ARG_LEN}) {})",
-                    disj(&alts)
-                )
+            other => {
+                let k = match other {
+                    Val::U64(x) => key(0, &[&x.to_be_bytes()]),
+                    Val::Bool(x) => key(1, &[&[u8::from(*x)]]),
+                    Val::Bytes(x) => key(2, &[x]),
+                    Val::Symbol(x) => key(3, &[x]),
+                    Val::Other(x) => key(4, &[x]),
+                    Val::Address(_) | Val::String(_) | Val::I128(_) => unreachable!(),
+                };
+                let id = intern(&mut self.other_ids, k);
+                format!("(and (= arg{i}_type {T_OTHER}) (= arg{i}_other {id}))")
             }
-            ArgPred::StringPrefix(p) => {
-                if p.prefix.len() > MAX_STR_ARG_LEN {
-                    // An over-long prefix constant fails closed on-chain
-                    // (and perch-ir validation refuses it).
-                    "false".to_string()
-                } else {
-                    // On-chain reads only the argument's first prefix-length
-                    // bytes, so the argument's own length is unbounded.
-                    format!(
-                        "(and (= arg{i}_type {T_STR}) (str.prefixof {} arg{i}_str))",
-                        smt_string(&p.prefix)
-                    )
-                }
-            }
-        };
-        format!("(and {present} {body})")
+        }
     }
 
     /// Declarations for the symbolic invocation, covering every argument
-    /// index the encoded predicates inspect.
+    /// index and signer the encoded rules inspect.
     #[must_use]
     pub fn declarations(&self) -> String {
         let mut out = String::new();
-        out.push_str("(declare-const ctx_contract Bool)\n");
+        out.push_str("(declare-const ctx_call Bool)\n");
+        out.push_str("(declare-const contract Int)\n");
         out.push_str("(declare-const fn_name String)\n");
-        out.push_str("(declare-const signer_count Int)\n(assert (>= signer_count 0))\n");
         out.push_str("(declare-const arg_count Int)\n(assert (>= arg_count 0))\n");
+        for k in self.signer_ids.values() {
+            out.push_str(&format!("(declare-const signer{k} Bool)\n"));
+        }
+        let (lo, hi) = (smt_int(i128::MIN), smt_int(i128::MAX));
         for i in &self.arg_indexes {
             out.push_str(&format!(
                 "(declare-const arg{i}_type Int)\n(assert (and (>= arg{i}_type 0) (<= arg{i}_type {T_OTHER})))\n"
@@ -239,6 +334,10 @@ impl Encoder {
                 "(declare-const arg{i}_u32 Int)\n(assert (and (>= arg{i}_u32 0) (<= arg{i}_u32 4294967295)))\n"
             ));
             out.push_str(&format!("(declare-const arg{i}_str String)\n"));
+            out.push_str(&format!(
+                "(declare-const arg{i}_i128 Int)\n(assert (and (>= arg{i}_i128 {lo}) (<= arg{i}_i128 {hi})))\n"
+            ));
+            out.push_str(&format!("(declare-const arg{i}_other Int)\n"));
         }
         out
     }
@@ -247,16 +346,20 @@ impl Encoder {
     #[must_use]
     pub fn witness_query(&self) -> String {
         let mut vars = vec![
-            "ctx_contract".to_string(),
+            "ctx_call".to_string(),
+            "contract".to_string(),
             "fn_name".to_string(),
-            "signer_count".to_string(),
             "arg_count".to_string(),
         ];
+        for k in self.signer_ids.values() {
+            vars.push(format!("signer{k}"));
+        }
         for i in &self.arg_indexes {
             vars.push(format!("arg{i}_type"));
             vars.push(format!("arg{i}_addr"));
             vars.push(format!("arg{i}_u32"));
             vars.push(format!("arg{i}_str"));
+            vars.push(format!("arg{i}_i128"));
         }
         format!("(get-value ({}))\n", vars.join(" "))
     }
@@ -278,34 +381,20 @@ fn disj(parts: &[String]) -> String {
     }
 }
 
-/// SMT-LIB 2.6 string literal: only `"` needs escaping (doubled).
-fn smt_string(s: &str) -> String {
+/// SMT-LIB 2.6 string literal of UTF-8 `bytes`: only `"` needs escaping
+/// (doubled).
+fn smt_string(bytes: &[u8]) -> String {
+    let s = String::from_utf8_lossy(bytes);
     format!("\"{}\"", s.replace('"', "\"\""))
 }
 
-/// Length-cap caveats for the byte-vs-char divergence (see module docs).
-#[must_use]
-pub fn encode_doc_warnings(doc: &PolicyDoc) -> Vec<String> {
-    let mut out = Vec::new();
-    for rule in &doc.rules {
-        for c in rule.args.iter().flatten() {
-            let texts: Vec<&String> = match &c.pred {
-                ArgPred::StringIn(p) => p.values.iter().collect(),
-                ArgPred::StringPrefix(p) => vec![&p.prefix],
-                _ => vec![],
-            };
-            for t in texts {
-                if !t.is_ascii() && t.chars().count() != t.len() {
-                    out.push(format!(
-                        "rule `{}`: non-ASCII string constant — SMT char-length vs on-chain \
-                         byte-length may diverge near the {MAX_STR_ARG_LEN} cap",
-                        rule.name
-                    ));
-                }
-            }
-        }
+/// SMT-LIB integer literal (negatives as `(- n)`).
+fn smt_int(x: i128) -> String {
+    if x < 0 {
+        format!("(- {})", x.unsigned_abs())
+    } else {
+        x.to_string()
     }
-    out
 }
 
 // --- checks --------------------------------------------------------------------
@@ -318,21 +407,21 @@ pub struct RuleLiveness {
 }
 
 /// For each rule: can it ever authorize an invocation? `Unsat` proves the
-/// rule dead (it can never yield a definite allow).
+/// rule dead (it can never allow one).
 #[must_use]
 pub fn dead_rules(doc: &PolicyDoc) -> Vec<RuleLiveness> {
-    doc.rules
-        .iter()
-        .map(|rule| {
+    lowered(doc)
+        .into_iter()
+        .map(|l| {
             let mut enc = Encoder::new();
-            let allow = enc.rule_allows(rule);
+            let allow = enc.rule_allows(&l.rule);
             let script = format!(
                 "{}(assert {allow})\n(check-sat)\n{}",
                 enc.declarations(),
                 enc.witness_query()
             );
             RuleLiveness {
-                rule: rule.name.clone(),
+                rule: l.name,
                 verdict: run_z3(&script),
             }
         })
@@ -354,19 +443,18 @@ pub struct OnlyCallsViolation {
 #[must_use]
 pub fn only_calls(doc: &PolicyDoc, contract: &str, allowed: &[String]) -> Vec<OnlyCallsViolation> {
     let mut violations = Vec::new();
-    for rule in &doc.rules {
-        let on_target = matches!(&rule.scope, Scope::Contract(c) if c.address == contract);
-        if !on_target {
+    for l in lowered(doc) {
+        if l.contract.as_deref() != Some(contract) {
             continue;
         }
         let mut enc = Encoder::new();
-        let allow = enc.rule_allows(rule);
+        let allow = enc.rule_allows(&l.rule);
         let outside: Vec<String> = allowed
             .iter()
-            .map(|f| format!("(not (= fn_name {}))", smt_string(f)))
+            .map(|f| format!("(not (= fn_name {}))", smt_string(f.as_bytes())))
             .collect();
         let script = format!(
-            "{}(assert {allow})\n(assert ctx_contract)\n(assert {})\n(check-sat)\n{}",
+            "{}(assert {allow})\n(assert {})\n(check-sat)\n{}",
             enc.declarations(),
             conj_term(&outside),
             enc.witness_query()
@@ -374,7 +462,7 @@ pub fn only_calls(doc: &PolicyDoc, contract: &str, allowed: &[String]) -> Vec<On
         match run_z3(&script) {
             Z3Verdict::Unsat => {}
             v => violations.push(OnlyCallsViolation {
-                rule: rule.name.clone(),
+                rule: l.name,
                 verdict: v,
             }),
         }
@@ -387,20 +475,20 @@ pub fn only_calls(doc: &PolicyDoc, contract: &str, allowed: &[String]) -> Vec<On
 #[must_use]
 pub fn can_call(doc: &PolicyDoc, function: &str) -> Vec<RuleLiveness> {
     let mut out = Vec::new();
-    for rule in &doc.rules {
-        if !matches!(&rule.scope, Scope::Contract(_)) {
+    for l in lowered(doc) {
+        if l.contract.is_none() {
             continue;
         }
         let mut enc = Encoder::new();
-        let allow = enc.rule_allows(rule);
+        let allow = enc.rule_allows(&l.rule);
         let script = format!(
-            "{}(assert {allow})\n(assert ctx_contract)\n(assert (= fn_name {}))\n(check-sat)\n{}",
+            "{}(assert {allow})\n(assert (= fn_name {}))\n(check-sat)\n{}",
             enc.declarations(),
-            smt_string(function),
+            smt_string(function.as_bytes()),
             enc.witness_query()
         );
         out.push(RuleLiveness {
-            rule: rule.name.clone(),
+            rule: l.name,
             verdict: run_z3(&script),
         });
     }
@@ -412,10 +500,10 @@ pub fn can_call(doc: &PolicyDoc, function: &str) -> Vec<RuleLiveness> {
 pub enum WideningFinding {
     /// The child has a rule the parent lacks — new authority by definition.
     AddedRule { rule: String },
-    /// Same rule name, different scope: different authority.
+    /// Same rule name, different contract: different authority.
     ScopeChanged { rule: String },
-    /// The child's program semantics admit an invocation the parent's refuse;
-    /// carries the witness.
+    /// The child's rule allows an invocation the parent's refuses; carries
+    /// the witness.
     SemanticWidening { rule: String, verdict: Z3Verdict },
     /// The child expires later than the parent (or dropped the expiry).
     ExpiryExtended { rule: String },
@@ -426,31 +514,27 @@ pub enum WideningFinding {
 }
 
 /// Semantic attenuation check: every finding is a reason `child` is NOT a
-/// pure narrowing of `parent`. Empty = proved narrowing (per matched rule
-/// name), strictly stronger on program semantics than
-/// `perch_compile::attenuation::is_narrowing` (which compares only
-/// `(scope, function-set)` reachability and cannot see argument predicates).
+/// pure narrowing of `parent`. Empty = proved narrowing, per matched rule
+/// name, of what the account's rules allow: functions, argument conditions
+/// and signers alike.
 #[must_use]
 pub fn narrows(parent: &PolicyDoc, child: &PolicyDoc) -> Vec<WideningFinding> {
+    let parents = lowered(parent);
     let mut findings = Vec::new();
-    for crule in &child.rules {
-        let Some(prule) = parent.rules.iter().find(|r| r.name == crule.name) else {
-            findings.push(WideningFinding::AddedRule {
-                rule: crule.name.clone(),
-            });
+    for c in lowered(child) {
+        let Some(p) = parents.iter().find(|p| p.name == c.name) else {
+            findings.push(WideningFinding::AddedRule { rule: c.name });
             continue;
         };
-        if prule.scope != crule.scope {
-            findings.push(WideningFinding::ScopeChanged {
-                rule: crule.name.clone(),
-            });
+        if p.rule.contract != c.rule.contract {
+            findings.push(WideningFinding::ScopeChanged { rule: c.name });
             continue;
         }
 
-        // Program semantics: child-allows ∧ ¬parent-allows must be unsat.
+        // child-allows ∧ ¬parent-allows must be unsat.
         let mut enc = Encoder::new();
-        let child_allow = enc.rule_allows(crule);
-        let parent_allow = enc.rule_allows(prule);
+        let child_allow = enc.rule_allows(&c.rule);
+        let parent_allow = enc.rule_allows(&p.rule);
         let script = format!(
             "{}(assert {child_allow})\n(assert (not {parent_allow}))\n(check-sat)\n{}",
             enc.declarations(),
@@ -459,42 +543,38 @@ pub fn narrows(parent: &PolicyDoc, child: &PolicyDoc) -> Vec<WideningFinding> {
         match run_z3(&script) {
             Z3Verdict::Unsat => {}
             v @ Z3Verdict::Sat(_) => findings.push(WideningFinding::SemanticWidening {
-                rule: crule.name.clone(),
+                rule: c.name.clone(),
                 verdict: v,
             }),
             v @ Z3Verdict::Unknown(_) => findings.push(WideningFinding::Undecided {
-                rule: crule.name.clone(),
+                rule: c.name.clone(),
                 verdict: v,
             }),
         }
 
-        // Expiry: dead-at-or-after X only narrows if X' ≤ X (None = never).
-        let extended = match (prule.not_after_ledger, crule.not_after_ledger) {
+        // The last ledger only narrows if it stays at or before the parent's
+        // (None = never expires).
+        let extended = match (p.rule.valid_until, c.rule.valid_until) {
             (Some(_), None) => true,
             (Some(p), Some(c)) => c > p,
             (None, _) => false,
         };
         if extended {
             findings.push(WideningFinding::ExpiryExtended {
-                rule: crule.name.clone(),
+                rule: c.name.clone(),
             });
         }
 
-        // Caps: a cap only narrows if it stays present with limit ≤ parent's
-        // over a window ≥ parent's, on the same token.
-        let loosened = match (&prule.cap, &crule.cap) {
+        // A cap only narrows if it stays present with limit ≤ the parent's
+        // over a window ≥ the parent's. Its token is the rule's contract,
+        // which is unchanged here.
+        let loosened = match (&p.rule.cap, &c.rule.cap) {
             (Some(_), None) => true,
-            (Some(p), Some(c)) => {
-                let plimit = p.limit.parse::<i128>().unwrap_or(i128::MAX);
-                let climit = c.limit.parse::<i128>().unwrap_or(i128::MAX);
-                p.token != c.token || climit > plimit || c.period_ledgers < p.period_ledgers
-            }
+            (Some(p), Some(c)) => c.limit > p.limit || c.period < p.period,
             (None, _) => false,
         };
         if loosened {
-            findings.push(WideningFinding::CapLoosened {
-                rule: crule.name.clone(),
-            });
+            findings.push(WideningFinding::CapLoosened { rule: c.name });
         }
     }
     findings

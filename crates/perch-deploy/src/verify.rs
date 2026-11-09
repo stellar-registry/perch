@@ -4,12 +4,11 @@
 //! reviewed). Then every composed rule must exist on chain, matched **by
 //! name** in the account's `configuration()` snapshot (rule ids are
 //! assigned when a rule is added and kept while it is edited in place), with
-//! the matching context type. Every
-//! interpreter-attached rule's stored program must equal the composed one,
-//! whose provenance is the hash of that rule in the applied document
-//! (`perch_ir::rule_hash`), and every policy-free rule must have no program
-//! at all, so no program from an earlier document survives under a live
-//! rule. The on-chain rule count must equal the document's exactly —
+//! the matching context type. Every rule's stored rule-eval rule (the
+//! account's `rule_set()`, aligned with its installed rules) must equal the
+//! composed one: the rule `__check_auth` decides that rule's authorizations
+//! with is the rule the reviewed document lowers to. The on-chain rule
+//! count, and the stored set's length, must equal the document's exactly —
 //! `apply_doc` brings the rule set to the document's, so a leftover rule is a
 //! detected mismatch, not a mystery. Every read must belong to the
 //! snapshot's configuration revision, which is read again at the end.
@@ -93,78 +92,68 @@ fn check_applied_hash(rpc: &Rpc, account: &str, doc_hash_hex: &str) -> Result<Ro
     })
 }
 
-/// The program stored for `rule_id` must be exactly `expected` (the composed
-/// `InstallParams`: the program and its rule-hash provenance), or absent when
-/// the rule is policy-free.
-fn check_program(
-    rpc: &Rpc,
-    account: &str,
-    interpreter: &str,
-    expected: Option<&ScVal>,
-    name: &str,
-    rule_id: u32,
-) -> Result<Row> {
-    let outcome = simulate_read(
-        rpc,
-        interpreter,
-        "get_program",
-        vec![scv::address(account)?, ScVal::U32(rule_id)],
-    )?;
-    let mismatch = match outcome {
-        ReadOutcome::ContractError { message, .. } => {
-            Some(format!("get_program trapped: {message}"))
-        }
-        // Option<InstallParams>: None encodes as Void.
-        ReadOutcome::Value(ScVal::Void) => expected.map(|_| "no program installed".to_string()),
-        ReadOutcome::Value(found @ ScVal::Map(Some(_))) => match expected {
-            None => Some("a program is installed for a policy-free rule".to_string()),
-            Some(want) if *want == found => None,
-            Some(_) => Some("program or rule-hash provenance differs".to_string()),
-        },
-        ReadOutcome::Value(other) => Some(format!("unexpected shape: {other:?}")),
+/// The account's stored rule-eval rules (`rule_set()`), aligned with its
+/// installed rules.
+fn read_rule_set(rpc: &Rpc, account: &str) -> Result<Vec<ScVal>> {
+    match simulate_read(rpc, account, "rule_set", vec![])? {
+        ReadOutcome::Value(ScVal::Vec(Some(rules))) => Ok(rules.to_vec()),
+        ReadOutcome::Value(other) => bail!("rule_set returned {other:?}"),
+        ReadOutcome::ContractError { message, .. } => bail!("rule_set trapped: {message}"),
+    }
+}
+
+/// The rule stored for the installed rule at `index` must be exactly the
+/// composed one.
+fn check_stored(stored: &[ScVal], expected: &RuleEntry, index: usize, rule_id: u32) -> Result<Row> {
+    let want = ScVal::from_xdr_base64(&expected.rule.scval_base64, Limits::none())
+        .context("compose stored rule")?;
+    let mismatch = match stored.get(index) {
+        None => Some("no stored rule".to_string()),
+        Some(found) if *found == want => None,
+        Some(_) => Some("stored rule differs".to_string()),
     };
     Ok(Row {
         rule_id: Some(rule_id),
-        name: name.to_string(),
-        check: "program hash",
+        name: expected.name.clone(),
+        check: "stored rule",
         mismatch,
     })
 }
 
 /// Find a composed rule on chain by name and compare its context type.
-fn check_rule(onchain: &[(u32, ScMap)], expected: &RuleEntry) -> Result<(Row, Option<u32>)> {
+/// Returns its index among the installed rules and its id when found.
+fn check_rule(
+    onchain: &[(u32, ScMap)],
+    expected: &RuleEntry,
+) -> Result<(Row, Option<(usize, u32)>)> {
     let want_name = scv::string(&expected.name)?;
     let want_ctx = auth::call_contract_context(&expected.context_type.call_contract)?;
     let found = onchain
         .iter()
-        .find(|(_, m)| scv::map_get(m, "name") == Some(&want_name));
-    let (rule_id, mismatch) = match found {
+        .enumerate()
+        .find(|(_, (_, m))| scv::map_get(m, "name") == Some(&want_name));
+    let (at, mismatch) = match found {
         None => (None, Some("MISSING".to_string())),
-        Some((id, m)) => {
+        Some((i, (id, m))) => {
             let ctx_ok = scv::map_get(m, "context_type") == Some(&want_ctx);
             (
-                Some(*id),
+                Some((i, *id)),
                 (!ctx_ok).then(|| "context_type mismatch".to_string()),
             )
         }
     };
     Ok((
         Row {
-            rule_id,
+            rule_id: at.map(|(_, id)| id),
             name: expected.name.clone(),
             check: "context+name",
             mismatch,
         },
-        rule_id,
+        at,
     ))
 }
 
-pub fn run(
-    rpc: &Rpc,
-    account: &str,
-    interpreter: &str,
-    rules_path: &std::path::Path,
-) -> Result<()> {
+pub fn run(rpc: &Rpc, account: &str, rules_path: &std::path::Path) -> Result<()> {
     let compose: ComposeOutput = serde_json::from_str(
         &std::fs::read_to_string(rules_path)
             .with_context(|| format!("read {}", rules_path.display()))?,
@@ -177,38 +166,23 @@ pub fn run(
             compose.account
         );
     }
-    if compose.interpreter != interpreter {
-        bail!(
-            "--interpreter {} does not match the compose output's interpreter {}",
-            interpreter,
-            compose.interpreter
-        );
-    }
 
     // Every read below must belong to the snapshot's revision: it is
     // checked again once they are done.
     let (revision, onchain) = read_configuration(rpc, account)?;
+    let stored = read_rule_set(rpc, account)?;
     let mut rows = vec![check_applied_hash(rpc, account, &compose.doc_hash)?];
 
     for expected in compose.genesis_rule.iter().chain(compose.apply.iter()) {
-        let (row, rule_id) = check_rule(&onchain, expected)?;
+        let (row, at) = check_rule(&onchain, expected)?;
         rows.push(row);
-        let want = match &expected.install {
-            Some(install) => Some(
-                ScVal::from_xdr_base64(&install.scval_base64, Limits::none())
-                    .context("compose install params")?,
-            ),
-            None => None,
-        };
-        rows.push(match rule_id {
-            Some(id) => {
-                check_program(rpc, account, interpreter, want.as_ref(), &expected.name, id)?
-            }
+        rows.push(match at {
+            Some((index, id)) => check_stored(&stored, expected, index, id)?,
             None => Row {
                 rule_id: None,
                 name: expected.name.clone(),
-                check: "program hash",
-                mismatch: Some("rule missing; program unchecked".to_string()),
+                check: "stored rule",
+                mismatch: Some("rule missing; stored rule unchecked".to_string()),
             },
         });
     }
@@ -223,6 +197,21 @@ pub fn run(
         check: "exact count",
         mismatch: (onchain.len() != expected_rules)
             .then(|| format!("on-chain {} != document {}", onchain.len(), expected_rules)),
+    });
+    // The stored set is aligned with the installed rules; an account with
+    // none is one OZ's policies still decide, which the reviewed rules do
+    // not describe.
+    rows.push(Row {
+        rule_id: None,
+        name: "(rule set)".to_string(),
+        check: "aligned",
+        mismatch: (stored.len() != onchain.len()).then(|| {
+            format!(
+                "{} stored rules for {} installed rules",
+                stored.len(),
+                onchain.len()
+            )
+        }),
     });
 
     let after = read_revision(rpc, account)?;

@@ -989,7 +989,7 @@ role; a document rule by its name and compiled scope (context type)**:
   thief who holds the owner key therefore cannot brick compromise recovery
   by deleting a baseline rule that later expires — the completion drops it
   deterministically. The anti-brick check (§3.5, §7.3) keeps this from ever
-  stranding the account: a policy-free self-admin rule that carries any
+  stranding the account: a constraint-free self-admin rule that carries any
   `not-after-ledger` — already past or still in the future — does **not**
   count as the surviving admin rule, so a document whose only admin rule is
   bounded is refused outright rather than installed and later dropped into a

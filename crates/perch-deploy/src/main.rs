@@ -29,7 +29,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Compile a PolicyDoc into the JSON worklist of add_context_rule calls.
+    /// Expand a PolicyDoc into the reviewable JSON of the rules it lowers to
+    /// on an account: each rule's context, signers, and the rule-eval rule
+    /// the account stores for it. `verify`'s expectation file.
     Compose {
         /// Path to the PolicyDoc JSON.
         #[arg(long)]
@@ -37,12 +39,6 @@ enum Cmd {
         /// The smart account (C…) the rules apply to.
         #[arg(long)]
         account: String,
-        /// The interpreter contract (C…) programs install into.
-        #[arg(long)]
-        interpreter: String,
-        /// The interpreter's wasm hash (64 hex chars), pinned into the plan.
-        #[arg(long)]
-        interpreter_wasm_hash: String,
     },
     /// Apply a policy document whole: submit its JSON bytes to the account's
     /// `apply_doc` in one transaction, signed by PERCH_ADMIN_KEY selecting
@@ -64,8 +60,6 @@ enum Cmd {
     Verify {
         #[arg(long)]
         account: String,
-        #[arg(long)]
-        interpreter: String,
         #[arg(long)]
         rules: PathBuf,
     },
@@ -90,17 +84,11 @@ impl Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match &cli.cmd {
-        Cmd::Compose {
-            doc,
-            account,
-            interpreter,
-            interpreter_wasm_hash,
-        } => {
+        Cmd::Compose { doc, account } => {
             let doc_json = std::fs::read_to_string(doc)
                 .with_context(|| format!("read doc {}", doc.display()))?;
             let env = Env::default();
-            let out =
-                compose::compose(&env, &doc_json, account, interpreter, interpreter_wasm_hash)?;
+            let out = compose::compose(&env, &doc_json, account)?;
             println!("{}", serde_json::to_string_pretty(&out)?);
             Ok(())
         }
@@ -110,10 +98,6 @@ fn main() -> Result<()> {
             dry_run,
         } => apply::run(&cli.rpc()?, cli.passphrase()?, account, doc, *dry_run),
         Cmd::Publish(args) => publish::run(&cli.rpc()?, cli.passphrase()?, args),
-        Cmd::Verify {
-            account,
-            interpreter,
-            rules,
-        } => verify::run(&cli.rpc()?, account, interpreter, rules),
+        Cmd::Verify { account, rules } => verify::run(&cli.rpc()?, account, rules),
     }
 }

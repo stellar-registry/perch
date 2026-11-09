@@ -14,12 +14,13 @@
 use perch_doc_compiler::CompiledDoc;
 use perch_rule_eval::convert::Addresses;
 use perch_rule_eval::{
-    admin_survives, doc_of_in, guarded, CompiledModel, StoredFunctions, StoredRule,
+    admin_declared, admin_survives, doc_of_in, guarded, CompiledModel, StoredFunctions, StoredRule,
 };
 use soroban_sdk::{Address, Env, Vec};
 use stellar_accounts::smart_account::Signer;
 
 use crate::{rules, PerchAccountError};
+use perch_recovery_interface::account::GUARDIAN_APPROVAL_FNS;
 
 /// The compiled document's one model, if it matches the compiled rules and
 /// recovery one for one.
@@ -82,7 +83,9 @@ fn stored(
 /// rules or recovery do not match the compiled document's one for one; with
 /// `UnguardedRule` when a rule other than the recovery rule asks for no
 /// signer (INV-1); and with `AdminLockout` when no rule lets its signers
-/// manage the account unconditionally and for good.
+/// manage the account unconditionally and for good, or the document
+/// declares no such rule as a constraint-free `all` rule (the compiled
+/// document's anti-brick check, `perch_doc_compiler::admin_survives`).
 pub(crate) fn lowered(
     e: &Env,
     compiled: &CompiledDoc,
@@ -96,7 +99,7 @@ pub(crate) fn lowered(
         .ok_or(PerchAccountError::ModelInvalid)?;
     let doc = doc_of_in(e, &model, &mut known).ok_or(PerchAccountError::ModelInvalid)?;
     let kept = kept(e, compiled, rule_eval::lower(&doc, &me))?;
-    if !admin_survives(&kept, &me) {
+    if !admin_survives(&kept, &me) || !admin_declared(&doc) {
         return Err(PerchAccountError::AdminLockout);
     }
     stored(e, &kept, &known)
@@ -108,8 +111,9 @@ pub(crate) fn lowered(
 /// adopted recovery controller and its ZK factor's adapter and pool.
 ///
 /// Refuses with `ModelInvalid` as [`lowered`] does, with `ScopeEscalation`
-/// when rule-eval's scoped lowering refuses the document (a recovery member,
-/// or a rule on the account or a contract of the excluded set), and with
+/// when a rule's `functions` names a guardian approval (spec §2) or
+/// rule-eval's scoped lowering refuses the document (a recovery member, or a
+/// rule on the account or a contract of the excluded set), and with
 /// `UnguardedRule` when a rule asks for no signer (INV-1).
 pub(crate) fn lowered_scoped(
     e: &Env,
@@ -127,9 +131,27 @@ pub(crate) fn lowered_scoped(
         set.push(known.read(e, a).ok_or(PerchAccountError::ModelInvalid)?);
     }
     let doc = doc_of_in(e, &model, &mut known).ok_or(PerchAccountError::ModelInvalid)?;
+    if names_guardian_approval(&doc) {
+        return Err(PerchAccountError::ScopeEscalation);
+    }
     let lowered = rule_eval::lower_scoped(&doc, &me, &set, gen)
         .map_err(|_| PerchAccountError::ScopeEscalation)?;
     stored(e, &kept(e, compiled, lowered)?, &known)
+}
+
+/// Whether a rule of `d` names a guardian approval
+/// (`perch_recovery_interface::account::GUARDIAN_APPROVAL_FNS`) in its
+/// `functions`.
+fn names_guardian_approval(d: &rule_eval::Doc) -> bool {
+    d.rules.iter().any(|r| {
+        r.functions.as_ref().is_some_and(|names| {
+            names.iter().any(|name| {
+                GUARDIAN_APPROVAL_FNS
+                    .iter()
+                    .any(|g| name.as_slice() == g.as_bytes())
+            })
+        })
+    })
 }
 
 /// The constructor's admin rule, as stored: every function of the account,

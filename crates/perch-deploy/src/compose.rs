@@ -1,26 +1,27 @@
 //! `compose`: PolicyDoc → a reviewable JSON expansion of the rules the
-//! document lowers to. The account applies the document directly
-//! (`apply_doc` — see the `apply` subcommand), so this output is a review
-//! artifact and `verify`'s expectation file, not an install worklist. The
-//! self-admin rule lands in `genesis_rule` (the constructor satisfies it at
-//! genesis; `apply_doc` re-creates it on every apply); rule ids here are
-//! doc-order and advisory — actual ids are assigned at apply time, and
-//! `verify` matches by name.
+//! document lowers to on one account. The account applies the document
+//! directly (`apply_doc` — see the `apply` subcommand), so this output is a
+//! review artifact and `verify`'s expectation file, not an install worklist.
+//! Each rule carries the rule-eval rule the account stores for it and
+//! decides its authorizations with (`rule_eval::lower` of the document's
+//! model, as the account's `rule_set()` holds it). The self-admin rule lands
+//! in `genesis_rule` (the constructor satisfies it at genesis; `apply_doc`
+//! re-creates it on every apply); rule ids here are doc-order and advisory —
+//! actual ids are assigned at apply time, and `verify` matches by name.
 
 use anyhow::{anyhow, bail, Context, Result};
-use perch_compile::{CapSpec, CompileConfig, LoweredRule, ScopeSpec, SignerSpec};
-use perch_program::InstallParams;
+use perch_ir::{Principals, Scope, SignerMethod};
+use perch_rule_eval::convert::Addresses;
+use perch_rule_eval::StoredRule;
 use serde::{Deserialize, Serialize};
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{BytesN, Env};
+use soroban_sdk::{Address, Env};
 use stellar_xdr::{Limits, ReadXdr, ScVal, WriteXdr};
 
 #[derive(Serialize, Deserialize)]
 pub struct ComposeOutput {
     pub doc_hash: String,
     pub account: String,
-    pub interpreter: String,
-    pub interpreter_wasm_hash: String,
     /// The single self-admin rule, satisfied by the account constructor at
     /// genesis and re-created by every `apply_doc`.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -38,10 +39,8 @@ pub struct RuleEntry {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub valid_until: Option<u32>,
     pub signers: Vec<SignerJson>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub install: Option<InstallJson>,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub cap: Option<CapJson>,
+    /// The rule-eval rule the account stores for this rule.
+    pub rule: StoredRuleJson,
 }
 
 /// Every rule in this pipeline scopes to `CallContract` (self-admin resolves
@@ -51,8 +50,8 @@ pub struct ContextTypeJson {
     pub call_contract: String,
 }
 
-/// Mirrors [`SignerSpec`]: externally-tagged JSON so the reviewable output is
-/// explicit about how each signer authenticates.
+/// Externally-tagged JSON so the reviewable output is explicit about how
+/// each signer authenticates.
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SignerJson {
@@ -60,20 +59,13 @@ pub enum SignerJson {
     Delegated { address: String },
 }
 
-/// The interpreter's InstallParams, in both machine (base64 ScVal XDR — what
-/// `install-rule` submits) and reviewable (serde_json ScVal) form.
+/// A `perch_rule_eval::StoredRule`, in both machine (base64 ScVal XDR — what
+/// `verify` compares with the account's `rule_set()` entry) and reviewable
+/// (serde_json ScVal) form.
 #[derive(Serialize, Deserialize)]
-pub struct InstallJson {
+pub struct StoredRuleJson {
     pub scval_base64: String,
     pub scval_json: serde_json::Value,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct CapJson {
-    pub token: Option<String>,
-    /// i128 as a decimal string — JSON numbers cannot carry it.
-    pub limit: String,
-    pub period_ledgers: u32,
 }
 
 pub fn parse_hash32(hex64: &str) -> Result<[u8; 32]> {
@@ -84,85 +76,90 @@ pub fn parse_hash32(hex64: &str) -> Result<[u8; 32]> {
         .map_err(|_| anyhow!("hash must be 32 bytes (64 hex chars), got {}", bytes.len()))
 }
 
-/// The InstallParams contracttype ScVal — `ToXdr` bytes ARE the ScVal XDR.
-pub fn install_scval(env: &Env, install: &InstallParams) -> Result<ScVal> {
-    let bytes: Vec<u8> = install.clone().to_xdr(env).iter().collect();
+/// The StoredRule contracttype ScVal — `ToXdr` bytes ARE the ScVal XDR.
+pub fn stored_scval(env: &Env, rule: &StoredRule) -> Result<ScVal> {
+    let bytes: Vec<u8> = rule.clone().to_xdr(env).iter().collect();
     Ok(ScVal::from_xdr(bytes, Limits::none())?)
 }
 
 fn rule_entry(
     env: &Env,
     expected_rule_id: u32,
-    rule: &LoweredRule,
+    doc: &perch_ir::PolicyDoc,
+    rule: &perch_ir::Rule,
+    stored: &StoredRule,
     call_contract: &str,
 ) -> Result<RuleEntry> {
-    let install = match &rule.install {
-        None => None,
-        Some(ip) => {
-            let scval = install_scval(env, ip)?;
-            Some(InstallJson {
-                scval_base64: scval.to_xdr_base64(Limits::none())?,
-                scval_json: serde_json::to_value(&scval)?,
-            })
-        }
+    let ids = match &rule.principals {
+        Principals::All(p) => &p.signers,
+        Principals::Threshold(p) => &p.signers,
+        Principals::SelfAuthenticating(_) => bail!("rule '{}' is self-authenticating", rule.name),
     };
+    let mut signers = Vec::new();
+    for id in ids {
+        let decl = doc
+            .signers
+            .iter()
+            .find(|s| &s.id == id)
+            .ok_or_else(|| anyhow!("rule '{}' names no declared signer '{id}'", rule.name))?;
+        signers.push(match &decl.method {
+            SignerMethod::External { verifier, key } => SignerJson::External {
+                verifier: verifier.clone(),
+                key_hex: key.clone(),
+            },
+            SignerMethod::Delegated { address } => SignerJson::Delegated {
+                address: address.clone(),
+            },
+        });
+    }
+    let scval = stored_scval(env, stored)?;
     Ok(RuleEntry {
         expected_rule_id,
         name: rule.name.clone(),
         context_type: ContextTypeJson {
             call_contract: call_contract.to_string(),
         },
-        valid_until: rule.valid_until,
-        signers: rule
-            .signers
-            .iter()
-            .map(|s| match s {
-                SignerSpec::External { verifier, key_hex } => SignerJson::External {
-                    verifier: verifier.clone(),
-                    key_hex: key_hex.clone(),
-                },
-                SignerSpec::Delegated { address } => SignerJson::Delegated {
-                    address: address.clone(),
-                },
-            })
-            .collect(),
-        install,
-        cap: rule.cap.as_ref().map(|c: &CapSpec| CapJson {
-            token: c.token.clone(),
-            limit: c.limit.to_string(),
-            period_ledgers: c.period_ledgers,
-        }),
+        valid_until: stored.valid_until,
+        signers,
+        rule: StoredRuleJson {
+            scval_base64: scval.to_xdr_base64(Limits::none())?,
+            scval_json: serde_json::to_value(&scval)?,
+        },
     })
 }
 
-pub fn compose(
-    env: &Env,
-    doc_json: &str,
-    account: &str,
-    interpreter: &str,
-    interpreter_wasm_hash_hex: &str,
-) -> Result<ComposeOutput> {
+pub fn compose(env: &Env, doc_json: &str, account: &str) -> Result<ComposeOutput> {
     let doc = perch_ir::from_json(doc_json).map_err(|e| anyhow!("doc parse failed: {e:?}"))?;
     perch_ir::validate(&doc).map_err(|errs| anyhow!("doc validation failed: {errs:?}"))?;
+    crate::scv::contract(account).context("--account")?;
 
-    let wasm_hash = parse_hash32(interpreter_wasm_hash_hex)?;
-    let cfg = CompileConfig {
-        interpreter_wasm_hash: BytesN::from_array(env, &wasm_hash),
-    };
-    let plan = perch_compile::compile(env, &doc, &cfg).map_err(|e| anyhow!("compile: {e:?}"))?;
-    // Fail-closed gate: never emit attachments for a plan that has diverged
-    // from the reviewed document.
-    perch_compile::verify_plan_matches_doc(env, &doc, &plan)
-        .map_err(|e| anyhow!("plan/doc divergence: {e:?}"))?;
+    // The account's own conversion: the document's model, read through
+    // soroban-facade, lowered by rule-eval, and each rule converted back to
+    // the host form the account stores.
+    let model = perch_rule_eval::model_of(env, &doc).map_err(|e| anyhow!("model: {e:?}"))?;
+    let mut known = Addresses::default();
+    let me = known
+        .read(env, &Address::from_str(env, account))
+        .context("the account's address")?;
+    let model = perch_rule_eval::doc_of_in(env, &model, &mut known)
+        .context("soroban-facade cannot read the document's model")?;
+    let lowered = rule_eval::lower(&model, &me);
 
     let mut genesis_rule = None;
     let mut apply = Vec::new();
-    for rule in &plan.rules {
+    for (rule, lowered) in doc.rules.iter().zip(&lowered) {
+        let stored = StoredRule::from_rule_in(env, lowered, &known)
+            .ok_or_else(|| anyhow!("rule '{}' has no stored form", rule.name))?;
         match &rule.scope {
-            ScopeSpec::SelfAdmin => {
-                // The constructor installs rule 0 policy-free; a self-admin rule
-                // carrying a program or cap could never be genesis-satisfied.
-                if rule.install.is_some() || rule.cap.is_some() {
+            Scope::SelfAdmin(_) => {
+                // The constructor installs rule 0 asking every signer for
+                // every function; a self-admin rule with a constraint could
+                // never be genesis-satisfied.
+                let constraint_free = matches!(rule.principals, Principals::All(_))
+                    && rule.functions.is_none()
+                    && rule.args.is_none()
+                    && rule.cap.is_none();
+                if !constraint_free {
                     bail!(
                         "self-admin rule '{}' has constraints; the constructor cannot satisfy it",
                         rule.name
@@ -171,11 +168,11 @@ pub fn compose(
                 if genesis_rule.is_some() {
                     bail!("constructor installs exactly one self-admin rule; document has more");
                 }
-                genesis_rule = Some(rule_entry(env, 0, rule, account)?);
+                genesis_rule = Some(rule_entry(env, 0, &doc, rule, &stored, account)?);
             }
-            ScopeSpec::Contract(addr) => {
+            Scope::Contract(c) => {
                 let id = apply.len() as u32 + 1;
-                apply.push(rule_entry(env, id, rule, addr)?);
+                apply.push(rule_entry(env, id, &doc, rule, &stored, &c.address)?);
             }
         }
     }
@@ -183,8 +180,6 @@ pub fn compose(
     Ok(ComposeOutput {
         doc_hash: perch_ir::doc_hash_hex(&doc),
         account: account.to_string(),
-        interpreter: interpreter.to_string(),
-        interpreter_wasm_hash: interpreter_wasm_hash_hex.to_string(),
         genesis_rule,
         apply,
     })
@@ -204,10 +199,21 @@ mod tests {
         std::fs::read_to_string(p).expect("read ci-publish.json")
     }
 
+    fn stored(entry: &RuleEntry) -> StoredRule {
+        use soroban_sdk::xdr::FromXdr;
+        let env = Env::default();
+        let scval = ScVal::from_xdr_base64(&entry.rule.scval_base64, Limits::none()).unwrap();
+        let xdr = soroban_sdk::Bytes::from_slice(
+            &env,
+            &WriteXdr::to_xdr(&scval, Limits::none()).unwrap(),
+        );
+        StoredRule::from_xdr(&env, &xdr).unwrap()
+    }
+
     #[test]
     fn compose_skips_self_admin_and_freezes_doc_hash() {
         let env = Env::default();
-        let out = compose(&env, &fixture(), DUMMY, DUMMY, &"ab".repeat(32)).unwrap();
+        let out = compose(&env, &fixture(), DUMMY).unwrap();
 
         assert_eq!(out.doc_hash, FIXTURE_DOC_HASH);
         // admin is genesis-satisfied, never an apply entry.
@@ -215,7 +221,9 @@ mod tests {
         assert_eq!(genesis.name, "admin");
         assert_eq!(genesis.expected_rule_id, 0);
         assert_eq!(genesis.context_type.call_contract, DUMMY);
-        assert!(genesis.install.is_none());
+        let admin = stored(genesis);
+        assert!(admin.conds.is_empty() && admin.cap.is_empty());
+        assert_eq!(admin.threshold, admin.signers.len());
 
         assert_eq!(out.apply.len(), 1);
         let ci = &out.apply[0];
@@ -223,24 +231,42 @@ mod tests {
         assert_eq!(ci.expected_rule_id, 1);
         // not-after-ledger 55000000 lowers to the inclusive valid_until 54999999.
         assert_eq!(ci.valid_until, Some(54_999_999));
-        assert!(ci.install.is_some());
         assert_eq!(ci.signers.len(), 1);
+        let rule = stored(ci);
+        assert_eq!(rule.valid_until, Some(54_999_999));
+        assert_eq!(rule.threshold, 1);
+    }
+
+    /// The composed rule is what the account stores: rule-eval's lowering of
+    /// the document's model on the account, through the same conversions.
+    #[test]
+    fn composed_rules_are_the_lowering_of_the_model() {
+        let env = Env::default();
+        let out = compose(&env, &fixture(), DUMMY).unwrap();
+        let doc = perch_ir::from_json(&fixture()).unwrap();
+        let model = perch_rule_eval::model_of(&env, &doc).unwrap();
+        let me = perch_rule_eval::convert::address(&env, &Address::from_str(&env, DUMMY)).unwrap();
+        let lowered = rule_eval::lower(&perch_rule_eval::doc_of(&env, &model).unwrap(), &me);
+        let entries: Vec<&RuleEntry> = out.genesis_rule.iter().chain(&out.apply).collect();
+        assert_eq!(entries.len(), lowered.len());
+        for (entry, rule) in entries.into_iter().zip(&lowered) {
+            assert_eq!(
+                stored(entry),
+                StoredRule::from_rule(&env, rule).unwrap(),
+                "{}",
+                entry.name
+            );
+        }
     }
 
     #[test]
-    fn install_params_round_trip_through_serde_json() {
+    fn stored_rule_round_trips_through_serde_json() {
         let env = Env::default();
-        let doc = perch_ir::from_json(&fixture()).unwrap();
-        let cfg = CompileConfig {
-            interpreter_wasm_hash: BytesN::from_array(&env, &[0xab; 32]),
-        };
-        let plan = perch_compile::compile(&env, &doc, &cfg).unwrap();
-        let install = plan.rules[1].install.as_ref().expect("ci-publish installs");
-
-        let original: Vec<u8> = install.clone().to_xdr(&env).iter().collect();
-        let scval = ScVal::from_xdr(original.clone(), Limits::none()).unwrap();
-        let json = serde_json::to_value(&scval).unwrap();
-        let back: ScVal = serde_json::from_value(json).unwrap();
+        let out = compose(&env, &fixture(), DUMMY).unwrap();
+        let entry = &out.apply[0];
+        let scval = ScVal::from_xdr_base64(&entry.rule.scval_base64, Limits::none()).unwrap();
+        let original = WriteXdr::to_xdr(&scval, Limits::none()).unwrap();
+        let back: ScVal = serde_json::from_value(entry.rule.scval_json.clone()).unwrap();
         // Fully qualified: soroban's env-based `ToXdr` also matches `.to_xdr`
         // on ScVal under testutils.
         let reserialized = WriteXdr::to_xdr(&back, Limits::none()).unwrap();

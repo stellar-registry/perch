@@ -1651,8 +1651,9 @@ dependencies = [
 name = "perch-analyze"
 version = "0.1.1"
 dependencies = [
- "perch-compile",
  "perch-ir",
+ "perch-rule-eval",
+ "rule-eval",
  "soroban-sdk",
 ]
 
@@ -1709,10 +1710,10 @@ dependencies = [
  "clap",
  "ed25519-dalek",
  "hex",
- "perch-compile",
  "perch-ed25519-verifier",
  "perch-ir",
- "perch-program",
+ "perch-rule-eval",
+ "rule-eval",
  "serde",
  "serde_json",
  "sha2",
@@ -1736,9 +1737,7 @@ name = "perch-doc-compiler"
 version = "0.3.5"
 dependencies = [
  "hex",
- "perch-compile",
  "perch-ir",
- "perch-program",
  "perch-recovery-interface",
  "perch-rule-eval",
  "soroban-sdk",
@@ -1888,7 +1887,6 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "perch-ir",
- "perch-program",
  "rule-eval",
  "rule-eval-conformance",
  "soroban-facade",
@@ -1937,6 +1935,7 @@ dependencies = [
  "hex",
  "p256",
  "perch-account",
+ "perch-compile",
  "perch-doc-compiler",
  "perch-ed25519-verifier",
  "perch-interpreter",

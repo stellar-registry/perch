@@ -85,6 +85,19 @@ import { parsePolicyDocJson } from '@stellar-registry/perch';
 const doc = parsePolicyDocJson(jsonText); // throws on any deviation — fail closed
 ```
 
+### Pinning a grant to the account
+
+A grant's rule matches every call its target, functions and argument
+predicates allow. For the token functions `transfer`, `transfer_from`,
+`approve`, `burn` and `burn_from` (`OWNER_FNS`) the account requires
+argument 0 to be itself. For any other function, a grant author pins the
+argument that names the account with `is-self` (`isSelf()` in the builder).
+Show `selfPinWarnings(doc)` before the owner approves a grant: one `"Rule
+… pins no argument to the account (is-self): …"` per rule that pins none,
+other than a rule listing only those token functions. It is a warning, not
+a refusal. A grant never calls a token's admin functions (`mint`,
+`clawback`, `set_admin`, `set_authorized`): the account refuses them.
+
 ## Guarantees
 
 - `canonicalJson`, `docHash`, `ruleHash`, and `configHash` are byte-identical

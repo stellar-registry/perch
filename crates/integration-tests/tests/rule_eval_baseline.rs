@@ -15,7 +15,10 @@
 //!
 //! The test replays every trace on a fresh account and on one with a
 //! predecessor document, and fails on any difference from the recorded
-//! verdicts, records or lowering, when the account's stored rule-eval rule
+//! verdicts, records or lowering, the verdicts refined as the account
+//! refines the model, so that a capped rule, and a grant's rule for a token
+//! function whose argument 0 is the owner, act only when argument 0 is the
+//! account (`rule_core::refined`), when the account's stored rule-eval rule
 //! set after an apply differs from the lowering of the document's model or
 //! from the denotation of what is installed (`perch_testkit::rule_set`), and
 //! when, after an accepted authorization, the account keeps a spending

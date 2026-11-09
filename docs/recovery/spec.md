@@ -1086,7 +1086,10 @@ with:
 - a rule scoped to the ZK adapter or pool of the applied recovery member
   (§15 rule 3, which the compiler can check only within one document);
 - a rule whose `functions` names a guardian approval (`submit_guardian`,
-  `approve_change`), whatever contract it is scoped to.
+  `approve_change`), whatever contract it is scoped to;
+- a rule whose `functions` names a token-admin function (`mint`,
+  `clawback`, `set_admin`, `set_authorized`), whatever contract it is
+  scoped to.
 
 The contracts these name are the **excluded set**: the account, then its
 recovery controller and the adapter and pool of its ZK factor, all read
@@ -1107,11 +1110,43 @@ which covers a rule that leaves its functions unrestricted. The names are
 `account::GUARDIAN_APPROVAL_FNS`; a rule on an unrelated contract that
 exports one of them is refused too.
 
+**Token-admin functions.** A Stellar Asset Contract's admin functions
+(`mint`, `clawback`, `set_admin`, `set_authorized`) act with the token
+admin's authority, which no argument names, so admin powers stay with the
+account document: no grant document's rule calls one. Besides the
+`functions` refusal above, `__check_auth` refuses a tagged rule selected
+for a context naming one on any contract (`GrantEscalation`), which covers
+a rule that leaves its functions unrestricted. The names are
+`TOKEN_ADMIN_FNS`, matched by name as guardian approvals are, so a rule on
+a non-token contract that exports one of them is refused too.
+
 So no grant document can change the account document's rules, recovery, or
-upgrades, act at the account's recovery, or cast its guardian approvals,
-whoever approves it. The compiler never emits OZ's `Default` or
+upgrades, act at the account's recovery, cast its guardian approvals, or
+call a token-admin function, whoever approves it. The compiler never emits OZ's `Default` or
 `CreateContract` rules; a `Default` rule in a grant document would match
 calls on the account too.
+
+**Caps and grants.** A cap meters the account's own transfers.
+`__check_auth` refuses (`RuleEvalRefused`) a context chosen under a capped
+rule, of the account document or a grant document, or under a grant document's
+rule (a grant) for a token function whose argument 0 is the owner
+(`transfer`, `transfer_from`, `approve`, `burn`, `burn_from`; for
+`transfer_from` and `burn_from`, the spender), unless that argument is the
+account itself (`gate.rs`). These functions are matched by name on any
+contract, since a grant cannot know whether a contract is a SEP-41 token:
+under a grant, a call on a non-token contract that exports `transfer` or
+`approve` with another argument 0 is refused. As another account's
+CAP-0071 delegated signer, the account is handed that account's contexts
+(`cap-0071.md` C2); none of these rules authorizes that account's calls to
+these functions, and the account's spending records count only its own
+transfers. Here the account refines rule-core's model, whose rules match
+such a call whatever its argument 0: the account's verdict is the model's
+or a refusal. A grant's rule for any other function, whose arguments may
+name other addresses first (a token or pool, say), matches as its argument
+predicates say, so a grant author pins the account's argument with
+`is-self`. perch-js's `selfPinWarnings` warns, before the owner approves a
+grant, about a grant rule with no `is-self` pin, other than one listing only
+these token functions: a warning, not a refusal.
 
 **Normal form.** The account keeps no grant document's text, only what
 the document lowers to and its signer ids, so it applies only documents
@@ -1139,8 +1174,8 @@ would advance it past `u64::MAX` refuses (`GenerationExhausted`), and every
 advance emits `GrantsWiped { gen }`. `__check_auth` refuses a tagged rule
 selected for a call on a contract of the excluded set: the recovery
 controller, or the ZK adapter or pool of the applied recovery member; and
-one selected for a guardian approval on any contract
-(`PerchAuthError::GrantEscalation`), after the reserved-name guard and the
+one selected for a guardian approval or a token-admin function on any
+contract (`PerchAuthError::GrantEscalation`), after the reserved-name guard and the
 freeze and before any rule is evaluated. So the `apply_grant` guard above
 also holds for a grant applied before that member, without `apply_doc`
 scanning the grants. rule-eval's `check_auth` then refuses a chosen rule
@@ -1854,7 +1889,7 @@ on the deployed contract
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers, held to the install-time limits and refusing two that are one key (§7.5); emits `context_rule_added`. |
-| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the grant generation gate (§7.6), then rule-eval's `check_auth` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion is decided instead over the account's record of the recovery rule, in OZ's `do_check_auth`'s order (§7.5; no payload signer, `UnauthorizedSigner`; an expired rule or a context off the account, `UnvalidatedContext`), and then by the controller's `rcv_complete` (T5). An account storing no rule set, which the constructor never leaves, authorizes nothing else (`RuleEvalRefused`). The order of the refusing steps does not matter for security: each only refuses. |
+| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the argument-0 gate (§7.6: a context chosen under a capped rule, or under a grant document's rule for a token function whose argument 0 is the owner, matched by name, must have the account as argument 0, `RuleEvalRefused`), then rule-eval's `check_auth` over the stored rules of the chosen rules, which carries the grant generation gate (§7.6, `StaleGrant`) (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion is decided instead over the account's record of the recovery rule, in OZ's `do_check_auth`'s order (§7.5; no payload signer, `UnauthorizedSigner`; an expired rule or a context off the account, `UnvalidatedContext`), and then by the controller's `rcv_complete` (T5). An account storing no rule set, which the constructor never leaves, authorizes nothing else (`RuleEvalRefused`). The order of the refusing steps does not matter for security: each only refuses. |
 | Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the grant generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |

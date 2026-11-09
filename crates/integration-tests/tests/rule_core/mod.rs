@@ -38,7 +38,10 @@
 //! (`perch_smart_account::check_auth`), so a refusal by either is a refused
 //! verdict. An accepted verdict carries the spending records the account
 //! keeps for rule-eval, one per rule the trace lowers to (empty for an
-//! uncapped rule), which the caller compares with the trace's. After every
+//! uncapped rule), which the caller compares with the trace's, refined as
+//! the account refines the model: a capped rule, and a grant's rule for a
+//! token function whose argument 0 is the owner, act only when argument 0
+//! is the account ([`refined`]). After every
 //! accepted authorization the account must keep a record only for a rule
 //! stored with a cap and none for a removed rule
 //! (`perch_testkit::rule_set::check_records`); a difference is reported with
@@ -81,7 +84,8 @@ use rule_eval_conformance::documents::{
     JsonDoc, JsonPred, JsonPrincipals, JsonScope, Lowered, Trace, Verdict,
 };
 use rule_eval_conformance::{
-    decode_context, decode_hex, decode_rules, rules_eq, soroban, JsonContext, JsonSigner, JsonVal,
+    decode_context, decode_hex, decode_rules, decode_signers, rules_eq, soroban, JsonContext,
+    JsonSigner, JsonVal,
 };
 use sha2::{Digest as _, Sha256};
 use soroban_facade::SdkHost;
@@ -111,6 +115,15 @@ use perch_account::PerchAccountError;
 /// overrides).
 pub fn vectors() -> PathBuf {
     rule_eval_conformance::vectors_dir()
+}
+
+/// Perch's own document traces in rule-core's format: capped transfers, and
+/// a grant document's owner functions, from the trace's account, which
+/// rule-core's vectors do not make, so a charged record is compared and the
+/// account's own calls are checked under [`refined`]. rule-core's runner checks their
+/// expectations (`rule_core_documents.rs`).
+pub fn perch_vectors() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/rule_core/documents")
 }
 
 // ---------------------------------------------------------------------------
@@ -1303,10 +1316,120 @@ pub fn expected(v: &Verdict) -> Got {
     }
 }
 
+/// The verdicts the account gives `t`'s authorizations: `t`'s own, refined
+/// as the account refines the model (`gate.rs`): an authorization choosing
+/// a capped rule, or a grant document's rule (one carrying a generation)
+/// for a token function whose argument 0 is the owner
+/// ([`perch_smart_account::OWNER_FNS`]), for a context whose argument 0 is
+/// not `t`'s account is refused, with the
+/// records unchanged, and so is one choosing a grant document's rule for a
+/// token-admin function ([`admin_fn`], `__check_auth`'s `GrantEscalation`).
+/// Once that refuses an authorization `t` accepts,
+/// `t`'s later verdicts count a charge the account never made, so the rest
+/// are replayed with rule-eval's `check_auth` over `t`'s lowered rules from
+/// the account's records, refined the same way.
+pub fn refined(t: &Trace) -> Vec<Got> {
+    let Lowered::Ok(rules) = &t.lowered else {
+        return t
+            .authorizations
+            .iter()
+            .map(|a| expected(&a.expected))
+            .collect();
+    };
+    let rules = decode_rules(rules).expect("trace rules");
+    let account = unhex(&t.account);
+    let mut records: Vec<rule_eval::SpendRecord> =
+        rules.iter().map(|_| rule_eval::empty_record()).collect();
+    let mut followed = true;
+    let mut out = vec![];
+    for a in &t.authorizations {
+        let batch: Vec<rule_eval::Context> = a
+            .batch
+            .iter()
+            .map(|c| decode_context(c).expect("trace context"))
+            .collect();
+        let own = batch.iter().zip(&a.choices).all(|(c, j)| {
+            let rule = rules.get(*j as usize);
+            let token_admin = rule.is_some_and(|r| r.generation.is_some()) && admin_fn(c);
+            !token_admin
+                && (rule
+                    .is_none_or(|r| r.cap.is_none() && (r.generation.is_none() || !owner_fn(c)))
+                    || from_account(c, &account))
+        });
+        let got = if !own {
+            followed &= matches!(a.expected, Verdict::Refused);
+            Got::Refused
+        } else if followed {
+            let got = expected(&a.expected);
+            if let Got::Accepted(rs) = &got {
+                records = rs.iter().map(spend_record).collect();
+            }
+            got
+        } else {
+            let signers = decode_signers(&a.authenticated).expect("trace signers");
+            let generation = a.generation.parse().expect("decimal generation");
+            match rule_eval::check_auth(
+                &rules, &records, &batch, &a.choices, &signers, a.now, generation,
+            ) {
+                Ok(next) => {
+                    records = next;
+                    Got::Accepted(records.iter().map(record_of).collect())
+                }
+                Err(_) => Got::Refused,
+            }
+        };
+        out.push(got);
+    }
+    out
+}
+
+/// Whether `c` calls one of the token-admin functions
+/// (`perch_smart_account::TOKEN_ADMIN_FNS`), which no grant document's
+/// rule authorizes (`__check_auth`, `GrantEscalation`).
+fn admin_fn(c: &rule_eval::Context) -> bool {
+    matches!(c, rule_eval::Context::Call { function, .. }
+        if perch_smart_account::TOKEN_ADMIN_FNS
+            .iter()
+            .any(|n| function.as_slice() == n.as_bytes()))
+}
+
+/// Whether `c` calls one of [`perch_smart_account::OWNER_FNS`].
+fn owner_fn(c: &rule_eval::Context) -> bool {
+    matches!(c, rule_eval::Context::Call { function, .. }
+        if perch_smart_account::OWNER_FNS
+            .iter()
+            .any(|n| function.as_slice() == n.as_bytes()))
+}
+
+/// Whether `c` is a call whose argument 0 is the address `account`.
+fn from_account(c: &rule_eval::Context, account: &[u8]) -> bool {
+    matches!(c, rule_eval::Context::Call { args, .. }
+        if matches!(args.first(), Some(EVal::Address(a)) if a.as_slice() == account))
+}
+
+fn spend_record(r: &Record) -> rule_eval::SpendRecord {
+    rule_eval::SpendRecord {
+        history: r
+            .0
+            .iter()
+            .map(|&(ledger, amount)| rule_eval::SpendEntry { ledger, amount })
+            .collect(),
+        total: r.1,
+    }
+}
+
+fn record_of(r: &rule_eval::SpendRecord) -> Record {
+    (
+        r.history.iter().map(|x| (x.ledger, x.amount)).collect(),
+        r.total,
+    )
+}
+
 /// Every way `run` differs from what `t` states: whether the document is
 /// refused, the lowering of the document's own rules (the recovery rule,
 /// which Perch installs from its recovery member rather than lowers, only
-/// by presence), each verdict, and each accepted authorization's records;
+/// by presence), each verdict, and each accepted authorization's records,
+/// as [`refined`] gives them;
 /// and every spending record the run found the account keeping that it
 /// should not.
 pub fn differences(t: &Trace, run: &Run) -> Vec<String> {
@@ -1343,8 +1466,14 @@ pub fn differences(t: &Trace, run: &Run) -> Vec<String> {
             },
         ));
     }
-    for (i, (a, got)) in t.authorizations.iter().zip(&run.verdicts).enumerate() {
-        let want = expected(&a.expected);
+    let wants = refined(t);
+    for (i, ((a, got), want)) in t
+        .authorizations
+        .iter()
+        .zip(&run.verdicts)
+        .zip(wants)
+        .enumerate()
+    {
         if *got != want {
             let delegated = a
                 .authenticated

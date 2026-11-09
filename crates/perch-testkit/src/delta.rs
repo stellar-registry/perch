@@ -130,8 +130,9 @@ pub const SIGNER_IDS: [&str; 16] = [
 pub const RULE_NAMES: [&str; 15] = [
     "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
 ];
-/// Function names a constrained rule may allow.
-pub const FUNCTIONS: [&str; 3] = ["transfer", "approve", "mint"];
+/// Function names a constrained rule may allow: none a grant document may
+/// not list (a guardian approval or a token-admin function, spec §7.6).
+pub const FUNCTIONS: [&str; 3] = ["transfer", "approve", "swap"];
 /// Size of the key pool (delegated addresses and external keys).
 pub const KEY_POOL: usize = 20;
 /// Size of the scope pool (contracts rules are scoped to).

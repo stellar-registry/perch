@@ -81,6 +81,7 @@ export {
   type ResolvedVerifier,
   type VerifierWarning,
 } from './verifiers.js';
+export { OWNER_FNS, selfPinWarnings, type SelfPinWarning } from './grants.js';
 export {
   addressPayload,
   credentialFingerprint,

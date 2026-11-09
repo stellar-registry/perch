@@ -108,6 +108,10 @@ the release-stack suite, and the testnet exercise cover them.
     points, with listed or unrestricted functions, or from a grant applied
     before the controller was adopted, while the account document's rules
     still do;
+  - under enforcing authorization by `grant_token_admin.rs`: no grant rule
+    calls a token-admin function (`mint`, `clawback`, `set_admin`,
+    `set_authorized`), with listed or unrestricted functions, while the
+    account document's rule on the token still mints;
   - by `rule_core_documents.rs`: rule-core's grant document traces, whose
     lowering, verdicts and records its Lean model computed, through the
     real `apply_grant` and `__check_auth`: every refusal of the scoped
@@ -164,7 +168,13 @@ the release-stack suite, and the testnet exercise cover them.
 - Cumulative caps (`cap`) lower to a rule-eval cap, charged against a
   spending record the account keeps. They are outside the stateless model by
   construction ([`THEORY.md`](./THEORY.md) explains why this boundary is a
-  theorem); rule-core's model covers them.
+  theorem); rule-core's model covers them. On capped rules, and on a
+  grant document's rules for token functions whose argument 0 is the
+  owner (`transfer`, `transfer_from`, `approve`, `burn`, `burn_from`), the
+  account refines that model: it additionally requires argument 0 to be
+  the account (`gate.rs`), so its verdict there is the model's or a
+  refusal. `rule_core_documents.rs` and `rule_eval_baseline.rs` compare
+  against the model's verdicts so refined (`rule_core::refined`).
 
 ## Not established
 

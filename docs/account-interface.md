@@ -112,9 +112,16 @@ the owner chooses (one per app grant, say), and returns its `doc_hash`
 
 - It refuses (`GrantEscalation`) a `recovery` member, a `self-admin` rule, a
   rule scoped to the account, its recovery controller, or its ZK adapter or
-  pool, or a rule whose `functions` names a guardian approval, so no grant
-  document reaches the account document's rules, recovery, upgrades, or
-  guardian approvals.
+  pool, or a rule whose `functions` names a guardian approval or a
+  token-admin function (`mint`, `clawback`, `set_admin`, `set_authorized`),
+  so no grant document reaches the account document's rules, recovery,
+  upgrades, guardian approvals, or token-admin powers.
+- A grant rule matches the calls its target, functions and argument
+  predicates allow. For `transfer`, `transfer_from`, `approve`, `burn` and
+  `burn_from` the account requires argument 0 to be itself; for any other
+  function, pin the account's argument with `is-self`. perch-js's
+  `selfPinWarnings(doc)` lists the rules that pin none, for the wallet to
+  show before the owner approves (spec §7.6).
 - It refuses (`NotNormalForm`) a document that is not in normal form. The
   compiler reports what the text shows (`CompiledDoc::normal_form`,
   `perch_ir::normal_form`): keys in lowercase hex, cap limits written as
@@ -335,9 +342,10 @@ their docs land in the account's spec too.
 - **`GrantEscalation`.** `apply_grant` was given a document a grant document
   may not be: it has a `recovery` member, a `self-admin` rule, a rule scoped
   to the account itself, its recovery controller, or its ZK adapter or pool,
-  or a rule whose `functions` names a guardian approval (spec §7.6).
-  `__check_auth` also refuses a grant rule selected for a guardian approval
-  on any contract, with `PerchAuthError::GrantEscalation`.
+  or a rule whose `functions` names a guardian approval or a token-admin
+  function (spec §7.6). `__check_auth` also refuses a grant rule selected
+  for a guardian approval or a token-admin function on any contract, with
+  `PerchAuthError::GrantEscalation`.
 - **`ModelInvalid`.** The compiled document carries no model, more than one,
   a model soroban-facade cannot read, or one whose rules or recovery do not
   match the compiled rules one for one.

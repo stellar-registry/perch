@@ -1,0 +1,344 @@
+//! `CompiledModel`, a `#[contracttype]` mirror of `rule_eval::Doc`: the part
+//! of a policy document rule-eval's lowering reads, in host types. Strkeys
+//! become `Address`es, hex keys `Bytes`, decimal limits `i128`, function
+//! names `Symbol`s, and signer ids and strings `String`s.
+//!
+//! [`doc_of`] reads a model as a `rule_eval::Doc`. With the `ir` feature,
+//! [`model_of`] builds one from a validated `perch_ir::PolicyDoc`.
+
+use soroban_sdk::{contracttype, Address, Env, String, Symbol, Vec};
+use stellar_accounts::smart_account::Signer;
+
+use crate::convert::{address, signer, string_bytes, symbol_bytes};
+
+/// `rule_eval::Scope`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModelScope {
+    Contract(Address),
+    SelfAdmin,
+}
+
+/// `rule_eval::Principals`: signer ids.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModelPrincipals {
+    All(Vec<String>),
+    Threshold(Vec<String>, u32),
+}
+
+/// `rule_eval::Pred`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ModelPred {
+    IsSelf,
+    AddressEq(Address),
+    StringIn(Vec<String>),
+    StringPrefix(String),
+    U32Eq(u32),
+}
+
+/// `rule_eval::ArgConstraint`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelArg {
+    pub index: u32,
+    pub pred: ModelPred,
+}
+
+/// `rule_eval::DocCap`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelCap {
+    pub limit: i128,
+    pub period_ledgers: u32,
+}
+
+/// `rule_eval::DocRule`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelRule {
+    pub scope: ModelScope,
+    pub principals: ModelPrincipals,
+    pub functions: Option<Vec<Symbol>>,
+    pub args: Option<Vec<ModelArg>>,
+    pub not_after_ledger: Option<u32>,
+    /// Zero or one entries: `#[contracttype]` has no `Option` of a
+    /// `#[contracttype]` struct.
+    pub cap: Vec<ModelCap>,
+}
+
+/// `rule_eval::SignerDecl`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelSigner {
+    pub id: String,
+    pub signer: Signer,
+}
+
+/// `rule_eval::ZkFactor`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelZk {
+    pub adapter: Address,
+    pub pool: Address,
+}
+
+/// `rule_eval::Recovery`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModelRecovery {
+    pub controller: Address,
+    /// Zero or one entries.
+    pub zk: Vec<ModelZk>,
+}
+
+/// `rule_eval::Doc`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CompiledModel {
+    pub signers: Vec<ModelSigner>,
+    pub rules: Vec<ModelRule>,
+    /// Zero or one entries.
+    pub recovery: Vec<ModelRecovery>,
+}
+
+fn strings(list: &Vec<String>) -> alloc::vec::Vec<alloc::vec::Vec<u8>> {
+    list.iter().map(|s| string_bytes(&s)).collect()
+}
+
+fn pred(e: &Env, p: &ModelPred) -> Option<rule_eval::Pred> {
+    Some(match p {
+        ModelPred::IsSelf => rule_eval::Pred::IsSelf,
+        ModelPred::AddressEq(a) => rule_eval::Pred::AddressEq(address(e, a)?),
+        ModelPred::StringIn(vs) => rule_eval::Pred::StringIn(strings(vs)),
+        ModelPred::StringPrefix(p) => rule_eval::Pred::StringPrefix(string_bytes(p)),
+        ModelPred::U32Eq(v) => rule_eval::Pred::U32Eq(*v),
+    })
+}
+
+fn rule(e: &Env, r: &ModelRule) -> Option<rule_eval::DocRule> {
+    if r.cap.len() > 1 {
+        return None;
+    }
+    let functions = match &r.functions {
+        Some(fs) => Some(
+            fs.iter()
+                .map(|f| symbol_bytes(e, &f))
+                .collect::<Option<_>>()?,
+        ),
+        None => None,
+    };
+    let args = match &r.args {
+        Some(args) => Some(
+            args.iter()
+                .map(|a| {
+                    Some(rule_eval::ArgConstraint {
+                        index: a.index,
+                        pred: pred(e, &a.pred)?,
+                    })
+                })
+                .collect::<Option<_>>()?,
+        ),
+        None => None,
+    };
+    Some(rule_eval::DocRule {
+        scope: match &r.scope {
+            ModelScope::Contract(a) => rule_eval::Scope::Contract(address(e, a)?),
+            ModelScope::SelfAdmin => rule_eval::Scope::SelfAdmin,
+        },
+        principals: match &r.principals {
+            ModelPrincipals::All(ids) => rule_eval::Principals::All(strings(ids)),
+            ModelPrincipals::Threshold(ids, m) => {
+                rule_eval::Principals::Threshold(strings(ids), *m)
+            }
+        },
+        functions,
+        args,
+        not_after_ledger: r.not_after_ledger,
+        cap: r.cap.first().map(|c| rule_eval::DocCap {
+            limit: c.limit,
+            period_ledgers: c.period_ledgers,
+        }),
+    })
+}
+
+fn recovery(e: &Env, r: &ModelRecovery) -> Option<rule_eval::Recovery> {
+    if r.zk.len() > 1 {
+        return None;
+    }
+    let zk = match r.zk.first() {
+        Some(z) => Some(rule_eval::ZkFactor {
+            adapter: address(e, &z.adapter)?,
+            pool: address(e, &z.pool)?,
+        }),
+        None => None,
+    };
+    Some(rule_eval::Recovery {
+        controller: address(e, &r.controller)?,
+        zk,
+    })
+}
+
+/// The document `m` mirrors, or `None` when it holds more than one cap,
+/// zero-knowledge factor or recovery configuration where one is the most,
+/// or an address the facade refuses.
+#[must_use]
+pub fn doc_of(e: &Env, m: &CompiledModel) -> Option<rule_eval::Doc> {
+    if m.recovery.len() > 1 {
+        return None;
+    }
+    let recovery = match m.recovery.first() {
+        Some(r) => Some(recovery(e, &r)?),
+        None => None,
+    };
+    Some(rule_eval::Doc {
+        signers: m
+            .signers
+            .iter()
+            .map(|d| {
+                Some(rule_eval::SignerDecl {
+                    id: string_bytes(&d.id),
+                    signer: signer(e, &d.signer)?,
+                })
+            })
+            .collect::<Option<_>>()?,
+        rules: m.rules.iter().map(|r| rule(e, &r)).collect::<Option<_>>()?,
+        recovery,
+    })
+}
+
+#[cfg(feature = "ir")]
+pub use from_ir::{model_of, ModelError};
+
+#[cfg(feature = "ir")]
+mod from_ir {
+    use perch_ir::{ArgPred, PolicyDoc, Principals, RecoveryMode, Scope, SignerMethod};
+    use soroban_sdk::{Address, Bytes, Env, String, Symbol, Vec};
+    use stellar_accounts::smart_account::Signer;
+
+    use super::{
+        CompiledModel, ModelArg, ModelCap, ModelPred, ModelPrincipals, ModelRecovery, ModelRule,
+        ModelScope, ModelSigner, ModelZk,
+    };
+
+    /// Why a validated document has no model.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub enum ModelError {
+        /// A rule with self-authenticating principals, which rule-eval's
+        /// document has no form for (Perch's lowering refuses it too).
+        SelfAuthenticating,
+        /// A signer's `key` is not hex.
+        KeyHex,
+        /// A cap's `limit` does not parse as an `i128`.
+        CapLimit,
+    }
+
+    fn strings(e: &Env, list: &[alloc::string::String]) -> Vec<String> {
+        let mut out = Vec::new(e);
+        for s in list {
+            out.push_back(String::from_str(e, s));
+        }
+        out
+    }
+
+    fn pred(e: &Env, p: &ArgPred) -> ModelPred {
+        match p {
+            ArgPred::IsSelf(_) => ModelPred::IsSelf,
+            ArgPred::AddressEq(p) => ModelPred::AddressEq(Address::from_str(e, &p.address)),
+            ArgPred::StringIn(p) => ModelPred::StringIn(strings(e, &p.values)),
+            ArgPred::StringPrefix(p) => ModelPred::StringPrefix(String::from_str(e, &p.prefix)),
+            ArgPred::U32Eq(p) => ModelPred::U32Eq(p.value),
+        }
+    }
+
+    /// The model of `d`, read as the doc compiler reads a document: strkeys
+    /// with `Address::from_str`, keys as hex of either case, function names
+    /// with `Symbol::new`, and a cap's limit with `i128`'s `parse`, which
+    /// takes a sign and leading zeros.
+    ///
+    /// Precondition: `perch_ir::validate(d).is_ok()`, which makes every
+    /// strkey and function name one the host takes.
+    ///
+    /// # Errors
+    ///
+    /// [`ModelError`]: what validation leaves for the lowering to refuse.
+    pub fn model_of(e: &Env, d: &PolicyDoc) -> Result<CompiledModel, ModelError> {
+        let mut signers = Vec::new(e);
+        for s in &d.signers {
+            let signer = match &s.method {
+                SignerMethod::Delegated { address } => {
+                    Signer::Delegated(Address::from_str(e, address))
+                }
+                SignerMethod::External { verifier, key } => Signer::External(
+                    Address::from_str(e, verifier),
+                    Bytes::from_slice(e, &hex::decode(key).map_err(|_| ModelError::KeyHex)?),
+                ),
+            };
+            signers.push_back(ModelSigner {
+                id: String::from_str(e, &s.id),
+                signer,
+            });
+        }
+        let mut rules = Vec::new(e);
+        for r in &d.rules {
+            let principals = match &r.principals {
+                Principals::All(p) => ModelPrincipals::All(strings(e, &p.signers)),
+                Principals::Threshold(p) => ModelPrincipals::Threshold(strings(e, &p.signers), p.m),
+                Principals::SelfAuthenticating(_) => return Err(ModelError::SelfAuthenticating),
+            };
+            let mut cap = Vec::new(e);
+            if let Some(c) = &r.cap {
+                cap.push_back(ModelCap {
+                    limit: c.limit.parse().map_err(|_| ModelError::CapLimit)?,
+                    period_ledgers: c.period_ledgers,
+                });
+            }
+            rules.push_back(ModelRule {
+                scope: match &r.scope {
+                    Scope::Contract(c) => ModelScope::Contract(Address::from_str(e, &c.address)),
+                    Scope::SelfAdmin(_) => ModelScope::SelfAdmin,
+                },
+                principals,
+                functions: r.functions.as_ref().map(|fs| {
+                    let mut out = Vec::new(e);
+                    for f in fs {
+                        out.push_back(Symbol::new(e, f));
+                    }
+                    out
+                }),
+                args: r.args.as_ref().map(|args| {
+                    let mut out = Vec::new(e);
+                    for a in args {
+                        out.push_back(ModelArg {
+                            index: a.index,
+                            pred: pred(e, &a.pred),
+                        });
+                    }
+                    out
+                }),
+                not_after_ledger: r.not_after_ledger,
+                cap,
+            });
+        }
+        let mut recovery = Vec::new(e);
+        if let Some(r) = &d.recovery {
+            let mut zk = Vec::new(e);
+            if let RecoveryMode::ZkOnly(z) | RecoveryMode::Combined(_, z) = &r.mode {
+                zk.push_back(ModelZk {
+                    adapter: Address::from_str(e, &z.adapter),
+                    pool: Address::from_str(e, &z.pool),
+                });
+            }
+            recovery.push_back(ModelRecovery {
+                controller: Address::from_str(e, &r.controller),
+                zk,
+            });
+        }
+        Ok(CompiledModel {
+            signers,
+            rules,
+            recovery,
+        })
+    }
+}

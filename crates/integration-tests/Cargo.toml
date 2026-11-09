@@ -48,3 +48,4 @@ serde_json = "1"
 rule-eval = { workspace = true }
 rule-eval-conformance = { workspace = true }
 soroban-facade = { workspace = true, features = ["sdk"] }
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }

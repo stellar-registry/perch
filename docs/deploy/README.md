@@ -956,9 +956,9 @@ Once it is merged to that repository's `main`:
 
 A completion is `apply_doc` of the attempt's target, authorized through the
 zero-signer recovery rule. The controller recognizes it from a marker its
-`enforce` writes inside the account's `__check_auth`. Recording-mode
+`rcv_complete` writes inside the account's `__check_auth`. Recording-mode
 simulation, the default way a client learns a transaction's auth entries,
-never runs `__check_auth`, so `enforce` never runs, `rcv_sync` sees no
+never runs `__check_auth`, so `rcv_complete` never runs, `rcv_sync` sees no
 marker, and the simulation fails with `AttemptAuthorized`, as if the call
 were a policy change during the window.
 

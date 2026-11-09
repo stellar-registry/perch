@@ -23,7 +23,7 @@ it relies on (`crates/perch-smart-account`).
 Every test in `recovery.rs` and `account_capabilities.rs` runs under
 enforcing authorization (`set_auths` with hand-built entries, see
 `tests/support/mod.rs`), so the account's real `__check_auth`, its rule
-selection, and the controller's `enforce` all run. The one exception is
+selection, and the controller's `rcv_complete` all run. The one exception is
 `the_controller_itself_refuses_a_zk_factor_changed_in_place`, which mocks
 the authorization of a plain address standing in for a non-Perch account
 that calls `rcv_sync` directly. The world uses the real account, compiler,
@@ -47,8 +47,8 @@ is named.
 | Evidence-free attempts block nothing; authorization invalidates every sibling with one `invalidate_below` write | [§6.3](spec.md#63-transitions) T4, D2 | controller promotion | `evidence_free_attempts_freeze_nothing_and_block_nothing`, `the_first_authorized_attempt_invalidates_its_siblings` |
 | A lost-key source is compared at promotion; a changed source is stored as `Invalidated` | [§6.3](spec.md#63-transitions) T4 | controller promotion | `a_lost_key_attempt_whose_source_changed_needs_a_fresh_attempt` |
 | Attempt storage: temporary while collecting, persistent once authorized or when the evidence window exceeds the maximum TTL; `NoSuchAttempt` once the entry is gone | [§3.6](spec.md#36-storage-lifetime), [§6.2](spec.md#62-attempt-states) | controller `save` | not pinned by a test |
-| Two-digest target binding: `target_doc_hash` and `target_bytes_hash` from one `derive_target`; `enforce` checks the bytes, `rcv_sync` the identity | [§6.3](spec.md#63-transitions) T1, T5 | controller `begin_*`, `enforce`, `rcv_sync` | `target_binding.rs`, `completion_must_submit_exactly_the_target_inside_its_window` |
-| Completion marker: temporary, bound to `(attempt_id, target_doc_hash, ledger)`; a marker left by an unexecuted sub-invocation is ignored | [§6.3](spec.md#63-transitions) T5 | controller `enforce`, `rcv_sync` (`CompletionMarker`) | `a_marker_left_by_an_unexecuted_sub_invocation_is_ignored` |
+| Two-digest target binding: `target_doc_hash` and `target_bytes_hash` from one `derive_target`; `rcv_complete` checks the bytes, `rcv_sync` the identity | [§6.3](spec.md#63-transitions) T1, T5 | controller `begin_*`, `rcv_complete`, `rcv_sync` | `target_binding.rs`, `completion_must_submit_exactly_the_target_inside_its_window` |
+| Completion marker: temporary, bound to `(attempt_id, target_doc_hash, ledger)`; a marker left by an unexecuted sub-invocation is ignored | [§6.3](spec.md#63-transitions) T5 | controller `rcv_complete`, `rcv_sync` (`CompletionMarker`) | `a_marker_left_by_an_unexecuted_sub_invocation_is_ignored` |
 | Invoker-only hooks: reserved names refused in `__check_auth` and `execute`; the controller's configuration written only by `rcv_sync` | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), D12 | account `check_auth`, `execute`; `perch_recovery_interface::account::is_reserved_invoker_only` | `hooks_are_unreachable_except_from_the_accounts_own_flows`, `account_capabilities.rs::execute_calls_as_the_account_and_refuses_invoker_only_hooks` |
 | Admin-document rules may be scoped to a controller, the account's own included (so it can act as a guardian there), not to its own ZK adapter or pool; a controller-scoped rule reaches only guardian approvals (I1–I3) | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) | doc compiler validation; reserved-name guard | `a_controller_scoped_rule_reaches_no_reserved_controller_entry_point`, `a_perch_account_guards_another_at_its_own_controller_until_it_is_frozen` |
 | The controller re-checks timing, quorum range, and the account not among its own guardians (`InvalidConfiguration`), the §3.4 factor rule (`RecoveryError::ZkFactorChangedInPlace`), and the circuit id and depth, because any contract can call `rcv_sync` for itself | [§3.1](spec.md#31-schema), [§3.4](spec.md#34-enrollment-ids), [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) | controller `check_config`, `check_zk_wiring` | `an_account_cannot_be_its_own_guardian`, `the_controller_itself_refuses_a_zk_factor_changed_in_place`, `zk_enrollments_are_fresh_wired_and_never_changed_in_place` |
@@ -64,7 +64,7 @@ is named.
 | The scope generation (account instance storage) advances by one on a completed recovery and on nothing else; a completion that would wrap it refuses with `GenerationExhausted` | [§12](spec.md#12-account-upgrades) | account `apply`, `complete_recovery`; view `scope_generation` | `revision.rs`: `the_scope_generation_advances_only_on_a_completed_recovery`; `recovery.rs`: `guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_key`, `a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment`, `a_completion_that_would_wrap_the_scope_generation_is_refused` |
 | Scoped documents: no recovery member, no rule scoped to the account, its recovery controller, or its ZK adapter or pool, and no rule whose `functions` names a guardian approval (`ScopeEscalation`); no scoped rule casts a guardian approval at any controller (`PerchAuthError::ScopeEscalation`, by `GUARDIAN_APPROVAL_FNS`); owner-only `apply_scope` and `remove_scope`; a scope reconciled against its own records; the generation gate (`StaleScope`) and the controller, adapter and pool guard for scopes applied before enrollment (`PerchAuthError::ScopeEscalation`) on every path; every completion wipes every scope; `gc_scope` only for wiped scopes; the credential index refuses a wiped scope's credentials in every later document except a completion's target (`WipedCredential`); tags extended on read and restored, never absent, when archived; the freeze covers scopes and the policy block does not | [§7.6](spec.md#76-scoped-documents), D17 | account `apply_scope_doc`, `check_scoped`, `names_guardian_approval`, `excluded_contract`, `check_unwiped`, `check_auth`, `apply`, `complete_recovery`, `drop_scope`; `perch_recovery_interface::account::is_guardian_approval` | `scoped_docs.rs` (every test); `scoped_guardian_approvals.rs` (every test); `rule_core_documents.rs` (the scoped traces); `release_stack.rs` `docsplit_guards_and_scope_manager` |
 | The rule-eval rule set: the compiled model lowered on the account, stored aligned with the installed-rule records; INV-1 and the anti-brick check on the stored rules | [§7.5](spec.md#75-bounded-completion-cost) | account `rule_set::lowered`, `apply_rules`, `install_admin`; view `rule_set`; doc compiler `compile_parsed` (`model_of`) | `rule_set.rs`; the stored set against the lowering and the installed rules after every apply in `rule_core_documents.rs`, `rule_eval_baseline.rs`, `auth_corpus.rs`, `apply_delta.rs` (`perch_testkit::rule_set`) |
-| Rule-eval in `__check_auth`: `rule_eval::authorize` over the chosen stored rules decides (`RuleEvalRefused`; an unknown id, `ContextRuleNotFound`; the recovery rule outside a completion refused), then the account's `authenticate` checks every signer; a completion left to the controller's `enforce` (`authorize_completion`, over the account's record of the recovery rule, as OZ's `do_check_auth` decided it), and an account storing no set (which the constructor never leaves) authorizing nothing else; a document rule carries no policy; each capped rule's spending record kept while the rule keeps its id and cap | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), [§7.5](spec.md#75-bounded-completion-cost), [§12](spec.md#12-account-upgrades) | account `check_auth`, `gate::{authorize, drop_records}`, `rules::desired`, `apply_rules`, `apply_scope_doc`, `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; every verdict and record against rule-core's model in `rule_core_documents.rs` and against the recorded verdicts and OZ records in `rule_eval_baseline.rs`; `auth_corpus.rs`; the hand-written leaf vectors against rule-eval in `leaf_vectors.rs`; the spending records checked after every accepted authorization (`perch_testkit::rule_set::check_records`) |
+| Rule-eval in `__check_auth`: `rule_eval::authorize` over the chosen stored rules decides (`RuleEvalRefused`; an unknown id, `ContextRuleNotFound`; the recovery rule outside a completion refused), then the account's `authenticate` checks every signer; a completion left to the controller's `rcv_complete` (`authorize_completion`, over the account's record of the recovery rule, as OZ's `do_check_auth` decided it), and an account storing no set (which the constructor never leaves) authorizing nothing else; a document rule carries no policy; each capped rule's spending record kept while the rule keeps its id and cap | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths), [§7.5](spec.md#75-bounded-completion-cost), [§12](spec.md#12-account-upgrades) | account `check_auth`, `gate::{authorize, drop_records}`, `rules::desired`, `apply_rules`, `apply_scope_doc`, `drop_scope`; `perch_rule_eval::{mirror, convert::calls}` | `gate.rs`; every verdict and record against rule-core's model in `rule_core_documents.rs` and against the recorded verdicts and OZ records in `rule_eval_baseline.rs`; `auth_corpus.rs`; the hand-written leaf vectors against rule-eval in `leaf_vectors.rs`; the spending records checked after every accepted authorization (`perch_testkit::rule_set::check_records`) |
 | Bounded completion cost: the delta apply and the document caps | [§7.5](spec.md#75-bounded-completion-cost) | [Delta apply](#delta-apply-spec-75) below | [Delta apply tests](#delta-apply-tests); `release_stack.rs` `worst_case_*` ([`budgets.md`](budgets.md#document-caps)) |
 | Configuration revision and `expected_revision`; ordinary signatures bind rule ids, not a revision | [§15](spec.md#15-invoker-only-hooks-and-other-authorization-paths) "Revision binding" | account `advance_revision` (instance storage), `apply` | `revision.rs` |
 | Storage lifetime and renewal | [§3.6](spec.md#36-storage-lifetime) | controller `renew`, `renew_nullifier`; account `renew(fingerprints, enrollment_ids)`; pool `renew_*` | pool: `renew_extends_every_entry_a_witness_needs`; the controller's and the account's `renew` are not pinned by a test |
@@ -109,7 +109,7 @@ What the spec leaves to the implementation, or what only its tests show.
   consumers a spurious stale-revision result, which is safe.
   `configuration()` returns it with everything rule selection needs, read
   at one ledger. A completion may carry `expected_revision` too: the
-  controller's `enforce` reads only argument 0. `UnguardedRule` is the last
+  controller's `rcv_complete` reads only argument 0. `UnguardedRule` is the last
   code of the account's error enum, after `StaleRevision`,
   `GenerationExhausted` and `ModelInvalid`.
 - **Account renewal.** Each revoked fingerprint and each enrolled id is its
@@ -178,17 +178,22 @@ payload with the chosen ids), calling an `External` signer's verifier and
 handing a `Delegated` one to the host as OZ's does, and the records
 `authorize` charged are stored. A document rule carries no policy. A
 recovery completion (one `apply_doc` context selecting the recovery rule)
-is decided by the controller's `enforce` alone, so recovery never depends
+is decided by the controller's `rcv_complete` alone, so recovery never depends
 on the evaluator: `authorize_completion` (`auth.rs`) checks the payload as
 OZ's `do_check_auth` checked it for the recovery rule, from the account's
 record of that rule — every chosen id the recovery rule's
 (`ContextRuleNotFound`), every context a call on the account while the rule
 is unexpired (`UnvalidatedContext`), no payload signer
-(`UnauthorizedSigner`) — then calls the controller's `enforce(context, [],
-rule, account)` for each context, with the record's `ContextRule`, the value
-OZ's registry gave the controller. `tests/completion_differential.rs` runs
-both checks over a grid of payloads and finds the same verdicts and
-controller calls. The account writes nothing to OZ's registry. An account
+(`UnauthorizedSigner`) — then calls the controller's
+`rcv_complete(account, context, rule)` for each context, with the record's
+signer count and scope as the `RecoveryRule`.
+`tests/completion_differential.rs` runs this check and OZ's over a grid of
+payloads and finds the same verdicts and the same contexts asked about,
+OZ's `enforce` call carrying the same rule shape and no authenticated
+signer. `tests/controller_differential.rs` runs the recovery flows and
+each hook against the controller built with OZ's `Policy` hooks and the
+account that calls them, and finds the same outcomes, events and
+ledger. The account writes nothing to OZ's registry. An account
 storing no admin set, which the constructor never leaves, authorizes
 nothing but a completion (`RuleEvalRefused`). The
 check reads a stored rule or record back from its XDR in one pass
@@ -246,8 +251,8 @@ canonical keys, which their verifier cannot map to one
 (`tests/install_checks.rs`).
 
 **Recovery rule.** Installing the recovery rule, under a new id or with a
-new controller, calls the controller's `install(config_hash, rule,
-account)`, which checks the rule's shape and that `rcv_sync` stored that
+new controller, calls the controller's `rcv_install(account, config_hash,
+rule)`, which checks the rule's shape and that `rcv_sync` stored that
 configuration. Removing it calls no controller hook.
 
 **Bounds and state.** An apply writes the admin records and the stored set
@@ -316,12 +321,13 @@ mid-sequence is outside the oracle's coverage.
 | Adding signers up to the cap is one in-place edit | `adding_several_signers_is_one_edit` |
 | The recovery rule takes a new id for a new configuration at its controller, and keeps its id across a controller switch | `recovery_changes_edit_only_the_recovery_rule`, `a_new_controller_is_swapped_in_place`; `rules.rs` unit test `only_a_recovery_rule_reconfigured_at_its_controller_takes_a_new_id` |
 | After every accepted apply, the recovery rule's record has zero signers, the account as its contract, no last ledger, and the controller as its one policy, and OZ's registry holds no rule | `perch_testkit::rule_set::check`, run by every suite that checks the stored set |
-| A completion's check against OZ's `do_check_auth` over a registry holding only the recovery rule: signers present, a wrong id, an expired rule, a wrong context, a second context, mismatched lengths, a refusing controller, and the order of the checks give the same verdicts and codes and the same `enforce` calls | `completion_differential.rs` |
+| A completion's check against OZ's `do_check_auth` over a registry holding only the recovery rule: signers present, a wrong id, an expired rule, a wrong context, a second context, mismatched lengths, a refusing controller, and the order of the checks give the same verdicts and codes and ask the controller about the same contexts with the same rule shape | `completion_differential.rs` |
+| Against the controller built with OZ's `Policy` hooks and the account that calls them (those builds' wasm, `PERCH_PREV_CONTROLLER_WASM`, `PERCH_PREV_ACCOUNT_WASM`): lost-key, compromise under a freeze, ZK rotation, cancellation and expiry, removal and a controller switch give the same outcomes, `__check_auth` codes, events and ledger after every step; `enforce`/`install` and `rcv_complete`/`rcv_install` over rule shapes, contexts, configuration hashes and attempt windows give the same verdicts and ledger, and the accepted marker completes alike | `controller_differential.rs` (`#[ignore]`d: needs the builds) |
 | The constructor's install checks (OZ's codes), and a compiled document never reaching the canonical-duplicate check | `install_checks.rs` |
-| Against the OZ-registry account it replaces (that build's wasm, `PERCH_OZ_ACCOUNT_WASM`): generated admin and scoped document sequences give the same outcomes, ids, views and events; generated authorizations get the same verdicts; a recovery flow under enforcing authorization reads the same | `oz_differential.rs` (`#[ignore]`d: needs the build) |
+| Against the OZ-registry account it replaces (that build's wasm, `PERCH_OZ_ACCOUNT_WASM`, beside the controller built with it, `PERCH_OZ_CONTROLLER_WASM`): generated admin and scoped document sequences give the same outcomes, ids, views and events; generated authorizations get the same verdicts; a recovery flow under enforcing authorization reads the same | `oz_differential.rs` (`#[ignore]`d: needs the build) |
 | Named cases: functions, scope, cap parameters, added and shared signers and policies, rename, remove and re-add, a key swapped under one id, minimal and maximal documents, reordering, expiry, a recovery-only change | the remaining `apply_delta.rs` tests |
 | Revoked credentials stay refused after an in-place edit; the freeze and generation behave as under the full replace; reserved names stay closed; a delta in the authorized window changes nothing | `delta_security.rs`: `a_revoked_credential_cannot_return_through_an_in_place_edit`, `the_freeze_and_the_generation_behave_as_under_the_full_replace`, `reserved_names_hold_after_a_controller_scoped_rule_is_edited_in_place`, `a_delta_inside_an_authorized_window_is_refused_and_changes_nothing` |
-| A policy install failing mid-delta (the recovery rule's controller, after a removal and an in-place edit), and the budget running out at 20, 40, 60, 80, 90, 95, and 99% of the delta's instructions, revert everything under enforcing authorization | `a_policy_install_failing_mid_delta_reverts_every_edit`, `budget_exhaustion_mid_delta_reverts_every_edit` |
+| The recovery rule's install failing mid-delta (its controller refusing `rcv_install`, after a removal and an in-place edit), and the budget running out at 20, 40, 60, 80, 90, 95, and 99% of the delta's instructions, revert everything under enforcing authorization | `a_recovery_rule_install_failing_mid_delta_reverts_every_edit`, `budget_exhaustion_mid_delta_reverts_every_edit` |
 | Changing one rule's functions or cap changes only that rule's stored rule, and no record | `apply_delta.rs`: `a_rule_keeping_its_name_with_new_functions_changes_only_its_stored_rule`, `new_cap_parameters_change_only_that_rules_stored_cap`, `a_changed_rule_leaves_the_other_stored_rules_alone`; `perch-compile` `a_programs_provenance_is_its_rules_hash_alone` |
 | On the release wasm: each signer transition leaves exactly the target signers (a joining key acts, a leaving key cannot); a rejected transition (a duplicate key, or the budget running out at 25, 50, 75, and 95% of a full rotation) leaves every ledger entry unchanged | `release_stack.rs`: `signer_transitions` (paths and costs in [`budgets.md`](budgets.md#signer-transitions)), `a_rejected_signer_transition_changes_nothing` |
 | Arbitrary document sequences (coverage-guided) | `fuzz/fuzz_targets/apply_doc_delta.rs`, in the assurance fuzz pass |

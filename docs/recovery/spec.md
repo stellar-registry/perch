@@ -49,7 +49,7 @@ Other documents cite these requirements by ID.
 | D9 | Nullifiers | One nullifier per enrolled ZK credential, owned by that `(account, enrollment)`. It is either unspent or spent. Only a completion of that account spends it; nothing ever un-spends it. Proofs for any action need it unspent. Nullifiers are never reserved, so there is nothing to release. | §11 |
 | D10 | Stale state | Leaves and nullifiers bind an enrollment id the configuration names, and the account refuses to re-enroll an id it used before. Every configuration change and every completion bumps the per-account epoch, and evidence or attempts from an older epoch are dead. | §3, §11 |
 | D11 | Upgrades | Owner authorization (plus, under `Protected`, condition evidence over an `Upgrade` statement binding the Wasm hash and the epoch). Executable after 120 960 ledgers. An account-owned **recovery generation** invalidates the request whenever recovery configuration changes, including across unenrolled → enrolled → unenrolled. Executing an upgrade advances it. Blocked during an authorized attempt. | §12 |
-| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_insert`, `rcv_gate`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. That name guard, not a ban on rules scoped to the controller, is what protects the controller: the admin document may scope rules to a controller so the account can act as a guardian there. No scoped document's rule may cast a guardian approval at any controller (D17). Guardian and ZK evidence is always submitted through non-reserved entry points and recorded; hooks only read the records. | §2, §5, §15 |
+| D12 | Invoker-only hooks | The account never authorizes a reserved hook name (`install`, `uninstall`, `enforce`, `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete`, `rcv_insert`, `rcv_gate`) through `__check_auth`, and never calls one through `execute`. Controller, pool, and policy hooks are reachable only from the account's own controlled flows. That name guard, not a ban on rules scoped to the controller, is what protects the controller: the admin document may scope rules to a controller so the account can act as a guardian there. No scoped document's rule may cast a guardian approval at any controller (D17). Guardian and ZK evidence is always submitted through non-reserved entry points and recorded; hooks only read the records. | §2, §5, §15 |
 | D13 | Statement | One `RecoveryStatement`, encoded at fixed width and hashed with SHA-256. Guardians authorize the digest and the circuit binds it. | §4 |
 | D14 | ZK boundary | The controller passes the structured statement to an adapter. The adapter checks the circuit id, field canonicality, root membership in the enrolled pool, and the proof. Public inputs are `root, nullifier, statement_hash`. | §13 |
 | D15 | Pool | Depth 32 (chosen by `budgets.md`'s depth rule; a depth-24 build is the fallback). A full tree rolls over automatically. Roots are accepted as `(tree_id, root)`, and every root a tree has ever had stays acceptable. | §14 |
@@ -136,9 +136,9 @@ account built without recovery support cannot enroll in place.
 
   The reserved-name guard (§15, invariant I1) is what keeps such a rule's
   signers away from the controller's sensitive entry points. It refuses all
-  eight reserved names — `install`, `uninstall`, `enforce`, `rcv_sync`,
-  `rcv_cancel`, `rcv_upgrade`, `rcv_insert`, and `rcv_gate` (D12, §15) — on any
-  contract, whatever rule is selected. What such a rule
+  ten reserved names — `install`, `uninstall`, `enforce`, `rcv_sync`,
+  `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete`, `rcv_insert`,
+  and `rcv_gate` (D12, §15) — on any contract, whatever rule is selected. What such a rule
   grants is exactly what it says: its signers approve, as this account,
   statements for accounts that list this account as a guardian. The account
   cannot list itself (§15), so the rule never touches the account's own
@@ -691,11 +691,14 @@ Promotion refuses while another attempt is authorized and live
 (`AttemptAuthorized`).
 
 **T5 Complete** — `apply_doc(target_bytes, …)` selecting the zero-signer
-recovery rule. The account defers the whole check to the rule's one
-policy, as OZ's `do_check_auth` defers a zero-signer rule's (`cap-0071.md`
-C5): the controller's `enforce`, which requires all of:
+recovery rule. Once the account has checked the selection (§7.5: the
+recovery rule's id, no payload signer, a context on the account, the rule
+unexpired), it defers the whole check to the rule's controller
+(`cap-0071.md` C5): the controller's `rcv_complete(account, context,
+rule)`, told of the rule as a `RecoveryRule` (its signer count and scope),
+which requires all of:
 
-- no signers were authenticated, and the rule has the recovery rule's shape
+- the rule requires no signer and authorizes calls on the account alone
   (`MalformedContextRule`);
 - the context is `apply_doc` on this account (`WrongTarget`);
 - an authorized live attempt `A` exists (`AttemptNotLive`);
@@ -703,9 +706,9 @@ C5): the controller's `enforce`, which requires all of:
   timelock ends);
 - `sha256(target_bytes) = A.target_bytes_hash` (`WrongTarget`).
 
-`enforce` binds the exact bytes of the context it authorizes: for that
+`rcv_complete` binds the exact bytes of the context it authorizes: for that
 context a different document is refused, and so is a non-canonical spelling of
-the target (same identity, other bytes). `enforce` then writes a completion
+the target (same identity, other bytes). `rcv_complete` then writes a completion
 marker `(attempt_id, A.target_doc_hash, L)` in temporary storage.
 
 The marker records only the canonical **identity** of the target, not the
@@ -717,8 +720,10 @@ current ledger, and its attempt is still the authorized one. It does **not**
 re-check the consuming invocation's input bytes against `A.target_bytes_hash`.
 Otherwise it classifies the call as an ordinary change (§10).
 
-`enforce` runs for every context in an authorization tree, including a
-sub-invocation that never executes, so a marker can be left behind. Because
+An account can ask `rcv_complete` about a context in an authorization tree
+that never executes, so a marker can be left behind. (A perch account asks
+only about a completion's one `apply_doc` context, the invocation being
+authorized; the controller serves any account.) Because
 consumption is by identity, within the same ledger and authorized window an
 `apply_doc` under ordinary owner authorization that carries a differently
 formatted spelling of the same canonical target can consume such a leftover
@@ -733,7 +738,7 @@ to equal `A.target_bytes_hash`) is tracked in
 account↔controller ABI change, so it reaches only newly-built accounts.
 
 Application therefore binds the identity, not the exact input bytes. If the two
-digests ever disagreed (a faulty compiler), the only bytes `enforce` accepts
+digests ever disagreed (a faulty compiler), the only bytes `rcv_complete` accepts
 would compile to another identity. Then `rcv_sync` would refuse the apply as an
 ordinary change during the authorized window (`AttemptAuthorized`), nothing
 would be applied, and the attempt could only be cancelled or expire.
@@ -996,7 +1001,7 @@ allows, its program and cap included, is the rule-eval rule the account
 stores beside the record (`rule_set`), and `__check_auth` decides with
 rule-eval's `authorize` over those rules. A completion (T5) reads the
 recovery rule from its record; nothing of OZ's registry is written.
-Installing it calls the controller's `install`; removing it calls no hook. The apply
+Installing it calls the controller's `rcv_install`; removing it calls no hook. The apply
 never scans historical rule ids, which grow without bound with every past
 apply.
 
@@ -1281,7 +1286,7 @@ adopted (`PerchAccountError::RecoveryNotEnrolled`). It emits
 
 While the mirror is set, `__check_auth` refuses every context except a
 single `apply_doc` context on the account itself that selects the recovery
-rule, which the controller's `enforce` then validates (T5). The refusal is
+rule, which the controller's `rcv_complete` then validates (T5). The refusal is
 `PerchAuthError::AccountFrozen`.
 
 A cross-contract read of the controller from `__check_auth` would not work.
@@ -1339,12 +1344,12 @@ the account's recovery generation (§12). The controller cannot read the
 account back during the call (D16).
 
 The call is invoker-only (§15). `rcv_sync` both decides and writes. No
-separate `install` call ever writes configuration. `install` is
+separate `rcv_install` call ever writes configuration. `rcv_install` is
 bookkeeping: it checks that the recovery rule has the required shape
 (`MalformedContextRule`) and was installed for the stored configuration's
-hash (`InvalidConfiguration`). `uninstall` writes nothing: removal is
-decided by `rcv_sync` alone, and the account calls no hook when it removes
-the recovery rule.
+hash (`NotEnrolled`, `InvalidConfiguration`). Removal is decided by
+`rcv_sync` alone, and the account calls no hook when it removes the
+recovery rule.
 
 **The recovery rule.** While the applied document enrolls recovery, the
 account installs one extra context rule: named `recovery`, scoped to the
@@ -1360,7 +1365,7 @@ removes it.
 
 | Case | Recognised by | Authorization | Effects |
 | --- | --- | --- | --- |
-| Completion | A completing marker from this invocation's `enforce` (T5) whose target identity equals the `doc_hash` argument (the identity of the document the account compiled) | Already established by the attempt | The compiled configuration must name this controller and its hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared); otherwise `WrongTarget`. Consumes the marker, marks the attempt `Completed`, spends its nullifier, stores the target configuration, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), advances its scope generation, wiping every scoped document (§7.6), clears any pending upgrade, and clears its freeze mirror. |
+| Completion | A completing marker from this invocation's `rcv_complete` (T5) whose target identity equals the `doc_hash` argument (the identity of the document the account compiled) | Already established by the attempt | The compiled configuration must name this controller and its hash must equal the attempt's target configuration hash (unchanged, or ZK-rotated as declared); otherwise `WrongTarget`. Consumes the marker, marks the attempt `Completed`, spends its nullifier, stores the target configuration, and bumps the epoch. Returns `Completed(Completion { attempt_id, replaced })`, where `replaced` holds the attempt's recorded source credentials. The account inserts the new leaf from the compiled target's ZK factor (§14.2), records the new enrollment id as used, revokes `replaced` together with every credential the completion removed from its current document (§8), advances its scope generation, wiping every scoped document (§7.6), clears any pending upgrade, and clears its freeze mirror. |
 | No change | `config_hash` and controller unchanged, and not a completion | Owner authorization (already required by `apply_doc`) | Refuses if an attempt is authorized and live (§9); otherwise nothing. |
 | Enroll | No configuration stored | Owner authorization | Refuses unless the configuration names this controller (`InvalidConfiguration`) and passes §3.1's re-checks and §3.4's wiring check. Stores the configuration and bumps the epoch. The account records the enrollment id as used. |
 | Reconfigure | `config_hash` differs, controller unchanged | `Loss`: owner. `Protected`: owner plus the stored configuration's condition over `Reconfigure(Set(new))`, from recorded approvals (§5) | Refuses during an authorized window, and unless the new configuration passes §3.1's re-checks and §3.4. Stores the new configuration, bumps the epoch, and invalidates every attempt. |
@@ -1712,13 +1717,14 @@ out of scope.
 code is making this call". Soroban satisfies it two ways: invoker-contract
 authorization, and a signature through the account's `__check_auth`. The
 second is a bypass: without a guard, a document rule scoped to the
-controller would let its signers call `install` directly.
+controller would let its signers call `rcv_install` directly.
 
 The account must therefore:
 
 1. **refuse in `__check_auth`** any context whose function name is in
    `account::RESERVED_INVOKER_ONLY_FNS` (`install`, `uninstall`, `enforce`,
-   `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_insert`, `rcv_gate`), on
+   `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete`,
+   `rcv_insert`, `rcv_gate`), on
    any contract, before any rule is evaluated
    (`PerchAuthError::ReservedFunction`). Names match exactly. Matching by
    name also covers controllers and policies the account adopted in the
@@ -1766,9 +1772,12 @@ them against the digest the on-chain `check_auth` actually hands a verifier.
 - **I1.** Every controller, pool, or policy entry point that acts on an
   account's own recovery state under that account's authorization has a
   reserved name. These are `rcv_sync`, `rcv_cancel`, `rcv_upgrade`,
-  `install`, `uninstall`, `enforce`, and the pool's `rcv_insert`; the
-  account's own `rcv_gate` is reserved too. Adding such an entry point
-  without adding its name to `RESERVED_INVOKER_ONLY_FNS` breaks the spec.
+  `rcv_install`, `rcv_complete`, and the pool's `rcv_insert`; the account's
+  own `rcv_gate` is reserved too, and so are OZ's `Policy` hooks `install`,
+  `uninstall` and `enforce`, which the account calls on no contract but
+  which an OZ policy guards with the account's authorization. Adding such
+  an entry point without adding its name to `RESERVED_INVOKER_ONLY_FNS`
+  breaks the spec.
 - **I2.** Every other controller entry point that takes an address's
   authorization takes it as a guardian (`submit_guardian`,
   `approve_change`), bound to another account's statement digest. Signing
@@ -1785,19 +1794,20 @@ them against the digest the on-chain `check_auth` actually hands a verifier.
 the call stack (`cap-0071.md` C8). The rules that follow from it:
 
 - **Hooks never call back into the account.** That covers `rcv_sync`,
-  `rcv_cancel`, `rcv_upgrade`, `enforce`, `install`, and the pool's
-  `rcv_insert`. The account passes each of them what it needs:
+  `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete`, and the
+  pool's `rcv_insert`. The account passes each of them what it needs:
   - the compiled document hash and configuration;
   - the approval freshness bound;
   - the upgrade step;
+  - its recovery rule's shape, and the context a completion authorizes;
   - the leaf's `(enrollment_id, commitment)`.
 - **The controller reads the account only from its own external entry
   points.** These are `begin_*`, `publish_baseline`, and evidence
   submission, through `account::RecoveryAccountClient`.
 - **`__check_auth`'s own checks never read the controller.** The freeze is
   a local mirror (§9). The controller runs beneath `__check_auth` only as
-  the recovery rule's policy: the account calls its `enforce` for a
-  completion, one `apply_doc` context selecting the recovery rule (T5).
+  the recovery rule's controller: the account calls its `rcv_complete` for
+  a completion, one `apply_doc` context selecting the recovery rule (T5).
 - **Evidence for an account should not be submitted through that account's
   own `execute`.** The account would then be on the stack when the
   controller reads its views or sets its freeze mirror, and the submission
@@ -1818,7 +1828,7 @@ on the deployed contract
 | Contract | Entry point | Authorization |
 | --- | --- | --- |
 | Account | `__constructor(admin_signers)` | Deploy time only. Installs rule 0, `admin`, scoped to the account, with the given signers, held to the install-time limits and refusing two that are one key (§7.5); emits `context_rule_added`. |
-| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion is decided instead by the controller's `enforce`, called as OZ's `do_check_auth` called a policy, over the account's record of the recovery rule (§7.5; no payload signer, `UnauthorizedSigner`; an expired rule or a context off the account, `UnvalidatedContext`). An account storing no rule set, which the constructor never leaves, authorizes nothing else (`RuleEvalRefused`). The order of the refusing steps does not matter for security: each only refuses. |
+| Account | `__check_auth` | Reserved names (rule 1), then the freeze (§9), then the scope generation gate (§7.6), then rule-eval's `authorize` over the stored rules of the chosen rules (`RuleEvalRefused`; a chosen id that names no installed rule, `ContextRuleNotFound`, OZ's code #3000; the recovery rule outside a completion, `RuleEvalRefused`), then the account's `authenticate` of every payload signer against OZ's digest, then the spending records `authorize` charged are stored. A recovery completion is decided instead over the account's record of the recovery rule, in OZ's `do_check_auth`'s order (§7.5; no payload signer, `UnauthorizedSigner`; an expired rule or a context off the account, `UnvalidatedContext`), and then by the controller's `rcv_complete` (T5). An account storing no rule set, which the constructor never leaves, authorizes nothing else (`RuleEvalRefused`). The order of the refusing steps does not matter for security: each only refuses. |
 | Account | `apply_doc(doc_json, approval_valid_until, expected_revision)` | Owner authorization, or the recovery rule (completion only); refused with `StaleRevision` when `expected_revision` is set and the account is at another configuration revision. Then, in order: compile (`Compiler(..)` errors), `AdminLockout`, the rule-eval lowering of the compiled model (`ModelInvalid`, `UnguardedRule`, `AdminLockout`), `RevokedCredential`, `ZkFactorChangedInPlace`, `EnrollmentReused`, the controller's `rcv_sync` (`Recovery(..)` errors), `WipedCredential` unless the outcome is a completion (§7.6), rule reconciliation, leaf insertion, completion effects (`GenerationExhausted` when the scope generation is at `u64::MAX`). Emits `DocApplied`. |
 | Account | `execute(target, fn, args)` | Owner authorization; reserved names refused |
 | Account | `schedule_upgrade`, `execute_upgrade`, `cancel_upgrade` | Owner authorization (§12) |
@@ -1828,7 +1838,7 @@ on the deployed contract
 | Account | `gc_scope(scope)` | Permissionless; a scope a completion wiped only (§7.6) |
 | Account | `renew(fingerprints, enrollment_ids)` | Permissionless (§3.6) |
 | Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `scope_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `scope`, `scope_rule_set`, `scope_doc`, `scope_count`, `scopes`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
-| Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade` (`controller::RecoveryHooksClient`), `install`, `uninstall`, `enforce` | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
+| Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete` (`controller::RecoveryHooksClient`) | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew`, `renew_nullifier` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |
 | Controller | `config`, `epoch`, `next_attempt_id`, `attempt`, `attempt_live`, `activity_gate`, `statement(account, attempt_id, domain)`, `change_statement(account, subject, valid_until)`, `change_evidence`, `nullifier_spent`, `baseline` | None (read-only; evidence providers fetch the exact statement to sign or prove) |

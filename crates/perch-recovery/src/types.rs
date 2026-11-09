@@ -88,10 +88,10 @@ pub struct Attempt {
     /// compile to.
     pub target_doc_hash: BytesN<32>,
     /// `sha256` of the canonical bytes `derive_target` returned, computed by
-    /// the controller from the same derivation: what `enforce` requires the
-    /// completing `apply_doc` argument to hash to. Under CANON v1 it equals
-    /// `target_doc_hash`; a structured identity would differ (spec §6.3 T1,
-    /// T5).
+    /// the controller from the same derivation: what `rcv_complete` requires
+    /// the completing `apply_doc` argument to hash to. Under CANON v1 it
+    /// equals `target_doc_hash`; a structured identity would differ (spec
+    /// §6.3 T1, T5).
     pub target_bytes_hash: BytesN<32>,
     /// The derived target's recovery `config_hash` (the current one, or the
     /// current one with the declared ZK rotation).
@@ -137,17 +137,17 @@ impl ChangeApproval {
     }
 }
 
-/// Written by `enforce` when the recovery rule authorizes the completing
-/// `apply_doc`, and consumed by that same invocation's `rcv_sync`
+/// Written by `rcv_complete` when the recovery rule authorizes the
+/// completing `apply_doc`, and consumed by that same invocation's `rcv_sync`
 /// (spec T5). Its presence is what makes an `apply_doc` a completion.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompletionMarker {
-    /// The authorized attempt `enforce` checked.
+    /// The authorized attempt `rcv_complete` checked.
     pub attempt_id: u64,
     /// The target the completing `apply_doc` must apply.
     pub target_doc_hash: BytesN<32>,
-    /// The ledger `enforce` ran in. A marker from an earlier ledger is
+    /// The ledger `rcv_complete` ran in. A marker from an earlier ledger is
     /// stale.
     pub ledger: u32,
 }

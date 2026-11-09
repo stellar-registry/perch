@@ -37,7 +37,7 @@ identity: `doc_hash = SHA-256(canonical bytes)`, plus two tagged fragment
 hashes, `rule_hash` (`"perch/rule" ‖ rule bytes`) and `config_hash`
 (`"perch/recovery/config" ‖ recovery member bytes`). A recovery attempt
 records two digests of its derived target ([spec](recovery/spec.md) §6.3,
-T1): `target_bytes_hash`, which the controller's `enforce` compares with
+T1): `target_bytes_hash`, which the controller's `rcv_complete` compares with
 `sha256` of the completing `apply_doc` bytes, and `target_doc_hash`, which
 `rcv_sync` compares with the identity the account's compiler computed. Under
 CANON v1 the two are equal (`canonical_bytes_identity`,
@@ -185,8 +185,8 @@ caps.
 of its own (its rule registry) with its contract, signers and last ledger
 and no policy, beside the rule-eval rule it stores for it, which decides
 every authorization through it but a recovery completion, which the
-controller's `enforce` decides over the account's record of the recovery
-rule. The account writes nothing to OZ's registry.
+controller's `rcv_complete` decides once the account has checked it over
+its record of the recovery rule. The account writes nothing to OZ's registry.
 `apply_doc` reconciles the installed rules as a delta (spec §7.5).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
@@ -401,15 +401,17 @@ on [#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3).
 *exact* authorized target bytes, not merely a document that compiles to the
 authorized canonical identity.
 
-**Current behaviour:** at T5 the controller's `enforce` checks
+**Current behaviour:** at T5 the controller's `rcv_complete` checks
 `sha256(target_bytes) = A.target_bytes_hash` for the context it authorizes and
 writes a completion marker holding the canonical identity
 `(attempt_id, A.target_doc_hash, L)`. The account's `apply_doc` body runs
 `rcv_sync` with the identity it compiled; `rcv_sync` consumes a marker when the
 identity, ledger, and authorized attempt match, and does not re-check the
 consuming invocation's input bytes against `A.target_bytes_hash`. Because
-`enforce` runs for every context in an authorization tree — including a
-sub-invocation that never executes — a marker can be left behind, and within
+an account can ask `rcv_complete` about a context in an authorization tree
+that never executes, a marker can be left behind (a perch account asks only
+about a completion's one `apply_doc` context, the invocation being
+authorized; the controller serves any account), and within
 the same ledger and authorized window an `apply_doc` under ordinary owner
 authorization that carries a differently formatted spelling of the same
 canonical target can consume it and be classified as a completion rather than

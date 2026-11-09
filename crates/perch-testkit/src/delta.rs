@@ -722,6 +722,13 @@ impl Default for DeltaWorld {
 
 impl DeltaWorld {
     pub fn new() -> Self {
+        Self::with_controller(None)
+    }
+
+    /// A world whose recovery controller runs `controller` (a wasm) instead
+    /// of this source's, at the address `new` gives it: for an account build
+    /// that calls an earlier controller's hooks (`oz_differential.rs`).
+    pub fn with_controller(controller: Option<&[u8]>) -> Self {
         // Property tests build many worlds; none writes a test snapshot.
         let env = Env::new_with_config(EnvTestConfig {
             capture_snapshot_at_drop: false,
@@ -749,7 +756,12 @@ impl DeltaWorld {
         let spending_limit = infra::perch_spending_limit::address(&env);
         env.register_at(&spending_limit, PerchSpendingLimit, ());
         let verifier = env.register(AnyKeyVerifier, ());
-        let controller = env.register(PerchRecovery, ());
+        // A native contract registers at the next generated address; a wasm
+        // is put there too, so both worlds name the same controller.
+        let controller = match controller {
+            Some(wasm) => env.register_at(&Address::generate(&env), wasm, ()),
+            None => env.register(PerchRecovery, ()),
+        };
         let keys: Vec<Address> = (0..KEY_POOL).map(|_| Address::generate(&env)).collect();
         let scopes: Vec<Address> = (0..SCOPE_POOL).map(|_| Address::generate(&env)).collect();
         let guardians: Vec<Address> = (0..2).map(|_| Address::generate(&env)).collect();

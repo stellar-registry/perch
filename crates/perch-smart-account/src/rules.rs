@@ -25,7 +25,7 @@
 //!
 //! Every rule added or edited is held to OZ's install-time limits
 //! ([`check`]), which a compiled document always meets. The recovery rule's
-//! controller is asked to install it, as OZ asks a rule's policies; a
+//! controller is told of it when it is installed (`rcv_install`); a
 //! completion reads the rule from its record (`auth::authorize_completion`).
 //!
 //! The authorization the result grants is exactly what a full replace of
@@ -34,10 +34,10 @@
 //! unchanged (`gate::drop_records`). Everything runs in the one `apply_doc`
 //! invocation, so a failure anywhere reverts every edit.
 
-use crate::auth;
 use crate::PerchStorage;
 use perch_account_types::{ContextRule, ContextRuleType, Signer};
 use perch_doc_compiler::{CompiledDoc, CompiledRule, RuleScope};
+use perch_recovery_interface::controller::{RecoveryHooksClient, RecoveryRule};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, String, Val, Vec};
 
@@ -143,8 +143,8 @@ impl InstalledRule {
         rule
     }
 
-    /// The rule as the `ContextRule` OZ's views and policy hooks name: its
-    /// signers and policies with their positions as their ids.
+    /// The rule as the `ContextRule` OZ's views name: its signers and
+    /// policies with their positions as their ids.
     pub(crate) fn context_rule(&self, e: &Env) -> ContextRule {
         let mut policies = Vec::new(e);
         for p in self.policies.iter() {
@@ -159,6 +159,18 @@ impl InstalledRule {
             policy_ids: positions(e, policies.len()),
             policies,
             valid_until: self.valid_until,
+        }
+    }
+
+    /// The rule as its recovery controller's hooks are told of it: how many
+    /// signers it requires, and the contract its calls are on.
+    pub(crate) fn recovery_rule(&self) -> RecoveryRule {
+        RecoveryRule {
+            signers: self.signers.len(),
+            contract: match &self.context_type {
+                ContextRuleType::CallContract(contract) => Some(contract.clone()),
+                _ => None,
+            },
         }
     }
 }
@@ -397,14 +409,14 @@ fn edit(e: &Env, c: &InstalledRule, d: &InstalledRule, params: &Vec<Val>, sum: &
     }
 }
 
-/// Install recovery rule `rule` (with its id): its controller's `install`
-/// checks the rule's shape and that it is installed for the configuration
-/// `rcv_sync` stored.
+/// Install recovery rule `rule`: its controller's `rcv_install` checks the
+/// rule's shape and that it is installed for the configuration `rcv_sync`
+/// stored, the hash that is the rule's one install parameter.
 fn install(e: &Env, rule: &InstalledRule, params: &Vec<Val>) {
-    auth::PolicyClient::new(e, &rule.policies.get_unchecked(0).policy).install(
-        &params.get_unchecked(0),
-        &rule.context_rule(e),
+    RecoveryHooksClient::new(e, &rule.policies.get_unchecked(0).policy).rcv_install(
         &e.current_contract_address(),
+        &params.get_unchecked(0).into_val(e),
+        &rule.recovery_rule(),
     );
 }
 

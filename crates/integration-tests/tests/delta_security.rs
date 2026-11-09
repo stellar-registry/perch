@@ -9,8 +9,9 @@
 //! - Reserved names and the controller-scope rule still hold after in-place
 //!   edits; a delta inside an authorized window is refused and changes
 //!   nothing.
-//! - A failure partway through a delta (a policy install that fails, or the
-//!   budget running out) reverts the whole `apply_doc`.
+//! - A failure partway through a delta (the controller refusing the
+//!   recovery rule's install, or the budget running out) reverts the whole
+//!   `apply_doc`.
 
 mod support;
 
@@ -287,14 +288,14 @@ fn a_delta_inside_an_authorized_window_is_refused_and_changes_nothing() {
 // Atomicity
 // ---------------------------------------------------------------------------
 
-/// A delta that removes a rule, edits another in place, and then fails on a
-/// policy install leaves nothing behind.
+/// A delta that removes a rule, edits another in place, and then fails on
+/// the recovery rule's install leaves nothing behind.
 #[test]
-fn a_policy_install_failing_mid_delta_reverts_every_edit() {
+fn a_recovery_rule_install_failing_mid_delta_reverts_every_edit() {
     let w = world();
     let (a, b) = (w.new_key(), w.new_key());
     let mut failing = w.recovery("loss", Mode::Guardian);
-    failing.controller = w.env.register(FailingPolicy, ());
+    failing.controller = w.env.register(FailingController, ());
     w.apply_bytes(
         &json(
             &w,

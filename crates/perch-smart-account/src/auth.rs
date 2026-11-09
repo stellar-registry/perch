@@ -3,11 +3,12 @@
 //! [`authenticate`] checks one payload signer's signature, and
 //! [`check_distinct`] refuses two signers that are one key. The account's
 //! authorization types are `perch-account-types`', the XDR and contract-spec
-//! twins of OZ's. [`authorize_completion`] decides a recovery completion:
-//! it calls the recovery controller's `enforce` as OZ's `do_check_auth`
-//! called a policy, over the account's own record of the recovery rule.
+//! twins of OZ's. [`authorize_completion`] decides a recovery completion
+//! over the account's own record of the recovery rule, and asks the
+//! recovery controller to decide each context (`rcv_complete`).
 
-use perch_account_types::{AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError};
+use perch_account_types::{AuthPayload, ContextRuleType, Signer, SmartAccountError};
+use perch_recovery_interface::controller::RecoveryHooksClient;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::{
     contractclient, crypto::Hash, panic_with_error, Address, Bytes, Env, IntoVal, Map, Val, Vec,
@@ -36,22 +37,6 @@ fn fail(e: &Env, error: SmartAccountError) -> ! {
 trait Verifier {
     fn verify(e: &Env, hash: Bytes, key_data: Val, sig_data: Val) -> bool;
     fn batch_canonicalize_key(e: &Env, key_data: Vec<Val>) -> Vec<Bytes>;
-}
-
-/// The recovery controller's hooks, as the account calls them: `install`
-/// checks the recovery rule it is installed on, and `enforce` decides a
-/// completion. They are OZ's `Policy` hooks, called with the same values.
-#[allow(unused)]
-#[contractclient(name = "PolicyClient")]
-trait Policy {
-    fn install(e: &Env, install_params: Val, context_rule: ContextRule, smart_account: Address);
-    fn enforce(
-        e: &Env,
-        context: Context,
-        authenticated_signers: Vec<Signer>,
-        context_rule: ContextRule,
-        smart_account: Address,
-    );
 }
 
 /// Check `signer`'s signature over `digest`. An `External` signer's
@@ -119,10 +104,9 @@ pub(crate) fn check_distinct(e: &Env, signers: &Vec<Signer>) {
 /// (`ContextRuleNotFound`), and every context a call on this account while
 /// that rule is unexpired (`UnvalidatedContext`), as OZ checks each context in
 /// turn; the payload must name no signer, since the rule has none
-/// (`UnauthorizedSigner`). Then each of the rule's policies, the adopted
-/// controller, is asked to `enforce` each context with no authenticated
-/// signer, and its refusal fails the invocation. The rule it is shown is
-/// the record's `ContextRule`, the value OZ's registry gave it.
+/// (`UnauthorizedSigner`). Then the rule's controller decides each context
+/// (`rcv_complete`), told of the rule as the record holds it, and its
+/// refusal fails the invocation.
 pub fn authorize_completion(
     e: &Env,
     recovery: u32,
@@ -152,10 +136,10 @@ pub fn authorize_completion(
         return Err(SmartAccountError::UnauthorizedSigner.into());
     }
     if let Some(rule) = rule {
-        let rule = rule.context_rule(e);
+        let shape = rule.recovery_rule();
         for context in contexts.iter() {
             for policy in rule.policies.iter() {
-                PolicyClient::new(e, &policy).enforce(&context, &Vec::new(e), &rule, &me);
+                RecoveryHooksClient::new(e, &policy.policy).rcv_complete(&me, &context, &shape);
             }
         }
     }

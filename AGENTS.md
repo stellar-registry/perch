@@ -106,7 +106,7 @@ To test real rule-selection/policy-enforcement behavior, either call
 `perch_smart_account::check_auth` directly with a hand-built
 `AuthPayload`/`Context`, wrapped in `env.as_contract(&account, || {...})`
 (as `auth_binding.rs` does; it decides with rule-eval over the stored rule
-set, and a recovery completion with the controller's `enforce`) — this
+set, and a recovery completion with the controller's `rcv_complete`) — this
 bypasses host-level auth entirely rather than
 depending on it — or install hand-built auth entries with `env.set_auths`,
 which runs the account's real `__check_auth` (as

@@ -99,26 +99,32 @@ impl UpgradeRequest {
 /// address also covers controllers and policies the account adopted in the
 /// past.
 ///
-/// - `install`, `uninstall`, `enforce`: OZ `Policy` lifecycle hooks, called
-///   by the account while installing the recovery rule (`install`) and to
-///   decide a completion (`enforce`).
+/// - `install`, `uninstall`, `enforce`: OZ `Policy` lifecycle hooks. The
+///   account calls none of them, but an OZ policy starts each with
+///   `smart_account.require_auth()`, as perch controllers deployed with
+///   OZ's hooks do.
 /// - `rcv_sync`: the controller hook `apply_doc` calls to apply a recovery
 ///   configuration transition (enroll, reconfigure, remove, complete).
 /// - `rcv_cancel`: the controller hook for a `Loss` owner's cancellation.
 /// - `rcv_upgrade`: the controller hook that checks upgrade evidence.
+/// - `rcv_install`: the controller hook the account calls when it installs
+///   the recovery rule.
+/// - `rcv_complete`: the controller hook that decides a completion.
 /// - `rcv_insert`: the pool's account-bound leaf insertion.
 /// - `rcv_gate`: the account's own hook through which its adopted
 ///   controller sets or clears the `Protected` freeze mirror. It requires
 ///   the controller's authorization, which only the controller's own code
 ///   can give; listing it here also stops the account from being steered
 ///   into calling another account's gate.
-pub const RESERVED_INVOKER_ONLY_FNS: [&str; 8] = [
+pub const RESERVED_INVOKER_ONLY_FNS: [&str; 10] = [
     "install",
     "uninstall",
     "enforce",
     "rcv_sync",
     "rcv_cancel",
     "rcv_upgrade",
+    "rcv_install",
+    "rcv_complete",
     "rcv_insert",
     "rcv_gate",
 ];

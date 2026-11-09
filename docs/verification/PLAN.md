@@ -72,7 +72,7 @@ the release-stack suite, and the testnet exercise cover them.
   across authorization paths, cancellation and the cancel cap, evidence
   freshness and expiry, epochs, nullifier spending, baselines, upgrade
   approvals, and the two-digest target binding. The controller's two checks
-  are not modeled: `enforce` comparing `sha256` of the completing
+  are not modeled: `rcv_complete` comparing `sha256` of the completing
   `apply_doc` bytes with `target_bytes_hash`, and `rcv_sync` comparing the
   compiled identity with `target_doc_hash` (`target_binding.rs` tests both).
   The only formal fact behind `target_bytes_hash == target_doc_hash` under

@@ -120,14 +120,13 @@ impl Target {
 }
 
 /// A recovery controller whose `rcv_sync` enrolls any configuration and
-/// whose policy `install` always fails: the recovery rule's install, the
-/// last step of an `apply_doc` that adds it, fails after every other rule
-/// edit.
+/// whose `rcv_install` always fails: the recovery rule's install, the last
+/// step of an `apply_doc` that adds it, fails after every other rule edit.
 #[contract]
-pub struct FailingPolicy;
+pub struct FailingController;
 
 #[contractimpl]
-impl FailingPolicy {
+impl FailingController {
     pub fn rcv_sync(
         _e: Env,
         _account: Address,
@@ -137,35 +136,14 @@ impl FailingPolicy {
     ) -> perch_recovery_interface::controller::SyncOutcome {
         perch_recovery_interface::controller::SyncOutcome::Enrolled
     }
-}
 
-#[contractimpl]
-impl stellar_accounts::policies::Policy for FailingPolicy {
-    type AccountParams = Val;
-
-    fn enforce(
-        _e: &Env,
-        _context: Context,
-        _authenticated_signers: Vec<Signer>,
-        _context_rule: stellar_accounts::smart_account::ContextRule,
-        _smart_account: Address,
-    ) {
-    }
-
-    fn install(
-        e: &Env,
-        _install_params: Val,
-        _context_rule: stellar_accounts::smart_account::ContextRule,
-        _smart_account: Address,
-    ) {
-        soroban_sdk::panic_with_error!(e, KeyError::Denied);
-    }
-
-    fn uninstall(
-        _e: &Env,
-        _context_rule: stellar_accounts::smart_account::ContextRule,
-        _smart_account: Address,
-    ) {
+    pub fn rcv_install(
+        _e: Env,
+        _account: Address,
+        _config_hash: BytesN<32>,
+        _rule: perch_recovery_interface::controller::RecoveryRule,
+    ) -> Result<(), KeyError> {
+        Err(KeyError::Denied)
     }
 }
 
@@ -419,8 +397,12 @@ pub struct World {
 pub struct Opts {
     /// The account is the full-replace oracle (`perch_testkit::delta`).
     pub oracle: bool,
-    /// The account runs this wasm instead (`oz_differential.rs`).
+    /// The account runs this wasm instead (`oz_differential.rs`,
+    /// `controller_differential.rs`).
     pub account_wasm: Option<&'static [u8]>,
+    /// The recovery controller runs this wasm instead
+    /// (`controller_differential.rs`).
+    pub controller_wasm: Option<&'static [u8]>,
     /// Which compiler sits at the compiler's address.
     pub compiler: TestCompiler,
     /// Every contract the world registers, and every [`World::new_key`],
@@ -535,7 +517,10 @@ pub fn world_with(opts: Opts) -> World {
     let owner = register!(Key, ());
     let device = register!(Key, ());
     let guardians = (0..3).map(|_| register!(Key, ())).collect();
-    let controller = register!(PerchRecovery, ());
+    let controller = match opts.controller_wasm {
+        Some(wasm) => register!(wasm, ()),
+        None => register!(PerchRecovery, ()),
+    };
     let adapter = register!(MockAdapter, ());
     let pool = register!(PerchZkPool, ());
     let target = register!(Target, ());

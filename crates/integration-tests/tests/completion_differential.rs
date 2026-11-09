@@ -7,15 +7,20 @@
 //! Over a grid of payloads — signers present, a wrong id, an expired rule, a
 //! wrong context, a second context, mismatched lengths, a refusing
 //! controller, and combinations that fix the order of the checks — both give
-//! the same verdict, error code included, and make the same `enforce` calls
-//! on the controller: the same context, authenticated signers, `ContextRule`
-//! and account, in the same order. The controller here records each call it
-//! accepts; a real controller's checks are `recovery.rs`'s.
+//! the same verdict, error code included, and ask the controller about the
+//! same contexts in the same order. OZ asks through the `Policy` hook
+//! `enforce(context, authenticated_signers, ContextRule, account)`, the
+//! account through `rcv_complete(account, context, RecoveryRule)`; the
+//! controller here records each as the latter, `enforce`'s rule projected
+//! onto its signer count and scope, and requires `enforce`'s authenticated
+//! signers to be empty. Those are all a controller checks besides its own
+//! state (`recovery.rs`, `controller_differential.rs`).
 //!
 //! Each check runs as its own contract call on the account, so a refusal
 //! rolls back like an authorization the host refuses.
 
 use perch_account_types::{AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError};
+use perch_recovery_interface::controller::RecoveryRule;
 use perch_smart_account::{InstalledPolicy, InstalledRule};
 use soroban_sdk::auth::{Context, ContractContext, CreateContractHostFnContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
@@ -33,8 +38,8 @@ const RECOVERY: u32 = 1;
 /// The controller's refusal code when it is set to refuse.
 const REFUSED: u32 = 77;
 
-/// A recovery controller that accepts every `enforce` and records it, or
-/// refuses every one (`refuse`).
+/// A recovery controller that accepts every completion it is asked about
+/// and records it, or refuses every one (`refuse`).
 #[contract]
 struct Controller;
 
@@ -42,6 +47,7 @@ struct Controller;
 impl Controller {
     pub fn install(_e: Env, _params: Val, _rule: ContextRule, _account: Address) {}
 
+    /// OZ's question, recorded as the account's.
     pub fn enforce(
         e: Env,
         context: Context,
@@ -49,17 +55,19 @@ impl Controller {
         context_rule: ContextRule,
         smart_account: Address,
     ) {
-        if e.storage().instance().has(&symbol_short!("refuse")) {
-            soroban_sdk::panic_with_error!(e, soroban_sdk::Error::from_contract_error(REFUSED));
-        }
-        let call = (context, authenticated_signers, context_rule, smart_account).to_xdr(&e);
-        let mut calls: Vec<Bytes> = e
-            .storage()
-            .instance()
-            .get(&symbol_short!("calls"))
-            .unwrap_or(Vec::new(&e));
-        calls.push_back(call);
-        e.storage().instance().set(&symbol_short!("calls"), &calls);
+        assert!(authenticated_signers.is_empty());
+        let rule = RecoveryRule {
+            signers: context_rule.signers.len(),
+            contract: match context_rule.context_type {
+                ContextRuleType::CallContract(contract) => Some(contract),
+                _ => None,
+            },
+        };
+        record(&e, smart_account, context, rule);
+    }
+
+    pub fn rcv_complete(e: Env, account: Address, context: Context, rule: RecoveryRule) {
+        record(&e, account, context, rule);
     }
 
     pub fn refuse(e: Env) {
@@ -76,6 +84,22 @@ impl Controller {
         e.storage().instance().remove(&symbol_short!("calls"));
         calls
     }
+}
+
+/// Accept and record `rcv_complete(account, context, rule)`, unless set to
+/// refuse.
+fn record(e: &Env, account: Address, context: Context, rule: RecoveryRule) {
+    if e.storage().instance().has(&symbol_short!("refuse")) {
+        soroban_sdk::panic_with_error!(e, soroban_sdk::Error::from_contract_error(REFUSED));
+    }
+    let call = (account, context, rule).to_xdr(e);
+    let mut calls: Vec<Bytes> = e
+        .storage()
+        .instance()
+        .get(&symbol_short!("calls"))
+        .unwrap_or(Vec::new(e));
+    calls.push_back(call);
+    e.storage().instance().set(&symbol_short!("calls"), &calls);
 }
 
 /// The account: each check as one of its entry points, over its storage.
@@ -247,16 +271,23 @@ fn a_completion_is_accepted_with_the_same_controller_call() {
     assert_eq!(verdict, Ok(()));
     assert_eq!(calls.len(), 1);
 
-    // The call is `enforce(context, [], rule, account)` with the rule as OZ's
-    // registry gives it.
+    // The call is `rcv_complete(account, context, rule)` with the rule as
+    // OZ's registry gives it: no signer, and calls on the account.
     let rule = w
         .env
         .as_contract(&w.account, || oz::get_context_rule(&w.env, RECOVERY));
+    assert!(rule.signers.is_empty());
+    assert_eq!(
+        rule.context_type,
+        oz::ContextRuleType::CallContract(w.account.clone())
+    );
     let expected = (
-        w.on_account(),
-        Vec::<Signer>::new(&w.env),
-        perch_testkit::twin::<ContextRule>(&w.env, rule),
         w.account.clone(),
+        w.on_account(),
+        RecoveryRule {
+            signers: 0,
+            contract: Some(w.account.clone()),
+        },
     )
         .to_xdr(&w.env);
     assert_eq!(calls[0], expected);

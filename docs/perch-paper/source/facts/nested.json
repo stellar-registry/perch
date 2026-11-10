@@ -1,0 +1,57 @@
+{
+  "nested-stake-xlm": {
+    "value": "1",
+    "source": "crates/integration-tests/tests/auth_root.rs:28, 47 (Game::guess: a loss transfers UNIT from the guesser to the game); docs/nido-sim/README.md step 3 (a loss costs 1 XLM)"
+  },
+  "nested-cap-xlm": {
+    "value": "2",
+    "source": "crates/integration-tests/tests/auth_root.rs:117, 273 (the transfer rule's cap: limit 2 UNIT)"
+  },
+  "nested-period-ledgers": {
+    "value": "100",
+    "source": "crates/integration-tests/tests/auth_root.rs:117 (period-ledgers 100)"
+  },
+  "auth-root-pin": {
+    "value": "c593bacde94604b37dabc908f1c151b1149edf5c",
+    "anon": "[withheld]",
+    "source": "git rev-parse c593bac (V): feat(auth)!: constrain rules to exact entry roots"
+  },
+  "nido-sim-page-mb": {
+    "value": "5.3",
+    "source": "docs/nido-sim/index.html, 5,291,831 bytes (V)"
+  },
+  "nido-sim-page-sha256": {
+    "value": "b1f6cfa248afe5ac770037a2b29f1e9a761f5530eaaab16ab4822742f4882472",
+    "source": "docs/nido-sim/README.md (pins, hashes, \"What it runs\"; V)"
+  },
+  "nido-sim-replies-sha256": {
+    "value": "9ec27d1662a8999436d0961eb5ac122c4aefb28f2d7a405bad7e02b5e5aa7db7",
+    "source": "docs/nido-sim/README.md (pins, hashes, \"What it runs\"; V)"
+  },
+  "nido-sim-replies": {
+    "value": "42",
+    "source": "the Nido simulation's reference run: 42 replies, identical natively, under WASI and in the browser (V)"
+  },
+  "nido-shop-cap-eurc": {
+    "value": "10",
+    "source": "docs/nido-sim/README.md step 2 (pay-shop: 10 EURC per 100 ledgers)"
+  },
+  "nido-coffee-eurc": {
+    "value": "3.50",
+    "source": "docs/nido-sim/README.md step 3 (shop.order(account, 3.50 EURC))"
+  },
+  "nido-pin": {
+    "value": "97105a0b54763d27f70d65c0d54239fe33bf777f",
+    "anon": "[withheld]",
+    "source": "docs/nido-sim/README.md (pins, hashes, \"What it runs\"; V)"
+  },
+  "nido-sim-perch-pin": {
+    "value": "2c64fe483f00e38061dd777bc9194f285b19721d",
+    "anon": "[withheld]",
+    "source": "docs/nido-sim/README.md (pins, hashes, \"What it runs\"; V)"
+  },
+  "nido-sim-rule-core-pin": {
+    "value": "5a689a5760d9a94ef92e5182b15653bed21f7670",
+    "source": "docs/nido-sim/README.md (pins, hashes, \"What it runs\"; V)"
+  }
+}

@@ -1,0 +1,14 @@
+<div class="sim-embed" id="nido-embed" data-src="{{root}}../nido-sim/index.html?embed=1" data-full="{{root}}../nido-sim/index.html" data-mb="{{fact:nido-sim-page-mb}}" data-msg="nido-sim" data-autostart="0" data-focus="nido-create" data-title="A Nido account in soroban-sim" data-chip="RUNS PERCH'S CONTRACTS" data-note="Each continues on the same account, creating it and installing the grant first if needed, and approves every request.">
+<p class="sim-rule">The grant lets the app call the game and pay it at most {{fact:nested-cap-xlm}} XLM per {{fact:nested-period-ledgers}} ledgers, only inside <code>game.guess</code>; and order at the shop and pay it at most {{fact:nido-shop-cap-eurc}} test EURC per {{fact:nested-period-ledgers}} ledgers, only inside <code>shop.order</code>.</p>
+<p class="sim-open"><a href="{{root}}../nido-sim/index.html">Open the Nido simulation</a> ({{fact:nido-sim-page-mb}} MB; it runs offline in your browser).</p>
+<div class="sim-try" role="group" aria-labelledby="nido-try-title"><p class="box-title" id="nido-try-title">Try these</p>
+<ul>
+<li><a href="{{root}}../nido-sim/index.html?scenario=W3sib3AiOiJndWVzcyIsIm51bWJlciI6M31d" data-commands='[{"op":"guess","number":3}]'>Lose a guess: the stake is checked inside <code>game.guess</code></a></li>
+<li><a href="{{root}}../nido-sim/index.html?scenario=W3sib3AiOiJvcmRlciIsImNlbnRzIjozNTB9XQ" data-commands='[{"op":"order","cents":350}]'>Buy a coffee: the test-EURC payment is checked inside <code>shop.order</code></a></li>
+<li><a href="{{root}}../nido-sim/index.html?scenario=W3sib3AiOiJ0cmFuc2ZlciIsInRva2VuIjoieGxtIiwiY2VudHMiOjEwMH1d" data-commands='[{"op":"transfer","token":"xlm","cents":100}]'>Pay the game 1 XLM directly</a></li>
+<li><a href="{{root}}../nido-sim/index.html?scenario=W3sib3AiOiJndWVzcyIsIm51bWJlciI6MywiZW50cnkiOiJvdGhlciJ9XQ" data-commands='[{"op":"guess","number":3,"entry":"other"}]'>Lose through <code>game.other</code></a></li>
+<li><a href="{{root}}../nido-sim/index.html?scenario=W3sib3AiOiJndWVzcyIsIm51bWJlciI6M30seyJvcCI6Imd1ZXNzIiwibnVtYmVyIjozfSx7Im9wIjoiZ3Vlc3MiLCJudW1iZXIiOjN9XQ" data-commands='[{"op":"guess","number":3},{"op":"guess","number":3},{"op":"guess","number":3}]'>Lose three times in a row</a></li>
+</ul>
+<p class="sim-note">Each link opens the Nido simulation with that scenario: it creates the account, installs the grant and approves each request.</p>
+</div>
+</div>

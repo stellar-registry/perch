@@ -1672,18 +1672,21 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
     const src = embed.dataset.src;
     const full = embed.dataset.full;
     const mb = embed.dataset.mb;
+    // The Nido page (nido-sim-panel.html) speaks nido-sim:* messages and starts at its first step.
+    const msg = embed.dataset.msg || 'perch-sim';
+    const autostart = embed.dataset.autostart !== '0';
     const fig = embed.querySelector('figure.fig');
     const tries = embed.querySelector('.sim-try');
     // Start, and the full page (the frame links its reference and hash tables).
     const actions = h('div', { class: 'sim-actions' });
     const startBtn = button(`Start the simulation here (${mb ? `${mb} MB, ` : ''}runs offline in this tab)`, { class: 'primary' });
-    actions.append(el('span', { class: 'xp-chip', 'data-kind': 'executed' }, 'RUNS THE REAL CONTRACTS'), startBtn, el('a', { href: full }, 'Open the full page'));
+    actions.append(el('span', { class: 'xp-chip', 'data-kind': 'executed' }, embed.dataset.chip || 'RUNS THE REAL CONTRACTS'), startBtn, el('a', { href: full }, 'Open the full page'));
     const open = embed.querySelector(':scope > .sim-open');
     if (open) open.replaceWith(actions); else embed.prepend(actions);
     const frameBox = el('div', { class: 'sim-frame' });
     if (tries) tries.after(frameBox); else actions.after(frameBox);
     const note = tries && tries.querySelector('.sim-note');
-    if (note) note.textContent = 'Each link runs its scenario here, starting the simulation if it is not running; Ctrl- or Cmd-click opens it on the full page instead. Both accounts run every request, from a fresh ledger with the rule installed.';
+    if (note) note.textContent = `Each link runs its scenario here, starting the simulation if it is not running; Ctrl- or Cmd-click opens it on the full page instead. ${embed.dataset.note || 'Both accounts run every request, from a fresh ledger with the rule installed.'}`;
     let fold = null;
     if (fig) {
       if (!fig.querySelector('.xp-chip')) {
@@ -1706,7 +1709,7 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
     // Focus the frame's first request control (same origin), else the frame itself.
     function focusFrame() {
       try {
-        const first = frame.contentDocument && frame.contentDocument.getElementById('sim-amount');
+        const first = frame.contentDocument && frame.contentDocument.getElementById(embed.dataset.focus || 'sim-amount');
         if (first) { first.focus(); return; }
       } catch { /* another origin, such as file:// */ }
       frame.focus();
@@ -1716,8 +1719,9 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
       if (frame) return;
       let url = src;
       if (theme()) url += `${url.includes('?') ? '&' : '?'}theme=${theme()}`;
-      url += `${url.includes('?') ? '&' : '?'}${commands ? `scenario=${b64url(JSON.stringify(commands))}` : 'autostart=1'}`;
-      frame = el('iframe', { src: url, title: 'OpenZeppelin and Perch accounts in soroban-sim', loading: 'eager' });
+      if (commands) url += `${url.includes('?') ? '&' : '?'}scenario=${b64url(JSON.stringify(commands))}`;
+      else if (autostart) url += `${url.includes('?') ? '&' : '?'}autostart=1`;
+      frame = el('iframe', { src: url, title: embed.dataset.title || 'OpenZeppelin and Perch accounts in soroban-sim', loading: 'eager' });
       frame.addEventListener('load', () => {
         ready = true;
         if (pending) { post(pending); pending = null; }
@@ -1729,11 +1733,11 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
       if (fold) { fold.hidden = false; fold.setAttribute('aria-expanded', 'false'); fold.textContent = 'Show the recorded run'; }
       frame.focus();
     }
-    function post(commands) { frame.contentWindow.postMessage({ type: 'perch-sim:load', commands }, '*'); }
+    function post(commands) { frame.contentWindow.postMessage({ type: `${msg}:load`, commands }, '*'); }
     window.addEventListener('message', (e) => {
       if (!frame || e.source !== frame.contentWindow) return;
       const d = e.data;
-      if (!d || typeof d !== 'object' || d.type !== 'perch-sim:height') return;
+      if (!d || typeof d !== 'object' || d.type !== `${msg}:height`) return;
       const hgt = Number(d.height ?? d.h);
       // the frame takes its content's height, so the page scrolls, not the frame
       if (Number.isFinite(hgt) && hgt > 0) frame.style.height = `${Math.min(Math.max(hgt, 240), 40000)}px`;

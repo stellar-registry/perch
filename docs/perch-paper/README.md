@@ -11,9 +11,10 @@ where it helps, an academic LaTeX edition (LNCS):
 | The Perch vision | `vision/index.html` | — |
 
 CI builds the PDFs with a pinned Tectonic and publishes each beside its page;
-they are not committed. `sim/` is the simulation the main paper embeds: an
-OpenZeppelin account with oz-policy-builder's policy and a Perch account, run
-side by side in soroban-sim in the browser (its own `README.md`).
+they are not committed. The main paper embeds two simulations, each with its
+own `README.md`: `sim/`, an OpenZeppelin account with oz-policy-builder's
+policy and a Perch account run side by side in soroban-sim in the browser, and
+`../nido-sim/`, a Nido account given a grant and checked on nested calls.
 
 ## Sources
 

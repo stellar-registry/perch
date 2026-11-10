@@ -15,17 +15,19 @@ STAKE, CAP, PERIOD = fact('nested-stake-xlm'), fact('nested-cap-xlm'), fact('nes
 GRANT_A = [('Rule `game`', 't'), ('any function of the game contract, signed by the app’s key', 'm')]
 GRANT_B = [('Rule `pay-game`', 't'), ('the XLM token’s `transfer` only', 'x'),
            ('argument 0 is the account itself', 'x'),
+           ('argument 1 is the game', 'x'),
            ('only when the entry’s root call is exactly `game.guess`', 'x'),
            (f'at most {CAP} XLM in any {PERIOD} ledgers', 'x')]
 NODE_1 = [('1  root call', 'm'), ('`game.guess(3, account)`', 'x'),
           ('✓ rule `game`: a call to the game contract', 'g')]
 NODE_2 = [('2  call inside it, on a loss', 'm'), (f'`XLM.transfer(account, game, {STAKE} XLM)`', 'x'),
-          ('✓ rule `pay-game`: from the account', 'g'),
+          ('✓ rule `pay-game`: from the account, to the game', 'g'),
           ('✓ the entry’s root is exactly `game.guess`', 'g'),
           (f'✓ {STAKE} of {CAP} XLM in the window', 'g')]
 REFUSED = [('Refused, with nothing written', 'd'),
            ('✕ the same transfer signed as its own entry: its root is `XLM.transfer`', 'x'),
            ('✕ the transfer under `game.other`, or under another game’s `guess`', 'x'),
+           ('✕ the stake sent to anyone but the game', 'x'),
            (f'✕ a third loss within {PERIOD} ledgers: over the cap', 'x')]
 
 
@@ -98,7 +100,7 @@ def text_alt():
             f'<p>The entry the app signs holds a tree of two calls, and the account checks each against its rule.</p>'
             f'<ol><li>{code(NODE_1[1][0])}, the root call: rule <code>game</code> accepts a call to the game contract.</li>'
             f'<li>{code(NODE_2[1][0])}, made by the game on a loss: rule <code>pay-game</code> accepts it because it '
-            f'is from the account, the entry’s root is exactly <code>game.guess</code>, and it brings the window '
+            f'is from the account to the game, the entry’s root is exactly <code>game.guess</code>, and it brings the window '
             f'to {STAKE} of {CAP} XLM.</li></ol>'
             f'<p>{code(REFUSED[0][0])}:</p><ul>{items(REFUSED[1:])}</ul>')
 

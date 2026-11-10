@@ -45,12 +45,12 @@
  },
  "fig-nested": {
   "title": "One grant covers the call and the payment inside it.",
-  "caption": "The scenario of the stack's exact-root test and the Nido simulation: the app's grant has a rule for the game contract and a rule, `pay-game`, that allows the XLM token's `transfer` only from the account, only under the root call `game.guess`, within a cap. The account checks each call of the signed tree against the rule the payload names for it.",
+  "caption": "The scenario of the stack's exact-root test and the Nido simulation: the app's grant has a rule for the game contract and a rule, `pay-game`, that allows the XLM token's `transfer` only from the account, only to the game, only under the root call `game.guess`, within a cap. The Nido simulation's grant pins the recipient; the exact-root test checks the root and the cap. The account checks each call of the signed tree against the rule the payload names for it.",
   "editions": [
    "html"
   ],
   "short": "the nested-call diagram",
-  "caption_html": "The account checks each call in the tree against its own rule. The `pay-game` rule accepts the transfer only from the account, only inside `game.guess`, and within its cap."
+  "caption_html": "The account checks each call in the tree against its own rule. The `pay-game` rule accepts the transfer only from the account, only to the game, only inside `game.guess`, and within its cap."
  },
  "fig-sim": {
   "title": "Both designs, one scenario, from soroban-sim's native run.",

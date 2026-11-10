@@ -1,0 +1,2272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perch, the paper</title>
+<meta name="description" content="The academic Perch paper, section by section, told through one picture: the account is a building, a grant is a keycard with its limits printed on it, and the proofs are an inspector certifying the lock design.">
+<link rel="icon" href="data:,">
+<style>
+:root {
+  color-scheme: light dark;
+  --paper: #F1EDE4;
+  --paper-2: #E5DFD2;
+  --ink: #23262C;
+  --ink-2: #616772;
+  --rule: rgba(35, 38, 44, .18);
+  --grid: rgba(44, 93, 146, .06);
+  --brass: #96630F;
+  --plan: #2B5C92;
+  --stop: #A3392B;
+  --f-display: "Futura", "Century Gothic", "Avenir Next", "Trebuchet MS", sans-serif;
+  --f-text: "Avenir Next", "Avenir", "Segoe UI", system-ui, sans-serif;
+  --f-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --pad-x: clamp(16px, 4.2vw, 64px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #16181C;
+    --paper-2: #21242B;
+    --ink: #ECE7DC;
+    --ink-2: #A3A7AF;
+    --rule: rgba(236, 231, 220, .16);
+    --grid: rgba(142, 186, 232, .05);
+    --brass: #E2B35C;
+    --plan: #8EBBEA;
+    --stop: #EE8C79;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #16181C;
+  --paper-2: #21242B;
+  --ink: #ECE7DC;
+  --ink-2: #A3A7AF;
+  --rule: rgba(236, 231, 220, .16);
+  --grid: rgba(142, 186, 232, .05);
+  --brass: #E2B35C;
+  --plan: #8EBBEA;
+  --stop: #EE8C79;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background-color: var(--paper);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--ink);
+  font-family: var(--f-text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- slides: drafting sheets ---------- */
+#deck { position: fixed; inset: 0; touch-action: pinch-zoom; }
+.slide {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: clamp(22px, 3.4vw, 46px) var(--pad-x) 74px;
+  opacity: 0; visibility: hidden;
+  transform: translateY(8px);
+  transition: opacity .5s ease, transform .6s cubic-bezier(.2, .7, .2, 1), visibility 0s linear .5s;
+}
+.slide.active {
+  opacity: 1; visibility: visible; transform: none;
+  transition: opacity .5s ease, transform .6s cubic-bezier(.2, .7, .2, 1), visibility 0s;
+}
+/* the sheet border, with corner ticks */
+.slide::before {
+  content: ""; position: absolute; inset: 12px; pointer-events: none;
+  border: 1px solid var(--rule);
+}
+.ticks { position: absolute; inset: 0; pointer-events: none; }
+.ticks i { position: absolute; width: 18px; height: 18px; border-color: var(--ink-2); border-style: solid; opacity: .7; }
+.ticks .a { top: 6px; left: 6px; border-width: 1.5px 0 0 1.5px; }
+.ticks .b { top: 6px; right: 6px; border-width: 1.5px 1.5px 0 0; }
+.ticks .c { bottom: 6px; left: 6px; border-width: 0 0 1.5px 1.5px; }
+.ticks .d { bottom: 6px; right: 6px; border-width: 0 1.5px 1.5px 0; }
+
+.head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px 20px; flex-wrap: wrap;
+  min-width: 0;
+}
+.head h2 {
+  font-family: var(--f-display);
+  font-weight: 500;
+  font-size: clamp(30px, 4.6vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -.01em;
+  margin: 0;
+  flex: 1 1 18ch;
+  min-width: 0;
+}
+/* the paper reference: a door plaque */
+.plaque {
+  position: relative; flex: none;
+  display: inline-grid; gap: 2px;
+  padding: 8px 18px 8px 18px;
+  border: 1px solid var(--brass); border-radius: 6px;
+  background: var(--paper);
+  font-size: clamp(13px, 1.15vw, 16px);
+  white-space: nowrap;
+  margin-top: .35em;
+}
+.plaque small { font-size: .7em; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2); }
+.plaque b { font-weight: 600; color: var(--ink); letter-spacing: .01em; }
+.plaque::before, .plaque::after {
+  content: ""; position: absolute; top: 50%; width: 5px; height: 5px; margin-top: -2.5px; border-radius: 50%;
+  background: var(--brass); opacity: .8;
+}
+.plaque::before { left: 6px; }
+.plaque::after { right: 6px; }
+.plaque.on-title { margin: 0 0 1.4em; }
+.plaque.beyond { border-color: var(--ink-2); }
+.plaque.beyond::before, .plaque.beyond::after { background: var(--ink-2); }
+.plaque .tag { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px dashed var(--ink-2); border-radius: 4px; color: var(--ink-2); font-weight: 400; font-size: .85em; }
+
+.stage { min-height: 0; min-width: 0; display: grid; padding-top: clamp(6px, 1.4vh, 18px); position: relative; }
+.stage > svg { width: 100%; height: 100%; display: block; overflow: visible; min-height: 0; }
+.notes { display: none; }
+.stage-links {
+  margin: 0; font-size: clamp(13px, 1.1vw, 15px); color: var(--ink-2);
+  display: flex; gap: 8px 22px; flex-wrap: wrap; justify-content: center; align-items: center;
+}
+.stage-links a { color: var(--plan); text-underline-offset: 3px; }
+.stage-sim { grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+.frame-wrap { position: relative; min-height: 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--paper-2); }
+.frame-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: transparent; }
+.frame-wrap .frame-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--ink-2); font-size: 15px; pointer-events: none; }
+.stage-sim .frame-wrap { display: none; }
+.stage-sim.live > svg { display: none; }
+.stage-sim.live .frame-wrap { display: block; }
+.stage-sim .when-live { display: none; }
+.stage-sim.live .when-live { display: inline-block; }
+.stage-sim.live .when-still { display: none; }
+.act {
+  appearance: none; font: inherit; font-size: clamp(14px, 1.15vw, 16px); cursor: pointer; text-decoration: none; display: inline-block;
+  color: var(--paper); background: var(--brass); border: 0; border-radius: 6px; padding: 9px 18px; letter-spacing: .01em;
+}
+.act.ghost { color: var(--ink); background: transparent; border: 1px solid var(--rule); }
+.act:focus-visible { outline: 2px solid var(--plan); outline-offset: 3px; }
+
+/* title sheet */
+.slide-title {
+  grid-template-rows: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 3vw;
+}
+.slide-title .title-text { min-width: 0; }
+.slide-title .kicker { font-size: clamp(12px, 1vw, 14px); letter-spacing: .2em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 1.2em; }
+.slide-title h1 {
+  font-family: var(--f-display);
+  font-weight: 500;
+  font-size: clamp(60px, 10vw, 164px);
+  line-height: .92;
+  letter-spacing: -.02em;
+  margin: 0 0 .28em;
+}
+.slide-title .sub { font-size: clamp(18px, 1.8vw, 26px); margin: 0 0 .6em; max-width: 24ch; line-height: 1.28; }
+.slide-title .wallet { font-size: clamp(14px, 1.2vw, 17px); color: var(--ink-2); margin: 0 0 1.8em; }
+.byline { font-size: clamp(14px, 1.2vw, 17px); color: var(--ink-2); margin: 0 0 1.6em; line-height: 1.5; }
+.byline b { color: var(--ink); font-weight: 500; }
+.legend { list-style: none; padding: 0; margin: 0; display: flex; gap: 10px 22px; flex-wrap: wrap; font-size: clamp(13px, 1.1vw, 16px); color: var(--ink-2); }
+.legend li { display: inline-flex; align-items: center; gap: 8px; }
+.legend i { display: inline-block; width: 26px; height: 0; border-top: 2px solid; }
+.legend .l-card i { border-color: var(--brass); }
+.legend .l-proof i { border-color: var(--plan); }
+.legend .l-stop i { border-color: var(--stop); }
+.legend .l-prop i { border-top: 2px dashed var(--ink-2); }
+.slide-title .stage { height: min(78vh, 46vw); padding: 0; }
+
+/* closing sheet */
+.links {
+  list-style: none; margin: 0 auto; padding: clamp(8px, 2vh, 24px) 0 0; width: min(100%, 1180px);
+  display: grid; gap: clamp(10px, 1.4vw, 18px);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 262px), 1fr));
+  align-content: start; overflow: auto; min-height: 0;
+}
+.lk {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 3px 14px; align-items: center;
+  text-decoration: none; color: var(--ink); height: 100%;
+  border: 1px solid var(--rule); border-left: 3px solid var(--brass); border-radius: 6px;
+  padding: clamp(12px, 1.8vh, 20px) 16px; background: var(--paper);
+  transition: background .2s ease;
+}
+.lk:hover { background: var(--paper-2); }
+.lk svg { grid-row: span 2; width: 36px; height: 36px; overflow: visible; fill: none; stroke: var(--brass); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.lk .lk-t { font-family: var(--f-display); font-weight: 500; font-size: clamp(17px, 1.4vw, 21px); line-height: 1.15; }
+.lk .lk-s { font-size: clamp(12px, 1vw, 14px); color: var(--ink-2); }
+.lk:focus-visible, .stage-links a:focus-visible { outline: 2px solid var(--plan); outline-offset: 3px; }
+.pins {
+  margin: 0 auto; width: min(100%, 1180px); font-size: clamp(12px, 1vw, 14px); color: var(--ink-2);
+  display: flex; flex-wrap: wrap; gap: 4px 18px; padding-top: clamp(10px, 2vh, 20px);
+}
+.pins code { font-family: var(--f-code); color: var(--ink); font-size: .95em; }
+.close-foot { margin: clamp(8px, 2vh, 20px) auto 0; width: min(100%, 1180px); font-size: clamp(13px, 1.1vw, 16px); color: var(--ink-2); }
+.slide-close .stage { grid-template-rows: auto auto minmax(0, 1fr); align-content: start; }
+
+/* ---------- svg vocabulary ---------- */
+.st { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.k-ink { stroke: var(--ink); }
+.k-soft { stroke: var(--ink-2); }
+.k-faint { stroke: var(--rule); }
+.k-brass { stroke: var(--brass); }
+.k-plan { stroke: var(--plan); }
+.k-stop { stroke: var(--stop); }
+.k-paper { stroke: var(--paper); }
+.k-pencil { stroke: var(--ink-2); stroke-dasharray: 9 7; }
+.k-pencilhead { stroke: var(--ink-2); }
+.fl-ink { fill: var(--ink); }
+.fl-soft { fill: var(--ink-2); }
+.fl-brass { fill: var(--brass); }
+.fl-plan { fill: var(--plan); }
+.fl-stop { fill: var(--stop); }
+.fl-paper { fill: var(--paper); }
+.fl-paper2 { fill: var(--paper-2); }
+.fl-hatch { fill: url(#hatch); }
+.fl-hatch-brass { fill: url(#hatch-brass); }
+.fl-hatch-plan { fill: url(#hatch-plan); }
+.fl-hatch-stop { fill: url(#hatch-stop); }
+.tx { fill: var(--ink); font-family: var(--f-text); }
+.c-soft { fill: var(--ink-2); }
+.c-brass { fill: var(--brass); }
+.c-plan { fill: var(--plan); }
+.c-stop { fill: var(--stop); }
+.c-paper { fill: var(--paper); }
+.c-pencil { fill: var(--ink-2); }
+.f-code { font-family: var(--f-code); }
+.f-disp { font-family: var(--f-display); font-weight: 500; }
+.seal-use { color: var(--plan); transform-box: fill-box; transform-origin: center; }
+#defs .hl { stroke: var(--ink-2); stroke-width: 1; opacity: .38; }
+#defs .hl-brass { stroke: var(--brass); stroke-width: 1.2; opacity: .55; }
+#defs .hl-plan { stroke: var(--plan); stroke-width: 1.2; opacity: .5; }
+#defs .hl-stop { stroke: var(--stop); stroke-width: 1.2; opacity: .55; }
+.s-wave { fill: none; stroke: currentColor; stroke-width: .7; vector-effect: non-scaling-stroke; opacity: .9; }
+.s-tick { fill: none; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.s-ring { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cw-fade { transition: opacity .45s ease; }
+
+/* ---------- motion: each sheet draws itself once on arrival ---------- */
+.an-draw { stroke-dasharray: var(--len, 0); stroke-dashoffset: var(--len, 0); }
+.an-fade, .an-march, .an-seal, .an-rise, .an-travel { opacity: 0; }
+.slide.on .an-draw { animation: draw 1s cubic-bezier(.55, .05, .25, 1) var(--d, 0ms) forwards; }
+.slide.on .an-fade { animation: fade .7s ease var(--d, 0ms) forwards; }
+.slide.on .an-march { animation: march .9s cubic-bezier(.3, .6, .2, 1) var(--d, 0ms) forwards; }
+.slide.on .an-seal { animation: sealin 1.4s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) forwards; }
+.slide.on .an-rise { animation: rise 1s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) forwards; }
+.slide.on .an-out { animation: out .6s ease var(--d, 0ms) forwards; }
+.slide.on .an-travel { animation: travel 3.4s cubic-bezier(.45, 0, .3, 1) var(--d, 0ms) forwards; }
+.an-rise { transform-box: fill-box; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes march { from { opacity: 0; stroke-dashoffset: 80; } to { opacity: 1; stroke-dashoffset: 0; } }
+@keyframes sealin { from { opacity: 0; transform: rotate(-40deg) scale(.85); } to { opacity: 1; transform: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+@keyframes travel {
+  0% { opacity: 0; transform: none; }
+  8% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--tx, 0px), var(--ty, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide, .slide.active { transition: none; transform: none; }
+  .an-draw { stroke-dasharray: none; stroke-dashoffset: 0; }
+  .an-fade, .an-march, .an-seal, .an-rise { opacity: 1; }
+  .an-out, .an-travel { opacity: 0; }
+  .slide.on .an-draw, .slide.on .an-fade, .slide.on .an-march, .slide.on .an-seal, .slide.on .an-rise, .slide.on .an-out, .slide.on .an-travel { animation: none; }
+  .cw-fade { transition: none; }
+}
+.still .slide, .still .slide.active { transition: none; transform: none; }
+.still .an-draw { stroke-dasharray: none; stroke-dashoffset: 0; }
+.still .an-fade, .still .an-march, .still .an-seal, .still .an-rise { opacity: 1; }
+.still .an-out, .still .an-travel { opacity: 0; }
+.still .slide.on .an-draw, .still .slide.on .an-fade, .still .slide.on .an-march, .still .slide.on .an-seal, .still .slide.on .an-rise, .still .slide.on .an-out, .still .slide.on .an-travel { animation: none; }
+.still .k-pencil { stroke-dasharray: 9 7; }
+.still .cw-fade { transition: none; }
+
+/* ---------- chrome ---------- */
+.chrome {
+  position: fixed; left: 22px; right: 22px; bottom: 18px;
+  height: 44px;
+  display: flex; align-items: center; gap: 10px;
+  z-index: 5;
+  font-size: 14px; color: var(--ink-2);
+}
+.btn {
+  appearance: none; border: 0; background: transparent; color: var(--ink-2);
+  width: 38px; height: 38px; border-radius: 6px;
+  display: grid; place-items: center; cursor: pointer; padding: 0;
+}
+.btn:hover { color: var(--ink); background: var(--paper-2); }
+.btn:focus-visible, .marks button:focus-visible { outline: 2px solid var(--plan); outline-offset: 2px; }
+.btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.btn[aria-pressed="true"] { color: var(--ink); background: var(--paper-2); }
+.marks { list-style: none; display: flex; gap: 5px; margin: 0 auto; padding: 0; align-items: center; }
+.marks button {
+  appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent;
+  width: 14px; height: 18px; display: grid; place-items: center; border-radius: 2px;
+}
+.marks i { display: block; width: 8px; height: 8px; border: 1.3px solid var(--ink-2); border-radius: 1px; opacity: .6; transition: transform .25s ease; }
+.marks .m-sec i { border-color: var(--brass); }
+.marks button[aria-current="true"] i { background: var(--brass); border-color: var(--brass); opacity: 1; transform: scale(1.4); }
+.count { font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+.bar { display: none; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px; background: var(--rule); }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--brass); transition: width .4s ease; }
+
+#notes-panel {
+  position: fixed; left: 22px; right: 22px; bottom: 70px;
+  max-height: 42vh; overflow: auto;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 16px 20px;
+  z-index: 6;
+  font-size: 15px; line-height: 1.5;
+  max-width: 78ch; margin: 0 auto;
+}
+#notes-panel p { margin: 0 0 .7em; }
+#notes-panel .src { color: var(--ink-2); font-size: 13px; margin: 0; }
+#notes-panel code { font-family: var(--f-code); font-size: .92em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .marks i, .bar i, .lk { transition: none; }
+}
+.still .marks i, .still .bar i { transition: none; }
+@media (max-width: 900px) { .marks { gap: 3px; } .marks button { width: 11px; } .marks i { width: 7px; height: 7px; } }
+@media (max-width: 640px) {
+  .marks { display: none; }
+  .bar { display: block; }
+  .chrome { justify-content: flex-end; left: 14px; right: 14px; bottom: 12px; }
+  .count { margin-right: auto; text-align: left; }
+  .slide { padding-bottom: 66px; }
+  .head { gap: 8px; }
+  .plaque { padding: 5px 14px; margin-top: 0; }
+  .close-foot { display: none; }
+  #notes-panel { left: 12px; right: 12px; bottom: 64px; padding: 12px 14px; font-size: 14px; }
+}
+@media (max-aspect-ratio: 10/11) {
+  .slide-title { grid-template-columns: none; grid-template-rows: auto minmax(0, 1fr); align-items: start; gap: 0; }
+  .slide-title .stage { height: auto; min-height: 0; }
+  .slide-title h1 { margin-top: 2vh; }
+  .slide-title .wallet, .byline { margin-bottom: .9em; }
+  .slide-title .kicker { margin-bottom: .6em; }
+}
+</style>
+</head>
+<body>
+<svg id="defs" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl" x1="0" y1="0" x2="0" y2="9"/></pattern>
+    <pattern id="hatch-brass" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl-brass" x1="0" y1="0" x2="0" y2="8"/></pattern>
+    <pattern id="hatch-plan" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl-plan" x1="0" y1="0" x2="0" y2="8"/></pattern>
+    <pattern id="hatch-stop" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line class="hl-stop" x1="0" y1="0" x2="0" y2="8"/></pattern>
+  </defs>
+</svg>
+
+<main id="deck" aria-roledescription="slide deck" aria-label="Perch, the paper">
+
+<section class="slide slide-title" data-ref="Title · Abstract" data-draw="title" aria-roledescription="slide" aria-label="Perch">
+  <div class="title-text">
+    <p class="kicker">The paper, in pictures</p>
+    <h1>Perch</h1>
+    <p class="sub">Bounded grants for apps and agents on Soroban smart accounts</p>
+    <p class="wallet">Previewed on Stellar testnet through the Nido wallet.</p>
+    <p class="byline"><b>Willem Wyndham and Elizabeth Engelman</b><br>The Aha Company</p>
+    <ul class="legend">
+      <li class="l-card"><i></i>the card</li>
+      <li class="l-proof"><i></i>proved</li>
+      <li class="l-stop"><i></i>refused</li>
+      <li class="l-prop"><i></i>proposed</li>
+    </ul>
+  </div>
+  <div class="stage"><svg role="img" aria-label="A building with a card reader by its door, and a keycard in front of it with its limits printed on it."></svg></div>
+  <aside class="notes">
+    <p>The academic paper, in its own order, told through one picture. The account is a building with a master key, the owner's. A grant is a keycard with its limits printed on it: which doors (contracts and functions), how much it may spend in any window of ledgers, and when it expires. Cutting a narrower copy of a card is attenuation. The front desk checks every card before any lock turns. The proofs are an inspector certifying the lock design. Each sheet carries the paper section it follows.</p>
+    <p>Brass is the card and what it allows; blue is what a theorem proves; red is a refusal; dashed pencil is proposed.</p>
+    <p class="src">docs/perch-paper/latex/perch-paper.tex; sections/abstract.tex; source/facts/paper.json (title, authors, affiliation, wallet-name).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§1" data-draw="problem" aria-roledescription="slide" aria-label="Three ways to let an app spend">
+  <header class="head"><h2>Three ways to let an app spend</h2></header>
+  <div class="stage"><svg role="img" aria-label="Three ways to let an app spend: ask the owner on every call, hand it a master key that opens everything, or give it a keycard that opens one door within limits the building enforces."></svg></div>
+  <aside class="notes">
+    <p>An app that spends for a user today either asks the user to approve every call or holds a key that can do anything. A Soroban account can be a contract that decides each authorization itself, so a middle ground exists: a grant lets an app or agent act for the account within limits the account itself enforces. The bound has to hold across the nested calls of one transaction, across repeated calls over time, and whichever installed rule the transaction's submitter selects.</p>
+    <p class="src">Paper §1 (sections/motivation.tex), first paragraph.</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§1 · Fig. 1" data-draw="shop" aria-roledescription="slide" aria-label="The shop card">
+  <header class="head"><h2>The shop card</h2></header>
+  <div class="stage"><svg role="img" aria-label="The running example as a keycard: it opens the XLM token's transfer door, pays only the shop, needs the app's key, and allows at most 10 XLM in any 100 ledgers."></svg></div>
+  <aside class="notes">
+    <p>The running example, the shop grant (Fig. 1), lets an app or agent send XLM from the account to the shop and to no one else, at most 10 XLM in any 100 ledgers, about eight minutes. Its one rule names the native XLM token, the function <code>transfer</code>, argument 0 as this account and argument 1 as the shop, the app's Ed25519 key, and the cap. A grant cannot say everything: it has no bound on one call's amount (the cap bounds the window), no <i>or</i> and no <i>not</i>, no reads of other contracts, and it checks each call alone.</p>
+    <p class="src">Paper §1 and Fig. 1 (sections/motivation.tex; source/figures/fig-shop-grant.a.txt, .b.txt); source/facts/example.json (shop-cap-xlm, shop-period-ledgers, shop-period-minutes).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§1 · Theorems 2, 6, 8" data-draw="bounds" aria-roledescription="slide" aria-label="Three bounds">
+  <header class="head"><h2>Three bounds</h2></header>
+  <div class="stage"><svg role="img" aria-label="Safe and bounded mean three properties, not an audit: every door an accepted request opens is on a card; no window holds more than the allowance; no card opens the account's own office or its recovery contracts. Status: unmerged, previewed on testnet through Nido, not audited."></svg></div>
+  <aside class="notes">
+    <p>"Safe and bounded" means three properties, not an audit: each call of an accepted request is allowed by an installed rule (Theorem 2), no window of a capped rule holds more than its limit (Theorem 6), and no grant allows a call to the account or its adopted recovery contracts (Theorem 8). "Proved" applies to the Lean translation of the Rust decision function, not the deployed Wasm or the tested account code around it, the shell. A completed recovery moves one counter, and every earlier grant stops authorizing.</p>
+    <p>Status: the design is an unmerged pull-request stack ending at #68, previewed on testnet through Nido, and not audited; the paper does not recommend it for real funds before an audit. An earlier design is on mainnet. soroban-sim is published by The Aha Company, where the authors work.</p>
+    <p class="src">Paper §1 (sections/motivation.tex), "Safe and bounded" and "Status".</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§2" data-draw="background" aria-roledescription="slide" aria-label="How the building is asked">
+  <header class="head"><h2>How the building is asked</h2></header>
+  <div class="stage"><svg role="img" aria-label="A request carries a list of doors in order, such as a game's guess and the transfer it makes from the account. The host asks the account's desk to decide every door on the list. A rehearsal that only records skips the desk; only an enforcing rehearsal predicts a refusal."></svg></div>
+  <aside class="notes">
+    <p>A contract that needs an address's approval calls <code>require_auth</code>; for a contract account, the host then calls the account's <code>__check_auth</code> with the authorization entry's signed payload, its signatures and its contexts: every call and contract creation in the invocation tree, in preorder, each of which the account must decide. A lost guess in a game gives two, the game's <code>guess</code> and the transfer it makes from the account. The nonce is consumed only on success, so a refused entry can be resubmitted until it expires. Recording-mode simulation, which builds entries, does not call <code>__check_auth</code>, so only enforcing simulation predicts a refusal.</p>
+    <p>OpenZeppelin's Soroban library stores context rules with external signers, delegated signers and policies; in v0.8.0, <code>__check_auth</code> validates the selected rules, authenticates the signers, then calls each policy's <code>enforce</code>. oz-policy-builder's shared <code>policy-interpreter</code> evaluates a predicate on each guarded call alone and keeps no totals, which OpenZeppelin's <code>spending_limit</code> policy keeps. Perch reuses OpenZeppelin's types and payload field; it differs in what decides.</p>
+    <p class="src">Paper §2 (sections/background.tex).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§3 · Theorem 8" data-draw="issue" aria-roledescription="slide" aria-label="Issuing a card">
+  <header class="head"><h2>Issuing a card</h2></header>
+  <div class="stage"><svg role="img" aria-label="The owner sends a grant document in one install call. The document compiler checks it, and the account turns it into rules, refusing any line aimed at the account itself or its recovery contracts. A line names one contract and its functions, argument conditions, the signers needed, and optionally an expiry and an allowance."></svg></div>
+  <aside class="notes">
+    <p>The owner calls <code>apply_grant</code> with a grant document. A stateless document compiler validates the JSON; the account lowers it with rule-core's <code>lower_scoped</code> under its own address, its excluded set (its adopted recovery controller, and the zero-knowledge adapter and pool of its recovery configuration) and its grant generation, refusing any rule that targets the account or that set (Theorem 8).</p>
+    <p>A rule checks one target contract and a function list; five kinds of argument condition (is-self, address-eq, string-in, string-prefix, u32-eq), all of which must hold; a threshold over distinct listed signers; optionally an expiry (not-after-ledger N authorizes through ledger N − 1); and optionally a cap, when the function list is exactly <code>["transfer"]</code>. The payload names one rule per context, the account does not search, and a signer that no chosen rule names is refused.</p>
+    <p class="src">Paper §3 (sections/grants.tex), "Installing a grant" and "What a rule checks".</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§3 · Fig. 2 · Theorem 6" data-draw="window" aria-roledescription="slide" aria-label="The allowance meter">
+  <header class="head"><h2>The allowance meter</h2></header>
+  <div class="stage"><svg role="img" aria-label="An allowance meter over the last 100 ledgers. 6 XLM at ledger t is accepted; 5 more is refused; 4 at t plus 1 fills the 10 XLM allowance; 1 at t plus 99 is refused; at t plus 100 the 6 leaves the window and 5 is accepted, leaving 9."></svg></div>
+  <aside class="notes">
+    <p>For a cap of λ per P ledgers, the window at ledger L holds the charges made after L − P and through L. The decision that checks a call also charges it, contexts of one authorization that select the same rule see each other's charges, and a refusal changes nothing. The record lives in the account's storage and holds up to 907 spends; replacing a capped rule starts an empty window. Theorem 6 bounds every window from empty records.</p>
+    <p>The five events are Fig. 2's: +6 at t accepted; +5 at t refused (6 + 5 = 11 &gt; 10, record unchanged); +4 at t + 1 accepted (the limit is inclusive); +1 at t + 99 refused; at t + 100 the 6 leaves and +5 is accepted, leaving 9. The axis is compressed between t + 2 and t + 98.</p>
+    <p class="src">Paper §3 and Fig. 2 (sections/grants.tex; source/figures/fig-cap-window.steps.json); source/facts/example.json (cap-event-1 to cap-event-5); source/facts/limits.json (spends-per-window).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§3 · Theorem 4 (App. B)" data-draw="atten" aria-roledescription="slide" aria-label="Cutting a copy">
+  <header class="head"><h2>Cutting a copy</h2></header>
+  <div class="stage"><svg role="img" aria-label="The app's shop card is cut into a narrower copy for a helper, paying the same shop at most 2 XLM per 100 ledgers. Theorem 4: the copy opens no door the original does not. Installing a copy in the account is proposed."></svg></div>
+  <aside class="notes">
+    <p>Attenuation, modelled and not installable: a grant derived for a helper by rule-core's 10 attenuation steps allows no call its parent does not (Theorem 4). Caps and expiry narrow by trace inclusion (Theorem 5 of the verification companion), and neither bounds what parent and child spend together. The steps: drop a rule; remove or restrict functions; add an argument condition; remove signers or raise a threshold; add a cap, lower its limit or lengthen its period; set or lower the last ledger. No step changes a rule's target or generation. Installing an attenuated grant is proposed (§12).</p>
+    <p class="src">Paper §3 (sections/grants.tex, "Attenuation (modelled; not installable)"); Appendix B, Definition 5 and Theorem 4 (sections/repro.tex; source/statements.json T4).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§3 · §5 (G4)" data-draw="ending" aria-roledescription="slide" aria-label="When a card stops">
+  <header class="head"><h2>When a card stops</h2></header>
+  <div class="stage"><svg role="img" aria-label="A card stops at its expiry, by one owner call that deletes it, or, with every earlier card, when a recovery completes and the account moves one counter. Anyone may then clear a stale card's storage."></svg></div>
+  <aside class="notes">
+    <p>A grant stops at its expiry, by one owner call (<code>remove_grant</code>, which deletes its storage), or, with every earlier grant, when a recovery completes: a completed recovery moves one counter, and every earlier grant stops authorizing. Anyone may then remove a stale grant's storage with <code>gc_grant</code>, which refuses a current-generation grant. Recovery invalidation (G4) is proved in an account model (Theorem 10 of the verification companion), tested and run on testnet.</p>
+    <p class="src">Paper §3 (sections/grants.tex, "Ending a grant"); §1; §5 (sections/threat-model.tex, "Goals and trust").</p>
+  </aside>
+</section>
+
+<section class="slide" data-beyond="the stack since c593bac" data-draw="tree" aria-roledescription="slide" aria-label="One card, every node">
+  <header class="head"><h2>One card, every node</h2></header>
+  <div class="stage"><svg role="img" aria-label="The app's card opens the game room. Inside, a losing guess asks for the stake, a transfer from the account to the game, and the same card covers it only because it is asked from inside the game room. As a tree: the root game.guess passes the game rule; the nested transfer passes the transfer rule only if it is from the account itself, only to the game, within the cap, and its entry's root is exactly game.guess. The same transfer made directly, under another root, or to anyone other than the game, is refused."></svg></div>
+  <aside class="notes">
+    <p>Beyond the paper: exact entry roots arrived in the stack with commit c593bac ("constrain rules to exact entry roots"), after the paper's pin f0275f4; the paper lists "rules that require their entry's root" as proposed in §12.</p>
+    <p>Every node of an authorization tree is checked against the rule the payload names for it. In the guess scenario, <code>game.guess</code> calls <code>guesser.require_auth()</code>, and a loss pays the stake with the XLM token's <code>transfer(account, game, stake)</code> inside it, so the account's entry is <code>[game.guess, token.transfer]</code>. The grant has a <code>game</code> rule and a <code>transfer</code> rule. The root passes the game rule. The nested transfer passes the transfer rule only if it is from the account itself (is-self on argument 0), only to the game (address-eq on argument 1, as the Nido simulation's grant pins it; the <code>auth_root.rs</code> test grant leaves the recipient open), within the cap (argument 2 is charged to the window; in the test, 2 XLM per 100 ledgers with a 1 XLM stake, so the cap refuses a third loss), and its entry's root is exactly <code>game.guess</code> (the rule's <code>auth-root</code>). The same transfer made directly, or under another root, is refused, and in the Nido simulation a stake the game's owner redirects to itself is refused at the recipient check ("the payment must go to Game"). A win is paid by the game itself, so the account's entry holds only <code>game.guess</code> and uses no allowance. The root check names an exact contract and function; it does not inspect root arguments or other ancestors.</p>
+    <p class="src">crates/integration-tests/tests/auth_root.rs (Game::guess; signed_game_loss_and_win_and_document_round_trip; direct_under_cap_and_fabricated_game_root_are_refused; wrong_root_function_contract_omitted_root_auth_and_reordered_tree_are_refused; auth_free_router_keeps_entry_roots_and_caps_aggregate_across_entries); docs/auth-root.md; crates/perch-ir/src/doc.rs (AuthRoot); commit c593bac. bitswell/soroban-rule-core 5a689a5, crates/rule-eval/src/authorize.rs and rule.rs. Paper §12 (sections/agents.tex).</p>
+  </aside>
+</section>
+
+<section class="slide" data-beyond="Nido in soroban-sim" data-draw="nidorun" aria-roledescription="slide" aria-label="A Nido account, live">
+  <header class="head"><h2>A Nido account, live</h2></header>
+  <div class="stage stage-sim">
+    <svg role="img" aria-label="In the test building, offline: Nido's factory builds your account and a passkey stand-in holds its master key; the app's keycard is issued; in the game room a losing guess pays the stake, only to the game, and in the shop an order pays the shop, only the shop, each approved in the Nido sign dialog and checked node by node. Simulated: the passkey stand-in, the rebuilt factory, the EURC test token, the game and the shop."></svg>
+    <div class="frame-wrap"><span class="frame-wait">Loading the Nido simulation…</span><iframe data-src="../nido-sim/index.html?embed=1" title="Nido in soroban-sim: create an account, install a grant, play guess, buy a coffee"></iframe></div>
+    <p class="stage-links"><button class="act when-still" type="button" data-run>Run it here (5.4 MB)</button><button class="act ghost when-live" type="button" data-unrun>Back to the drawing</button><a class="act ghost" href="../nido-sim/index.html" target="_blank" rel="noopener">Open the Nido simulation</a></p>
+  </div>
+  <aside class="notes">
+    <p>Beyond the paper: a Nido account in soroban-sim, the way Nido creates one, running this stack's account. Creating it: a one-time setup key gives the address from Nido's factory before any passkey exists; a passkey stand-in, a software P-256 key, is created; the setup key signs a binding of the network, the factory and the passkey; <code>create_account</code> deploys the account, whose constructor installs one <code>admin</code> rule for the passkey through Perch's WebAuthn verifier. Installing the grant: the passkey signs <code>apply_grant</code> under the admin rule, for a game rule, an XLM transfer rule rooted at <code>game.guess</code> that pays only the game (2 XLM per 100 ledgers), a shop rule (<code>order</code>), and a test-EURC transfer rule rooted at <code>shop.order</code> that pays only the shop (10 EURC per 100 ledgers). Each transfer rule pins the recipient (<code>address-eq</code> on argument 1), so a payment to anyone else is refused by the rule. Using it: a losing guess is the tree <code>game.guess</code> → <code>XLM.transfer</code> (1 XLM); a win is <code>game.guess</code> alone; a coffee is <code>shop.order</code> → <code>EURC.transfer</code> (3.50 EURC). Each request opens the Nido sign dialog, whose preview runs the request in the page first; after approval the page shows each node's checks. The simulation runs Perch pinned at 2c64fe4, which still names the install call <code>apply_scope</code>, so its dialog shows the older name.</p>
+    <p>Simulated, and labelled so: the passkey stand-in, Nido's factory rebuilt to deploy this stack's account, the EURC test token, and the game and shop written for the demo. None of the page's contracts is a deployed one. "Run it here" loads the 5.4 MB page; its simulator compiles on the first press inside it. While the frame has focus, keys go to the frame; use the arrows at the bottom to move on.</p>
+    <p class="src">docs/nido-sim/index.html and README.md (what it runs, embedding, pins and hashes); nidohq/nido 97105a0b, contracts/factory/src/contract.rs (create_account); docs/auth-root.md; slide 10.</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§4 · Fig. 3" data-draw="desk" aria-roledescription="slide" aria-label="The front desk">
+  <header class="head"><h2>The front desk</h2></header>
+  <div class="stage"><svg role="img" aria-label="One authorization in six stations: arrival from the host, guards, looking up the named rule, the decision, the ID check by a verifier, and the logbook. The decision is proved; the host and verifiers are trusted; the rest is tested. A refusal at any station writes nothing, and the ID check runs only after the decision accepts."></svg></div>
+  <aside class="notes">
+    <p>Figure 3 follows one authorization through six stages: the account decides at one point, writes nothing on a refusal, and calls the verifier only after the decision accepts. Stage 4 is rule-core's <code>rule_eval::authorize</code>: it returns the next spending records or a refusal, reads no storage and checks no signature (Definition 3 is its model). The account reports refusals as auth error 3 (a stale grant) or 5 (any other). Stage 4 is the function the theorems cover; the other stages are tested account code, and the host is trusted.</p>
+    <p>What a signature binds: an external signer signs a digest of the host's payload, this account and the selected rule IDs. A delegated signer approves the host's payload, which omits the rule IDs, so a submitter may select any rule that lists the delegate; OpenZeppelin v0.8.0 binds them for both kinds.</p>
+    <p class="src">Paper §4 and Fig. 3 (sections/authorization.tex; source/figures/fig-auth-path.steps.json).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§5 · Table 1" data-draw="threat" aria-roledescription="slide" aria-label="Who holds the card">
+  <header class="head"><h2>Who holds the card</h2></header>
+  <div class="stage"><svg role="img" aria-label="Two adversaries: A1, the card holder, an app or agent key, honest or stolen; and A2, the courier who submits or relays requests. What holds: Theorems 2, 6 and 8, and a signature that names the chosen rules. What remains: every rule naming the key together, allowances per rule, and each call checked alone."></svg></div>
+  <aside class="notes">
+    <p>A grant has to hold against the app that holds it and against whoever submits its transactions: A1, the grantee's key, honest or stolen, and A2, a submitter or relayer. A1 can sign within rules naming its key, build any invocation tree, and choose among rules naming its key; what holds is Theorems 2, 6 and 8 (with signer authentication, selection and context conversion tested), and what remains is the union of authority across rules naming its key, caps per rule rather than per grant, each call checked alone, allowances and <code>execute</code>, approve through a token rule with no function list, and replacing a rule starting a new window. A2 can wrap signed entries, choose timing and fee, and resubmit a refused entry until its expiration ledger; an external signer's signature binds this account, the entry and the selected rule IDs (tested; a paper proof under signature and hash assumptions), while delegated signers do not bind rule IDs and a rule edited in place between signing and inclusion decides under its new contents.</p>
+    <p class="src">Paper §5 and Table 1 (sections/threat-model.tex; source/tables/tab-grantee.json).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§5" data-draw="trust" aria-roledescription="slide" aria-label="What the building trusts">
+  <header class="head"><h2>What the building trusts</h2></header>
+  <div class="stage"><svg role="img" aria-label="Trusted: the host and validators, the verifiers documents name, the adopted recovery controller, the document compiler, the compiler that builds the account and the wallet's display, with unforgeable signatures and a collision-resistant SHA-256 assumed. Goals: containment, permission soundness and window safety are proved for lowering and the decision, with the code around them tested; recovery invalidation is proved in an account model and tested; fail-closed refusal is tested."></svg></div>
+  <aside class="notes">
+    <p>Containment (G1), permission soundness (G2) and window safety (G3) are proved for lowering and the decision function, the code around them tested; fail-closed refusal (G6) is tested; recovery invalidation (G4) is proved in an account model (Theorem 10 of the verification companion), tested and run on testnet. The paper trusts the Soroban host and validators, the verifiers documents name, the adopted recovery controller, the document compiler, rustc and the wallet's display, and assumes unforgeable signature schemes (Ed25519; ECDSA P-256 for passkeys) and a collision-resistant SHA-256. Budgets across grants, effects outside authorization, confidentiality and verifier correctness are non-goals.</p>
+    <p class="src">Paper §5 (sections/threat-model.tex, "Goals and trust").</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§6" data-draw="guards" aria-roledescription="slide" aria-label="Guards at the door, or one desk">
+  <header class="head"><h2>Guards at the door, or one desk</h2></header>
+  <div class="stage"><svg role="img" aria-label="Both designs use OpenZeppelin context rules, judge each call alone and deny by default. OpenZeppelin with oz-policy-builder posts several separate guards at a rule's door: an interpreter that checks each call, a spending limit that keeps totals, and a threshold. Perch keeps one desk that holds every rule and the allowance meter."></svg></div>
+  <aside class="notes">
+    <p>Both designs build on OpenZeppelin's context rules, judge each call alone and deny by default. OpenZeppelin with oz-policy-builder composes a decision from contracts attached to a rule (interpreter, <code>spending_limit</code>, a threshold policy), each swappable and auditable on its own. Perch puts one document behind one decision point that holds every check and its state. Composition buys flexibility, such as a check that reads a live price, which a Perch rule cannot express; one decision point gives one place to check and to keep a limit's state. The interpreter "does not see what a transaction moved, keep rolling totals or count calls"; totals come from <code>spending_limit</code>, an opt-in policy that accepts <code>transfer</code> alone. A Perch window is part of the rule's decision (Theorem 6).</p>
+    <p class="src">Paper §6 (sections/compare.tex), "Shared ground, two arrangements" and "A limit over time".</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§6 · Table 2" data-draw="stronger" aria-roledescription="slide" aria-label="Where each is stronger">
+  <header class="head"><h2>Where each is stronger</h2></header>
+  <div class="stage"><svg role="img" aria-label="oz-policy-builder is ahead in maturity, authoring, and expressiveness and ecosystem. Perch is ahead in limits over time, one decision point, and a proved core. Five lessons for Perch follow."></svg></div>
+  <aside class="notes">
+    <p>oz-policy-builder is ahead in maturity (its status, external review and tests on real transactions in Table 2), authoring (record or declare, synthesise a predicate, test that each conjunct is needed, and verify it) and expressiveness and ecosystem (reads of other contracts, quantifiers, clock windows, batches related through an execution adapter, threshold policies, a deny code per reason, and rules on existing OpenZeppelin accounts, where a grant needs a Perch account). Perch is ahead in limits over time, one decision point, which refuses before any verifier runs and installs one grant across contracts, and a proved core; no formal model was found in oz-policy-builder's tree, which is tested, partly on the shipped Wasm.</p>
+    <p>Five lessons for Perch: a front end that records a transaction and emits a grant document for review; simulating a grant against the account's own decision function before install; minimality checks, and overlap checks that refuse a cap another rule naming the same key bypasses; a corpus of real transactions; and an audit before any claim of maturity.</p>
+    <p class="src">Paper §6 and Table 2 (sections/compare.tex; source/tables/tab-choose.json).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§7" data-draw="sim" aria-roledescription="slide" aria-label="A full-size test building">
+  <header class="head"><h2>A full-size test building</h2></header>
+  <div class="stage stage-sim">
+    <svg role="img" aria-label="soroban-sim runs both designs' real contract code offline in one host: the OpenZeppelin v0.8.0 account with policy-interpreter and spending_limit, and the Perch account with its document compiler and an Ed25519 verifier, each beside the XLM contract. The same request goes to both."></svg>
+    <p class="stage-links"><a href="../perch-paper/sim/index.html" target="_blank" rel="noopener">Open the simulation (4.9 MB, offline)</a></p>
+  </div>
+  <aside class="notes">
+    <p>soroban-sim runs the contract code of both designs offline in one host. Each design gets a session on soroban-env-host 29.0.2 at protocol 29, applying with enforcing authorization in a recording-mode build: OpenZeppelin's v0.8.0 account with oz-policy-builder's <code>policy-interpreter</code> and <code>spending_limit</code>, or the Perch account with its document compiler and an Ed25519 verifier, each beside the native XLM contract, rebuilt from the pinned sources (only the OpenZeppelin side matches a deployment). The OpenZeppelin predicate pins the recipient and bounds each transfer at 10 XLM, with <code>spending_limit</code> adding 10 XLM per 100 ledgers; Perch runs the shop grant. The OpenZeppelin side signs as a delegated account, since oz-policy-builder refuses external signers on policed rules, hence 2 authorization entries to Perch's 1. Real contract bytes run offline and deterministically, every verdict carries a trace, and native, WASI and browser runs return byte-identical replies, timings removed. No instruction counts are reported.</p>
+    <p class="src">Paper §7 (sections/simulation.tex), "What runs" and "Why soroban-sim".</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§7 · Table 3" data-draw="run" aria-roledescription="slide" aria-label="The recorded run">
+  <header class="head"><h2>The recorded run</h2></header>
+  <div class="stage"><svg role="img" aria-label="Recorded run. Both designs pay 6 XLM and refuse 5 more. With spending_limit removed, the OpenZeppelin account applies three more 6 XLM payments, 18 XLM, while Perch refuses all three. Balances fall to 76 and 94 XLM."></svg></div>
+  <aside class="notes">
+    <p>A 6-XLM payment applies in both designs. The 5 XLM that follows is refused in both: Perch's trace shows <code>__check_auth</code> refusing with no verifier call, the OpenZeppelin account's shows <code>spending_limit</code> refusing (3221). With <code>spending_limit</code> removed, the OpenZeppelin account applies each of three 6-XLM sends under the per-call bound (18 XLM), as oz-policy-builder documents, while Perch refuses all three because its window holds 6. Re-adding <code>spending_limit</code> starts an empty history, as replacing a Perch rule starts an empty window. Another recipient, a forged signature and a key not on the rule are refused by both; 100 ledgers later, 5 XLM applies in both.</p>
+    <p class="src">Paper §7 and Table 3 (sections/simulation.tex; source/figures/tab-sim.table.json; source/figures/fig-sim.run.json, steps 2–8).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§8 · Theorem 1 (App. B)" data-draw="inspector" aria-roledescription="slide" aria-label="The inspector">
+  <header class="head"><h2>The inspector</h2></header>
+  <div class="stage"><svg role="img" aria-label="The desk's decision rule, as written, is traced by machine into a form a proof checker reads. An inspector compares the tracing with a readable blueprint. Theorem 1: on every input the tracing gives the blueprint's answer and never jams. The lock as built is not inspected."></svg></div>
+  <aside class="notes">
+    <p>The decision function is about 2,400 lines of no_std Rust in rule-core. Charon reads its MIR and Aeneas translates it into Lean; CI regenerates the translation, fails on any difference, and pins all 940 exported theorems to Lean's standard axioms. Proved means kernel-checked. The proofs trust the Lean kernel and its standard axioms, Charon, Aeneas and its Lean model of Rust primitives, rustc's MIR, and the specification, including the denotations.</p>
+    <p>Theorem 1 (Appendix B): on every input the translated evaluator succeeds, never panicking or diverging, and its value denotes the model's result on the denoted inputs; it says nothing about allocation failure or compiled Wasm.</p>
+    <p class="src">Paper §8 (sections/proofs.tex), "The evaluator and its translation" and "What the proofs trust"; Appendix B, Theorem 1 (source/statements.json T1); source/facts/proofs.json (rule-eval-lines, exported-theorems).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§8 · Theorem 2" data-draw="t2" aria-roledescription="slide" aria-label="Theorem 2: acceptance implies permission">
+  <header class="head"><h2>Acceptance implies permission</h2></header>
+  <div class="stage"><svg role="img" aria-label="Theorem 2. If the desk accepts a request, every door in it is allowed by a line on the cards it was given, for the signers it was given."></svg></div>
+  <aside class="notes">
+    <p>Theorem 2: if evaluation accepts, the selected rule set allows every supplied context for the signer list it was given. The theorem takes that list as an input; the account authenticates it (obligation O1). Proved for the model and the translation.</p>
+    <p class="src">Paper §8, Theorem 2 (sections/proofs.tex; source/statements.json T2).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§8 · Theorem 6" data-draw="t6" aria-roledescription="slide" aria-label="Theorem 6: cap-window safety">
+  <header class="head"><h2>Cap-window safety</h2></header>
+  <div class="stage"><svg role="img" aria-label="Theorem 6. From an empty record, however the payments are timed, no window of P ledgers holds more than the allowance in accepted charges."></svg></div>
+  <aside class="notes">
+    <p>Theorem 6: from empty records, in any run, counting its accepted authorizations, the charges made to a capped rule with a non-negative limit after L − P and through L sum to at most its limit, for every ledger L. The model also bounds every P consecutive ledgers that start at ledger 1 or later, and those from ledger 0 when no authorization is at ledger 0; without that hypothesis it fails from ledger 0. Proved for the model and the translation (the second part for the model only).</p>
+    <p class="src">Paper §8, Theorem 6 (sections/proofs.tex; source/statements.json T6).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§8 · Theorem 8" data-draw="t8" aria-roledescription="slide" aria-label="Theorem 8: grant target containment">
+  <header class="head"><h2>Grant target containment</h2></header>
+  <div class="stage"><svg role="img" aria-label="Theorem 8. No card the account installs, nor any copy cut from it, opens a door to the account itself or to its adopted recovery contracts."></svg></div>
+  <aside class="notes">
+    <p>Theorem 8: the rule set the account installs for a grant document, under its address, its excluded set and its generation, allows no call to the account or to an element of the excluded set, and attenuation preserves this. In the account, the excluded set is its adopted recovery controller and the zero-knowledge adapter and pool of its recovery configuration. Proved for the model and the translation, for rules whose argument conditions fit the evaluator's bounded vectors.</p>
+    <p class="src">Paper §8, Theorem 8 (sections/proofs.tex; source/statements.json T8).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§9" data-draw="eval" aria-roledescription="slide" aria-label="Evaluation">
+  <header class="head"><h2>Evaluation</h2></header>
+  <div class="stage"><svg role="img" aria-label="57 traces from the model run through the natively compiled account, every verdict and record matching. 11 testnet transactions through Nido's preview. A passkey-signed transfer paid 12,889 stroops. An account holding the game's grant pays 1.677 XLM a year in rent."></svg></div>
+  <aside class="notes">
+    <p>RQ1, enforcement: Perch's tests run 57 Lean-generated traces through the natively compiled account and check every verdict and spending record against the model. In the recorded run each Perch verdict is the one the shop grant specifies, and the designs agreed except on the three sends after the owner removed <code>spending_limit</code>.</p>
+    <p>Testnet preview: on 5 November 2026, a scripted run of Nido's preview with virtual passkeys made 11 testnet transactions, among them a game's two-rule grant, two lost guesses and a one-guardian recovery to completion; the wallet, not the chain, declined a third guess over the cap. Cost, Perch only: a passkey-signed transfer through a grant paid a testnet fee of 12,889 stroops, WebAuthn verification included; a fresh preview account holding the game's grant, after two capped transfers (3,308 bytes), pays 1.677 XLM a year in rent at the floor rate. Threats to validity: one task; one host version, recording-mode, without exact metering; signer kinds that differ by necessity; testnet resets, with envelopes not yet archived; and a game run from a branch with an uncommitted patch.</p>
+    <p class="src">Paper §9 (sections/evaluation.tex); source/facts/testnet.json, proofs.json.</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§10" data-draw="limits" aria-roledescription="slide" aria-label="Limitations">
+  <header class="head"><h2>Limitations</h2></header>
+  <div class="stage"><svg role="img" aria-label="The inspector certified the tracing, not the lock as built; the specification is trusted; the shell around the desk is tested; no single theorem covers the whole path. A record holds at most 907 spends, two pre-signed installs can land in either order, and a document holds at most 10 rules, 8 signers and 8,192 bytes. Nothing is audited."></svg></div>
+  <aside class="notes">
+    <p>The theorems concern the translation, not the Wasm rustc builds; the specification is trusted; the shell is tested; and no single theorem covers the whole authorization path. Table 1 lists what a grantee or a relayer can still do. Beyond it, a record holds at most 907 spends; two pre-signed installs for one grant can land in either order; and document caps (10 rules, 8 signers, 8,192 canonical bytes) bound what a grant can say. Nothing is audited; the owner key, recovery and the trusted components are in the vision companion.</p>
+    <p class="src">Paper §10 (sections/limits.tex); source/facts/limits.json.</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§11" data-draw="related" aria-roledescription="slide" aria-label="Related work">
+  <header class="head"><h2>Related work</h2></header>
+  <div class="stage"><svg role="img" aria-label="A limit that resets at each period's start lets spends either side of a reset reach twice the cap within one period's length; a sliding window is bounded wherever it is placed. Cards a holder carries can be cut down but cannot carry past spending, so the meter lives in the building."></svg></div>
+  <aside class="notes">
+    <p>Hardy's confused deputy motivates designating authority explicitly, as capability systems do. SPKI/SDSI, macaroons, Biscuit and UCAN attenuate tokens a holder carries; a windowed cap needs past spending, which a token cannot carry without an external store, and in Schneider's terms makes the decision a stateful execution monitor. On EVM chains, ERC-4337 and ERC-7579 validators and hooks play the role of OpenZeppelin policies, ERC-7710 and ERC-7715 carry delegations and permission requests, and Zodiac Roles scopes a role to targets, functions and parameter conditions with refilling allowances. MetaMask's delegation framework caps transfers per fixed period, resetting at each period's start, so spends either side of a reset can reach twice the cap within one period's length; a Perch window (L − P, L] is bounded for every L (Theorem 6). In XACML's terms, Perch links its decision point into the account. Cedar links a Lean model to its Rust by differential testing; Perch proves a translation of its Rust equivalent to a model. oz-policy-builder's synthesis relates to policy mining. Sunbeam and Komet reason about compiled Wasm, which complements a proof about a translation.</p>
+    <p class="src">Paper §11 (sections/related.tex).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§12" data-proposed data-draw="future" aria-roledescription="slide" aria-label="Future work">
+  <header class="head"><h2>Future work</h2></header>
+  <div class="stage"><svg role="img" aria-label="Proposed: an agent runtime with delegation-tree budgets; an account entry point that installs cut copies; rules that require their entry's root; and Cedar as an authoring language."></svg></div>
+  <aside class="notes">
+    <p>Everything here is proposed: an agent runtime with delegation-tree budgets; an account entry point for attenuated grants; rules that require their entry's root (drafts Perch #69 and rule-core #17); and Cedar as an authoring language. The vision companion details each.</p>
+    <p class="src">Paper §12 (sections/agents.tex).</p>
+  </aside>
+</section>
+
+<section class="slide" data-ref="§13" data-draw="conclusion" aria-roledescription="slide" aria-label="Conclusion">
+  <header class="head"><h2>Conclusion</h2></header>
+  <div class="stage"><svg role="img" aria-label="Perch decides an app's grant at one desk and charges its allowance meter in that decision. The tracing of the decision is proved to match a model and keep the three bounds; the shell is tested; nothing is audited. The designs differed only where the owner removed the limit over time. oz-policy-builder is ahead in maturity, authoring and expressiveness. Next: merge the stack, complete an audit, and measure both designs with exact metering."></svg></div>
+  <aside class="notes">
+    <p>Perch decides an app's grant at one point in the account and charges its spending window in that decision. The decision function's translation is proved to match a model and to keep the claim's three bounds; the shell is tested, and nothing is audited. In the recorded soroban-sim run, the two designs' verdicts differed only where the owner removed the limit over time. oz-policy-builder is ahead in maturity, authoring and expressiveness, and Perch should learn from it. What remains is to merge the stack, complete an audit, and measure both designs with exact metering.</p>
+    <p class="src">Paper §13 (sections/conclusion.tex).</p>
+  </aside>
+</section>
+
+<section class="slide slide-close" data-ref="App. A" aria-roledescription="slide" aria-label="Artifacts">
+  <header class="head"><h2>Artifacts</h2></header>
+  <div class="stage">
+    <p class="pins"><span>Perch <code>f0275f4</code></span><span>the decision core <code>cbabe59</code></span><span>soroban-sim <code>d029384</code> (host 29.0.2)</span><span>OpenZeppelin <code>v0.8.0</code></span><span>oz-policy-builder <code>43b13ed</code></span><span>the proof checker <code>v4.35.0</code></span></p>
+    <ul class="links">
+      <li><a class="lk" href="../perch-paper/latex/perch-paper.pdf"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M10 4h15l7 7v25H10z"/><path d="M25 4v7h7M15 18h12M15 24h12M15 30h8"/></svg><span class="lk-t">The paper (PDF)</span><span class="lk-s">the academic edition this deck follows</span></a></li>
+      <li><a class="lk" href="../perch-paper/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="6" width="32" height="28" rx="3"/><path d="M4 13h32M10 20h20M10 26h14"/></svg><span class="lk-t">The paper (HTML)</span><span class="lk-s">with the sign dialog and the simulation</span></a></li>
+      <li><a class="lk" href="../perch-paper/verification/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="17" cy="17" r="11"/><path d="M25 25l10 10M12 17l4 4 7-8"/></svg><span class="lk-t">What Perch proves</span><span class="lk-s">all 13 theorems and 9 definitions</span></a></li>
+      <li><a class="lk" href="../perch-paper/oz-policy-builder/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="8" width="14" height="24" rx="3"/><rect x="22" y="8" width="14" height="24" rx="3"/><path d="M8 16h6M8 22h6M26 16h6M26 22h6"/></svg><span class="lk-t">Perch and oz-policy-builder</span><span class="lk-s">the comparison, a source per cell</span></a></li>
+      <li><a class="lk" href="../perch-paper/vision/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 34V14L20 5l14 9v20z"/><path d="M16 34V24h8v10"/></svg><span class="lk-t">The Perch vision</span><span class="lk-s">recovery, agents, the full account</span></a></li>
+      <li><a class="lk" href="../perch-paper/sim/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="3" y="6" width="34" height="28" rx="3"/><path d="M3 13h34"/><rect x="8" y="18" width="11" height="11" rx="2"/><rect x="21" y="18" width="11" height="11" rx="2"/></svg><span class="lk-t">The simulation</span><span class="lk-s">both designs in soroban-sim</span></a></li>
+      <li><a class="lk" href="../nido-sim/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 34V14L20 5l14 9v20z"/><rect x="15" y="20" width="10" height="14" rx="1"/><circle cx="31" cy="30" r="3"/></svg><span class="lk-t">Nido in soroban-sim</span><span class="lk-s">an account, a grant, guess and a coffee</span></a></li>
+      <li><a class="lk" href="../perch-deck/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="8" width="32" height="22" rx="3"/><path d="M20 30v5M13 35h14"/></svg><span class="lk-t">The Perch deck</span><span class="lk-s">the HTML paper's story, in slides</span></a></li>
+    </ul>
+    <p class="close-foot">Willem Wyndham and Elizabeth Engelman · The Aha Company</p>
+  </div>
+  <aside class="notes">
+    <p>Appendix A pins every source: Perch f0275f4 (the earlier design on mainnet at c135aca), rule-core cbabe59, soroban-sim d029384 with soroban-env-host 29.0.2, OpenZeppelin stellar-contracts v0.8.0 (ddc327e) and oz-policy-builder 43b13ed, and lists the SHA-256 of the simulation page, its reference run and replies, and every contract's Wasm. rule-core's proofs reproduce with Charon 7b462d9, Aeneas ab34bd2 and Lean v4.35.0. CI builds the PDF and publishes it beside the HTML paper.</p>
+    <p class="src">Paper Appendix A (sections/repro.tex); docs/perch-paper/README.md.</p>
+  </aside>
+</section>
+
+</main>
+
+<aside id="notes-panel" hidden aria-label="Speaker notes"></aside>
+
+<nav class="chrome" aria-label="Deck controls">
+  <button class="btn" id="prev" aria-label="Previous slide"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <ol class="marks" id="marks"></ol>
+  <span class="count" id="count" aria-live="polite"></span>
+  <button class="btn" id="notes-btn" aria-label="Speaker notes" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/><path d="M8.5 9h7M8.5 12h4.5"/></svg></button>
+  <button class="btn" id="theme-btn" aria-label="Switch theme"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5a7.5 7.5 0 0 0 0 15z" fill="currentColor"/></svg></button>
+  <button class="btn" id="next" aria-label="Next slide"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+  <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+</nav>
+
+<script>
+(() => {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+function E(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  if (attrs) for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const f2 = n => Math.round(n * 100) / 100;
+const root = document.documentElement;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+const still = () => reduce.matches || root.classList.contains('still');
+
+/* ---------- the inspector's seal: a guilloché rosette from illustrative bytes ---------- */
+const SEAL = '7c3e05b19ad24f86e1307bc5d9a2e46f8b1d0c97e35a2f6408bd71c3e9a5f02d';
+function buildSeal(id, hex, dense) {
+  const defs = $('#defs defs');
+  const sym = E('symbol', { id, viewBox: '-100 -100 200 200', overflow: 'visible' }, defs);
+  const b = Array.from({ length: 32 }, (_, i) => parseInt(hex.substr(i * 2, 2), 16));
+  let d = '';
+  for (let i = 0; i < 32; i++) {
+    const a = i / 32 * Math.PI * 2 - Math.PI / 2, r2 = 90 + 10 * b[i] / 255;
+    d += `M${f2(86 * Math.cos(a))} ${f2(86 * Math.sin(a))}L${f2(r2 * Math.cos(a))} ${f2(r2 * Math.sin(a))}`;
+  }
+  E('path', { d, class: 's-tick' }, sym);
+  E('circle', { r: 83, class: 's-ring' }, sym);
+  E('circle', { r: 6, class: 's-ring' }, sym);
+  const bands = dense ? [[30, 0], [50, 10], [68, 20]] : [[38, 0], [64, 12]];
+  const copies = dense ? 11 : 6, N = dense ? 480 : 280;
+  bands.forEach(([r0, o]) => {
+    const amp = 4.5 + 9 * b[o] / 255, k = 3 + (b[o + 1] % 9) + Math.round(r0 / 22), m = 1 + (b[o + 2] % 5);
+    const mod = .1 + .6 * b[o + 3] / 255, ph = b[o + 4] / 255 * Math.PI * 2;
+    for (let c = 0; c < copies; c++) {
+      const sh = c / copies * Math.PI * 2;
+      let p = '';
+      for (let i = 0; i <= N; i++) {
+        const t = i / N * Math.PI * 2, r = r0 + amp * Math.sin(k * t + sh) * (1 + mod * Math.sin(m * t + ph));
+        p += (i ? 'L' : 'M') + f2(r * Math.cos(t)) + ' ' + f2(r * Math.sin(t));
+      }
+      E('path', { d: p + 'Z', class: 's-wave' }, sym);
+    }
+  });
+}
+buildSeal('seal-A', SEAL, true);
+buildSeal('seal-A-mini', SEAL, false);
+
+/* ---------- icons, in a 60-unit box centred on 0,0 ---------- */
+const scallop = (() => {
+  let d = '';
+  for (let i = 0; i <= 14; i++) {
+    const a = i / 14 * Math.PI * 2, am = (i - .5) / 14 * Math.PI * 2;
+    d += i ? `Q${f2(25 * Math.cos(am))} ${f2(25 * Math.sin(am))} ${f2(19 * Math.cos(a))} ${f2(19 * Math.sin(a))}` : `M${f2(19 * Math.cos(a))} ${f2(19 * Math.sin(a))}`;
+  }
+  return d + 'Z';
+})();
+const ICONS = {
+  key: [['circle', { cx: -14, cy: 0, r: 9 }], ['path', { d: 'M-5 0H26M18 0V8M24 0V6' }]],
+  master: [['circle', { cx: -14, cy: 0, r: 11 }], ['circle', { cx: -14, cy: 0, r: 4 }], ['path', { d: 'M-3 0H26M14 0V9M20 0V7M26 0V9' }]],
+  person: [['circle', { cx: 0, cy: -10, r: 9 }], ['path', { d: 'M-18 22C-18 5 18 5 18 22' }]],
+  agent: [['rect', { x: -17, y: -20, width: 34, height: 26, rx: 8 }], ['path', { d: 'M0 -20V-26M-21 26V22C-21 15 21 15 21 22V26M-8 -1H8' }], ['circle', { cx: -7, cy: -10, r: 2.6 }], ['circle', { cx: 7, cy: -10, r: 2.6 }], ['circle', { cx: 0, cy: -28, r: 2.4 }]],
+  courier: [['circle', { cx: -6, cy: -12, r: 8 }], ['path', { d: 'M-22 22C-22 6 10 6 10 22' }], ['rect', { x: 6, y: -2, width: 20, height: 14, rx: 2 }], ['path', { d: 'M6 -1L16 6L26 -1' }]],
+  guard: [['circle', { cx: 0, cy: -6, r: 8 }], ['path', { d: 'M-12 -13H12L8 -21H-8ZM-18 24C-18 8 18 8 18 24' }]],
+  desk: [['circle', { cx: 0, cy: -15, r: 8 }], ['path', { d: 'M-15 4C-15 -5 15 -5 15 4M-28 4H28V24H-28ZM-28 10H28' }]],
+  door: [['rect', { x: -15, y: -26, width: 30, height: 52, rx: 2 }], ['circle', { cx: 8, cy: 2, r: 2.5 }]],
+  lock: [['rect', { x: -15, y: -4, width: 30, height: 26, rx: 5 }], ['path', { d: 'M-9 -4V-12A9 9 0 0 1 9 -12V-4' }], ['circle', { cx: 0, cy: 8, r: 2.6 }]],
+  unlock: [['rect', { x: -15, y: -4, width: 30, height: 26, rx: 5 }], ['path', { d: 'M-9 -4V-12A9 9 0 0 1 9 -17' }], ['circle', { cx: 0, cy: 8, r: 2.6 }]],
+  building: [['path', { d: 'M-24 26V-8L0 -26L24 -8V26ZM-7 26V10H7V26M-16 -4H-8V4H-16ZM8 -4H16V4H8Z' }]],
+  card: [['rect', { x: -25, y: -16, width: 50, height: 32, rx: 5 }], ['path', { d: 'M-25 -7H25' }], ['rect', { x: -19, y: 1, width: 10, height: 8, rx: 2 }]],
+  doc: [['path', { d: 'M-16 -24H8L18 -14V24H-16ZM8 -24V-14H18M-8 -4H10M-8 4H10M-8 12H4' }]],
+  blueprint: [['rect', { x: -24, y: -20, width: 48, height: 40, rx: 2 }], ['path', { d: 'M-24 -6H24M-24 8H24M-8 -20V20M8 -20V20' }]],
+  magnifier: [['circle', { cx: -5, cy: -5, r: 15 }], ['path', { d: 'M6 6L22 22' }]],
+  clock: [['circle', { r: 21 }], ['path', { d: 'M0 -12V0L9 6' }]],
+  scissors: [['circle', { cx: -11, cy: 14, r: 7 }], ['circle', { cx: 11, cy: 14, r: 7 }], ['path', { d: 'M-6 9L14 -24M6 9L-14 -24' }]],
+  shop: [['path', { d: 'M-24 -8H24L20 -22H-20ZM-20 -8V22H20V-8M-6 22V8H6V22M-24 -8C-24 -2 -12 -2 -12 -8C-12 -2 0 -2 0 -8C0 -2 12 -2 12 -8C12 -2 24 -2 24 -8' }]],
+  bell: [['path', { d: 'M-14 10V-2C-14 -11 -8 -17 0 -17C8 -17 14 -11 14 -2V10L18 14H-18ZM-5 18C-4 22 4 22 5 18' }]],
+  list: [['rect', { x: -18, y: -24, width: 36, height: 48, rx: 4 }], ['path', { d: 'M-10 -10H10M-10 0H10M-10 10H4' }]],
+  people: [['circle', { cx: -9, cy: -10, r: 7 }], ['circle', { cx: 11, cy: -8, r: 6 }], ['path', { d: 'M-24 20C-24 4 6 4 6 20M4 6C8 2 24 2 26 18' }]],
+  meter: [['rect', { x: -26, y: -9, width: 52, height: 18, rx: 4 }], ['path', { d: 'M-26 -15V-20M0 -15V-20M26 -15V-20' }]],
+  tree: [['path', { d: 'M0 -18L-13 -2M0 -18L13 -2M-13 -2L-20 16M-13 -2L-6 16M13 -2L6 16M13 -2L20 16' }]],
+  stamp: [['path', { d: scallop }], ['circle', { r: 10 }]],
+  check: [['path', { d: 'M-14 1L-4 12L16 -12' }]],
+  cross: [['path', { d: 'M-12 -12L12 12M12 -12L-12 12' }]],
+  hourglass: [['path', { d: 'M-11 -20H11L-11 20H11Z' }]],
+  gear: [['circle', { r: 9 }], ['path', { d: 'M0 -22V-15M0 15V22M-22 0H-15M15 0H22M-15.5 -15.5L-10.6 -10.6M10.6 10.6L15.5 15.5M-15.5 15.5L-10.6 10.6M10.6 -10.6L15.5 -15.5' }]],
+  network: [['circle', { cx: 0, cy: -16, r: 7 }], ['circle', { cx: -18, cy: 14, r: 7 }], ['circle', { cx: 18, cy: 14, r: 7 }], ['path', { d: 'M-4 -10L-14 8M4 -10L14 8M-11 14H11' }]],
+  controller: [['rect', { x: -26, y: -18, width: 52, height: 36, rx: 6 }], ['path', { d: 'M-12 9A12 12 0 0 1 12 9M0 9L7 -2' }]],
+  screen: [['rect', { x: -24, y: -18, width: 48, height: 32, rx: 4 }], ['path', { d: 'M0 14V22M-10 22H10' }]],
+};
+const TREE_DOTS = [[0, -18], [-13, -2], [13, -2], [-20, 16], [-6, 16], [6, 16], [20, 16]];
+
+/* ---------- drawing context ---------- */
+class Ctx {
+  constructor(svg, tall) {
+    this.svg = svg; this.tall = tall; this.layer = svg;
+    this.t = 150; this.step = 60;
+    this.fs = tall ? 36 : 27;
+    this.sw = tall ? 3.4 : 2.4;
+  }
+  at(ms) { this.t = ms; return this; }
+  group(tf, cls) { const g = E('g', tf ? { transform: tf } : null, this.svg); if (cls) g.setAttribute('class', cls); this.layer = g; return g; }
+  reset() { this.layer = this.svg; }
+  _d(o) {
+    if (o && o.d != null) return o.d;
+    const d = this.t;
+    this.t += (o && o.step != null) ? o.step : this.step;
+    return d;
+  }
+  _paint(e, o, d) {
+    const k = o.k || 'ink';
+    const cls = ['st', 'k-' + k];
+    let anim = k === 'pencil' ? 'an-march' : 'an-draw';
+    if (o.fill) { cls.push('fl-' + o.fill); anim = k === 'pencil' ? 'an-march' : 'an-fade'; }
+    if (o.anim) anim = o.anim;
+    if (anim !== 'none') cls.push(anim);
+    if (o.cls) cls.push(o.cls);
+    e.setAttribute('class', cls.join(' '));
+    e.setAttribute('stroke-width', o.w != null ? o.w * (o.raw ? 1 : this.sw) : this.sw);
+    if (o.fillOp != null) e.setAttribute('fill-opacity', o.fillOp);
+    if (o.op != null) e.setAttribute('opacity', o.op);
+    e.style.setProperty('--d', d + 'ms');
+    return e;
+  }
+  line(x1, y1, x2, y2, o = {}) { return this._paint(E('line', { x1, y1, x2, y2 }, o.p || this.layer), o, this._d(o)); }
+  path(d, o = {}) { return this._paint(E('path', { d }, o.p || this.layer), o, this._d(o)); }
+  circle(cx, cy, r, o = {}) { return this._paint(E('circle', { cx, cy, r }, o.p || this.layer), o, this._d(o)); }
+  rect(x, y, w, h, o = {}) { return this._paint(E('rect', { x, y, width: w, height: h, rx: o.rx || 0 }, o.p || this.layer), o, this._d(o)); }
+  text(x, y, s, o = {}) {
+    const size = this.fs * (o.size || 1);
+    const t = E('text', { x, y, 'font-size': f2(size), 'text-anchor': o.anchor || 'middle' }, o.p || this.layer);
+    if (o.base) t.setAttribute('dominant-baseline', o.base);
+    const cls = ['tx'];
+    if (o.anim !== 'none') cls.push(o.anim || 'an-fade');
+    if (o.k) cls.push('c-' + o.k);
+    if (o.font) cls.push('f-' + o.font);
+    t.setAttribute('class', cls.join(' '));
+    if (o.weight) t.setAttribute('font-weight', o.weight);
+    if (o.italic) t.setAttribute('font-style', 'italic');
+    if (o.ls != null) t.setAttribute('letter-spacing', o.ls);
+    t.textContent = s;
+    t.style.setProperty('--d', this._d(o) + 'ms');
+    return t;
+  }
+  lines(x, y, arr, o = {}) { const gap = o.gap || this.fs * (o.size || 1) * 1.32; arr.forEach((s, i) => this.text(x, y + i * gap, s, { ...o, step: o.step != null ? o.step : 40 })); }
+  tw(s, o = {}) { return s.length * this.fs * (o.size || 1) * (o.font === 'code' ? .6 : .53); }
+  chip(x, y, s, o = {}) {
+    const size = (o.size || .8);
+    const w = this.tw(s, { size, font: o.font }) + this.fs * .9, h = this.fs * size * 1.75;
+    const d = this._d(o);
+    this.rect(x - w / 2, y - h / 2, w, h, { k: o.k || 'soft', rx: o.rx != null ? o.rx : 5, w: o.w || .55, d, fill: o.fill, fillOp: o.fillOp, p: o.p, anim: o.k === 'pencil' ? 'an-march' : 'an-fade' });
+    this.text(x, y + 1, s, { size, k: o.tk, font: o.font, base: 'central', d: d + 120, p: o.p });
+    return w;
+  }
+  seal(x, y, r, o = {}) {
+    const id = 'seal-A' + (r * (this.tall ? .45 : .85) < 60 ? '-mini' : '');
+    const d = this._d(o);
+    if (o.bg) this._paint(E('circle', { cx: x, cy: y, r: r * 1.04 }, o.p || this.layer), { k: 'faint', fill: 'paper', w: .4, anim: 'an-fade' }, d);
+    const at = E('g', { transform: `translate(${f2(x)} ${f2(y)})` }, o.p || this.layer);
+    const g = E('g', null, at);
+    g.setAttribute('class', 'seal-use an-seal');
+    g.style.setProperty('--d', d + 'ms');
+    E('use', { href: '#' + id, x: -r, y: -r, width: 2 * r, height: 2 * r }, g);
+    return at;
+  }
+  icon(name, x, y, s, o = {}) {
+    const sc = s / 60;
+    const g = E('g', { transform: `translate(${x} ${y}) scale(${f2(sc)})` }, o.p || this.layer);
+    const d = this._d(o);
+    const k = o.k || 'ink';
+    const ik = k === 'pencil' ? 'pencilhead' : k;
+    const dot = { soft: 'soft', brass: 'brass', plan: 'plan', stop: 'stop', pencil: 'soft' }[k] || 'ink';
+    (ICONS[name] || []).forEach(([tag, a]) => {
+      const e = E(tag, a, g);
+      const small = tag === 'circle' && a.r != null && a.r < 3;
+      this._paint(e, { k: ik, w: this.sw / sc * (o.w || 1), raw: true, fill: small ? dot : o.fill, fillOp: small ? null : o.fillOp, anim: o.anim || (k === 'pencil' ? 'an-fade' : null) }, d);
+    });
+    if (name === 'tree') TREE_DOTS.forEach(([cx, cy]) => this._paint(E('circle', { cx, cy, r: 3 }, g), { k: ik, fill: dot, w: this.sw / sc, raw: true, anim: 'an-fade' }, d));
+    return g;
+  }
+  head(x, y, ang, o = {}) {
+    const L = this.tall ? 17 : 13;
+    const a1 = ang + Math.PI - .45, a2 = ang + Math.PI + .45;
+    return this.path(`M${f2(x + L * Math.cos(a1))} ${f2(y + L * Math.sin(a1))}L${f2(x)} ${f2(y)}L${f2(x + L * Math.cos(a2))} ${f2(y + L * Math.sin(a2))}`, { ...o, k: o.k === 'pencil' ? 'pencilhead' : o.k, anim: 'an-fade' });
+  }
+  arrow(x1, y1, x2, y2, o = {}) {
+    const d = this._d(o);
+    this.line(x1, y1, x2, y2, { ...o, d });
+    this.head(x2, y2, Math.atan2(y2 - y1, x2 - x1), { ...o, d: d + 500 });
+  }
+  curve(x1, y1, x2, y2, o = {}) {
+    const dir = o.dir || 'h';
+    let c1, c2;
+    if (dir === 'h') { const mx = (x1 + x2) / 2; c1 = [mx, y1]; c2 = [mx, y2]; }
+    else { const my = (y1 + y2) / 2; c1 = [x1, my]; c2 = [x2, my]; }
+    const d = this._d(o);
+    const p = this.path(`M${f2(x1)} ${f2(y1)}C${f2(c1[0])} ${f2(c1[1])} ${f2(c2[0])} ${f2(c2[1])} ${f2(x2)} ${f2(y2)}`, { ...o, d });
+    if (o.head) this.head(x2, y2, Math.atan2(y2 - c2[1], x2 - c2[0]), { ...o, d: d + 600 });
+    return p;
+  }
+  check(x, y, s, o = {}) { return this.icon('check', x, y, s, { ...o, w: o.w || 1.5 }); }
+  cross(x, y, s, o = {}) { return this.icon('cross', x, y, s, { ...o, w: 1.4 }); }
+  // A keycard with its limits printed on it; returns the group to print on.
+  keycard(x, y, w, h, o = {}) {
+    const k = o.k || 'brass';
+    const g = E('g', { transform: `translate(${f2(x)} ${f2(y)})${o.rot ? ` rotate(${o.rot})` : ''}` }, o.p || this.layer);
+    if (o.rise) { g.setAttribute('class', 'an-rise'); g.style.setProperty('--d', this._d({ step: 0 }) + 'ms'); }
+    const d = this._d(o);
+    const an = o.rise ? 'none' : null;
+    this.rect(0, 0, w, h, { k, rx: Math.min(18, h * .09), w: o.w || 1.1, fill: 'paper', p: g, d, anim: an || (k === 'pencil' ? 'an-march' : 'an-fade') });
+    this.rect(0, h * .13, w, Math.max(8, h * .09), { k, w: .15, fill: k === 'pencil' ? 'hatch' : 'brass', fillOp: .25, p: g, d: d + 100, anim: an || 'an-fade' });
+    if (o.chip !== false) {
+      const cw = Math.min(56, h * .2), ch = cw * .76, cx = Math.min(30, w * .06), cy = h * .34;
+      this.rect(cx, cy, cw, ch, { k, rx: 4, w: .5, p: g, d: d + 150, anim: an || 'an-fade' });
+      this.path(`M${cx} ${cy + ch / 2}H${cx + cw}M${cx + cw / 2} ${cy}V${cy + ch}`, { k, w: .3, p: g, d: d + 150, anim: an || 'an-fade' });
+    }
+    return g;
+  }
+  // An allowance meter: outline, then the used part.
+  meter(x, y, w, h, frac, o = {}) {
+    const d = this._d(o);
+    this.rect(x, y, w, h, { k: o.k || 'brass', rx: Math.min(6, h / 3), w: .6, d, p: o.p, anim: o.anim });
+    if (frac > 0) this.rect(x, y, w * frac, h, { k: o.k || 'brass', rx: Math.min(6, h / 3), w: .3, fill: o.fill || 'brass', fillOp: o.fillOp != null ? o.fillOp : .45, d: d + 200, p: o.p, anim: o.anim });
+  }
+  // A proved mark: the inspector's seal beside a word.
+  badge(x, y, kind, o = {}) {
+    const d = this._d(o);
+    const s = o.size || .58;
+    if (kind === 'proved') { this.seal(x - this.fs * .55, y - this.fs * .2, this.fs * .42, { d }); this.text(x, y, 'proved', { anchor: 'start', size: s, k: 'plan', d: d + 100 }); }
+    else this.text(x - this.fs * .9, y, kind, { anchor: 'start', size: s, k: 'soft', d: d + 100, italic: true });
+  }
+}
+
+/* ---------- small helpers for repeated pictures ---------- */
+function facade(c, x, y, w, h, o = {}) {
+  // A building front: walls, a parapet, windows and a row of doors.
+  const k = o.k || 'ink';
+  const d = c._d(o);
+  c.rect(x - w / 2, y - h / 2, w, h, { k, w: 1, d, fill: o.fill, fillOp: o.fillOp });
+  c.line(x - w / 2 - w * .05, y - h / 2, x + w / 2 + w * .05, y - h / 2, { k, w: 1.2, d: d + 50 });
+  const doors = o.doors || 3, dw = w * .16, dh = h * .38, gap = (w - doors * dw) / (doors + 1);
+  const res = [];
+  for (let i = 0; i < doors; i++) {
+    const dx = x - w / 2 + gap + i * (dw + gap), dy = y + h / 2 - dh;
+    const open = o.open && o.open[i];
+    c.rect(dx, dy, dw, dh, { k: open || k, w: open ? 1 : .7, fill: open ? (open === 'brass' ? 'hatch-brass' : 'hatch') : null, d: d + 120 + i * 60 });
+    res.push([dx + dw / 2, dy, dw, dh]);
+  }
+  for (let i = 0; i < doors; i++) {
+    const wx = x - w / 2 + gap + i * (dw + gap);
+    c.rect(wx, y - h / 2 + h * .14, dw, h * .2, { k: 'soft', w: .4, d: d + 200 });
+  }
+  return res;
+}
+function plaqueText(c, x, y, s, o = {}) { return c.text(x, y, s, { size: .54, k: 'plan', ...o }); }
+
+/* ---------- slides ---------- */
+const B = {};
+
+B.title = { vb: ['0 0 800 800', '0 0 800 760'], draw(c) {
+  const T = c.tall;
+  c.at(60);
+  c.line(40, 640, 760, 640, { k: 'soft', w: .5 });
+  // The building, drawn as an elevation.
+  c.rect(150, 236, 500, 22, { k: 'ink', w: .9 });
+  c.rect(170, 258, 460, 382, { k: 'ink', w: 1.1 });
+  [215, 370, 525].forEach((x, i) => [292, 392].forEach((y, j) => c.rect(x, y, 60, 70, { k: 'soft', w: .5, step: 30 })));
+  c.rect(355, 500, 90, 140, { k: 'ink', w: 1, rx: 3 });
+  c.line(400, 500, 400, 640, { k: 'ink', w: .5 });
+  c.circle(390, 572, 3, { k: 'ink', fill: 'ink', w: .3 });
+  c.circle(410, 572, 3, { k: 'ink', fill: 'ink', w: .3 });
+  c.rect(462, 548, 26, 42, { k: 'brass', w: .9, rx: 4 });
+  c.circle(475, 560, 4, { k: 'brass', fill: 'brass', w: .3 });
+  c.line(468, 576, 482, 576, { k: 'brass', w: .5 });
+  // The keycard, with its limits printed on it.
+  c.at(1300);
+  const g = c.keycard(T ? 330 : 360, T ? 560 : 548, 300, 180, { rot: -8, rise: true });
+  c.text(90, 76, 'the shop', { anchor: 'start', size: .82, p: g, anim: 'none', d: 0 });
+  c.text(90, 112, 'XLM · transfer', { anchor: 'start', size: .64, k: 'soft', p: g, anim: 'none', d: 0 });
+  c.meter(90, 128, 170, 16, .6, { p: g, anim: 'none', d: 0 });
+  c.text(90, 166, '10 per 100 ledgers', { anchor: 'start', size: .56, k: 'brass', p: g, anim: 'none', d: 0 });
+  // The owner's master key.
+  c.at(2000);
+  c.icon('master', 92, 590, 74, { k: 'ink' });
+  c.text(92, 646, "the owner's", { size: .5, k: 'soft' });
+  c.text(92, 672, 'master key', { size: .5, k: 'soft' });
+} };
+
+B.problem = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const rows = T
+    ? [[230], [640], [1050]].map(([y]) => ({ ic: [92, y], ob: [300, y], lab: [480, y - 8, 'start'], sub: [480, y + 32, 'start'] }))
+    : [300, 800, 1300].map(x => ({ ic: [x, 160], ob: [x, 430], lab: [x, 640, 'middle'], sub: [x, 682, 'middle'] }));
+  const S = T ? 60 : 70;
+  c.at(80);
+  if (T) { c.line(40, 435, 760, 435, { k: 'faint', w: .5 }); c.line(40, 845, 760, 845, { k: 'faint', w: .5 }); }
+  else { c.line(550, 110, 550, 710, { k: 'faint', w: .5 }); c.line(1050, 110, 1050, 710, { k: 'faint', w: .5 }); }
+  // Ask on every call.
+  c.at(250);
+  const r0 = rows[0];
+  c.icon('agent', r0.ic[0], r0.ic[1], S, { k: 'soft' });
+  const [sx, sy] = T ? [196, 186] : [226, 300];
+  for (let i = 0; i < 6; i++) {
+    const x = sx + i * (T ? 9 : 11), y = sy + i * (T ? 9 : 14);
+    c.rect(x, y, T ? 104 : 140, T ? 44 : 52, { k: 'soft', rx: 6, w: .55, fill: 'paper', step: 70 });
+    c.icon('bell', x + (T ? 20 : 24), y + (T ? 22 : 26), T ? 22 : 26, { k: 'soft', step: 0 });
+  }
+  if (T) c.icon('person', 400, 230, S - 6, { k: 'soft' });
+  else { c.arrow(r0.ic[0], r0.ic[1] + 46, r0.ic[0], sy - 10, { k: 'soft', w: .6 }); c.icon('person', 300, 530, S, { k: 'soft' }); }
+  c.text(r0.lab[0], r0.lab[1], 'ask every call', { anchor: r0.lab[2], size: .9 });
+  c.text(r0.sub[0], r0.sub[1], 'a prompt per call', { anchor: r0.sub[2], size: .7, k: 'soft' });
+  // A master key: every door.
+  c.at(1100);
+  const r1 = rows[1];
+  c.icon('master', r1.ic[0], r1.ic[1], S, { k: 'soft' });
+  const bw = T ? 190 : 230, bh = T ? 150 : 180;
+  if (T) c.arrow(r1.ic[0] + 40, r1.ic[1], r1.ob[0] - bw / 2 - 8, r1.ob[1], { k: 'soft', w: .6 });
+  else c.arrow(r1.ic[0], r1.ic[1] + 40, r1.ob[0], r1.ob[1] - bh / 2 - 14, { k: 'soft', w: .6 });
+  facade(c, r1.ob[0], r1.ob[1], bw, bh, { k: 'soft', open: ['soft', 'soft', 'soft'] });
+  c.text(r1.lab[0], r1.lab[1], 'a master key', { anchor: r1.lab[2], size: .9 });
+  c.text(r1.sub[0], r1.sub[1], 'opens everything', { anchor: r1.sub[2], size: .7, k: 'soft' });
+  // A keycard: one door, within limits.
+  c.at(1900);
+  const r2 = rows[2];
+  c.icon('card', r2.ic[0], r2.ic[1], S, { k: 'brass' });
+  if (T) c.arrow(r2.ic[0] + 40, r2.ic[1], r2.ob[0] - bw / 2 - 8, r2.ob[1], { k: 'brass', w: .7 });
+  else c.arrow(r2.ic[0], r2.ic[1] + 40, r2.ob[0], r2.ob[1] - bh / 2 - 14, { k: 'brass', w: .7 });
+  facade(c, r2.ob[0], r2.ob[1], bw, bh, { k: 'ink', open: [null, 'brass', null] });
+  c.text(r2.lab[0], r2.lab[1], 'a keycard', { anchor: r2.lab[2], size: .9, k: 'brass' });
+  c.text(r2.sub[0], r2.sub[1], 'limits the account enforces', { anchor: r2.sub[2], size: .7, k: 'soft' });
+} };
+
+B.shop = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? { card: [60, 70, 680, 900], rows: [400, 520, 640, 760], ix: 190, tx: 240, title: [240, 320], seal: [630, 250, 60], m: [240, 830, 380, 22], foot: [400, 1080], foot2: [400, 1124] }
+    : { card: [300, 110, 1000, 520], rows: [330, 405, 480, 555], ix: 420, tx: 480, title: [420, 262], seal: [1180, 330, 70], m: [480, 538, 330, 26], foot: [800, 708], foot2: null };
+  c.at(100);
+  const [x, y, w, h] = P.card;
+  const g = c.keycard(x, y, w, h, { rise: true });
+  c.reset();
+  c.at(700);
+  c.text(P.title[0], P.title[1], 'shop card', { anchor: 'start', font: 'disp', size: 1.1 });
+  c.icon('building', P.seal[0], P.seal[1], T ? 70 : 76, { k: 'brass' });
+  const rows = [['door', 'XLM token · transfer only'], ['shop', 'from this account to the shop only'], ['key', "the app's own key signs"]];
+  rows.forEach(([ic, s], i) => {
+    c.icon(ic, P.ix, P.rows[i], T ? 44 : 40, { k: 'brass', step: 0 });
+    c.text(P.tx, P.rows[i] + 10, s, { anchor: 'start', size: T ? .66 : .82, step: 160 });
+  });
+  c.icon('meter', P.ix, P.rows[3], T ? 46 : 42, { k: 'brass', step: 0 });
+  if (T) {
+    c.text(P.tx, P.rows[3] + 10, 'at most 10 XLM in any', { anchor: 'start', size: .66 });
+    c.text(P.tx, P.rows[3] + 48, '100 ledgers, about 8 minutes', { anchor: 'start', size: .6, k: 'soft' });
+    c.meter(P.m[0], P.m[1], P.m[2], P.m[3], .6, {});
+  } else {
+    c.text(P.tx, P.rows[3] + 10, 'at most 10 XLM in any 100 ledgers', { anchor: 'start', size: .82 });
+    c.text(P.tx + 520, P.rows[3] + 10, '≈ 8 min', { anchor: 'start', size: .62, k: 'soft' });
+    c.meter(P.m[0], P.m[1] + 44, P.m[2], 18, .6, {});
+  }
+  c.at(2200);
+  if (T) {
+    c.text(P.foot[0], P.foot[1], 'it cannot say: an amount per call,', { size: .6, k: 'soft' });
+    c.text(P.foot2[0], P.foot2[1], 'or, not, or read another contract', { size: .6, k: 'soft' });
+  } else c.text(P.foot[0], P.foot[1], 'it cannot say: an amount per call · or · not · a read of another contract', { size: .66, k: 'soft' });
+} };
+
+B.bounds = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const cells = T ? [[400, 230], [400, 590], [400, 950]] : [[290, 300], [800, 300], [1310, 300]];
+  const texts = [['every door it opens', 'is on a card'], ['no window holds more', 'than the allowance'], ['no card opens the', "account's own office"]];
+  const th = ['Theorem 2', 'Theorem 6', 'Theorem 8'];
+  c.at(80);
+  c.text(T ? 400 : 800, T ? 50 : 100, 'three properties, not an audit', { size: T ? .62 : .7, k: 'soft' });
+  cells.forEach(([x, y], i) => {
+    const d = 300 + i * 700;
+    c.at(d);
+    const px = T ? x - 190 : x, py = T ? y : y;
+    if (i === 0) {
+      c.icon('card', px - 70, py, 74, { k: 'brass' });
+      c.arrow(px - 30, py, px + 20, py, { k: 'brass', w: .7 });
+      c.icon('door', px + 70, py, 92, { k: 'brass', fill: 'hatch-brass' });
+      c.check(px + 70, py - 74, 34, { k: 'plan' });
+    } else if (i === 1) {
+      c.line(px - 95, py - 46, px + 95, py - 46, { k: 'ink', w: .7 });
+      [[-78, 40], [-48, 28], [-18, 14], [12, 32], [42, 20], [72, 26]].forEach(([dx, hh], j) => c.rect(px + dx - 9, py + 50 - hh * 1.6, 18, hh * 1.6, { k: 'brass', w: .4, fill: 'brass', fillOp: .4, step: 40 }));
+      c.rect(px - 60, py - 60, 110, 116, { k: 'plan', w: .9, rx: 4 });
+      c.line(px - 95, py + 50, px + 95, py + 50, { k: 'soft', w: .5 });
+    } else {
+      c.rect(px - 90, py - 60, 180, 120, { k: 'ink', w: .9 });
+      c.line(px, py - 60, px, py + 60, { k: 'ink', w: .5 });
+      c.text(px + 45, py + 6, 'office', { size: .5, k: 'soft' });
+      c.rect(px + 4, py - 56, 82, 112, { k: 'stop', w: .3, fill: 'hatch-stop' });
+      c.icon('card', px - 50, py, 54, { k: 'brass' });
+      c.line(px - 18, py, px - 4, py, { k: 'brass', w: .7 });
+      c.line(px + 4, py - 22, px + 4, py + 22, { k: 'stop', w: 1.6 });
+    }
+    const tx = T ? x + 40 : x, ty = T ? y - 18 : y + 148, an = T ? 'start' : 'middle';
+    c.text(tx, ty, texts[i][0], { anchor: an, size: T ? .64 : .8 });
+    c.text(tx, ty + (T ? 36 : 36), texts[i][1], { anchor: an, size: T ? .64 : .8 });
+    plaqueText(c, tx, ty + (T ? 82 : 82), th[i], { anchor: an, size: T ? .54 : .6 });
+  });
+  c.at(2600);
+  if (T) {
+    c.line(60, 1150, 740, 1150, { k: 'faint', w: .5 });
+    c.text(400, 1196, 'unmerged · testnet preview through Nido', { size: .54, k: 'soft' });
+    c.text(400, 1236, 'not audited', { size: .54, k: 'soft' });
+  } else {
+    c.line(160, 640, 1440, 640, { k: 'faint', w: .5 });
+    c.text(800, 690, 'unmerged · previewed on testnet through Nido · not audited', { size: .66, k: 'soft' });
+  }
+} };
+
+B.background = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? { slip: [60, 60, 420, 360], r1: [110, 150], r2: [170, 270], slipL: [270, 400], host: [620, 240], hostL: [620, 320], acc: [400, 640], accL: [400, 760], rehearse: [[200, 1000], [600, 1000]] }
+    : { slip: [90, 160, 430, 380], r1: [140, 260], r2: [200, 390], slipL: [305, 512], host: [800, 350], hostL: [800, 430], acc: [1290, 350], accL: [1290, 500], rehearse: [[620, 650], [1100, 650]] };
+  c.at(80);
+  const [sx, sy, sw, sh] = P.slip;
+  c.rect(sx, sy, sw, sh, { k: 'ink', w: .8, rx: 4, fill: 'paper' });
+  c.path(`M${sx} ${sy + 50}H${sx + sw}`, { k: 'faint', w: .5 });
+  c.text(sx + 24, sy + 34, 'the request', { anchor: 'start', size: .66, k: 'soft' });
+  c.at(500);
+  const box = (x, y, s, k) => { const w = c.tw(s, { size: .7 }) + 44; c.rect(x, y - 26, w, 52, { k, rx: 6, w: .8 }); c.text(x + 22, y + 9, s, { anchor: 'start', size: .7 }); return w; };
+  box(P.r1[0], P.r1[1], 'game: guess', 'ink');
+  c.path(`M${P.r1[0] + 24} ${P.r1[1] + 26}V${P.r2[1]}H${P.r2[0] - 4}`, { k: 'ink', w: .6 });
+  box(P.r2[0], P.r2[1], 'XLM: transfer', 'brass');
+  c.text(P.slipL[0], P.slipL[1], 'two doors, in order', { size: .62, k: 'soft' });
+  c.at(1300);
+  c.icon('network', P.host[0], P.host[1], T ? 70 : 76, { k: 'soft' });
+  c.text(P.hostL[0], P.hostL[1], 'the host', { size: .74 });
+  if (T) {
+    c.arrow(sx + sw + 10, sy + sh / 2, P.host[0] - 50, P.host[1], { k: 'ink', w: .7 });
+    c.arrow(P.host[0], P.hostL[1] + 20, P.acc[0] + 60, P.acc[1] - 70, { k: 'ink', w: .7 });
+  } else {
+    c.arrow(sx + sw + 12, P.host[1], P.host[0] - 56, P.host[1], { k: 'ink', w: .7 });
+    c.arrow(P.host[0] + 56, P.host[1], P.acc[0] - 120, P.acc[1], { k: 'ink', w: .7 });
+    c.text((P.host[0] + P.acc[0]) / 2 - 30, P.host[1] - 20, 'asks', { size: .62, k: 'soft' });
+  }
+  c.at(1900);
+  c.icon('desk', P.acc[0], P.acc[1], T ? 100 : 110, { k: 'brass' });
+  c.text(P.accL[0], P.accL[1] - (T ? 0 : 50), "the account's desk", { size: .76 });
+  c.text(P.accL[0], P.accL[1] + (T ? 40 : -12), 'decides every door', { size: .66, k: 'soft' });
+  c.at(2600);
+  const [[ax, ay], [bx, by]] = P.rehearse;
+  if (T) c.line(40, 900, 760, 900, { k: 'faint', w: .5 }); else c.line(400, 580, 1500, 580, { k: 'faint', w: .5 });
+  c.text(ax, ay - (T ? 0 : 0), 'a recording rehearsal', { size: .62, k: 'soft' });
+  c.icon('desk', ax, ay + (T ? 86 : 66), T ? 64 : 56, { k: 'soft' });
+  c.line(ax - 36, ay + (T ? 116 : 92), ax + 36, ay + (T ? 56 : 40), { k: 'stop', w: 1 });
+  c.text(ax, ay + (T ? 170 : 132), 'skips the desk', { size: .62, k: 'stop' });
+  c.text(bx, by, 'an enforcing rehearsal', { size: .62, k: 'soft' });
+  c.icon('desk', bx, by + (T ? 86 : 66), T ? 64 : 56, { k: 'brass' });
+  c.text(bx, by + (T ? 170 : 132), 'predicts a refusal', { size: .62, k: 'brass' });
+} };
+
+B.issue = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    own: [110, 110], ownL: [110, 190], a1: [170, 110, 300, 110], a1L: [235, 84], cmp: [310, 50, 190, 120], cmpI: [405, 92], cmpL: [405, 150], a2: [510, 110, 600, 110],
+    acc: [40, 230, 720, 470], accL: [70, 278], ok: [70, 350], no: [70, 470], card: [510, 380, 214, 140], what: [400, 790], icons: [[150, 900], [400, 900], [650, 900], [270, 1110], [530, 1110]], icS: 64,
+  } : {
+    own: [110, 270], ownL: [110, 352], a1: [170, 270, 330, 270], a1L: [250, 244], cmp: [342, 210, 200, 120], cmpI: [442, 252], cmpL: [442, 312], a2: [552, 270, 660, 270],
+    acc: [672, 110, 860, 360], accL: [700, 154], ok: [710, 220], no: [710, 340], card: [1170, 200, 300, 190], what: [800, 532], icons: [[260, 640], [530, 640], [800, 640], [1070, 640], [1340, 640]], icS: 58,
+  };
+  c.at(80);
+  c.icon('person', P.own[0], P.own[1] - 18, 60, { k: 'ink' });
+  c.icon('master', P.own[0], P.own[1] + 30, 42, { k: 'ink' });
+  c.text(P.ownL[0], P.ownL[1], 'owner', { size: .7, k: 'soft' });
+  c.arrow(...P.a1, { k: 'ink', w: .7 });
+  c.text(P.a1L[0], P.a1L[1], 'one install call', { size: .56, k: 'soft' });
+  const [mx, my, mw, mh] = P.cmp;
+  c.rect(mx, my, mw, mh, { k: 'ink', w: .8, rx: 8 });
+  c.icon('doc', P.cmpI[0], P.cmpI[1], 44, { k: 'ink' });
+  c.text(P.cmpL[0], P.cmpL[1], 'document compiler', { size: .5, k: 'soft' });
+  c.arrow(...P.a2, { k: 'ink', w: .7 });
+  c.at(900);
+  const [ax, ay, aw, ah] = P.acc;
+  c.rect(ax, ay, aw, ah, { k: 'ink', w: 1.1 });
+  c.line(ax - 10, ay, ax + aw + 10, ay, { k: 'ink', w: 1.4 });
+  c.text(P.accL[0], P.accL[1], 'the account turns each line into a rule', { anchor: 'start', size: .6, k: 'soft' });
+  c.at(1300);
+  const line = ([x, y], s, ok) => {
+    const w = c.tw(s, { size: .66 }) + 40;
+    c.rect(x, y - 30, w, 60, { k: ok ? 'brass' : 'stop', rx: 6, w: .8, fill: ok ? null : 'hatch-stop' });
+    c.text(x + 20, y + 9, s, { anchor: 'start', size: .66 });
+    if (ok) c.check(x + w + 34, y, 34, { k: 'brass' }); else c.cross(x + w + 34, y, 28, { k: 'stop' });
+    return w;
+  };
+  line(P.ok, 'XLM: transfer → the shop', true);
+  line(P.no, 'the account itself', false);
+  plaqueText(c, P.no[0] + (T ? 0 : 0), P.no[1] + (T ? 66 : 64), 'refused at install · Theorem 8', { anchor: 'start', size: .54 });
+  c.at(2000);
+  const [kx, ky, kw, kh] = P.card;
+  const g = c.keycard(kx, ky, kw, kh, { rise: true });
+  c.text(kw * .32, kh * .5, 'the shop', { anchor: 'start', size: .66, p: g, anim: 'none', d: 0 });
+  c.meter(kw * .32, kh * .62, kw * .55, 14, .6, { p: g, anim: 'none', d: 0 });
+  c.reset();
+  c.at(2500);
+  if (T) c.line(40, 730, 760, 730, { k: 'faint', w: .5 }); else c.line(120, 488, 1480, 488, { k: 'faint', w: .5 });
+  c.text(P.what[0], P.what[1], 'what a line can say', { size: .66, k: 'soft' });
+  const what = [['door', 'one contract,', 'its functions'], ['list', 'argument conditions,', 'all must hold'], ['people', 'k of its', 'signers'], ['clock', 'an expiry', '(optional)'], ['meter', 'an allowance', '(transfer only)']];
+  what.forEach(([ic, a, b], i) => {
+    const [x, y] = P.icons[i];
+    c.icon(ic, x, y, P.icS, { k: 'brass', step: 120 });
+    c.text(x, y + (T ? 66 : 64), a, { size: T ? .56 : .6, step: 0 });
+    c.text(x, y + (T ? 100 : 94), b, { size: T ? .56 : .6, k: 'soft', step: 80 });
+  });
+} };
+
+/* The allowance meter: drawn in its final state, then played on arrival. */
+B.window = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const G = T ? {
+    x0: 90, x1: 760, y0: 640, u: 34, top: 270,
+    pts: [[-101, 92], [-1, 138], [0, 220], [1, 300], [2, 345], [98, 455], [99, 505], [100, 595], [101, 685]],
+    brk: 400, bw: 40, tfs: .56, tl: 686,
+    meter: { x: 120, y: 820, w: 560, h: 50, horiz: true }, mLab: [120, 796, 'start'], mVal: [400, 930],
+    cap: [400, 1040], cap2: [400, 1086], frameL: [400, 236],
+    labs: ['t−1', 't', 't+1', 't+99', 't+100', 't+101'],
+  } : {
+    x0: 170, x1: 1240, y0: 560, u: 34, top: 200,
+    pts: [[-101, 172], [-1, 260], [0, 400], [1, 520], [2, 600], [98, 790], [99, 870], [100, 1010], [101, 1150]],
+    brk: 695, bw: 56, tfs: .6, tl: 602,
+    meter: { x: 1350, y: 220, w: 80, h: 340, horiz: false }, mLab: [1390, 164, 'middle'], mVal: [1390, 612],
+    cap: [705, 690], frameL: null,
+    labs: ['t − 1', 't', 't + 1', 't + 99', 't + 100', 't + 101'],
+  };
+  const X = n => {
+    const p = G.pts;
+    if (n <= p[0][0]) return p[0][1];
+    for (let i = 1; i < p.length; i++) if (n <= p[i][0]) { const [a, xa] = p[i - 1], [b, xb] = p[i]; return xa + (xb - xa) * (n - a) / (b - a); }
+    return p[p.length - 1][1];
+  };
+  const Y = v => G.y0 - v * G.u;
+  c.at(80);
+  c.line(G.x0, G.y0, G.x0, G.top - 20, { k: 'soft', w: .5 });
+  [[0, '0'], [5, '5'], [10, '10']].forEach(([v, s]) => c.text(G.x0 - 14, Y(v) + 8, s, { anchor: 'end', size: .66, k: 'soft', step: 0 }));
+  c.line(G.x0, G.y0, G.brk - 12, G.y0, { k: 'soft', w: .6 });
+  c.line(G.brk + 12, G.y0, G.x1, G.y0, { k: 'soft', w: .6 });
+  c.path(`M${G.brk - 18} ${G.y0 + 10}L${G.brk - 8} ${G.y0 - 10}M${G.brk + 8} ${G.y0 + 10}L${G.brk + 18} ${G.y0 - 10}`, { k: 'soft', w: .6 });
+  [-1, 0, 1, 99, 100, 101].forEach((n, i) => {
+    c.line(X(n), G.y0, X(n), G.y0 + 8, { k: 'soft', w: .5, step: 0 });
+    c.text(X(n), G.tl, G.labs[i], { size: G.tfs, k: 'soft', step: 30 });
+  });
+  c.line(G.x0, Y(10), G.x1, Y(10), { k: 'ink', w: .7 });
+  c.text(T ? G.x0 + 10 : G.x1, Y(10) - 14, 'allowance 10 XLM', { anchor: T ? 'start' : 'end', size: .62, k: 'soft' });
+  const L = E('g', { class: 'an-fade' }, c.svg);
+  L.style.setProperty('--d', '500ms');
+  const mk = (tag, a, cls) => { const e = E(tag, a, L); e.setAttribute('class', cls); return e; };
+  const band = mk('rect', { y: G.top - 10, height: G.y0 - G.top + 10, rx: 4 }, 'st k-ink fl-hatch cw-fade');
+  band.setAttribute('stroke-width', c.sw * .5);
+  const edgeL = mk('line', { y1: G.top - 22, y2: G.y0 + 12 }, 'st k-ink cw-fade'), edgeR = mk('line', { y1: G.top - 22, y2: G.y0 + 12 }, 'st k-ink cw-fade');
+  [edgeL, edgeR].forEach(e => e.setAttribute('stroke-width', c.sw * 1.4));
+  const fl = E('text', { 'font-size': f2(c.fs * .56), 'text-anchor': 'middle', y: G.top - 30 }, L);
+  fl.setAttribute('class', 'tx c-soft cw-fade'); fl.textContent = 'the last 100 ledgers';
+  const bar = n => {
+    const r = mk('rect', { x: X(n) - G.bw / 2, width: G.bw, rx: 3 }, 'st k-brass fl-brass cw-fade');
+    r.setAttribute('fill-opacity', .38); r.setAttribute('stroke-width', c.sw * .7);
+    return r;
+  };
+  const b6 = bar(0), b4 = bar(1), b5 = bar(100);
+  const ghost = (n, from, to) => {
+    const r = mk('rect', { x: X(n) - G.bw / 2, width: G.bw, y: Y(to), height: Y(from) - Y(to), rx: 3 }, 'st k-stop fl-hatch-stop cw-fade');
+    r.setAttribute('stroke-width', c.sw * .6); return r;
+  };
+  const gA = ghost(0, 6, 11), gB = ghost(99, 0, 1);
+  const xmark = (x, y, lab) => {
+    const g = E('g', { transform: `translate(${f2(x)} ${f2(y)})` }, L);
+    g.setAttribute('class', 'cw-fade');
+    const s = T ? 11 : 9;
+    const p = E('path', { d: `M${-s} ${-s}L${s} ${s}M${s} ${-s}L${-s} ${s}` }, g);
+    p.setAttribute('class', 'st k-stop'); p.setAttribute('stroke-width', c.sw * .9);
+    const t = E('text', { x: s + 8, y: s - 2, 'font-size': f2(c.fs * (T ? .6 : .56)) }, g);
+    t.setAttribute('class', 'tx c-stop'); t.textContent = lab;
+    return g;
+  };
+  const xA = xmark(X(0), Y(8.5), '+5'), xB = xmark(X(99), Y(1.2), '+1');
+  const M = G.meter;
+  const mOut = mk('rect', { x: M.x, y: M.y, width: M.w, height: M.h, rx: 4 }, 'st k-ink');
+  mOut.setAttribute('stroke-width', c.sw * .5);
+  const mFill = mk('rect', { rx: 3 }, 'st k-brass fl-brass');
+  mFill.setAttribute('fill-opacity', .45); mFill.setAttribute('stroke-width', c.sw * .6);
+  const mGhost = mk('rect', { rx: 3 }, 'st k-stop fl-hatch-stop cw-fade');
+  mGhost.setAttribute('stroke-width', c.sw * .5);
+  const mLab = E('text', { x: G.mLab[0], y: G.mLab[1], 'font-size': f2(c.fs * .62), 'text-anchor': G.mLab[2] }, L);
+  mLab.setAttribute('class', 'tx c-soft'); mLab.textContent = 'used';
+  const mVal = E('text', { x: G.mVal[0], y: G.mVal[1], 'font-size': f2(c.fs * .8), 'text-anchor': 'middle' }, L);
+  mVal.setAttribute('class', 'tx c-brass');
+  mVal.setAttribute('font-weight', 600);
+  const cap = E('text', { x: G.cap[0], y: G.cap[1], 'font-size': f2(c.fs * (T ? .62 : .72)), 'text-anchor': 'middle' }, L);
+  cap.setAttribute('class', 'tx cw-fade');
+  const cap2 = T ? E('text', { x: G.cap2[0], y: G.cap2[1], 'font-size': f2(c.fs * .6), 'text-anchor': 'middle' }, L) : null;
+  if (cap2) cap2.setAttribute('class', 'tx c-soft cw-fade');
+  const setBand = l => {
+    const a = X(l - 99.5), b = X(l + .5);
+    band.setAttribute('x', f2(a)); band.setAttribute('width', f2(b - a));
+    edgeL.setAttribute('x1', f2(a)); edgeL.setAttribute('x2', f2(a));
+    edgeR.setAttribute('x1', f2(b)); edgeR.setAttribute('x2', f2(b));
+    fl.setAttribute('x', f2((a + b) / 2));
+  };
+  const setBar = (r, v) => { r.setAttribute('y', f2(Y(v))); r.setAttribute('height', f2(Math.max(0, G.y0 - Y(v)))); };
+  const mAt = v => M.horiz ? { x: M.x, y: M.y, w: M.w * v / 10, h: M.h } : { x: M.x, y: M.y + M.h - M.h * v / 10, w: M.w, h: M.h * v / 10 };
+  const setMeter = v => { const r = mAt(v); mFill.setAttribute('x', f2(r.x)); mFill.setAttribute('y', f2(r.y)); mFill.setAttribute('width', f2(Math.max(0, r.w))); mFill.setAttribute('height', f2(Math.max(0, r.h))); mVal.textContent = `${Math.round(v)} of 10`; };
+  const setMGhost = (from, to) => {
+    if (M.horiz) { mGhost.setAttribute('x', f2(M.x + M.w * from / 10)); mGhost.setAttribute('y', M.y); mGhost.setAttribute('width', f2(M.w * (to - from) / 10)); mGhost.setAttribute('height', M.h); }
+    else { mGhost.setAttribute('x', M.x); mGhost.setAttribute('y', f2(M.y + M.h - M.h * to / 10)); mGhost.setAttribute('width', M.w); mGhost.setAttribute('height', f2(M.h * (to - from) / 10)); }
+  };
+  const CAPS = [
+    ['ledger t', '+6 accepted · 6 used'],
+    ['ledger t', '+5 refused · 6 + 5 > 10'],
+    ['ledger t + 1', '+4 accepted · 10, the limit is inclusive'],
+    ['ledger t + 99', '+1 refused · the window holds 10'],
+    ['ledger t + 100', 'the 6 leaves · +5 accepted · 9 used'],
+  ];
+  const setCap = i => {
+    if (i < 0) { cap.textContent = ''; if (cap2) cap2.textContent = ''; return; }
+    if (cap2) { cap.textContent = CAPS[i][0]; cap2.textContent = CAPS[i][1]; }
+    else cap.textContent = CAPS[i][0] + ' · ' + CAPS[i][1];
+  };
+  const op = (e, v) => { e.style.opacity = v; };
+  const finalState = () => {
+    setBand(100); [band, edgeL, edgeR, fl].forEach(e => op(e, 1));
+    setBar(b6, 6); op(b6, .25); setBar(b4, 4); op(b4, 1); setBar(b5, 5); op(b5, 1);
+    op(gA, 0); op(gB, 0); op(xA, 1); op(xB, 1); op(mGhost, 0);
+    setMeter(9); setCap(4); op(cap, 1); if (cap2) op(cap2, 1);
+  };
+  finalState();
+  c.svg._play = { setBand, setBar, setMeter, setMGhost, setCap, op, finalState, b6, b4, b5, gA, gB, xA, xB, mGhost, band, edgeL, edgeR, fl, cap, cap2 };
+}, enter(svg) {
+  const P = svg._play;
+  if (!P) return;
+  if (still()) { P.finalState(); return; }
+  const A = svg._anim = new Anim();
+  const { op } = P;
+  const cap = i => { op(P.cap, 0); if (P.cap2) op(P.cap2, 0); A.at(260, () => { P.setCap(i); op(P.cap, 1); if (P.cap2) op(P.cap2, 1); }); };
+  const reset = () => {
+    [P.b6, P.b4, P.b5].forEach(b => { P.setBar(b, 0); op(b, 1); });
+    [P.gA, P.gB, P.xA, P.xB, P.mGhost].forEach(e => op(e, 0));
+    P.setBand(0); [P.band, P.edgeL, P.edgeR, P.fl].forEach(e => op(e, 0));
+    P.setMeter(0); P.setCap(-1);
+  };
+  const run = () => {
+    reset();
+    A.at(500, () => [P.band, P.edgeL, P.edgeR, P.fl].forEach(e => op(e, 1)));
+    A.at(900, () => { cap(0); A.tween(700, k => { P.setBar(P.b6, 6 * k); P.setMeter(6 * k); }); });
+    A.at(2700, () => { cap(1); P.setMGhost(6, 11); op(P.gA, 1); op(P.mGhost, 1); });
+    A.at(3700, () => op(P.xA, 1));
+    A.at(4300, () => { op(P.gA, 0); op(P.mGhost, 0); });
+    A.at(4900, () => { cap(2); A.tween(500, k => P.setBand(k)); A.tween(700, k => { P.setBar(P.b4, 4 * k); P.setMeter(6 + 4 * k); }); });
+    A.at(6900, () => { cap(3); A.tween(1300, k => P.setBand(1 + 98 * k)); });
+    A.at(8300, () => { P.setMGhost(10, 11); op(P.gB, 1); op(P.mGhost, 1); });
+    A.at(9200, () => op(P.xB, 1));
+    A.at(9800, () => { op(P.gB, 0); op(P.mGhost, 0); });
+    A.at(10400, () => { cap(4); A.tween(700, k => P.setBand(99 + k)); op(P.b6, .25); A.tween(600, k => P.setMeter(10 - 6 * k)); });
+    A.at(11300, () => A.tween(700, k => { P.setBar(P.b5, 5 * k); P.setMeter(4 + 5 * k); }));
+    A.at(15500, run);
+  };
+  run();
+}, leave(svg) { if (svg._anim) svg._anim.stop(); if (svg._play) svg._play.finalState(); } };
+
+B.atten = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    a: [50, 60, 370, 230], aL: [50, 40], mach: [470, 90, 280, 170], machL: [610, 300],
+    chips: [[215, 380], [585, 380], [215, 450], [585, 450], [215, 520], [585, 520], [400, 590]],
+    b: [200, 690, 400, 230], bL: [200, 670], th: [400, 990], th2: [400, 1030], inst: [400, 1070, 400, 1150], acc: [400, 1200], accL: [450, 1210, 'start'],
+  } : {
+    a: [90, 190, 400, 240], aL: [90, 168], mach: [640, 170, 320, 190], machL: [800, 392],
+    chips: [[690, 470], [910, 470], [690, 534], [910, 534], [690, 598], [910, 598], [800, 662]],
+    b: [1120, 230, 360, 200], bL: [1120, 208], th: [1300, 500], th2: [1300, 540], inst: [1300, 580, 1300, 660], acc: [1300, 706], accL: [1350, 716, 'start'],
+  };
+  const card = (box, lab, cap, d, k = 'brass') => {
+    c.at(d);
+    const [x, y, w, h] = box;
+    const g = c.keycard(x, y, w, h, { rise: true, k });
+    c.text(w * .3, h * .46, 'the shop', { anchor: 'start', size: .74, p: g, anim: 'none', d: 0 });
+    c.rect(w * .3, h * .58, w * .6, 16, { k: 'faint', w: .4, rx: 5, p: g, anim: 'none', d: 0 });
+    c.meter(w * .3, h * .58, w * .6 * cap / 10, 16, 1, { p: g, anim: 'none', d: 0 });
+    c.text(w * .3, h * .86, `${cap} XLM per 100 ledgers`, { anchor: 'start', size: .6, k: 'brass', p: g, anim: 'none', d: 0 });
+    c.reset();
+    c.text(x, lab[1], lab[0], { anchor: 'start', size: .64, k: 'soft', d });
+  };
+  card(P.a, ["the app's card", P.aL[1]], 10, 100);
+  c.at(800);
+  const [mx, my, mw, mh] = P.mach;
+  c.rect(mx, my, mw, mh, { k: 'ink', w: 1, rx: 10 });
+  c.rect(mx + 20, my + mh * .55, mw - 40, 16, { k: 'soft', w: .5, rx: 4 });
+  c.icon('scissors', mx + mw / 2, my + mh * .3, 56, { k: 'ink' });
+  c.text(P.machL[0], P.machL[1], 'cutting a copy: 10 narrowing steps', { size: .58, k: 'soft' });
+  if (!T) { c.arrow(P.a[0] + P.a[2] + 14, P.a[1] + P.a[3] / 2, mx - 12, my + mh / 2, { k: 'ink', w: .7 }); c.arrow(mx + mw + 12, my + mh / 2, P.b[0] - 14, P.b[1] + P.b[3] / 2, { k: 'brass', w: .7 }); }
+  else { c.arrow(P.a[0] + P.a[2] + 6, P.a[1] + 115, mx - 8, my + 85, { k: 'ink', w: .6 }); c.arrow(400, 614, 400, 650, { k: 'brass', w: .6 }); }
+  const steps = ['drop a line', 'fewer doors', 'add a condition', 'more signers', 'lower allowance', 'longer period', 'earlier expiry'];
+  steps.forEach((s, i) => c.chip(P.chips[i][0], P.chips[i][1], s, { k: 'soft', size: T ? .58 : .62, step: 90 }));
+  card(P.b, ["the helper's copy", P.bL[1]], 2, 2000);
+  c.at(2700);
+  plaqueText(c, P.th[0], P.th[1], 'Theorem 4: the copy opens no door', { size: T ? .58 : .62 });
+  plaqueText(c, P.th2[0], P.th2[1], 'the original does not', { size: T ? .58 : .62 });
+  c.at(3200);
+  c.arrow(...P.inst, { k: 'pencil', w: .8 });
+  c.icon('building', P.acc[0], P.acc[1], 54, { k: 'pencil' });
+  c.text(P.accL[0], P.accL[1], 'installing a copy: proposed', { anchor: P.accL[2], size: .6, k: 'pencil' });
+} };
+
+B.ending = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const cells = T ? [[400, 200], [400, 560], [400, 920]] : [[290, 330], [800, 330], [1310, 330]];
+  const lab = [['its expiry', 'works through ledger N − 1'], ['one owner call', 'deletes it'], ['a completed recovery', 'one counter moves; every earlier card stops']];
+  cells.forEach(([x, y], i) => {
+    const d = 200 + i * 800;
+    c.at(d);
+    const px = T ? x - 180 : x;
+    if (i === 0) {
+      c.icon('card', px - 50, y, 80, { k: 'brass' });
+      c.icon('clock', px + 60, y - 10, 70, { k: 'ink' });
+    } else if (i === 1) {
+      c.icon('card', px - 30, y, 80, { k: 'brass' });
+      c.line(px - 70, y + 34, px + 10, y - 34, { k: 'stop', w: 1.2 });
+      c.icon('master', px + 70, y - 38, 52, { k: 'ink' });
+    } else {
+      c.text(px, y - 70, '0  →  1', { size: .9, k: 'plan', weight: 600 });
+      [-60, 0, 60].forEach((dx, j) => {
+        c.icon('card', px + dx, y + 10, 52, { k: 'soft', step: 60 });
+        c.cross(px + dx, y + 10, 26, { k: 'stop', step: 40 });
+      });
+      c.icon('master', px, y + 76, 50, { k: 'ink' });
+    }
+    const tx = T ? x + 10 : x, ty = T ? y - 10 : y + 150, an = T ? 'start' : 'middle';
+    c.text(tx, ty, lab[i][0], { anchor: an, size: T ? .68 : .86 });
+    if (T && i === 2) { c.text(tx, ty + 38, 'one counter moves;', { anchor: an, size: .58, k: 'soft' }); c.text(tx, ty + 72, 'every earlier card stops', { anchor: an, size: .58, k: 'soft' }); }
+    else c.text(tx, ty + (T ? 38 : 40), lab[i][1], { anchor: an, size: T ? .58 : .66, k: 'soft' });
+  });
+  c.at(2800);
+  if (T) { c.line(40, 1120, 760, 1120, { k: 'faint', w: .5 }); c.text(400, 1170, "anyone may then clear a stale card", { size: .58, k: 'soft' }); c.text(400, 1208, 'a current card cannot be cleared', { size: .58, k: 'soft' }); }
+  else { c.line(160, 610, 1440, 610, { k: 'faint', w: .5 }); c.text(800, 670, "then anyone may clear a stale card's storage; a current card cannot be cleared", { size: .64, k: 'soft' }); }
+} };
+
+B.tree = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    card: [40, 70, 300, 170], room: [400, 40, 360, 330], door: [400, 200], doorL: [416, 284], desk: [620, 250], deskL: [620, 322],
+    walk: 'M340 150H386M418 200C500 200 530 230 570 245', ck1: [450, 150], ck2: [700, 196], same: [620, 150],
+    out: [190, 430], outL: [190, 500], outPath: 'M190 246V392',
+    treeL: [400, 600], root: [60, 640, 380, 70], kid: [150, 760, 420, 70], conds: [[180, 880], [180, 922], [180, 964]], dir: [60, 1060, 380, 64], dirL: [60, 1166],
+  } : {
+    card: [60, 150, 320, 180], room: [450, 130, 380, 340], door: [450, 300], doorL: [466, 390], desk: [690, 330], deskL: [690, 404],
+    walk: 'M380 300H436M468 300C560 300 600 320 640 330', ck1: [500, 254], ck2: [770, 282], same: [690, 238],
+    out: [220, 560], outL: [220, 632], outPath: 'M220 332V520',
+    treeL: [1210, 140], root: [930, 170, 380, 70], kid: [1010, 290, 440, 70], conds: [[1040, 404], [1040, 444], [1040, 484]], dir: [930, 580, 380, 64], dirL: [930, 682],
+  };
+  c.at(80);
+  // The card: a line for the game, a line for the payment.
+  const [kx, ky, kw, kh] = P.card;
+  const g = c.keycard(kx, ky, kw, kh, { rise: true });
+  c.text(kw * .3, kh * .5, 'game: guess', { anchor: 'start', size: .56, p: g, anim: 'none', d: 0 });
+  c.text(kw * .3, kh * .7, 'XLM: transfer', { anchor: 'start', size: .56, p: g, anim: 'none', d: 0 });
+  c.text(kw * .3, kh * .86, 'to the game, in its room', { anchor: 'start', size: .42, k: 'brass', p: g, anim: 'none', d: 0 });
+  c.text(kx, ky - 16, "the app's card", { anchor: 'start', size: .56, k: 'soft' });
+  // The game room, entered by its door; the stake is asked for inside.
+  c.at(500);
+  const [rx, ry, rw, rh] = P.room;
+  c.path(`M${rx} ${P.door[1] - 46}V${ry}H${rx + rw}V${ry + rh}H${rx}V${P.door[1] + 46}`, { k: 'ink', w: 1.2 });
+  c.text(rx + rw / 2, ry + 44, 'the game room', { size: .7 });
+  c.icon('door', P.door[0], P.door[1], 92, { k: 'brass', fill: 'hatch-brass' });
+  c.text(P.doorL[0], P.doorL[1], 'door: guess', { anchor: 'start', size: .54, k: 'soft' });
+  c.icon('desk', P.desk[0], P.desk[1], 88, { k: 'brass' });
+  c.text(P.deskL[0], P.deskL[1], 'a loss: pay the stake', { size: .58 });
+  c.text(P.deskL[0], P.deskL[1] + 30, 'account to game, in XLM', { size: .48, k: 'soft' });
+  c.at(1300);
+  c.path(P.walk, { k: 'brass', w: .8 });
+  c.check(P.ck1[0], P.ck1[1], 30, { k: 'brass' });
+  c.check(P.ck2[0], P.ck2[1], 30, { k: 'brass' });
+  c.text(P.same[0], P.same[1], 'the same card', { size: .52, k: 'brass' });
+  // The same payment asked for outside the room.
+  c.at(1900);
+  c.path(P.outPath, { k: 'stop', w: .7 });
+  c.icon('desk', P.out[0], P.out[1], 70, { k: 'stop' });
+  c.cross(P.out[0] + 52, P.out[1] - 30, 24, { k: 'stop' });
+  c.text(P.outL[0], P.outL[1], 'the same payment, asked directly', { size: .5, k: 'stop' });
+  c.text(P.outL[0], P.outL[1] + 28, 'refused', { size: .5, k: 'stop' });
+  // The authorization tree, node by node.
+  c.at(2400);
+  if (T) c.line(40, 560, 760, 560, { k: 'faint', w: .5 }); else c.line(890, 110, 890, 700, { k: 'faint', w: .5 });
+  c.text(P.treeL[0], P.treeL[1], 'the authorization tree', { size: .6, k: 'soft' });
+  const node = ([x, y, w, h], a, b, k, ok, d) => {
+    c.rect(x, y, w, h, { k, w: .9, rx: 8, d });
+    c.text(x + 22, y + h / 2 - 3, a, { anchor: 'start', size: .64, d: d + 80 });
+    c.text(x + 22, y + h / 2 + 23, b, { anchor: 'start', size: .46, k: 'soft', d: d + 120 });
+    if (ok) c.check(x + w + 36, y + h / 2, 30, { k: 'brass', d: d + 400 }); else c.cross(x + w + 36, y + h / 2, 24, { k: 'stop', d: d + 400 });
+  };
+  node(P.root, 'game: guess', 'the root: passes the game line', 'ink', true, 2500);
+  const [ax, ay, , ah] = P.root, [bx, by, , bh] = P.kid;
+  c.path(`M${ax + 40} ${ay + ah}V${by + bh / 2}H${bx - 6}`, { k: 'ink', w: .7, d: 2900 });
+  node(P.kid, 'XLM: transfer, the stake', 'nested: passes the transfer line only if', 'ink', true, 3100);
+  ['from the account, only to the game', 'within the cap', 'its root is exactly game: guess'].forEach((t, i) => {
+    const [x, y] = P.conds[i];
+    c.circle(x, y - 7, 5, { k: 'brass', fill: 'brass', w: .3, d: 3500 + i * 200 });
+    c.text(x + 18, y, t, { anchor: 'start', size: .54, d: 3500 + i * 200 });
+  });
+  c.at(4300);
+  node(P.dir, 'XLM: transfer as the root', 'made directly, or under another root', 'stop', false, 4300);
+  c.text(P.dirL[0], P.dirL[1], 'refused: the transfer line needs the game room', { anchor: 'start', size: .5, k: 'stop' });
+} };
+
+B.nidorun = { vb: ['0 0 1600 760', '0 0 800 1200'], draw(c) {
+  const T = c.tall;
+  const cx = T ? [205, 595, 205, 595] : [230, 610, 990, 1370], cy = T ? [300, 300, 760, 760] : [360, 360, 360, 360];
+  const tw = T ? 360 : 340, th = T ? 420 : 400;
+  const sim = (x, y, t) => c.chip(x, y, t, { k: 'soft', size: T ? .44 : .48, fill: 'hatch' });
+  c.at(60);
+  c.text(T ? 400 : 800, T ? 40 : 100, 'in the test building, offline; each signature in the Nido dialog', { size: T ? .48 : .62, k: 'soft' });
+  const tiles = [['the building is built', 'a passkey stand-in holds', 'the master key'], ['the keycard is issued', 'one install call', ''], ['the game room', 'a loss pays the stake to the game', ''], ['the shop', 'an order pays the shop', '']];
+  tiles.forEach(([a, b, b2], i) => {
+    const x = cx[i], y = cy[i], d = 200 + i * 500;
+    c.at(d);
+    c.rect(x - tw / 2, y - th / 2, tw, th, { k: 'ink', rx: 10, w: .9 });
+    c.circle(x - tw / 2 + 32, y - th / 2 + 32, 16, { k: 'brass', w: .7 });
+    c.text(x - tw / 2 + 32, y - th / 2 + 33, String(i + 1), { size: .56, base: 'central', k: 'brass' });
+    const gy = y - 70;
+    if (i === 0) { c.icon('building', x - 36, gy, 70, { k: 'ink' }); c.icon('master', x + 60, gy + 14, 50, { k: 'brass' }); }
+    else if (i === 1) { const g = c.keycard(x - 80, gy - 46, 160, 96, {}); c.text(48, 60, 'the app', { anchor: 'start', size: .44, p: g, anim: 'none', d: 0 }); }
+    else {
+      const [r, k2] = i === 2 ? ['game.guess', 'XLM.transfer'] : ['shop.order', 'EURC.transfer'];
+      c.rect(x - 130, gy - 62, 170, 40, { k: 'ink', rx: 6, w: .7 });
+      c.text(x - 118, gy - 35, r, { anchor: 'start', size: .44, font: 'code' });
+      c.path(`M${x - 110} ${gy - 22}V${gy + 22}H${x - 84}`, { k: 'ink', w: .5 });
+      c.rect(x - 82, gy + 2, 194, 40, { k: 'ink', rx: 6, w: .7 });
+      c.text(x - 70, gy + 29, k2, { anchor: 'start', size: .44, font: 'code' });
+      c.check(x + 64, gy - 42, 22, { k: 'brass' });
+      c.check(x + 136, gy + 22, 22, { k: 'brass' });
+    }
+    c.text(x, y + 46, a, { size: T ? .64 : .7 });
+    c.text(x, y + 82, b, { size: T ? .48 : .52, k: 'soft' });
+    if (b2) c.text(x, y + 110, b2, { size: T ? .48 : .52, k: 'soft' });
+    c.chip(x, y + th / 2 - 44, i === 0 ? 'in Nido' : 'the Nido dialog', { k: 'brass', tk: 'brass', size: .46 });
+  });
+  c.at(2400);
+  if (T) { sim(400, 1040, 'simulated: the passkey stand-in, the rebuilt factory,'); sim(400, 1090, 'the EURC test token, the game and the shop'); }
+  else sim(800, 630, 'simulated: the passkey stand-in, the rebuilt factory, the EURC test token, the game and the shop');
+} };
+
+B.desk = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const st = [['arrival', 'the host', 'trusted', 'network'], ['guards', '', 'tested', 'guard'], ['look up', 'select rules', 'tested', 'list'], ['decide', 'the desk rule', 'proved', 'desk'], ['ID check', 'authenticate', 'tested', 'magnifier', 'verifier trusted'], ['logbook', 'store records', 'tested', 'doc']];
+  const P = T ? { w: 260, h: 104, xs: () => 330, ys: i => 90 + i * 168, done: [330, 1110] }
+    : { w: 190, h: 128, xs: i => 118 + i * 236, ys: () => 300, done: [1520, 300] };
+  st.forEach(([lab, paper, kind, ic, note], i) => {
+    const x = P.xs(i), y = P.ys(i);
+    c.at(150 + i * 300);
+    const k = kind === 'proved' ? 'plan' : 'ink';
+    if (kind === 'proved') { c.rect(x - P.w / 2 - 7, y - P.h / 2 - 7, P.w + 14, P.h + 14, { k, rx: 12, w: 1.2 }); }
+    c.rect(x - P.w / 2, y - P.h / 2, P.w, P.h, { k, rx: 8, w: kind === 'proved' ? .5 : .9, fill: kind === 'trusted' ? 'hatch' : null });
+    if (T) {
+      c.icon(ic, x - P.w / 2 + 44, y, 50, { k: kind === 'proved' ? 'plan' : 'soft' });
+      c.text(x - P.w / 2 + 84, y - 4, lab, { anchor: 'start', size: .72, k: kind === 'proved' ? 'plan' : undefined });
+      c.text(x - P.w / 2 + 84, y + 28, paper, { anchor: 'start', size: .48, k: 'soft' });
+    } else {
+      c.icon(ic, x, y - 28, 46, { k: kind === 'proved' ? 'plan' : 'soft' });
+      c.text(x, y + 22, lab, { size: .8, k: kind === 'proved' ? 'plan' : undefined });
+      c.text(x, y + 50, paper, { size: .5, k: 'soft' });
+    }
+    if (T) c.badge(x - P.w / 2 - 20 - (kind === 'proved' ? 50 : 70), y + 8, kind, { size: .5 });
+    else c.badge(x - 28 + (kind === 'proved' ? 10 : 6), y - P.h / 2 - 22, kind, { size: .54 });
+    if (note) c.text(T ? x + P.w / 2 + 12 : x, T ? y + 34 : y - P.h / 2 - 54, note, { anchor: T ? 'start' : 'middle', size: .44, k: 'soft', italic: true });
+    if (i < st.length - 1) {
+      if (T) c.arrow(x, y + P.h / 2 + 6, x, P.ys(i + 1) - P.h / 2 - 10, { k: 'ink', w: .7 });
+      else c.arrow(x + P.w / 2 + 6, y, P.xs(i + 1) - P.w / 2 - 10, y, { k: 'ink', w: .7 });
+    }
+  });
+  c.at(2200);
+  [1, 2, 3, 4].forEach(i => {
+    const x = P.xs(i), y = P.ys(i);
+    if (T) { c.line(x + P.w / 2 + 8, y, 640, y, { k: 'stop', w: .5, step: 30 }); c.circle(664, y, 22, { k: 'stop', w: .6, step: 0 }); c.cross(664, y, 20, { k: 'stop', step: 60 }); }
+    else { c.line(x, y + P.h / 2 + 8, x, 500, { k: 'stop', w: .5, step: 30 }); c.circle(x, 524, 22, { k: 'stop', w: .6, step: 0 }); c.cross(x, 524, 20, { k: 'stop', step: 60 }); }
+  });
+  if (T) { c.line(664, P.ys(1) + 22, 664, P.ys(4) - 22, { k: 'faint', w: .5 }); c.text(664, P.ys(4) + 80, 'turned away:', { size: .56, k: 'stop' }); c.text(664, P.ys(4) + 114, 'nothing written', { size: .56, k: 'stop' }); }
+  else { c.line(P.xs(1) + 22, 524, P.xs(4) - 22, 524, { k: 'faint', w: .5 }); c.text((P.xs(1) + P.xs(4)) / 2, 590, 'turned away at any station: nothing written', { size: .7, k: 'stop' }); }
+  c.at(2900);
+  const [dx, dy] = P.done;
+  if (T) c.arrow(330, P.ys(5) + P.h / 2 + 6, 330, dy - 40, { k: 'brass', w: .7 });
+  else c.arrow(P.xs(5) + P.w / 2 + 6, 300, dx - 40, 300, { k: 'brass', w: .7 });
+  c.icon('unlock', dx, dy, 52, { k: 'brass' });
+  c.text(dx, dy + (T ? 0 : 62), T ? '' : 'the lock turns', { size: .58, k: 'brass' });
+  if (T) c.text(dx + 50, dy + 8, 'the lock turns', { anchor: 'start', size: .58, k: 'brass' });
+  c.at(3300);
+  if (T) c.text(100, P.ys(4) + 78, 'only after', { size: .52, k: 'soft' }), c.text(100, P.ys(4) + 108, 'a yes', { size: .52, k: 'soft' });
+  else c.text(P.xs(4), 676, 'the ID check runs only after the desk says yes', { size: .6, k: 'soft' });
+  const tok = E('circle', { cx: T ? 330 : 30, cy: T ? 20 : 300, r: T ? 11 : 9 }, c.svg);
+  tok.setAttribute('class', 'fl-brass an-travel');
+  tok.style.setProperty('--d', '3400ms');
+  if (T) tok.style.setProperty('--ty', (dy - 70) + 'px'); else tok.style.setProperty('--tx', (dx - 90) + 'px');
+} };
+
+B.threat = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    a1: [150, 110], a1L: [240, 96], a1s: [240, 134], a1c: [[240, 182], [240, 214], [240, 246]],
+    a2: [150, 380], a2L: [240, 366], a2s: [240, 404], a2c: [[240, 452], [240, 484]],
+    desk: [650, 250], holdH: [60, 620], hold: [[110, 690], [110, 750], [110, 810], [110, 870]], remH: [60, 980], rem: [[110, 1040], [110, 1090], [110, 1140]],
+  } : {
+    a1: [150, 170], a1L: [230, 156], a1s: [230, 192], a1c: [[230, 236], [230, 268], [230, 300]],
+    a2: [150, 420], a2L: [230, 406], a2s: [230, 442], a2c: [[230, 486], [230, 518]],
+    desk: [700, 300], holdH: [900, 140], hold: [[940, 200], [940, 254], [940, 308], [940, 362]], remH: [900, 470], rem: [[940, 528], [940, 576], [940, 624]],
+  };
+  const sz = T ? .56 : .62;
+  c.at(80);
+  c.icon('agent', P.a1[0] - 22, P.a1[1], 60, { k: 'ink' });
+  c.icon('card', P.a1[0] + 28, P.a1[1] + 24, 40, { k: 'brass' });
+  c.text(P.a1L[0], P.a1L[1], 'A1 · the card holder', { anchor: 'start', size: T ? .66 : .8 });
+  c.text(P.a1s[0], P.a1s[1], 'an app or agent key, honest or stolen', { anchor: 'start', size: sz, k: 'soft' });
+  ['signs within the lines naming its key', 'builds any request', 'chooses among those lines'].forEach((s, i) => c.text(P.a1c[i][0], P.a1c[i][1], '· ' + s, { anchor: 'start', size: sz, step: 60 }));
+  c.at(900);
+  c.icon('courier', P.a2[0], P.a2[1], 64, { k: 'ink' });
+  c.text(P.a2L[0], P.a2L[1], 'A2 · the courier', { anchor: 'start', size: T ? .66 : .8 });
+  c.text(P.a2s[0], P.a2s[1], 'whoever submits or relays the request', { anchor: 'start', size: sz, k: 'soft' });
+  ['chooses timing and fee', 'resends a refused request until it expires'].forEach((s, i) => c.text(P.a2c[i][0], P.a2c[i][1], '· ' + s, { anchor: 'start', size: sz, step: 60 }));
+  c.at(1600);
+  if (!T) c.line(840, 110, 840, 690, { k: 'faint', w: .5 }); else c.line(40, 560, 760, 560, { k: 'faint', w: .5 });
+  c.text(P.holdH[0], P.holdH[1], 'what holds', { anchor: 'start', size: T ? .64 : .72, k: 'plan' });
+  [['Theorem 2', 'every door is on a card'], ['Theorem 6', 'each allowance holds'], ['Theorem 8', 'no card reaches the account'], ['tested', 'the signature names the chosen lines']].forEach(([a, b], i) => {
+    const [x, y] = P.hold[i];
+    if (i < 3) c.seal(x, y - 8, T ? 20 : 16, { step: 0 }); else c.check(x, y - 8, T ? 30 : 26, { k: 'ink', step: 0 });
+    c.text(x + (T ? 34 : 30), y, a, { anchor: 'start', size: sz, k: i < 3 ? 'plan' : 'soft', step: 40 });
+    c.text(x + (T ? 186 : 160), y, b, { anchor: 'start', size: sz, step: 120 });
+  });
+  c.at(2400);
+  c.text(P.remH[0], P.remH[1], 'what remains', { anchor: 'start', size: T ? .64 : .72, k: 'stop' });
+  ['the lines naming its key, together', 'allowances per line, not per card', 'each call checked alone'].forEach((s, i) => {
+    const [x, y] = P.rem[i];
+    c.circle(x, y - 8, 5, { k: 'stop', fill: 'stop', w: .3, step: 0 });
+    c.text(x + 24, y, s, { anchor: 'start', size: sz, step: 120 });
+  });
+} };
+
+B.trust = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const trusted = [['network', 'host and', 'validators'], ['magnifier', 'verifiers', 'documents name'], ['controller', 'the recovery', 'controller'], ['doc', 'document', 'compiler'], ['gear', 'the compiler', ''], ['screen', "the wallet's", 'display']];
+  const pos = T ? trusted.map((_, i) => [150 + (i % 3) * 250, 140 + Math.floor(i / 3) * 210]) : trusted.map((_, i) => [190 + i * 244, 200]);
+  c.at(80);
+  c.text(T ? 400 : 800, T ? 40 : 90, 'trusted', { size: .72, k: 'soft' });
+  trusted.forEach(([ic, a, b], i) => {
+    const [x, y] = pos[i];
+    c.icon(ic, x, y, T ? 60 : 62, { k: 'soft', step: 100 });
+    c.text(x, y + (T ? 64 : 66), a, { size: T ? .54 : .62, step: 0 });
+    if (b) c.text(x, y + (T ? 96 : 96), b, { size: T ? .54 : .62, step: 40 });
+  });
+  c.text(T ? 400 : 800, T ? 520 : 362, 'assumed: unforgeable signatures · a collision-resistant SHA-256', { size: T ? .5 : .6, k: 'soft' });
+  c.at(1300);
+  if (T) c.line(40, 570, 760, 570, { k: 'faint', w: .5 }); else c.line(120, 410, 1480, 410, { k: 'faint', w: .5 });
+  const goals = [['G1 containment', 'proved', 'for lowering; code around it tested'], ['G2 permission soundness', 'proved', 'for the decision; code around it tested'], ['G3 window safety', 'proved', 'for the decision; code around it tested'], ['G4 recovery invalidation', 'proved', 'in an account model; tested; run on testnet'], ['G6 fail-closed refusal', 'tested', '']];
+  goals.forEach(([g, kind, how], i) => {
+    const x = T ? 70 : 160, y = T ? 640 + i * 110 : 470 + i * 52;
+    c.text(x, y, g, { anchor: 'start', size: T ? .6 : .66, step: 0 });
+    if (kind === 'proved') { c.seal(x + (T ? 430 : 470), y - 8, T ? 16 : 14, { step: 0 }); c.text(x + (T ? 456 : 492), y, 'proved', { anchor: 'start', size: T ? .54 : .6, k: 'plan', step: 0 }); }
+    else c.text(x + (T ? 440 : 480), y, 'tested', { anchor: 'start', size: T ? .54 : .6, k: 'soft', italic: true, step: 0 });
+    if (how) c.text(T ? x : x + 610, T ? y + 38 : y, how, { anchor: 'start', size: T ? .5 : .6, k: 'soft', step: 120 });
+  });
+} };
+
+B.guards = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  c.at(80);
+  if (T) { c.text(400, 50, 'both: OpenZeppelin context rules,', { size: .58, k: 'soft' }); c.text(400, 88, 'each call judged alone, deny by default', { size: .58, k: 'soft' }); }
+  else c.text(800, 92, 'both: OpenZeppelin context rules · each call judged alone · deny by default', { size: .66, k: 'soft' });
+  // Several guards at one door.
+  c.at(400);
+  const L = T ? { door: [400, 300], g: [[200, 450], [400, 450], [600, 450]], cap: [400, 600] } : { door: [400, 250], g: [[230, 420], [400, 420], [570, 420]], cap: [400, 620] };
+  c.text(L.door[0], L.door[1] - 110, 'OpenZeppelin with oz-policy-builder', { size: T ? .6 : .68 });
+  c.icon('door', L.door[0], L.door[1], 120, { k: 'ink' });
+  const gl = [['interpreter', 'each call alone'], ['spending limit', 'keeps totals; opt-in'], ['threshold', 'a policy']];
+  gl.forEach(([a, b], i) => {
+    const [x, y] = L.g[i];
+    c.icon('guard', x, y, T ? 66 : 70, { k: 'ink', step: 200 });
+    c.text(x, y + (T ? 62 : 66), a, { size: T ? .54 : .62, step: 0 });
+    c.text(x, y + (T ? 92 : 96), b, { size: T ? .48 : .54, k: 'soft', step: 0 });
+    c.line(x, y - 40, L.door[0] + (i - 1) * 20, L.door[1] + 64, { k: 'faint', w: .4, step: 0 });
+  });
+  c.text(L.cap[0], L.cap[1] + (T ? 70 : 54), 'each guard swappable; one can read a live price', { size: T ? .5 : .6, k: 'soft' });
+  // One desk.
+  c.at(1500);
+  if (T) c.line(40, 720, 760, 720, { k: 'faint', w: .5 }); else c.line(800, 160, 800, 720, { k: 'faint', w: .5 });
+  const R = T ? { t: [400, 790], desk: [400, 920], book: [250, 1060], m: [480, 1048], cap: [400, 1180] } : { t: [1200, 140], desk: [1200, 330], book: [1060, 500], m: [1180, 488], cap: [1200, 674] };
+  c.text(R.t[0], R.t[1], 'Perch', { size: T ? .6 : .68, k: 'brass' });
+  c.icon('desk', R.desk[0], R.desk[1], T ? 130 : 150, { k: 'brass' });
+  c.icon('list', R.book[0], R.book[1], 52, { k: 'brass' });
+  c.text(R.book[0], R.book[1] + 52, 'every rule', { size: .56, k: 'soft' });
+  c.meter(R.m[0], R.m[1] - 12, 150, 24, .6, {});
+  c.text(R.m[0] + 75, R.m[1] + 52, 'the allowance meter', { size: .56, k: 'soft' });
+  c.text(R.cap[0], R.cap[1], 'one place to check and to keep the limit', { size: T ? .5 : .6, k: 'soft' });
+} };
+
+B.stronger = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const opb = [['maturity', 'testnet pin; audit in progress; 33 mainnet transactions tested'], ['authoring', 'record or declare, synthesise, verify'], ['expressiveness', 'reads, quantifiers, clock windows, deny codes'], ['reach', 'rules on existing OpenZeppelin accounts']];
+  const pr = [['limits over time', 'a window inside the rule'], ['one decision point', 'refuses before any verifier runs'], ['one card across contracts', 'one install, one removal'], ['a proved core', 'the decision, proved (§8)']];
+  const col = (x0, y0, head, k, items, d) => {
+    c.at(d);
+    c.text(x0, y0, head, { anchor: 'start', size: T ? .66 : .74, k, weight: 600 });
+    c.line(x0, y0 + 18, x0 + (T ? 680 : 620), y0 + 18, { k: k === 'brass' ? 'brass' : 'ink', w: .5 });
+    items.forEach(([a, b], i) => {
+      const y = y0 + (T ? 70 : 72) + i * (T ? 92 : 78);
+      c.text(x0, y, a, { anchor: 'start', size: T ? .58 : .66, step: 0 });
+      c.text(x0 + (T ? 0 : 230), y + (T ? 34 : 0), b, { anchor: 'start', size: T ? .5 : .58, k: 'soft', step: 120 });
+    });
+  };
+  if (T) {
+    col(60, 70, 'oz-policy-builder is ahead', 'ink', opb, 100);
+    col(60, 520, 'Perch is ahead', 'brass', pr, 1300);
+    c.at(2400);
+    c.line(40, 950, 760, 950, { k: 'faint', w: .5 });
+    c.text(60, 1000, 'lessons for Perch', { anchor: 'start', size: .58, k: 'soft' });
+    ['record a transaction, emit a card', 'simulate a card before install', 'minimality and overlap checks', 'a corpus of real transactions', 'an audit before claiming maturity'].forEach((s, i) => c.text(60, 1044 + i * 40, '· ' + s, { anchor: 'start', size: .5, step: 60 }));
+  } else {
+    col(90, 150, 'oz-policy-builder is ahead', 'ink', opb, 100);
+    col(860, 150, 'Perch is ahead', 'brass', pr, 1300);
+    c.at(2400);
+    c.line(90, 520, 1510, 520, { k: 'faint', w: .5 });
+    c.text(90, 570, 'lessons for Perch', { anchor: 'start', size: .64, k: 'soft' });
+    const ls = ['record a transaction, emit a card', 'simulate a card before install', 'minimality and overlap checks', 'a corpus of real transactions', 'an audit before claiming maturity'];
+    ls.forEach((s, i) => c.text(90 + (i % 3) * 480, 620 + Math.floor(i / 3) * 44, '· ' + s, { anchor: 'start', size: .58, step: 60 }));
+  }
+} };
+
+B.sim = { vb: ['0 0 1600 740', '0 0 800 1200'], draw(c) {
+  const T = c.tall;
+  const P = T ? { hall: [30, 60, 740, 1010], hL: [400, 116], oz: [80, 280, 640, 330], pe: [80, 660, 640, 330], split: [400, 150], foot: [400, 1036] }
+    : { hall: [110, 70, 1380, 580], hL: [800, 128], oz: [170, 250, 590, 330], pe: [840, 250, 590, 330], split: [800, 160], foot: [800, 628] };
+  c.at(80);
+  const [hx, hy, hw, hh] = P.hall;
+  c.path(`M${hx} ${hy + hh}V${hy + 50}Q${hx + hw / 2} ${hy - 40} ${hx + hw} ${hy + 50}V${hy + hh}Z`, { k: 'ink', w: 1 });
+  c.text(P.hL[0], P.hL[1], 'soroban-sim: one host, offline', { size: T ? .62 : .72 });
+  const bld = (box, title, k, items, d) => {
+    c.at(d);
+    const [x, y, w, h] = box;
+    c.rect(x, y, w, h, { k, w: 1, rx: 4 });
+    c.line(x - 10, y, x + w + 10, y, { k, w: 1.3 });
+    c.text(x + 24, y + 44, title, { anchor: 'start', size: T ? .6 : .7, k: k === 'brass' ? 'brass' : undefined });
+    items.forEach(([ic, s], i) => {
+      const cx = x + (T ? 110 + i * 160 : 100 + i * 130), cy = y + h * .58;
+      c.icon(ic, cx, cy, T ? 54 : 52, { k: ic === 'card' ? 'brass' : 'soft', step: 80 });
+      c.text(cx, cy + (T ? 62 : 58), s, { size: T ? .46 : .5, k: 'soft', step: 0 });
+    });
+  };
+  const [sx, sy] = P.split;
+  if (T) {
+    c.arrow(sx, sy, sx, P.oz[1] - 10, { k: 'ink', w: .7 });
+    c.path(`M${sx} ${sy + 30}H50V${P.pe[1] - 30}H${sx}V${P.pe[1] - 12}`, { k: 'ink', w: .5 });
+    c.head(sx, P.pe[1] - 10, Math.PI / 2, { k: 'ink', w: .5 });
+    c.text(sx + 18, sy + 80, 'the same request', { anchor: 'start', size: .5, k: 'soft' });
+  } else {
+    c.curve(sx, sy, P.oz[0] + P.oz[2] / 2, P.oz[1] - 8, { k: 'ink', w: .7, dir: 'v', head: true });
+    c.curve(sx, sy, P.pe[0] + P.pe[2] / 2, P.pe[1] - 8, { k: 'ink', w: .7, dir: 'v', head: true });
+    c.text(sx, sy + 56, 'the same request', { size: .56, k: 'soft' });
+  }
+  bld(P.oz, 'OpenZeppelin v0.8.0 account', 'ink', [['guard', 'interpreter'], ['guard', 'spending limit'], ['key', 'delegated'], ['door', 'XLM']], 900);
+  bld(P.pe, 'Perch account', 'brass', [['card', 'shop card'], ['doc', 'compiler'], ['magnifier', 'Ed25519'], ['door', 'XLM']], 1500);
+  c.at(2300);
+  c.text(P.foot[0], P.foot[1], 'real contract bytes · every verdict traced · native = WASI = browser', { size: T ? .46 : .6, k: 'soft' });
+} };
+
+B.run = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const cmds = [['pay 6', 'ok', 'ok'], ['pay 5', 'no', 'no'], ['limit off', 'off', 'na'], ['pay 6', 'more', 'no'], ['pay 6', 'more', 'no'], ['pay 6', 'more', 'no'], ['limit on', 'on', 'na']];
+  const G = T ? { cell: i => ({ y: 232 + i * 90 }), lab: 60, oz: 470, pe: 650, head: 150, gs: 40, bars: { x0: 60, w: 640, oz: 940, pe: 1070, h: 34 }, br: [530] }
+    : { cell: i => ({ x: 440 + i * 145 }), head: 150, oz: 292, pe: 440, lab: 70, gs: 40, bars: { x0: 440, w: 870, oz: 572, pe: 690, h: 34 }, br: [340] };
+  const at = i => 700 + i * 520;
+  c.at(80);
+  if (T) { c.text(G.oz, G.head, 'OZ', { size: .7 }); c.text(G.pe, G.head, 'Perch', { size: .7, k: 'brass' }); }
+  else { c.text(G.lab, G.oz + 9, 'OpenZeppelin', { anchor: 'start', size: .8 }); c.text(G.lab, G.pe + 9, 'Perch', { anchor: 'start', size: .8, k: 'brass' }); }
+  const glyph = (kind, x, y, k, d) => {
+    if (kind === 'ok' || kind === 'more') c.check(x, y, G.gs, { k, d, w: kind === 'more' ? 2.2 : 1.5 });
+    else if (kind === 'no') c.cross(x, y, G.gs - 8, { k: 'stop', d });
+    else if (kind === 'off' || kind === 'on') { c.icon('guard', x, y, G.gs + 8, { k: 'soft', d }); if (kind === 'off') c.line(x - 22, y + 22, x + 22, y - 22, { k: 'ink', w: .8, d: d + 200 }); }
+    else c.text(x, y + 8, '–', { size: .8, k: 'soft', d });
+  };
+  cmds.forEach(([lab, oz, pe], i) => {
+    const d = at(i);
+    if (T) { const y = G.cell(i).y; c.text(G.lab, y + 8, lab, { anchor: 'start', size: .56, k: lab[0] === 'p' ? undefined : 'soft', d }); glyph(oz, G.oz, y, 'ink', d + 120); glyph(pe, G.pe, y, 'brass', d + 180); }
+    else { const x = G.cell(i).x; c.text(x, G.head, lab, { size: .6, k: lab[0] === 'p' ? undefined : 'soft', d }); glyph(oz, x, G.oz, 'ink', d + 120); glyph(pe, x, G.pe, 'brass', d + 180); }
+  });
+  const dB = at(6) + 300;
+  if (T) { const y1 = G.cell(3).y - 30, y2 = G.cell(5).y + 30, x = G.br[0]; c.path(`M${x - 10} ${y1}H${x}V${y2}H${x - 10}`, { k: 'ink', w: .8, d: dB }); c.text(x + 14, (y1 + y2) / 2 + 8, '18 XLM', { anchor: 'start', size: .6, weight: 600, d: dB + 200 }); }
+  else { const x1 = G.cell(3).x - 40, x2 = G.cell(5).x + 40, y = G.br[0]; c.path(`M${x1} ${y - 10}V${y}H${x2}V${y - 10}`, { k: 'ink', w: .8, d: dB }); c.text((x1 + x2) / 2, y + 36, '18 XLM more', { size: .76, weight: 600, d: dB + 200 }); }
+  const Bz = G.bars, ux = Bz.w / 100;
+  const balance = (y, k, spent, label, end, d0) => {
+    const fill = k === 'brass' ? 'brass' : 'ink';
+    c.rect(Bz.x0, y, Bz.w, Bz.h, { k: 'faint', w: .5, fill: 'hatch', d: d0 });
+    const keep = 100 - spent.length * 6;
+    c.rect(Bz.x0, y, keep * ux, Bz.h, { k, w: .6, fill, fillOp: .3, d: d0 + 100 });
+    spent.forEach((ci, j) => c.rect(Bz.x0 + (100 - (j + 1) * 6) * ux, y, 6 * ux, Bz.h, { k, w: .6, fill, fillOp: .3, anim: 'an-out', d: at(ci) + 220 }));
+    if (T) { c.text(Bz.x0, y - 14, label, { anchor: 'start', size: .56, k: k === 'brass' ? 'brass' : undefined, d: d0 }); c.text(Bz.x0 + Bz.w, y - 14, end, { anchor: 'end', size: .66, weight: 600, k: k === 'brass' ? 'brass' : undefined, d: at(6) + 400 }); }
+    else { c.text(G.lab, y + 25, label, { anchor: 'start', size: .68, k: k === 'brass' ? 'brass' : 'soft', d: d0 }); c.text(Bz.x0 + Bz.w + 22, y + 26, end, { anchor: 'start', size: .78, weight: 600, k: k === 'brass' ? 'brass' : undefined, d: at(6) + 400 }); }
+  };
+  balance(Bz.oz, 'ink', [0, 3, 4, 5], T ? 'OpenZeppelin balance' : 'balance', '76 XLM', 300);
+  balance(Bz.pe, 'brass', [0], T ? 'Perch balance' : 'balance', '94 XLM', 400);
+  if (!T) c.text(Bz.x0, Bz.oz - 16, 'from 100 XLM', { anchor: 'start', size: .56, k: 'soft', d: 300 });
+} };
+
+B.inspector = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? { rust: [150, 140], rustL: [150, 220], a1: [230, 140, 330, 140], a1L: [280, 112], tr: [420, 140], trL: [420, 220], bp: [660, 140], bpL: [660, 220], insp: [540, 380], eq: [540, 150], th: [400, 560], th2: [400, 602], cast: [200, 780], castL: [300, 790], foot: [400, 1000], foot2: [400, 1040] }
+    : { rust: [180, 280], rustL: [180, 370], a1: [260, 280, 470, 280], a1L: [365, 252], tr: [580, 280], trL: [580, 370], bp: [1020, 280], bpL: [1020, 370], insp: [800, 230], eq: [800, 300], th: [800, 500], th2: [800, 540], cast: [210, 600], castL: [270, 610], foot: [1000, 690], foot2: null };
+  c.at(80);
+  c.icon('doc', P.rust[0], P.rust[1], T ? 80 : 90, { k: 'ink' });
+  c.text(P.rustL[0], P.rustL[1], 'the desk rule, as written', { size: T ? .52 : .64 });
+  c.text(P.rustL[0], P.rustL[1] + (T ? 34 : 36), 'about 2,400 lines', { size: T ? .46 : .54, k: 'soft' });
+  c.arrow(...P.a1, { k: 'ink', w: .7 });
+  c.text(P.a1L[0], P.a1L[1], T ? 'traced' : 'traced by machine', { size: T ? .48 : .54, k: 'soft' });
+  c.at(900);
+  c.icon('blueprint', P.tr[0], P.tr[1], T ? 80 : 92, { k: 'plan' });
+  c.text(P.trL[0], P.trL[1], 'the tracing', { size: T ? .52 : .64, k: 'plan' });
+  c.icon('blueprint', P.bp[0], P.bp[1], T ? 80 : 92, { k: 'plan' });
+  c.text(P.bpL[0], P.bpL[1], 'the blueprint', { size: T ? .52 : .64, k: 'plan' });
+  c.text(P.bpL[0], P.bpL[1] + (T ? 34 : 36), 'a readable model', { size: T ? .46 : .54, k: 'soft' });
+  c.at(1500);
+  if (!T) {
+    c.icon('magnifier', P.insp[0] - 20, P.insp[1] - 60, 60, { k: 'plan' });
+    c.seal(P.insp[0] + 40, P.insp[1] - 70, 32, {});
+    c.text(P.eq[0], P.eq[1] + 4, '=', { size: 1.6, k: 'plan' });
+    c.text(P.eq[0], P.eq[1] + 70, 'the inspector compares', { size: .56, k: 'soft' });
+  } else {
+    c.text(P.eq[0], P.eq[1] + 14, '=', { size: 1.3, k: 'plan' });
+    c.icon('magnifier', P.insp[0] - 40, P.insp[1], 64, { k: 'plan' });
+    c.seal(P.insp[0] + 40, P.insp[1], 34, {});
+    c.text(P.insp[0], P.insp[1] + 76, 'the inspector compares', { size: .5, k: 'soft' });
+  }
+  c.at(2200);
+  plaqueText(c, P.th[0], P.th[1], 'Theorem 1: on every input, the tracing gives the', { size: T ? .56 : .7 });
+  plaqueText(c, P.th2[0], P.th2[1], "blueprint's answer, and never jams or loops", { size: T ? .56 : .7 });
+  c.at(2800);
+  c.icon('lock', P.cast[0], P.cast[1], T ? 56 : 54, { k: 'soft' });
+  c.text(P.castL[0], P.castL[1], 'the lock as built: not inspected', { anchor: 'start', size: T ? .5 : .58, k: 'soft' });
+  if (T) { c.text(P.foot[0], P.foot[1], 'kernel-checked · 940 theorems', { size: .5, k: 'soft' }); c.text(P.foot2[0], P.foot2[1], 'CI re-traces on every change', { size: .5, k: 'soft' }); }
+  else c.text(P.foot[0] + 100, P.foot[1], 'kernel-checked · 940 theorems on standard axioms · CI re-traces on every change', { size: .54, k: 'soft' });
+} };
+
+B.t2 = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const doorsX = T ? 130 : 300, cardX = T ? 300 : 820;
+  const ys = T ? [350, 470, 590] : [250, 370, 490];
+  const [cy, cw, ch] = T ? [230, 450, 440] : [130, 520, 440];
+  c.at(80);
+  c.text(doorsX, ys[0] - (T ? 76 : 70), 'the request', { size: .62, k: 'soft' });
+  ys.forEach(y => c.icon('door', doorsX, y, T ? 84 : 92, { k: 'brass', fill: 'hatch-brass', step: 200 }));
+  const [dx, dy] = T ? [610, 110] : [560, 140];
+  c.icon('desk', dx, dy, T ? 80 : 84, { k: 'ink' });
+  c.check(dx + 56, dy - 30, 34, { k: 'ink' });
+  c.text(dx, dy + (T ? 74 : 76), 'accepted', { size: .58, k: 'soft' });
+  c.at(1000);
+  c.keycard(cardX, cy, cw, ch, { rise: true });
+  ys.forEach((y, i) => {
+    const lx = cardX + (T ? 100 : 130), lw = T ? 250 : 300;
+    c.rect(lx, y - 22, lw, 44, { k: 'brass', w: .6, rx: 6, d: 1400 + i * 200 });
+    c.text(lx + 20, y + 8, 'line ' + (i + 1), { anchor: 'start', size: .6, d: 1500 + i * 200 });
+    c.line(doorsX + 32, y, lx - 8, y, { k: 'plan', w: .7, d: 1900 + i * 200 });
+    c.check(lx + lw - 30, y, 26, { k: 'plan', d: 2200 + i * 200 });
+  });
+  c.at(2800);
+  const tx = T ? 400 : 800, ty = T ? 780 : 640;
+  plaqueText(c, tx, ty, T ? 'If the desk accepts, every door in the' : 'If the desk accepts, every door in the request is allowed by', { size: T ? .6 : .76 });
+  plaqueText(c, tx, ty + (T ? 42 : 42), T ? 'request is allowed by a line on the cards' : 'a line on the cards it was given, for the signers it was given.', { size: T ? .6 : .76 });
+  if (T) plaqueText(c, tx, ty + 84, 'it was given, for the signers it was given.', { size: .6 });
+  c.text(tx, ty + (T ? 150 : 96), 'who signed is an input; the account checks it (tested)', { size: T ? .5 : .56, k: 'soft' });
+} };
+
+B.t6 = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const x0 = T ? 60 : 140, x1 = T ? 740 : 1460, y0 = T ? 560 : 470, u = 26, P = 22;
+  // Illustrative attempts, accepted only while the last P ledgers stay within 10.
+  const tries = [[0, 3], [3, 4], [6, 4], [9, 2], [14, 1], [20, 5], [24, 3], [27, 3], [31, 2], [36, 4], [40, 3], [44, 1], [48, 5], [52, 4], [55, 2], [60, 3], [63, 4], [66, 4], [72, 1], [75, 3], [78, 2], [83, 5], [87, 3], [90, 3], [96, 2]];
+  const acc = [], ref = [];
+  tries.forEach(([t, v]) => {
+    const sum = acc.filter(([a]) => a > t - P && a <= t).reduce((m, [, x]) => m + x, 0);
+    (sum + v <= 10 ? acc : ref).push([t, v]);
+  });
+  const X = t => x0 + (x1 - x0) * t / 100;
+  c.at(80);
+  c.line(x0, y0, x1, y0, { k: 'soft', w: .6 });
+  c.line(x0, y0 - 10 * u, x1, y0 - 10 * u, { k: 'ink', w: .7 });
+  c.text(x1, y0 - 10 * u - 30, 'allowance', { anchor: 'end', size: .58, k: 'soft' });
+  c.at(400);
+  acc.forEach(([t, v]) => c.rect(X(t) - (T ? 7 : 11), y0 - v * u, T ? 14 : 22, v * u, { k: 'brass', w: .4, fill: 'brass', fillOp: .38, step: 40 }));
+  ref.forEach(([t]) => c.cross(X(t), y0 - 10 * u - 16, T ? 16 : 18, { k: 'stop', step: 30 }));
+  c.at(1700);
+  const wins = T ? [4, 38, 70] : [2, 20, 38, 56, 74];
+  wins.forEach((st, i) => {
+    const a = X(st), b = X(st + P);
+    const sum = acc.filter(([t]) => t >= st && t < st + P).reduce((m, [, v]) => m + v, 0);
+    const yy = y0 + (T ? 60 : 50) + (i % 2) * (T ? 70 : 60);
+    c.rect(a, y0 - 10 * u - 4, b - a, 10 * u + 4, { k: 'plan', w: .6, rx: 4, step: 0, op: .9 });
+    c.path(`M${a} ${yy - 16}V${yy}H${b}V${yy - 16}`, { k: 'plan', w: .7, step: 0 });
+    c.text((a + b) / 2, yy + (T ? 34 : 30), `${sum} of 10`, { size: T ? .54 : .56, k: 'plan', step: 300 });
+  });
+  c.at(3000);
+  const tx = T ? 400 : 800, ty = T ? 900 : 690;
+  plaqueText(c, tx, ty, T ? 'From an empty record, however the' : 'From an empty record, however the payments are timed,', { size: T ? .6 : .76 });
+  plaqueText(c, tx, ty + 42, T ? 'payments are timed, no window of P ledgers' : 'no window of P ledgers holds more than the allowance.', { size: T ? .6 : .76 });
+  if (T) plaqueText(c, tx, ty + 84, 'holds more than the allowance.', { size: .6 });
+  c.text(tx, ty + (T ? 150 : 96), 'illustrative payments; red marks a refused one', { size: T ? .5 : .56, k: 'soft' });
+} };
+
+B.t8 = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? { b: [60, 70, 680, 640], card: [80, 800], copy: [80, 930] } : { b: [520, 90, 900, 520], card: [120, 250], copy: [120, 420] };
+  const [bx, by, bw, bh] = P.b;
+  c.at(80);
+  c.rect(bx, by, bw, bh, { k: 'ink', w: 1.3 });
+  // Rooms: two contracts the card may reach; the account's office and its recovery office.
+  const mid = bx + bw / 2, midy = by + bh / 2;
+  c.line(mid, by, mid, by + bh, { k: 'ink', w: .8 });
+  c.line(bx, midy, bx + bw, midy, { k: 'ink', w: .8 });
+  const rooms = T
+    ? [[bx, by, "the account's office", 'shut'], [mid, by, 'recovery contracts', 'shut'], [bx, midy, 'XLM token', 'open'], [mid, midy, 'a game', 'open']]
+    : [[bx, by, 'XLM token', 'open'], [mid, by, 'a game', 'open'], [bx, midy, "the account's office", 'shut'], [mid, midy, 'recovery contracts', 'shut']];
+  c.at(500);
+  rooms.forEach(([x, y, s, st], i) => {
+    const w = bw / 2, h = bh / 2;
+    if (st === 'shut') c.rect(x + 6, y + 6, w - 12, h - 12, { k: 'stop', w: .3, fill: 'hatch-stop', step: 0 });
+    c.text(x + w / 2, y + h / 2 + 8, s, { size: T ? .56 : .66, step: 120, k: st === 'shut' ? 'stop' : undefined });
+    c.icon(st === 'shut' ? 'lock' : 'door', x + w / 2, y + h / 2 + (T ? 70 : 64), T ? 46 : 44, { k: st === 'shut' ? 'stop' : 'brass', step: 80 });
+  });
+  c.at(1700);
+  const cw = T ? 230 : 250, ch = T ? 140 : 150;
+  const g1 = c.keycard(P.card[0], P.card[1], cw, ch, { rise: true });
+  c.text(cw * .32, ch * .55, 'a card', { anchor: 'start', size: .62, p: g1, anim: 'none', d: 0 });
+  c.reset();
+  const g2 = c.keycard(P.copy[0], P.copy[1], cw * .82, ch * .82, { rise: true });
+  c.text(cw * .82 * .3, ch * .82 * .58, 'a copy cut from it', { anchor: 'start', size: .5, p: g2, anim: 'none', d: 0 });
+  c.reset();
+  c.at(2300);
+  if (T) {
+    c.arrow(P.card[0] + cw * .7, P.card[1] - 6, bx + bw / 4 + 40, by + bh - 40, { k: 'brass', w: .6 });
+    c.line(P.card[0] + cw * .3, P.card[1] - 6, bx + bw / 4 - 60, midy + 8, { k: 'stop', w: .6 });
+    c.cross(bx + bw / 4 - 60, midy + 30, 24, { k: 'stop' });
+  } else {
+    c.arrow(P.card[0] + cw + 10, P.card[1] + 40, mid - bw / 4, midy - 30, { k: 'brass', w: .6 });
+    c.line(P.card[0] + cw + 10, P.card[1] + 110, bx + 10, midy + bh / 4, { k: 'stop', w: .6 });
+    c.cross(bx - 20, midy + bh / 4 - 4, 24, { k: 'stop' });
+    c.line(P.copy[0] + cw * .82 + 10, P.copy[1] + 60, bx + 10, midy + bh / 4 + 30, { k: 'stop', w: .6 });
+  }
+  c.at(2900);
+  const tx = T ? 400 : 800, ty = T ? 1130 : 690;
+  plaqueText(c, tx, ty, T ? 'No card the account installs, nor any copy' : 'No card the account installs, nor any copy cut from it, opens a door', { size: T ? .56 : .76 });
+  plaqueText(c, tx, ty + (T ? 40 : 42), T ? 'cut from it, opens a door to the account or its recovery contracts.' : 'to the account itself or to its adopted recovery contracts.', { size: T ? .5 : .76 });
+} };
+
+B.eval = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const cells = [['57', 'traces from the model', 'run through the natively compiled account: every verdict and record matches'], ['11', 'testnet transactions', "through Nido's preview: a two-rule game grant, two lost guesses, a one-guardian recovery"], ['12,889', 'stroops in fees', 'one passkey-signed transfer through a grant'], ['1.677', 'XLM a year in rent', 'an account holding the game grant, 3,308 bytes']];
+  const pos = T ? cells.map((_, i) => [70, 90 + i * 240]) : cells.map((_, i) => [120 + (i % 2) * 700, 140 + Math.floor(i / 2) * 240]);
+  cells.forEach(([n, a, b], i) => {
+    const [x, y] = pos[i];
+    c.at(150 + i * 500);
+    c.text(x, y + 60, n, { anchor: 'start', font: 'disp', size: T ? 2.1 : 2.6, k: 'brass' });
+    c.text(x + (T ? 0 : 0), y + (T ? 112 : 112), a, { anchor: 'start', size: T ? .66 : .74 });
+    const words = b.split(' '), lines = [];
+    let cur = '';
+    words.forEach(w => { if ((cur + ' ' + w).length > (T ? 38 : 54)) { lines.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; });
+    lines.push(cur);
+    lines.forEach((s, j) => c.text(x, y + (T ? 150 : 150) + j * (T ? 32 : 32), s, { anchor: 'start', size: T ? .5 : .58, k: 'soft', step: 0 }));
+  });
+  c.at(2400);
+  if (T) { c.line(40, 1060, 760, 1060, { k: 'faint', w: .5 }); c.text(400, 1110, 'recorded run: verdicts agreed except the', { size: .5, k: 'soft' }); c.text(400, 1146, 'three sends without spending_limit', { size: .5, k: 'soft' }); c.text(400, 1200, 'threats to validity: one task, one host version', { size: .5, k: 'soft' }); c.text(400, 1236, 'without exact metering, testnet resets', { size: .5, k: 'soft' }); }
+  else { c.line(120, 640, 1480, 640, { k: 'faint', w: .5 }); c.text(800, 684, 'the recorded run: verdicts agreed except the three sends without spending_limit', { size: .6, k: 'soft' }); c.text(800, 724, 'threats to validity: one task · one host version, without exact metering · testnet resets', { size: .56, k: 'soft' }); }
+} };
+
+B.limits = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const C = T ? [400, 340] : [420, 380];
+  const R = T ? [270, 190, 110] : [300, 210, 120];
+  c.at(80);
+  c.circle(C[0], C[1], R[0], { k: 'soft', w: .7, fill: 'hatch' });
+  c.circle(C[0], C[1], R[1], { k: 'ink', w: .9, fill: 'paper' });
+  c.circle(C[0], C[1], R[2] + 8, { k: 'plan', w: 1.2 });
+  c.circle(C[0], C[1], R[2], { k: 'plan', w: .5, fill: 'paper' });
+  c.at(700);
+  c.icon('desk', C[0], C[1] - 18, T ? 64 : 70, { k: 'plan' });
+  c.text(C[0], C[1] + (T ? 46 : 52), 'the tracing', { size: T ? .5 : .56, k: 'plan' });
+  c.text(C[0], C[1] + (T ? 74 : 80), 'proved', { size: T ? .46 : .5, k: 'plan' });
+  c.text(C[0], C[1] - R[1] + (T ? 34 : 38), 'the shell: tested', { size: T ? .5 : .56 });
+  c.text(C[0], C[1] - R[0] + (T ? 36 : 40), 'the lock as built, the host:', { size: T ? .46 : .52, k: 'soft' });
+  c.text(C[0], C[1] - R[0] + (T ? 64 : 70), 'outside the theorems', { size: T ? .46 : .52, k: 'soft' });
+  c.at(1600);
+  const items = [['the specification is trusted', ''], ['no single theorem covers the whole path', ''], ['a meter keeps at most 907 spends', ''], ['two pre-signed installs land in either order', ''], ['a card holds at most 10 rules, 8 signers, 8,192 bytes', ''], ['nothing is audited', 'stop']];
+  items.forEach(([s, k], i) => {
+    const x = T ? 70 : 860, y = T ? 720 + i * 80 : 190 + i * 74;
+    c.circle(x, y - 8, 5, { k: k || 'ink', fill: k || 'ink', w: .3, step: 0 });
+    const words = s.split(' '); const L = [];
+    let cur = '';
+    words.forEach(w => { if ((cur + ' ' + w).length > (T ? 34 : 60)) { L.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; });
+    L.push(cur);
+    L.forEach((t, j) => c.text(x + 24, y + j * 32, t, { anchor: 'start', size: T ? .56 : .64, k: k || undefined, step: j ? 0 : 160 }));
+  });
+} };
+
+B.related = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const chart = (x0, y0, w, h, kind, d) => {
+    c.at(d);
+    const u = h / 12;
+    c.line(x0, y0, x0 + w, y0, { k: 'soft', w: .5 });
+    c.line(x0, y0 - 10 * u, x0 + w, y0 - 10 * u, { k: 'ink', w: .6 });
+    const per = w / 2;
+    if (kind === 'fixed') {
+      c.line(x0 + per, y0 + 8, x0 + per, y0 - 11 * u, { k: 'soft', w: .5 });
+      c.text(x0 + per, y0 + (T ? 34 : 30), 'reset', { size: .5, k: 'soft' });
+      c.rect(x0 + per - 36, y0 - 10 * u, 26, 10 * u, { k: 'brass', w: .4, fill: 'brass', fillOp: .4 });
+      c.rect(x0 + per + 10, y0 - 10 * u, 26, 10 * u, { k: 'brass', w: .4, fill: 'brass', fillOp: .4 });
+      c.rect(x0 + per - 60, y0 - 11.6 * u, 120, 11.6 * u + 6, { k: 'stop', w: .8, rx: 4 });
+      c.text(x0 + per + 76, y0 - 10 * u - 10, 'twice the cap', { anchor: 'start', size: .54, k: 'stop' });
+      c.text(x0 + per + 76, y0 - 10 * u + 22, 'within one period', { anchor: 'start', size: .54, k: 'stop' });
+    } else {
+      c.rect(x0 + per - 36, y0 - 10 * u, 26, 10 * u, { k: 'brass', w: .4, fill: 'brass', fillOp: .4 });
+      c.rect(x0 + per - 36 + per * .9, y0 - 6 * u, 26, 6 * u, { k: 'brass', w: .4, fill: 'brass', fillOp: .4 });
+      c.rect(x0 + per - 60, y0 - 11.6 * u, per * .78, 11.6 * u + 6, { k: 'plan', w: .8, rx: 4 });
+      if (T) c.text(x0, y0 + 40, 'bounded for every window', { anchor: 'start', size: .54, k: 'plan' });
+      else c.text(x0 + per + per * .78 - 40, y0 - 10 * u - 10, 'bounded for every window', { anchor: 'start', size: .54, k: 'plan' });
+    }
+  };
+  if (T) {
+    c.text(60, 60, 'a cap that resets each period', { anchor: 'start', size: .6 });
+    chart(60, 330, 680, 220, 'fixed', 100);
+    c.text(60, 420, 'a sliding window (Perch, Theorem 6)', { anchor: 'start', size: .6 });
+    chart(60, 690, 680, 220, 'sliding', 900);
+  } else {
+    c.text(120, 140, 'a cap that resets each period', { anchor: 'start', size: .66 });
+    chart(120, 400, 620, 220, 'fixed', 100);
+    c.text(860, 140, 'a sliding window (Perch, Theorem 6)', { anchor: 'start', size: .66 });
+    chart(860, 400, 620, 220, 'sliding', 900);
+  }
+  c.at(1800);
+  const y = T ? 820 : 520;
+  if (T) c.line(40, y - 40, 760, y - 40, { k: 'faint', w: .5 }); else c.line(120, y - 40, 1480, y - 40, { k: 'faint', w: .5 });
+  c.icon('card', T ? 110 : 170, y + 30, 56, { k: 'brass' });
+  c.arrow(T ? 160 : 220, y + 30, T ? 250 : 320, y + 30, { k: 'ink', w: .6 });
+  c.icon('meter', T ? 300 : 370, y + 30, 50, { k: 'brass' });
+  c.cross(T ? 300 : 370, y + 30, 22, { k: 'stop' });
+  const tx = T ? 60 : 450;
+  const ty = T ? y + 110 : y + 18;
+  c.text(tx, ty, 'cards a holder carries (SPKI/SDSI, macaroons, Biscuit, UCAN) can be cut down,', { anchor: 'start', size: T ? .46 : .58 });
+  c.text(tx, ty + (T ? 34 : 36), 'but carry no past spending: the meter lives in the building', { anchor: 'start', size: T ? .46 : .58 });
+  c.text(tx, ty + (T ? 90 : 96), 'also: ERC-4337, ERC-7579, ERC-7710, ERC-7715, Zodiac Roles, Cedar, Sunbeam, Komet', { anchor: 'start', size: T ? .42 : .52, k: 'soft' });
+} };
+
+B.future = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const items = [['tree', 'an agent runtime', 'with delegation-tree budgets'], ['card', 'install a cut copy', 'an account entry point'], ['list', "rules that require", "their entry's root"], ['doc', 'Cedar as an', 'authoring language']];
+  items.forEach(([ic, a, b], i) => {
+    const x = T ? [205, 595][i % 2] : 230 + i * 380, y = T ? [300, 760][Math.floor(i / 2)] : 360;
+    c.at(150 + i * 450);
+    c.rect(x - (T ? 170 : 160), y - (T ? 190 : 190), T ? 340 : 320, T ? 380 : 380, { k: 'pencil', w: .8, rx: 10 });
+    c.icon(ic, x, y - (T ? 60 : 60), T ? 90 : 96, { k: 'pencil' });
+    c.text(x, y + (T ? 70 : 80), a, { size: T ? .6 : .72, k: 'pencil' });
+    c.text(x, y + (T ? 106 : 116), b, { size: T ? .54 : .62, k: 'pencil' });
+  });
+  c.at(2200);
+  c.text(T ? 400 : 800, T ? 1080 : 680, 'everything here is proposed', { size: T ? .58 : .66, k: 'soft' });
+} };
+
+B.conclusion = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const done = [['desk', 'ink', 'one desk decides and charges the meter'], ['stamp', 'plan', 'the tracing is proved to keep three bounds'], ['list', 'ink', 'the shell is tested'], ['cross', 'stop', 'nothing is audited'], ['guard', 'ink', 'the designs differed only where the limit was removed'], ['people', 'ink', 'oz-policy-builder is ahead in maturity, authoring and expressiveness']];
+  const next = ['merge the stack', 'complete an audit', 'measure both designs with exact metering'];
+  c.at(80);
+  done.forEach(([ic, k, s], i) => {
+    const x = T ? 90 : 140, y = T ? 90 + i * 110 : 150 + i * 84;
+    c.icon(ic, x, y, T ? 50 : 48, { k, step: 120 });
+    const words = s.split(' '); const L = [];
+    let cur = '';
+    words.forEach(w => { if ((cur + ' ' + w).length > (T ? 34 : 56)) { L.push(cur); cur = w; } else cur = cur ? cur + ' ' + w : w; });
+    L.push(cur);
+    L.forEach((t, j) => c.text(x + (T ? 50 : 56), y + 10 + j * (T ? 32 : 32) - (L.length > 1 ? 14 : 0), t, { anchor: 'start', size: T ? .54 : .66, step: 0 }));
+  });
+  c.at(1800);
+  const nx = T ? 70 : 1060, ny = T ? 820 : 190;
+  if (!T) c.line(1000, 120, 1000, 640, { k: 'faint', w: .5 }); else c.line(40, 770, 760, 770, { k: 'faint', w: .5 });
+  c.text(nx, ny, 'what remains', { anchor: 'start', size: T ? .64 : .72, k: 'brass', weight: 600 });
+  next.forEach((s, i) => {
+    const y = ny + 70 + i * (T ? 70 : 74);
+    c.rect(nx, y - 20, 22, 22, { k: 'brass', w: .7, rx: 3, step: 0 });
+    c.text(nx + 40, y, s, { anchor: 'start', size: T ? .56 : .64, step: 160 });
+  });
+} };
+
+/* ---------- small animation helper for the played slides ---------- */
+function Anim() { this.timers = []; this.alive = true; }
+Anim.prototype.at = function (ms, fn) { this.timers.push(setTimeout(() => { if (this.alive) fn(); }, ms)); };
+Anim.prototype.tween = function (dur, fn) {
+  const t0 = performance.now();
+  const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+  const step = now => {
+    if (!this.alive) return;
+    const p = Math.min(1, (now - t0) / dur);
+    fn(ease(p));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+};
+Anim.prototype.stop = function () { this.alive = false; this.timers.forEach(clearTimeout); this.timers = []; };
+
+/* ---------- deck runtime ---------- */
+const slides = $$('.slide');
+let cur = 0, tallMode = null;
+const leaveTimers = new Map();
+
+function sheet(s) {
+  const t = document.createElement('div');
+  t.className = 'ticks'; t.setAttribute('aria-hidden', 'true');
+  t.innerHTML = '<i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i>';
+  s.prepend(t);
+  const head = $('.head', s) || $('.title-text', s);
+  const ref = s.dataset.ref || s.dataset.beyond;
+  if (head && ref) {
+    const p = document.createElement('span');
+    p.className = 'plaque' + (s.dataset.beyond ? ' beyond' : '');
+    p.innerHTML = `<small>${s.dataset.beyond ? 'beyond the paper' : 'in the paper'}</small><b>${ref}${s.hasAttribute('data-proposed') ? '<span class="tag">proposed</span>' : ''}</b>`;
+    if (head.classList.contains('title-text')) { p.classList.add('on-title'); head.prepend(p); } else head.appendChild(p);
+  }
+}
+const svgOf = s => $('.stage > svg', s);
+function syncFrameTheme(f) {
+  try {
+    const d = f.contentDocument;
+    if (!d) return;
+    const t = root.dataset.theme || '';
+    if (t) d.documentElement.setAttribute('data-theme', t); else d.documentElement.removeAttribute('data-theme');
+  } catch (_) { /* a frame we cannot reach keeps its own theme */ }
+}
+function startFrame(f) {
+  if (!f || f.getAttribute('src')) return;
+  let src = f.dataset.src;
+  const t = root.dataset.theme;
+  if (t) src += (src.includes('?') ? '&' : '?') + 'theme=' + t;
+  f.addEventListener('load', () => { syncFrameTheme(f); const w = f.parentNode.querySelector('.frame-wait'); if (w) w.remove(); });
+  f.setAttribute('src', src);
+}
+$$('[data-run]').forEach(b => b.addEventListener('click', e => {
+  e.stopPropagation();
+  const st = b.closest('.stage-sim');
+  st.classList.add('live');
+  startFrame($('iframe', st));
+  const u = $('[data-unrun]', st); if (u) u.focus();
+}));
+$$('[data-unrun]').forEach(b => b.addEventListener('click', e => {
+  e.stopPropagation();
+  const st = b.closest('.stage-sim');
+  st.classList.remove('live');
+  const r = $('[data-run]', st); if (r) r.focus();
+}));
+function enter(s) { const b = B[s.dataset.draw]; const svg = svgOf(s); if (b && b.enter && svg) b.enter(svg); }
+function leave(s) { const b = B[s.dataset.draw]; const svg = svgOf(s); if (b && b.leave && svg) b.leave(svg); }
+
+function render() {
+  const tall = innerHeight > innerWidth * 1.1;
+  if (tall === tallMode) return;
+  if (tallMode !== null && slides[cur]) leave(slides[cur]);
+  tallMode = tall;
+  slides.forEach(s => {
+    const b = B[s.dataset.draw];
+    const svg = svgOf(s);
+    if (!b || !svg) return;
+    while (svg.lastChild) svg.removeChild(svg.lastChild);
+    svg.setAttribute('viewBox', b.vb[tall ? 1 : 0]);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    b.draw(new Ctx(svg, tall));
+    $$('.an-draw', svg).forEach(e => {
+      try { e.style.setProperty('--len', Math.ceil(e.getTotalLength()) + 1); } catch (_) { /* not a geometry element */ }
+    });
+  });
+  const s = slides[cur];
+  if (s && s.classList.contains('active')) { s.classList.remove('on'); void s.offsetWidth; s.classList.add('on'); enter(s); }
+}
+
+const marks = $('#marks');
+let lastSec = '';
+slides.forEach((s, i) => {
+  sheet(s);
+  const li = document.createElement('li');
+  const b = document.createElement('button');
+  b.type = 'button';
+  const sec = (s.dataset.ref || '').split(' · ')[0];
+  b.className = sec !== lastSec ? 'm-sec' : 'm';
+  lastSec = sec;
+  b.setAttribute('aria-label', `Slide ${i + 1}: ${s.getAttribute('aria-label')}`);
+  b.innerHTML = '<i aria-hidden="true"></i>';
+  b.addEventListener('click', () => go(i));
+  li.appendChild(b); marks.appendChild(li);
+});
+const markBtns = $$('button', marks);
+
+function go(i, fromHash) {
+  i = Math.max(0, Math.min(slides.length - 1, i));
+  const prev = slides[cur];
+  if (i !== cur && prev) {
+    prev.classList.remove('active');
+    prev.setAttribute('aria-hidden', 'true');
+    prev.inert = true;
+    leave(prev);
+    clearTimeout(leaveTimers.get(prev));
+    leaveTimers.set(prev, setTimeout(() => prev.classList.remove('on'), still() ? 0 : 600));
+  }
+  const s = slides[i];
+  clearTimeout(leaveTimers.get(s));
+  const fresh = i !== cur || !s.classList.contains('active');
+  if (fresh) { s.classList.remove('on'); void s.offsetWidth; }
+  s.classList.add('active', 'on');
+  s.removeAttribute('aria-hidden');
+  s.inert = false;
+  cur = i;
+  if (fresh) enter(s);
+  markBtns.forEach((b, j) => b.setAttribute('aria-current', j === i ? 'true' : 'false'));
+  $('#count').textContent = `${i + 1} / ${slides.length}`;
+  $('#bar').style.width = ((i + 1) / slides.length * 100) + '%';
+  if (!fromHash) history.replaceState(null, '', '#' + (i + 1));
+  if (!$('#notes-panel').hidden) showNotes();
+}
+const next = () => go(cur + 1), prev = () => go(cur - 1);
+
+function showNotes() { const n = $('.notes', slides[cur]); $('#notes-panel').innerHTML = n ? n.innerHTML : ''; }
+function toggleNotes() {
+  const p = $('#notes-panel'), btn = $('#notes-btn');
+  p.hidden = !p.hidden;
+  btn.setAttribute('aria-pressed', String(!p.hidden));
+  if (!p.hidden) showNotes();
+}
+
+const darkQ = matchMedia('(prefers-color-scheme: dark)');
+function isDark() { const t = root.dataset.theme; return t ? t === 'dark' : darkQ.matches; }
+function syncThemeLabel() { $('#theme-btn').setAttribute('aria-label', isDark() ? 'Switch to light theme' : 'Switch to dark theme'); }
+function toggleTheme() {
+  const t = isDark() ? 'light' : 'dark';
+  root.dataset.theme = t;
+  try { localStorage.setItem('perch-paper-deck-theme', t); } catch (_) { /* storage unavailable */ }
+  syncThemeLabel();
+  $$('iframe[src]').forEach(syncFrameTheme);
+}
+try { const t = localStorage.getItem('perch-paper-deck-theme'); if (t === 'light' || t === 'dark') root.dataset.theme = t; } catch (_) { /* storage unavailable */ }
+const qs = new URLSearchParams(location.search);
+const qp = qs.get('theme');
+if (qs.get('still') === '1') root.classList.add('still');
+if (qp === 'light' || qp === 'dark') root.dataset.theme = qp;
+darkQ.addEventListener('change', syncThemeLabel);
+syncThemeLabel();
+
+$('#prev').addEventListener('click', prev);
+$('#next').addEventListener('click', next);
+$('#notes-btn').addEventListener('click', toggleNotes);
+$('#theme-btn').addEventListener('click', toggleTheme);
+
+const inControl = t => t && t.closest && t.closest('a, button, input, select, iframe, .frame-wrap');
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key, t = e.target;
+  if ((k === ' ' || k === 'Enter') && t && t.closest && t.closest('.slide') && inControl(t)) return;
+  if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || (k === ' ' && !e.shiftKey)) { e.preventDefault(); next(); }
+  else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || (k === ' ' && e.shiftKey)) { e.preventDefault(); prev(); }
+  else if (k === 'Home') { e.preventDefault(); go(0); }
+  else if (k === 'End') { e.preventDefault(); go(slides.length - 1); }
+  else if (k === 'n' || k === 'N') toggleNotes();
+  else if (k === 't' || k === 'T') toggleTheme();
+});
+
+// Swipe in any direction; a tap on the right of the stage advances, on the left goes back.
+let p0 = null;
+const deck = $('#deck');
+deck.addEventListener('pointerdown', e => { p0 = inControl(e.target) ? null : { x: e.clientX, y: e.clientY, t: Date.now() }; });
+deck.addEventListener('pointerup', e => {
+  if (!p0) return;
+  const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (Math.max(adx, ady) > 40) {
+    if (adx > ady) (dx < 0 ? next : prev)();
+    else (dy < 0 ? next : prev)();
+  } else if (Date.now() - p0.t < 500 && e.pointerType !== 'mouse') {
+    (e.clientX > innerWidth * .33 ? next : prev)();
+  }
+  p0 = null;
+});
+
+let rt;
+addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 140); });
+addEventListener('hashchange', () => { const n = parseInt(location.hash.slice(1), 10); if (n) go(n - 1, true); });
+reduce.addEventListener('change', () => { const s = slides[cur]; leave(s); enter(s); });
+
+slides.forEach(s => { s.setAttribute('aria-hidden', 'true'); s.inert = true; });
+render();
+const start = parseInt(location.hash.slice(1), 10);
+go(start ? start - 1 : 0, true);
+if (qs.get('notes') === '1') toggleNotes();
+})();
+</script>
+</body>
+</html>

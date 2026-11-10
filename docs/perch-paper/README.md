@@ -16,6 +16,11 @@ own `README.md`: `sim/`, an OpenZeppelin account with oz-policy-builder's
 policy and a Perch account run side by side in soroban-sim in the browser, and
 `../nido-sim/`, a Nido account given a grant and checked on nested calls.
 
+Two slide decks sit beside the paper: `../perch-deck/` tells the main
+paper's story, and `../perch-paper-deck/` follows the academic edition
+(`latex/perch-paper.pdf`) section by section, with each slide naming the
+section or theorem it comes from.
+
 ## Sources
 
 `source/documents.json` lists the documents. Each has an outline

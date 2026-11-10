@@ -178,9 +178,8 @@ docs/schema.md        the PolicyDoc JSON Schema: generation, drift, release path
                       and the boundary between schema-valid and authorized/canonical
 docs/testnet-deployment.md  the `unverified/perch` testnet registry and author account
                       that deployments before 2026-10-22 resolve their infra in
-docs/index.html       reading hub for the published HTML documentation (GitHub Pages):
-                      docs/perch-paper/, docs/oz-walkthrough/, docs/cedar-walkthrough/,
-                      docs/slides/
+docs/index.html       reading hub for the published HTML documentation (GitHub Pages);
+                      it links each paper, walkthrough, simulation, and slide deck
 testdata/             golden vectors shared by the Rust, TypeScript, and Lean suites
                       (frozen); see testdata/README.md
 testdata/schema/      shared PolicyDoc JSON Schema conformance cases (Rust + perch-js suites)

@@ -17,20 +17,20 @@
     "source": "git rev-parse c593bac (V): feat(auth)!: constrain rules to exact entry roots"
   },
   "nido-sim-page-mb": {
-    "value": "5.3",
-    "source": "docs/nido-sim/index.html, 5,291,831 bytes (V)"
+    "value": "5.4",
+    "source": "docs/nido-sim/index.html, 5,388,257 bytes (V)"
   },
   "nido-sim-page-sha256": {
-    "value": "b1f6cfa248afe5ac770037a2b29f1e9a761f5530eaaab16ab4822742f4882472",
+    "value": "5fbfba50c0938c0d0f2e8e72f8549b41f2fafaa9a456ab6aac672238fa98be6c",
     "source": "docs/nido-sim/README.md (pins, hashes, \"What it runs\"; V)"
   },
   "nido-sim-replies-sha256": {
-    "value": "9ec27d1662a8999436d0961eb5ac122c4aefb28f2d7a405bad7e02b5e5aa7db7",
+    "value": "5ec17f91692e417a25990f84547e25b7228624fa0ac7e4ce13c872aacfad47e2",
     "source": "docs/nido-sim/README.md (pins, hashes, \"What it runs\"; V)"
   },
   "nido-sim-replies": {
-    "value": "42",
-    "source": "the Nido simulation's reference run: 42 replies, identical natively, under WASI and in the browser (V)"
+    "value": "45",
+    "source": "the Nido simulation's reference run: 45 replies, identical natively, under WASI and in the browser (V)"
   },
   "nido-shop-cap-eurc": {
     "value": "10",

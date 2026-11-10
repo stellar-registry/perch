@@ -69,6 +69,9 @@ crates/
                       (off-chain: the differential suites and legacy accounts)
   perch-rule-eval/    Perch's rules as rule-core's evaluator reads them: host-value
                       conversions, storage mirrors, the anti-brick checks
+  perch-review-core/  off-chain: an account's `__check_auth` verdict and cap budgets
+                      for an authorization entry, from a ledger snapshot, as
+                      import-free wasm; npm/ holds its private TypeScript wrapper
   perch-account-types/  the account's signer, `__check_auth` payload, context rule,
                       and error codes, XDR- and spec-identical to OZ's
   perch-doc-compiler/ deployable, stateless: doc JSON → compiled rules (signers,

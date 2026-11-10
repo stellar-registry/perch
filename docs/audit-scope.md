@@ -326,9 +326,13 @@ checked by hash. They are not reviewed line by line.
 - **Off-chain tooling and harnesses** (`crates/perch-testnet`,
   `crates/perch-zk-prover`, `crates/perch-testkit`, `crates/perch-bench*`,
   `crates/perch-conformance`, `crates/perch-golden`, `crates/perch-analyze`,
-  `crates/perch-compile`, `crates/integration-tests`): evidence and tools,
+  `crates/perch-compile`, `crates/perch-review-core` and its `npm/`
+  wrapper, `crates/integration-tests`): evidence and tools,
   not deployed contract code. `perch-compile` lowers rules to interpreter
   programs with per-rule provenance; no deployable links it.
+  `perch-review-core` is off-chain and not deployed; its verdict is advisory
+  display for wallets before signing, and the account's on-chain
+  `__check_auth` remains the authority.
 - **Documentation and slides** (`docs/**`, `*.md`). The recovery spec is
   normative for both Perch units.
 

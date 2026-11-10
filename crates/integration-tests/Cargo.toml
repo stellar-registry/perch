@@ -47,11 +47,16 @@ ed25519-dalek = "2"
 fips204 = { workspace = true }
 hex = "0.4"
 serde_json = "1"
+# base64 for the npm fixtures review_core_differential.rs writes.
+base64 = "0.22"
 # rule-core's evaluator, Soroban facade and conformance runner (document
 # traces and the rule-eval baseline), at the workspace's one rev.
 rule-eval = { workspace = true }
 rule-eval-conformance = { workspace = true }
 soroban-facade = { workspace = true, features = ["sdk"] }
 perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }
+# The off-chain verdict differential-tested against the account
+# (`review_core_differential.rs`).
+perch-review-core = { version = "0.1.0", path = "../perch-review-core" }
 # Perch's hand-written eval vectors, against rule-eval (tests/leaf_vectors.rs).
 perch-conformance = { version = "0.1.1", path = "../perch-conformance" }

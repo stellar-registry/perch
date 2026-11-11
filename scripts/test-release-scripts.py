@@ -1678,9 +1678,12 @@ class MainnetSettings(unittest.TestCase):
 # A `stellar` that keeps a registry and a ledger in a JSON file and logs every
 # call, for scripts/publish-wasm.sh, scripts/deploy-stack.sh and
 # scripts/fetch-infra-wasm.sh. Any call that would send a transaction changes
-# the state; --build-only, --send=no, and `tx` calls never do. fetch_hash
-# answers from state["registries"][<id>] for a registry listed there (only
-# read), else from state["published"].
+# the state; --build-only, --send=no, and `tx` calls never do. fetch_hash,
+# publish_hash and deploy_stateless use state["registries"][<id>] for a
+# registry listed there, else state["published"]; a publish_hash into a
+# registry in state["refuse"] fails, as an author's missing authorization
+# would. get_context_rules_count and get_context_rule answer from
+# state["rules"][<account>].
 # deploy_stateless answers ADDR, or with FAKE_DERIVE (scripts/derive-id.py)
 # the real content address. A fetch writes FAKE_CODE/<hash>.wasm when there
 # is one, else an empty file.
@@ -1738,18 +1741,28 @@ elif args[:2] == ["contract", "invoke"]:
         print('"' + state[fn] + '"')
     elif "--build-only" in args:
         print("UNSIGNED")
+    elif fn == "get_context_rules_count":
+        print(len(state.get("rules", {}).get(opt("--id"), [])))
+    elif fn == "get_context_rule":
+        rules = state.get("rules", {}).get(opt("--id"), [])
+        if int(a["--context_rule_id"]) >= len(rules):
+            sys.exit("HostError: Error(Contract, #3000)")
+        print(json.dumps(rules[int(a["--context_rule_id"])]))
     elif fn == "fetch_hash":
         published = state.get("registries", {}).get(opt("--id"), state["published"])
         if key not in published:
             sys.exit("HostError: Error(Contract, #2)")
         print('"' + published[key] + '"')
     elif fn == "deploy_stateless":
-        addr = address(state["published"][key])
+        published = state.get("registries", {}).get(opt("--id"), state["published"])
+        addr = address(published[key])
         if "--send=no" not in args:
-            state["deployed"][addr] = state["published"][key]; save()
+            state["deployed"][addr] = published[key]; save()
         print('"' + addr + '"')
     elif fn == "publish_hash" and "--send=no" not in args:
-        state["published"][key] = a["--wasm_hash"]; save()
+        if opt("--id") in state.get("refuse", []):
+            sys.exit("HostError: Error(Auth, InvalidAction)")
+        state.get("registries", {}).get(opt("--id"), state["published"])[key] = a["--wasm_hash"]; save()
     else:
         sys.exit("unexpected invoke " + fn)
 else:
@@ -2145,7 +2158,8 @@ class DeployStack(unittest.TestCase):
     """scripts/deploy-stack.sh against a fake `stellar`: what it publishes,
     in what order, under which addresses, what its manifest records, and
     that a plan sends nothing. perch/verifiers serves the stack's WebAuthn
-    verifier unless a test says otherwise."""
+    verifier, and the author holds an unexpired rule on perch/verifiers (the
+    perch author's ci-publish-verifiers), unless a test says otherwise."""
 
     AUTHOR = "C" + "U" * 55
     ADMIN = "G" + "M" * 55
@@ -2200,6 +2214,11 @@ class DeployStack(unittest.TestCase):
                     "STELLAR_RPC_URL": "http://127.0.0.1:9", "STELLAR_NETWORK_PASSPHRASE": t}
         self.env.pop("STELLAR_SIGN_WITH_KEY", None)
 
+    def rule(self, registry, valid_until=9999):
+        """One of the author's context rules, as get_context_rule reads it."""
+        return {"name": "ci-publish-verifiers", "context_type": {"CallContract": registry},
+                "signers": [{"Delegated": "G" + "D" * 55}], "valid_until": valid_until}
+
     def set_state(self, published, installed, deployed):
         # perch/verifiers, created and seeded with the stack's WebAuthn verifier.
         webauthn = self.hash["perch-webauthn-verifier"]
@@ -2207,7 +2226,14 @@ class DeployStack(unittest.TestCase):
             json.dump({"published": published, "installed": list(installed),
                        "deployed": {**deployed, self.verifiers: "f" * 64, self.in_verifiers: webauthn},
                        "registries": {self.verifiers: {"perch-webauthn-verifier@0.1.0": webauthn}},
+                       "rules": {self.AUTHOR: [self.rule(self.verifiers)]},
                        "admin": self.ADMIN, "manager": self.ADMIN}, f)
+
+    def unserved(self, state):
+        """perch/verifiers without the stack's WebAuthn verifier: the release's
+        new version, which only its author can publish there."""
+        state["registries"][self.verifiers].clear()
+        state["deployed"].pop(self.in_verifiers)
 
     def edit_state(self, change):
         state = self.state()
@@ -2219,22 +2245,23 @@ class DeployStack(unittest.TestCase):
         with open(self.state_file) as f:
             return json.load(f)
 
-    def sent(self):
-        """Each transaction the calls sent, as "<op> <name>"."""
+    def sent(self, into=None):
+        """Each transaction the calls sent, as "<op> <name>"; with into, only
+        the invocations of that contract."""
         out = []
         with open(self.log_file) as f:
             for c in map(json.loads, f):
                 if "--build-only" in c or "--send=no" in c:
                     continue
-                if c[:2] == ["contract", "upload"]:
+                if c[:2] == ["contract", "upload"] and into is None:
                     out.append("upload " + os.path.basename(c[c.index("--wasm") + 1]))
-                elif c[:2] == ["contract", "invoke"]:
+                elif c[:2] == ["contract", "invoke"] and into in (None, c[c.index("--id") + 1]):
                     out.append(c[c.index("--") + 1] + " " + c[c.index("--wasm_name") + 1])
         return out
 
-    def deploy(self, *extra, check=True):
+    def deploy(self, *extra, check=True, reuse="perch-doc-compiler perch-interpreter"):
         out = subprocess.run([DEPLOY_STACK, "--author", self.AUTHOR, "--stack", self.stack, "--manifest", self.manifest,
-                              "--reuse", "perch-doc-compiler perch-interpreter", *extra],
+                              "--reuse", reuse, *extra],
                              capture_output=True, text=True, env=self.env)
         if check:
             self.assertEqual(out.returncode, 0, out.stderr)
@@ -2286,7 +2313,9 @@ class DeployStack(unittest.TestCase):
         self.assertEqual(webauthn["address"], self.content["perch-webauthn-verifier"])
         self.assertNotEqual(webauthn["address"], self.in_verifiers)
 
-    def test_an_ed25519_verifier_is_recorded_only_where_perch_verifiers_serves_it(self):
+    def add_ed25519(self):
+        """The stack's ed25519 verifier, 10.0.2: its hash, and its content
+        address in perch/verifiers."""
         data = b"\0asm\1\0\0\0perch-ed25519-verifier"
         ed25519 = hashlib.sha256(data).hexdigest()
         with open(os.path.join(self.stack, "perch_ed25519_verifier.wasm"), "wb") as f:
@@ -2297,11 +2326,30 @@ class DeployStack(unittest.TestCase):
                                       "sha256": ed25519, "bytes": len(data), "tier": 0, "pins": {}})
         with open(os.path.join(self.stack, "build.json"), "w") as f:
             json.dump(build, f)
-        self.assertIn("perch/verifiers does not serve perch-ed25519-verifier 10.0.2: no document can name",
-                      self.deploy())
+        self.hash["perch-ed25519-verifier"] = ed25519
+        return ed25519, run(["python3", DERIVE_ID, "content", self.verifiers, ed25519, PASSPHRASES["testnet"]],
+                            REPO).stdout.strip()
+
+    def test_an_ed25519_verifier_is_published_into_perch_verifiers_and_recorded(self):
+        ed25519, at = self.add_ed25519()
+        self.deploy()
+        self.assertEqual(self.sent(into=self.verifiers),
+                         ["publish_hash perch-ed25519-verifier", "deploy_stateless perch-ed25519-verifier"])
+        with open(self.manifest) as f:
+            self.assertEqual(json.load(f)["verifiers"]["contracts"]["perch-ed25519-verifier"],
+                             {"version": "10.0.2", "sha256": ed25519, "bytes": len(b"\0asm\1\0\0\0perch-ed25519-verifier"),
+                              "name": "perch-ed25519-verifier@10.0.2", "address": at})
+
+    def test_an_ed25519_verifier_the_author_cannot_publish_there_is_only_warned_about(self):
+        ed25519, at = self.add_ed25519()
+        self.edit_state(lambda s: s["rules"].clear())
+        err = self.deploy()
+        self.assertIn("perch/verifiers does not serve perch-ed25519-verifier 10.0.2, and the author " + self.AUTHOR
+                      + " holds no unexpired rule on perch/verifiers", err)
+        self.assertIn("no document can name the stack's perch-ed25519-verifier there yet", err)
+        self.assertEqual(self.sent(into=self.verifiers), [])
         with open(self.manifest) as f:
             self.assertEqual(list(json.load(f)["verifiers"]["contracts"]), ["perch-webauthn-verifier"])
-        at = run(["python3", DERIVE_ID, "content", self.verifiers, ed25519, PASSPHRASES["testnet"]], REPO).stdout.strip()
 
         def seed(state):
             state["registries"][self.verifiers]["perch-ed25519-verifier@10.0.2"] = ed25519
@@ -2309,34 +2357,108 @@ class DeployStack(unittest.TestCase):
         self.edit_state(seed)
         self.deploy()
         with open(self.manifest) as f:
-            self.assertEqual(json.load(f)["verifiers"]["contracts"]["perch-ed25519-verifier"],
-                             {"version": "10.0.2", "sha256": ed25519, "bytes": len(data),
-                              "name": "perch-ed25519-verifier@10.0.2", "address": at})
+            self.assertEqual(json.load(f)["verifiers"]["contracts"]["perch-ed25519-verifier"]["address"], at)
+
+    def test_a_reused_verifier_goes_into_perch_verifiers_only_as_the_registrys_bytes(self):
+        ed25519, at = self.add_ed25519()
+        reuse = "perch-doc-compiler perch-interpreter perch-ed25519-verifier"
+        # The registry serves other bytes for it: nothing goes into
+        # perch/verifiers, and the reuse check refuses the deploy.
+        self.edit_state(lambda s: s["published"].update({"perch-ed25519-verifier@10.0.2": "ab" * 32}))
+        err = self.deploy(check=False, reuse=reuse)
+        self.assertIn("does not serve these bytes for the reused perch-ed25519-verifier yet", err)
+        self.assertEqual(self.sent(), [])
+        # It serves them: they go into perch/verifiers too.
+        in_registry = run(["python3", DERIVE_ID, "content", self.registry, ed25519, PASSPHRASES["testnet"]],
+                          REPO).stdout.strip()
+
+        def serve(state):
+            state["published"]["perch-ed25519-verifier@10.0.2"] = ed25519
+            state["deployed"][in_registry] = ed25519
+        self.edit_state(serve)
+        self.deploy(reuse=reuse)
+        self.assertEqual(self.sent(into=self.verifiers),
+                         ["publish_hash perch-ed25519-verifier", "deploy_stateless perch-ed25519-verifier"])
+        self.assertEqual(self.state()["registries"][self.verifiers]["perch-ed25519-verifier@10.0.2"], ed25519)
+
+    def test_a_webauthn_verifier_perch_verifiers_does_not_serve_is_published_there_first_as_the_author(self):
+        webauthn = self.hash["perch-webauthn-verifier"]
+        self.edit_state(self.unserved)
+        self.deploy()
+        # Before anything else, into perch/verifiers, authored by --author.
+        self.assertEqual(self.sent()[:3], ["upload perch_webauthn_verifier.wasm", "publish_hash perch-webauthn-verifier",
+                                           "deploy_stateless perch-webauthn-verifier"])
+        self.assertEqual(self.sent(into=self.verifiers),
+                         ["publish_hash perch-webauthn-verifier", "deploy_stateless perch-webauthn-verifier"])
+        with open(self.log_file) as f:
+            publish = next(c for c in map(json.loads, f) if "publish_hash" in c and self.verifiers in c)
+        self.assertEqual(publish[publish.index("--author") + 1], self.AUTHOR)
+        self.assertEqual(self.state()["registries"][self.verifiers], {"perch-webauthn-verifier@0.1.0": webauthn})
+        self.assertEqual(self.state()["deployed"][self.in_verifiers], webauthn)
+        with open(self.manifest) as f:
+            self.assertEqual(json.load(f)["verifiers"]["contracts"]["perch-webauthn-verifier"]["address"],
+                             self.in_verifiers)
+        receipt = self.receipts()[0]
+        self.assertEqual((receipt["registry"], receipt["author"], receipt["status"], receipt["address"]),
+                         (self.verifiers, self.AUTHOR, "published", self.in_verifiers))
+        # Idempotent: a second run sends nothing new.
+        before = len(self.sent())
+        self.deploy()
+        self.assertEqual(len(self.sent()), before)
+
+    def test_a_webauthn_verifier_published_but_not_deployed_there_is_deployed_without_a_rule(self):
+        # deploy_stateless is permissionless.
+        self.edit_state(lambda s: (s["deployed"].pop(self.in_verifiers), s["rules"].clear()))
+        self.deploy()
+        self.assertEqual(self.sent(into=self.verifiers), ["deploy_stateless perch-webauthn-verifier"])
+
+    def test_a_publish_into_perch_verifiers_that_fails_stops_the_deploy_before_the_stack(self):
+        self.edit_state(lambda s: (self.unserved(s), s.update({"refuse": [self.verifiers]})))
+        err = self.deploy(check=False)
+        self.assertIn("its publish into perch/verifiers as " + self.AUTHOR + " failed", err)
+        self.assertIn("the factory pins its WebAuthn verifier there", err)
+        self.assertEqual(self.sent(), ["upload perch_webauthn_verifier.wasm", "publish_hash perch-webauthn-verifier"])
+        self.assertFalse(os.path.exists(self.manifest))
 
     def test_a_webauthn_verifier_perch_verifiers_does_not_serve_is_refused_before_anything_is_sent(self):
         # The factory pins it there: every account it creates would refuse
-        # its passkey admin.
+        # its passkey admin. No publish there can help, or the author holds
+        # no rule there that is still valid.
+        no_rule = "perch/verifiers does not serve perch-webauthn-verifier 0.1.0, and the author " + self.AUTHOR \
+            + " holds no unexpired rule on perch/verifiers"
         cases = {
             "is not deployed on testnet": lambda s: s["deployed"].pop(self.verifiers),
-            "perch/verifiers does not serve perch-webauthn-verifier 0.1.0":
-                lambda s: s["registries"][self.verifiers].clear(),
             "perch/verifiers serves perch-webauthn-verifier 0.1.0 as " + "ab" * 32:
                 lambda s: s["registries"][self.verifiers].update({"perch-webauthn-verifier@0.1.0": "ab" * 32}),
-            "not deployed at its content address " + self.in_verifiers:
-                lambda s: s["deployed"].pop(self.in_verifiers),
+            no_rule + " (no rule)": lambda s: (self.unserved(s), s["rules"].clear()),
+            no_rule + " (expired)": lambda s: (self.unserved(s), s["rules"].update({self.AUTHOR: [self.rule(self.verifiers, 4242)]})),
+            no_rule + " (on another contract)":
+                lambda s: (self.unserved(s), s["rules"].update({self.AUTHOR: [self.rule(self.registry)]})),
         }
         for why, change in cases.items():
             with self.subTest(why=why):
                 self.set_state(*self.initial)
                 self.edit_state(change)
                 err = self.deploy(check=False)
-                self.assertIn(why, err)
+                self.assertIn(why.split(" (")[0], err)
                 self.assertIn("the factory pins its WebAuthn verifier there", err)
                 self.assertEqual(self.sent(), [])
                 self.assertFalse(os.path.exists(self.manifest))
         # A plan reports it and goes on.
         self.assertIn("a real run needs it first", self.deploy("--plan"))
         self.assertEqual([r["status"] for r in self.receipts()], ["reused", "would publish", "would install", "would publish"])
+
+    def test_a_plan_simulates_the_publish_into_perch_verifiers_and_sends_nothing(self):
+        self.edit_state(self.unserved)
+        before = self.state()
+        self.assertIn("perch-webauthn-verifier: a real run publishes it into perch/verifiers before anything else",
+                      self.deploy("--plan"))
+        self.assertEqual(self.sent(), [])
+        self.assertEqual(self.state(), before)
+        self.assertFalse(os.path.exists(self.manifest))
+        self.assertEqual([(r["registry"], r["status"]) for r in self.receipts()], [
+            (self.verifiers, "would publish"), (self.registry, "reused"), (self.registry, "would publish"),
+            (self.registry, "would install"), (self.registry, "would publish")])
 
     def test_a_plan_sends_nothing_and_writes_no_manifest(self):
         before = self.state()
@@ -2689,6 +2811,14 @@ elif args[:2] == ["contract", "invoke"]:
         print(len(state["rules"].get(cid, [])))
     elif fn == "get_context_rule":
         print(json.dumps(state["rules"][cid][int(a["--context_rule_id"])]))
+    elif fn in ("compile_doc", "apply_doc"):
+        # A stand-in for the document hash: sha256 of its sorted JSON.
+        import hashlib
+        doc = json.loads(bytes.fromhex(a["--doc_json"]))
+        h = hashlib.sha256(json.dumps(doc, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        print(json.dumps({"doc_hash": h}) if fn == "compile_doc" else '"' + h + '"')
+    elif fn == "revision":
+        print("1")
     else:
         sys.exit("unexpected invoke " + fn)
 else:
@@ -2813,7 +2943,8 @@ shutil.copy(src, args[args.index("-o") + 1])
                           verifiers: {n + "@" + self.versions[n]: self.hash[n] for n in self.VERIFIERS}},
             "infra": {"doc_compiler": self.at["perch-doc-compiler"], "interpreter": self.at["perch-interpreter"],
                       "spending_limit": self.at["perch-spending-limit"]},
-            "rules": {author: [{"name": "ci-publish", "context_type": {"CallContract": constructorless}}]},
+            "rules": {author: [{"name": "ci-publish", "context_type": {"CallContract": constructorless}},
+                               {"name": "ci-publish-verifiers", "context_type": {"CallContract": verifiers}}]},
             "binver": {self.hash["perch-constructorless-registry"]: self.registry_version},
         }
         self.state_file = os.path.join(self.dir, "state.json")
@@ -2920,6 +3051,37 @@ shutil.copy(src, args[args.index("-o") + 1])
         self.assertEqual(signer["verifier"], self.at["perch-ed25519-verifier"])
         self.assertNotIn("verifier-name", signer)
         self.assertIn("admin signer External(ed25519 verifier " + self.at["perch-ed25519-verifier"], err)
+
+    def test_a_new_perch_authors_document_holds_ci_publish_verifiers(self):
+        self.author_doc()
+        with open(os.path.join(self.checkout, "target", "bootstrap-registry", "testnet", "perch-author.json")) as f:
+            rules = {r["name"]: r for r in json.load(f)["rules"]}
+        self.assertEqual(list(rules), ["admin", "ci-publish", "admin-registry", "ci-publish-verifiers"])
+        ci = rules["ci-publish"]
+        # ci-publish on perch/verifiers, with publish_hash alone.
+        self.assertEqual(rules["ci-publish-verifiers"], {
+            **ci, "name": "ci-publish-verifiers", "scope": {"type": "contract", "address": self.verifiers},
+            "functions": ["publish_hash"]})
+        self.assertEqual(ci["scope"]["address"], self.constructorless)
+        self.assertIn("not-after-ledger", ci)
+
+    def test_an_author_from_before_ci_publish_verifiers_is_left_alone(self):
+        # Its admin applies the committed document (docs/deploy/README.md).
+        self.state["rules"][self.author_id] = [
+            r for r in self.state["rules"][self.author_id] if r["name"] != "ci-publish-verifiers"]
+        self.save()
+        out = self.bootstrap("--ci-key", self.source, "--ci-expiry-ledger", "123")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        note, = [line for line in out.stderr.splitlines() if "ci-publish-verifiers" in line and "has no" in line]
+        self.assertIn("perch author " + self.author_id + " has no ci-publish-verifiers on " + self.verifiers, note)
+        self.assertIn("testdata/deploy/perch-author-testnet.json", note)
+        # A warning, never a planned step: nothing is left for a rerun to do.
+        self.assertNotIn(" ->", note)
+        self.assertNotIn("apply_doc", out.stderr)
+        self.assertIn("all done", out.stderr)
+        self.assertFalse(os.path.exists(os.path.join(
+            self.checkout, "target", "bootstrap-registry", "testnet", "perch-author.json")))
+        self.assertEqual(self.submissions(), [])
 
     def test_a_refused_submission_fails_the_run(self):
         self.assertTrue(self.names)

@@ -42,9 +42,12 @@ if [ "${1:-}" = "--summary" ]; then
       def fee: if has("fee_stroops") | not then ""
                elif .fee_stroops == null then " (fee after the publish)"
                else " (\(.fee_stroops / 10000000) XLM)" end;
-      "| Contract | Version | sha256 | Status | Transactions |",
-      "| --- | --- | --- | --- | --- |",
-      (.[] | "| \(.name) | \(.version) | `\(.sha256)` | \(.status) | \([.txs[] | .op + fee] | join("<br>")) |"),
+      # A stack deploy also publishes into perch/verifiers: then each row
+      # names its registry.
+      ([.[].registry] | unique | length > 1) as $registries |
+      "| Contract | Version | sha256 |\(if $registries then " Registry |" else "" end) Status | Transactions |",
+      "| --- | --- | --- |\(if $registries then " --- |" else "" end) --- | --- |",
+      (.[] | "| \(.name) | \(.version) | `\(.sha256)` |\(if $registries then " `\(.registry)` |" else "" end) \(.status) | \([.txs[] | .op + fee] | join("<br>")) |"),
       (if any(.[].txs[]; has("fee_stroops"))
        then "", "Total simulated fee: \([.[].txs[].fee_stroops // 0] | add | . / 10000000) XLM (publish_hash fees are lower bounds; see scripts/publish-wasm.sh)"
        else empty end)

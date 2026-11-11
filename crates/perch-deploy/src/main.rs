@@ -9,6 +9,7 @@
 use perch_deploy::{apply, compose, publish, rpc, verify};
 
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -62,6 +63,11 @@ enum Cmd {
         account: String,
         #[arg(long)]
         rules: PathBuf,
+        /// Accept an account built before the `rule_set` view: its stored
+        /// rules (signers, predicates) are not compared, and a run with no
+        /// mismatch prints PARTIAL and exits 3 instead of 0.
+        #[arg(long)]
+        legacy_no_rule_set: bool,
     },
 }
 
@@ -81,7 +87,7 @@ impl Cli {
     }
 }
 
-fn main() -> Result<()> {
+fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
     match &cli.cmd {
         Cmd::Compose { doc, account } => {
@@ -90,14 +96,21 @@ fn main() -> Result<()> {
             let env = Env::default();
             let out = compose::compose(&env, &doc_json, account)?;
             println!("{}", serde_json::to_string_pretty(&out)?);
-            Ok(())
         }
         Cmd::Apply {
             account,
             doc,
             dry_run,
-        } => apply::run(&cli.rpc()?, cli.passphrase()?, account, doc, *dry_run),
-        Cmd::Publish(args) => publish::run(&cli.rpc()?, cli.passphrase()?, args),
-        Cmd::Verify { account, rules } => verify::run(&cli.rpc()?, account, rules),
+        } => apply::run(&cli.rpc()?, cli.passphrase()?, account, doc, *dry_run)?,
+        Cmd::Publish(args) => publish::run(&cli.rpc()?, cli.passphrase()?, args)?,
+        Cmd::Verify {
+            account,
+            rules,
+            legacy_no_rule_set,
+        } => {
+            let verdict = verify::run(&cli.rpc()?, account, rules, *legacy_no_rule_set)?;
+            return Ok(ExitCode::from(verdict.exit_code()));
+        }
     }
+    Ok(ExitCode::SUCCESS)
 }

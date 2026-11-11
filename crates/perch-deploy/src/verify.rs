@@ -13,6 +13,11 @@
 //! detected mismatch, not a mystery. Every read must belong to the
 //! snapshot's configuration revision, which is read again at the end.
 //! Everything runs through simulation — no keys, no writes.
+//!
+//! An account built before the `rule_set` view fails verification. With
+//! `--legacy-no-rule-set` its other checks still run and the result is
+//! [`Verdict::Partial`], never `installed == reviewed`: the process exits
+//! with [`PARTIAL_EXIT_CODE`].
 
 use anyhow::{bail, Context, Result};
 use stellar_xdr::{Limits, ReadXdr, ScMap, ScVal};
@@ -21,6 +26,39 @@ use crate::compose::{parse_hash32, ComposeOutput, RuleEntry};
 use crate::rpc::Rpc;
 use crate::tx::{simulate_read, ReadOutcome};
 use crate::{auth, scv};
+
+/// Exit code of a [`Verdict::Partial`] run: neither success, a failed
+/// verification (1), nor a usage error (2).
+pub const PARTIAL_EXIT_CODE: u8 = 3;
+
+/// What a run with no mismatch established.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Verdict {
+    /// Every check ran, the stored rules included.
+    Verified,
+    /// The account has no `rule_set` view: the stored rules were not read.
+    Partial,
+}
+
+impl Verdict {
+    pub fn summary(&self) -> &'static str {
+        match self {
+            Verdict::Verified => "verification OK: installed == reviewed",
+            Verdict::Partial => {
+                "verification PARTIAL: applied doc hash, rule names, context types and count \
+                 match; stored rules not readable on this account version (signers/predicates \
+                 not compared)"
+            }
+        }
+    }
+
+    pub fn exit_code(&self) -> u8 {
+        match self {
+            Verdict::Verified => 0,
+            Verdict::Partial => PARTIAL_EXIT_CODE,
+        }
+    }
+}
 
 struct Row {
     /// Actual on-chain rule id, if the rule was found.
@@ -92,14 +130,39 @@ fn check_applied_hash(rpc: &Rpc, account: &str, doc_hash_hex: &str) -> Result<Ro
     })
 }
 
-/// The account's stored rule-eval rules (`rule_set()`), aligned with its
-/// installed rules.
-fn read_rule_set(rpc: &Rpc, account: &str) -> Result<Vec<ScVal>> {
-    match simulate_read(rpc, account, "rule_set", vec![])? {
-        ReadOutcome::Value(ScVal::Vec(Some(rules))) => Ok(rules.to_vec()),
-        ReadOutcome::Value(other) => bail!("rule_set returned {other:?}"),
-        ReadOutcome::ContractError { message, .. } => bail!("rule_set trapped: {message}"),
+/// The account's stored rule-eval rules, aligned with its installed rules,
+/// from a `rule_set()` read. An account built before that view (whose rules
+/// OZ's policies decide) is an error, or `None` with `legacy_no_rule_set`.
+fn rule_set_from(
+    read: Result<ReadOutcome>,
+    legacy_no_rule_set: bool,
+) -> Result<Option<Vec<ScVal>>> {
+    match read {
+        Ok(ReadOutcome::Value(ScVal::Vec(Some(rules)))) => Ok(Some(rules.to_vec())),
+        Ok(ReadOutcome::Value(other)) => bail!("rule_set returned {other:?}"),
+        Ok(ReadOutcome::ContractError { message, .. }) => bail!("rule_set trapped: {message}"),
+        Err(e) if legacy_no_rule_set && lacks_function(&format!("{e:#}")) => Ok(None),
+        Err(e) => Err(e),
     }
+}
+
+/// A read of a function the contract does not export.
+fn lacks_function(message: &str) -> bool {
+    message.contains("Error(WasmVm, MissingValue)")
+        && message.contains("non-existent contract function")
+}
+
+/// The run's result from its rows: any mismatch fails; without one, the
+/// verdict is partial when the stored rules were not read.
+fn verdict(rows: &[Row], stored_compared: bool) -> Result<Verdict> {
+    if rows.iter().any(|r| r.mismatch.is_some()) {
+        bail!("verification failed");
+    }
+    Ok(if stored_compared {
+        Verdict::Verified
+    } else {
+        Verdict::Partial
+    })
 }
 
 /// The rule stored for the installed rule at `index` must be exactly the
@@ -153,7 +216,12 @@ fn check_rule(
     ))
 }
 
-pub fn run(rpc: &Rpc, account: &str, rules_path: &std::path::Path) -> Result<()> {
+pub fn run(
+    rpc: &Rpc,
+    account: &str,
+    rules_path: &std::path::Path,
+    legacy_no_rule_set: bool,
+) -> Result<Verdict> {
     let compose: ComposeOutput = serde_json::from_str(
         &std::fs::read_to_string(rules_path)
             .with_context(|| format!("read {}", rules_path.display()))?,
@@ -170,14 +238,18 @@ pub fn run(rpc: &Rpc, account: &str, rules_path: &std::path::Path) -> Result<()>
     // Every read below must belong to the snapshot's revision: it is
     // checked again once they are done.
     let (revision, onchain) = read_configuration(rpc, account)?;
-    let stored = read_rule_set(rpc, account)?;
+    let stored = rule_set_from(
+        simulate_read(rpc, account, "rule_set", vec![]),
+        legacy_no_rule_set,
+    )?;
     let mut rows = vec![check_applied_hash(rpc, account, &compose.doc_hash)?];
 
     for expected in compose.genesis_rule.iter().chain(compose.apply.iter()) {
         let (row, at) = check_rule(&onchain, expected)?;
         rows.push(row);
+        let Some(stored) = &stored else { continue };
         rows.push(match at {
-            Some((index, id)) => check_stored(&stored, expected, index, id)?,
+            Some((index, id)) => check_stored(stored, expected, index, id)?,
             None => Row {
                 rule_id: None,
                 name: expected.name.clone(),
@@ -201,18 +273,20 @@ pub fn run(rpc: &Rpc, account: &str, rules_path: &std::path::Path) -> Result<()>
     // The stored set is aligned with the installed rules; an account with
     // none is one OZ's policies still decide, which the reviewed rules do
     // not describe.
-    rows.push(Row {
-        rule_id: None,
-        name: "(rule set)".to_string(),
-        check: "aligned",
-        mismatch: (stored.len() != onchain.len()).then(|| {
-            format!(
-                "{} stored rules for {} installed rules",
-                stored.len(),
-                onchain.len()
-            )
-        }),
-    });
+    if let Some(stored) = &stored {
+        rows.push(Row {
+            rule_id: None,
+            name: "(rule set)".to_string(),
+            check: "aligned",
+            mismatch: (stored.len() != onchain.len()).then(|| {
+                format!(
+                    "{} stored rules for {} installed rules",
+                    stored.len(),
+                    onchain.len()
+                )
+            }),
+        });
+    }
 
     let after = read_revision(rpc, account)?;
     if after != revision {
@@ -231,9 +305,86 @@ pub fn run(rpc: &Rpc, account: &str, rules_path: &std::path::Path) -> Result<()>
         );
     }
 
-    if rows.iter().any(|r| r.mismatch.is_some()) {
-        bail!("verification failed");
+    let verdict = verdict(&rows, stored.is_some())?;
+    println!("{}", verdict.summary());
+    Ok(verdict)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::anyhow;
+
+    const NO_RULE_SET: &str =
+        "read simulation of rule_set failed: HostError: Error(WasmVm, MissingValue)\n\n\
+         Event log (newest first):\n   0: [Diagnostic Event] contract:CAAG…, topics:[error, \
+         Error(WasmVm, MissingValue)], data:[\"trying to invoke non-existent contract function\", rule_set]";
+
+    fn row(mismatch: Option<&str>) -> Row {
+        Row {
+            rule_id: None,
+            name: "admin".to_string(),
+            check: "context+name",
+            mismatch: mismatch.map(str::to_string),
+        }
     }
-    println!("verification OK: installed == reviewed");
-    Ok(())
+
+    #[test]
+    fn a_missing_view_is_told_apart_from_a_failed_read() {
+        assert!(lacks_function(NO_RULE_SET));
+        assert!(!lacks_function(
+            "read simulation of rule_set failed: HostError: Error(Budget, ExceededLimit)"
+        ));
+        assert!(!lacks_function("rpc: 503 Service Unavailable"));
+    }
+
+    #[test]
+    fn an_account_without_rule_set_fails_by_default() {
+        let err = rule_set_from(Err(anyhow!(NO_RULE_SET)), false).unwrap_err();
+        assert!(lacks_function(&format!("{err:#}")));
+    }
+
+    #[test]
+    fn legacy_mode_is_partial_and_never_installed_eq_reviewed() {
+        let stored = rule_set_from(Err(anyhow!(NO_RULE_SET)), true).unwrap();
+        assert_eq!(stored, None);
+
+        let v = verdict(&[row(None), row(None)], stored.is_some()).unwrap();
+        assert_eq!(v, Verdict::Partial);
+        assert!(v.summary().starts_with("verification PARTIAL"));
+        assert!(!v.summary().contains("installed == reviewed"));
+        assert_eq!(v.exit_code(), PARTIAL_EXIT_CODE);
+        assert!(![0, 1, 2].contains(&v.exit_code()));
+    }
+
+    #[test]
+    fn legacy_mode_only_excuses_a_missing_view() {
+        assert!(rule_set_from(Err(anyhow!("rpc: 503 Service Unavailable")), true).is_err());
+        assert!(rule_set_from(
+            Ok(ReadOutcome::ContractError {
+                code: Some(1),
+                message: "Error(Contract, #1)".to_string(),
+            }),
+            true,
+        )
+        .is_err());
+        assert!(verdict(&[row(None), row(Some("MISSING"))], false).is_err());
+    }
+
+    #[test]
+    fn a_readable_rule_set_is_fully_verified_in_either_mode() {
+        for legacy in [false, true] {
+            let read = Ok(ReadOutcome::Value(ScVal::Vec(Some(
+                vec![ScVal::U32(7)].try_into().unwrap(),
+            ))));
+            let stored = rule_set_from(read, legacy).unwrap();
+            assert_eq!(stored, Some(vec![ScVal::U32(7)]));
+
+            let v = verdict(&[row(None)], stored.is_some()).unwrap();
+            assert_eq!(v, Verdict::Verified);
+            assert_eq!(v.summary(), "verification OK: installed == reviewed");
+            assert_eq!(v.exit_code(), 0);
+        }
+        assert!(verdict(&[row(Some("stored rule differs"))], true).is_err());
+    }
 }

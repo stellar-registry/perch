@@ -106,7 +106,8 @@ the mainnet author account; the testnet key is never used on mainnet.
 
 **Open: renewal owner for the `ci-publish` rule.** The rule's `valid_until`
 is ledger 6999999 on the author account above, and the bootstrap's
-`--ci-expiry-ledger` on an author `bootstrap-registry.sh` creates. After that
+`--ci-expiry-ledger` on an author `bootstrap-registry.sh` creates, whose
+`ci-publish-verifiers` carries the same expiry. After that
 ledger every CI publish fails authorization until
 someone re-applies the delegate rule with a later `valid_until`, using the
 account's `admin` rule (human-held). No one is assigned to watch the expiry or

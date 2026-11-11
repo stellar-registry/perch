@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "network": "Public Global Stellar Network ; September 2015",
+  "signers": [
+    {
+      "id": "admin",
+      "verifier": "CBOMBLOC5AB7YEHCEVMRFUFXV6UBEOP6IZJKA2PIWV32N3SSGS35AS6P",
+      "key": "18f4c5c7702def68a86c39783b1aa2efd410d8b891c9333827fa43c031f3e534"
+    },
+    {
+      "id": "ci",
+      "address": "GCU2TBV6HOCGBEOJSXHLI3LQWIMGMN7KFMI6YIH74RMMQB6VQGT6RXHE"
+    }
+  ],
+  "rules": [
+    {
+      "name": "admin",
+      "scope": {
+        "type": "self-admin"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish",
+      "scope": {
+        "type": "contract",
+        "address": "CC236AK2RX7MUO7BV7JYDDW5KHZ3X7YYJOJKCVDC543BQBNNSUCZB7NN"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish",
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 71430000
+    },
+    {
+      "name": "admin-registry",
+      "scope": {
+        "type": "contract",
+        "address": "CC236AK2RX7MUO7BV7JYDDW5KHZ3X7YYJOJKCVDC543BQBNNSUCZB7NN"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish-verifiers",
+      "scope": {
+        "type": "contract",
+        "address": "CCDCKRUV4W4DQYBWFWT4FNQ2QXQPGUQ7EXOZHIHSSLB6YJHMLHPMGDPH"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 71430000
+    }
+  ]
+}

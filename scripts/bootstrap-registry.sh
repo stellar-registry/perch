@@ -33,11 +33,16 @@
 #                     deploy_stateless. The factory's WebAuthn pin is there
 #   create-author     --project perch|nido: deploy a design-A perch-account and
 #                     apply its document (admin, ci-publish and admin-registry on
-#                     that project's registry). Where the compiler resolves
-#                     verifier names (its verifier_registry view), the admin
-#                     signer is the ed25519 verifier perch/verifiers deployed,
-#                     named in the document; with an earlier compiler, the one
-#                     in constructorless, by contract id
+#                     that project's registry; the perch author's also
+#                     ci-publish-verifiers on perch/verifiers). Where the compiler
+#                     resolves verifier names (its verifier_registry view), the
+#                     admin signer is the ed25519 verifier perch/verifiers
+#                     deployed, named in the document; with an earlier compiler,
+#                     the one in constructorless, by contract id. An author that
+#                     already holds ci-publish is left alone: a perch author
+#                     from before ci-publish-verifiers gains it by its admin's
+#                     apply_doc (docs/deploy/README.md, "The perch author's
+#                     rule on perch/verifiers")
 #   names             --project perch|nido: bind each remaining name to that
 #                     project's author with a synthetic hash (stellar-registry/perch#142)
 #   all               preflight, code (constructorless registry and account),
@@ -55,8 +60,9 @@
 #   --account-signer external|delegated   External(ed25519 verifier, key), which
 #                      perch-deploy apply signs (default); or Delegated(G), which
 #                      this script cannot sign
-#   --ci-key G         the authors' ci-publish delegate (required with --send)
-#   --ci-expiry-ledger N   ci-publish's not-after-ledger (required with --send)
+#   --ci-key G         a new author's ci-publish (and ci-publish-verifiers)
+#                      delegate (required with --send)
+#   --ci-expiry-ledger N   their not-after-ledger (required with --send)
 #   --account-wasm F|TAG|build   the perch-account wasm. Default: the bytes
 #                      the testnet deployment runs (deployments/testnet.json's
 #                      perch-account), fetched from testnet by hash. Otherwise a
@@ -85,7 +91,7 @@
 # --constructorless-wasm say otherwise.
 #
 # Env: STELLAR_RPC_URL overrides the network's RPC (a rehearsal points it at a
-# soroban-sim fork: scripts/rehearse-bootstrap.sh). PERCH_ADMIN_KEY, the admin
+# soroban-sim fork: scripts/rehearse-migration.sh). PERCH_ADMIN_KEY, the admin
 # key's secret, signs and pays each author's apply_doc through this checkout's
 # perch-deploy (--send only). Simulations use the source's address and never
 # load a secret.
@@ -772,41 +778,69 @@ admin_verifier() {
     fi
 }
 
-# The author document, in the shape of testdata/deploy/perch-testnet.template.json.
-author_doc() { # registry ci expiry
-    jq -n --arg net "$PASSPHRASE" --arg reg "$1" --arg verifier "$ADMIN_VERIFIER" --arg name "$ADMIN_VERIFIER_NAME" \
-        --arg mode "$ACCOUNT_SIGNER" \
-        --arg g "$ADMIN_KEY_G" --arg key "$("$DERIVE" key "$ADMIN_KEY_G")" --arg ci "$2" --argjson until "$3" '
+# The author document: admin, ci-publish and admin-registry on the project's
+# registry (the shape of testdata/deploy/perch-testnet.template.json). With
+# a verifiers registry (the perch author's), also ci-publish-verifiers: the
+# ci-publish delegate's publish_hash of the author's own names there, until
+# the same ledger, through which deploy-stack.sh publishes the stack's
+# verifiers into perch/verifiers. It allows publish_hash alone, the one call
+# that publishes.
+author_doc() { # registry admin-signer-json ci expiry [verifiers]
+    jq -n --arg net "$PASSPHRASE" --arg reg "$1" --argjson admin "$2" --arg ci "$3" --argjson until "$4" \
+        --arg vreg "${5:-}" '
+        def ci_rule($name; $registry; $functions):
+          {name: $name, scope: {type: "contract", address: $registry},
+           principals: {type: "all", signers: ["ci"]}, functions: $functions,
+           args: [{index: 1, pred: {type: "is-self"}}], "not-after-ledger": $until};
         {version: 1, network: $net,
-         signers: [(if $mode == "delegated" then {id: "admin", address: $g}
-                    elif $name == "" then {id: "admin", verifier: $verifier, key: $key}
-                    else {id: "admin", verifier: $verifier, "verifier-name": $name, key: $key} end),
-                   {id: "ci", address: $ci}],
-         rules: [
+         signers: [{id: "admin"} + $admin, {id: "ci", address: $ci}],
+         rules: ([
            {name: "admin", scope: {type: "self-admin"}, principals: {type: "all", signers: ["admin"]}},
-           {name: "ci-publish", scope: {type: "contract", address: $reg},
-            principals: {type: "all", signers: ["ci"]}, functions: ["publish", "publish_hash"],
-            args: [{index: 1, pred: {type: "is-self"}}], "not-after-ledger": $until},
+           ci_rule("ci-publish"; $reg; ["publish", "publish_hash"]),
            {name: "admin-registry", scope: {type: "contract", address: $reg},
-            principals: {type: "all", signers: ["admin"]}}]}'
+            principals: {type: "all", signers: ["admin"]}}]
+           + (if $vreg == "" then [] else [ci_rule("ci-publish-verifiers"; $vreg; ["publish_hash"])] end))}'
 }
 
-# Whether an author has a ci-publish rule scoped to a registry.
-author_scoped() { # author registry
-    local count id found=0 rule
-    instance_exists "$1" || return 1
+# A new author's admin signer, as its document names it.
+new_admin() {
+    if [ "$ACCOUNT_SIGNER" = delegated ]; then
+        jq -cn --arg g "$ADMIN_KEY_G" '{address: $g}'
+    else
+        jq -cn --arg v "$ADMIN_VERIFIER" --arg n "$ADMIN_VERIFIER_NAME" --arg k "$("$DERIVE" key "$ADMIN_KEY_G")" \
+            '{verifier: $v} + (if $n == "" then {} else {"verifier-name": $n} end) + {key: $k}'
+    fi
+}
+
+doc_hex() { jq -cj . | od -An -v -tx1 | tr -d ' \n'; }
+
+# An author's context rules into RULES, one JSON array of get_context_rule's
+# answers. Ids are sparse: every rule must be found, or the read dies rather
+# than report fewer rules than the account holds. The last author read is
+# kept until its next apply_doc.
+RULES_OF="" RULES=""
+author_rules() { # author
+    local count id found=0 rule out="[]"
+    [ "$RULES_OF" != "$1" ] || return 0
     count="$(simulate "$1" get_context_rules_count)"
-    [[ "$count" =~ ^[0-9]+$ ]] || return 1
+    [[ "$count" =~ ^[0-9]+$ ]] || die "could not read $1's rules: $count"
     for ((id = 0; id < count + 32 && found < count; id++)); do
         rule="$(simulate "$1" get_context_rule --context_rule_id "$id")"
         jq -e . >/dev/null 2>&1 <<<"$rule" || continue
         found=$((found + 1))
-        if [ "$(jq -r .name <<<"$rule")" = ci-publish ] &&
-            [ "$(jq -r '.context_type.CallContract // empty' <<<"$rule")" = "$2" ]; then
-            return 0
-        fi
+        out="$(jq -c --argjson r "$rule" '. + [$r]' <<<"$out")"
     done
-    return 1
+    [ "$found" = "$count" ] || die "read $found of $1's $count rules (the last answer: $rule)"
+    RULES_OF="$1" RULES="$out"
+}
+
+# Whether an author has a rule of that name (default ci-publish) scoped to a
+# registry.
+author_scoped() { # author registry [name]
+    instance_exists "$1" || return 1
+    author_rules "$1"
+    jq -e --arg r "$2" --arg n "${3:-ci-publish}" \
+        'any(.[]; .name == $n and .context_type.CallContract == $r)' >/dev/null <<<"$RULES"
 }
 
 # A deployed author must resolve its infra in this network's constructorless:
@@ -835,10 +869,12 @@ check_infra() { # author fresh(0|1)
 }
 
 cmd_create_author() {
-    local project="$PROJECT" author reg salt hash wasm signer tx fee ci expiry docfile hex r
+    local project="$PROJECT" author reg vreg="" salt hash wasm signer tx fee ci expiry docfile hex r
     author="$(author_of "$project")"
     reg="$(registry_of "$project")"
-    log "$project author $author: ci-publish and admin-registry on $reg"
+    # The perch author also publishes the stack's verifiers into perch/verifiers.
+    [ "$project" != perch ] || vreg="$VERIFIERS"
+    log "$project author $author: ci-publish and admin-registry on $reg${vreg:+, ci-publish-verifiers on $vreg}"
 
     # 1. The account: a design-A perch-account, deployed directly (the factory
     #    is itself deploy_stateless'd into constructorless later).
@@ -889,6 +925,8 @@ cmd_create_author() {
     #    deployer(constructorless, compiler hash), which `seed` puts there.
     if author_scoped "$author" "$reg"; then
         log "$project author already has ci-publish on $reg"
+        [ -z "$vreg" ] || author_scoped "$author" "$vreg" ci-publish-verifiers ||
+            warn "$project author $author has no ci-publish-verifiers on $vreg, and an existing author's document is left alone: its admin applies testdata/deploy/perch-author-$NETWORK.json (docs/deploy/README.md, \"The perch author's rule on perch/verifiers\")"
         return
     fi
     ci="$CI_KEY"
@@ -904,9 +942,9 @@ cmd_create_author() {
         warn "no --ci-expiry-ledger: the dry run uses $expiry (about 30 days from now)"
     fi
     docfile="$OUT/$project-author.json"
-    author_doc "$reg" "$ci" "$expiry" >"$docfile"
-    log "$project author document ($docfile): admin $ACCOUNT_SIGNER $ADMIN_KEY_G, ci-publish by $ci until ledger $expiry, admin-registry; both on $reg"
-    hex="$(jq -cj . "$docfile" | od -An -v -tx1 | tr -d ' \n')"
+    author_doc "$reg" "$(new_admin)" "$ci" "$expiry" "$vreg" >"$docfile"
+    log "$project author document ($docfile): admin $ACCOUNT_SIGNER $ADMIN_KEY_G, ci-publish by $ci until ledger $expiry and admin-registry on $reg${vreg:+, ci-publish-verifiers by $ci until ledger $expiry on $vreg}"
+    hex="$(doc_hex <"$docfile")"
     if ! instance_exists "$COMPILER"; then
         # The same compiler bytes may already run in the registry this
         # network's deployment records while a migration is pending
@@ -935,7 +973,9 @@ cmd_create_author() {
         warn "stops here: the $project author is not deployed yet"
         return 1
     fi
-    r="$(simulate "$author" apply_doc --doc_json "$hex" --approval_valid_until 0 --expected_revision "$(simulate "$author" revision | unquote)")"
+    local rev
+    rev="$(simulate "$author" revision | unquote)"
+    r="$(simulate "$author" apply_doc --doc_json "$hex" --approval_valid_until 0 --expected_revision "$rev")"
     log "simulated apply_doc: $r"
     [[ "$r" =~ ^\"[0-9a-f]{64}\"$ ]] || die "apply_doc would fail"
     if [ "$ACCOUNT_SIGNER" = delegated ]; then
@@ -946,11 +986,14 @@ cmd_create_author() {
     plan "sign: PERCH_ADMIN_KEY=<secret of $ADMIN_KEY_G> cargo run -p perch-deploy -- --rpc-url $RPC_URL --network-passphrase '$PASSPHRASE' apply --account $author --doc $docfile (that key also pays)"
     [ "$SEND" = 1 ] || return 0
     [ -n "${PERCH_ADMIN_KEY:-}" ] || die "--send needs PERCH_ADMIN_KEY, the secret of $ADMIN_KEY_G"
-    mainnet_gate "the $project author's apply_doc" "$(fee_of "$author" apply_doc --doc_json "$hex" --approval_valid_until 0 --expected_revision 0)"
+    mainnet_gate "the $project author's apply_doc" "$(fee_of "$author" apply_doc --doc_json "$hex" --approval_valid_until 0 --expected_revision "$rev")"
     cargo run --locked --manifest-path "$REPO/Cargo.toml" -q -p perch-deploy -- --rpc-url "$RPC_URL" --network-passphrase "$PASSPHRASE" \
         apply --account "$author" --doc "$docfile" </dev/null || die "submitting the $project author's apply_doc failed"
+    RULES_OF=""
     author_scoped "$author" "$reg" || die "after apply_doc, $author has no ci-publish on $reg"
-    log "$project author verified on chain: ci-publish on $reg"
+    [ -z "$vreg" ] || author_scoped "$author" "$vreg" ci-publish-verifiers ||
+        die "after apply_doc, $author has no ci-publish-verifiers on $vreg"
+    log "$project author verified on chain: ci-publish on $reg${vreg:+, ci-publish-verifiers on $vreg}"
 }
 
 cmd_names() {

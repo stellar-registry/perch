@@ -1,0 +1,45 @@
+Theorems~\ref{stmt:acceptance-implies-permission},
+\ref{stmt:cap-window-safety} and~\ref{stmt:grant-target-containment} below are
+the three bounds of \S\ref{sec:motivation}. Appendix~\ref{sec:formal-defs}
+states Theorem~\ref{stmt:total-equivalence-of-the-evaluator} (on every input the
+translation returns the model's result, without panicking or diverging) and
+Theorem~\ref{stmt:attenuation-narrows-authority} (attenuation never widens the
+calls a grant allows; not installable). Theorem numbers are shared with the
+verification companion, which states all \fact{statements-count}.
+
+\paragraph{The evaluator and its translation.} The decision function is about
+\fact{rule-eval-lines} lines of \code{no\_std} Rust in
+rule-core~\selfcite{rule-core}. Charon~\cite{charon} reads its MIR (rustc
+\fact{rustc-mir-nightly}) and Aeneas~\cite{aeneas} translates it into
+Lean~\cite{lean4}; CI
+regenerates the translation, fails on any difference, and pins all
+\fact{exported-theorems} exported theorems to Lean's standard axioms.
+\emph{Proved} means kernel-checked.
+
+
+\begin{perchbox}
+\textbf{What the proofs trust.} The Lean kernel and its standard axioms; Charon
+\fact{charon-rev}, Aeneas \fact{aeneas-rev} and its Lean model of Rust
+primitives; rustc's MIR; and the specification, including the denotations. The
+account, as built for the pin and the testnet preview with rustc
+\fact{rustc-perch}, also relies on the document compiler, the tested shell and
+verifiers, and the Soroban host.
+\end{perchbox}
+
+\paragraph{Notation.} Lists carry an arrow ($\vec c$); $\rho$ is a rule set
+$R$'s spending records, one per rule; $r_i = R_{j_i}$ is the rule chosen for
+context $c_i$; $u_r = \infty$ and $g_r = \bot$ when absent; $\varnothing$ is
+the empty records; ledgers are natural numbers. \emph{allows}$(r, c, S)$: $c$
+calls $r$'s contract and a function it allows, meets $r$'s argument
+conditions, and $S$ holds at least $k_r$ of $r$'s signers. \emph{authorize}
+returns records $\rho'$ when each chosen rule allows its context, has not
+expired and carries generation $\bot$ or $g$, every signer is on a chosen
+rule, and every cap charge passes. $\mathit{spent}_j$ lists each positive
+charge (ledger, amount) that a run's accepted authorizations make to rule $j$,
+whose cap is $(\lambda_j, P_j)$. \emph{Derives}: zero or more of the ten
+attenuation steps. Appendix~\ref{sec:formal-defs} gives
+Definitions~\ref{def:contexts-and-authorizations}--\ref{def:derivation}.
+
+\input{generated/statements/T2}
+\input{generated/statements/T6}
+\input{generated/statements/T8}

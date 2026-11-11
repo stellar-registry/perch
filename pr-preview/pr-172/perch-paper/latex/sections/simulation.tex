@@ -1,0 +1,39 @@
+soroban-sim~\selfcite{soroban-sim} runs the contract code of both designs
+offline in one host; the HTML edition\ifdefined\anonymous\else\footnote{\url{https://bitswell-hq.github.io/stellar-registry__perch/perch-paper/sim/}}\fi{}
+embeds it for the reader to drive, and we report its recorded reference run.
+
+\paragraph{What runs.} Each design gets a session on soroban-env-host
+\fact{soroban-env-host-sim} at protocol \fact{sim-protocol}, applying with enforcing authorization in a
+recording-mode build: OpenZeppelin's \fact{oz-v080-tag} account with
+oz-policy-builder's \code{policy-interpreter} and \code{spending\_limit}, or the
+Perch account with its document compiler and an Ed25519 verifier, each beside
+the native XLM contract, rebuilt from the pinned sources (Appendix~\ref{sec:repro}; only the
+OpenZeppelin side matches a deployment). The OpenZeppelin predicate pins the
+recipient and bounds each transfer at \fact{shop-cap-xlm}~XLM, with
+\code{spending\_limit} adding \fact{shop-cap-xlm}~XLM per
+\fact{shop-period-ledgers} ledgers; Perch runs the shop grant. Each request
+records its verdict and code, the contracts called during authorization (from
+the host's diagnostic events), the window and a ledger fingerprint. The
+OpenZeppelin side signs as a delegated account, since oz-policy-builder refuses
+external signers on policed rules (\nolinkurl{docs/stellar.md:563-564}), hence
+\fact{sim-oz-entries} authorization entries to Perch's \fact{sim-perch-entries}.
+We report no instruction counts.
+
+\paragraph{The recorded scenario} (Table~\ref{tab:tab-sim}). A \fact{sim-pay-xlm}-XLM payment applies in both designs. The
+\fact{sim-second-pay-xlm}~XLM that follows is refused in both: Perch's trace shows \code{\_\_check\_auth}
+refusing with no verifier call, the OpenZeppelin account's shows
+\code{spending\_limit} refusing (\fact{oz-spending-limit-exceeded}). With
+\code{spending\_limit} removed, the OpenZeppelin account applies each of
+\fact{sim-oz-percall-sends} \fact{sim-pay-xlm}-XLM sends under the per-call bound
+(\fact{sim-oz-percall-moved-xlm}~XLM), as oz-policy-builder documents, while
+Perch refuses all three because its window holds \fact{sim-pay-xlm}.
+Re-adding \code{spending\_limit} starts an empty history, as replacing
+a Perch rule starts an empty window. Another recipient, a forged signature and
+a key not on the rule are refused by both; \fact{shop-period-ledgers} ledgers
+later, \fact{sim-late-pay-xlm}~XLM applies in both.
+
+\perchtable{tab-sim}
+
+\paragraph{Why soroban-sim.} Real contract bytes run offline and
+deterministically, every verdict carries a trace, and native, WASI and browser
+runs return byte-identical replies, timings removed.

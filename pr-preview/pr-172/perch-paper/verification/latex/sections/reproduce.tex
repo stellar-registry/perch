@@ -1,0 +1,36 @@
+The proofs reproduce from rule-core~\cite{rule-core} at
+\facthash{rule-core-pin}, with Charon \fact{charon-rev}, Aeneas
+\fact{aeneas-rev}, Lean \fact{lean-rule-core} and rustc
+\fact{rustc-mir-nightly}, all pinned in its \code{flake.nix},
+\code{rust-toolchain.toml} and \code{formal/lean-toolchain}. From the
+repository's root (rule-core \srcpath{README.md:327-340}):
+\begin{Verbatim}[fontsize=\footnotesize,xleftmargin=1em]
+cd formal && lake exe cache get && lake build && cd ..
+tools/extract.sh --check
+tools/check-claims --theorems lean --skip-tests
+cd conformance/generator && lake build && lake exe gen-vectors ../vectors
+\end{Verbatim}
+The first line builds the model, the translation and every theorem, with its
+axiom record; the second fails if the committed translation differs from a fresh
+extraction (it needs Nix, or the \code{nixos/nix} image); the third checks the
+claims ledger; the fourth regenerates the conformance vectors and traces from the
+model.
+
+Theorem~\ref{stmt:canonical-identity} reproduces from Perch~\cite{perch-src} at
+\facthash{perch-pin}, in its \code{formal/} package with Lean
+\fact{lean-perch-canon} (Perch \srcpath{formal/README.md:144-148}):
+\begin{Verbatim}[fontsize=\footnotesize,xleftmargin=1em]
+cd formal && lake build             # checks all proofs
+lake env lean CheckAxioms.lean      # audits their axioms
+\end{Verbatim}
+\paragraph{The claims ledger.} rule-core records \fact{claims-unproven} claims
+as unproven, \fact{claims-unproven-ids}, and \fact{claims-assumed} as assumed,
+\fact{claims-assumed-ids}: hypotheses of the model (bounded room, the empty
+batch, no creation vocabulary, ledgers from~1) and the trusted items of
+\S\ref{sec:trust}.
+
+\noindent This paper is built from shared sources with
+\code{python3} \srcpath{docs/perch-paper/build/paper.py} and
+\srcpath{docs/perch-paper/latex/build.sh} in the Perch repository.
+
+\perchtable{tab-binding}

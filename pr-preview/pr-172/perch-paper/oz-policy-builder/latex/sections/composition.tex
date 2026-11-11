@@ -1,0 +1,57 @@
+\paragraph{What oz-policy-builder documents.} Its interpreter sees one authorized call at a
+time, so a call that authorizes two contexts needs a rule for each
+(\srcpath{docs/architecture.md:307-309}); relating the calls of a transaction is the
+execution adapter's job, since a rule bound to the adapter is honoured only for a
+call in a batch the adapter checked (\srcpath{docs/stellar.md:191-195}). Totals come
+only from outside the interpreter: it ``does not see what a transaction moved,
+keep rolling totals or count calls'', and limits over time come from a token
+allowance and its expiry or from OpenZeppelin's \code{spending\_limit} beside it
+(\srcpath{docs/stellar.md:404-407}), which the installer attaches only to a rule that
+pins \code{transfer} on a token (\srcpath{packages/policy-synth/src/install.ts:957-967}).
+That policy uses Perch's window boundary (\fact{oz-spending-window}) and keeps at
+most \fact{oz-spending-history-max} entries; oz-policy-builder's authors deployed
+the OpenZeppelin policies they pin and state that they did not audit them
+(\srcpath{evidence/README.md:154-157}). OpenZeppelin publishes audit reports for
+its library; the \fact{oz-v080-tag} diff audit lists \code{spending\_limit.rs}
+and the smart account's \code{storage.rs} in scope (\code{stellar-contracts}
+\srcpath{audits/}, v0.8.0 report, p.~4). Several signers need a threshold policy: a
+rule with any policy accepts one authenticated signer unless
+\code{simple\_threshold} or \code{weighted\_threshold} is attached, and the
+installer requires one unless the owners set \code{anyOne}
+(\srcpath{README.md:122-125}). Changing and ending a rule are separate steps. The
+interpreter pins a policed rule to its signer set and refuses with error
+\fact{opb-error-signers-changed} once the set changes, so changing who signs means
+adding a rule and removing the old one, or removing the policy and adding it
+again with its admins (\srcpath{docs/stellar.md:552-554}); rules are removed one at a time; and
+removing a rule with only rule~0's signatures leaves the interpreter's entry for
+it, never read again, until it archives, because the interpreter's
+\code{uninstall} needs the policy admins' own authorization
+(\srcpath{docs/stellar.md:548-562}).
+
+\paragraph{What it buys.} The interpreter is fixed code, reviewed once, and a
+policy is data, so ``a new combination of constraints needs no new contract and
+no re-audit'' (\srcpath{README.md:21-24}). Because each policy is a contract, a
+predicate can read live state, up to \fact{opb-interpreter-max-reads} values from
+other contracts, such as an oracle price or a registry
+(\srcpath{dsl.rs:409-423}; \srcpath{docs/stellar.md:369-375}). OpenZeppelin's own policies
+attach to the same rule, and one can be added or swapped without changing the
+others. In
+exchange, each guarantee holds while the contract that gives it is attached: the
+window bound while \code{spending\_limit} is on the rule, the threshold while a
+threshold policy is. Each policy keeps its own state, and a write by an earlier
+policy is rolled back with the call when a later one refuses
+(Table~\ref{tab:tab-walkthrough}, step~4).
+
+\paragraph{What Perch does instead, and what that costs.} A Perch grant is one
+document decided by one evaluator linked into the account: target, functions,
+argument conditions, threshold, expiry, generation and window cap are checked
+together, against rules and spending records held only in the account. There is
+nothing to attach or order, and one install writes a grant whose rules span
+several contracts. The cost is the converse of what composition buys. A rule can
+say less: \fact{doc-conditions-count} conjunctive argument conditions
+(\fact{doc-conditions}), no disjunction or negation, no bound on one call's
+amount, and no reads of other contracts. And because the evaluator is linked into
+the account, a new kind of condition needs a new evaluator, new proofs and a new
+account build, which an existing account reaches only through its owner's
+upgrade, at least \fact{upgrade-delay-ledgers} ledgers after it is scheduled
+(Perch \srcpath{perch-recovery-interface/src/account.rs:15}).

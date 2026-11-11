@@ -1,0 +1,138 @@
+{
+ "sim-page-sha256": {
+  "value": "ce8174dc3ac325deb511a3fecfa8127d72477ac7d47a1a4a5040680c906b982e",
+  "anon": "[withheld]",
+  "source": "`shasum -a 256 docs/perch-paper/sim/index.html`; equals `source/figures/fig-sim.run.json` `page_sha256`"
+ },
+ "sim-page-sha256-short": {
+  "value": "ce8174dc…",
+  "anon": "[withheld]",
+  "source": "same"
+ },
+ "sim-page-bytes": {
+  "value": "4,913,857",
+  "source": "size of `docs/perch-paper/sim/index.html`"
+ },
+ "sim-page-mb": {
+  "value": "4.9",
+  "source": "size of `docs/perch-paper/sim/index.html` in MB (10^6 bytes), one decimal"
+ },
+ "sim-golden-sha256": {
+  "value": "38da174d3bc6d7242f788ac2bf479545e3bce18aefbcd578966341c53cbe3dea",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `golden_sha256`"
+ },
+ "sim-golden-sha256-short": {
+  "value": "38da174d…",
+  "anon": "[withheld]",
+  "source": "same"
+ },
+ "sim-replies-sha256": {
+  "value": "88bf930eea70cb7344c912049c77e44b134b3806993c12cc7c4edabd52a38136",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `replies_sha256` (SHA-256 of the fifteen replies minus every `ms` field, one JSON line each (replies.mjs); native, WASI and the browser agree on it)"
+ },
+ "sim-replies-sha256-short": {
+  "value": "88bf930e…",
+  "anon": "[withheld]",
+  "source": "same"
+ },
+ "sim-reactor-sha256": {
+  "value": "a2352156fda3b91648dba2c218f883e248f20eac2c5ee1bb59cce699c13bd0da",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `reactor_sha256`"
+ },
+ "sim-commands": {
+  "value": "15",
+  "source": "`source/figures/fig-sim.run.json` `steps` (commands 0 to 14)"
+ },
+ "sim-start-xlm": {
+  "value": "100",
+  "source": "`source/figures/fig-sim.run.json` step 0 `balance_xlm`, both designs"
+ },
+ "sim-oz-percall-sends": {
+  "value": "three",
+  "source": "`source/figures/fig-sim.run.json`: OZ payments applied while `spending_limit` was absent from `policies` (commands 5, 6, 7)"
+ },
+ "sim-oz-percall-moved-xlm": {
+  "value": "18",
+  "source": "the sum of those payments' `amount_xlm`"
+ },
+ "sim-oz-entries": {
+  "value": "2",
+  "source": "`source/figures/fig-sim.run.json` `entries`, every OZ request"
+ },
+ "sim-perch-entries": {
+  "value": "1",
+  "source": "`source/figures/fig-sim.run.json` `entries`, every Perch request"
+ },
+ "sim-oz-final-xlm": {
+  "value": "70",
+  "source": "`source/figures/fig-sim.run.json` last step, OZ `balance_xlm`"
+ },
+ "sim-perch-final-xlm": {
+  "value": "88",
+  "source": "`source/figures/fig-sim.run.json` last step, Perch `balance_xlm`"
+ },
+ "sim-wasm-perch-account": {
+  "value": "3038f5dc50ad803acfd7567f10deabc0b24cedb2b8d5b7ea83030418b4914527",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"perch_account.wasm\"]`"
+ },
+ "sim-wasm-perch-doc-compiler": {
+  "value": "60f470704831852e67835379187a32058d9636b3783bf5ad9e625a29fc8da86f",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"perch_doc_compiler.wasm\"]`"
+ },
+ "sim-wasm-perch-ed25519-verifier": {
+  "value": "27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"perch_ed25519_verifier.wasm\"]`"
+ },
+ "sim-wasm-perch-interpreter": {
+  "value": "4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"perch_interpreter.wasm\"]`"
+ },
+ "sim-wasm-perch-spending-limit": {
+  "value": "ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"perch_spending_limit.wasm\"]`"
+ },
+ "sim-wasm-verifiers-stub": {
+  "value": "65a4168ba2123c22dee2d30e0341f420db1dae59bef7b207ba0c8da3f55f5d14",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"verifiers_stub.wasm\"]`"
+ },
+ "sim-wasm-oz-account": {
+  "value": "8286422f205951f37f4249401b403471fc432340dde6925432d31bb8a90cce27",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"oz_account_0_8_0.wasm\"]`"
+ },
+ "sim-wasm-oz-spending-limit": {
+  "value": "65e70aad310bcaf7025aedc97e70cde098e1dd6c22d5153879c9cc64ea7da8e2",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"oz_spending_limit_0_8_0.wasm\"]`"
+ },
+ "sim-wasm-policy-interpreter": {
+  "value": "6704996f626904a4e33b95bda17b73963fc9cf502ffdfdbe9d85b4b10288e0d4",
+  "anon": "[withheld]",
+  "source": "`source/figures/fig-sim.run.json` `contracts[\"policy_interpreter.wasm\"]`"
+ },
+ "sim-pay-xlm": {
+  "value": "6",
+  "source": "`source/figures/fig-sim.run.json` steps 2 and 5–7, `request.amount_xlm`: the in-rule payment to the shop, applied by both designs at step 2 and repeated with `spending_limit` removed"
+ },
+ "sim-second-pay-xlm": {
+  "value": "5",
+  "source": "`source/figures/fig-sim.run.json` step 3, `request.amount_xlm`: the payment in the same window that both designs refuse"
+ },
+ "sim-late-pay-xlm": {
+  "value": "5",
+  "source": "`source/figures/fig-sim.run.json` step 14, `request.amount_xlm`: the payment after the window has moved on"
+ },
+ "sim-oz-per-call-bound-xlm": {
+  "value": "10",
+  "source": "`source/figures/fig-sim.run.json` `task`: the oz-policy-builder predicate pins the recipient and bounds each transfer at 10 XLM"
+ }
+}

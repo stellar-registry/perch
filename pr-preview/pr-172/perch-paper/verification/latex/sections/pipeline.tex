@@ -1,0 +1,22 @@
+The evaluator, \code{crates/rule-eval} in rule-core, is about
+\fact{rule-eval-lines} lines of dependency-free \code{no\_std} Rust that forbids
+\code{unsafe} code, in a subset Aeneas can translate: no traits, closures or
+iterator adaptors, and every loop a \code{while} over one slice.
+
+\paragraph{The proof path.} Charon~\cite{charon} \fact{charon-rev} reads the MIR, the
+compiler's mid-level representation, that rustc \fact{rustc-mir-nightly}
+produces, and Aeneas~\cite{aeneas} \fact{aeneas-rev} translates it into a
+generated \fact{extracted-lean-lines}-line Lean program over Aeneas's library of
+Rust primitives. Equivalence theorems relate it to the model through denotations
+(Definition~\ref{def:denotation}). rule-core's CI re-extracts and fails on any
+difference from the committed translation, and its \code{lake build} rejects
+\code{sorry}, \code{admit}, \code{axiom} and similar escapes in every Lean source
+(rule-core \srcpath{README.md:276-281}). Lean's kernel~\cite{lean4},
+\fact{lean-rule-core}, checks the proofs.
+
+\paragraph{The shipping path.} rustc \fact{rustc-perch} compiles the same source
+to \code{wasm32v1-none}, linked into the account, and nothing checks this Wasm
+against the translation. Tests on a natively built account bridge the paths
+(\S\ref{sec:obligations}).
+
+\perchfigure{fig-proof-paths}

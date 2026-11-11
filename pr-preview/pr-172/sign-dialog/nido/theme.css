@@ -1,0 +1,42 @@
+/* Nido's signing popup ("Warm Nest") for <soroban-sign-dialog>, through its custom properties and parts only.
+   Tokens from nidohq/nido 97105a0b packages/frontend/src/styles/nido.css (lines 5-49, 120-140, 251-260, 357-361);
+   Nido is light-only (nido.css line 48), so these tokens also hold when the page is dark. See NOTICE.md. */
+@font-face { font-family: "Fraunces"; src: url("fonts/fraunces-800-latin.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+@font-face { font-family: "Hanken Grotesk"; src: url("fonts/hanken-grotesk-latin.woff2") format("woff2"); font-weight: 400 800; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("fonts/jetbrains-mono-latin.woff2") format("woff2"); font-weight: 400 600; font-display: swap; }
+
+soroban-sign-dialog, soroban-sign-dialog.brand {
+  --ssd-font: "Hanken Grotesk", system-ui, sans-serif;
+  --ssd-mono: "JetBrains Mono", ui-monospace, monospace;
+  --ssd-bg: #FFF8F0;          /* --paper */
+  --ssd-surface: #ffffff;     /* --paper-2: white cards on cream */
+  --ssd-fg: #2A1A12;          /* --ink */
+  --ssd-muted: #7a6655;       /* --mut */
+  --ssd-border: #efe2d2;      /* --line */
+  --ssd-accent: #cf4a1e;      /* --acc-btn, the contrast-safe fill of the coral accent */
+  --ssd-accent-fg: #ffffff;
+  --ssd-ok: #0a6b75;          /* --good-ink */
+  --ssd-ok-bg: #DBF0F1;       /* --good-soft */
+  --ssd-warn: #815a14;        /* --warn */
+  --ssd-warn-bg: #F8ECD4;     /* --warn-soft */
+  --ssd-danger: #aa3a26;      /* --danger */
+  --ssd-danger-bg: #FBE7E2;   /* .alert.danger */
+  --ssd-danger-fg: #ffffff;
+  --ssd-radius: 26px;         /* --r-xl, the sheet's corner */
+  --ssd-radius-sm: 14px;      /* --r-md: buttons, inputs */
+  --ssd-radius-pill: 999px;   /* --r-pill: chips */
+  --ssd-title-size: 21px;     /* the sheet title */
+  --ssd-weight-strong: 700;
+  --ssd-width: 28rem;         /* the 448px focused column of the signing popup */
+  --ssd-backdrop: rgba(20, 18, 12, 0.42);
+  --ssd-shadow: 0 20px 60px rgba(20, 20, 15, 0.22);
+  color-scheme: light;
+}
+/* Nido's mark and name in the component's logo slot, as in Nido's top bar (Logo.astro). */
+.nido-logo { display: inline-flex; align-items: center; gap: 6px; font: 800 19px/1 "Fraunces", Georgia, serif;
+  letter-spacing: -0.01em; color: #2A1A12; }
+soroban-sign-dialog::part(title) { font-family: "Fraunces", Georgia, serif; font-weight: 800; letter-spacing: -0.01em; }
+soroban-sign-dialog::part(network) { background: #F4E8D7; color: #2A1A12; font-weight: 700; }
+soroban-sign-dialog::part(approve), soroban-sign-dialog::part(reject) { font-weight: 700; }
+soroban-sign-dialog::part(approve) { min-height: 52px; }
+soroban-sign-dialog::part(reject) { min-height: 52px; background: #F4E8D7; color: #2A1A12; border-color: transparent; }

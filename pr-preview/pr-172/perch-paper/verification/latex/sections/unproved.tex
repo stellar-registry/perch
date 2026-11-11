@@ -1,0 +1,27 @@
+\paragraph{The proofs and the binary.} Nothing checks the Wasm, built by rustc
+\fact{rustc-perch}, against the translation (Fig.~\ref{fig:fig-proof-paths}).
+Release builds keep overflow checks and abort on
+panic, and allocation failure and stack exhaustion, which the model omits, also
+trap, so each fails the transaction. The specification is trusted, including
+\code{Doc.allows}, written from Perch's earlier account (\fact{doc-allows-source},
+on OpenZeppelin's library at \fact{oz-fork-pin}), not from the pinned one. The
+owner may replace the account's code after \fact{upgrade-delay-ledgers} ledgers;
+the proofs cover the examined code, not its replacement.
+
+\paragraph{The shell and the host.} Tested, not proved: the JSON parser and
+compiler, stored-value decoding, rule-ID resolution, context conversion, the
+excluded set's assembly, record persistence, the credential index, the
+generation update, the composition of evaluation with authentication, and the
+recovery controller. The integration tests run the real \code{\_\_check\_auth}
+under enforcing authorization, but as natively registered contracts; the Wasm,
+with passkeys and real proofs, runs in Perch's \srcpath{release_stack.rs} flows
+and on testnet. The host models are tested on selected traces and omit TTL,
+archival, fees, footprints and validation before the host runs. No single
+theorem covers the whole authorization path, including batches that mix
+administrative and grant rules, so
+Proposition~\ref{stmt:from-the-evaluator-to-the-account} is argued. No external
+audit has been completed.
+
+\paragraph{Proposed.} A Lean lemma for O2, selection and renumbering, would turn
+the proposition's main argued step into a theorem, and a Wasm-level check
+(\S\ref{sec:related}) would cover the shipping path. Neither has been done.

@@ -1,0 +1,73 @@
+{
+ "title": "Disclosed open items in both systems.",
+ "caption": "Items each project documents about itself. oz-policy-builder rates its items in a STRIDE register; Perch keeps none, so its rows give the status its documents state. H-1/E-36 and E-38 arise from features Perch lacks; their absence in Perch is not a security property of Perch.",
+ "columns": [
+  "System",
+  "Item",
+  "Status",
+  "Source"
+ ],
+ "latex_colspec": "@{}lLp{0.2\\linewidth}p{0.24\\linewidth}@{}",
+ "rows": [
+  [
+   "Perch",
+   "The completion marker is consumed by the target's canonical identity, not its exact bytes",
+   "open",
+   "issue {{fact:completion-marker-issue}}"
+  ],
+  [
+   "Perch",
+   "Delegated signers do not bind rule IDs",
+   "by design (CAP-0071)",
+   "`docs/recovery/cap-0071.md:28`"
+  ],
+  [
+   "Perch",
+   "Replacing a capped rule, or changing its cap, starts an empty window",
+   "documented",
+   "`docs/DEFERRED.md:298-324`"
+  ],
+  [
+   "Perch",
+   "A rule edited in place between signing and inclusion decides under its new contents",
+   "documented",
+   "`docs/DEFERRED.md:227-262`"
+  ],
+  [
+   "Perch",
+   "Grant installs take no expected version",
+   "stated",
+   "`lib.rs:1000-1006`"
+  ],
+  [
+   "Perch",
+   "One key is admin and manager of `perch/verifiers` on testnet and mainnet; the admin can replace the registry's code at once",
+   "deployment fact",
+   "`deployments/*.json:22-23`"
+  ],
+  [
+   "oz-policy-builder",
+   "H-1/E-36: a keyed door on a no-gate adapter without the grants pin",
+   "High, residual Medium; tooling-only guard",
+   "`audit-overview.md:165-177`"
+  ],
+  [
+   "oz-policy-builder",
+   "E-38: a keyless follower's fence can be loosened by the followed rule's admins",
+   "{{fact:opb-e38-severity}}",
+   "`stride-threat-model.md:400`"
+  ],
+  [
+   "oz-policy-builder",
+   "T-05: same-transaction read manipulation",
+   "High where a rule uses `read`",
+   "`stride-threat-model.md:397`"
+  ],
+  [
+   "oz-policy-builder",
+   "T-19: the review reaches the owner through the agent",
+   "High until the owner side runs it",
+   "`stride-threat-model.md:398`"
+  ]
+ ]
+}

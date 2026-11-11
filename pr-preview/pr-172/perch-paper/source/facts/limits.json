@@ -1,0 +1,169 @@
+{
+ "spend-record-base-bytes": {
+  "value": "172",
+  "source": "`P:docs/recovery/budgets.md:606-607` (V)"
+ },
+ "spend-record-per-spend-bytes": {
+  "value": "72",
+  "source": "same (V)"
+ },
+ "ledger-entry-limit-bytes": {
+  "value": "65,536",
+  "source": "same (V)"
+ },
+ "spends-per-window": {
+  "value": "907",
+  "source": "same (V)"
+ },
+ "contract-size-limit-bytes": {
+  "value": "131,072",
+  "source": "r2:427 (C)"
+ },
+ "preview-account-share-of-limit": {
+  "value": "81%",
+  "source": "106,584 / 131,072 (C)"
+ },
+ "tx-instruction-limit": {
+  "value": "400M",
+  "source": "r2:431, 619 (C)"
+ },
+ "doc-max-signers": {
+  "value": "8",
+  "source": "`P:crates/perch-doc-compiler/src/lib.rs:68` (V)"
+ },
+ "doc-max-rules": {
+  "value": "10",
+  "source": "`…/lib.rs:70` (V)"
+ },
+ "doc-max-canonical-bytes": {
+  "value": "8,192",
+  "source": "`…/lib.rs:72` (V)"
+ },
+ "doc-max-rule-name-bytes": {
+  "value": "20",
+  "source": "`…/lib.rs:76` (V)"
+ },
+ "worst-case-completion-share": {
+  "value": "40.7%",
+  "source": "`P:docs/recovery/budgets.md:730` (V): lost-key completion, `Combined`, ZK rotation, 8 signers, 10 rules, in process"
+ },
+ "upgrade-delay-ledgers": {
+  "value": "120,960",
+  "source": "`P:crates/perch-recovery-interface/src/account.rs:15, 179` (V)"
+ },
+ "upgrade-delay-days": {
+  "value": "seven days at the nominal five-second ledger",
+  "source": "same; r2:617 (C)"
+ },
+ "nominal-ledger-seconds": {
+  "value": "5",
+  "source": "r2:18 (C)"
+ },
+ "reserved-hook-count": {
+  "value": "10",
+  "source": "`P:crates/perch-smart-account/src/lib.rs:1113-1119`; spec §2 (R, r1-plan C16)"
+ },
+ "reserved-hook-names": {
+  "value": "`install`, `uninstall`, `enforce` and seven `rcv_*` names",
+  "markup": true,
+  "source": "same (R)"
+ },
+ "recovery-statement-bytes": {
+  "value": "278",
+  "source": "`P:docs/recovery/statement.md:49` (V)"
+ },
+ "auth-domain-tag": {
+  "value": "perch/account/auth-addr-v1",
+  "source": "`P:crates/perch-smart-account/src/lib.rs:376-400` (R)"
+ },
+ "auth-scheme-name": {
+  "value": "addr_oz_v1",
+  "code": true,
+  "source": "`P:…/lib.rs:350` (R)"
+ },
+ "contract-id-bytes": {
+  "value": "32",
+  "source": "r2:291 (C)"
+ },
+ "zk-pool-depth": {
+  "value": "32",
+  "source": "`P:deployments/testnet.json:28` (V)"
+ },
+ "zk-earlier-deployment": {
+  "value": "7ae915dc",
+  "source": "r2:397 (C)"
+ },
+ "zk-earlier-transactions": {
+  "value": "81",
+  "source": "r2:397 (C)"
+ },
+ "zk-secret-entropy-bits": {
+  "value": "128",
+  "source": "`P:docs/recovery/spec.md:198-201` (R)"
+ },
+ "auth-error-reserved-function": {
+  "value": "1",
+  "source": "`P:crates/perch-smart-account/src/lib.rs:234-252`, `PerchAuthError` numbered from 1 (V)"
+ },
+ "auth-error-account-frozen": {
+  "value": "2",
+  "source": "same (V)"
+ },
+ "auth-error-stale-scope": {
+  "value": "3",
+  "source": "same (V)"
+ },
+ "auth-error-scope-escalation": {
+  "value": "4",
+  "source": "same (V)"
+ },
+ "auth-error-rule-eval-refused": {
+  "value": "5",
+  "source": "same (V)"
+ },
+ "oz-error-context-rule-not-found": {
+  "value": "3000",
+  "source": "r2:281; r2-final (C)"
+ },
+ "oz-error-external-verification-failed": {
+  "value": "3003",
+  "source": "r2:285; r2-final (C)"
+ },
+ "account-error-scope-live": {
+  "value": "#59",
+  "note": "prints #59",
+  "source": "`P:…/lib.rs:161-216` (C)"
+ },
+ "account-error-wiped-credential": {
+  "value": "#60",
+  "note": "prints #60",
+  "source": "same (C)"
+ },
+ "controller-error-not-executable-yet": {
+  "value": "6",
+  "source": "r2:349, 545 (C)"
+ },
+ "host-auth-error": {
+  "value": "Error(Auth, InvalidAction)",
+  "code": true,
+  "source": "r2:247 (C)"
+ },
+ "verifier-name-webauthn": {
+  "value": "perch-webauthn-verifier@0.1.2",
+  "source": "r2:591 (C), for the account document only; for the game grant it is **U** (K41)",
+  "unverified": true
+ },
+ "sim-verifier-name": {
+  "value": "ed25519@1.0.0",
+  "source": "r2:587 (C)"
+ },
+ "registry-stub-bytes": {
+  "value": "562",
+  "source": "r2:587, `MANIFEST` (C)"
+ },
+ "mldsa-verifier": {
+  "value": "ML-DSA-65",
+  "note": "built and tested; in neither manifest",
+  "source": "r2:321 (C)"
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "perch-js-package": {
+  "value": "@stellar-registry/perch",
+  "source": "`P:packages/perch-js/package.json:2` at f0275f4 (V, E-main r4); `npm view @stellar-registry/perch versions` lists 0.4.1 (V, E-main r4)"
+ },
+ "perch-js-version": {
+  "value": "0.4.1",
+  "source": "`P:packages/perch-js/package.json:3` at f0275f4 (V, E-main r4); published on npm (V, E-main r4)"
+ },
+ "nido-run-lost-guesses": {
+  "value": "two",
+  "source": "r2:591 (C): \"two lost guesses\""
+ },
+ "nido-run-guardians": {
+  "value": "one",
+  "source": "r2:591 (C): \"a one-guardian Loss recovery through to completion\""
+ }
+}

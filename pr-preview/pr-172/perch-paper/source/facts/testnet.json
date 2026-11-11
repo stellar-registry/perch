@@ -1,0 +1,113 @@
+{
+ "preview-deploy-date": {
+  "value": "2026-11-05",
+  "source": "r2:52, 58 (C)"
+ },
+ "preview-deploy-ledger": {
+  "value": "5,577,521",
+  "source": "r2:58 (C)"
+ },
+ "preview-account-wasm": {
+  "value": "0bdbdd142c953976056196cc837f84667e0fb64e731b007cc45d8b852c4ce844",
+  "source": "r1 blockchain-accounts H3, fetched from testnet (C)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "preview-account-wasm-short": {
+  "value": "0bdbdd14…",
+  "source": "same (C)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "preview-account-bytes": {
+  "value": "106,584",
+  "source": "same (C)"
+ },
+ "nido-run-date": {
+  "value": "5 November 2026",
+  "source": "r2:591 (C)"
+ },
+ "nido-run-transactions": {
+  "value": "11",
+  "source": "r2:591 (C)"
+ },
+ "completion-tx": {
+  "value": "161cd96849732ba17740c05157d60141e765099fe854929101113e48427917ba",
+  "anon": "[withheld; in the artifact]",
+  "source": "r1-plan line 8 (C)"
+ },
+ "completion-tx-short": {
+  "value": "161cd968…17ba",
+  "source": "same (C)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "completion-ledger": {
+  "value": "5,578,777",
+  "source": "same (C)"
+ },
+ "completion-account": {
+  "value": "CBOUTD6XXCUB4QTIT4T5D4U5EMAUTKYAKPSKBTZF4RXGD3OWQTXINLZM",
+  "anon": "[withheld; in the artifact]",
+  "source": "same (C)"
+ },
+ "completion-account-short": {
+  "value": "CBOUTD6X…INLZM",
+  "source": "same (C)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "completion-event": {
+  "value": "scopes_wiped {gen: 1}",
+  "code": true,
+  "source": "same (C)"
+ },
+ "completion-grant-generation": {
+  "value": "1",
+  "source": "r2:591 (C)"
+ },
+ "completion-recovery-generation": {
+  "value": "2",
+  "source": "r2:591 (C)"
+ },
+ "census-account": {
+  "value": "CDAPPQ5YKFK2GBAP6TSKPHHHDNDZWBYFF4AVC5I4BVCDJ5MK6CPFFX3V",
+  "anon": "[withheld; in the artifact]",
+  "source": "r2:688; r1-plan §2 item 20 (C)"
+ },
+ "census-bytes": {
+  "value": "3,308",
+  "source": "r2:431; r1-plan §2 item 20 (C)"
+ },
+ "census-entries": {
+  "value": "8",
+  "source": "same (C)"
+ },
+ "census-rent-xlm-year": {
+  "value": "1.677",
+  "source": "same (C)"
+ },
+ "smoke-account": {
+  "value": "CBJ3PMMMQOQGGHYPXRNS4S4LOIWFPXVE2HOLY7DRNWK6PPE4EHVLCDXE",
+  "anon": "[withheld; in the artifact]",
+  "source": "r2:690; r2-final (C)"
+ },
+ "smoke-amount": {
+  "value": "1 stroop",
+  "source": "r2:593 (C)"
+ },
+ "smoke-cpu": {
+  "value": "5,944,258",
+  "source": "r2:593 (C)"
+ },
+ "smoke-fee-stroops": {
+  "value": "12,889",
+  "source": "r2:593 (C)"
+ },
+ "smoke-tx": {
+  "value": "3e652c739cd265f5cd9d9434c2f5f2c927c66dd810f7cf2efe55b77f45a0234c",
+  "anon": "[withheld; in the artifact]",
+  "source": "r2:690 (C)"
+ },
+ "registry-admin-manager": {
+  "value": "GAMPJROHOAW662FINQ4XQOY2ULX5IEGYXCI4SMZYE75EHQBR6PSTJG3M",
+  "note": "one key, both roles",
+  "source": "`P:deployments/testnet.json:22-23` (V); `mainnet.json:22-23` (R, auditor)"
+ }
+}

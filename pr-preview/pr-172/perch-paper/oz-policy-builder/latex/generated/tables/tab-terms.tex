@@ -1,0 +1,19 @@
+% Generated from source/tables/tab-terms.json; edit that.
+\begin{table}[tbp]
+\centering
+\caption{\textbf{Eight words the two systems use differently.} Grant, scope, policy, interpreter, \code{execute}, recovery, cap and expiry mean different things in the two systems. \emph{Scope} is Perch's code name for a grant and its JSON name for a rule's target. The last column gives the meaning in OpenZeppelin's account or in oz-policy-builder.}\label{tab:tab-terms}
+\scriptsize\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.13\linewidth}LLL@{}}
+\toprule
+\textbf{Term} & \textbf{In Perch} & \textbf{Name in the artifacts} & \textbf{In OpenZeppelin or oz-policy-builder} \\
+\midrule
+Grant & A bounded set of rules the owner installs so an app can act without a prompt for each call & scope & No single object: one context rule per contract, each with its policies \\
+Rule target & The contract whose functions a rule lets be called & JSON \code{"scope"} & The context rule's \code{CallContract} address \\
+Policy & --- & --- & A contract attached to a context rule; the account calls its \code{enforce} after authenticating (hooks \code{install}, \code{uninstall}, \code{enforce}) \\
+Interpreter & The policy contract of Perch's earlier design (\fact{perch-deployed-account-version}); its address is still pinned and reported, never called & \code{perch\_\allowbreak{}interpreter} & oz-policy-builder's \code{policy-\allowbreak{}interpreter}, the shared predicate evaluator \\
+\code{execute} & The account's owner-authorized call as the account & \code{execute(target,\allowbreak{} function,\allowbreak{} args)} & The adapter's batch call \code{execute(calls,\allowbreak{} grants,\allowbreak{} wait)} \\
+Recovery & Replacing lost credentials through guardians, a zero-knowledge proof, or both & \code{rcv\_*}, \code{apply\_doc} & The Prime app's "recovery" moves custody funds to a fixed address \\
+Cap and window & At most \emph{limit} charged over the last \emph{P} ledgers: the window at ledger \emph{L} is (\emph{L} \ensuremath{-} \emph{P}, \emph{L}] & \code{cap}, \code{period-ledgers} & \code{spending\_limit} uses the same window boundary. In an oz-policy-builder Intent, \code{cap} bounds one call (\code{lte}) \\
+Expiry & \fact{perch-expiry-semantics} & \code{not-after-ledger} & OpenZeppelin \code{valid\_until} N authorizes through N \\
+\bottomrule
+\end{tabularx}
+\end{table}

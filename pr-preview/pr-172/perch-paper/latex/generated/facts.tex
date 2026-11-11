@@ -1,0 +1,343 @@
+% Generated from source/facts.json and source/documents.json; edit those.
+\expandafter\def\csname perchdoc@main\endcsname{\companion{https://bitswell-hq.github.io/stellar-registry__perch/perch-paper/}{Perch: Bounded Grants for Apps and Agents on Soroban Smart Accounts}}
+\expandafter\def\csname perchdoc@oz-policy-builder\endcsname{\companion{https://bitswell-hq.github.io/stellar-registry__perch/perch-paper/oz-policy-builder/}{Bounding an App's Authority on Soroban: Perch and oz-policy-builder Compared}}
+\expandafter\def\csname perchdoc@vision\endcsname{\companion{https://bitswell-hq.github.io/stellar-registry__perch/perch-paper/vision/}{The Perch Vision: Recovery, Agents and the Full Account}}
+\expandafter\def\csname perchdoc@verification\endcsname{\companion{https://bitswell-hq.github.io/stellar-registry__perch/perch-paper/verification/}{What Perch Proves: An Aeneas-Translated Authorization Evaluator and Its Models}}
+\expandafter\def\csname perchfact@account-error-scope-live\endcsname{\#59}
+\expandafter\def\csname perchfact@account-error-wiped-credential\endcsname{\#60}
+\expandafter\def\csname perchfact@aeneas-rev\endcsname{ab34bd2}
+\expandafter\def\csname perchfact@affiliation\endcsname{\ifdefined\anonymous Anonymous institution\else The Aha Company\fi}
+\expandafter\def\csname perchfact@attenuation-steps\endcsname{10}
+\expandafter\def\csname perchfact@auth-domain-tag\endcsname{perch/account/auth-addr-v1}
+\expandafter\def\csname perchfact@auth-error-account-frozen\endcsname{2}
+\expandafter\def\csname perchfact@auth-error-reserved-function\endcsname{1}
+\expandafter\def\csname perchfact@auth-error-rule-eval-refused\endcsname{5}
+\expandafter\def\csname perchfact@auth-error-scope-escalation\endcsname{4}
+\expandafter\def\csname perchfact@auth-error-stale-scope\endcsname{3}
+\expandafter\def\csname perchfact@auth-scheme-name\endcsname{\code{addr\_oz\_v1}}
+\expandafter\def\csname perchfact@authors\endcsname{\ifdefined\anonymous Anonymous authors\else Willem Wyndham and Elizabeth Engelman\fi}
+\expandafter\def\csname perchfact@cap-event-1\endcsname{ledger t: +6 accepted; 6 in the window}
+\expandafter\def\csname perchfact@cap-event-2\endcsname{ledger t: +5 refused; 6 + 5 = 11 \textgreater{} 10; record unchanged}
+\expandafter\def\csname perchfact@cap-event-3\endcsname{ledger t + 1: +4 accepted; 10 \ensuremath{\le} 10, the limit is inclusive}
+\expandafter\def\csname perchfact@cap-event-4\endcsname{ledger t + 99: +1 refused; the window (t \ensuremath{-} 1, t + 99] holds 10}
+\expandafter\def\csname perchfact@cap-event-5\endcsname{ledger t + 100: the 6 leaves the window, leaving 4; +5 accepted; 9}
+\expandafter\def\csname perchfact@cedar-spec-pin-short\endcsname{a4c5a89}
+\expandafter\def\csname perchfact@census-account\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else CDAPPQ5YKFK2GBAP6TSKPHHHDNDZWBYFF4AVC5I4BVCDJ5MK6CPFFX3V\fi}
+\expandafter\def\csname perchfact@census-bytes\endcsname{3,308}
+\expandafter\def\csname perchfact@census-entries\endcsname{8}
+\expandafter\def\csname perchfact@census-rent-xlm-year\endcsname{1.677}
+\expandafter\def\csname perchfact@charon-rev\endcsname{7b462d9}
+\expandafter\def\csname perchfact@claim-perch-validation\endcsname{\code{unproven.\allowbreak{}perch-\allowbreak{}validation}}
+\expandafter\def\csname perchfact@claim-scoped-admin-change\endcsname{\code{unproven.\allowbreak{}scoped-\allowbreak{}admin-\allowbreak{}change}}
+\expandafter\def\csname perchfact@claims-assumed\endcsname{19}
+\expandafter\def\csname perchfact@claims-assumed-ids\endcsname{\code{rule.cond-room}, \code{rule.\allowbreak{}functions-\allowbreak{}room}, \code{rule.lower-room}, \code{rule.empty-batch}, \code{rule.\allowbreak{}no-\allowbreak{}creation-\allowbreak{}vocabulary}, \code{rule.\allowbreak{}ledgers-\allowbreak{}start-\allowbreak{}at-\allowbreak{}1}, \code{trusted.rustc}, \code{trusted.charon}, \code{trusted.aeneas}, \code{trusted.\allowbreak{}aeneas-\allowbreak{}result-\allowbreak{}loop}, \code{trusted.\allowbreak{}aeneas-\allowbreak{}library-\allowbreak{}items}, \code{trusted.\allowbreak{}lean-\allowbreak{}kernel}, \code{trusted.\allowbreak{}denotations}, \code{trusted.\allowbreak{}document-\allowbreak{}meaning}, \code{trusted.\allowbreak{}soroban-\allowbreak{}models}, \code{trusted.\allowbreak{}soroban-\allowbreak{}host}, \code{trusted.\allowbreak{}sdk-\allowbreak{}items}, \code{trusted.\allowbreak{}facade-\allowbreak{}conversion}, \code{trusted.\allowbreak{}host-\allowbreak{}harness}}
+\expandafter\def\csname perchfact@claims-proven\endcsname{107}
+\expandafter\def\csname perchfact@claims-tested\endcsname{40}
+\expandafter\def\csname perchfact@claims-total\endcsname{180}
+\expandafter\def\csname perchfact@claims-unproven\endcsname{14}
+\expandafter\def\csname perchfact@claims-unproven-ids\endcsname{\code{conformance.\allowbreak{}encoding}, \code{unproven.\allowbreak{}narrower-\allowbreak{}converse}, \code{unproven.\allowbreak{}openzeppelin-\allowbreak{}signer-\allowbreak{}mapping}, \code{unproven.\allowbreak{}openzeppelin-\allowbreak{}spending-\allowbreak{}limit}, \code{unproven.\allowbreak{}openzeppelin-\allowbreak{}authorization}, \code{unproven.\allowbreak{}openzeppelin-\allowbreak{}spending-\allowbreak{}limit-\allowbreak{}metering}, \code{unproven.\allowbreak{}openzeppelin-\allowbreak{}expiry-\allowbreak{}and-\allowbreak{}signers}, \code{unproven.\allowbreak{}generation-\allowbreak{}counter}, \code{unproven.\allowbreak{}perch-\allowbreak{}meaning}, \code{unproven.\allowbreak{}perch-\allowbreak{}validation}, \code{unproven.\allowbreak{}lowering-\allowbreak{}shell}, \code{unproven.\allowbreak{}scoped-\allowbreak{}admin-\allowbreak{}change}, \code{unproven.\allowbreak{}history-\allowbreak{}bound-\allowbreak{}on-\allowbreak{}mainnet}, \code{unproven.\allowbreak{}budget-\allowbreak{}shell}}
+\expandafter\def\csname perchfact@completion-account\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else CBOUTD6XXCUB4QTIT4T5D4U5EMAUTKYAKPSKBTZF4RXGD3OWQTXINLZM\fi}
+\expandafter\def\csname perchfact@completion-account-short\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else CBOUTD6X\ldots{}INLZM\fi}
+\expandafter\def\csname perchfact@completion-event\endcsname{\code{scopes\_\allowbreak{}wiped \{gen:\allowbreak{} 1\}}}
+\expandafter\def\csname perchfact@completion-grant-generation\endcsname{1}
+\expandafter\def\csname perchfact@completion-ledger\endcsname{5,578,777}
+\expandafter\def\csname perchfact@completion-marker-issue\endcsname{\ifdefined\anonymous [withheld]\else \#15\fi}
+\expandafter\def\csname perchfact@completion-recovery-generation\endcsname{2}
+\expandafter\def\csname perchfact@completion-tx\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else 161cd96849732ba17740c05157d60141e765099fe854929101113e48427917ba\fi}
+\expandafter\def\csname perchfact@completion-tx-short\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else 161cd968\ldots{}17ba\fi}
+\expandafter\def\csname perchfact@contract-id-bytes\endcsname{32}
+\expandafter\def\csname perchfact@contract-size-limit-bytes\endcsname{131,072}
+\expandafter\def\csname perchfact@controller-error-not-executable-yet\endcsname{6}
+\expandafter\def\csname perchfact@cpu-begin\endcsname{13,670,993}
+\expandafter\def\csname perchfact@cpu-complete\endcsname{14,220,904}
+\expandafter\def\csname perchfact@cpu-enroll\endcsname{13,733,435}
+\expandafter\def\csname perchfact@cpu-gc\endcsname{1,365,038}
+\expandafter\def\csname perchfact@cpu-guardian-1\endcsname{1,719,379}
+\expandafter\def\csname perchfact@cpu-guardian-2\endcsname{2,595,288}
+\expandafter\def\csname perchfact@cpu-guess-1\endcsname{3,992,899}
+\expandafter\def\csname perchfact@cpu-guess-2\endcsname{4,104,949}
+\expandafter\def\csname perchfact@cpu-install-fresh\endcsname{8,674,696}
+\expandafter\def\csname perchfact@cpu-install-game\endcsname{3,663,659; 1,006,385; 10,697,803}
+\expandafter\def\csname perchfact@cpu-install-grant\endcsname{8,493,201}
+\expandafter\def\csname perchfact@cpu-reset\endcsname{87,218,534; 91,002,996; 16,141,851; 12,030,445; 2,252,729; 55,758,065; 92,237; 1,760,165; 185,494; 1,508,981; 915,820}
+\expandafter\def\csname perchfact@cpu-spend-6\endcsname{2,752,173}
+\expandafter\def\csname perchfact@cpu-spend-grant2\endcsname{2,815,558}
+\expandafter\def\csname perchfact@cpu-win\endcsname{3,082,877}
+\expandafter\def\csname perchfact@demo-advance-ledgers\endcsname{11}
+\expandafter\def\csname perchfact@deployed-account-bytes\endcsname{70,702}
+\expandafter\def\csname perchfact@deployed-account-wasm\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else 2c976bfd98678f3b6fcf5514420a81ef5e5b9fc1c5b6c60ec6f2dd64448479d5\fi}
+\expandafter\def\csname perchfact@deployed-policy-1-bytes\endcsname{17,999}
+\expandafter\def\csname perchfact@deployed-policy-1-wasm\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else f884913eba4a9491f8bcf89d1a687381c7c0699b148f98f8dc344e9a6223b26e\fi}
+\expandafter\def\csname perchfact@deployed-policy-2-bytes\endcsname{12,923}
+\expandafter\def\csname perchfact@deployed-policy-2-wasm\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else 8c043dcc24f944d7c3e349fb5fd83cedba4a9124b5791b625bd76b520b0f4a80\fi}
+\expandafter\def\csname perchfact@doc-allows-source\endcsname{dff2a73}
+\expandafter\def\csname perchfact@doc-conditions\endcsname{\code{is-self}, \code{address-eq}, \code{string-in}, \code{string-prefix}, \code{u32-eq}}
+\expandafter\def\csname perchfact@doc-conditions-count\endcsname{five}
+\expandafter\def\csname perchfact@doc-max-canonical-bytes\endcsname{8,192}
+\expandafter\def\csname perchfact@doc-max-rule-name-bytes\endcsname{20}
+\expandafter\def\csname perchfact@doc-max-rules\endcsname{10}
+\expandafter\def\csname perchfact@doc-max-signers\endcsname{8}
+\expandafter\def\csname perchfact@domain-tag-rule\endcsname{\code{perch/rule}}
+\expandafter\def\csname perchfact@domain-tags-recovery\endcsname{\code{perch/\allowbreak{}recovery/\allowbreak{}statement}, \code{perch/\allowbreak{}recovery/\allowbreak{}config}, \code{perch/\allowbreak{}recovery/\allowbreak{}credential}, \code{perch/\allowbreak{}recovery/\allowbreak{}replacements}}
+\expandafter\def\csname perchfact@domain-tags-zk\endcsname{\code{perch/\allowbreak{}recovery/\allowbreak{}zk/\allowbreak{}v2/\allowbreak{}leaf}, \code{perch/\allowbreak{}recovery/\allowbreak{}zk/\allowbreak{}v2/\allowbreak{}bind}, \code{perch/\allowbreak{}recovery/\allowbreak{}zk/\allowbreak{}v2/\allowbreak{}nullifier}, \code{perch/\allowbreak{}recovery/\allowbreak{}zk/\allowbreak{}v2/\allowbreak{}auth}}
+\expandafter\def\csname perchfact@embedded-account\endcsname{perch\_account.wasm \ensuremath{\cdot} 106,736 B \ensuremath{\cdot} 3038f5dc50ad803acfd7567f10deabc0b24cedb2b8d5b7ea83030418b4914527}
+\expandafter\def\csname perchfact@embedded-account-short\endcsname{3038f5dc\ldots{}}
+\expandafter\def\csname perchfact@embedded-compiler\endcsname{perch\_doc\_compiler.wasm \ensuremath{\cdot} 111,418 B \ensuremath{\cdot} 60f470704831852e67835379187a32058d9636b3783bf5ad9e625a29fc8da86f}
+\expandafter\def\csname perchfact@embedded-ed25519\endcsname{perch\_ed25519\_verifier.wasm \ensuremath{\cdot} 1,634 B \ensuremath{\cdot} 27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c}
+\expandafter\def\csname perchfact@embedded-game\endcsname{guess\_the\_number.wasm \ensuremath{\cdot} 3,217 B \ensuremath{\cdot} 882b950b11ee752f99a4149fc5c238dac03ee7091ba2723adfb87b5e029d4b42}
+\expandafter\def\csname perchfact@embedded-policy-1\endcsname{perch\_interpreter.wasm \ensuremath{\cdot} 18,806 B \ensuremath{\cdot} 4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f}
+\expandafter\def\csname perchfact@embedded-policy-2\endcsname{perch\_spending\_limit.wasm \ensuremath{\cdot} 13,720 B \ensuremath{\cdot} ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b}
+\expandafter\def\csname perchfact@embedded-reactor\endcsname{perch\_browser.wasm \ensuremath{\cdot} 3,372,928 B \ensuremath{\cdot} effaddd920357a560958a054849e6de15b1f74798846140ede66dd8ad1bb08ab}
+\expandafter\def\csname perchfact@embedded-recovery\endcsname{perch\_recovery.wasm \ensuremath{\cdot} 67,816 B \ensuremath{\cdot} ffb371746321c57487197145b8290fd4ec4a5b1a4a5eaf8969cfb93ed63f27c3}
+\expandafter\def\csname perchfact@embedded-stub\endcsname{verifiers\_stub.wasm \ensuremath{\cdot} 562 B \ensuremath{\cdot} 65a4168ba2123c22dee2d30e0341f420db1dae59bef7b207ba0c8da3f55f5d14}
+\expandafter\def\csname perchfact@evaluator-history-bound\endcsname{1,000}
+\expandafter\def\csname perchfact@exact-roots-prs\endcsname{\ifdefined\anonymous [withheld]\else Perch \#69 and rule-core \#17\fi}
+\expandafter\def\csname perchfact@exported-theorems\endcsname{940}
+\expandafter\def\csname perchfact@extracted-lean-lines\endcsname{3,653}
+\expandafter\def\csname perchfact@fixture-ledger\endcsname{5,301,502}
+\expandafter\def\csname perchfact@game-losing-guess\endcsname{0}
+\expandafter\def\csname perchfact@game-secret-range\endcsname{1 to 10}
+\expandafter\def\csname perchfact@game-wrong-guess-xlm\endcsname{1}
+\expandafter\def\csname perchfact@grant1-cap-stroops\endcsname{100000000}
+\expandafter\def\csname perchfact@grant1-cap-xlm\endcsname{10}
+\expandafter\def\csname perchfact@grant1-period-ledgers\endcsname{100}
+\expandafter\def\csname perchfact@grant1-period-minutes\endcsname{about eight minutes}
+\expandafter\def\csname perchfact@grant1-spend-applied-xlm\endcsname{6}
+\expandafter\def\csname perchfact@grant1-spend-refused-xlm\endcsname{5}
+\expandafter\def\csname perchfact@grant3-cap-xlm\endcsname{2}
+\expandafter\def\csname perchfact@grant3-period-ledgers\endcsname{100}
+\expandafter\def\csname perchfact@guess-the-number-pin\endcsname{df80831ac6bc2a2110cab15654726456b53cc8f3}
+\expandafter\def\csname perchfact@host-auth-error\endcsname{\code{Error(Auth,\allowbreak{} InvalidAction)}}
+\expandafter\def\csname perchfact@host-cases-agreeing\endcsname{155 of 213}
+\expandafter\def\csname perchfact@host-model-tested-versions\endcsname{soroban-env-host 29.0.1 and 30.0.0}
+\expandafter\def\csname perchfact@host-tests-expressed\endcsname{27 of 74 tests in five host test files}
+\expandafter\def\csname perchfact@host-traces-generated\endcsname{95}
+\expandafter\def\csname perchfact@host-traces-named\endcsname{35}
+\expandafter\def\csname perchfact@host-traces-random\endcsname{60}
+\expandafter\def\csname perchfact@host-traces-transcribed\endcsname{39}
+\expandafter\def\csname perchfact@inpage-check-time\endcsname{2.2 s}
+\expandafter\def\csname perchfact@inpage-declarations\endcsname{10,306}
+\expandafter\def\csname perchfact@inpage-size\endcsname{9.5 MB under brotli}
+\expandafter\def\csname perchfact@inpage-theorems\endcsname{768}
+\expandafter\def\csname perchfact@lean-doc-traces\endcsname{57}
+\expandafter\def\csname perchfact@lean-perch-canon\endcsname{v4.33.0}
+\expandafter\def\csname perchfact@lean-rule-core\endcsname{v4.35.0}
+\expandafter\def\csname perchfact@ledger-entry-limit-bytes\endcsname{65,536}
+\expandafter\def\csname perchfact@mldsa-verifier\endcsname{ML-DSA-65}
+\expandafter\def\csname perchfact@nido-preview-host\endcsname{\ifdefined\anonymous [withheld]\else 356.test.nido.fyi\fi}
+\expandafter\def\csname perchfact@nido-preview-pr\endcsname{\ifdefined\anonymous [withheld]\else nidohq/nido\#356\fi}
+\expandafter\def\csname perchfact@nido-run-date\endcsname{5 November 2026}
+\expandafter\def\csname perchfact@nido-run-guardians\endcsname{one}
+\expandafter\def\csname perchfact@nido-run-lost-guesses\endcsname{two}
+\expandafter\def\csname perchfact@nido-run-transactions\endcsname{11}
+\expandafter\def\csname perchfact@nominal-ledger-seconds\endcsname{5}
+\expandafter\def\csname perchfact@opb-adapter-wasm-short\endcsname{bf85432c\ldots{}}
+\expandafter\def\csname perchfact@opb-audit-scope\endcsname{the interpreter, custody gate, execution adapter, Prime seat and three TypeScript packages at v5.2.0, with the OpenZeppelin account and its policies out of scope}
+\expandafter\def\csname perchfact@opb-audit-start\endcsname{26 October 2026}
+\expandafter\def\csname perchfact@opb-audit-status\endcsname{in progress}
+\expandafter\def\csname perchfact@opb-commits-after-release\endcsname{17}
+\expandafter\def\csname perchfact@opb-corpus-calls\endcsname{33}
+\expandafter\def\csname perchfact@opb-corpus-shapes\endcsname{26}
+\expandafter\def\csname perchfact@opb-domain-tags\endcsname{\code{prime-seat-grant} (session grants) and \code{prime.\allowbreak{}execution.\allowbreak{}adapter.\allowbreak{}v5} (the execution adapter's address salt)}
+\expandafter\def\csname perchfact@opb-e38-severity\endcsname{Medium, accepted}
+\expandafter\def\csname perchfact@opb-error-arg-mismatch\endcsname{100}
+\expandafter\def\csname perchfact@opb-error-arg-mismatch-name\endcsname{ArgMismatch}
+\expandafter\def\csname perchfact@opb-error-default-context\endcsname{218}
+\expandafter\def\csname perchfact@opb-error-external-signer\endcsname{212}
+\expandafter\def\csname perchfact@opb-error-no-authenticated-signers\endcsname{210}
+\expandafter\def\csname perchfact@opb-error-nonce-replay\endcsname{202}
+\expandafter\def\csname perchfact@opb-error-predicate-hash\endcsname{208}
+\expandafter\def\csname perchfact@opb-error-signers-changed\endcsname{204}
+\expandafter\def\csname perchfact@opb-install-auth-window\endcsname{300 ledgers by default, at most 17,280}
+\expandafter\def\csname perchfact@opb-interpreter-limits\endcsname{reads 8, leaves 400, bytes 24,576, elems 32, in 32, depth 5}
+\expandafter\def\csname perchfact@opb-interpreter-mainnet\endcsname{none pinned}
+\expandafter\def\csname perchfact@opb-interpreter-max-reads\endcsname{8}
+\expandafter\def\csname perchfact@opb-interpreter-testnet\endcsname{CDER6P73JWMIVD3X6TGGOQIDAH3DLU7OKRTLT4ULPTZ3QJJ3QUGTK7CM}
+\expandafter\def\csname perchfact@opb-interpreter-tests\endcsname{440}
+\expandafter\def\csname perchfact@opb-interpreter-wasm\endcsname{6704996f626904a4e33b95bda17b73963fc9cf502ffdfdbe9d85b4b10288e0d4}
+\expandafter\def\csname perchfact@opb-interpreter-wasm-short\endcsname{6704996f\ldots{}}
+\expandafter\def\csname perchfact@opb-local-network\endcsname{a local Stellar quickstart network (protocol 30)}
+\expandafter\def\csname perchfact@opb-mutants\endcsname{31 of 32 killed}
+\expandafter\def\csname perchfact@opb-open-high\endcsname{E-25, T-05, T-19, E-36}
+\expandafter\def\csname perchfact@opb-packages-version\endcsname{5.2.0}
+\expandafter\def\csname perchfact@opb-pentest-branch\endcsname{\code{fix/\allowbreak{}hacken-\allowbreak{}pt-\allowbreak{}findings}}
+\expandafter\def\csname perchfact@opb-pentest-pr\endcsname{\#78}
+\expandafter\def\csname perchfact@opb-per-call-applied-sends\endcsname{three}
+\expandafter\def\csname perchfact@opb-per-call-bound-xlm\endcsname{5}
+\expandafter\def\csname perchfact@opb-per-call-moved-xlm\endcsname{9}
+\expandafter\def\csname perchfact@opb-pin\endcsname{43b13ed1d9c6662afd74f446006e69bfcf21259b}
+\expandafter\def\csname perchfact@opb-pin-date\endcsname{2026-10-30}
+\expandafter\def\csname perchfact@opb-pin-short\endcsname{43b13ed}
+\expandafter\def\csname perchfact@opb-release\endcsname{v5.2.0}
+\expandafter\def\csname perchfact@opb-repo\endcsname{untangledfinance/oz-policy-builder}
+\expandafter\def\csname perchfact@opb-rust-test-runs\endcsname{575}
+\expandafter\def\csname perchfact@opb-synth-package\endcsname{\code{@crediolabs/\allowbreak{}policy-\allowbreak{}synth}}
+\expandafter\def\csname perchfact@opb-tests-against-oz08\endcsname{26}
+\expandafter\def\csname perchfact@opb-tools-count\endcsname{nine}
+\expandafter\def\csname perchfact@opb-ts-tests\endcsname{1,823}
+\expandafter\def\csname perchfact@oz-error-context-rule-not-found\endcsname{3000}
+\expandafter\def\csname perchfact@oz-error-external-verification-failed\endcsname{3003}
+\expandafter\def\csname perchfact@oz-error-unauthorized-signer\endcsname{3016}
+\expandafter\def\csname perchfact@oz-fork-pin\endcsname{33726766}
+\expandafter\def\csname perchfact@oz-fork-repo\endcsname{\ifdefined\anonymous [withheld]\else theahaco/stellar-contracts-OZ\fi}
+\expandafter\def\csname perchfact@oz-fork-version\endcsname{stellar-accounts 0.7.1}
+\expandafter\def\csname perchfact@oz-policies-mainnet\endcsname{v0.7.2, deployed 9 June 2026}
+\expandafter\def\csname perchfact@oz-policies-testnet\endcsname{v0.8.0, deployed 26 October 2026}
+\expandafter\def\csname perchfact@oz-spending-history-max\endcsname{815}
+\expandafter\def\csname perchfact@oz-spending-history-max-v072\endcsname{1,000}
+\expandafter\def\csname perchfact@oz-spending-limit-exceeded\endcsname{3221}
+\expandafter\def\csname perchfact@oz-spending-window\endcsname{entries at or before C \ensuremath{-} P are evicted, so the window is (C \ensuremath{-} P, C]}
+\expandafter\def\csname perchfact@oz-v072-commit\endcsname{a9c4216}
+\expandafter\def\csname perchfact@oz-v072-line-account-build\endcsname{91a2cd56\ldots{}}
+\expandafter\def\csname perchfact@oz-v072-tag\endcsname{v0.7.2}
+\expandafter\def\csname perchfact@oz-v080-account-build\endcsname{8286422f\ldots{}}
+\expandafter\def\csname perchfact@oz-v080-commit\endcsname{ddc327e}
+\expandafter\def\csname perchfact@oz-v080-tag\endcsname{v0.8.0}
+\expandafter\def\csname perchfact@oz-valid-until-semantics\endcsname{refused only when \code{valid\_until} \textless{} ledger, so the rule authorizes through \code{valid\_until}}
+\expandafter\def\csname perchfact@paper-date\endcsname{7 November 2026}
+\expandafter\def\csname perchfact@paper-iteration\endcsname{Fourth iteration \ensuremath{\cdot} November 2026}
+\expandafter\def\csname perchfact@paper-subtitle-html\endcsname{Bounded grants for apps and agents on Stellar}
+\expandafter\def\csname perchfact@paper-title-latex\endcsname{Perch: Bounded Grants for Apps and Agents on Soroban Smart Accounts}
+\expandafter\def\csname perchfact@passkey-key-bytes\endcsname{65}
+\expandafter\def\csname perchfact@perch-deployed-account-version\endcsname{0.5.1}
+\expandafter\def\csname perchfact@perch-deployed-mainnet-date\endcsname{2026-10-26}
+\expandafter\def\csname perchfact@perch-deployed-source\endcsname{\ifdefined\anonymous [withheld]\else c135aca277745434f2abf679edd9868c95204b51\fi}
+\expandafter\def\csname perchfact@perch-deployed-source-short\endcsname{\ifdefined\anonymous [withheld]\else c135aca\fi}
+\expandafter\def\csname perchfact@perch-deployed-testnet-date\endcsname{2026-10-22}
+\expandafter\def\csname perchfact@perch-deployed-testnet-ledger\endcsname{5,330,546}
+\expandafter\def\csname perchfact@perch-expiry-semantics\endcsname{\code{not-after-ledger} N authorizes through N \ensuremath{-} 1}
+\expandafter\def\csname perchfact@perch-js-package\endcsname{@stellar-registry/perch}
+\expandafter\def\csname perchfact@perch-js-version\endcsname{0.4.1}
+\expandafter\def\csname perchfact@perch-pin\endcsname{\ifdefined\anonymous [withheld]\else f0275f41c5ab47c903bbfe9986b4bf3239c01b11\fi}
+\expandafter\def\csname perchfact@perch-pin-short\endcsname{\ifdefined\anonymous [withheld]\else f0275f4\fi}
+\expandafter\def\csname perchfact@perch-pr-stack-head\endcsname{\ifdefined\anonymous [withheld]\else \#68\fi}
+\expandafter\def\csname perchfact@perch-preview-source\endcsname{\ifdefined\anonymous [withheld]\else a410123\fi}
+\expandafter\def\csname perchfact@perch-repo\endcsname{\ifdefined\anonymous [withheld]\else bitswell-hq/stellar-registry\_\_perch\fi}
+\expandafter\def\csname perchfact@preview-account-bytes\endcsname{106,584}
+\expandafter\def\csname perchfact@preview-account-share-of-limit\endcsname{81\%}
+\expandafter\def\csname perchfact@preview-account-wasm\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else 0bdbdd142c953976056196cc837f84667e0fb64e731b007cc45d8b852c4ce844\fi}
+\expandafter\def\csname perchfact@preview-account-wasm-short\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else 0bdbdd14\ldots{}\fi}
+\expandafter\def\csname perchfact@preview-deploy-date\endcsname{2026-11-05}
+\expandafter\def\csname perchfact@preview-deploy-ledger\endcsname{5,577,521}
+\expandafter\def\csname perchfact@preview-game-cap-stroops\endcsname{20000000}
+\expandafter\def\csname perchfact@preview-game-cap-xlm\endcsname{2}
+\expandafter\def\csname perchfact@preview-game-period-label\endcsname{one nominal day}
+\expandafter\def\csname perchfact@preview-game-period-ledgers\endcsname{17,280}
+\expandafter\def\csname perchfact@recovery-delay-ledgers\endcsname{10}
+\expandafter\def\csname perchfact@recovery-guardians-demo\endcsname{2}
+\expandafter\def\csname perchfact@recovery-modes\endcsname{\code{guardian-only}, \code{zk-only}, \code{combined}}
+\expandafter\def\csname perchfact@recovery-profile-demo\endcsname{Loss}
+\expandafter\def\csname perchfact@recovery-statement-bytes\endcsname{278}
+\expandafter\def\csname perchfact@recovery-statement-layout\endcsname{a 24-byte domain tag, a version byte and an action byte; the network ID and the account and controller contract IDs (32 bytes each); the configuration epoch (8 bytes) and configuration hash (32 bytes); the delay, expiry and valid-until ledgers (4 bytes each); and, for a lost-key or compromise attempt, the attempt ID (8 bytes) and the hashes of the source document, the target document and the replacement set (32 bytes each)}
+\expandafter\def\csname perchfact@recovery-window\endcsname{[A + 10, A + 110)}
+\expandafter\def\csname perchfact@recovery-window-ledgers\endcsname{100}
+\expandafter\def\csname perchfact@registry-admin-manager\endcsname{GAMPJROHOAW662FINQ4XQOY2ULX5IEGYXCI4SMZYE75EHQBR6PSTJG3M}
+\expandafter\def\csname perchfact@registry-stub-bytes\endcsname{562}
+\expandafter\def\csname perchfact@reserved-hook-count\endcsname{10}
+\expandafter\def\csname perchfact@reserved-hook-names\endcsname{\code{install}, \code{uninstall}, \code{enforce} and seven \code{rcv\_*} names}
+\expandafter\def\csname perchfact@rule-core-conditions\endcsname{\code{ArgEq}, \code{ArgIn}, \code{ArgStrPrefix}, \code{ArgI128AtMost}}
+\expandafter\def\csname perchfact@rule-core-pin\endcsname{cbabe594ae2df408991e825e56ddd618ea29541b}
+\expandafter\def\csname perchfact@rule-core-pin-short\endcsname{cbabe59}
+\expandafter\def\csname perchfact@rule-core-repo\endcsname{\ifdefined\anonymous [withheld]\else bitswell/soroban-rule-core\fi}
+\expandafter\def\csname perchfact@rule-eval-lines\endcsname{2,400}
+\expandafter\def\csname perchfact@run-balance-path\endcsname{100 \ensuremath{-} 6 \ensuremath{-} 2 \ensuremath{-} 1 \ensuremath{-} 1 + 3}
+\expandafter\def\csname perchfact@run-commands\endcsname{27}
+\expandafter\def\csname perchfact@run-final-balance-xlm\endcsname{93}
+\expandafter\def\csname perchfact@run-final-generation\endcsname{1}
+\expandafter\def\csname perchfact@run-game-deploy-transactions\endcsname{2}
+\expandafter\def\csname perchfact@run-game-payout-xlm\endcsname{3}
+\expandafter\def\csname perchfact@run-operation-transactions\endcsname{14}
+\expandafter\def\csname perchfact@run-refused-in-simulation\endcsname{11}
+\expandafter\def\csname perchfact@run-setup-transactions\endcsname{11}
+\expandafter\def\csname perchfact@run-start-balance-xlm\endcsname{100}
+\expandafter\def\csname perchfact@run-transactions\endcsname{27}
+\expandafter\def\csname perchfact@run-view-only\endcsname{1}
+\expandafter\def\csname perchfact@rustc-mir-nightly\endcsname{nightly-2026-09-17}
+\expandafter\def\csname perchfact@rustc-perch\endcsname{1.97.1}
+\expandafter\def\csname perchfact@rustc-rule-core-stable\endcsname{1.99.0}
+\expandafter\def\csname perchfact@shop-cap-xlm\endcsname{10}
+\expandafter\def\csname perchfact@shop-period-ledgers\endcsname{100}
+\expandafter\def\csname perchfact@shop-period-minutes\endcsname{about eight minutes}
+\expandafter\def\csname perchfact@sim-commands\endcsname{15}
+\expandafter\def\csname perchfact@sim-golden-sha256\endcsname{\ifdefined\anonymous [withheld]\else 38da174d3bc6d7242f788ac2bf479545e3bce18aefbcd578966341c53cbe3dea\fi}
+\expandafter\def\csname perchfact@sim-golden-sha256-short\endcsname{\ifdefined\anonymous [withheld]\else 38da174d\ldots{}\fi}
+\expandafter\def\csname perchfact@sim-late-pay-xlm\endcsname{5}
+\expandafter\def\csname perchfact@sim-oz-entries\endcsname{2}
+\expandafter\def\csname perchfact@sim-oz-final-xlm\endcsname{70}
+\expandafter\def\csname perchfact@sim-oz-per-call-bound-xlm\endcsname{10}
+\expandafter\def\csname perchfact@sim-oz-percall-moved-xlm\endcsname{18}
+\expandafter\def\csname perchfact@sim-oz-percall-sends\endcsname{three}
+\expandafter\def\csname perchfact@sim-page-bytes\endcsname{4,913,857}
+\expandafter\def\csname perchfact@sim-page-mb\endcsname{4.9}
+\expandafter\def\csname perchfact@sim-page-sha256\endcsname{\ifdefined\anonymous [withheld]\else ce8174dc3ac325deb511a3fecfa8127d72477ac7d47a1a4a5040680c906b982e\fi}
+\expandafter\def\csname perchfact@sim-page-sha256-short\endcsname{\ifdefined\anonymous [withheld]\else ce8174dc\ldots{}\fi}
+\expandafter\def\csname perchfact@sim-pay-xlm\endcsname{6}
+\expandafter\def\csname perchfact@sim-perch-entries\endcsname{1}
+\expandafter\def\csname perchfact@sim-perch-final-xlm\endcsname{88}
+\expandafter\def\csname perchfact@sim-protocol\endcsname{29}
+\expandafter\def\csname perchfact@sim-reactor-sha256\endcsname{\ifdefined\anonymous [withheld]\else a2352156fda3b91648dba2c218f883e248f20eac2c5ee1bb59cce699c13bd0da\fi}
+\expandafter\def\csname perchfact@sim-replies-sha256\endcsname{\ifdefined\anonymous [withheld]\else 88bf930eea70cb7344c912049c77e44b134b3806993c12cc7c4edabd52a38136\fi}
+\expandafter\def\csname perchfact@sim-replies-sha256-short\endcsname{\ifdefined\anonymous [withheld]\else 88bf930e\ldots{}\fi}
+\expandafter\def\csname perchfact@sim-second-pay-xlm\endcsname{5}
+\expandafter\def\csname perchfact@sim-start-xlm\endcsname{100}
+\expandafter\def\csname perchfact@sim-verifier-name\endcsname{ed25519@1.0.0}
+\expandafter\def\csname perchfact@sim-wasm-oz-account\endcsname{\ifdefined\anonymous [withheld]\else 8286422f205951f37f4249401b403471fc432340dde6925432d31bb8a90cce27\fi}
+\expandafter\def\csname perchfact@sim-wasm-oz-spending-limit\endcsname{\ifdefined\anonymous [withheld]\else 65e70aad310bcaf7025aedc97e70cde098e1dd6c22d5153879c9cc64ea7da8e2\fi}
+\expandafter\def\csname perchfact@sim-wasm-perch-account\endcsname{\ifdefined\anonymous [withheld]\else 3038f5dc50ad803acfd7567f10deabc0b24cedb2b8d5b7ea83030418b4914527\fi}
+\expandafter\def\csname perchfact@sim-wasm-perch-doc-compiler\endcsname{\ifdefined\anonymous [withheld]\else 60f470704831852e67835379187a32058d9636b3783bf5ad9e625a29fc8da86f\fi}
+\expandafter\def\csname perchfact@sim-wasm-perch-ed25519-verifier\endcsname{\ifdefined\anonymous [withheld]\else 27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c\fi}
+\expandafter\def\csname perchfact@sim-wasm-perch-interpreter\endcsname{\ifdefined\anonymous [withheld]\else 4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f\fi}
+\expandafter\def\csname perchfact@sim-wasm-perch-spending-limit\endcsname{\ifdefined\anonymous [withheld]\else ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b\fi}
+\expandafter\def\csname perchfact@sim-wasm-policy-interpreter\endcsname{\ifdefined\anonymous [withheld]\else 6704996f626904a4e33b95bda17b73963fc9cf502ffdfdbe9d85b4b10288e0d4\fi}
+\expandafter\def\csname perchfact@sim-wasm-verifiers-stub\endcsname{\ifdefined\anonymous [withheld]\else 65a4168ba2123c22dee2d30e0341f420db1dae59bef7b207ba0c8da3f55f5d14\fi}
+\expandafter\def\csname perchfact@smoke-account\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else CBJ3PMMMQOQGGHYPXRNS4S4LOIWFPXVE2HOLY7DRNWK6PPE4EHVLCDXE\fi}
+\expandafter\def\csname perchfact@smoke-amount\endcsname{1 stroop}
+\expandafter\def\csname perchfact@smoke-cpu\endcsname{5,944,258}
+\expandafter\def\csname perchfact@smoke-fee-stroops\endcsname{12,889}
+\expandafter\def\csname perchfact@smoke-tx\endcsname{\ifdefined\anonymous [withheld; in the artifact]\else 3e652c739cd265f5cd9d9434c2f5f2c927c66dd810f7cf2efe55b77f45a0234c\fi}
+\expandafter\def\csname perchfact@soroban-env-host-sim\endcsname{29.0.2}
+\expandafter\def\csname perchfact@soroban-sdk-account\endcsname{29.0.1}
+\expandafter\def\csname perchfact@soroban-sdk-deployed\endcsname{27.0.6}
+\expandafter\def\csname perchfact@soroban-sim-license\endcsname{Apache-2.0}
+\expandafter\def\csname perchfact@soroban-sim-pin\endcsname{d02938430f0ac41f34e5e3e4c8c48d85b871bd68}
+\expandafter\def\csname perchfact@soroban-sim-pin-short\endcsname{d029384}
+\expandafter\def\csname perchfact@soroban-sim-repo\endcsname{\ifdefined\anonymous [withheld]\else theahaco/soroban-sim\fi}
+\expandafter\def\csname perchfact@spend-record-base-bytes\endcsname{172}
+\expandafter\def\csname perchfact@spend-record-per-spend-bytes\endcsname{72}
+\expandafter\def\csname perchfact@spends-per-window\endcsname{907}
+\expandafter\def\csname perchfact@standalone-passphrase\endcsname{Standalone Network ; February 2017}
+\expandafter\def\csname perchfact@standard-axioms\endcsname{\code{propext}, \code{Quot.sound}, \code{Classical.choice}}
+\expandafter\def\csname perchfact@statements-count\endcsname{13}
+\expandafter\def\csname perchfact@stroops-per-xlm\endcsname{10,000,000}
+\expandafter\def\csname perchfact@testnet-passphrase\endcsname{Test SDF Network ; September 2015}
+\expandafter\def\csname perchfact@testnet-protocol\endcsname{30}
+\expandafter\def\csname perchfact@tx-instruction-limit\endcsname{400M}
+\expandafter\def\csname perchfact@upgrade-delay-days\endcsname{seven days at the nominal five-second ledger}
+\expandafter\def\csname perchfact@upgrade-delay-ledgers\endcsname{120,960}
+\expandafter\def\csname perchfact@verifier-name-webauthn\endcsname{perch-webauthn-verifier@0.1.2}
+\expandafter\def\csname perchfact@verifier-trap-error\endcsname{\code{Error(Crypto,\allowbreak{} InvalidInput)}}
+\expandafter\def\csname perchfact@wallet-name\endcsname{\ifdefined\anonymous a passkey wallet\else Nido\fi}
+\expandafter\def\csname perchfact@wasi-imports\endcsname{clock\_time\_get, environ\_get, environ\_sizes\_get, fd\_write, proc\_exit}
+\expandafter\def\csname perchfact@wasi-imports-count\endcsname{5}
+\expandafter\def\csname perchfact@worst-case-completion-share\endcsname{40.7\%}
+\expandafter\def\csname perchfact@wt-calls-oz\endcsname{2}
+\expandafter\def\csname perchfact@wt-calls-perch\endcsname{1}
+\expandafter\def\csname perchfact@wt-cpu-install-oz\endcsname{5,681,179}
+\expandafter\def\csname perchfact@wt-cpu-install-perch\endcsname{9,881,592}
+\expandafter\def\csname perchfact@wt-cpu-pay-oz\endcsname{4,337,137}
+\expandafter\def\csname perchfact@wt-cpu-pay-perch\endcsname{2,870,646}
+\expandafter\def\csname perchfact@wt-cpu-pay2-oz\endcsname{4,343,344}
+\expandafter\def\csname perchfact@wt-cpu-pay2-perch\endcsname{2,970,928}
+\expandafter\def\csname perchfact@wt-entries-oz\endcsname{2}
+\expandafter\def\csname perchfact@wt-entries-perch\endcsname{1}
+\expandafter\def\csname perchfact@wt-golden-sha256-short\endcsname{b7e87793\ldots{}}
+\expandafter\def\csname perchfact@wt-host\endcsname{soroban-env-host 29.0.2 in soroban-sim, protocol 29, applying with enforcing authorization; simulation's recording-mode host build, not the exact-metering one}
+\expandafter\def\csname perchfact@wt-oz-account-build\endcsname{8286422f\ldots{}}
+\expandafter\def\csname perchfact@wt-oz-spending-limit-build\endcsname{65e70aad\ldots{}}
+\expandafter\def\csname perchfact@wt-page-sha256-short\endcsname{45f4759b\ldots{}}
+\expandafter\def\csname perchfact@wt-steps\endcsname{8}
+\expandafter\def\csname perchfact@wt-task\endcsname{an app key may send XLM from the account only to the shop, at most 10 XLM in any 100-ledger window}
+\expandafter\def\csname perchfact@zk-earlier-deployment\endcsname{7ae915dc}
+\expandafter\def\csname perchfact@zk-earlier-transactions\endcsname{81}
+\expandafter\def\csname perchfact@zk-pool-depth\endcsname{32}
+\expandafter\def\csname perchfact@zk-secret-entropy-bits\endcsname{128}

@@ -1,0 +1,18 @@
+% Generated from source/tables/tab-walkthrough.json; edit that.
+\begin{table}[tbp]
+\centering
+\caption{\textbf{One task in both designs, run in the walkthrough.} The task: \fact{wt-task}. One soroban-sim session per design (\fact{wt-host}), so \code{\_\_check\_auth} ran: the OpenZeppelin \fact{oz-v080-tag} account \fact{wt-oz-account-build} with oz-policy-builder's interpreter \fact{opb-interpreter-wasm-short} and OpenZeppelin's \code{spending\_limit} \fact{wt-oz-spending-limit-build}, carrying the rule policy-synth synthesises from the task's declared Intent; and Perch \fact{perch-pin-short} with one grant. Signers: a delegated Stellar account on the OpenZeppelin side, as oz-policy-builder requires; an Ed25519 key checked by a verifier contract on the Perch side. Each refusal is an enforcing simulation that left the ledger unchanged. The steps are those of the \href{https://bitswell-hq.github.io/stellar-registry__perch/oz-walkthrough/}{walkthrough page}: page SHA-256 \code{\fact{wt-page-sha256-short}}, reference run \code{\fact{wt-golden-sha256-short}}.}\label{tab:tab-walkthrough}
+\scriptsize\begin{tabularx}{\linewidth}{@{}lp{0.24\linewidth}LL@{}}
+\toprule
+\textbf{Step} & \textbf{Request} & \textbf{OpenZeppelin account with oz-policy-builder} & \textbf{Perch} \\
+\midrule
+1 & The owner installs the rule & Applied & Applied \\
+2 & The app pays the shop 6 XLM & Applied & Applied \\
+3 & 5 XLM more in the same window & Refused by \code{spending\_limit}, \#\fact{oz-spending-limit-exceeded} \code{SpendingLimitExceeded}; the interpreter is not called & Refused, auth error \fact{auth-error-rule-eval-refused}; no verifier call \\
+4 & 1 XLM to another recipient & Refused by the interpreter, \#\fact{opb-error-arg-mismatch} \code{\fact{opb-error-arg-mismatch-name}}, after \code{spending\_limit} recorded the spend (rolled back) & Refused, auth error \fact{auth-error-rule-eval-refused}; no verifier call \\
+5 & Another key signs in the app's name & Refused by the host's signature check on the app's entry; no policy runs & The evaluator accepts; the verifier traps in the host's signature check \\
+6 & A key not on the rule signs as itself & Refused by the account, \#\fact{oz-error-unauthorized-signer} \code{UnauthorizedSigner} & Refused, auth error \fact{auth-error-rule-eval-refused}; no verifier call \\
+7 & 100 ledgers later, 5 XLM & Applied & Applied \\
+\bottomrule
+\end{tabularx}
+\end{table}

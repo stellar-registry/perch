@@ -1,0 +1,52 @@
+An app or agent that acts for a Soroban smart account without a signature prompt
+for each call needs a bound on what it may do: which contracts and functions,
+which recipients, how much over time, and until when. Two designs build that
+bound on OpenZeppelin's account model~\cite{oz-stellar-accounts}.
+oz-policy-builder~\cite{oz-policy-builder} attaches a shared predicate
+interpreter to the account's context rules as a policy, beside OpenZeppelin's own
+policies, and writes its predicates with an off-chain synthesiser. Perch links
+one evaluator into the account and decides every grant there. The Perch paper,
+\perchdoc{main}, gives the comparison one section; this companion gives it in
+full, with sources, and ends with what Perch should learn.
+
+\paragraph{Sources and runs.} We compare Perch~\cite{perch-src} at \fact{perch-pin-short}, whose
+evaluator is rule-core~\cite{rule-core} at \fact{rule-core-pin-short};
+oz-policy-builder at \fact{opb-pin-short} (\fact{opb-pin-date}), release
+\fact{opb-release} and \fact{opb-commits-after-release} later commits, none under
+its \srcpath{contracts/} directory; and OpenZeppelin \code{stellar-contracts}
+\fact{oz-v080-tag} (\fact{oz-v080-commit}). Claims about oz-policy-builder are
+read from its public documentation and source at that pin, cited by path and
+line (unqualified paths are oz-policy-builder's), or come from our runs. We built
+it, and its \fact{opb-rust-test-runs} Rust test runs and \fact{opb-ts-tests}
+TypeScript tests passed; we ran its record, synthesise, verify and install flow
+against an OpenZeppelin \fact{oz-v080-tag} account on
+\fact{opb-local-network}, and the calls outside the rule were refused with the
+codes its documentation gives; and we ran one task through both designs in
+soroban-sim~\cite{soroban-sim} (\S\ref{sec:same-task}).
+
+\paragraph{Disclosure.} The authors designed Perch and work at The Aha Company.
+soroban-sim, the host in which both designs ran, is published at
+\code{\fact{soroban-sim-repo}} (\fact{soroban-sim-license}).
+
+\paragraph{Shared ground.} Both designs use OpenZeppelin's context-rule model: an
+authorization entry names, in its \code{context\_rule\_ids}, one rule for each
+context (each call or contract creation the entry authorizes), and that rule
+alone decides the context. Perch reproduces OpenZeppelin's authorization types
+and its two signer kinds, \emph{external} (a key a verifier contract checks) and
+\emph{delegated} (an address whose own authorization the host checks), but
+attaches no policies. Both judge each context alone, so a call that authorizes
+two contexts needs a rule for each (\srcpath{docs/architecture.md:307-309}). Both
+deny by default.
+
+\paragraph{The trade-off.} OpenZeppelin with oz-policy-builder composes a
+decision from contracts that can be swapped and audited separately; its authors
+call the interpreter ``one audit-once engine'' to which ``every policy is
+declarative data'' (\srcpath{README.md:21-24}). Perch
+puts one grant document behind one decision point: the account's linked
+evaluator checks target, functions, arguments, threshold, expiry and window cap
+together, against state held only in the account. Composition buys flexibility
+and reuse; one decision point gives one place to check and to prove. Eight words
+mean different things in the two systems (Table~\ref{tab:tab-terms}); we use them
+in Perch's sense unless a sentence says otherwise.
+
+\perchtable{tab-terms}

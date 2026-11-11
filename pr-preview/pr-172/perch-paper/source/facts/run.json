@@ -1,0 +1,116 @@
+{
+ "run-commands": {
+  "value": "27",
+  "source": "r2:503, 567; `GOLDEN` (C)"
+ },
+ "run-transactions": {
+  "value": "27",
+  "source": "r2:567 (C)"
+ },
+ "run-setup-transactions": {
+  "value": "11",
+  "source": "same (C)"
+ },
+ "run-game-deploy-transactions": {
+  "value": "2",
+  "source": "same (C)"
+ },
+ "run-operation-transactions": {
+  "value": "14",
+  "source": "same (C)"
+ },
+ "run-refused-in-simulation": {
+  "value": "11",
+  "source": "same (C)"
+ },
+ "run-view-only": {
+  "value": "1",
+  "source": "same (C)"
+ },
+ "run-start-balance-xlm": {
+  "value": "100",
+  "source": "r2:535 (C)"
+ },
+ "run-final-balance-xlm": {
+  "value": "93",
+  "source": "r2:567; `GOLDEN` `final_balance_stroops` 930000000 (C)"
+ },
+ "run-balance-path": {
+  "value": "100 − 6 − 2 − 1 − 1 + 3",
+  "source": "r2:567 (C)"
+ },
+ "run-final-generation": {
+  "value": "1",
+  "source": "`GOLDEN` (C)"
+ },
+ "run-game-payout-xlm": {
+  "value": "3",
+  "note": "the 1-XLM seed plus two lost guesses",
+  "source": "r2:561 (C)"
+ },
+ "cpu-reset": {
+  "value": "87,218,534; 91,002,996; 16,141,851; 12,030,445; 2,252,729; 55,758,065; 92,237; 1,760,165; 185,494; 1,508,981; 915,820",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-install-grant": {
+  "value": "8,493,201",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-spend-6": {
+  "value": "2,752,173",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-enroll": {
+  "value": "13,733,435",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-begin": {
+  "value": "13,670,993",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-guardian-1": {
+  "value": "1,719,379",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-guardian-2": {
+  "value": "2,595,288",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-complete": {
+  "value": "14,220,904",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-install-fresh": {
+  "value": "8,674,696",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-spend-grant2": {
+  "value": "2,815,558",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-gc": {
+  "value": "1,365,038",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-install-game": {
+  "value": "3,663,659; 1,006,385; 10,697,803",
+  "source": "`GOLDEN` (C). Which number is the upload, the deploy and the install is **U**; print them unlabelled",
+  "unverified": true
+ },
+ "cpu-guess-1": {
+  "value": "3,992,899",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-guess-2": {
+  "value": "4,104,949",
+  "source": "`GOLDEN` (C)"
+ },
+ "cpu-win": {
+  "value": "3,082,877",
+  "source": "`GOLDEN` (C)"
+ },
+ "demo-advance-ledgers": {
+  "value": "11",
+  "source": "the live experiment's default `advance-input` value and `GOLDEN` command 11 (`{\"op\": \"advance\", \"ledgers\": 11}`); r2:503 (C)"
+ }
+}

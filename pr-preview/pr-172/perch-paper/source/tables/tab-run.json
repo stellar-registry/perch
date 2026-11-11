@@ -1,0 +1,118 @@
+{
+ "title": "The reference run.",
+ "caption": "Commands are numbered as in the live experiment. CPU is the host CPU instructions of each applied, signed transaction in soroban-sim with soroban-env-host {{fact:soroban-env-host-sim}}, applying with enforcing authorization, so `__check_auth` and verifier calls are included. The host is simulation's recording-mode build, not the exact-metering one, so counts can differ from stellar-core's metering. Refusals are caught in enforcing simulation and never submitted. Auth errors {{fact:auth-error-stale-scope}} and {{fact:auth-error-rule-eval-refused}} are `__check_auth`'s codes inside {{fact:host-auth-error}}; {{fact:account-error-scope-live}} and {{fact:account-error-wiped-credential}} are account entry-point errors.",
+ "columns": [
+  "#",
+  "Command",
+  "Expected result",
+  "CPU instructions"
+ ],
+ "latex_colspec": "@{}lLLp{0.22\\linewidth}@{}",
+ "rows": [
+  [
+   "1",
+   "Create / reset",
+   "{{fact:run-setup-transactions}} setup transactions; balance {{fact:run-start-balance-xlm}} XLM; generation 0",
+   "{{fact:cpu-reset}}"
+  ],
+  [
+   "2",
+   "Install grant 1",
+   "Applied",
+   "{{fact:cpu-install-grant}}"
+  ],
+  [
+   "3",
+   "Spend {{fact:grant1-spend-applied-xlm}}",
+   "Applied; 100 → 94",
+   "{{fact:cpu-spend-6}}"
+  ],
+  [
+   "4",
+   "Spend {{fact:grant1-spend-refused-xlm}}",
+   "Refused, auth error {{fact:auth-error-rule-eval-refused}} (cap); fingerprint unchanged",
+   "—"
+  ],
+  [
+   "5",
+   "Collect grant 1",
+   "Refused, `GrantLive` ({{fact:account-error-scope-live}})",
+   "—"
+  ],
+  [
+   "6–9",
+   "Enroll; begin; guardian 1; guardian 2",
+   "Applied; authorized at ledger A",
+   "{{fact:cpu-enroll}}; {{fact:cpu-begin}}; {{fact:cpu-guardian-1}}; {{fact:cpu-guardian-2}}"
+  ],
+  [
+   "10",
+   "Complete",
+   "Refused, controller `NotExecutableYet` ({{fact:controller-error-not-executable-yet}})",
+   "—"
+  ],
+  [
+   "11",
+   "Advance 11 ledgers",
+   "View only",
+   "—"
+  ],
+  [
+   "12",
+   "Complete",
+   "Applied; generation 0 → 1",
+   "{{fact:cpu-complete}}"
+  ],
+  [
+   "13",
+   "Spend 1 with grant 1",
+   "Refused, auth error {{fact:auth-error-stale-scope}} (`StaleGrant`)",
+   "—"
+  ],
+  [
+   "14–15",
+   "Old owner installs; re-grant the wiped key",
+   "Refused, auth error {{fact:auth-error-rule-eval-refused}}; `WipedCredential` ({{fact:account-error-wiped-credential}})",
+   "—"
+  ],
+  [
+   "16–18",
+   "Install grant 2; spend 2 with grant 2; collect grant 1",
+   "Applied; 94 → 92",
+   "{{fact:cpu-install-fresh}}; {{fact:cpu-spend-grant2}}; {{fact:cpu-gc}}"
+  ],
+  [
+   "19",
+   "Install grant 3 (the game)",
+   "Applied",
+   "{{fact:cpu-install-game}}"
+  ],
+  [
+   "20–23",
+   "Game with missing or wrong authorization, either outcome",
+   "Refused (host authorization error, or auth error {{fact:auth-error-rule-eval-refused}} for a wrong credential)",
+   "—"
+  ],
+  [
+   "24–25",
+   "Guess 0, twice",
+   "Applied; 92 → 91 → 90",
+   "{{fact:cpu-guess-1}}; {{fact:cpu-guess-2}}"
+  ],
+  [
+   "26",
+   "Guess 0, a third time",
+   "Refused, auth error {{fact:auth-error-rule-eval-refused}} (2-XLM cap)",
+   "—"
+  ],
+  [
+   "27",
+   "Winning fixture",
+   "Applied; 90 → 93; cap record unchanged",
+   "{{fact:cpu-win}}"
+  ]
+ ],
+ "editions": [
+  "html"
+ ]
+}

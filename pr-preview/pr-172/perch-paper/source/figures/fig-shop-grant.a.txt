@@ -1,0 +1,20 @@
+{ "version": 1,
+  "network": "Standalone Network ; February 2017",
+  "signers": [
+    { "id": "app", "verifier": "C...ED25519",       ①
+      "key": "...32-byte Ed25519 key, hex..." } ],
+  "rules": [
+    { "name": "pay-shop",
+      "scope": { "type": "contract",                ②
+                 "address": "C...XLM" },
+      "principals": { "type": "all",                ③
+                      "signers": ["app"] },
+      "functions": ["transfer"],                    ④
+      "args": [                                     ⑤
+        { "index": 0,
+          "pred": { "type": "is-self" } },
+        { "index": 1,
+          "pred": { "type": "address-eq",
+                    "address": "G...SHOP" } } ],
+      "cap": { "limit": "100000000",                ⑥
+               "period-ledgers": 100 } } ] }

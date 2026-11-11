@@ -1,0 +1,117 @@
+{
+ "nav_note": "A companion to the Perch paper.<br>Fourth iteration · November 2026",
+ "sections": [
+  {
+   "id": "overview",
+   "title_html": "Two ways to bound an app",
+   "title_latex": "Introduction",
+   "nav": "Overview",
+   "tables": [
+    "tab-terms"
+   ]
+  },
+  {
+   "id": "designs",
+   "title_html": "Where each design decides",
+   "title_latex": "Two Designs",
+   "nav": "Two designs",
+   "figures": [
+    "fig-two-paths"
+   ]
+  },
+  {
+   "id": "same-task",
+   "title_html": "One task, run in both",
+   "title_latex": "One Task in Both Designs",
+   "nav": "One task",
+   "figures": [
+    "fig-same-task"
+   ],
+   "tables": [
+    "tab-walkthrough"
+   ]
+  },
+  {
+   "id": "spellings",
+   "title_html": "One intent, two spellings",
+   "title_latex": "One Intent, Two Spellings",
+   "nav": "Two spellings",
+   "figures": [
+    "fig-two-spellings"
+   ]
+  },
+  {
+   "id": "composition",
+   "title_html": "Safety by composition",
+   "title_latex": "Safety by Composition",
+   "nav": "Composition"
+  },
+  {
+   "id": "opb-stronger",
+   "title_html": "Where oz-policy-builder is stronger",
+   "title_latex": "Where oz-policy-builder Is Stronger",
+   "nav": "oz-policy-builder's strengths"
+  },
+  {
+   "id": "perch-stronger",
+   "title_html": "Where Perch is stronger",
+   "title_latex": "Where Perch Is Stronger",
+   "nav": "Perch's strengths"
+  },
+  {
+   "id": "lessons",
+   "title_html": "What Perch should learn",
+   "title_latex": "Lessons for Perch",
+   "nav": "Lessons"
+  },
+  {
+   "id": "dimensions",
+   "title_html": "Every dimension",
+   "title_latex": "Dimensions",
+   "nav": "Dimensions",
+   "tables": [
+    "tab-compare"
+   ]
+  },
+  {
+   "id": "limits",
+   "title_html": "What this comparison does not show",
+   "title_latex": "What This Comparison Does Not Show",
+   "nav": "Limits"
+  },
+  {
+   "id": "related",
+   "title_html": "Related work",
+   "title_latex": "Related Work",
+   "nav": "Related work"
+  },
+  {
+   "id": "conclusion",
+   "title_html": "Conclusion",
+   "title_latex": "Conclusion",
+   "nav": "Conclusion"
+  },
+  {
+   "id": "sources",
+   "title_html": "Sources and open items",
+   "title_latex": "Sources and Open Items",
+   "nav": "Sources",
+   "tables": [
+    "tab-compare-full",
+    "tab-disclosed"
+   ],
+   "appendix": true
+  },
+  {
+   "id": "references",
+   "title_html": "References",
+   "title_latex": "References",
+   "nav": "References",
+   "editions": [
+    "html"
+   ],
+   "appendix": true,
+   "unnumbered": true
+  }
+ ]
+}

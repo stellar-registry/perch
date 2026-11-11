@@ -1,0 +1,8 @@
+{ "calls": [
+  { "contract": "C...GAME", "fn": "guess" },
+  { "contract": "C...XLM", "fn": "transfer", ①
+    "where": [
+      { "constraint": "pin", "at": [1],
+        "to": "C...GAME" },
+      { "constraint": "cap", "at": [2],      ②
+        "max": "20000000" } ] } ] }

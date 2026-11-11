@@ -1,0 +1,55 @@
+{
+ "intro": "One authorization through `__check_auth` at the pinned build, in six stages.",
+ "steps": [
+  {
+   "n": "1",
+   "text": "**Host call.** The Soroban host calls `__check_auth(signature_payload, auth payload, contexts)`; the auth payload names one rule per context (`context_rule_ids`) and the claimed signers.",
+   "exits": [],
+   "assurance": "trusted (host)"
+  },
+  {
+   "n": "2",
+   "text": "**Guards.** Refuse a context calling a reserved hook name ({{fact:reserved-hook-names}}), an account frozen during a recovery (the vision paper), and a selected grant rule on the account’s adopted recovery contracts. A recovery completion leaves here.",
+   "exits": [
+    "`ReservedFunction` ({{fact:auth-error-reserved-function}})",
+    "`AccountFrozen` ({{fact:auth-error-account-frozen}})",
+    "`GrantEscalation` ({{fact:auth-error-scope-escalation}})",
+    "a completion: decided by the recovery controller"
+   ],
+   "assurance": "tested"
+  },
+  {
+   "n": "3",
+   "text": "**Select rules.** Resolve each named rule ID to a stored rule and its spending record; the account does not search.",
+   "exits": [
+    "`ContextRuleNotFound` ({{fact:oz-error-context-rule-not-found}})"
+   ],
+   "assurance": "tested"
+  },
+  {
+   "n": "4",
+   "text": "**Decide.** `rule_eval::check_auth` maps the rules, records, contexts, choices, claimed signers, ledger and generation to the next records or a refusal. It reads no storage and checks no signature.",
+   "exits": [
+    "stale grant: `StaleGrant` ({{fact:auth-error-stale-scope}})",
+    "otherwise `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}})"
+   ],
+   "assurance": "proved"
+  },
+  {
+   "n": "5",
+   "text": "**Authenticate.** Hash the payload, the account and the rule IDs into a digest; each external signer’s verifier contract checks it (trusted); a delegated signer authorizes through the host.",
+   "exits": [
+    "bad signature: the verifier traps ({{fact:verifier-trap-error}} for Ed25519)",
+    "`ExternalVerificationFailed` ({{fact:oz-error-external-verification-failed}})"
+   ],
+   "assurance": "tested; verifier trusted"
+  },
+  {
+   "n": "6",
+   "text": "**Store.** Store each changed spending record. Authorized.",
+   "exits": [],
+   "assurance": "tested"
+  }
+ ],
+ "outro": "No exit writes anything; the verifier runs only after the decision accepts."
+}

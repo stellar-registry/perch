@@ -1,0 +1,8 @@
+% Generated from source/statements.json.
+\begin{perchstatement}{5}{Trace inclusion.}\label{stmt:trace-inclusion}
+\[\begin{aligned}&\mathit{attenuateAll}(R, \vec\sigma) = R' \land \mathit{Accepts}(R', \varnothing, \vec a)\\
+&\qquad \implies \mathit{Accepts}(R, \varnothing, \vec a^{f}), \quad f = \mathit{chainSource}(\vec\sigma)\end{aligned}\]
+For a single successful derivation lineage, every accepted child history from empty records is accepted by the parent from empty records, with rule choices renumbered past dropped rules. Sibling histories are not covered. Here \(\vec a^{f}\) renumbers each choice \(j\) to \(f(j)\).
+\statementhypotheses{Empty records; one derivation lineage}
+\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/Chain.lean\#L1048}{Chain.RuleSet.attenuateAll\_traceNarrower}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/ExtractedAuthorize.lean\#L466}{Extracted.DerivesAlong.traceNarrower} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}}
+\end{perchstatement}

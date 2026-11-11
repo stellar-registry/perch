@@ -5,23 +5,21 @@
 <ol class="steps">
 <li><a href="#step-grant">The owner installs a grant for an app.</a></li>
 <li><a href="#step-request">An app asks the user's Perch account to pay for an order.</a></li>
-<li><a href="#step-view">The sign dialog shows the user in plain words what the request asks for, with the full tree of authority under Details.</a></li>
-<li><a href="#step-preview">It previews the request's effects in the simulator.</a></li>
-<li><a href="#authorization">The user signs or refuses, and the account decides if the request is valid.</a></li>
+<li><a href="#grants">The account checks each call against its rule and its spending window.</a></li>
+<li><a href="#authorization">The app signs, and the account decides if the request is valid.</a></li>
 <li><a href="#simulation">The same request runs against an OpenZeppelin account.</a></li>
 </ol>
+<p>An aside after step 4 shows what a wallet can show a person who reviews a request before signing it.</p>
 <h3 id="step-grant">The owner installs a grant for an app</h3>
 <p>Every request starts from a grant the owner installs for an app or an agent. The paper's running example is the shop grant ({{ref:fig:fig-shop-grant}}), which lets an app send XLM, Stellar's native currency, from the user's account to one shop and no one else. The grant allows at most {{fact:shop-cap-xlm}} XLM in any {{fact:shop-period-ledgers}} ledgers, {{fact:shop-period-minutes}} at about {{fact:nominal-ledger-seconds}} seconds a ledger.</p>
 
-<p>The grant has one <dfn><a href="#glossary">rule</a></dfn>, which names the contract (the XLM token), the function (<code>transfer</code>), the recipient (the shop), the key that must sign (the app's) and a <dfn><a href="#glossary">cap</a></dfn>; a rule may also stop at an expiry ledger. The owner installs a <dfn><a href="#glossary">grant document</a></dfn> like this one with one call to the account, <code>apply_grant</code>, after a <dfn><a href="#glossary">document compiler</a></dfn> contract validates it.
+<p>The grant has one <dfn><a href="#glossary">rule</a></dfn>, which names the contract (the XLM token), the function (<code>transfer</code>), the recipient (the shop), the key that must sign (the app's) and a <dfn><a href="#glossary">cap</a></dfn>; a rule may also stop at an expiry ledger. The owner installs a <dfn><a href="#glossary">grant document</a></dfn> like the one below with one call to the account, <code>apply_grant</code>, after a <dfn><a href="#glossary">document compiler</a></dfn> contract validates it.
 </p>
 
 <p>A wallet builds the document with Perch's TypeScript library, published on npm as <code>{{fact:perch-js-package}}</code>, rather than writing it by hand.</p>
 {{fig:fig-shop-grant}}
-<p>An app can also pass a narrower grant to a helper, such as a sub-agent. <dfn><a href="#glossary">Attenuation</a></dfn> derives such a grant from the app's with rule-core's {{fact:attenuation-steps}} narrowing steps, among them dropping a rule, removing functions, adding an argument condition, raising a signer threshold, lowering a cap, lengthening its period and moving the expiry earlier. From the shop grant, for example, a helper can receive a grant that pays the same shop at most 2 XLM per {{fact:shop-period-ledgers}} ledgers.</p>
+<p>An app can also pass a narrower grant to a helper, such as a sub-agent. <dfn><a href="#glossary">Attenuation</a></dfn> derives such a grant from the app's original grant with rule-core's {{fact:attenuation-steps}} narrowing steps, among them dropping a rule, removing functions, adding an argument condition, raising a signer threshold, lowering a cap, lengthening its period and moving the expiry earlier. From the shop grant, for example, a helper can receive a grant that pays the same shop at most 2 XLM per {{fact:shop-period-ledgers}} ledgers.</p>
 
 <h3 id="step-request">An app asks the account to pay for an order</h3>
-
-<p>
-...
-</p>
+<p>To pay for an order, the app builds a transaction that calls the XLM token's <code>transfer</code> function to move XLM from the user's account to the shop. The funds leave the user's account, so the payment goes through only if the account approves it, and the account approves it only if it fits a grant the app holds (steps <a href="#grants">3</a> and <a href="#authorization">4</a>). The transaction names the rule it relies on, here the shop grant's one rule. A helper holding a narrower grant makes the same kind of request under its own grant.</p>
+{{fig:fig-shop-request}}

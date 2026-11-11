@@ -14,7 +14,8 @@
    "nav": "The request",
    "figures": [
     "fig-overview",
-    "fig-shop-grant"
+    "fig-shop-grant",
+    "fig-shop-request"
    ],
    "aliases": [
     "status"
@@ -31,9 +32,9 @@
   },
   {
    "id": "grants",
-   "title_html": "The sign dialog shows the whole request and previews it",
+   "title_html": "The account checks each call against its rule and its spending window",
    "title_latex": "Grants and Spending Windows",
-   "nav": "Review and preview",
+   "nav": "Checks and windows",
    "figures": [
     "fig-cap-window"
    ],
@@ -45,9 +46,9 @@
   },
   {
    "id": "authorization",
-   "title_html": "The user signs or refuses, and the account decides",
+   "title_html": "The app signs, and the account decides",
    "title_latex": "The Authorization Path",
-   "nav": "Sign or refuse",
+   "nav": "Sign and decide",
    "figures": [
     "fig-auth-path"
    ],
@@ -57,6 +58,16 @@
     "threat-model",
     "limits"
    ]
+  },
+  {
+   "id": "wallet-preview",
+   "title_html": "Aside: what a wallet can show before anyone signs",
+   "title_latex": "Wallet Preview",
+   "nav": "Wallet preview",
+   "editions": [
+    "html"
+   ],
+   "unnumbered": true
   },
   {
    "id": "threat-model",

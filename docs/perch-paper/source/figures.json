@@ -26,6 +26,25 @@
    }
   ]
  },
+ "fig-shop-request": {
+  "title": "The transaction an app builds to pay the shop {{fact:sim-pay-xlm}} XLM under the shop grant.",
+  "caption": "Illustrative, not the encoded transaction. (a) The call and its one authorization entry, with addresses abbreviated as in the shop grant figure and the signer and rule written by name. (b) Each marked part in words.",
+  "kind": "code",
+  "short": "the shop request figure",
+  "editions": [
+   "html"
+  ],
+  "panels": [
+   {
+    "file": "a",
+    "title": "(a) The transaction"
+   },
+   {
+    "file": "b",
+    "title": "(b) In words"
+   }
+  ]
+ },
  "fig-cap-window": {
   "title": "The shop grant's cap, {{fact:shop-cap-xlm}} XLM per {{fact:shop-period-ledgers}} ledgers, on illustrative ledgers.",
   "caption": "At ledger *L* the window holds charges made after *L* − 100 and through *L*. Charges inside the window at *t* + 100 are highlighted. A refused transfer leaves the spending record unchanged. A charge stops counting exactly 100 ledgers after it was made.",

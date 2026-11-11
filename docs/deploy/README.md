@@ -1000,14 +1000,15 @@ chains as they are then.
 
 ### soroban-sim and protocols
 
-soroban-sim links one host protocol and refuses to fork a network on any
-other. The script reads each network's protocol from its public RPC. For
-protocol 29 it installs the commit it pins (`SOROBAN_SIM_REV`). For protocol
-30 it installs that commit with `scripts/soroban-sim/protocol-30.patch`
-(`soroban-env-host`, `soroban-simulation` and `stellar-xdr` 30.0.0, and the
-lockfile), until soroban-sim releases a protocol-30 build. A network on a
-protocol no build covers stops the rehearsal with that message.
-`SOROBAN_SIM=<binary>` forks every network with that one binary.
+The script installs the soroban-sim commit it pins (`SOROBAN_SIM_REV`),
+which links the protocol-29 and protocol-30 hosts and runs, for each fork,
+the one the network's `protocolVersion` names
+([theahaco/soroban-sim#38](https://github.com/theahaco/soroban-sim/pull/38)).
+Mainnet runs protocol 29 and testnet 30. A network on a protocol that build
+does not link stops the rehearsal with soroban-sim's message naming the
+protocols it supports; moving the pin to a soroban-sim release that links it
+fixes that. `SOROBAN_SIM=<binary>` forks every network with that binary
+instead.
 
 ### What it does not cover
 

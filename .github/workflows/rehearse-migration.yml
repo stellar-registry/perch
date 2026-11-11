@@ -25,7 +25,6 @@ on:
       - scripts/registry-target.sh
       - scripts/rehearse-migration.sh
       - scripts/release-deps.py
-      - scripts/soroban-sim/**
       - scripts/verify-deployment.sh
       - crates/*/wasm/registry.path
       - crates/*/wasm/verifiers.path
@@ -71,16 +70,13 @@ jobs:
           echo "bb40f68e752db1a32526c43e0108e8eff785f7c24c67024cffe1c316e034372975fd78c9af8e9a48148235aad15c9a103f1a5b490c282f1db09a7a793794b69f  $RUNNER_TEMP/gc.tar.gz" | sha512sum -c -
           tar -xz -C "$RUNNER_TEMP/gc" --strip-components=1 -f "$RUNNER_TEMP/gc.tar.gz"
           echo "$RUNNER_TEMP/gc" >>"$GITHUB_PATH"
-      - name: soroban-sim builds
+      - name: soroban-sim commit
         id: sim
-        run: |
-          rev=$(sed -n 's/^SOROBAN_SIM_REV=\([0-9a-f]*\).*/\1/p' scripts/rehearse-migration.sh)
-          patches=$(cat scripts/soroban-sim/*.patch | sha256sum | cut -c1-16)
-          echo "key=$rev-$patches" >>"$GITHUB_OUTPUT"
+        run: echo "rev=$(sed -n 's/^SOROBAN_SIM_REV=\([0-9a-f]*\).*/\1/p' scripts/rehearse-migration.sh)" >>"$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: target/soroban-sim
-          key: soroban-sim-${{ runner.os }}-${{ steps.sim.outputs.key }}
+          path: target/soroban-sim/${{ steps.sim.outputs.rev }}
+          key: soroban-sim-${{ runner.os }}-${{ steps.sim.outputs.rev }}
       - name: Rehearse the migration on forks of testnet and mainnet
         env:
           # Read-only: `gh attestation verify` looks up each wasm's public

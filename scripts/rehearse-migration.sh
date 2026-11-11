@@ -7,9 +7,9 @@
 # substitution is a fork override the fork's report lists. Each network, in
 # the order the release path runs it (docs/deploy/README.md):
 #
-#   1. Fork it with the soroban-sim build of its current protocol, and give
-#      the stellar CLI a profile of its own holding only throwaway keys
-#      (operator, admin, ci).
+#   1. Fork it with soroban-sim, which runs the host of the network's
+#      protocol, and give the stellar CLI a profile of its own holding only
+#      throwaway keys (operator, admin, ci).
 #   2. The bootstrap: read who holds its role (perch's manager, or the root's
 #      manager while perch does not exist), fork_addSigner the operator key
 #      onto that account, and fund it and the admin key; run
@@ -93,8 +93,8 @@
 #              for it; mainnet takes only attested wasm.
 # Env: REHEARSE_ACCEPT_KNOWN_GAPS=verifiers, as --accept-known-gaps.
 #      SOROBAN_SIM, a soroban-sim binary to fork every network with;
-#      otherwise the script installs SOROBAN_SIM_REV below, built for each
-#      network's protocol, under target/soroban-sim/. The release (step 3)
+#      otherwise the script installs SOROBAN_SIM_REV below under
+#      target/soroban-sim/. The release (step 3)
 #      needs the theahaco/stellar-cli fork as `stellar`
 #      (.github/actions/setup-stellar-fork) with its scaffold plugin,
 #      git-cliff, and this checkout's whole history. CARGO_TARGET_DIR
@@ -108,12 +108,9 @@
 set -euo pipefail
 
 SOROBAN_SIM_REPO=https://github.com/theahaco/soroban-sim
-SOROBAN_SIM_REV=3ca6e5089e89d3d290568fd73bd27c644eee1657   # main: the RPC facade (theahaco/soroban-sim#26)
-# soroban-sim links one host protocol and refuses to fork a network on any
-# other. That commit's host is protocol 29. scripts/soroban-sim/protocol-<N>.patch
-# moves the same commit to protocol N's soroban-env-host until soroban-sim
-# releases a build for it.
-SOROBAN_SIM_PROTOCOL=29
+# main: links the protocol-29 and protocol-30 hosts and runs the one each
+# forked network's protocolVersion names (theahaco/soroban-sim#38).
+SOROBAN_SIM_REV=96ecb5a9530df5d2a7b36f60a7146153144cf6a0
 RELEASES_REPO=https://github.com/stellar-registry/perch
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -169,39 +166,15 @@ printf '## Migration rehearsal%s\n' "$($bootstrap_only && echo ' (bootstrap only
 # the stellar profile below would hide by moving XDG_CONFIG_HOME.
 export GH_CONFIG_DIR="${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}"
 
-# --- soroban-sim, one build per protocol --------------------------------------
+# --- soroban-sim, pinned -----------------------------------------------------
 
-# The public RPC `soroban-sim serve --fork <network>` forks.
-base_rpc() { case "$1" in testnet) echo https://soroban-testnet.stellar.org ;; mainnet) echo https://mainnet.sorobanrpc.com ;; esac; }
-sim_for() { # protocol -> the soroban-sim binary whose host implements it
-    local protocol="$1" patch="$REPO/scripts/soroban-sim/protocol-$1.patch" dir src
-    if [ -n "${SOROBAN_SIM:-}" ]; then
-        [ -x "$SOROBAN_SIM" ] || die "SOROBAN_SIM=$SOROBAN_SIM is not executable"
-        echo "$SOROBAN_SIM"
-        return
-    fi
-    if [ "$protocol" = "$SOROBAN_SIM_PROTOCOL" ]; then
-        dir="$REPO/target/soroban-sim/$SOROBAN_SIM_REV"
-    elif [ -f "$patch" ]; then
-        dir="$REPO/target/soroban-sim/$SOROBAN_SIM_REV-p$protocol-$(sha256_file "$patch" | cut -c1-16)"
-    else
-        die "no soroban-sim build for protocol $protocol: $SOROBAN_SIM_REV implements $SOROBAN_SIM_PROTOCOL, and there is no ${patch#"$REPO"/}"
-    fi
-    if [ ! -x "$dir/bin/soroban-sim" ]; then
-        log "installing soroban-sim $SOROBAN_SIM_REV for protocol $protocol"
-        if [ "$protocol" = "$SOROBAN_SIM_PROTOCOL" ]; then
-            cargo install --locked --git "$SOROBAN_SIM_REPO" --rev "$SOROBAN_SIM_REV" soroban-sim-cli --root "$dir" >&2
-        else
-            src="$(mktemp -d)"
-            git clone --quiet "$SOROBAN_SIM_REPO" "$src" >&2
-            git -C "$src" checkout --quiet --detach "$SOROBAN_SIM_REV"
-            git -C "$src" apply "$patch"
-            cargo install --locked --path "$src/crates/soroban-sim-cli" --root "$dir" >&2
-            rm -rf "$src"
-        fi
-    fi
-    echo "$dir/bin/soroban-sim"
-}
+SIM="${SOROBAN_SIM:-$REPO/target/soroban-sim/$SOROBAN_SIM_REV/bin/soroban-sim}"
+if [ ! -x "$SIM" ]; then
+    [ -z "${SOROBAN_SIM:-}" ] || die "SOROBAN_SIM=$SOROBAN_SIM is not executable"
+    log "installing soroban-sim $SOROBAN_SIM_REV"
+    cargo install --locked --git "$SOROBAN_SIM_REPO" --rev "$SOROBAN_SIM_REV" soroban-sim-cli \
+        --root "$REPO/target/soroban-sim/$SOROBAN_SIM_REV" >&2
+fi
 
 # --- the wasm the bootstrap is given ---------------------------------------------
 
@@ -352,7 +325,7 @@ trap on_exit EXIT
 
 testnet_deployment="" bridged_verifier=""
 rehearse() {
-    local network="$1" out passphrase url line role_source root perch constructorless verifiers nido role protocol sim pid
+    local network="$1" out passphrase url line role_source root perch constructorless verifiers nido role protocol pid
     out="$out_base/$network"
     local w opt flag name wasm_flags=()
     for w in "account_wasm --account-wasm perch-account" "registry_wasm --constructorless-wasm perch-constructorless-registry"; do
@@ -383,12 +356,8 @@ rehearse() {
     local operator_g admin_g ci_g
     operator_g="$(stellar keys address operator)" admin_g="$(stellar keys address admin)" ci_g="$(stellar keys address ci)"
 
-    protocol="$(curl -fsS "$(base_rpc "$network")" -H 'content-type: application/json' \
-        -d '{"jsonrpc":"2.0","id":1,"method":"getLatestLedger"}' | jq -er .result.protocolVersion)" \
-        || die "$network: cannot read its protocol version from $(base_rpc "$network")"
-    sim="$(sim_for "$protocol")"
-    log "$network: forking protocol $protocol with soroban-sim serve"
-    "$sim" serve --fork "$network" --network-passphrase "$passphrase" --port 0 --report "$out/report" \
+    log "$network: forking with soroban-sim serve"
+    "$SIM" serve --fork "$network" --network-passphrase "$passphrase" --port 0 --report "$out/report" \
         >"$out/serve.log" 2>&1 &
     pid=$!
     SERVER_PIDS+=("$pid")
@@ -410,8 +379,9 @@ rehearse() {
     # Everything below sends only to this local fork.
     [[ "$(rpc fork_info '{}' | jq -r .facade)" == soroban-sim* ]] || die "$url is not a soroban-sim facade"
     [ "$(rpc getNetwork '{}' | jq -r .passphrase)" = "$passphrase" ] || die "the fork is not $network"
-    log "$network: facade at $url, $(rpc fork_info '{}' | jq -r '"a fork of ledger \(.fork.ledger)"')"
-    note "Fork of ledger $(rpc fork_info '{}' | jq -r .fork.ledger), protocol $protocol ($(basename "$(dirname "$(dirname "$sim")")"))"
+    protocol="$(rpc fork_info '{}' | jq -r .fork.protocolVersion)"
+    log "$network: facade at $url, $(rpc fork_info '{}' | jq -r '"a fork of ledger \(.fork.ledger)"') on protocol $protocol"
+    note "Fork of ledger $(rpc fork_info '{}' | jq -r .fork.ledger), protocol $protocol (soroban-sim ${SOROBAN_SIM:-$SOROBAN_SIM_REV})"
     export STELLAR_RPC_URL="$url" STELLAR_NETWORK_PASSPHRASE="$passphrase"
     local net=(--rpc-url "$url" --network-passphrase "$passphrase")
 

@@ -52,6 +52,7 @@ import unittest
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RELEASE_DEPS = os.path.join(REPO, "scripts", "release-deps.py")
 SOURCE_DIRTY = os.path.join(REPO, "scripts", "source-dirty.sh")
+DEPLOYMENT_STATE = os.path.join(REPO, "scripts", "deployment-state.sh")
 CHECK_PINS = os.path.join(REPO, "scripts", "check-pins.sh")
 MANIFEST_REGISTRY = os.path.join(REPO, "scripts", "manifest-registry.sh")
 NPM_RELEASE = os.path.join(REPO, "scripts", "npm-release.sh")
@@ -507,6 +508,44 @@ _, ext, _ = rd.Tree("HEAD").closure({contract!r})
 print(" ".join(sorted({{n for n, _, _ in ext}})))
 """], REPO).stdout.split()
             self.assertIn("soroban-sdk", tree, contract)
+
+
+class DeploymentState(unittest.TestCase):
+    """Deployed bytes become stale when any contract's release scope changes."""
+
+    def setUp(self):
+        self.repo = Repo()
+        with open(DEPLOYMENT_STATE) as f:
+            self.repo.write("scripts/deployment-state.sh", f.read())
+        self.repo.commit("source")
+        self.manifest = os.path.join(self.repo.dir, "deployment.json")
+
+    def tearDown(self):
+        self.repo.cleanup()
+
+    def record_deployment(self):
+        commit = run(["git", "rev-parse", "HEAD"], self.repo.dir).stdout.strip()
+        self.repo.write("deployment.json", json.dumps({"source": {"commit": commit}}))
+
+    def state(self, *args):
+        return run(["bash", "scripts/deployment-state.sh", *args, self.manifest], self.repo.dir).stdout.strip()
+
+    def test_each_contract_release_scope_invalidates_deployed_bytes(self):
+        scopes = set().union(*(paths_for(c) for c in contract_lists()[0].split()))
+        for scope in sorted(scopes):
+            with self.subTest(scope=scope):
+                self.record_deployment()
+                self.repo.write(f"{scope}/src/lib.rs", "// contract source changed\n")
+                self.repo.commit(f"change {scope}")
+                self.assertEqual(self.state(), "stale")
+                self.assertEqual(self.state("--changed"), scope)
+
+    def test_unrelated_documentation_keeps_deployed_bytes_current(self):
+        self.record_deployment()
+        self.repo.write("docs/example.md", "Documentation only.\n")
+        self.repo.commit("docs")
+        self.assertEqual(self.state(), "current")
+        self.assertEqual(self.state("--changed"), "")
 
 
 def npm_lists():

@@ -48,7 +48,7 @@ manifest="${1:-$repo_root/deployments/${STELLAR_NETWORK:-testnet}.json}"
 paths=(
     crates/perch-interpreter crates/perch-program
     crates/perch-doc-compiler crates/perch-ir
-    crates/perch-recovery-interface crates/perch-account-types
+    crates/perch-recovery-interface crates/perch-account-types crates/perch-rule-eval
     crates/perch-ed25519-verifier
     crates/perch-mldsa-verifier
     crates/perch-spending-limit

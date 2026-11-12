@@ -185,11 +185,14 @@ limits above the current caps.
 **Current behaviour:** the account's rule-eval backend and delta reconciliation
 are described in [the recovery spec §7.5](recovery/spec.md#75-bounded-completion-cost).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
-`derive_target`, a document with more than 8 declared signers
+`derive_target`, an account document with more than 8 declared signers
 (`MAX_DOC_SIGNERS`), more than 10 rules (`MAX_DOC_RULES`), more than 8,192
 canonical bytes (`MAX_DOC_CANONICAL_BYTES`), or a rule name over 20 bytes
 (`MAX_RULE_NAME_BYTES`, the account's `MAX_NAME_SIZE`). The recovery rule the account
-generates is additional to the 10 document rules. The caps are sized so that
+generates is additional to the 10 document rules. A grant document, which no
+recovery compiles, has its own caps and a bound on the entry it stores
+(spec §7.5; [`budgets.md`](recovery/budgets.md), "Grant-document caps"). The
+account-document caps are sized so that
 a worst-case completion, compromise restore, or `Protected` reconfiguration
 stays within 75% of every *measured* per-transaction limit: instructions,
 memory, write bytes, and write entries
@@ -206,7 +209,9 @@ records are the audited backend (the Perch OZ materialization unit).
 The residual limit is product capacity: a document that needs more signers,
 rules, or bytes cannot be applied. The caps apply per document; app grants
 can be spread over any number of grant documents (spec §7.6), each under
-the same caps.
+the grant caps. A grant document's rules live in one ledger entry, which
+the compiler bounds (`MAX_GRANT_STORED_BYTES`); storing them across entries,
+or in a more compact form, would lift that limit.
 
 **Exit criterion and follow-up review:** a backend change is a new account
 build that existing accounts adopt only by upgrade. Review it as a

@@ -87,8 +87,8 @@ pub use perch_account_types::{
     AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError,
 };
 pub use rules::{
-    InstalledPolicy, InstalledRule, RuleRecord, MAX_EXTERNAL_KEY_SIZE, MAX_NAME_SIZE, MAX_POLICIES,
-    MAX_SIGNERS,
+    InstalledPolicy, InstalledRule, RuleRecord, RuleSet, MAX_EXTERNAL_KEY_SIZE, MAX_NAME_SIZE,
+    MAX_POLICIES, MAX_SIGNERS,
 };
 
 // Re-exported so `impl_perch_smart_account!` can name it via `$crate::…`
@@ -256,30 +256,46 @@ pub enum PerchAuthError {
     RuleEvalRefused,
 }
 
-/// A grant document as the account stores it: [`GrantRecord`]'s fields,
-/// with each rule's record holding its stored rule, the grant's position in
-/// the grant index, the document's signer ids in declaration order, and
-/// each signer's `verifier-name` (empty where it has none; the list empty
-/// when no signer has one), which with the records give back its canonical
-/// text.
+/// A grant document as the account stores it, a tuple: the grant generation
+/// it was applied under, its `doc_hash`, the grant's position in the grant
+/// index, its rules ([`RuleSet`]: the signer table, each signer once, and
+/// each rule's record holding its stored rule), the document's signer ids in
+/// declaration order, and each signer's `verifier-name` (empty where it has
+/// none; the list empty when no signer has one), which with the records give
+/// back its canonical text.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StoredGrant {
-    pub gen: u64,
-    pub doc_hash: BytesN<32>,
-    pub pos: u32,
-    pub rules: Vec<RuleRecord>,
-    pub signer_ids: Vec<String>,
-    pub verifier_names: Vec<String>,
-}
+pub struct StoredGrant(
+    pub u64,
+    pub BytesN<32>,
+    pub u32,
+    pub RuleSet,
+    pub Vec<String>,
+    pub Vec<String>,
+);
 
 impl StoredGrant {
+    /// The grant generation it was applied under.
+    fn gen(&self) -> u64 {
+        self.0
+    }
+
+    /// Its signer table.
+    fn signers(&self) -> Vec<Signer> {
+        self.3 .0.clone()
+    }
+
+    /// Its rules' records.
+    fn rules(&self) -> Vec<RuleRecord> {
+        self.3 .1.clone()
+    }
+
     /// The grant as the `grant` view gives it.
     fn record(&self, e: &Env) -> GrantRecord {
         GrantRecord {
-            gen: self.gen,
-            doc_hash: self.doc_hash.clone(),
-            rules: rules::installed_view(e, &self.rules, None),
+            gen: self.0,
+            doc_hash: self.1.clone(),
+            rules: rules::installed_view(e, &self.3 .0, &self.3 .1, None),
         }
     }
 }
@@ -438,9 +454,16 @@ fn bind_payload(e: &Env, signature_payload: &Hash<32>) -> Hash<32> {
 /// `apply_doc`'s `expected_revision`. Version 2 adds grant documents
 /// ([`PerchSmartAccount::apply_grant`] and the grant views); since then
 /// `configuration` and `installed_rules` cover the account document only.
-pub const INTERFACE_VERSION: u32 = 3;
-/// The layout of [`AccountConfiguration`].
-pub const SNAPSHOT_VERSION: u32 = 2;
+///
+/// Version 4 adds the signer-table views [`PerchSmartAccount::rule_signers`]
+/// and [`PerchSmartAccount::grant_signers`].
+pub const INTERFACE_VERSION: u32 = 4;
+/// The layout of [`AccountConfiguration`] and of the stored rules
+/// [`PerchSmartAccount::rule_set`] and [`PerchSmartAccount::grant_rule_set`]
+/// return. Version 3 stores rules compactly (`perch_rule_eval::StoredRule`):
+/// a tuple, `string-in` values as strings, and signers as positions in the
+/// signer table those views' companions return.
+pub const SNAPSHOT_VERSION: u32 = 3;
 
 /// A scheduled account upgrade (spec §12), bound to the account's recovery
 /// generation.
@@ -606,7 +629,7 @@ struct PerchStorage {
     /// against these records alone, so its cost (and a completion's) is
     /// bounded by the document caps rather than by how many rules the
     /// account ever had, and an unchanged rule is not touched at all.
-    rule_set: PersistentItem<Vec<RuleRecord>>,
+    rule_set: PersistentItem<RuleSet>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
     /// The configuration revision: 0 after the constructor, advanced by one
@@ -966,18 +989,25 @@ pub trait PerchSmartAccount: CustomAccountInterface {
     }
 
     /// The rule-eval rules `__check_auth` evaluates, aligned with
-    /// `installed_rules`.
+    /// `installed_rules`, their signers positions in `rule_signers`.
     // docs/account-interface.md, "Views".
     fn rule_set(e: &Env) -> Vec<StoredRule> {
-        stored_rules(e, &PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e)))
+        stored_rules(e, &rule_set_of(e).1)
+    }
+
+    /// The signer table of the account document's stored rules: each signer
+    /// once, at the position `rule_set` names it by.
+    // docs/account-interface.md, "Views".
+    fn rule_signers(e: &Env) -> Vec<Signer> {
+        rule_set_of(e).0
     }
 
     /// The count of context rules, grants' and expired ones included.
     // docs/account-interface.md, "Views".
     fn get_context_rules_count(e: &Env) -> u32 {
-        let mut count = PerchStorage::get_rule_set(e).map_or(0, |r| r.len());
+        let mut count = rule_set_of(e).1.len();
         for grant in Self::grants(e, 0, u32::MAX).iter() {
-            count += PerchStorage::get_grants(e, &grant).map_or(0, |r| r.rules.len());
+            count += PerchStorage::get_grants(e, &grant).map_or(0, |r| r.rules().len());
         }
         count
     }
@@ -985,13 +1015,17 @@ pub trait PerchSmartAccount: CustomAccountInterface {
     /// The context rule with this id; panics if there is none.
     // docs/account-interface.md, "Views".
     fn get_context_rule(e: &Env, context_rule_id: u32) -> ContextRule {
-        let records = match PerchStorage::get_grant_tags(e, &context_rule_id) {
-            Some(grant) => PerchStorage::get_grants(e, &grant).map(|r| r.rules),
+        let set = match PerchStorage::get_grant_tags(e, &context_rule_id) {
+            Some(grant) => PerchStorage::get_grants(e, &grant).map(|r| r.3),
             None => PerchStorage::get_rule_set(e),
         };
         let recovery = PerchStorage::get_recovery_rule(e) == Some(context_rule_id);
-        match records.and_then(|r| r.iter().find(|r| r.id == context_rule_id)) {
-            Some(record) => record.installed(recovery).context_rule(e),
+        let found = set.and_then(|set| {
+            let record = set.1.iter().find(|r| r.id() == context_rule_id)?;
+            Some(record.installed(e, &set.0, recovery))
+        });
+        match found {
+            Some(rule) => rule.context_rule(e),
             None => soroban_sdk::panic_with_error!(
                 e,
                 soroban_sdk::Error::from(SmartAccountError::ContextRuleNotFound)
@@ -1020,7 +1054,7 @@ pub trait PerchSmartAccount: CustomAccountInterface {
     // docs/account-interface.md, "Removing grants".
     fn gc_grant(e: &Env, grant: u32) -> Result<(), PerchAccountError> {
         let record = PerchStorage::get_grants(e, &grant).ok_or(PerchAccountError::UnknownGrant)?;
-        if record.gen == grant_generation(e) {
+        if record.gen() == grant_generation(e) {
             return Err(PerchAccountError::GrantLive);
         }
         drop_grant(e, grant, &record);
@@ -1033,19 +1067,27 @@ pub trait PerchSmartAccount: CustomAccountInterface {
     }
 
     /// The rule-eval rules of the grant document under `grant`, aligned with
-    /// its record's rules.
+    /// its record's rules, their signers positions in `grant_signers`.
     fn grant_rule_set(e: &Env, grant: u32) -> Vec<StoredRule> {
         match PerchStorage::get_grants(e, &grant) {
-            Some(s) => stored_rules(e, &s.rules),
+            Some(s) => stored_rules(e, &s.rules()),
             None => Vec::new(e),
         }
+    }
+
+    /// The signer table of the grant document under `grant`, if any: each
+    /// signer once, at the position `grant_rule_set` names it by, in the
+    /// order its rules first name them.
+    // docs/account-interface.md, "Views".
+    fn grant_signers(e: &Env, grant: u32) -> Option<Vec<Signer>> {
+        PerchStorage::get_grants(e, &grant).map(|s| s.signers())
     }
 
     /// The signer ids of the grant document under `grant`, in declaration
     /// order, if any: with its rules, they give back its canonical text.
     // docs/account-interface.md, "Views".
     fn grant_signer_ids(e: &Env, grant: u32) -> Option<Vec<String>> {
-        PerchStorage::get_grants(e, &grant).map(|s| s.signer_ids)
+        PerchStorage::get_grants(e, &grant).map(|s| s.4)
     }
 
     /// Each signer's `verifier-name` in the grant document under `grant`,
@@ -1053,7 +1095,7 @@ pub trait PerchSmartAccount: CustomAccountInterface {
     /// none, and no entries when no signer has one.
     // docs/account-interface.md, "Views".
     fn grant_verifier_names(e: &Env, grant: u32) -> Option<Vec<String>> {
-        PerchStorage::get_grants(e, &grant).map(|s| s.verifier_names)
+        PerchStorage::get_grants(e, &grant).map(|s| s.5)
     }
 
     /// How many grant ids have a record, wiped ones included.
@@ -1246,7 +1288,7 @@ fn apply_grant_doc(e: &Env, grant: u32, doc_json: Bytes) -> Result<BytesN<32>, P
         excluded.push_back(z.pool);
     }
     let excluded: alloc::vec::Vec<Address> = excluded.iter().collect();
-    let rule_set = rule_set::lowered_grant(e, &compiled, &excluded, gen)?;
+    let (signers, rule_set) = rule_set::lowered_grant(e, &compiled, &excluded, gen)?;
     check_normal(e, &me, &compiled)?;
     for fingerprint in compiled.fingerprints.iter() {
         if PerchStorage::has_revoked(e, &fingerprint) {
@@ -1273,13 +1315,13 @@ fn apply_grant_doc(e: &Env, grant: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     let record = PerchStorage::get_grants(e, &grant);
     let stored = record
         .as_ref()
-        .map(|r| r.rules.clone())
-        .unwrap_or(Vec::new(e));
-    let current = rules::installed(&stored, None);
+        .map(|r| r.3.clone())
+        .unwrap_or(RuleSet::empty(e));
+    let current = rules::installed(e, &stored.0, &stored.1, None);
     let (desired, params) = rules::desired(e, &compiled);
     let (next, sum) = rules::reconcile(e, &current, &desired, &params, rules::Mode::Delta);
     let records = rules::records(e, &next, &rule_set);
-    gate::drop_records(e, &stored, &records);
+    gate::drop_records(e, &stored.1, &records);
 
     // Every rule in a record is tagged with the grant, so only a new id
     // needs a tag.
@@ -1298,7 +1340,7 @@ fn apply_grant_doc(e: &Env, grant: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     });
 
     let pos = match &record {
-        Some(r) => r.pos,
+        Some(r) => r.2,
         None => index_insert(e, grant),
     };
     let mut signer_ids = Vec::new(e);
@@ -1306,18 +1348,18 @@ fn apply_grant_doc(e: &Env, grant: u32, doc_json: Bytes) -> Result<BytesN<32>, P
         signer_ids.push_back(s.id);
     }
     let named = compiled.verifier_names.iter().any(|n| !n.is_empty());
-    let applied = StoredGrant {
+    let applied = StoredGrant(
         gen,
-        doc_hash: compiled.doc_hash.clone(),
+        compiled.doc_hash.clone(),
         pos,
-        rules: records,
+        RuleSet(signers, records),
         signer_ids,
-        verifier_names: if named {
+        if named {
             compiled.verifier_names.clone()
         } else {
             Vec::new(e)
         },
-    };
+    );
     if record.as_ref() != Some(&applied) {
         PerchStorage::set_grants(e, &grant, &applied);
         extend_persistent(e, |ttl| {
@@ -1444,16 +1486,16 @@ fn check_unwiped(
 /// Remove `grant`'s record and rules (their tags and spending records with
 /// it), and its index position.
 fn drop_grant(e: &Env, grant: u32, record: &StoredGrant) {
-    for r in record.rules.iter() {
-        PerchStorage::remove_grant_tags(e, &r.id);
-        gate::drop_record(e, r.id);
+    for r in record.rules().iter() {
+        PerchStorage::remove_grant_tags(e, &r.id());
+        gate::drop_record(e, r.id());
     }
     PerchStorage::remove_grants(e, &grant);
-    index_remove(e, record.pos);
+    index_remove(e, record.2);
     GrantRemoved {
         grant,
-        gen: record.gen,
-        rules_removed: record.rules.len(),
+        gen: record.gen(),
+        rules_removed: record.rules().len(),
     }
     .publish(e);
 }
@@ -1476,7 +1518,7 @@ fn index_remove(e: &Env, at: u32) {
     if at != last {
         let moved = PerchStorage::get_grant_index(e, &last).unwrap();
         let mut record = PerchStorage::get_grants(e, &moved).unwrap();
-        record.pos = at;
+        record.2 = at;
         PerchStorage::set_grant_index(e, &at, &moved);
         PerchStorage::set_grants(e, &moved, &record);
         extend_persistent(e, |ttl| {
@@ -1488,20 +1530,22 @@ fn index_remove(e: &Env, at: u32) {
     PerchStorage::set_grant_count(e, &last);
 }
 
+/// The account document's rules as stored (none before the constructor).
+fn rule_set_of(e: &Env) -> RuleSet {
+    PerchStorage::get_rule_set(e).unwrap_or(RuleSet::empty(e))
+}
+
 /// The account document's rules as installed, the recovery rule marked.
 fn admin_rules(e: &Env) -> Vec<InstalledRule> {
-    rules::installed_view(
-        e,
-        &PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e)),
-        PerchStorage::get_recovery_rule(e),
-    )
+    let set = rule_set_of(e);
+    rules::installed_view(e, &set.0, &set.1, PerchStorage::get_recovery_rule(e))
 }
 
 /// The stored rules of `records`, in order.
 fn stored_rules(e: &Env, records: &Vec<RuleRecord>) -> Vec<StoredRule> {
     let mut out = Vec::new(e);
     for r in records.iter() {
-        out.push_back(r.rule);
+        out.push_back(r.rule());
     }
     out
 }
@@ -1696,20 +1740,29 @@ pub mod testutils {
         PerchStorage::set_grant_generation(e, &generation);
     }
 
-    /// Replace the admin records' stored rules with `rule_set`, in order;
-    /// panics unless it holds one rule per record. Run as the account
-    /// (`env.as_contract`).
-    pub fn set_rule_set(e: &Env, rule_set: &Vec<StoredRule>) {
-        let records = PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e));
-        PerchStorage::set_rule_set(e, &with_rules(e, &records, rule_set));
+    /// Replace the admin records' stored rules with `rule_set`, in order, and
+    /// their signer table with `signers`, the table `rule_set` names its
+    /// signers in; panics unless it holds one rule per record. Run as the
+    /// account (`env.as_contract`).
+    pub fn set_rule_set(e: &Env, signers: &Vec<Signer>, rule_set: &Vec<StoredRule>) {
+        let set = rule_set_of(e);
+        PerchStorage::set_rule_set(
+            e,
+            &RuleSet(signers.clone(), with_rules(e, &set.1, rule_set)),
+        );
     }
 
-    /// Replace the stored rules of the grant document under `grant`, as
-    /// [`set_rule_set`] does the account document's. Run as the account
-    /// (`env.as_contract`).
-    pub fn set_grant_rule_set(e: &Env, grant: u32, rule_set: &Vec<StoredRule>) {
+    /// Replace the stored rules and signer table of the grant document under
+    /// `grant`, as [`set_rule_set`] does the account document's. Run as the
+    /// account (`env.as_contract`).
+    pub fn set_grant_rule_set(
+        e: &Env,
+        grant: u32,
+        signers: &Vec<Signer>,
+        rule_set: &Vec<StoredRule>,
+    ) {
         let mut stored = PerchStorage::get_grants(e, &grant).expect("a grant record");
-        stored.rules = with_rules(e, &stored.rules, rule_set);
+        stored.3 = RuleSet(signers.clone(), with_rules(e, &stored.3 .1, rule_set));
         PerchStorage::set_grants(e, &grant, &stored);
     }
 
@@ -1717,41 +1770,53 @@ pub mod testutils {
         assert_eq!(records.len(), rules.len(), "one stored rule per record");
         let mut out = Vec::new(e);
         for (record, rule) in records.iter().zip(rules.iter()) {
-            out.push_back(RuleRecord { rule, ..record });
+            out.push_back(RuleRecord(record.0, record.1, record.2, rule));
         }
         out
     }
 
-    /// Overwrite the admin records. Run as the account (`env.as_contract`).
-    pub fn set_rule_records(e: &Env, records: &Vec<RuleRecord>) {
-        PerchStorage::set_rule_set(e, records);
+    /// Overwrite the admin records and their signer table. Run as the
+    /// account (`env.as_contract`).
+    pub fn set_rule_records(e: &Env, set: &RuleSet) {
+        PerchStorage::set_rule_set(e, set);
     }
 
-    /// Install `rule` as an account-document rule named `name`, under a new
-    /// id, which it returns: a record with no policy, as `apply_doc` records
-    /// a document rule, appended to the admin records. Run as the account
-    /// (`env.as_contract`).
-    pub fn install_rule(e: &Env, name: &str, rule: &StoredRule) -> u32 {
+    /// Install `rule`, whose signers are positions in `signers`, as an
+    /// account-document rule named `name`, under a new id, which it returns:
+    /// a record with no policy, as `apply_doc` records a document rule,
+    /// appended to the admin records, its signers added to their table. Run
+    /// as the account (`env.as_contract`).
+    pub fn install_rule(e: &Env, name: &str, rule: &StoredRule, signers: &Vec<Signer>) -> u32 {
         let id = rules::allocate(e);
-        let mut records = PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e));
-        records.push_back(RuleRecord {
-            id,
-            name: String::from_str(e, name),
-            policies: Vec::new(e),
-            rule: rule.clone(),
-        });
-        PerchStorage::set_rule_set(e, &records);
+        let mut set = rule_set_of(e);
+        let mut rule = rule.clone();
+        let mut positions = Vec::new(e);
+        for at in rule.3.iter() {
+            let signer = signers.get(at).expect("a position in `signers`");
+            let p = match set.0.first_index_of(&signer) {
+                Some(p) => p,
+                None => {
+                    set.0.push_back(signer);
+                    set.0.len() - 1
+                }
+            };
+            positions.push_back(p);
+        }
+        rule.3 = positions;
+        set.1
+            .push_back(RuleRecord(id, String::from_str(e, name), Vec::new(e), rule));
+        PerchStorage::set_rule_set(e, &set);
         id
     }
 
     /// Remove account-document rule `id`'s record. Run as the account
     /// (`env.as_contract`).
     pub fn remove_rule(e: &Env, id: u32) {
-        let mut records = PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e));
-        if let Some(i) = records.iter().position(|r| r.id == id) {
-            records.remove(i as u32);
+        let mut set = rule_set_of(e);
+        if let Some(i) = set.1.iter().position(|r| r.id() == id) {
+            set.1.remove(i as u32);
         }
-        PerchStorage::set_rule_set(e, &records);
+        PerchStorage::set_rule_set(e, &set);
     }
 
     /// The id the next installed rule gets: every id below it was given
@@ -1779,17 +1844,17 @@ pub mod testutils {
 fn apply_rules(
     e: &Env,
     compiled: &CompiledDoc,
-    rule_set: &Vec<StoredRule>,
+    rule_set: &rule_set::Stored,
     mode: rules::Mode,
 ) -> rules::DeltaSummary {
-    let stored = PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e));
-    let current = rules::installed(&stored, PerchStorage::get_recovery_rule(e));
+    let stored = rule_set_of(e);
+    let current = rules::installed(e, &stored.0, &stored.1, PerchStorage::get_recovery_rule(e));
     let (desired, params) = rules::desired(e, compiled);
     let (next, sum) = rules::reconcile(e, &current, &desired, &params, mode);
-    let records = rules::records(e, &next, rule_set);
-    gate::drop_records(e, &stored, &records);
-    if records != stored {
-        PerchStorage::set_rule_set(e, &records);
+    let set = RuleSet(rule_set.0.clone(), rules::records(e, &next, &rule_set.1));
+    gate::drop_records(e, &stored.1, &set.1);
+    if set != stored {
+        PerchStorage::set_rule_set(e, &set);
         extend_persistent(e, |ttl| PerchStorage::extend_rule_set_ttl(e, ttl, ttl));
     }
     let recovery_rule = next.iter().find(|r| r.recovery).map(|r| r.id);
@@ -1834,13 +1899,16 @@ pub fn install_account_rules(e: &Env, admin_signers: &Vec<Signer>) {
         }
     }
     auth::check_distinct(e, admin_signers);
-    let record = RuleRecord {
-        id: rule.id,
-        name: rule.name.clone(),
-        policies: Vec::new(e),
-        rule: rule_set::admin(e, admin_signers),
-    };
-    PerchStorage::set_rule_set(e, &Vec::from_array(e, [record]));
+    let record = RuleRecord(
+        rule.id,
+        rule.name.clone(),
+        Vec::new(e),
+        rule_set::admin(e, admin_signers),
+    );
+    PerchStorage::set_rule_set(
+        e,
+        &RuleSet(admin_signers.clone(), Vec::from_array(e, [record])),
+    );
     extend_persistent(e, |ttl| PerchStorage::extend_rule_set_ttl(e, ttl, ttl));
     ContextRuleAdded {
         context_rule_id: rule.id,

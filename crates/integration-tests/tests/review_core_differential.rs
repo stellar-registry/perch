@@ -891,9 +891,17 @@ fn run_authorize_trace(
     let mut ids = vec![];
     for (i, r) in rules.iter().enumerate() {
         let renamed = lab.rule(r);
-        let stored =
-            StoredRule::from_rule(&e, &renamed).ok_or(format!("rule {i} has no stored form"))?;
-        ids.push(e.as_contract(&w.account, || install_rule(&e, &format!("r{i}"), &stored)));
+        if non_string_set(&renamed) {
+            return Err(format!(
+                "{NOT_PERCH}rule {i} has a set of values that are not strings"
+            ));
+        }
+        let mut table = SVec::new(&e);
+        let stored = StoredRule::from_rule(&e, &renamed, &mut table)
+            .ok_or(format!("rule {i} has no stored form"))?;
+        ids.push(e.as_contract(&w.account, || {
+            install_rule(&e, &format!("r{i}"), &stored, &table)
+        }));
     }
     for (j, start) in t.start.iter().enumerate() {
         if rules[j].cap.is_none() || start.history.is_empty() {
@@ -1036,6 +1044,20 @@ fn run_authorize_trace(
     Ok(())
 }
 
+/// The prefix of a skipped trace's reason when one of its rules is no rule a
+/// Perch document lowers to, so no account can hold it.
+const NOT_PERCH: &str = "not a Perch rule: ";
+
+/// Whether `rule` has a set condition holding a value that is not a string:
+/// rule-eval reads one, but only `string-in` lowers to a set, so an account
+/// stores sets of strings alone (`StoredCond::ArgIn`).
+fn non_string_set(rule: &rule_eval::Rule) -> bool {
+    rule.conds.iter().any(|c| {
+        matches!(c, rule_eval::Cond::ArgIn(_, vs)
+            if vs.iter().any(|v| !matches!(v, rule_eval::Val::String(_))))
+    })
+}
+
 #[test]
 fn the_core_agrees_with_the_account_on_every_authorization_trace() {
     let traces = authorize::load_dir(&rule_core::vectors().join("authorize"))
@@ -1066,7 +1088,17 @@ fn the_core_agrees_with_the_account_on_every_authorization_trace() {
         model.misaligned,
         model.beyond_ttl
     );
-    assert!(skipped.len() * 10 < traces.len(), "too many traces skipped");
+    // A trace whose rules no account can hold has nothing to compare; every
+    // other skip counts against the budget.
+    let not_perch = skipped.iter().filter(|s| s.contains(NOT_PERCH)).count();
+    assert!(
+        (skipped.len() - not_perch) * 10 < traces.len(),
+        "too many traces skipped"
+    );
+    assert!(
+        (traces.len() - skipped.len()) * 4 > traces.len() * 3,
+        "too few traces run"
+    );
     assert!(tally.accepted > 0 && tally.records > 0);
     assert!(model.widened.is_empty(), "{:?}", model.widened);
     assert!(
@@ -1841,18 +1873,19 @@ fn gate_cases() -> (Vec<String>, Tally) {
     let sk = SigningKey::from_bytes(&[42; 32]);
     let pk = Bytes::from_array(&e, &sk.verifying_key().to_bytes());
     let signer = Signer::External(verifier.clone(), pk);
-    let rule = StoredRule {
-        auth_root: None,
-        contract: app.clone(),
-        functions: perch_rule_eval::StoredFunctions::AnyExcept(SVec::new(&e)),
-        conds: SVec::new(&e),
-        signers: SVec::from_array(&e, [signer.clone()]),
-        threshold: 1,
-        cap: SVec::new(&e),
-        valid_until: None,
-        generation: None,
-    };
-    let ext = e.as_contract(&g.w.account, || install_rule(&e, "ext", &rule));
+    let rule = StoredRule(
+        app.clone(),
+        perch_rule_eval::StoredFunctions::AnyExcept(SVec::new(&e)),
+        SVec::new(&e),
+        SVec::from_array(&e, [0u32]),
+        1,
+        SVec::new(&e),
+        None,
+        None,
+        None,
+    );
+    let table = SVec::from_array(&e, [signer.clone()]);
+    let ext = e.as_contract(&g.w.account, || install_rule(&e, "ext", &rule, &table));
     let a = g.val(1u32);
     let call = g.ctx(&app, "f", vec![a]);
     let ids = SVec::from_array(&e, [ext]);
@@ -1983,12 +2016,15 @@ fn witness_fixtures() -> Vec<serde_json::Value> {
         e: e.clone(),
         names: BTreeMap::new(),
     };
+    // Rules as the views give them: a signer table, and the stored rules
+    // naming signers by position in it.
     let stored = |rules: &[rule_eval::Rule]| -> Option<Vec<u8>> {
+        let mut table = SVec::new(&e);
         let mut v: SVec<StoredRule> = SVec::new(&e);
         for r in rules {
-            v.push_back(StoredRule::from_rule(&e, r)?);
+            v.push_back(StoredRule::from_rule(&e, r, &mut table)?);
         }
-        Some(host_xdr(&e, v))
+        Some(host_xdr(&e, (table, v)))
     };
     let sym = |s: &str| F::Symbol(s.as_bytes().to_vec());
     let symbols = |fs: &[Vec<u8>]| F::Vec(fs.iter().map(|f| F::Symbol(f.clone())).collect());
@@ -2052,13 +2088,15 @@ fn witness_fixtures() -> Vec<serde_json::Value> {
                     VStep::RaiseThreshold(i, t) => {
                         F::Vec(vec![sym("RaiseThreshold"), F::U32(i), F::U32(t)])
                     }
+                    // A `StoredCap`: the tuple of its limit, period and
+                    // amount argument.
                     VStep::AddCap(i, c) => F::Vec(vec![
                         sym("AddCap"),
                         F::U32(i),
-                        F::Map(vec![
-                            (sym("amount_arg"), F::U32(c.amount_arg)),
-                            (sym("limit"), F::I128(c.limit)),
-                            (sym("period"), F::U32(c.period)),
+                        F::Vec(vec![
+                            F::I128(c.limit),
+                            F::U32(c.period),
+                            F::U32(c.amount_arg),
                         ]),
                     ]),
                     VStep::LowerCapLimit(i, l) => {
@@ -2197,8 +2235,12 @@ impl Renamer {
 /// A copy of a rule already renamed.
 fn rename_identity(r: &rule_eval::Rule) -> rule_eval::Rule {
     let e = Env::default();
-    let v: Val = StoredRule::from_rule(&e, r).unwrap().into_val(&e);
-    perch_rule_eval::mirror::rule(&e, v).unwrap()
+    let mut table = SVec::new(&e);
+    let v: Val = StoredRule::from_rule(&e, r, &mut table)
+        .unwrap()
+        .into_val(&e);
+    let table = perch_rule_eval::convert::signers(&e, &table).unwrap();
+    perch_rule_eval::mirror::rule(&e, v, &table).unwrap()
 }
 
 /// Budget inputs: records and caps around the window's edges, with the
@@ -2215,11 +2257,7 @@ fn budget_fixtures() -> Vec<serde_json::Value> {
         ),
         total: spends.iter().map(|s| s.1).sum(),
     };
-    let cap = |limit: i128, period: u32| StoredCap {
-        limit,
-        period,
-        amount_arg: 2,
-    };
+    let cap = |limit: i128, period: u32| StoredCap(limit, period, 2);
     let cases = [
         ("an empty record", record(&[]), cap(100, 50), 1000),
         (

@@ -20,7 +20,7 @@ use alloc::vec::Vec;
 
 use soroban_facade::Val;
 
-use crate::stored::{address, field, fields, u32_of, u64_of, vec_of};
+use crate::stored::{address, fields, u32_of, u64_of, vec_of};
 use crate::xdr::{self, Kind};
 
 /// Why a snapshot or an entry could not be read.
@@ -63,6 +63,28 @@ fn sym(name: &str) -> Val {
 /// The key of a `PersistentMap<u32, _>` entry.
 fn map_key(name: &str, id: u32) -> Val {
     Val::Vec(vec![sym(name), Val::U32(id)])
+}
+
+/// A document's rules as the account stores them (`RuleSet`): the signer
+/// table its stored rules name signers in, and its rule records.
+#[derive(Clone, Copy)]
+pub(crate) struct Rules<'a> {
+    pub(crate) table: &'a Val,
+    pub(crate) records: &'a [Val],
+}
+
+impl<'a> Rules<'a> {
+    /// The tuple of a table and a vector of records.
+    fn of(v: &'a Val) -> Option<Rules<'a>> {
+        let [table, records] = vec_of(v)? else {
+            return None;
+        };
+        vec_of(table)?;
+        Some(Rules {
+            table,
+            records: vec_of(records)?,
+        })
+    }
 }
 
 impl Snapshot {
@@ -177,9 +199,10 @@ impl Snapshot {
         Ok(typed(self.instance("GrantGeneration"), u64_of)?.unwrap_or(0))
     }
 
-    /// `RuleSet`: the account document's rule records, as host values.
-    pub(crate) fn rule_set(&self) -> Result<Option<&[Val]>, Unreadable> {
-        typed(self.persistent(&sym("RuleSet")), vec_of)
+    /// `RuleSet`: the account document's rules (the tuple of their signer
+    /// table and records), as host values.
+    pub(crate) fn rule_set(&self) -> Result<Option<Rules<'_>>, Unreadable> {
+        typed(self.persistent(&sym("RuleSet")), Rules::of)
     }
 
     /// Whether rule `id` has a `GrantTags` entry.
@@ -192,10 +215,14 @@ impl Snapshot {
         typed(self.persistent(&map_key("GrantTags", id)), u32_of)
     }
 
-    /// `Grants(grant)`'s rule records, as host values.
-    pub(crate) fn grant_rules(&self, grant: u32) -> Result<Option<&[Val]>, Unreadable> {
+    /// `Grants(grant)`'s rules (the fourth field of the tuple a
+    /// `StoredGrant` is stored as), as host values.
+    pub(crate) fn grant_rules(&self, grant: u32) -> Result<Option<Rules<'_>>, Unreadable> {
         typed(self.persistent(&map_key("Grants", grant)), |v| {
-            vec_of(field(v, b"rules")?)
+            let [_gen, _hash, _pos, rules, _ids, _names] = vec_of(v)? else {
+                return None;
+            };
+            Rules::of(rules)
         })
     }
 

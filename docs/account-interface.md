@@ -135,8 +135,12 @@ the owner chooses (one per app grant, say), and returns its `doc_hash`
 - It refuses (`WipedCredential`) a credential a grant document named before
   the last completed recovery, and records every credential it names under
   the current grant generation.
-- The document is compiled under the same caps as any document and reconciled
-  against this grant's records only. Every rule it installs is tagged with
+- The document is compiled under the grant-document caps (15 signers, 50
+  rules, 8 192 canonical bytes: the compiler's `grant_limits`, larger than
+  an account document's `limits`; and a record of at most 49 152 bytes, the
+  entry this grant's rules are stored in, whose size the compiler computes
+  from the document) and reconciled against this grant's
+  records only. Every rule it installs is tagged with
   the grant, and its stored rule carries the current grant generation, so
   applying over a wiped grant revives it with the new rules.
 - It keeps the document's signer ids and each signer's `verifier-name`, not
@@ -190,13 +194,17 @@ as the account (spec §15).
   account document, read at one ledger, with the revision it belongs to.
   Grant documents' rules are not in it; `grants` and `grant` list them.
 - **`capabilities`.** See `AccountCapabilities` below.
-- **`installed_rules`, `rule_set`.** `installed_rules` is every context rule
-  the account document installed, with its id; `apply_doc` matches the
-  document's rules against these. `rule_set` is aligned with it: entry `i` is
-  the rule-eval rule installed rule `i` enforces, and what `__check_auth`
-  evaluates. The account stores each rule once, as one record holding its
-  id, name and policies and its rule-eval rule; a rule's scope, signers and
-  last ledger in `installed_rules` are its rule-eval rule's.
+- **`installed_rules`, `rule_set`, `rule_signers`.** `installed_rules` is
+  every context rule the account document installed, with its id;
+  `apply_doc` matches the document's rules against these. `rule_set` is
+  aligned with it: entry `i` is the rule-eval rule installed rule `i`
+  enforces, and what `__check_auth` evaluates. The account stores each
+  document's rules once: a signer table (`rule_signers`), holding each
+  signer the rules name once, in the order they first name it, and per rule
+  one record holding its id, name and policies and its rule-eval rule,
+  which names its signers by position in the table (`StoredRule` below). A
+  rule's scope, signers and last ledger in `installed_rules` are its
+  rule-eval rule's.
 - **`get_context_rules_count`, `get_context_rule`.** The account's rules in
   OZ's `ContextRule` shape, read from its records (the account document's and
   every grant's). A rule keeps its id while it is edited in place and gets a
@@ -212,15 +220,16 @@ as the account (spec §15).
 - **`credential_generation`.** The last grant generation a grant document
   named this credential fingerprint under. Once `grant_generation` is past
   it, no document may name the credential (spec §7.6).
-- **`grant`, `grant_rule_set`, `grant_signer_ids`, `grant_verifier_names`.**
-  A grant document's record, its rule-eval rules (aligned with the record's
-  rules, each carrying the grant generation it was applied under; empty for
-  an unknown id), its signer ids in declaration order, and each signer's
-  `verifier-name` aligned with them (empty where a signer has none, and no
-  entries when no signer has one). The account does not store the
-  document's text: the four give it back, since the account applies a grant
-  document only in normal form. perch-js's `rebuildGrantDoc` (and
-  `readGrantDoc`, which reads the four) rebuilds it and trusts it only once
+- **`grant`, `grant_rule_set`, `grant_signers`, `grant_signer_ids`,
+  `grant_verifier_names`.** A grant document's record, its rule-eval rules
+  (aligned with the record's rules, each carrying the grant generation it
+  was applied under; empty for an unknown id), the signer table they name
+  their signers by position in, its signer ids in declaration order, and
+  each signer's `verifier-name` aligned with them (empty where a signer has
+  none, and no entries when no signer has one). The account does not store
+  the document's text: the five give it back, since the account applies a
+  grant document only in normal form. perch-js's `rebuildGrantDoc` (and
+  `readGrantDoc`, which reads the five) rebuilds it and trusts it only once
   its `sha256` is the record's `doc_hash`. Rule names repeat across grants,
   so a wallet selects a grant rule by `(grant, name)`.
 - **`grants(start, count)`.** The grant ids at positions
@@ -293,6 +302,8 @@ recorded when a controller is adopted, and passed back as
   - `interface_version` is `INTERFACE_VERSION`. Version 2 adds grant
     documents; since then `configuration` and `installed_rules` cover the
     account document only. Version 3 adds exact `auth-root` conditions.
+    Version 4 adds the signer-table views `rule_signers` and
+    `grant_signers`.
   - `doc_identity` is `canon_v1`: the applied `doc_hash` is `sha256` of the
     CANON v1 canonical bytes.
   - `auth_digest` is `addr_oz_v1`: a signer signs OZ's
@@ -306,8 +317,23 @@ recorded when a controller is adopted, and passed back as
     transaction) and `grant_v1` (grant documents through `apply_grant`,
     `remove_grant`, and `gc_grant`, spec §7.6).
   - `snapshot_version` is `SNAPSHOT_VERSION`, the layout of
-    `AccountConfiguration`. Version 2 adds explicit optional root metadata
+    `AccountConfiguration` and of the stored rules `rule_set` and
+    `grant_rule_set` return. Version 2 adds explicit optional root metadata
     to every installed rule; a missing field is only valid in snapshot 1.
+    Version 3 stores rules as `StoredRule` below; `AccountConfiguration` is
+    as in version 2.
+- **`StoredRule`** is the tuple of a rule's contract, functions, conditions,
+  signers (positions in its document's signer table, `rule_signers` or the
+  grant's `grant_signers`), threshold, cap (zero or one `StoredCap`, the
+  tuple of its limit, period and amount argument), last ledger, grant
+  generation, and exact root (zero or one `StoredAuthRoot`). A `string-in`
+  condition keeps its values as plain strings (`ArgIn(u32, Vec<String>)`).
+  Tuples, plain strings and one signer table per document keep a grant's
+  record small: its entry is what bounds a grant document
+  (`docs/recovery/budgets.md`, "The stored bound"). `__check_auth` reads
+  only this layout. No reader remains for the named-field map earlier
+  builds stored, since no account storing it shipped; the testnet preview
+  accounts are recreated rather than migrated.
 - **`InstalledRule.recovery`** marks the zero-signer recovery rule. Document
   rules are matched by name and the recovery rule by this flag, so a document
   rule that happens to be named `recovery` is never confused with it.

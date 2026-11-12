@@ -552,6 +552,13 @@ fn stored(w: &DeltaWorld, name: &str) -> perch_smart_account::StoredRule {
     client.rule_set().get(at as u32).unwrap()
 }
 
+/// The signers of the stored rule of the rule installed as `name`, read
+/// from the account's signer table.
+fn stored_signers(w: &DeltaWorld, name: &str) -> soroban_sdk::Vec<perch_account_types::Signer> {
+    let table = perch_account::PerchAccountClient::new(&w.env, &w.delta).rule_signers();
+    stored(w, name).signers_in(&w.env, &table).unwrap()
+}
+
 #[test]
 fn a_rule_keeping_its_name_with_new_functions_changes_only_its_stored_rule() {
     let mut a = rule("r1", Some(0), &[0]);
@@ -561,6 +568,7 @@ fn a_rule_keeping_its_name_with_new_functions_changes_only_its_stored_rule() {
     let w = DeltaWorld::new();
     apply_both(&w, &doc(delegated(1), std::vec![admin(&[0]), a]));
     let old = stored(&w, "r1");
+    let old_signers = stored_signers(&w, "r1");
     let before = w.installed(&w.delta);
     let (w, events, _, after) = transition_after(
         &w,
@@ -572,8 +580,8 @@ fn a_rule_keeping_its_name_with_new_functions_changes_only_its_stored_rule() {
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
     assert!(names(&events, &w.delta).is_empty());
     let new = stored(&w, "r1");
-    assert_ne!(new.functions, old.functions);
-    assert_eq!((new.signers, new.threshold), (old.signers, old.threshold));
+    assert_ne!(new.1, old.1);
+    assert_eq!((stored_signers(&w, "r1"), new.4), (old_signers, old.4));
 }
 
 #[test]
@@ -609,8 +617,8 @@ fn new_cap_parameters_change_only_that_rules_stored_cap() {
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
     assert!(names(&events, &w.delta).is_empty());
-    let cap = stored(&w, "r1").cap.get(0).unwrap();
-    assert_eq!((cap.limit, cap.period), (2_000, 100));
+    let cap = stored(&w, "r1").cap().get(0).unwrap();
+    assert_eq!((cap.0, cap.1), (2_000, 100));
 }
 
 #[test]

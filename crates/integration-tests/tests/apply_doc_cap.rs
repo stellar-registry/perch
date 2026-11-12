@@ -71,9 +71,9 @@ fn apply_doc_stores_the_cap_in_the_rule_eval_rule() {
     assert_eq!(capped.name, SString::from_str(&w.env, "capped"));
     assert_eq!(capped.policies.len(), 0);
     let stored = client.rule_set().get_unchecked(1);
-    let cap = stored.cap.get(0).expect("a cap");
-    assert_eq!((cap.limit, cap.period, cap.amount_arg), (10, 1000, 2));
-    assert_eq!(stored.conds.len(), 1);
+    let cap = stored.cap().get(0).expect("a cap");
+    assert_eq!((cap.0, cap.1, cap.2), (10, 1000, 2));
+    assert_eq!(stored.2.len(), 1);
 }
 
 #[test]

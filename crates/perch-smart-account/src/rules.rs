@@ -57,9 +57,13 @@ pub const MAX_EXTERNAL_KEY_SIZE: u32 = 256;
 
 // The compiler refuses what these limits would, so a document that compiles
 // also installs: a rule name within the name limit, a rule naming every
-// declared signer within the signer limit, and keys within the key limit.
+// declared signer within the signer limit (an account document's or a grant
+// document's), and keys within the key limit. A document rule carries no
+// policy (`document_rule`), so only the recovery rule's one counts against
+// the policy limit.
 const _: () = assert!(perch_doc_compiler::MAX_RULE_NAME_BYTES == MAX_NAME_SIZE);
 const _: () = assert!(perch_doc_compiler::MAX_DOC_SIGNERS <= MAX_SIGNERS);
+const _: () = assert!(perch_doc_compiler::MAX_GRANT_SIGNERS <= MAX_SIGNERS);
 
 /// OZ's codes for the install-time refusals (`stellar-accounts`'
 /// `SmartAccountError`), raised unchanged.
@@ -109,51 +113,97 @@ pub struct DeltaSummary {
     pub policies_removed: u32,
 }
 
-/// One installed rule as the account stores it: its id, name and policies,
-/// and the rule-eval rule that decides what it allows.
+/// One installed rule as the account stores it, a tuple: its id, name and
+/// policies, and the rule-eval rule that decides what it allows, whose
+/// signers are positions in the signer table of the records holding it
+/// ([`RuleSet`], a grant's record).
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RuleRecord {
-    pub id: u32,
-    pub name: String,
-    pub policies: Vec<InstalledPolicy>,
-    pub rule: StoredRule,
-}
+pub struct RuleRecord(
+    pub u32,
+    pub String,
+    pub Vec<InstalledPolicy>,
+    pub StoredRule,
+);
 
 impl RuleRecord {
-    /// The record as the views give it: the stored rule's contract, last
+    /// The rule id.
+    #[must_use]
+    pub fn id(&self) -> u32 {
+        self.0
+    }
+
+    /// The rule's stored rule-eval rule.
+    #[must_use]
+    pub fn rule(&self) -> StoredRule {
+        self.3.clone()
+    }
+
+    /// The record as the views give it, its signers read from `signers`, the
+    /// table of the records holding it: the stored rule's contract, last
     /// ledger and signers, and `recovery` whether it is the recovery rule.
-    pub(crate) fn installed(&self, recovery: bool) -> InstalledRule {
+    pub(crate) fn installed(
+        &self,
+        e: &Env,
+        signers: &Vec<Signer>,
+        recovery: bool,
+    ) -> InstalledRule {
         InstalledRule {
-            id: self.id,
+            id: self.0,
             recovery,
-            name: self.name.clone(),
-            context_type: ContextRuleType::CallContract(self.rule.contract.clone()),
-            valid_until: self.rule.valid_until,
-            auth_root: self.rule.auth_root.clone(),
-            signers: self.rule.signers.clone(),
-            policies: self.policies.clone(),
+            name: self.1.clone(),
+            context_type: ContextRuleType::CallContract(self.3.contract()),
+            valid_until: self.3.valid_until(),
+            auth_root: self.3.auth_root(),
+            // The account writes a record's positions with its table.
+            signers: self
+                .3
+                .signers_in(e, signers)
+                .expect("a stored rule's positions are in its table"),
+            policies: self.2.clone(),
         }
     }
 }
 
-/// `records` as [`InstalledRule`]s, the one whose id is `recovery` the
-/// recovery rule: each record read once, into the reconcile's working list.
-pub(crate) fn installed(records: &Vec<RuleRecord>, recovery: Option<u32>) -> RuleList {
+/// A document's rules as the account stores them, a tuple: the signer table
+/// their stored rules name signers in, each signer once, and their records.
+/// The account document's rules are one (`rule_set`); a grant's record
+/// holds its own table and records the same way.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RuleSet(pub Vec<Signer>, pub Vec<RuleRecord>);
+
+impl RuleSet {
+    /// No rules.
+    pub(crate) fn empty(e: &Env) -> RuleSet {
+        RuleSet(Vec::new(e), Vec::new(e))
+    }
+}
+
+/// `records`, their signers read from `signers`, as [`InstalledRule`]s, the
+/// one whose id is `recovery` the recovery rule: each record read once, into
+/// the reconcile's working list.
+pub(crate) fn installed(
+    e: &Env,
+    signers: &Vec<Signer>,
+    records: &Vec<RuleRecord>,
+    recovery: Option<u32>,
+) -> RuleList {
     records
         .iter()
-        .map(|r| r.installed(recovery == Some(r.id)))
+        .map(|r| r.installed(e, signers, recovery == Some(r.0)))
         .collect()
 }
 
 /// [`installed`] as the views return it.
 pub(crate) fn installed_view(
     e: &Env,
+    signers: &Vec<Signer>,
     records: &Vec<RuleRecord>,
     recovery: Option<u32>,
 ) -> Vec<InstalledRule> {
     let mut out = Vec::new(e);
-    for r in installed(records, recovery) {
+    for r in installed(e, signers, records, recovery) {
         out.push_back(r);
     }
     out
@@ -165,12 +215,12 @@ pub(crate) fn installed_view(
 pub(crate) fn records(e: &Env, next: &[InstalledRule], rules: &Vec<StoredRule>) -> Vec<RuleRecord> {
     let mut out = Vec::new(e);
     for (i, r) in next.iter().enumerate() {
-        out.push_back(RuleRecord {
-            id: r.id,
-            name: r.name.clone(),
-            policies: r.policies.clone(),
-            rule: rules.get_unchecked(i as u32),
-        });
+        out.push_back(RuleRecord(
+            r.id,
+            r.name.clone(),
+            r.policies.clone(),
+            rules.get_unchecked(i as u32),
+        ));
     }
     out
 }

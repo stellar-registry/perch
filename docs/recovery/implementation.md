@@ -15,7 +15,7 @@ it relies on (`crates/perch-smart-account`).
 | §3.4 enrollment ids, §8 revocation, §9 freeze, §12 upgrades, §15 reserved names, `execute`, `applied_doc` | `crates/perch-smart-account/src/lib.rs` | `recovery.rs`, `account_capabilities.rs` |
 | §7 permitted changes | `perch_ir::recovery::derive_target`; `PerchDocCompiler::derive_target` | `crates/perch-ir/tests/recovery.rs`, `recovery.rs` |
 | §7.5 delta apply | `crates/perch-smart-account/src/rules.rs` (`desired`, `reconcile`) | [below](#delta-apply-tests) |
-| §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}` | `doc_caps.rs`; `release_stack.rs` `worst_case_*` |
+| §7.5 document caps | `perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES, MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}`; a grant document's `MAX_GRANT_{SIGNERS,RULES,CANONICAL_BYTES,STORED_BYTES}` (`limits_of`, `grant_stored_bytes`) | `doc_caps.rs`; `grant_docs.rs`; `grant_stored_size.rs`; `release_stack.rs` `worst_case_*` |
 | §7.6 grant documents | `crates/perch-smart-account/src/lib.rs` (`apply_grant_doc`, `check_grant`, `check_normal`, `drop_grant`, the grant index, the excluded-contract gate in `check_auth`, `complete_recovery`), `gate.rs` (the generation check, `StaleGrant`) | `grant_docs.rs`; `release_stack.rs` `docsplit_*` and the `worst_case_*` compromise flows ([`budgets.md`](budgets.md#grant-documents)) |
 | §13 ZK adapter, §14 membership pool | `crates/perch-zk-adapter`, `crates/perch-zk-pool` | [`docs/zk/README.md`](../zk/README.md#what-is-tested-and-how) |
 | §15 revision binding and the consumer interface: the `revision`/`configuration`/`document`/`capabilities` views, `apply_doc`'s `expected_revision`; the compiler's `limits`/`capabilities` | `PerchSmartAccount::{apply_doc, revision, configuration, document, capabilities}`, `apply` and `execute_upgrade` (`advance_revision`); `PerchDocCompiler::{limits, capabilities}` | `revision.rs`; `auth_vectors.rs` (signing digest and `AuthPayload` vectors for perch-js) |
@@ -130,8 +130,12 @@ allows. The rule's context type is `CallContract` of that rule's contract,
 its `valid_until` and signers are that rule's, and it is the recovery rule
 when its id is the instance's `RecoveryRule`, so each rule is stored once;
 the views read records as the `InstalledRule`s they were (`rules::installed`).
-The account document's records are one persistent entry (`RuleSet`), and each
-grant document's are in its grant record. Ids come from
+A document's records sit beside one signer table (`rules::RuleSet`): each
+signer its rules name, once, in the order they first name it, and a stored
+rule names its signers by position in it, so a signer several rules name is
+stored once. Records and stored rules are tuples (`StoredRule`,
+`account-interface.md` "Types"). The account document's are one persistent
+entry (`RuleSet`), and each grant document's are in its grant record. Ids come from
 the account's counter (`NextRuleId`, instance storage, `rules::allocate`),
 which never gives an id twice, so a spending record or grant tag keyed by
 id never outlives its rule into another. `get_context_rule(id)` and
@@ -171,7 +175,11 @@ instead of its text, and `perch_testkit::rebuild` and perch-js's
 `check_auth` decides an authorization with rule-eval's `check_auth` on the
 stored rules of the rules the payload chooses: a rule id is the stored rule
 its record holds, among the admin records or, when a grant tag names its
-grant, that grant's. It runs at the current ledger and grant generation,
+grant, that grant's, its signers read from that document's signer table
+(`gate::stored_rule`; the admin table converted once per authorization, and
+only when an admin rule is chosen). `perch_rule_eval::mirror::rule` reads
+a stored rule only in its tuple layout and refuses a position past the
+table. It runs at the current ledger and grant generation,
 under every signer the payload names, with the account's own spending
 records, and refuses a chosen grant rule of another generation (a wiped
 grant's) with `StaleGrant` and anything else it does not accept with
@@ -254,8 +262,9 @@ limits (`rules::check`): at most 15 signers and 5 policies, a name of at
 most 20 bytes, external keys of at most 256 bytes, and a signer or a
 policy; each refusal has OZ's code (3010, 3011, 3015, 3013, 3004). A
 compiled document always meets them: the compiler's caps are asserted
-within them at build time (`MAX_DOC_SIGNERS`, `MAX_RULE_NAME_BYTES`) and the
-IR caps keys at 256 bytes. The constructor installs signers no compiler has
+within them at build time (`MAX_DOC_SIGNERS`, `MAX_GRANT_SIGNERS`,
+`MAX_RULE_NAME_BYTES`), a document rule carries no policy (only the
+recovery rule has one), and the IR caps keys at 256 bytes. The constructor installs signers no compiler has
 seen, so it also refuses two that are one key (3007, `auth::check_distinct`):
 two delegated signers with one address, or external signers whose verifier's
 `batch_canonicalize_key` maps them to the same bytes, each verifier asked

@@ -149,10 +149,10 @@ pub fn authorize_completion(
 /// The account's record of its recovery rule, `recovery`. The records'
 /// entry is extended, as OZ extends the rule entry it reads.
 fn record(e: &Env, recovery: u32) -> Option<InstalledRule> {
-    let records = PerchStorage::get_rule_set(e)?;
+    let set = PerchStorage::get_rule_set(e)?;
     PerchStorage::extend_rule_set_ttl(e, SMART_ACCOUNT_TTL_THRESHOLD, SMART_ACCOUNT_EXTEND_AMOUNT);
-    records
+    set.1
         .iter()
-        .find(|r| r.id == recovery)
-        .map(|r| r.installed(true))
+        .find(|r| r.id() == recovery)
+        .map(|r| r.installed(e, &set.0, true))
 }

@@ -56,8 +56,10 @@ Each limit the schema encodes is taken from the one place that declares it:
   format/range rules. `MAX_SIGNER_KEY_LEN` and `ACK_SENTINEL` directly; the
   strkey/hex shapes, the `m <= N` / guardian `quorum <= count` ranges, and the
   `limit` positivity/overflow shape behaviourally.
-- `perch-doc-compiler`: the per-document caps `MAX_DOC_SIGNERS`,
-  `MAX_DOC_RULES`, and `MAX_RULE_NAME_BYTES`, which the generator reads directly
+- `perch-doc-compiler`: the per-document caps `MAX_DOC_SIGNERS` and
+  `MAX_DOC_RULES` (an account document's), `MAX_GRANT_SIGNERS` and
+  `MAX_GRANT_RULES` (a grant document's), and `MAX_RULE_NAME_BYTES`, which the
+  generator reads directly
   (plain `pub const`s; see "No contract-Wasm footprint").
 
 Two tests keep schema and source in agreement:
@@ -94,12 +96,17 @@ Structural shape and the representable data constraints:
   (`not-after-ledger`, `m`, `period-ledgers`, `quorum`, the recovery
   `*-ledgers` and `max-cancels`); the referenced-count bounds `m <= N`
   (threshold) and guardian `quorum <= guardian count`, encoded as an `allOf`
-  `if`/`then` chain enumerated up to `MAX_DOC_SIGNERS`;
+  `if`/`then` chain enumerated up to the larger signer cap (`m`) and
+  `MAX_DOC_SIGNERS` (`quorum`);
 - collections: non-empty and no-duplicate lists where perch-ir requires
   them (`functions`, `string-in` values, principal/guardian/replaceable lists);
 - per-document caps the compiler enforces (`perch-doc-compiler`): at most
-  `MAX_DOC_SIGNERS` signers and `MAX_DOC_RULES` rules (`maxItems`), and a rule
-  `name` at most `MAX_RULE_NAME_BYTES` bytes. Because JSON Schema's `maxLength`
+  `MAX_DOC_SIGNERS` signers and `MAX_DOC_RULES` rules in an account document
+  (one with a `recovery` member or a self-admin rule) and `MAX_GRANT_SIGNERS`
+  and `MAX_GRANT_RULES` in a grant document (`maxItems`, the larger of each
+  pair at the top level and the document's own under a top-level
+  `if`/`then`/`else` on its kind), and a rule `name` at most
+  `MAX_RULE_NAME_BYTES` bytes. Because JSON Schema's `maxLength`
   counts code points, not bytes, the rule name is also constrained to ASCII so
   one character is one byte. This is the one place the schema is stricter
   than the compiler: it rejects a non-ASCII name within the byte cap, which
@@ -143,9 +150,12 @@ validation as a substitute for them:
 - **Aggregate byte budget.** The compiler's `max_canonical_bytes` is the size of
   the canonically encoded document, not a property of the parsed JSON tree,
   so no schema keyword can express it. It lives in
-  `perch-doc-compiler::doc_limits()` and is mirrored client-side by perch-js's
-  `checkLimits`. The schema encodes the other per-document caps
-  (`max_signers`, `max_rules`, `max_rule_name_bytes`).
+  `perch-doc-compiler::doc_limits()` (an account document's) and
+  `grant_limits()` (a grant document's) and is mirrored client-side by
+  perch-js's `checkLimits`. The schema encodes the other per-document caps
+  (`max_signers`, `max_rules`, `max_rule_name_bytes`). Likewise the size of
+  the ledger entry a grant document makes its account store
+  (`MAX_GRANT_STORED_BYTES`), which the compiler computes from the document.
 - **Canonical spelling (CANON v2).** The schema accepts everything today's
   parser accepts, including non-canonical spellings of a valid value: a
   `cap.limit` with leading zeros or a leading `+` (`007`, `+5`), and uppercase

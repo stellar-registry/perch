@@ -2,9 +2,11 @@
 //! its host value.
 //!
 //! A [`StoredRule`](crate::StoredRule) or [`StoredRecord`](crate::StoredRecord)
-//! is a host value of its `#[contracttype]` encoding: a struct is a map of
-//! its fields by name, in the host's key order, and an enum constructor a
-//! vector of its name and fields. [`rule`] and [`record`] read the host's
+//! is a host value of its `#[contracttype]` encoding: a struct with named
+//! fields is a map of its fields by name, in the host's key order, a tuple
+//! struct a vector of its fields in order, and an enum constructor a vector
+//! of its name and fields. A stored rule's signers are positions in the
+//! signer table of the record holding it, which [`rule`] is given. [`rule`] and [`record`] read the host's
 //! `ScVal` XDR of one (`SdkHost::from_sdk` reads the same bytes) in one pass.
 //! An address is the `ScAddress` XDR inside its value, which is what
 //! soroban-facade's `xdr::address_xdr` gives for the address it reads there,
@@ -40,11 +42,13 @@ const SC_ADDRESS_CONTRACT: u32 = 1;
 const SC_ADDRESS_MUXED_ACCOUNT: u32 = 2;
 const PUBLIC_KEY_ED25519: u32 = 0;
 
-/// The rule the `StoredRule` whose host value is `v` mirrors, or `None` when
-/// `v` is no such value, or holds more than one cap.
+/// The rule the `StoredRule` whose host value is `v` mirrors, its signers
+/// read from `signers`, the signer table of the record holding it; or
+/// `None` when `v` is no such value, holds more than one cap or root, or
+/// names a position past the table.
 #[must_use]
-pub fn rule(e: &Env, v: Val) -> Option<Rule> {
-    whole(e, v, |x| x.rule())
+pub fn rule(e: &Env, v: Val, signers: &[Signer]) -> Option<Rule> {
+    whole(e, v, |x| x.rule(signers))
 }
 
 /// The record the `StoredRecord` whose host value is `v` mirrors, or `None`
@@ -188,67 +192,36 @@ impl<'a> Xdr<'a> {
         Some(self.bytes.get(start..self.pos)?.to_vec())
     }
 
-    /// A `StoredRule`.
-    fn rule(&mut self) -> Option<Rule> {
-        // Only the exact eight-key layout (no `auth_root` key) has no root.
-        // The nine-key layout names `auth_root` explicitly; unknown or missing
-        // keys, malformed tuples and trailing bytes are never ignored.
-        let fields = self.len(SCV_MAP)?;
-        let auth_root = match fields {
-            8 => None,
-            9 => {
-                self.key(b"auth_root")?;
-                let tag =
-                    u32::from_be_bytes(self.bytes.get(self.pos..self.pos + 4)?.try_into().ok()?);
-                if tag == SCV_VOID {
-                    self.tag(SCV_VOID)?;
-                    None
-                } else {
-                    if self.len(SCV_VEC)? != 1 || self.len(SCV_MAP)? != 2 {
-                        return None;
-                    }
-                    self.key(b"contract")?;
-                    let contract = self.address()?;
-                    // Only contract addresses can be an invocation root.
-                    if contract.get(..4)? != SC_ADDRESS_CONTRACT.to_be_bytes() {
-                        return None;
-                    }
-                    self.key(b"function")?;
-                    let function = self.opaque(SCV_SYMBOL)?.to_vec();
-                    if function.is_empty() || function.len() > 32 {
-                        return None;
-                    }
-                    Some(AuthRoot { contract, function })
-                }
-            }
-            _ => return None,
-        };
-        self.key(b"cap")?;
+    /// A `StoredRule`: the tuple of its nine fields, its signers positions
+    /// in `table`. Any other layout, a malformed field, or a trailing byte is
+    /// refused.
+    fn rule(&mut self, table: &[Signer]) -> Option<Rule> {
+        if self.len(SCV_VEC)? != 9 {
+            return None;
+        }
+        let contract = self.address()?;
+        let functions = self.functions()?;
+        let mut conds = Vec::new();
+        for _ in 0..self.len(SCV_VEC)? {
+            conds.push(self.cond()?);
+        }
+        let mut signers = Vec::new();
+        for _ in 0..self.len(SCV_VEC)? {
+            let at = usize::try_from(self.u32_val()?).ok()?;
+            signers.push(match table.get(at)? {
+                Signer::Delegated(a) => Signer::Delegated(a.clone()),
+                Signer::External(v, k) => Signer::External(v.clone(), k.clone()),
+            });
+        }
+        let threshold = self.u32_val()?;
         let cap = match self.len(SCV_VEC)? {
             0 => None,
             1 => Some(self.cap()?),
             _ => return None,
         };
-        self.key(b"conds")?;
-        let mut conds = Vec::new();
-        for _ in 0..self.len(SCV_VEC)? {
-            conds.push(self.cond()?);
-        }
-        self.key(b"contract")?;
-        let contract = self.address()?;
-        self.key(b"functions")?;
-        let functions = self.functions()?;
-        self.key(b"generation")?;
-        let generation = self.opt_u64()?;
-        self.key(b"signers")?;
-        let mut signers = Vec::new();
-        for _ in 0..self.len(SCV_VEC)? {
-            signers.push(self.signer()?);
-        }
-        self.key(b"threshold")?;
-        let threshold = self.u32_val()?;
-        self.key(b"valid_until")?;
         let valid_until = self.opt_u32()?;
+        let generation = self.opt_u64()?;
+        let auth_root = self.auth_root()?;
         Some(Rule {
             auth_root,
             contract,
@@ -260,6 +233,31 @@ impl<'a> Xdr<'a> {
             valid_until,
             generation,
         })
+    }
+
+    /// A rule's `Option<Vec<StoredAuthRoot>>`: `Void`, or one root, a map of
+    /// a contract address and a function name of 1 to 32 bytes.
+    fn auth_root(&mut self) -> Option<Option<AuthRoot>> {
+        let tag = u32::from_be_bytes(self.bytes.get(self.pos..self.pos + 4)?.try_into().ok()?);
+        if tag == SCV_VOID {
+            self.tag(SCV_VOID)?;
+            return Some(None);
+        }
+        if self.len(SCV_VEC)? != 1 || self.len(SCV_MAP)? != 2 {
+            return None;
+        }
+        self.key(b"contract")?;
+        let contract = self.address()?;
+        // Only contract addresses can be an invocation root.
+        if contract.get(..4)? != SC_ADDRESS_CONTRACT.to_be_bytes() {
+            return None;
+        }
+        self.key(b"function")?;
+        let function = self.opaque(SCV_SYMBOL)?.to_vec();
+        if function.is_empty() || function.len() > 32 {
+            return None;
+        }
+        Some(Some(AuthRoot { contract, function }))
     }
 
     /// A `StoredRecord`.
@@ -284,17 +282,14 @@ impl<'a> Xdr<'a> {
         Some(SpendRecord { history, total })
     }
 
-    /// A `StoredCap`.
+    /// A `StoredCap`: the tuple of its limit, period and amount argument.
     fn cap(&mut self) -> Option<Cap> {
-        if self.len(SCV_MAP)? != 3 {
+        if self.len(SCV_VEC)? != 3 {
             return None;
         }
-        self.key(b"amount_arg")?;
-        let amount_arg = self.u32_val()?;
-        self.key(b"limit")?;
         let limit = self.i128_val()?;
-        self.key(b"period")?;
         let period = self.u32_val()?;
+        let amount_arg = self.u32_val()?;
         Some(Cap {
             limit,
             period,
@@ -328,7 +323,7 @@ impl<'a> Xdr<'a> {
             b"ArgIn" => {
                 let mut vs = Vec::new();
                 for _ in 0..self.len(SCV_VEC)? {
-                    vs.push(self.val()?);
+                    vs.push(rule_eval::Val::String(self.opaque(SCV_STRING)?.to_vec()));
                 }
                 Cond::ArgIn(i, vs)
             }
@@ -369,17 +364,5 @@ impl<'a> Xdr<'a> {
                 }
             }
         })
-    }
-
-    /// A `perch_account_types::Signer`.
-    fn signer(&mut self) -> Option<Signer> {
-        match self.variant()? {
-            (b"Delegated", 1) => Some(Signer::Delegated(self.address()?)),
-            (b"External", 2) => {
-                let verifier = self.address()?;
-                Some(Signer::External(verifier, self.opaque(SCV_BYTES)?.to_vec()))
-            }
-            _ => None,
-        }
     }
 }

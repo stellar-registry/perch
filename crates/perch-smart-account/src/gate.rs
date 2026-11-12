@@ -47,15 +47,16 @@ use perch_rule_eval::{convert, mirror, StoredCap, StoredRecord};
 use soroban_sdk::auth::Context;
 use soroban_sdk::crypto::Hash;
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{symbol_short, Env, Map, Symbol, TryFromVal, Val, Vec as SVec};
+use soroban_sdk::{Env, TryFromVal, Val, Vec as SVec};
 
-use perch_account_types::{AuthPayload, SmartAccountError};
+use perch_account_types::{AuthPayload, Signer, SmartAccountError};
 
 use crate::auth::{
     authenticate, SMART_ACCOUNT_EXTEND_AMOUNT as EXTEND, SMART_ACCOUNT_TTL_THRESHOLD as THRESHOLD,
 };
 use crate::{
-    extend_persistent, grant_generation, PerchAuthError, PerchStorage, RuleRecord, OWNER_FNS,
+    extend_persistent, grant_generation, PerchAuthError, PerchStorage, RuleRecord, RuleSet,
+    OWNER_FNS,
 };
 
 fn refused() -> soroban_sdk::Error {
@@ -64,19 +65,23 @@ fn refused() -> soroban_sdk::Error {
 
 /// Rule-eval's verdict on the authorization, once every payload signer
 /// has authenticated, storing every capped chosen rule's record when it
-/// accepts (module docs). `admin` is the account document's records,
+/// accepts (module docs). `admin` is the account document's rules,
 /// `recovery` the recovery rule's id, and `bound` the account-bound
 /// signature payload.
 pub(crate) fn authorize(
     e: &Env,
-    admin: &SVec<RuleRecord>,
+    admin: &RuleSet,
     recovery: Option<u32>,
     bound: &Hash<32>,
     payload: &AuthPayload,
     contexts: &SVec<Context>,
 ) -> Result<(), soroban_sdk::Error> {
     PerchStorage::extend_rule_set_ttl(e, THRESHOLD, EXTEND);
-    let admin = admin.to_vals();
+    let mut admin = Rules {
+        signers: &admin.0,
+        records: admin.1.to_vals(),
+        table: None,
+    };
     let mut ids: Vec<u32> = Vec::new();
     let mut rules: Vec<rule_eval::Rule> = Vec::new();
     let mut records: Vec<rule_eval::SpendRecord> = Vec::new();
@@ -88,8 +93,9 @@ pub(crate) fn authorize(
         let j = match ids.iter().position(|x| *x == id) {
             Some(j) => j,
             None => {
-                let v = stored_rule(e, id, &admin).ok_or(SmartAccountError::ContextRuleNotFound)?;
-                let rule = mirror::rule(e, v).ok_or_else(refused)?;
+                let rule = stored_rule(e, id, &mut admin)
+                    .ok_or(SmartAccountError::ContextRuleNotFound)?
+                    .ok_or_else(refused)?;
                 let record = match rule.cap {
                     Some(_) => record(e, id),
                     None => Some(rule_eval::empty_record()),
@@ -166,28 +172,44 @@ fn same(a: &rule_eval::SpendRecord, b: &rule_eval::SpendRecord) -> bool {
             .all(|(x, y)| x.ledger == y.ledger && x.amount == y.amount)
 }
 
-/// The host value of the stored rule rule `id` enforces: the one its record
-/// holds, among its grant's records when a grant document installed it,
-/// otherwise among `admin`. A grant's record is extended as it is read, as
-/// the records are what authorizes.
-fn stored_rule(e: &Env, id: u32, admin: &SVec<Val>) -> Option<Val> {
+/// The account document's rules as `authorize` reads them: their signer
+/// table, their records' host values, and the table in rule-eval's form
+/// once a rule of theirs is read.
+struct Rules<'a> {
+    signers: &'a SVec<Signer>,
+    records: SVec<Val>,
+    table: Option<Vec<rule_eval::Signer>>,
+}
+
+/// The rule rule `id` enforces, read from its record (`None` when it has
+/// none) by `mirror::rule` with its records' signer table (`Some(None)` when
+/// that refuses it): among its grant's records when a grant document
+/// installed it, otherwise among `admin`. A grant's record is extended as it
+/// is read, as the records are what authorizes.
+fn stored_rule(e: &Env, id: u32, admin: &mut Rules) -> Option<Option<rule_eval::Rule>> {
     if let Some(grant) = PerchStorage::get_grant_tags(e, &id) {
         let record = PerchStorage::get_grants(e, &grant)?;
         PerchStorage::extend_grants_ttl(e, &grant, THRESHOLD, EXTEND);
-        return rule_of(e, &record.rules.to_vals(), id);
+        let v = rule_of(e, &record.3 .1.to_vals(), id)?;
+        return Some(convert::signers(e, &record.3 .0).and_then(|t| mirror::rule(e, v, &t)));
     }
-    rule_of(e, admin, id)
+    let v = rule_of(e, &admin.records, id)?;
+    if admin.table.is_none() {
+        admin.table = convert::signers(e, admin.signers);
+    }
+    Some(admin.table.as_ref().and_then(|t| mirror::rule(e, v, t)))
 }
 
-/// The `rule` field of the record of rule `id` among `records`, the host
-/// values of `RuleRecord`s: each is read as a map of its fields, so the
-/// stored rule reaches `mirror::rule` as it is stored.
+/// The stored rule of the record of rule `id` among `records`, the host
+/// values of `RuleRecord`s: each is read as the tuple it is stored as (id,
+/// name, policies, stored rule), so the stored rule reaches `mirror::rule`
+/// as it is stored.
 fn rule_of(e: &Env, records: &SVec<Val>, id: u32) -> Option<Val> {
     for v in records.iter() {
-        let record = Map::<Symbol, Val>::try_from_val(e, &v).ok()?;
-        let this = u32::try_from_val(e, &record.get(symbol_short!("id"))?).ok()?;
+        let record = SVec::<Val>::try_from_val(e, &v).ok()?;
+        let this = u32::try_from_val(e, &record.get(0)?).ok()?;
         if this == id {
-            return record.get(symbol_short!("rule"));
+            return record.get(3);
         }
     }
     None
@@ -218,16 +240,14 @@ pub(crate) fn drop_record(e: &Env, id: u32) {
 /// record of every capped rule of `current` that left, or that kept its id
 /// under another cap. A rule stored without a cap keeps no record.
 pub(crate) fn drop_records(e: &Env, current: &SVec<RuleRecord>, next: &SVec<RuleRecord>) {
-    let next: Vec<(u32, SVec<StoredCap>)> = next.iter().map(|n| (n.id, n.rule.cap)).collect();
+    let next: Vec<(u32, SVec<StoredCap>)> = next.iter().map(|n| (n.id(), n.rule().cap())).collect();
     for c in current.iter() {
-        if c.rule.cap.is_empty() {
+        let cap = c.rule().cap();
+        if cap.is_empty() {
             continue;
         }
-        if !next
-            .iter()
-            .any(|(id, cap)| *id == c.id && *cap == c.rule.cap)
-        {
-            drop_record(e, c.id);
+        if !next.iter().any(|(id, kept)| *id == c.id() && *kept == cap) {
+            drop_record(e, c.id());
         }
     }
 }

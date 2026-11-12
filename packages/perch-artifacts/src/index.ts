@@ -129,10 +129,17 @@ export const circuitManifest: CircuitManifest = json('circuits/manifest.json');
 /** Limits no contract view reports, written from the crates' own constants
  * by crates/integration-tests/tests/artifact_constants.rs. */
 export interface Constants {
+  /** An account document's caps (`MAX_DOC_*`), a grant document's
+   * (`MAX_GRANT_*`), and the rule-name cap both share. */
   doc_compiler: {
     MAX_DOC_SIGNERS: number;
     MAX_DOC_RULES: number;
     MAX_DOC_CANONICAL_BYTES: number;
+    MAX_GRANT_SIGNERS: number;
+    MAX_GRANT_RULES: number;
+    MAX_GRANT_CANONICAL_BYTES: number;
+    /** The largest ledger entry a grant document may make its account store. */
+    MAX_GRANT_STORED_BYTES: number;
     MAX_RULE_NAME_BYTES: number;
   };
   program: { PROGRAM_VERSION: number; MAX_PROGRAM_LEN: number; MAX_STACK_DEPTH: number };

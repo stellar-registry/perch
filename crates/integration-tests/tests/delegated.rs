@@ -105,17 +105,21 @@ fn setup() -> World {
     // is-self), with the DELEGATED account as its signer instead of the
     // fixture's External ci key.
     let signers = vec![&env, Signer::Delegated(delegate.clone())];
-    let rule = ci_publish_rule(&env, &account, &registry, signers, None);
+    let rule = ci_publish_rule(&env, &account, &registry, &signers, None);
     let rule_id = env.as_contract(&account, || {
-        perch_smart_account::testutils::install_rule(&env, "ci-publish", &rule)
+        perch_smart_account::testutils::install_rule(&env, "ci-publish", &rule, &signers)
     });
 
     let verifiers = env.register(MockRegistry, ());
-    let mut verifiers_rule =
-        ci_publish_rule(&env, &account, &verifiers, rule.signers.clone(), None);
-    verifiers_rule.functions = StoredFunctions::Only(vec![&env, Symbol::new(&env, "publish_hash")]);
+    let mut verifiers_rule = ci_publish_rule(&env, &account, &verifiers, &signers, None);
+    verifiers_rule.1 = StoredFunctions::Only(vec![&env, Symbol::new(&env, "publish_hash")]);
     let verifiers_rule_id = env.as_contract(&account, || {
-        perch_smart_account::testutils::install_rule(&env, "ci-publish-verifiers", &verifiers_rule)
+        perch_smart_account::testutils::install_rule(
+            &env,
+            "ci-publish-verifiers",
+            &verifiers_rule,
+            &signers,
+        )
     });
 
     World {

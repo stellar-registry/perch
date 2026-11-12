@@ -190,7 +190,7 @@ suffix and key canonicalization matter, is exercised by Nido's suite
 | `crates/perch-smart-account/src/rules.rs` | The account's rule registry and the delta reconcile: rules matched by slot, which changed rules keep their id (`keeps_id`), the id counter (`allocate`), the install-time limits (`check`), the recovery rule's controller `rcv_install`, the `DeltaSummary` |
 | `crates/perch-smart-account/src/auth.rs`: `check_distinct` | The constructor's canonical-duplicate check through the verifiers |
 | `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the rule views (`get_context_rule`, `get_context_rules_count`), `install_account_rules` and its `ContextRuleAdded`; the grant-document paths `apply_grant_doc`, `check_grant`, `rule_set::names_guardian_approval`, the normal-form refusal (`check_normal`), `excluded_contract`, the credential index (`check_unwiped`), `drop_grant`, and the grant index (spec §7.6) |
-| `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (the account's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
+| `crates/perch-doc-compiler/src/lib.rs`: the caps | An account document's `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192; a grant document's `MAX_GRANT_SIGNERS` = 15, `MAX_GRANT_RULES` = 50, `MAX_GRANT_CANONICAL_BYTES` = 8,192 (`limits_of`, by `perch_ir::is_account_document`), and the grant's stored entry at most `MAX_GRANT_STORED_BYTES` = 49,152 (`src/stored.rs`, `grant_stored_bytes`: the account's grant record computed from the document); `MAX_RULE_NAME_BYTES` (the account's `MAX_NAME_SIZE`, 20) for both; and the `DocTooLarge` refusal |
 | `crates/perch-spending-limit/**` | The deployable wrapper of OZ `spending_limit`, installing and uninstalling without events |
 | `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it: the interpreter, the spending limit, and the Ed25519, WebAuthn and ML-DSA verifiers. The account, the recovery controller, the factory, the doc compiler, the ZK pool and the ZK adapter link none of it |
 
@@ -212,9 +212,10 @@ document caps, permutes signer lists, spells keys in either hex case and cap
 limits with leading zeros or a sign, and advances the ledger past rule
 expiries between documents; `release_stack.rs`
 (`worst_case_*`, `signer_transitions`, `cap_sweep`,
-`the_metered_footprint_is_the_simulated_transactions`);
-[`recovery/budgets.md`](recovery/budgets.md), "Document caps", which sizes
-the caps.
+`the_metered_footprint_is_the_simulated_transactions`,
+`worst_case_grant_flows_at_the_grant_caps`, `grant_cap_sweep`);
+[`recovery/budgets.md`](recovery/budgets.md), "Document caps" and
+"Grant-document caps", which size the caps.
 
 ## Explicit dependency review
 

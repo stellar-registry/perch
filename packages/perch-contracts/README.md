@@ -16,7 +16,7 @@ npm install @stellar-registry/perch-contracts
 | `pool` | `perch-zk-pool`: trees, leaves, roots, enrollments |
 | `adapter` | `perch-zk-adapter`: `verify`, `circuit_id`, `tree_depth` |
 | `webauthnVerifier` | `perch-webauthn-verifier` |
-| `docCompiler` | `perch-doc-compiler`: `compile_doc`, `derive_target`, `limits`, `capabilities` |
+| `docCompiler` | `perch-doc-compiler`: `compile_doc`, `derive_target`, `limits`, `grant_limits`, `capabilities` |
 | `legacyAccount`, `legacyDocCompiler` | the deployed `perch-account` and `perch-doc-compiler` specs (snapshot 1; see below) |
 
 ```ts
@@ -49,15 +49,19 @@ controller's `rcv_complete` never marks the call as the completion and
 `rcv_sync` refuses it as a change during the authorized window. See
 [`docs/deploy/README.md`](../../docs/deploy/README.md#simulating-a-recovery-completion).
 
-The exact-root build's `account` and `docCompiler` bindings are marked
-undeployed. `legacyAccount` / `legacyDocCompiler` (also the
-`/legacy-account` and `/legacy-doc-compiler` package exports) retain the
-recorded deployed spec. Read `capabilities()` before `configuration()`:
-snapshot 1 uses the legacy account spec, snapshot 2 the exact-root spec.
-Select a compiler binding matching that account's pinned compiler, and
-refuse unknown snapshot versions.
+The `account` and `docCompiler` bindings, from the build that stores rules
+compactly (snapshot 3), are marked undeployed. `legacyAccount` /
+`legacyDocCompiler` (also the `/legacy-account` and `/legacy-doc-compiler`
+package exports) retain the recorded deployed spec. Read `capabilities()`
+before `configuration()`: snapshot 1 uses the legacy account spec, and
+snapshots 2 and 3 the current one, whose `configuration()` is the same in
+both. The stored-rule views (`rule_set`, `grant_rule_set`, with
+`rule_signers` and `grant_signers`) decode only snapshot 3's tuples. Select
+a compiler binding matching that account's pinned compiler, and refuse
+unknown snapshot versions.
 
-The Stellar SDK decodes struct fields by position. The exact-root spec
-cannot safely decode old rule maps, even though Rust's account storage reader can.
-`perch-js`'s `readSnapshot` supports both layouts through a matching
-`AccountReader`; it cannot repair a result already misdecoded by the SDK.
+The Stellar SDK decodes struct fields by position. The current spec cannot
+safely decode old rule maps, and the account itself no longer reads them.
+`perch-js`'s `readSnapshot` supports every snapshot's `configuration()`
+through a matching `AccountReader`; it cannot repair a result already
+misdecoded by the SDK.

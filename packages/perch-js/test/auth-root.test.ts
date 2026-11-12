@@ -47,21 +47,41 @@ describe('exact authorization root', () => {
     const legacy = { interfaceVersion: 2, snapshotVersion: 1, docIdentity: 'canon_v1', authDigest: 'addr_oz_v1', applyModes: ['one_tx'] };
     expect(() => checkDocumentCapabilities(fixture, legacy)).toThrow();
     expect(() => checkDocumentCapabilities(fixture, { ...legacy, interfaceVersion: 3, snapshotVersion: 2 })).not.toThrow();
+    expect(() => checkDocumentCapabilities(fixture, { ...legacy, interfaceVersion: 4, snapshotVersion: 3 })).not.toThrow();
+    expect(() => checkDocumentCapabilities(fixture, { ...legacy, interfaceVersion: 4, snapshotVersion: 4 })).toThrow('snapshot format 4');
+    for (const snapshotVersion of [Number.NaN, 2.5, 0]) {
+      expect(() => checkDocumentCapabilities(fixture, { ...legacy, interfaceVersion: 4, snapshotVersion }))
+        .toThrow(`snapshot format ${snapshotVersion}`);
+    }
     const old = { ...fixture, rules: fixture.rules.map(({ 'auth-root': _, ...r }) => r) };
     expect(() => checkDocumentCapabilities(old, legacy)).not.toThrow();
   });
 
-  it('refuses snapshot 2 metadata loss before rule selection', async () => {
-    const sim = new SimAccount();
+  /** A simulated account reporting `interfaceVersion` and `snapshotVersion`. */
+  const reporting = (sim: SimAccount, interfaceVersion: number, snapshotVersion: number) => {
     const reader = sim.reader();
     const capabilities = reader.capabilities.bind(reader);
     reader.capabilities = async () => {
       const answer = await capabilities();
-      return { ...answer, value: { ...answer.value, interfaceVersion: 3, snapshotVersion: 2 } };
+      return { ...answer, value: { ...answer.value, interfaceVersion, snapshotVersion } };
     };
-    await expect(readSnapshot(reader)).rejects.toThrow('omits auth-root metadata');
+    return reader;
+  };
+
+  it('refuses metadata loss from snapshot 2 on before rule selection', async () => {
+    for (const [interfaceVersion, snapshotVersion] of [[3, 2], [4, 3]] as const) {
+      const sim = new SimAccount();
+      const reader = reporting(sim, interfaceVersion, snapshotVersion);
+      await expect(readSnapshot(reader)).rejects.toThrow(`snapshot ${snapshotVersion} rule omits auth-root metadata`);
+      sim.rules = sim.rules.map((r) => ({ ...r, authRoot: null }));
+      expect((await readSnapshot(reader)).configuration.rules[0]!.authRoot).toBeNull();
+    }
+  });
+
+  it('refuses a snapshot format past the one this reader knows', async () => {
+    const sim = new SimAccount();
     sim.rules = sim.rules.map((r) => ({ ...r, authRoot: null }));
-    expect((await readSnapshot(reader)).configuration.rules[0]!.authRoot).toBeNull();
+    await expect(readSnapshot(reporting(sim, 5, 4))).rejects.toThrow('snapshot format 4');
   });
 
   it('screens the supplied preorder as one entry and keeps a rule per context', () => {
@@ -79,13 +99,19 @@ describe('exact authorization root', () => {
     expect(() => selectRules(snapshot, [game, transfer], [{ ...root, function: 'wrong' }, root])).toThrow(AuthRootMismatch);
   });
 
-  it('recognizes legacy stored rules and never defaults malformed new layouts', () => {
-    const old = { cap: [], conds: [], contract: token, functions: { tag: 'Only', values: [['transfer']] }, generation: 1n, signers: [], threshold: 1, valid_until: undefined };
-    expect(decodeStoredRule(old).authRoot).toBeUndefined();
-    expect(decodeStoredRule({ ...old, auth_root: [root] }).authRoot).toEqual(root);
+  it('reads only the stored tuple layout, and never defaults a malformed root', () => {
+    // contract, functions, conds, signer positions, threshold, cap, valid_until, generation, auth_root
+    const stored = [token, { tag: 'Only', values: [['transfer']] }, [], [0], 1, [], undefined, 1n, undefined];
+    const withRoot = (r: unknown) => stored.map((x, i) => (i === 8 ? r : x));
+    expect(decodeStoredRule(stored).authRoot).toBeNull();
+    expect(decodeStoredRule(withRoot([root])).authRoot).toEqual(root);
     for (const value of [[], ['bad'], [{ ...root, function: '*' }], {}, [root, root]]) {
-      expect(() => decodeStoredRule({ ...old, auth_root: value })).toThrow();
+      expect(() => decodeStoredRule(withRoot(value))).toThrow();
     }
-    expect(() => decodeStoredRule({ ...old, auth_rooot: [root.contract, root.function] })).toThrow();
+    // The map earlier builds stored, and a tuple of eight or ten fields.
+    const map = { cap: [], conds: [], contract: token, functions: stored[1], generation: 1n, signers: [], threshold: 1, valid_until: undefined };
+    expect(() => decodeStoredRule(map as never)).toThrow('unknown stored rule layout');
+    expect(() => decodeStoredRule(stored.slice(0, 8))).toThrow('unknown stored rule layout');
+    expect(() => decodeStoredRule([...stored, undefined])).toThrow('unknown stored rule layout');
   });
 });

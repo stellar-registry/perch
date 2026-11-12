@@ -43,8 +43,6 @@ const cond = (c: any): StoredCond => {
   switch (c.kind) {
     case 'argEq':
       return { ...c, value: val(c.value) };
-    case 'argIn':
-      return { ...c, values: c.values.map(val) };
     case 'argI128AtMost':
       return { ...c, bound: BigInt(c.bound) };
     default:
@@ -57,7 +55,7 @@ const rule = (r: any): StoredRule => ({
   authRoot: r.authRoot,
   functions: r.functions,
   conds: r.conds.map(cond),
-  signers: r.signers.map(signer),
+  signers: r.signers,
   threshold: r.threshold,
   cap: r.cap === null ? null : { limit: BigInt(r.cap.limit), period: r.cap.period, amountArg: r.cap.amountArg },
   validUntil: r.validUntil,
@@ -68,6 +66,7 @@ const stored = (v: any): StoredGrant => ({
   account: v.account,
   network: v.network,
   docHash: hexToBytes(v.docHash),
+  signers: v.signers.map(signer),
   signerIds: v.signerIds,
   verifierNames: v.verifierNames,
   rules: v.rules.map((r: any) => ({ name: r.name, rule: rule(r.rule) })),
@@ -85,29 +84,30 @@ const native = (v: any) => {
     c.kind === 'argEq'
       ? tagged('ArgEq', c.index, nVal(c.value))
       : c.kind === 'argIn'
-        ? tagged('ArgIn', c.index, c.values.map(nVal))
+        ? tagged('ArgIn', c.index, c.values)
         : c.kind === 'argI128AtMost'
           ? tagged('ArgI128AtMost', c.index, BigInt(c.bound))
           : tagged('ArgStrPrefix', c.index, c.prefix);
   const nSigner = (s: any) =>
     s.kind === 'delegated' ? tagged('Delegated', s.address) : tagged('External', s.verifier, Buffer.from(hexToBytes(s.key)));
-  const ruleSet = v.rules.map(({ rule: r }: any) => ({
-    ...(r.authRoot ? { auth_root: [r.authRoot] } : {}),
-    contract: r.contract,
-    functions: tagged(r.functions.kind === 'anyExcept' ? 'AnyExcept' : 'Only', r.functions.names),
-    conds: r.conds.map(nCond),
-    signers: r.signers.map(nSigner),
-    threshold: r.threshold,
-    cap: r.cap === null ? [] : [{ limit: BigInt(r.cap.limit), period: r.cap.period, amount_arg: r.cap.amountArg }],
-    valid_until: r.validUntil ?? undefined,
-    generation: r.generation === null ? undefined : BigInt(r.generation),
-  }));
+  // A tuple struct decodes as an array of its fields.
+  const ruleSet = v.rules.map(({ rule: r }: any) => [
+    r.contract,
+    tagged(r.functions.kind === 'anyExcept' ? 'AnyExcept' : 'Only', r.functions.names),
+    r.conds.map(nCond),
+    r.signers,
+    r.threshold,
+    r.cap === null ? [] : [[BigInt(r.cap.limit), r.cap.period, r.cap.amountArg]],
+    r.validUntil ?? undefined,
+    r.generation === null ? undefined : BigInt(r.generation),
+    r.authRoot ? [r.authRoot] : undefined,
+  ]);
   const record = {
     gen: 0n,
     doc_hash: Buffer.from(hexToBytes(v.docHash)),
     rules: v.rules.map(({ name }: any, id: number) => ({ id, name })),
   };
-  return { record, ruleSet, signerIds: v.signerIds, verifierNames: v.verifierNames };
+  return { record, ruleSet, signers: v.signers.map(nSigner), signerIds: v.signerIds, verifierNames: v.verifierNames };
 };
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -132,6 +132,19 @@ describe('rebuildGrantDoc trusts only what hashes to doc_hash', () => {
     const s = stored(shared);
     expect(() => rebuildGrantDoc({ ...s, signerIds: [...s.signerIds].reverse() })).toThrow(GrantNotRebuilt);
     expect(() => rebuildGrantDoc({ ...s, signerIds: s.signerIds.slice(1) })).toThrow(GrantNotRebuilt);
+  });
+
+  it('refuses another signer table', () => {
+    const s = stored(shared);
+    expect(s.signers.length).toBeGreaterThan(1);
+    expect(() => rebuildGrantDoc({ ...s, signers: [...s.signers].reverse() })).toThrow(GrantNotRebuilt);
+  });
+
+  it('refuses a position past the signer table', () => {
+    const s = stored(shared);
+    const [first, ...rest] = s.rules;
+    const past = { ...first!, rule: { ...first!.rule, signers: [...first!.rule.signers, s.signers.length] } };
+    expect(() => rebuildGrantDoc({ ...s, rules: [past, ...rest] })).toThrow(/past the signer table/);
   });
 
   it('refuses another network', () => {
@@ -169,13 +182,13 @@ describe('decodeStoredGrant', () => {
   it('reads the views as the generated bindings return them', () => {
     for (const v of vectors.vectors) {
       const n = native(v);
-      expect(decodeStoredGrant(v.account, v.network, n.record, n.ruleSet, n.signerIds, n.verifierNames)).toEqual(
+      expect(decodeStoredGrant(v.account, v.network, n.record, n.ruleSet, n.signers, n.signerIds, n.verifierNames)).toEqual(
         stored(v),
       );
     }
   });
 
   it('is null for a grant the account does not have', () => {
-    expect(decodeStoredGrant('C', 'n', undefined, [], undefined, undefined)).toBeNull();
+    expect(decodeStoredGrant('C', 'n', undefined, [], undefined, undefined, undefined)).toBeNull();
   });
 });

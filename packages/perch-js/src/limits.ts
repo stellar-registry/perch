@@ -1,6 +1,9 @@
 // The document caps an account's compiler enforces (`limits()` on
 // `perch-doc-compiler`), and the check perch-js runs before anything is
 // signed, so an over-limit document is refused locally rather than on chain.
+// `limits()` is an account document's caps; a grant document has its own,
+// `grant_limits()`, in the same format, which `decodeDocLimits` decodes and
+// `checkLimits` checks.
 
 import { canonicalJson } from './canonical.js';
 import { OverLimits, UnsupportedCapability } from './errors.js';

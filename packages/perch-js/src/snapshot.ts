@@ -125,7 +125,10 @@ export function checkCapabilities(c: AccountCapabilities): void {
   // earlier `oz_rule_ids` scheme omitted the account address and is no longer
   // produced; this perch-js signs only the bound digest, so it refuses it.
   if (c.authDigest !== 'addr_oz_v1') throw new UnsupportedCapability(`authorization digest ${c.authDigest}`);
-  if (c.snapshotVersion !== 1 && c.snapshotVersion !== 2) throw new UnsupportedCapability(`snapshot format ${c.snapshotVersion}`);
+  // Snapshot 3 changes only the stored-rule views (`rule_set`,
+  // `grant_rule_set`: tuples naming signers by position in `rule_signers`,
+  // `grant_signers`), which `readGrantDoc` reads; `configuration()` is as in 2.
+  if (![1, 2, 3].includes(c.snapshotVersion)) throw new UnsupportedCapability(`snapshot format ${c.snapshotVersion}`);
 }
 
 /** Which grant entry points the account exposes, from its `applyModes`:
@@ -163,8 +166,9 @@ export async function readSnapshot(reader: AccountReader, options: SnapshotOptio
     const config = take(await reader.configuration());
     const r = config.value.revision;
     const capabilities = take(await reader.capabilities());
-    if (capabilities.value.snapshotVersion === 2 && config.value.rules.some((rule) => rule.authRoot === undefined)) {
-      throw new UnsupportedCapability('snapshot 2 rule omits auth-root metadata');
+    const version = capabilities.value.snapshotVersion;
+    if (version >= 2 && config.value.rules.some((rule) => rule.authRoot === undefined)) {
+      throw new UnsupportedCapability(`snapshot ${version} rule omits auth-root metadata`);
     }
     const limits = take(await reader.limits());
     let document: Uint8Array | null | undefined;

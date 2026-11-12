@@ -318,8 +318,10 @@ export class WitnessCore extends Core {
 
   /**
    * Whether `steps` (rule-core's attenuation steps, as `ScVal` XDR) replay
-   * from `parent` to exactly `child` (vectors of `StoredRule`, `ScVal`
-   * XDR). `narrower` means the child allows nothing its parent does not, by
+   * from `parent` to exactly `child` (each the tuple of a signer table and
+   * a vector of `StoredRule` naming signers by position in it, as
+   * `grant_signers` and `grant_rule_set` return them, `ScVal` XDR).
+   * `narrower` means the child allows nothing its parent does not, by
    * rule-core's proof that every step narrows; it says nothing about rule
    * sets related by no steps.
    */

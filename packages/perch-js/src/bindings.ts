@@ -140,6 +140,7 @@ export function accountReader(account: string, client: AccountBindings, compiler
 export interface GrantBindings {
   grant(args: { grant: number }): Promise<Simulated<any>>;
   grant_rule_set(args: { grant: number }): Promise<Simulated<any>>;
+  grant_signers(args: { grant: number }): Promise<Simulated<any>>;
   grant_signer_ids(args: { grant: number }): Promise<Simulated<any>>;
   grant_verifier_names(args: { grant: number }): Promise<Simulated<any>>;
 }
@@ -180,7 +181,7 @@ function storedCond(c: Enum): StoredCond {
     case 'ArgI128AtMost':
       return { kind: 'argI128AtMost', index, bound: BigInt(x as bigint) };
     case 'ArgIn':
-      return { kind: 'argIn', index, values: (x as Enum[]).map(storedVal) };
+      return { kind: 'argIn', index, values: (x as unknown[]).map(text) };
     case 'ArgStrPrefix':
       return { kind: 'argStrPrefix', index, prefix: text(x) };
     default:
@@ -188,40 +189,42 @@ function storedCond(c: Enum): StoredCond {
   }
 }
 
-/** Decode one `StoredRule` as the bindings return it. */
-export function decodeStoredRule(r: Record<string, unknown>): StoredRule {
-  const keys = Object.keys(r).sort().join(',');
-  const legacy = 'cap,conds,contract,functions,generation,signers,threshold,valid_until';
-  if (keys !== legacy && keys !== `auth_root,${legacy}`) throw new Error('unknown stored rule layout');
-  const functions = r.functions as Enum;
+/** Decode one `StoredRule` as the bindings return it: the tuple of its
+ *  contract, functions, conditions, signer positions, threshold, cap, last
+ *  ledger, generation and exact root. */
+export function decodeStoredRule(r: readonly unknown[]): StoredRule {
+  if (!Array.isArray(r) || r.length !== 9) throw new Error('unknown stored rule layout');
+  const [contract, functionsV, conds, signers, threshold, caps, validUntil, generationV, root] = r;
+  const functions = functionsV as Enum;
   if (functions.tag !== 'AnyExcept' && functions.tag !== 'Only') throw new Error(`unknown functions ${functions.tag}`);
-  const cap = (r.cap as { limit: bigint; period: number; amount_arg: number }[])[0];
-  const generation = opt(r.generation as bigint | undefined);
+  const cap = (caps as [bigint, number, number][])[0];
+  const generation = opt(generationV as bigint | undefined);
   return {
-    contract: String(r.contract),
+    contract: String(contract),
     functions: {
       kind: functions.tag === 'AnyExcept' ? 'anyExcept' : 'only',
       names: (functions.values?.[0] as unknown[]).map(String),
     },
-    conds: (r.conds as Enum[]).map(storedCond),
-    signers: (r.signers as Enum[]).map(signer),
-    threshold: Number(r.threshold),
-    cap: cap ? { limit: BigInt(cap.limit), period: Number(cap.period), amountArg: Number(cap.amount_arg) } : null,
-    validUntil: opt(r.valid_until as number | undefined),
-    authRoot: Object.hasOwn(r, 'auth_root') ? authRoot(r.auth_root) : undefined,
+    conds: (conds as Enum[]).map(storedCond),
+    signers: (signers as unknown[]).map(Number),
+    threshold: Number(threshold),
+    cap: cap ? { limit: BigInt(cap[0]), period: Number(cap[1]), amountArg: Number(cap[2]) } : null,
+    validUntil: opt(validUntil as number | undefined),
+    authRoot: authRoot(root),
     generation: generation === null ? null : BigInt(generation),
   };
 }
 
-/** Decode what `grant(id)`, `grant_rule_set(id)`, `grant_signer_ids(id)`
- *  and `grant_verifier_names(id)` return for the grant of `account` on the
- *  network `network` (its passphrase); `null` when the account has no grant
- *  document there. */
+/** Decode what `grant(id)`, `grant_rule_set(id)`, `grant_signers(id)`,
+ *  `grant_signer_ids(id)` and `grant_verifier_names(id)` return for the grant
+ *  of `account` on the network `network` (its passphrase); `null` when the
+ *  account has no grant document there. */
 export function decodeStoredGrant(
   account: string,
   network: string,
   record: Record<string, unknown> | null | undefined,
-  ruleSet: Record<string, unknown>[],
+  ruleSet: unknown[][],
+  signers: Enum[] | null | undefined,
   signerIds: unknown[] | null | undefined,
   verifierNames: unknown[] | null | undefined,
 ): StoredGrant | null {
@@ -232,6 +235,7 @@ export function decodeStoredGrant(
     account,
     network,
     docHash: bytes(record.doc_hash),
+    signers: (signers ?? []).map(signer),
     signerIds: (signerIds ?? []).map(text),
     verifierNames: (verifierNames ?? []).map(text),
     rules: rules.map((r, i) => ({ name: String(r.name), rule: decodeStoredRule(ruleSet[i]!) })),
@@ -242,7 +246,7 @@ export function decodeStoredGrant(
  * Read the grant document under `grant` from `account`'s views and rebuild
  * it (`rebuildGrantDoc`); `null` when the account has none there. Throws
  * `GrantNotRebuilt` when it does not rebuild to the stored `doc_hash`, which
- * four reads straddling an `apply_grant` can also cause: read again.
+ * five reads straddling an `apply_grant` can also cause: read again.
  */
 export async function readGrantDoc(
   client: GrantBindings,
@@ -250,9 +254,10 @@ export async function readGrantDoc(
   network: string,
   grant: number,
 ): Promise<RebuiltGrant | null> {
-  const [record, ruleSet, signerIds, verifierNames] = await Promise.all([
+  const [record, ruleSet, signers, signerIds, verifierNames] = await Promise.all([
     client.grant({ grant }),
     client.grant_rule_set({ grant }),
+    client.grant_signers({ grant }),
     client.grant_signer_ids({ grant }),
     client.grant_verifier_names({ grant }),
   ]);
@@ -261,6 +266,7 @@ export async function readGrantDoc(
     network,
     record.result,
     ruleSet.result,
+    signers.result,
     signerIds.result,
     verifierNames.result,
   );

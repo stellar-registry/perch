@@ -303,6 +303,138 @@ fn only_the_owner_changes_a_grant() {
     assert!(call_via(&w, &app, id), "nothing changed");
 }
 
+/// Rule `k`'s name in [`dense_grant`]: `a`, ..., `z`, `ba`, ....
+fn dense_name(k: u32) -> String {
+    let letter = |n: u32| char::from(b'a' + n as u8);
+    if k < 26 {
+        letter(k).to_string()
+    } else {
+        format!("{}{}", letter(k / 26), letter(k % 26))
+    }
+}
+
+/// The shortest spelling of a grant document of `rules` rules on the target,
+/// each asking the one delegated key `key` (`a`): one-letter ids, rule names
+/// [`dense_name`], and `all` principals, so that the most rules fit the byte
+/// cap.
+fn dense_grant(w: &World, key: &Address, rules: u32) -> Bytes {
+    let rules: std::vec::Vec<String> = (0..rules)
+        .map(|k| {
+            format!(
+                r#"{{"name":"{}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["a"]}}}}"#,
+                dense_name(k),
+                strkey(&w.target)
+            )
+        })
+        .collect();
+    let json = format!(
+        r#"{{"version":1,"network":"{}","signers":[{{"id":"a","address":"{}"}}],"rules":[{}]}}"#,
+        perch_testkit::FIXTURE_NETWORK,
+        strkey(key),
+        rules.join(",")
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+/// A grant document of `signers` delegated keys and `rules` rules, each
+/// scoped to the target and letting any one of every signer call it.
+fn wide_grant(w: &World, keys: &[Address], rules: u32) -> Bytes {
+    let ids: std::vec::Vec<String> = (0..keys.len()).map(|i| format!(r#""k{i:02}""#)).collect();
+    let signers: std::vec::Vec<String> = keys
+        .iter()
+        .enumerate()
+        .map(|(i, a)| format!(r#"{{"id":"k{i:02}","address":"{}"}}"#, strkey(a)))
+        .collect();
+    let rules: std::vec::Vec<String> = (0..rules)
+        .map(|k| {
+            format!(
+                r#"{{"name":"g{k:02}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"threshold","m":1,"signers":[{}]}}}}"#,
+                strkey(&w.target),
+                ids.join(",")
+            )
+        })
+        .collect();
+    let json = format!(
+        r#"{{"version":1,"network":"{}","signers":[{}],"rules":[{}]}}"#,
+        perch_testkit::FIXTURE_NETWORK,
+        signers.join(","),
+        rules.join(",")
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+/// A grant document at each grant count cap applies and authorizes through
+/// its last rule: at the rule cap with one signer, and at the signer cap
+/// (OZ's per-rule signer limit) with every rule naming every signer, as many
+/// rules as the byte cap holds. One past the rule or the signer cap, within
+/// the byte cap, is refused, though an account document's caps are smaller
+/// (`docs/recovery/budgets.md`, "Grant-document caps").
+#[test]
+fn a_grant_document_at_the_grant_caps_applies() {
+    use perch_doc_compiler::{
+        DocCompilerError, MAX_GRANT_CANONICAL_BYTES, MAX_GRANT_RULES, MAX_GRANT_SIGNERS,
+    };
+    let w = world();
+    w.enroll(&w.doc(None));
+    let keys: std::vec::Vec<Address> = (0..=MAX_GRANT_SIGNERS).map(|_| w.new_key()).collect();
+    let at_signers = &keys[..MAX_GRANT_SIGNERS as usize];
+    let within_bytes = |doc: &Bytes| {
+        let json = std::str::from_utf8(&doc.to_alloc_vec())
+            .unwrap()
+            .to_string();
+        perch_ir::canonical_json(&perch_ir::from_json(&json).unwrap()).len()
+            <= MAX_GRANT_CANONICAL_BYTES as usize
+    };
+    let fit = (1..=MAX_GRANT_RULES)
+        .take_while(|&r| within_bytes(&wide_grant(&w, at_signers, r)))
+        .last()
+        .unwrap();
+
+    let at_caps = [
+        (
+            3,
+            &keys[..1],
+            MAX_GRANT_RULES,
+            dense_grant(&w, &keys[0], MAX_GRANT_RULES),
+        ),
+        (4, at_signers, fit, wide_grant(&w, at_signers, fit)),
+    ];
+    for (grant, signers, rules, doc) in at_caps {
+        apply_grant(&w, grant, &doc).expect("at a grant cap");
+        let record = w.client().grant(&grant).unwrap();
+        assert_eq!(record.rules.len(), rules);
+        assert!(record
+            .rules
+            .iter()
+            .all(|r| r.signers.len() == signers.len() as u32));
+        let last = if grant == 3 {
+            dense_name(rules - 1)
+        } else {
+            format!("g{:02}", rules - 1)
+        };
+        let last = grant_rule_id(&w, grant, &last);
+        assert!(call_via(&w, &signers[signers.len() - 1], last));
+    }
+
+    let before = (w.client().grant(&3), w.client().grant(&4));
+    for past in [
+        dense_grant(&w, &keys[0], MAX_GRANT_RULES + 1),
+        wide_grant(&w, &keys, 1),
+    ] {
+        assert!(within_bytes(&past));
+        assert_eq!(
+            err(apply_grant(&w, 5, &past)),
+            PerchAccountError::Compiler(DocCompilerError::DocTooLarge)
+        );
+    }
+    assert_eq!(
+        (w.client().grant(&3), w.client().grant(&4)),
+        before,
+        "nothing changed"
+    );
+    assert_eq!(w.client().grant(&5), None);
+}
+
 #[test]
 fn changing_a_grant_reconciles_its_own_rules_only() {
     let w = world();

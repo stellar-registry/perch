@@ -126,12 +126,13 @@ included) and every executed upgrade, and never anything else. Unlike
 import { accountReader, readSnapshot } from '@stellar-registry/perch';
 import { account, docCompiler, legacyAccount, legacyDocCompiler } from '@stellar-registry/perch-contracts';
 
-// capabilities() has the same ABI in both builds; choose before decoding rules.
+// capabilities() has the same ABI in every build; choose before decoding rules.
 const probe = new account.Client(opts(accountId));
 const { result: capabilities } = await probe.capabilities();
+// Snapshots 2 and 3 share configuration(); 3 changes only the stored-rule views.
 const bindings = capabilities.snapshot_version === 1
   ? { account: legacyAccount, compiler: legacyDocCompiler }
-  : capabilities.snapshot_version === 2
+  : capabilities.snapshot_version === 2 || capabilities.snapshot_version === 3
     ? { account, compiler: docCompiler }
     : undefined;
 if (!bindings) throw new Error('Unsupported snapshot version');
@@ -208,9 +209,11 @@ host render errors, so transports should attach the events.
 
 ### Limits and capabilities
 
-`snapshot.limits` holds the caps the account's compiler enforces;
-`checkLimits(doc, snapshot.limits)` throws `OverLimits` for a document the
-compiler would refuse. `readSnapshot` refuses with `UnsupportedCapability`
+`snapshot.limits` holds the caps the account's compiler enforces on an
+account document; `checkLimits(doc, snapshot.limits)` throws `OverLimits`
+for a document the compiler would refuse. A grant document has its own caps,
+the compiler's `grant_limits()`: decode them with `decodeDocLimits` and check
+a grant document against them with the same `checkLimits`. `readSnapshot` refuses with `UnsupportedCapability`
 an account whose document identity, authorization digest, or snapshot
 format this version does not implement, and a limits format it does not
 know. `grantMode(snapshot.capabilities)` returns `'grant_v1'` for an account
@@ -263,8 +266,9 @@ landed is skipped when an operation is retried or started again.
 ### Reading a grant document
 
 An account keeps no grant document's text. It keeps each rule's name and
-stored rule (`grant(id)`, `grant_rule_set(id)`), the document's signer ids
-(`grant_signer_ids(id)`) and each signer's `verifier-name`
+stored rule (`grant(id)`, `grant_rule_set(id)`), the signer table the rules
+name their signers by position in (`grant_signers(id)`), the document's
+signer ids (`grant_signer_ids(id)`) and each signer's `verifier-name`
 (`grant_verifier_names(id)`), and applies a grant document only in normal
 form, so those give the text back:
 
@@ -275,7 +279,7 @@ const grant = await readGrantDoc(new account.Client(opts(accountId)), accountId,
 // null when the account has no grant there; else { doc, canonical, docHash }
 ```
 
-`rebuildGrantDoc` rebuilds the document from those four views
+`rebuildGrantDoc` rebuilds the document from those five views
 (`decodeStoredGrant` decodes them as the generated bindings return them),
 and throws `GrantNotRebuilt` unless its canonical text hashes to the
 grant's stored `doc_hash`, so a rebuild is never trusted on its own. Write
@@ -333,8 +337,10 @@ winning guess selects just the game rule; a direct transfer fails the transfer
 rule's root condition. An outer router with no account authorization is not
 that entry root. General ancestry and root arguments are outside this feature.
 
-`readSnapshot` accepts legacy snapshot 1 and root-aware snapshot 2; every
-snapshot-2 rule must include root metadata. Applying root-bearing documents
+`readSnapshot` accepts legacy snapshot 1, root-aware snapshot 2, and
+snapshot 3 (the compact stored layout, whose `configuration()` is as in 2);
+every rule of snapshot 2 or later must include root metadata, and any other
+snapshot version is refused. Applying root-bearing documents
 requires interface >=3 and snapshot >=2. Canonical bytes/hashes of documents
 without `auth-root` are unchanged. An existing deployment accepts
 root-bearing documents only after a new build and upgrade. See [root semantics and compatibility](../../docs/auth-root.md).

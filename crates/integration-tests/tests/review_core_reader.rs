@@ -6,17 +6,20 @@
 //! must read the same rule or record, or both refuse it:
 //!
 //! - every rule a seeded generator draws, through its mirror
-//!   (`StoredRule::from_rule`), in the nine-key layout the account writes and
-//!   in the eight-key legacy layout without `auth_root`;
+//!   (`StoredRule::from_rule`), with the signer table its signers are
+//!   interned in: the tuple of nine fields the account writes;
 //! - each of those changed into a value the host still holds but the account
-//!   never writes: an unknown key, a second cap, a root on an account
-//!   address or with an empty function, a field of the wrong type, a value
-//!   constructor named for another type;
+//!   never writes: the map of named fields earlier builds stored, a missing
+//!   or extra field, a second cap, a cap of named fields, a root on an
+//!   account address or with an empty function, a field of the wrong type,
+//!   a value constructor named for another type, an `ArgIn` of a value that
+//!   is not a string, a signer position past the table or of the wrong
+//!   type, and a table holding a value that is not a signer;
 //! - every record the generator draws, and some changed the same way.
 
 use perch_review_core::stored;
 use perch_review_core::witness::rule_eq;
-use perch_rule_eval::{mirror, StoredRecord, StoredRule};
+use perch_rule_eval::{convert, mirror, StoredRecord, StoredRule};
 use rule_eval::{AuthRoot, Cap, Cond, Functions, Rule, Signer, SpendEntry, SpendRecord, Val};
 use soroban_facade::{xdr, Val as FVal};
 use soroban_sdk::testutils::Address as _;
@@ -108,7 +111,9 @@ fn gen_rule(r: &mut Rng, p: &Pools) -> Rule {
                 1 => Cond::ArgI128AtMost(r.below(4) as u32, r.pick(&[0, 10, i128::MAX])),
                 2 => Cond::ArgIn(
                     r.below(4) as u32,
-                    (0..r.below(3)).map(|_| gen_val(r, p)).collect(),
+                    (0..r.below(3))
+                        .map(|_| Val::String(r.pick(&[b"".to_vec(), b"hello".to_vec()])))
+                        .collect(),
                 ),
                 _ => Cond::ArgStrPrefix(r.below(4) as u32, r.pick(&[b"".to_vec(), b"he".to_vec()])),
             })
@@ -147,10 +152,15 @@ fn facade(e: &Env, v: SVal) -> FVal {
     xdr::decode(&out).expect("the facade reads every stored value")
 }
 
-/// Both readings of the stored rule `v`: they agree, or the test fails.
-fn same_rule(e: &Env, v: SVal, what: &str) -> bool {
-    let account = mirror::rule(e, v);
-    let core = stored::rule(&facade(e, v));
+/// Both readings of the stored rule `v` with the signer table `table`, as
+/// `gate::stored_rule` and the core's `stored_rule` read a record's: they
+/// agree, or the test fails.
+fn same_rule(e: &Env, v: SVal, table: SVal, what: &str) -> bool {
+    let account = soroban_sdk::Vec::<perch_account_types::Signer>::try_from_val(e, &table)
+        .ok()
+        .and_then(|t| convert::signers(e, &t))
+        .and_then(|t| mirror::rule(e, v, &t));
+    let core = stored::table(&facade(e, table)).and_then(|t| stored::rule(&facade(e, v), &t));
     match (&account, &core) {
         (Some(a), Some(c)) => assert!(rule_eq(a, c), "{what}"),
         (None, None) => {}
@@ -167,10 +177,19 @@ fn same_rule(e: &Env, v: SVal, what: &str) -> bool {
     account.is_some()
 }
 
+/// `f` applied to the fields of a stored tuple, as a new value.
+fn edit(v: &FVal, f: impl FnOnce(&mut Vec<FVal>)) -> FVal {
+    let FVal::Vec(mut fields) = v.clone() else {
+        panic!("a tuple struct is a vector")
+    };
+    f(&mut fields);
+    FVal::Vec(fields)
+}
+
 /// `f` applied to the map entries of a stored value, as a new value.
-fn edit(v: &FVal, f: impl FnOnce(&mut Vec<(FVal, FVal)>)) -> FVal {
+fn edit_map(v: &FVal, f: impl FnOnce(&mut Vec<(FVal, FVal)>)) -> FVal {
     let FVal::Map(mut entries) = v.clone() else {
-        panic!("a struct is a map")
+        panic!("a struct with named fields is a map")
     };
     f(&mut entries);
     FVal::Map(entries)
@@ -188,6 +207,37 @@ fn at<'a>(entries: &'a mut [(FVal, FVal)], key: &str) -> &'a mut FVal {
         .1
 }
 
+/// A stored rule's fields, by position.
+const CONDS: usize = 2;
+const SIGNERS: usize = 3;
+const THRESHOLD: usize = 4;
+const CAP: usize = 5;
+const GENERATION: usize = 7;
+const ROOT: usize = 8;
+
+/// The rule as an earlier build stored it: a map of its named fields.
+fn as_map(f: &FVal) -> FVal {
+    let FVal::Vec(x) = f else { unreachable!() };
+    let names = [
+        "contract",
+        "functions",
+        "conds",
+        "signers",
+        "threshold",
+        "cap",
+        "valid_until",
+        "generation",
+        "auth_root",
+    ];
+    let mut entries: Vec<(FVal, FVal)> = names
+        .iter()
+        .zip(x)
+        .map(|(n, v)| (sym(n), v.clone()))
+        .collect();
+    entries.sort_by_key(|e| xdr::encode(&e.0));
+    FVal::Map(entries)
+}
+
 #[test]
 fn the_core_reads_every_stored_rule_as_the_account_does() {
     let e = Env::default();
@@ -197,76 +247,140 @@ fn the_core_reads_every_stored_rule_as_the_account_does() {
     let (mut read, mut refused, mut changed) = (0, 0, 0);
     for k in 0..1500 {
         let rule = gen_rule(&mut r, &p);
-        let Some(m) = StoredRule::from_rule(&e, &rule) else {
+        let mut signers = soroban_sdk::Vec::new(&e);
+        let Some(m) = StoredRule::from_rule(&e, &rule, &mut signers) else {
             continue;
         };
         let v: SVal = m.into_val(&e);
-        assert!(same_rule(&e, v, &format!("rule {k}")));
+        let table: SVal = signers.into_val(&e);
+        assert!(same_rule(&e, v, table, &format!("rule {k}")));
         read += 1;
         let f = facade(&e, v);
-        let mut variants: Vec<(&str, FVal)> = vec![
-            // The legacy layout: no `auth_root` key, read only without one.
+        let ft = facade(&e, table);
+        let positions = |f: &mut Vec<FVal>| -> Vec<FVal> {
+            let FVal::Vec(p) = &f[SIGNERS] else {
+                unreachable!()
+            };
+            p.clone()
+        };
+        // An `ScVal` address (18) of an account (0) with an ed25519 key (0).
+        let mut account = vec![0, 0, 0, 18, 0, 0, 0, 0, 0, 0, 0, 0];
+        account.extend([9u8; 32]);
+        let FVal::Address(account) = xdr::decode(&account).unwrap() else {
+            unreachable!()
+        };
+        let mut variants: Vec<(&str, FVal, FVal)> = vec![
+            ("the earlier map layout", as_map(&f), ft.clone()),
             (
-                "legacy",
-                edit(&f, |es| es.retain(|(key, _)| *key != sym("auth_root"))),
+                "eight fields",
+                edit(&f, |x| {
+                    x.pop();
+                }),
+                ft.clone(),
             ),
-            (
-                "unknown key",
-                edit(&f, |es| es.push((sym("zz"), FVal::Void))),
-            ),
+            ("ten fields", edit(&f, |x| x.push(FVal::Void)), ft.clone()),
             (
                 "two caps",
-                edit(&f, |es| {
-                    let caps = at(es, "cap");
-                    if let FVal::Vec(c) = caps {
+                edit(&f, |x| {
+                    if let FVal::Vec(c) = &mut x[CAP] {
                         let one = c.first().cloned().unwrap_or(FVal::Void);
                         *c = vec![one.clone(), one];
                     }
                 }),
+                ft.clone(),
+            ),
+            (
+                "a cap of named fields",
+                edit(&f, |x| {
+                    x[CAP] = FVal::Vec(vec![FVal::Map(vec![
+                        (sym("amount_arg"), FVal::U32(2)),
+                        (sym("limit"), FVal::I128(1)),
+                        (sym("period"), FVal::U32(1)),
+                    ])]);
+                }),
+                ft.clone(),
             ),
             (
                 "a u64 threshold",
-                edit(&f, |es| *at(es, "threshold") = FVal::U64(1)),
+                edit(&f, |x| x[THRESHOLD] = FVal::U64(1)),
+                ft.clone(),
             ),
             (
                 "a u32 generation",
-                edit(&f, |es| *at(es, "generation") = FVal::U32(1)),
+                edit(&f, |x| x[GENERATION] = FVal::U32(1)),
+                ft.clone(),
             ),
             (
                 "a root on an account",
-                edit(&f, |es| {
-                    let mut account = vec![0, 0, 0, 0, 0, 0, 0, 0];
-                    account.extend([9u8; 32]);
-                    let soroban_facade::Val::Address(a) = xdr::decode(&{
-                        let mut x = vec![0, 0, 0, 18];
-                        x.extend(&account);
-                        x
-                    })
-                    .unwrap() else {
-                        unreachable!()
-                    };
-                    *at(es, "auth_root") = FVal::Vec(vec![FVal::Map(vec![
-                        (sym("contract"), FVal::Address(a)),
+                edit(&f, |x| {
+                    x[ROOT] = FVal::Vec(vec![FVal::Map(vec![
+                        (sym("contract"), FVal::Address(account.clone())),
                         (sym("function"), sym("f")),
                     ])]);
                 }),
+                ft.clone(),
             ),
             (
                 "a root with no function",
-                edit(&f, |es| {
-                    if let FVal::Vec(root) = at(es, "auth_root") {
-                        if let Some(FVal::Map(m)) = root.first_mut() {
-                            m[1].1 = sym("");
+                edit(&f, |x| {
+                    if let FVal::Vec(root) = &mut x[ROOT] {
+                        if let Some(m) = root.first_mut() {
+                            *m = edit_map(m, |es| *at(es, "function") = sym(""));
                         }
                     }
                 }),
+                ft.clone(),
             ),
+            (
+                "an ArgIn of a value that is not a string",
+                edit(&f, |x| {
+                    if let FVal::Vec(conds) = &mut x[CONDS] {
+                        conds.push(FVal::Vec(vec![
+                            sym("ArgIn"),
+                            FVal::U32(0),
+                            FVal::Vec(vec![FVal::Vec(vec![sym("U64"), FVal::U64(1)])]),
+                        ]));
+                    }
+                }),
+                ft.clone(),
+            ),
+            (
+                "a position past the table",
+                edit(&f, |x| {
+                    let FVal::Vec(t) = &ft else { unreachable!() };
+                    let mut p = positions(x);
+                    p.push(FVal::U32(t.len() as u32));
+                    x[SIGNERS] = FVal::Vec(p);
+                }),
+                ft.clone(),
+            ),
+            (
+                "a u64 position",
+                edit(&f, |x| {
+                    let mut p = positions(x);
+                    if let Some(first) = p.first_mut() {
+                        *first = FVal::U64(0);
+                    }
+                    x[SIGNERS] = FVal::Vec(p);
+                }),
+                ft.clone(),
+            ),
+            (
+                "a table holding a value that is not a signer",
+                f.clone(),
+                edit(&ft, |t| {
+                    if let Some(first) = t.first_mut() {
+                        *first = FVal::U32(0);
+                    }
+                }),
+            ),
+            ("an empty table", f.clone(), FVal::Vec(vec![])),
         ];
         // A value constructor named for another type: read by its field.
         variants.push((
             "a value named for another type",
-            edit(&f, |es| {
-                if let FVal::Vec(conds) = at(es, "conds") {
+            edit(&f, |x| {
+                if let FVal::Vec(conds) = &mut x[CONDS] {
                     for c in conds.iter_mut() {
                         if let FVal::Vec(parts) = c {
                             if parts.first() == Some(&sym("ArgEq")) {
@@ -278,13 +392,14 @@ fn the_core_reads_every_stored_rule_as_the_account_does() {
                     }
                 }
             }),
+            ft.clone(),
         ));
-        for (what, x) in variants {
-            let Some(hv) = host(&e, &x) else {
+        for (what, x, t) in variants {
+            let (Some(hv), Some(ht)) = (host(&e, &x), host(&e, &t)) else {
                 continue;
             };
             changed += 1;
-            if !same_rule(&e, hv, &format!("rule {k}, {what}")) {
+            if !same_rule(&e, hv, ht, &format!("rule {k}, {what}")) {
                 refused += 1;
             }
         }
@@ -342,15 +457,15 @@ fn the_core_reads_every_stored_record_as_the_account_does() {
         for (what, x) in [
             (
                 "an unknown key",
-                edit(&f, |es| es.push((sym("zz"), FVal::Void))),
+                edit_map(&f, |es| es.push((sym("zz"), FVal::Void))),
             ),
             (
                 "a u64 total",
-                edit(&f, |es| *at(es, "total") = FVal::U64(1)),
+                edit_map(&f, |es| *at(es, "total") = FVal::U64(1)),
             ),
             (
                 "a history entry with a u64 ledger",
-                edit(&f, |es| {
+                edit_map(&f, |es| {
                     if let FVal::Vec(h) = at(es, "history") {
                         if let Some(FVal::Map(m)) = h.first_mut() {
                             m[1].1 = FVal::U64(1);

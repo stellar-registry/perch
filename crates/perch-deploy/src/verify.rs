@@ -7,7 +7,9 @@
 //! the matching context type. Every rule's stored rule-eval rule (the
 //! account's `rule_set()`, aligned with its installed rules) must equal the
 //! composed one: the rule `__check_auth` decides that rule's authorizations
-//! with is the rule the reviewed document lowers to. The on-chain rule
+//! with is the rule the reviewed document lowers to, its signers named by
+//! position in the account's `rule_signers()`, which must equal the composed
+//! signer table. The on-chain rule
 //! count, and the stored set's length, must equal the document's exactly —
 //! `apply_doc` brings the rule set to the document's, so a leftover rule is a
 //! detected mismatch, not a mystery. Every read must belong to the
@@ -183,6 +185,26 @@ fn check_stored(stored: &[ScVal], expected: &RuleEntry, index: usize, rule_id: u
     })
 }
 
+/// The account's signer table, which its stored rules name signers in by
+/// position, must be exactly the composed one.
+fn check_signer_table(read: Result<ReadOutcome>, compose: &ComposeOutput) -> Result<Row> {
+    let want = ScVal::from_xdr_base64(&compose.signer_table.scval_base64, Limits::none())
+        .context("compose signer table")?;
+    let mismatch = match read? {
+        ReadOutcome::Value(found) if found == want => None,
+        ReadOutcome::Value(_) => Some("signer table differs".to_string()),
+        ReadOutcome::ContractError { message, .. } => {
+            Some(format!("rule_signers trapped: {message}"))
+        }
+    };
+    Ok(Row {
+        rule_id: None,
+        name: "signers".to_string(),
+        check: "signer table",
+        mismatch,
+    })
+}
+
 /// Find a composed rule on chain by name and compare its context type.
 /// Returns its index among the installed rules and its id when found.
 fn check_rule(
@@ -243,6 +265,12 @@ pub fn run(
         legacy_no_rule_set,
     )?;
     let mut rows = vec![check_applied_hash(rpc, account, &compose.doc_hash)?];
+    if stored.is_some() {
+        rows.push(check_signer_table(
+            simulate_read(rpc, account, "rule_signers", vec![]),
+            &compose,
+        )?);
+    }
 
     for expected in compose.genesis_rule.iter().chain(compose.apply.iter()) {
         let (row, at) = check_rule(&onchain, expected)?;

@@ -48,11 +48,13 @@ The canonical encoding and hash compatibility are defined in
 
 The host representations (`StoredRule`, `ModelRule`, `CompiledRule`,
 `InstalledRule`) use `auth_root: Option<Vec<StoredAuthRoot>>`: `None` is
-unrestricted; `Some` must contain exactly one `{contract, function}`. The
-optional wrapper permits decoding the positively identified old eight-key
-stored-rule map. A current stored map has exactly nine keys; malformed roots,
-unknown/missing keys and trailing XDR never fall back to unrestricted. Every
-write includes the field. Existing cap history and grant-generation data keep
+unrestricted; `Some` must contain exactly one `{contract, function}`. A
+stored rule is the tuple of its nine fields, the root last (snapshot 3,
+[`account-interface.md`](account-interface.md#types), `StoredRule`), and the
+account reads no other layout: the eight- and nine-key maps earlier builds
+stored are refused, since no account storing them shipped. Malformed roots,
+a missing or extra field and trailing XDR never fall back to unrestricted.
+Every write includes the field. Existing cap history and grant-generation data keep
 their formats. Reconciliation still keeps a matched rule's id and unchanged
 cap history, including when an unrelated rule is removed.
 
@@ -63,9 +65,9 @@ cap history, including when an unrelated rule is removed.
 | Rust struct literals | Add the optional field; rebuilding consumers is required. |
 | Document JSON | Absent field preserves old bytes. Old strict parsers refuse new documents. |
 | Contract ABI | Entrypoint arguments and auth digest unchanged; returned structs gain a field. Regenerate bindings from the new build. |
-| Stored data | New account reads the exact legacy layout as unrestricted. New layout must not be downgraded into code that ignores its root. |
-| Views | Interface version 3, snapshot version 2. Snapshot 2 rules always expose root metadata, null when unrestricted. |
-| TypeScript | New reader accepts snapshots 1 and 2 when supplied with matching ABI bindings. Snapshot 2 with missing root metadata is refused; root-bearing apply requires interface >=3 and snapshot >=2. |
+| Stored data | The account reads only the snapshot-3 tuple layout; the earlier maps are refused, not read as unrestricted. New layout must not be downgraded into code that ignores its root. |
+| Views | Roots arrived with interface version 3 and snapshot version 2; interface 4 and snapshot 3 (the compact stored layout) keep them. Rules of snapshot 2 and later always expose root metadata, null when unrestricted. |
+| TypeScript | New reader accepts snapshots 1 to 3 when supplied with matching ABI bindings. Snapshot 2 or later with missing root metadata is refused; root-bearing apply requires interface >=3 and snapshot >=2. Stored rules (`readGrantDoc`) are read in the snapshot-3 layout only. |
 | Events | Existing event names/codes unchanged. The legacy context-rule event/view does not describe every condition; consumers must read `installed_rules`/`rule_set` or the grant equivalents. |
 | Deployed accounts | Existing compiler/account addresses remain pinned. Publishing source does not enable roots on deployed accounts. A new compiler/account build and a deliberate delayed account upgrade or new account are required. |
 | Proofs | New root semantics live in rule-core; Perch's canonical model includes the optional member. Old per-invocation interpreter proofs do not cover root enforcement. |
@@ -77,8 +79,9 @@ Generated clients for the new interface are marked undeployed.
 `legacyAccount` and `legacyDocCompiler` retain the recorded deployed ABI.
 The SDK decodes structs by position, so callers must read the unchanged
 `capabilities` view first and choose the matching bindings: snapshot 1 uses
-legacy bindings; snapshot 2 uses the new account bindings. A new spec must
-not decode an old rule map. Upgrade and
+legacy bindings; snapshots 2 and 3 use the new account bindings, since
+`configuration` is unchanged in 3. A new spec must not decode an old rule
+map. Upgrade and
 rollout approval is separate. An old low-level signing client can bypass
 client screening, so it must not be advertised as explaining this condition;
 the new account still enforces it on chain.
@@ -112,7 +115,7 @@ the relevant win/loss behavior of Guess the Number commit
 `df80831ac6bc2a2110cab15654726456b53cc8f3`; it is not the production game's Wasm.
 It covers direct, wrong, fabricated, reordered and cross-entry roots; omitted
 root auth; auth-free routers; multiple entries; caps and rollback; expiry,
-stale generations and recovery freeze/completion. Storage tests cover legacy
-and malformed new layouts. Shared Rust/TS canonical vectors and Lean's inverse
+stale generations and recovery freeze/completion. Storage tests cover
+malformed roots and the refusal of the earlier map layouts. Shared Rust/TS canonical vectors and Lean's inverse
 parser cover identity. Metered release-stack tests cover compiled Wasm costs;
 these are empirical tests, distinct from the dependency's evaluator proofs.

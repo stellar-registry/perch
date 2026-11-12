@@ -272,11 +272,11 @@ impl Lab {
 fn signed_game_loss_and_win_and_document_round_trip() {
     let l = Lab::new("guess", 2 * UNIT);
     let stored = l.w.client().grant_rule_set(&GRANT);
-    assert!(stored.get_unchecked(2).auth_root.is_some());
+    assert!(stored.get_unchecked(2).auth_root().is_some());
     let rebuilt = perch_testkit::rebuild::grant_text(&l.w.env, &l.w.account, GRANT).unwrap();
     let parsed = perch_ir::from_json(&l.doc.to_string()).unwrap();
     assert_eq!(rebuilt, perch_ir::canonical_json(&parsed));
-    assert_eq!(l.w.client().capabilities().snapshot_version, 2);
+    assert_eq!(l.w.client().capabilities().snapshot_version, 3);
     perch_testkit::rule_set::check_grant(&l.w.env, &l.w.account, GRANT).unwrap();
     let entry = l.entry(
         l.guess(&l.game, "guess", 0),
@@ -483,7 +483,7 @@ fn dropping_the_companion_rule_never_erases_the_transfer_root_or_cap_history() {
         .client()
         .grant_rule_set(&GRANT)
         .get_unchecked(0)
-        .auth_root
+        .auth_root()
         .is_some());
     l.w.env.set_auths(&[l.entry(l.transfer(), &[id])]);
     let before = raw_entries(&l.w.env);
@@ -588,45 +588,68 @@ fn changing_a_root_keeps_cap_history_and_enforces_the_new_pair() {
         .is_err());
 }
 
+/// The account reads a grant rule only in the stored layout: the tuple of
+/// nine fields, its root last. The rule here has an exact root, so a direct
+/// transfer passes only once the root is cleared: the tuple with no root
+/// (`Void`) authorizes it, while the same rule as the maps earlier builds
+/// stored, the eight-key one with no root included (which they read as
+/// unrestricted), is refused, as are a malformed root and a missing field.
 #[test]
-fn account_gate_reads_legacy_and_malformed_stored_roots_without_lenient_conversion() {
+fn account_gate_reads_only_the_stored_layout_without_lenient_conversion() {
     use soroban_sdk::{TryFromVal, Val};
-    for case in 0..4 {
+    let names = [
+        "contract",
+        "functions",
+        "conds",
+        "signers",
+        "threshold",
+        "cap",
+        "valid_until",
+        "generation",
+        "auth_root",
+    ];
+    for case in 0..5 {
         let l = Lab::new("guess", 2 * UNIT);
         let id = l.id("transfer");
         l.w.env.as_contract(&l.w.account, || {
             let e = &l.w.env;
             let key: Vec<Val> =
                 soroban_sdk::vec![e, Symbol::new(e, "Grants").into_val(e), GRANT.into_val(e)];
-            let mut grant: Map<Symbol, Val> = e.storage().persistent().get(&key).unwrap();
-            let mut records = Vec::<Map<Symbol, Val>>::try_from_val(
-                e,
-                &grant.get(symbol_short!("rules")).unwrap(),
-            )
-            .unwrap();
+            // `StoredGrant`: (gen, doc_hash, pos, RuleSet, ids, names), and
+            // `RuleSet`: (signer table, records).
+            let mut grant: Vec<Val> = e.storage().persistent().get(&key).unwrap();
+            let mut set = Vec::<Val>::try_from_val(e, &grant.get_unchecked(3)).unwrap();
+            let mut records = Vec::<Vec<Val>>::try_from_val(e, &set.get_unchecked(1)).unwrap();
             let mut record = records.get_unchecked(2);
-            let mut rule =
-                Map::<Symbol, Val>::try_from_val(e, &record.get(symbol_short!("rule")).unwrap())
-                    .unwrap();
-            match case {
-                0 => {
-                    rule.remove(Symbol::new(e, "auth_root"));
-                } // exact legacy layout
-                1 => {
-                    rule.set(Symbol::new(e, "auth_root"), Vec::<Val>::new(e).into_val(e));
+            let mut rule = Vec::<Val>::try_from_val(e, &record.get_unchecked(3)).unwrap();
+            let as_map = |rule: &Vec<Val>, with_root: bool| {
+                let mut m: Map<Symbol, Val> = Map::new(e);
+                for (i, name) in names.iter().enumerate() {
+                    if with_root || *name != "auth_root" {
+                        m.set(Symbol::new(e, name), rule.get_unchecked(i as u32));
+                    }
                 }
-                2 => {
-                    let root = rule.get(Symbol::new(e, "auth_root")).unwrap();
-                    rule.remove(Symbol::new(e, "auth_root"));
-                    rule.set(Symbol::new(e, "auth_rooot"), root);
+                m.into_val(e)
+            };
+            rule.set(8, Val::VOID.into());
+            let stored: Val = match case {
+                0 => rule.into_val(e),
+                1 => as_map(&rule, true),
+                // The eight-key map, which earlier builds read as unrestricted.
+                2 => as_map(&rule, false),
+                3 => {
+                    rule.set(8, Vec::<Val>::new(e).into_val(e));
+                    rule.into_val(e)
                 }
                 _ => {
-                    rule.remove(Symbol::new(e, "threshold"));
+                    rule.remove(4);
+                    rule.into_val(e)
                 }
-            }
-            record.set(symbol_short!("rule"), rule.into_val(e));
+            };
+            record.set(3, stored);
             records.set(2, record);
-            grant.set(symbol_short!("rules"), records.into_val(e));
+            set.set(1, records.into_val(e));
+            grant.set(3, set.into_val(e));
             e.storage().persistent().set(&key, &grant);
         });
         l.w.env.set_auths(&[l.entry(l.transfer(), &[id])]);

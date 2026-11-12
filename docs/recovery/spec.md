@@ -1040,6 +1040,29 @@ Two rules bound that cost:
   amount of prior rule churn. Larger caps are not supported at this
   revision
   ([`DEFERRED.md`](../DEFERRED.md#versioned-policy-backend-and-larger-limits)).
+  These are an **account document's** caps: one with a self-admin rule or a
+  recovery member (`perch_ir::is_account_document`), which every document
+  `apply_doc` applies, every published baseline, and every recovery target
+  is. A **grant document** (§7.6), which no completion compiles or
+  installs, has its own: `MAX_GRANT_SIGNERS` = 15 declared signers (the
+  account's per-rule signer limit, OZ's), `MAX_GRANT_RULES` = 50 rules, and
+  `MAX_GRANT_CANONICAL_BYTES` = 8 192 canonical bytes, with the same
+  rule-name cap, and the ledger entry the account stores for it: at most
+  `MAX_GRANT_STORED_BYTES` = 49 152 bytes, 75% of the ledger's per-entry
+  limit. That entry holds the document's signers once, and every rule with
+  its conditions and their values (`account-interface.md`, "Types",
+  `StoredRule`). The compiler computes the entry's size from the document
+  (`grant_stored_bytes`, exact) and refuses one past the bound
+  (`DocTooLarge`); `apply_grant` of such a document fails and stores
+  nothing. Within the other caps no document reaches the bound: the
+  largest entry they admit is 21 236 bytes (32.4% of the limit), a
+  `string-in` of one-character values filling the byte cap. The compiler's `grant_limits` view returns the count and byte
+  caps. They are sized so
+  that every grant flow over every grant document they admit fits the
+  transaction budget, the ledger's per-entry limit included (`budgets.md`,
+  "Grant-document caps"; the `worst_case_grant_flows_at_the_grant_caps` test
+  holds them in CI, and `grant_stored_size.rs` holds the computed size equal
+  to the stored entry). No recovery reads a grant record.
 - **Bounded revocation writes.** The revoked set is one persistent entry per
   fingerprint, so a completion writes at most one entry per removed
   credential, a number the caps bound.
@@ -1053,7 +1076,7 @@ Two rules bound that cost:
 Besides its applied document, the **account document**, an account holds any
 number of **grant documents**, each under a `u32` grant id its owner
 chooses (one per app grant, say). A grant document is a policy document in
-the same format, compiled by the account's doc compiler under the same caps
+the same format, compiled by the account's doc compiler under its own caps
 (§7.5). It holds rules scoped to other contracts only: app grants and
 session keys. The account document keeps the account's own rules, the
 recovery member, and everything a recovery restores; everything this spec
@@ -1066,7 +1089,7 @@ says about "the applied document" is about the account document.
 | `apply_grant(grant, doc_json)` | Owner | Compiles `doc_json`, refuses it if it reaches past a grant (below), is not in normal form (`NotNormalForm`, below), names a revoked credential (`RevokedCredential`, §8), or names a credential a wiped grant named (`WipedCredential`, below), records each credential it names under the current grant generation, reconciles that grant's rules with §7.5's delta against **the grant's own records only**, tags each new rule, and stores the grant's record: its generation, `doc_hash`, rules, index position, and signer ids. Returns the `doc_hash`; emits `GrantApplied`. |
 | `remove_grant(grant)` | Owner | Removes every rule the grant installed, their tags and spending records, and the grant's record (`UnknownGrant` if none); emits `GrantRemoved`. This is how a grant is revoked. |
 | `gc_grant(grant)` | None | The same removal, for a grant a completion wiped only (`GrantLive` otherwise). |
-| `grant`, `grant_rule_set`, `grant_signer_ids`, `grant_generation`, `grant_count`, `grants(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A grant's record (generation, `doc_hash`, rules with their ids), its rule-eval rules, and its signer ids, which with its rules give back its canonical text; the grant generation; the index of grant ids; the grant generation a credential was last named under. |
+| `grant`, `grant_rule_set`, `grant_signers`, `grant_signer_ids`, `grant_verifier_names`, `grant_generation`, `grant_count`, `grants(start, count)`, `credential_generation(fingerprint)` | None (read-only) | A grant's record (generation, `doc_hash`, rules with their ids), its rule-eval rules, the signer table they name their signers by position in, and its signer ids and verifier names, which with its rules give back its canonical text (`account-interface.md`, "Views"); the grant generation; the index of grant ids; the grant generation a credential was last named under. |
 
 None of them calls the controller or changes the applied document, its
 `doc_hash`, the configuration revision (§15), or the recovery generation
@@ -1896,7 +1919,7 @@ on the deployed contract
 | Account | `apply_grant(grant, doc_json)`, `remove_grant(grant)` | Owner authorization (§7.6) |
 | Account | `gc_grant(grant)` | Permissionless; a grant a completion wiped only (§7.6) |
 | Account | `renew(fingerprints, enrollment_ids)` | Permissionless (§3.6) |
-| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `grant_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `get_context_rules_count`, `get_context_rule`, `grant`, `grant_rule_set`, `grant_signer_ids`, `grant_count`, `grants`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
+| Account | `applied_doc`, `applied_doc_hash`, `doc_compiler`, `infra`, `is_revoked`, `is_enrolled_id`, `recovery_controller`, `recovery_gate`, `pending_upgrade`, `next_upgrade_request_id`, `recovery_generation`, `grant_generation`, `revision`, `configuration`, `document`, `capabilities`, `installed_rules`, `rule_set`, `rule_signers`, `get_context_rules_count`, `get_context_rule`, `grant`, `grant_rule_set`, `grant_signers`, `grant_signer_ids`, `grant_verifier_names`, `grant_count`, `grants`, `credential_generation` | None (read-only). The views the controller calls (`applied_doc`, `applied_doc_hash`, `doc_compiler`, `is_revoked`, `is_enrolled_id`, `next_upgrade_request_id`) plus `rcv_gate` make up `account::RecoveryAccountClient`; the rest are for wallets. |
 | Controller | `rcv_sync`, `rcv_cancel`, `rcv_upgrade`, `rcv_install`, `rcv_complete` (`controller::RecoveryHooksClient`) | Invoker-only: `account.require_auth()` reachable only from the account's own flows |
 | Controller | `begin_lost_key`, `begin_compromise`, `submit_zk`, `submit_zk_change`, `publish_baseline`, `renew`, `renew_nullifier` | Permissionless |
 | Controller | `submit_guardian`, `approve_change` | The guardian's `require_auth_for_args((digest,))` (non-reserved names, so guardians that are perch accounts can sign) |

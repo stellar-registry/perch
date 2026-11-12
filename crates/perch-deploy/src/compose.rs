@@ -27,6 +27,10 @@ pub struct ComposeOutput {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub genesis_rule: Option<RuleEntry>,
     pub apply: Vec<RuleEntry>,
+    /// The signer table the stored rules name their signers in, by
+    /// position: what `verify` compares with the account's
+    /// `rule_signers()`.
+    pub signer_table: StoredRuleJson,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -59,9 +63,10 @@ pub enum SignerJson {
     Delegated { address: String },
 }
 
-/// A `perch_rule_eval::StoredRule`, in both machine (base64 ScVal XDR — what
-/// `verify` compares with the account's `rule_set()` entry) and reviewable
-/// (serde_json ScVal) form.
+/// A `perch_rule_eval::StoredRule`, or a signer table, in both machine
+/// (base64 ScVal XDR — what `verify` compares with the account's
+/// `rule_set()` entry or `rule_signers()`) and reviewable (serde_json ScVal)
+/// form.
 #[derive(Serialize, Deserialize)]
 pub struct StoredRuleJson {
     pub scval_base64: String,
@@ -78,8 +83,21 @@ pub fn parse_hash32(hex64: &str) -> Result<[u8; 32]> {
 
 /// The StoredRule contracttype ScVal — `ToXdr` bytes ARE the ScVal XDR.
 pub fn stored_scval(env: &Env, rule: &StoredRule) -> Result<ScVal> {
-    let bytes: Vec<u8> = rule.clone().to_xdr(env).iter().collect();
+    scval(env, rule.clone())
+}
+
+/// A contracttype value's ScVal.
+fn scval(env: &Env, v: impl ToXdr) -> Result<ScVal> {
+    let bytes: Vec<u8> = v.to_xdr(env).iter().collect();
     Ok(ScVal::from_xdr(bytes, Limits::none())?)
+}
+
+/// `v`'s ScVal in both forms.
+fn json_of(v: ScVal) -> Result<StoredRuleJson> {
+    Ok(StoredRuleJson {
+        scval_base64: v.to_xdr_base64(Limits::none())?,
+        scval_json: serde_json::to_value(&v)?,
+    })
 }
 
 fn rule_entry(
@@ -112,19 +130,15 @@ fn rule_entry(
             },
         });
     }
-    let scval = stored_scval(env, stored)?;
     Ok(RuleEntry {
         expected_rule_id,
         name: rule.name.clone(),
         context_type: ContextTypeJson {
             call_contract: call_contract.to_string(),
         },
-        valid_until: stored.valid_until,
+        valid_until: stored.valid_until(),
         signers,
-        rule: StoredRuleJson {
-            scval_base64: scval.to_xdr_base64(Limits::none())?,
-            scval_json: serde_json::to_value(&scval)?,
-        },
+        rule: json_of(stored_scval(env, stored)?)?,
     })
 }
 
@@ -147,8 +161,11 @@ pub fn compose(env: &Env, doc_json: &str, account: &str) -> Result<ComposeOutput
 
     let mut genesis_rule = None;
     let mut apply = Vec::new();
+    // One table for every rule, each signer once in the order the rules
+    // first name it, as the account keeps it.
+    let mut table = soroban_sdk::Vec::new(env);
     for (rule, lowered) in doc.rules.iter().zip(&lowered) {
-        let stored = StoredRule::from_rule_in(env, lowered, &known)
+        let stored = StoredRule::from_rule_in(env, lowered, &known, &mut table)
             .ok_or_else(|| anyhow!("rule '{}' has no stored form", rule.name))?;
         match &rule.scope {
             Scope::SelfAdmin(_) => {
@@ -177,11 +194,13 @@ pub fn compose(env: &Env, doc_json: &str, account: &str) -> Result<ComposeOutput
         }
     }
 
+    let signer_table = json_of(scval(env, table)?)?;
     Ok(ComposeOutput {
         doc_hash: perch_ir::doc_hash_hex(&doc),
         account: account.to_string(),
         genesis_rule,
         apply,
+        signer_table,
     })
 }
 
@@ -222,8 +241,8 @@ mod tests {
         assert_eq!(genesis.expected_rule_id, 0);
         assert_eq!(genesis.context_type.call_contract, DUMMY);
         let admin = stored(genesis);
-        assert!(admin.conds.is_empty() && admin.cap.is_empty());
-        assert_eq!(admin.threshold, admin.signers.len());
+        assert!(admin.2.is_empty() && admin.cap().is_empty());
+        assert_eq!(admin.4, admin.signers().len());
 
         assert_eq!(out.apply.len(), 1);
         let ci = &out.apply[0];
@@ -233,8 +252,8 @@ mod tests {
         assert_eq!(ci.valid_until, Some(54_999_999));
         assert_eq!(ci.signers.len(), 1);
         let rule = stored(ci);
-        assert_eq!(rule.valid_until, Some(54_999_999));
-        assert_eq!(rule.threshold, 1);
+        assert_eq!(rule.valid_until(), Some(54_999_999));
+        assert_eq!(rule.4, 1);
     }
 
     /// The composed rule is what the account stores: rule-eval's lowering of
@@ -249,14 +268,18 @@ mod tests {
         let lowered = rule_eval::lower(&perch_rule_eval::doc_of(&env, &model).unwrap(), &me);
         let entries: Vec<&RuleEntry> = out.genesis_rule.iter().chain(&out.apply).collect();
         assert_eq!(entries.len(), lowered.len());
+        let mut table = soroban_sdk::Vec::new(&env);
         for (entry, rule) in entries.into_iter().zip(&lowered) {
             assert_eq!(
                 stored(entry),
-                StoredRule::from_rule(&env, rule).unwrap(),
+                StoredRule::from_rule(&env, rule, &mut table).unwrap(),
                 "{}",
                 entry.name
             );
         }
+        let composed =
+            ScVal::from_xdr_base64(&out.signer_table.scval_base64, Limits::none()).unwrap();
+        assert_eq!(composed, scval(&env, table).unwrap(), "the signer table");
     }
 
     #[test]

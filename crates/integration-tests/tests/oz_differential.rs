@@ -476,7 +476,7 @@ impl Target {
                     Signer::Delegated(_) => None,
                 })
                 .collect();
-            let listed = |f: &str| match &stored.functions {
+            let listed = |f: &str| match &stored.1 {
                 StoredFunctions::Only(fs) => fs.contains(Symbol::new(&w.env, f)),
                 StoredFunctions::AnyExcept(fs) => !fs.contains(Symbol::new(&w.env, f)),
             };

@@ -68,14 +68,15 @@ fn the_constructor_stores_its_admin_rule() {
     let w = DeltaWorld::new();
     let c = check(&w.env, &w.delta).unwrap();
     assert_eq!(c.rules, 1);
-    let stored = PerchAccountClient::new(&w.env, &w.delta).rule_set();
-    let admin = stored.get_unchecked(0);
-    assert_eq!(admin.contract, w.delta);
+    let client = PerchAccountClient::new(&w.env, &w.delta);
+    let admin = client.rule_set().get_unchecked(0);
+    assert_eq!(admin.contract(), w.delta);
+    assert_eq!(admin.signers(), soroban_sdk::vec![&w.env, 0u32]);
     assert_eq!(
-        admin.signers,
+        client.rule_signers(),
         soroban_sdk::vec![&w.env, Signer::Delegated(w.keys[0].clone())]
     );
-    assert_eq!(admin.threshold, 1);
+    assert_eq!(admin.4, 1);
 }
 
 /// A document that only reorders a rule's signers. A
@@ -112,12 +113,16 @@ fn reordering_a_rules_signers_reorders_it_everywhere() {
                 .iter()
                 .collect(),
             "record" => records.get_unchecked(i as u32).signers.iter().collect(),
-            _ => account
-                .rule_set()
-                .get_unchecked(i as u32)
-                .signers
-                .iter()
-                .collect(),
+            _ => {
+                let table = account.rule_signers();
+                account
+                    .rule_set()
+                    .get_unchecked(i as u32)
+                    .signers()
+                    .iter()
+                    .map(|at| table.get_unchecked(at))
+                    .collect()
+            }
         }
     };
     let (a, b) = (
@@ -164,14 +169,15 @@ fn the_check_reports_a_stored_set_that_differs() {
         &None,
     );
     let good = account.rule_set();
+    let table = account.rule_signers();
     check(e, &w.delta).unwrap();
 
     let tampered = |f: &dyn Fn(&mut SVec<StoredRule>)| {
         let mut set = good.clone();
         f(&mut set);
-        e.as_contract(&w.delta, || set_rule_set(e, &set));
+        e.as_contract(&w.delta, || set_rule_set(e, &table, &set));
         let out = check(e, &w.delta);
-        e.as_contract(&w.delta, || set_rule_set(e, &good));
+        e.as_contract(&w.delta, || set_rule_set(e, &table, &good));
         out
     };
     let edit = |set: &mut SVec<StoredRule>, f: &dyn Fn(&mut StoredRule)| {
@@ -183,23 +189,32 @@ fn the_check_reports_a_stored_set_that_differs() {
     let cases: [(&str, Tamper); 4] = [
         ("signer order", &|s| {
             edit(s, &|r| {
-                let (x, y) = (r.signers.get_unchecked(0), r.signers.get_unchecked(1));
-                r.signers = soroban_sdk::vec![e, y, x];
+                let (x, y) = (r.3.get_unchecked(0), r.3.get_unchecked(1));
+                r.3 = soroban_sdk::vec![e, y, x];
             })
         }),
-        ("threshold", &|s| edit(s, &|r| r.threshold = 2)),
+        ("threshold", &|s| edit(s, &|r| r.4 = 2)),
         ("condition", &|s| {
             edit(s, &|r| {
-                r.conds = soroban_sdk::vec![e, StoredCond::ArgI128AtMost(0, i128::MAX)];
+                r.2 = soroban_sdk::vec![e, StoredCond::ArgI128AtMost(0, i128::MAX)];
             })
         }),
-        ("last ledger", &|s| {
-            edit(s, &|r| r.valid_until = Some(5_000))
-        }),
+        ("last ledger", &|s| edit(s, &|r| r.6 = Some(5_000))),
     ];
     for (what, f) in cases {
         assert!(tampered(f).is_err(), "a changed {what} passed");
     }
+    // The table in another order: every rule's positions now name others.
+    let (x, y) = (table.get_unchecked(0), table.get_unchecked(1));
+    let mut reordered = table.clone();
+    reordered.set(0, y);
+    reordered.set(1, x);
+    e.as_contract(&w.delta, || set_rule_set(e, &reordered, &good));
+    assert!(
+        check(e, &w.delta).is_err(),
+        "a reordered signer table passed"
+    );
+    e.as_contract(&w.delta, || set_rule_set(e, &table, &good));
     check(e, &w.delta).unwrap();
 }
 

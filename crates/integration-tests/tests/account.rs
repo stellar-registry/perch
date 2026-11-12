@@ -52,9 +52,10 @@ fn setup(ci: bool) -> World {
     let registry = Address::from_str(&env, FIXTURE_REGISTRY);
     let ci_signer = Signer::External(verifier.clone(), ci_pub.clone().into());
     let ci_rule_id = if ci {
-        let rule = ci_publish_rule(&env, &account, &registry, vec![&env, ci_signer], None);
+        let signers = vec![&env, ci_signer];
+        let rule = ci_publish_rule(&env, &account, &registry, &signers, None);
         env.as_contract(&account, || {
-            perch_smart_account::testutils::install_rule(&env, "ci-publish", &rule)
+            perch_smart_account::testutils::install_rule(&env, "ci-publish", &rule, &signers)
         })
     } else {
         u32::MAX

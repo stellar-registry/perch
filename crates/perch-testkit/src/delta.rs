@@ -621,22 +621,32 @@ pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
 
 /// Every stored rule-eval rule of `account`, by the OZ id of the installed
 /// rule it stands beside.
-fn stored_rules(w: &DeltaWorld, account: &Address) -> BTreeMap<u32, StoredRule> {
-    let client = PerchAccountClient::new(&w.env, account);
-    let mut out: BTreeMap<u32, StoredRule> = client
+fn stored_rules(w: &DeltaWorld, account: &Address) -> BTreeMap<u32, rule_eval::Rule> {
+    let e = &w.env;
+    let client = PerchAccountClient::new(e, account);
+    let read = |rules: soroban_sdk::Vec<StoredRule>, table: &soroban_sdk::Vec<_>| {
+        rules
+            .iter()
+            .map(|r| r.to_rule(e, table).expect("a stored rule reads back"))
+            .collect::<std::vec::Vec<_>>()
+    };
+    let mut out: BTreeMap<u32, rule_eval::Rule> = client
         .installed_rules()
         .iter()
         .map(|r| r.id)
-        .zip(client.rule_set().iter())
+        .zip(read(client.rule_set(), &client.rule_signers()))
         .collect();
     for grant in client.grants(&0, &u32::MAX).iter() {
         if let Some(record) = client.grant(&grant) {
+            let table = client
+                .grant_signers(&grant)
+                .expect("a grant's signer table");
             out.extend(
                 record
                     .rules
                     .iter()
                     .map(|r| r.id)
-                    .zip(client.grant_rule_set(&grant).iter()),
+                    .zip(read(client.grant_rule_set(&grant), &table)),
             );
         }
     }
@@ -660,8 +670,7 @@ pub fn rules_by_id(
 /// What `stored` allows beyond its contract, signers and last ledger,
 /// rendered like [`DocModel::expected_rules`]: its threshold, functions,
 /// conditions, and cap.
-fn enforced(e: &Env, stored: &StoredRule) -> BTreeSet<String> {
-    let rule = stored.to_rule(e).expect("a stored rule reads back");
+fn enforced(rule: &rule_eval::Rule) -> BTreeSet<String> {
     let names = |fs: &[std::vec::Vec<u8>]| -> BTreeSet<String> {
         fs.iter()
             .map(|f| String::from_utf8(f.clone()).unwrap())
@@ -692,7 +701,7 @@ fn enforced(e: &Env, stored: &StoredRule) -> BTreeSet<String> {
 /// `rule` rendered like [`DocModel::expected_rules`], or `None` once expired.
 /// `stored` is the stored rule its id selects, which the recovery rule's
 /// controller stands in for.
-fn granted(w: &DeltaWorld, rule: &ContextRule, stored: Option<&StoredRule>) -> Option<String> {
+fn granted(w: &DeltaWorld, rule: &ContextRule, stored: Option<&rule_eval::Rule>) -> Option<String> {
     if rule
         .valid_until
         .is_some_and(|v| v < w.env.ledger().sequence())
@@ -728,7 +737,7 @@ fn granted(w: &DeltaWorld, rule: &ContextRule, stored: Option<&StoredRule>) -> O
         .collect();
     if !policies.contains("recovery") {
         match stored {
-            Some(s) => policies.extend(enforced(&w.env, s)),
+            Some(s) => policies.extend(enforced(s)),
             None => {
                 policies.insert("unstored".to_string());
             }
@@ -1318,23 +1327,21 @@ impl Ids {
             // The account's records name its admin rules (the recovery
             // rule among them), each by its name and its stored rule's
             // contract.
-            if let (ScVal::Symbol(s), ScVal::Vec(Some(records))) = (&k.key, &d.val) {
+            if let ScVal::Symbol(s) = &k.key {
                 if s.0.to_utf8_string_lossy() == "RuleSet" {
-                    for r in records.iter() {
-                        if let Some(ScVal::U32(id)) = field(r, "id") {
-                            let name = field(r, "name").map(|v| render(v, Some(me)));
-                            let contract = field(r, "rule")
-                                .and_then(|rule| field(rule, "contract"))
-                                .map(|v| render(v, Some(me)));
-                            ids.rules.insert(
-                                *id,
-                                format!(
-                                    "{}@{}",
-                                    name.unwrap_or_default(),
-                                    contract.unwrap_or_default()
-                                ),
-                            );
-                        }
+                    for r in rule_records(&d.val) {
+                        let [ScVal::U32(id), name, _policies, rule] = r else {
+                            continue;
+                        };
+                        let contract = items(rule).and_then(|f| f.first());
+                        ids.rules.insert(
+                            *id,
+                            format!(
+                                "{}@{}",
+                                render(name, Some(me)),
+                                contract.map(|c| render(c, Some(me))).unwrap_or_default()
+                            ),
+                        );
                     }
                 }
                 continue;
@@ -1437,26 +1444,18 @@ impl Ids {
             (n, ScVal::U32(id)) if n.starts_with("[PolicyLookup") => {
                 self.policies.get(id).cloned().unwrap_or_default()
             }
-            // The rule records carry ids.
-            ("RuleSet", ScVal::Vec(Some(rules))) => {
-                let rendered: Vec<String> = rules
-                    .iter()
-                    .map(|r| match r {
-                        ScVal::Map(Some(m)) => {
-                            let fields: Vec<String> = m
-                                .0
-                                .iter()
-                                .filter(|e| render(&e.key, None) != "id")
-                                .map(|e| {
-                                    format!("{}={}", render(&e.key, None), render(&e.val, Some(me)))
-                                })
-                                .collect();
-                            format!("{{{}}}", fields.join(";"))
-                        }
-                        other => render(other, Some(me)),
+            // The rule records carry ids (each record's first field); the
+            // signer table beside them does not.
+            ("RuleSet", ScVal::Vec(Some(set))) => {
+                let table = set.first().map(|t| render(t, Some(me)));
+                let rendered: Vec<String> = rule_records(val)
+                    .map(|r| {
+                        let fields: Vec<String> =
+                            r.iter().skip(1).map(|f| render(f, Some(me))).collect();
+                        format!("[{}]", fields.join(","))
                     })
                     .collect();
-                format!("[{}]", rendered.join(","))
+                format!("[{},[{}]]", table.unwrap_or_default(), rendered.join(","))
             }
             _ => render(val, Some(me)),
         };
@@ -1492,6 +1491,25 @@ fn oz_key(key: &ScVal) -> Option<(String, u32)> {
         [ScVal::Symbol(kind), ScVal::U32(id)] => Some((kind.0.to_utf8_string_lossy(), *id)),
         _ => None,
     }
+}
+
+/// The items of a vector.
+fn items(v: &ScVal) -> Option<&[ScVal]> {
+    match v {
+        ScVal::Vec(Some(x)) => Some(x.as_slice()),
+        _ => None,
+    }
+}
+
+/// The records of a stored `RuleSet` (the tuple of a signer table and the
+/// records), each the items of its tuple (id, name, policies, stored rule).
+fn rule_records(set: &ScVal) -> impl Iterator<Item = &[ScVal]> {
+    items(set)
+        .and_then(|s| s.get(1))
+        .and_then(items)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(items)
 }
 
 fn field<'a>(v: &'a ScVal, name: &str) -> Option<&'a ScVal> {

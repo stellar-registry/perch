@@ -1,8 +1,10 @@
 // A grant document's canonical text, rebuilt from what its account keeps.
 //
 // The account keeps no grant document's text. It keeps each rule's name and
-// the rule-eval rule it enforces (`grant(id)`, `grant_rule_set(id)`), the
-// document's signer ids in declaration order (`grant_signer_ids(id)`), and
+// the rule-eval rule it enforces (`grant(id)`, `grant_rule_set(id)`), its
+// signers once in a table the rules name them by position in
+// (`grant_signers(id)`), the document's signer ids in declaration order
+// (`grant_signer_ids(id)`), and
 // each signer's `verifier-name` (`grant_verifier_names(id)`), and it
 // applies only documents in normal form (`perch_ir::normal_form`, and its own
 // checks in `apply_grant`): the one spelling, among the documents that store
@@ -45,21 +47,22 @@ export type StoredVal =
   | { kind: 'u64'; value: bigint }
   | { kind: 'bool'; value: boolean };
 
-/** A stored condition on one argument (`StoredCond`). */
+/** A stored condition on one argument (`StoredCond`); a set's values are
+ *  strings. */
 export type StoredCond =
   | { kind: 'argEq'; index: number; value: StoredVal }
   | { kind: 'argI128AtMost'; index: number; bound: bigint }
-  | { kind: 'argIn'; index: number; values: StoredVal[] }
+  | { kind: 'argIn'; index: number; values: string[] }
   | { kind: 'argStrPrefix'; index: number; prefix: string };
 
 /** A stored rule-eval rule (`StoredRule`). */
 export interface StoredRule {
   contract: string;
-  /** Absent only in legacy stored rules. */
-  authRoot?: AuthRoot | null;
+  authRoot: AuthRoot | null;
   functions: { kind: 'anyExcept' | 'only'; names: string[] };
   conds: StoredCond[];
-  signers: SignerKey[];
+  /** Positions in the grant's signer table (`StoredGrant.signers`). */
+  signers: number[];
   threshold: number;
   cap: { limit: bigint; period: number; amountArg: number } | null;
   validUntil: number | null;
@@ -73,6 +76,8 @@ export interface StoredGrant {
   /** The network passphrase: the document's `network`. */
   network: string;
   docHash: Uint8Array;
+  /** `grant_signers(id)`: the signer table the rules name signers in. */
+  signers: SignerKey[];
   /** `grant_signer_ids(id)`. */
   signerIds: string[];
   /** `grant_verifier_names(id)`: each signer's `verifier-name`, aligned with
@@ -132,16 +137,7 @@ function arg(account: string, c: StoredCond): ArgConstraint {
       throw new GrantNotRebuilt(`an equality on argument ${c.index} no predicate lowers to`);
     }
     case 'argIn':
-      return {
-        index: c.index,
-        pred: {
-          type: 'string-in',
-          values: c.values.map((v) => {
-            if (v.kind !== 'string') throw new GrantNotRebuilt(`a set on argument ${c.index} holding a ${v.kind}`);
-            return v.value;
-          }),
-        },
-      };
+      return { index: c.index, pred: { type: 'string-in', values: [...c.values] } };
     case 'argStrPrefix':
       return { index: c.index, pred: { type: 'string-prefix', prefix: c.prefix } };
     case 'argI128AtMost':
@@ -156,9 +152,14 @@ function arg(account: string, c: StoredCond): ArgConstraint {
  * document in normal form, or the rebuild does not hash to `doc_hash`.
  */
 export function rebuildGrantDoc(grant: StoredGrant): RebuiltGrant {
+  const signerAt = (at: number): SignerKey => {
+    const s = grant.signers[at];
+    if (s === undefined) throw new GrantNotRebuilt(`a position ${at} past the signer table`);
+    return s;
+  };
   const signers: SignerKey[] = [];
   for (const { rule } of grant.rules) {
-    for (const s of rule.signers) if (!signers.some((x) => sameSigner(x, s))) signers.push(s);
+    for (const s of rule.signers.map(signerAt)) if (!signers.some((x) => sameSigner(x, s))) signers.push(s);
   }
   if (signers.length !== grant.signerIds.length) {
     throw new GrantNotRebuilt(`${grant.signerIds.length} signer ids for ${signers.length} stored signers`);
@@ -168,7 +169,7 @@ export function rebuildGrantDoc(grant: StoredGrant): RebuiltGrant {
   }
   const idOf = (s: SignerKey): string => grant.signerIds[signers.findIndex((x) => sameSigner(x, s))]!;
   const rules = grant.rules.map(({ name, rule }) => {
-    const ids = rule.signers.map(idOf);
+    const ids = rule.signers.map(signerAt).map(idOf);
     const conds = [...rule.conds];
     let functions: string[] | undefined;
     let cap: Record<string, unknown> | undefined;

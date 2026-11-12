@@ -224,6 +224,7 @@ fn a_documents_keys_and_names_are_within_the_limits() {
     assert_eq!(perch_ir::MAX_SIGNER_KEY_LEN as u32, MAX_EXTERNAL_KEY_SIZE);
     assert_eq!(perch_doc_compiler::MAX_RULE_NAME_BYTES, MAX_NAME_SIZE);
     const { assert!(perch_doc_compiler::MAX_DOC_SIGNERS <= MAX_SIGNERS) };
+    const { assert!(perch_doc_compiler::MAX_GRANT_SIGNERS <= MAX_SIGNERS) };
     let long = hex::encode(std::vec![4u8; MAX_EXTERNAL_KEY_SIZE as usize + 1]);
     assert_eq!(
         compile_signers(&[("a", long)]),

@@ -188,18 +188,7 @@ pub fn step(v: &Val) -> Option<Step> {
         (b"RestrictFunctions", Some(x)) => Step::RestrictFunctions(i, symbols(x)?),
         (b"RemoveSigners", Some(x)) => Step::RemoveSigners(i, each(x, signer)?),
         (b"RaiseThreshold", Some(x)) => Step::RaiseThreshold(i, u32_of(x)?),
-        (b"AddCap", Some(x)) => {
-            let [amount_arg, limit, period] =
-                crate::stored::fields(x, [b"amount_arg", b"limit", b"period"])?;
-            Step::AddCap(
-                i,
-                Cap {
-                    limit: i128_of(limit)?,
-                    period: u32_of(period)?,
-                    amount_arg: u32_of(amount_arg)?,
-                },
-            )
-        }
+        (b"AddCap", Some(x)) => Step::AddCap(i, crate::stored::cap(x)?),
         (b"LowerCapLimit", Some(x)) => Step::LowerCapLimit(i, i128_of(x)?),
         (b"LengthenCapPeriod", Some(x)) => Step::LengthenCapPeriod(i, u32_of(x)?),
         (b"LowerValidUntil", Some(x)) => Step::LowerValidUntil(i, u32_of(x)?),

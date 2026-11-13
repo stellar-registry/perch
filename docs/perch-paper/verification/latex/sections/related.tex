@@ -1,0 +1,8 @@
+Cedar~\cite{cedar} specifies its authorization semantics in Lean and links that
+model to its Rust implementation by differential random
+testing~\cite{cedar-vgd}. Here the link is a proof: Charon~\cite{charon} and
+Aeneas~\cite{aeneas} translate the Rust evaluator into Lean, and
+Theorem~\ref{stmt:total-equivalence-of-the-evaluator} proves the translation
+equal to the model on every input. The step from that Rust to the shipped Wasm
+stays trusted; Wasm-level tools for Soroban, Sunbeam~\cite{sunbeam} and
+Komet~\cite{komet}, could check it.

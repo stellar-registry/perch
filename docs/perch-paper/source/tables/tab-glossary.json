@@ -1,0 +1,304 @@
+{
+ "title": "Glossary.",
+ "caption": "Eight words mean different things in the two systems: grant, scope, policy, interpreter, `execute`, recovery, cap and expiry; the last column gives the meaning in OpenZeppelin's account or in oz-policy-builder.",
+ "columns": [
+  "Term",
+  "In Perch",
+  "Name in the artifacts",
+  "In OpenZeppelin or oz-policy-builder"
+ ],
+ "editions": [
+  "html"
+ ],
+ "rows": [
+  [
+   "Grant",
+   "A bounded set of rules the owner installs so an app can act without a prompt for each call",
+   "grant",
+   "No single object: one context rule per contract, each with its policies"
+  ],
+  [
+   "Grant document",
+   "The JSON a wallet submits to install a grant; an input and a hash commitment",
+   "grant document",
+   "—"
+  ],
+  [
+   "Installed grant",
+   "The rules and metadata stored under a grant ID, stamped with the grant generation",
+   "`apply_grant`, `grant(id)`",
+   "—"
+  ],
+  [
+   "Account document",
+   "The owner's account policy: administrative rules and recovery configuration",
+   "`apply_doc`",
+   "Rule 0 and the account's other context rules"
+  ],
+  [
+   "Rule",
+   "One target contract, function list, argument conditions and signer threshold, with optional expiry, cap and generation",
+   "`Rule`",
+   "Context rule (below)"
+  ],
+  [
+   "Rule target",
+   "The contract whose functions a rule lets be called",
+   "JSON `\"scope\"`",
+   "The context rule's `CallContract` address"
+  ],
+  [
+   "Signer condition",
+   "Which listed signers must approve: a threshold over distinct identities",
+   "JSON `\"principals\"`",
+   "The rule's signers, with a threshold policy attached"
+  ],
+  [
+   "External signer",
+   "Key material plus a verifier contract that checks evidence for it (Ed25519, WebAuthn passkey)",
+   "`Signer::External`",
+   "Same enum case; refused on rules the interpreter polices (error {{fact:opb-error-external-signer}})"
+  ],
+  [
+   "Delegated signer",
+   "Another Soroban address that approves through the host; in Perch through CAP-0071, inside the account's own authorization entry",
+   "`Signer::Delegated`",
+   "Same enum case; approves in an authorization entry of its own, binding the rule IDs; the only kind on policed rules"
+  ],
+  [
+   "Credential",
+   "The value that fills a signer: a delegated address, or a verifier contract and key; a document names each signer by its signer ID",
+   "`Signer` (`Delegated(address)`, `External(verifier, key)`)",
+   "The same enum, also named `Signer`"
+  ],
+  [
+   "Verifier",
+   "A contract with `verify(digest, key, signature) -> bool`",
+   "`perch_ed25519_verifier`, WebAuthn verifier",
+   "The same interface for External signers"
+  ],
+  [
+   "Document compiler",
+   "A stateless contract that parses and validates a document, resolves verifier names and returns canonical bytes, `doc_hash` and a model",
+   "`perch_doc_compiler`",
+   "Off chain: the policy synthesiser"
+  ],
+  [
+   "`perch/verifiers`",
+   "A registry contract that publishes verifier Wasm as name@version and deploys it at an address derived from its hash",
+   "`perch-constructorless-registry`",
+   "—"
+  ],
+  [
+   "Account shell",
+   "The account code around the evaluator: installs documents, authenticates signers, stores state, admits recovery completion; tested, not proved",
+   "`perch-smart-account`",
+   "The OpenZeppelin account"
+  ],
+  [
+   "Evaluator",
+   "The pure function that decides an authorization and returns the next spending records",
+   "`rule_eval::check_auth`",
+   "The interpreter's `enforce`, per policy"
+  ],
+  [
+   "Lowering",
+   "Turning a compiled document's model into the rules the account stores, under the account's address, its excluded set and the current grant generation",
+   "`lower`, `lower_scoped`",
+   "—"
+  ],
+  [
+   "rule-core",
+   "The library that holds the evaluator, its Lean model, the translation and the proofs",
+   "`soroban-rule-core`",
+   "—"
+  ],
+  [
+   "Attenuation",
+   "Deriving from a grant a rule set that allows no call the original does not, by the ten steps of rule-core's attenuation; modeled and proved, with no account entry point at the pinned build",
+   "rule-core `attenuate`",
+   "—"
+  ],
+  [
+   "Spending record",
+   "A capped rule's charged amounts and their ledgers",
+   "`SpendRecord`",
+   "History in OpenZeppelin's `spending_limit`"
+  ],
+  [
+   "Cap and window",
+   "At most *limit* charged over the last *P* ledgers: the window at ledger *L* is (*L* − *P*, *L*]",
+   "`cap`, `period-ledgers`",
+   "`spending_limit` uses the same window boundary. In an oz-policy-builder Intent, `cap` bounds one call (`lte`)"
+  ],
+  [
+   "Grant generation",
+   "A counter on the account, 0 at creation, advanced only by a completed recovery; a grant from an older generation refuses",
+   "`grant_generation`, `StaleGrant`",
+   "—"
+  ],
+  [
+   "Recovery generation",
+   "A counter that every recovery-configuration change, completed recovery and executed upgrade advances",
+   "`recovery_generation`",
+   "—"
+  ],
+  [
+   "Revision",
+   "A counter that every account-document write and executed upgrade advances",
+   "`revision`",
+   "—"
+  ],
+  [
+   "Epoch",
+   "The recovery controller's counter; it invalidates older evidence and attempts",
+   "`epoch`",
+   "—"
+  ],
+  [
+   "Credential index",
+   "The account's record of the credentials grants have named; after a recovery it refuses (`WipedCredential`) any later document naming a credential an earlier grant named, except the recovery target itself",
+   "credential index, `WipedCredential`",
+   "—"
+  ],
+  [
+   "Excluded set",
+   "The adopted recovery controller and the zero-knowledge adapter and pool; no grant rule may call them",
+   "`excluded`",
+   "—"
+  ],
+  [
+   "Collection",
+   "Removing a stale grant's rules, tags and spending records; anyone may do it",
+   "`gc_grant`",
+   "—"
+  ],
+  [
+   "Archival",
+   "An entry whose rent lapsed: unavailable until restored, never absent",
+   "TTL",
+   "The same on Soroban"
+  ],
+  [
+   "Context",
+   "One call or contract creation in the invocation tree the host passes to `__check_auth`",
+   "`Context`",
+   "The same; a context rule matches it"
+  ],
+  [
+   "Authorization entry",
+   "Signed credentials for one invocation tree; the host consumes its nonce when the transaction succeeds",
+   "`SorobanAuthorizationEntry`",
+   "The same"
+  ],
+  [
+   "Context rule",
+   "—",
+   "—",
+   "OpenZeppelin's unit of authorization: a context type, signers, policies and an optional `valid_until`"
+  ],
+  [
+   "Policy",
+   "—",
+   "—",
+   "A contract attached to a context rule; the account calls its `enforce` after authenticating (hooks `install`, `uninstall`, `enforce`)"
+  ],
+  [
+   "Predicate",
+   "—",
+   "—",
+   "The expression the interpreter stores per (account, rule) and evaluates in `enforce`"
+  ],
+  [
+   "Execution adapter",
+   "—",
+   "—",
+   "An oz-policy-builder contract whose `execute(calls, grants, wait)` runs a batch for the account, bound to one custody gate or none"
+  ],
+  [
+   "Keyless rule",
+   "Refused (`UnguardedRule`)",
+   "—",
+   "A rule with no signer, bound to an execution adapter; anyone may run what its predicate permits"
+  ],
+  [
+   "Interpreter",
+   "The policy contract of Perch's earlier design ({{fact:perch-deployed-account-version}}); its address is still pinned and reported, never called",
+   "`perch_interpreter`",
+   "oz-policy-builder's `policy-interpreter`, the shared predicate evaluator"
+  ],
+  [
+   "`execute`",
+   "The account's owner-authorized call as the account",
+   "`execute(target, function, args)`",
+   "The adapter's batch call `execute(calls, grants, wait)`"
+  ],
+  [
+   "Recovery",
+   "Replacing lost credentials through guardians, a zero-knowledge proof, or both",
+   "`rcv_*`, `apply_doc`",
+   "The Prime app's \"recovery\" moves custody funds to a fixed address"
+  ],
+  [
+   "Expiry",
+   "{{fact:perch-expiry-semantics}}",
+   "`not-after-ledger`",
+   "OpenZeppelin `valid_until` N authorizes through N"
+  ],
+  [
+   "Loss, Protected",
+   "Recovery profiles: Loss assumes a key may be lost but not stolen; Protected assumes it may be stolen",
+   "`RecoveryProfile`",
+   "—"
+  ],
+  [
+   "Recovery controller",
+   "A separate contract the account document adopts; it runs recovery attempts and decides completions",
+   "`perch_recovery`",
+   "—"
+  ],
+  [
+   "Guardian",
+   "An address whose approval counts toward the recovery condition",
+   "`guardians`",
+   "—"
+  ],
+  [
+   "Nullifier",
+   "A value fixed by the account, enrollment ID and secret; a completion spends it, after which every proof from that secret is refused",
+   "`nullifier`",
+   "—"
+  ],
+  [
+   "CANON v1, `doc_hash`",
+   "Perch's canonical JSON (RFC 8785 restricted to Perch documents) and the SHA-256 of a document's canonical bytes",
+   "`canon.rs`, `doc_hash`",
+   "The interpreter's `predicate_hash` over a predicate's bytes"
+  ],
+  [
+   "MIR",
+   "The Rust compiler's mid-level intermediate representation, from which the proofs start",
+   "—",
+   "—"
+  ],
+  [
+   "Charon, Aeneas",
+   "Tools that read MIR and translate Rust into a pure Lean program",
+   "—",
+   "—"
+  ],
+  [
+   "Lean",
+   "The proof assistant whose kernel checks the theorems",
+   "—",
+   "—"
+  ],
+  [
+   "x402",
+   "An HTTP payment protocol; proposed as a payment integration for an agent runtime",
+   "—",
+   "—"
+  ]
+ ],
+ "row_ids": "gloss"
+}

@@ -8,7 +8,7 @@ mod support;
 
 use perch_account::{PerchAccount, PerchAccountClient, PerchAccountError, PerchAuthError};
 use perch_recovery::{AttemptState, EvidenceDomain, RecoveryError};
-use perch_recovery_interface::controller::SyncOutcome;
+use perch_recovery_interface::controller::{RecoveryRule, SyncOutcome};
 use perch_recovery_interface::credential::{Credential, ZkEnrollment};
 use perch_recovery_interface::zk::ZkEvidence;
 use perch_recovery_interface::{ConfigChange, RecoveryAction, StatementSubject};
@@ -74,11 +74,13 @@ fn guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_ke
 
     assert!(w.complete(&target).is_err(), "timelock not elapsed");
     w.advance(DELAY);
+    assert_eq!(w.client().grant_generation(), 0);
     let hash = w.complete(&target).expect("completion");
     assert_eq!(w.client().applied_doc(), Some(target.clone()));
     assert_eq!(hash, w.compiler().compile_doc(&target).doc_hash);
     assert_eq!(state(&w, id), AttemptState::Completed);
     assert_eq!(w.ctl().epoch(&w.account), 2, "enrollment and completion");
+    assert_eq!(w.client().grant_generation(), 1, "the completion");
 
     // The replaced key is permanently revoked; the new one works.
     assert!(w.client().is_revoked(&fingerprint(&w, &w.owner)));
@@ -100,6 +102,36 @@ fn guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_ke
 
     // Completion cannot be replayed.
     assert!(w.complete(&target).is_err());
+    assert_eq!(w.client().grant_generation(), 1);
+}
+
+/// The grant generation never wraps: a completion that would advance it past
+/// `u64::MAX` is refused, and the refusal changes nothing.
+#[test]
+fn a_completion_that_would_wrap_the_grant_generation_is_refused() {
+    let w = world();
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    let (id, new_owner, target) = open_lost_key(&w, None);
+    authorize(&w, id);
+    w.advance(DELAY);
+    w.env.as_contract(&w.account, || {
+        perch_smart_account::testutils::set_grant_generation(&w.env, u64::MAX)
+    });
+    let doc = w.client().applied_doc();
+    let revision = w.client().revision();
+    let generation = w.client().recovery_generation();
+
+    assert_eq!(
+        err(w.complete(&target)),
+        PerchAccountError::GenerationExhausted
+    );
+    assert_eq!(w.client().grant_generation(), u64::MAX);
+    assert_eq!(w.client().applied_doc(), doc);
+    assert_eq!(w.client().revision(), revision);
+    assert_eq!(w.client().recovery_generation(), generation);
+    assert_eq!(state(&w, id), AttemptState::Authorized);
+    assert!(!w.client().is_revoked(&fingerprint(&w, &w.owner)));
+    assert!(!w.activity_as(&new_owner), "the target was not installed");
 }
 
 #[test]
@@ -647,9 +679,10 @@ fn a_controller_scoped_rule_reaches_no_reserved_controller_entry_point() {
     let config = w.ctl().config(&w.account).unwrap();
     let epoch = w.ctl().epoch(&w.account);
     let hash = w.client().applied_doc_hash().unwrap();
-    let recovery_rule = w
-        .client()
-        .get_context_rule(&w.rule_id(&w.account, "recovery"));
+    let recovery_rule = RecoveryRule {
+        signers: 0,
+        contract: Some(w.account.clone()),
+    };
     let signed = |fn_name: &str, args: std::vec::Vec<soroban_sdk::xdr::ScVal>| {
         let root = w.invocation(&w.controller, fn_name, args);
         w.env.set_auths(&[w.owner_entry("ctl", root)]);
@@ -680,38 +713,31 @@ fn a_controller_scoped_rule_reaches_no_reserved_controller_entry_point() {
     );
     assert!(ctl.try_rcv_upgrade(&w.account, &execute).is_err());
     signed(
-        "install",
+        "rcv_install",
         std::vec![
+            w.sc(w.account.clone()),
             w.sc(config.config_hash.clone()),
-            w.sc(recovery_rule.clone()),
-            w.sc(w.account.clone())
+            w.sc(recovery_rule.clone())
         ],
     );
     assert!(ctl
-        .try_install(&config.config_hash, &recovery_rule, &w.account)
+        .try_rcv_install(&w.account, &config.config_hash, &recovery_rule)
         .is_err());
-    signed(
-        "uninstall",
-        std::vec![w.sc(recovery_rule.clone()), w.sc(w.account.clone())],
-    );
-    assert!(ctl.try_uninstall(&recovery_rule, &w.account).is_err());
     let forged = Context::Contract(ContractContext {
         contract: w.account.clone(),
         fn_name: Symbol::new(&w.env, "apply_doc"),
         args: vec![&w.env, w.client().applied_doc().unwrap().into_val(&w.env)],
     });
-    let no_signers: soroban_sdk::Vec<Signer> = soroban_sdk::Vec::new(&w.env);
     signed(
-        "enforce",
+        "rcv_complete",
         std::vec![
+            w.sc(w.account.clone()),
             w.sc(forged.clone()),
-            w.sc(no_signers.clone()),
-            w.sc(recovery_rule.clone()),
-            w.sc(w.account.clone())
+            w.sc(recovery_rule.clone())
         ],
     );
     assert!(ctl
-        .try_enforce(&forged, &no_signers, &recovery_rule, &w.account)
+        .try_rcv_complete(&w.account, &forged, &recovery_rule)
         .is_err());
     w.env.set_auths(&[]);
 
@@ -850,8 +876,10 @@ fn a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment() {
     assert!(w.client().recovery_gate().is_some());
 
     w.advance(DELAY);
+    assert_eq!(w.client().grant_generation(), 0);
     w.complete(&target)
         .expect("completion is not a reconfiguration");
+    assert_eq!(w.client().grant_generation(), 1, "the ZK completion");
     let n = nullifier(&w.env, &first.id);
     assert!(w.ctl().nullifier_spent(&w.account, &n));
     assert!(w.pool_client().enrollment(&w.account, &next.id).is_some());
@@ -952,11 +980,14 @@ fn one_accounts_completion_never_spends_anothers_nullifier() {
     assert!(w.ctl().nullifier_spent(&w.account, &victim_n));
 }
 
-/// `enforce` runs for every context in an authorization tree, including a
-/// sub-invocation that never executes. The marker it leaves must not turn a
-/// later, unrelated `apply_doc` into a (failing) completion.
+/// `enforce` leaves a marker that only the same invocation's `rcv_sync`
+/// consumes. The account calls `enforce` only for a completion, whose one
+/// context is the `apply_doc` being authorized; an authorization tree that
+/// chooses the recovery rule for an `apply_doc` sub-invocation that never
+/// executes is refused before any controller call. So no marker outlives
+/// it, and a later, unrelated `apply_doc` is not taken for a completion.
 #[test]
-fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
+fn the_recovery_rule_for_an_unexecuted_sub_invocation_leaves_no_marker() {
     let w = world();
     let doc = w.doc(Some(w.recovery("loss", Mode::Guardian)));
     w.enroll(&doc);
@@ -971,38 +1002,46 @@ fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
         &w.env,
         IntoVal::<_, soroban_sdk::Val>::into_val(&w.account, &w.env),
     ];
-    let mut root = w.invocation(
-        &w.account,
-        "execute",
-        std::vec![
-            w.sc(w.target.clone()),
-            w.sc(f.clone()),
-            w.sc(call_args.clone())
-        ],
+    let entry = || {
+        let mut root = w.invocation(
+            &w.account,
+            "execute",
+            std::vec![
+                w.sc(w.target.clone()),
+                w.sc(f.clone()),
+                w.sc(call_args.clone())
+            ],
+        );
+        root.sub_invocations = std::vec![w.invocation(
+            &w.account,
+            "apply_doc",
+            std::vec![w.sc(target.clone()), w.sc(0u32), w.sc(None::<u64>)],
+        )]
+        .try_into()
+        .unwrap();
+        let mut entry = w.owner_entry("admin", root);
+        if let soroban_sdk::xdr::SorobanCredentials::AddressWithDelegates(c) =
+            &mut entry.credentials
+        {
+            c.address_credentials.signature = w.sc(AuthPayload {
+                signers: soroban_sdk::map![
+                    &w.env,
+                    (Signer::Delegated(w.owner.clone()), Bytes::new(&w.env))
+                ],
+                context_rule_ids: vec![
+                    &w.env,
+                    w.rule_id(&w.account, "admin"),
+                    w.rule_id(&w.account, "recovery"),
+                ],
+            });
+        }
+        entry
+    };
+    w.env.set_auths(&[entry()]);
+    assert!(
+        w.client().try_execute(&w.target, &f, &call_args).is_err(),
+        "the recovery rule outside a completion"
     );
-    root.sub_invocations = std::vec![w.invocation(
-        &w.account,
-        "apply_doc",
-        std::vec![w.sc(target.clone()), w.sc(0u32), w.sc(None::<u64>)],
-    )]
-    .try_into()
-    .unwrap();
-    let mut entry = w.owner_entry("admin", root);
-    if let soroban_sdk::xdr::SorobanCredentials::AddressWithDelegates(c) = &mut entry.credentials {
-        c.address_credentials.signature = w.sc(AuthPayload {
-            signers: soroban_sdk::map![
-                &w.env,
-                (Signer::Delegated(w.owner.clone()), Bytes::new(&w.env))
-            ],
-            context_rule_ids: vec![
-                &w.env,
-                w.rule_id(&w.account, "admin"),
-                w.rule_id(&w.account, "recovery"),
-            ],
-        });
-    }
-    w.env.set_auths(&[entry]);
-    w.client().execute(&w.target, &f, &call_args);
     w.env.set_auths(&[]);
 
     // Same ledger: the owner cancels, then applies an unrelated document.
@@ -1013,7 +1052,7 @@ fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
     let mut quorum_one = w.recovery("loss", Mode::Guardian);
     quorum_one.quorum = 1;
     w.apply(&w.doc(Some(quorum_one)), 0)
-        .expect("the stale marker is dropped, not taken for a completion");
+        .expect("no marker is taken for a completion");
 }
 
 #[test]
@@ -1302,7 +1341,7 @@ fn compromise_restores_the_baseline_and_revokes_everything_added_since() {
     assert!(!w.activity_as(&thief));
 }
 
-/// The review's sequence (spec §8): the baseline names owner A, the
+/// Spec §8: the baseline names owner A, the
 /// current document has moved to owner B, and a compromise recovery
 /// replaces A's slot with C. A must be revoked although the current
 /// document no longer had it, or a second compromise recovery from the same
@@ -1362,10 +1401,9 @@ const CAP_RULES: &[&str] = CAP_RULE_NAMES
     .0;
 
 /// Spec §7.5: a completion's cost is bounded by the document caps, not by
-/// the account's history. `apply_doc` once scanned every rule id ever
-/// assigned, so (the review's regression) 19 applications of a 16-rule
-/// document (the cap then) pushed a completion past the 400-entry footprint limit, and a
-/// twentieth ordinary application failed at 403. The test host enforces
+/// the account's history. An `apply_doc` that scanned every rule id ever
+/// assigned would push a completion's footprint up with each application of
+/// a document at the rule cap, past the 400-entry limit. The test host enforces
 /// the mainnet limits, so every application and the completion here must
 /// fit, and the completion's footprint must not depend on the churn.
 #[test]

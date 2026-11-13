@@ -1,0 +1,37 @@
+% Generated from source/definitions.json; edit that.
+\begin{perchdefinition}{1}{Contexts and authorizations}\label{def:contexts-and-authorizations}
+\[\begin{aligned}&c \;::=\; \mathsf{call}(C, f, \vec v) \;\mid\; \mathsf{create}(w)\\
+&a = (\vec c, \vec j, S, \ell, g)\end{aligned}\]
+A context is one call or contract creation in an authorization entry's invocation tree. An authorization \(a\) carries the entry's contexts \(\vec c = c_1, \dots, c_n\) in preorder, root first; one rule index \(j_i\) per context; the claimed signers \(S\); the ledger \(\ell\); and the account's grant generation \(g\).\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L114}{Chain.Context}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L80}{Authorization}}
+\end{perchdefinition}
+\begin{perchdefinition}{2}{Rules and \emph{allows}}\label{def:rules-and-allows}
+\[\begin{aligned}&\mathit{allows}(r, c, S) \iff \mathit{sc}_r(c) \land \bigwedge_{\varphi \in \Phi_r} \varphi(c)\\
+&\qquad\qquad \land\ k_r \le |\Sigma_r \cap S|\\
+&\mathit{allows}(R, c, S) \iff \exists r \in R.\ \mathit{allows}(r, c, S)\\
+&R' \sqsubseteq R \iff \forall c, S.\ \mathit{allows}(R', c, S)\\
+&\qquad\qquad \implies \mathit{allows}(R, c, S)\end{aligned}\]
+A rule \(r\) has a scope \(\mathit{sc}_r\) (one contract and a function list; false on creations), argument conditions \(\Phi_r\), signers \(\Sigma_r\) and a threshold \(k_r\) over distinct signers, and optionally a cap \((\lambda_r, P_r)\), a last ledger \(u_r\) and a generation \(g_r\). \emph{allows} reads none of the last three; \emph{checkAuth} checks them. A rule set allows what one of its rules allows; \(R' \sqsubseteq R\) when \(R\) allows, under the same signers, everything \(R'\) allows.\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean\#L95}{Rule.allows}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean\#L98}{RuleSet.allows}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean\#L126}{RuleSet.narrower}}
+\end{perchdefinition}
+\begin{perchdefinition}{3}{\emph{checkAuth} and runs}\label{def:check-auth-and-runs}
+\[\begin{aligned}&\mathit{checkAuth}(R, \rho, (\vec c, \vec j, S, \ell, g)) = \rho' \iff\\
+&\quad |\vec j| = |\vec c| \land |\rho| = |R|\\
+&\quad \land\ \forall i.\ j_i < |R| \land \ell \le u_{r_i} \land g_{r_i} \in \{\bot, g\}\\
+&\qquad\qquad \land\ \mathit{allows}(r_i, c_i, S)\\
+&\quad \land\ \forall s \in S.\ \exists i.\ s \in \Sigma_{r_i}\\
+&\quad \land\ \rho' = \mathit{charge}(\cdots \mathit{charge}(\rho, c_1, j_1) \cdots, c_n, j_n)\end{aligned}\]
+Here \(r_i = R_{j_i}\). \(\mathit{charge}(\rho, c, j)\) leaves \(\rho\) unchanged when \(R_j\) has no cap; otherwise it reads the amount \(c\) carries, refusing a call that carries none, and applies Definition 4's check to rule \(j\)'s record. Each charge must succeed. \emph{checkAuth} returns the next records or the first refusal, and a refusal changes nothing. A run applies authorizations in order, keeping the records on a refused one.\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L147}{RuleSet.checkAuth}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Authorize.lean\#L182}{RuleSet.checkAuth\_eq\_ok\_iff}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L168}{RuleSet.run}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L178}{RuleSet.Accepts}}
+\end{perchdefinition}
+\begin{perchdefinition}{4}{Window, check and \emph{spent}}\label{def:window-check-and-spent}
+\[\begin{aligned}&\mathit{inWindow}_P(L, t) \iff \max(0,\, L - P) < t \le L\\
+&\mathit{check}_{\lambda, P}(h, \ell, x) = h' \;\land\; x > 0 \implies\\
+&\qquad \sum_{k:\ \mathit{inWindow}_P(\ell,\, t_k)} y_k \;+\; x \;\le\; \lambda\\
+&\qquad \land\ h' = ((t_k, y_k))_{k:\ \mathit{inWindow}_P(\ell,\, t_k)}\\
+&\qquad\qquad \cdot\, (\ell, x)\end{aligned}\]
+A record is a list \(h = ((t_k, y_k))_{k=1}^{m}\) of positive charges in ledger order, its total their sum. The check of a charge \(x\) at ledger \(\ell\) refuses \(x < 0\); accepts \(x = 0\), leaving \(h\); and otherwise refuses a ledger before the newest charge, an overflow, \fact{evaluator-history-bound} entries already kept, or a window total above \(\lambda\). On acceptance it keeps the entries in the window at \(\ell\) and appends \((\ell, x)\). \(\mathit{spent}_j(R, \rho, \vec a)\) lists \((\ell_a, x)\) for each positive charge that the accepted authorizations of run \(\vec a\) make to rule \(j\), in order.\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Cap.lean\#L205}{Params.inWindow}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Cap.lean\#L122}{Params.check}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L200}{RuleSet.spent}}
+\end{perchdefinition}
+\begin{perchdefinition}{5}{Derivation}\label{def:derivation}
+\[\begin{aligned}&\mathit{Derives}(R, R)\\
+&\mathit{Derives}(R, R') \land \mathit{attenuate}(R', \sigma) = R''\\
+&\qquad \implies \mathit{Derives}(R, R'')\end{aligned}\]
+\(\sigma\) is one of rule-core's ten attenuation steps: drop a rule; remove functions, or restrict functions; add an argument condition; remove signers, or raise a threshold; add a cap, lower its limit, or lengthen its period; set or lower the last ledger. No step changes a rule's target or generation. \(\mathit{attenuateAll}(R, \vec\sigma) = R'\) applies a list of steps and implies \(\mathit{Derives}(R, R')\).\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L442}{Chain.RuleSet.Derives}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L423}{Chain.RuleSet.attenuate}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L410}{Chain.Attenuation}}
+\end{perchdefinition}

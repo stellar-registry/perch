@@ -1,0 +1,2724 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perch Agent Grants</title>
+<meta name="description" content="Perch Agent Grants, an SCF Build Award submission: subagent budgets enforced by Stellar smart accounts. What Perch is, an agent that raised its own cap, where the policy lives, the contained policy runtime we will build, where Perch keeps the cap, what exists today, the three tranches with their dates, and the team.">
+<link rel="icon" href="data:,">
+<style>
+:root {
+  color-scheme: light dark;
+  --paper: #E8ECE6;
+  --paper-2: #DCE2DA;
+  --ink: #15233B;
+  --ink-2: #55647B;
+  --rule: rgba(21, 35, 59, .2);
+  --now: #1D6C9B;
+  --next: #B02F6B;
+  --seal: #97700F;
+  --f-display: "Didot", "Bodoni 72", "Bodoni MT", "Big Caslon", "Hoefler Text", Georgia, serif;
+  --f-text: "Optima", "Candara", "Segoe UI", "Avenir Next", system-ui, sans-serif;
+  --f-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --pad-x: clamp(16px, 4.2vw, 64px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0D1628;
+    --paper-2: #15213A;
+    --ink: #E6EAF1;
+    --ink-2: #98A5BB;
+    --rule: rgba(230, 234, 241, .17);
+    --now: #6EC4EF;
+    --next: #F483B8;
+    --seal: #E2C068;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0D1628;
+  --paper-2: #15213A;
+  --ink: #E6EAF1;
+  --ink-2: #98A5BB;
+  --rule: rgba(230, 234, 241, .17);
+  --now: #6EC4EF;
+  --next: #F483B8;
+  --seal: #E2C068;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- slides ---------- */
+#deck { position: fixed; inset: 0; touch-action: pinch-zoom; }
+.slide {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: clamp(22px, 3.4vw, 46px) var(--pad-x) 74px;
+  opacity: 0; visibility: hidden;
+  transform: scale(.985);
+  transition: opacity .55s ease, transform .7s cubic-bezier(.2, .7, .2, 1), visibility 0s linear .55s;
+}
+.slide.active {
+  opacity: 1; visibility: visible; transform: none;
+  transition: opacity .55s ease, transform .7s cubic-bezier(.2, .7, .2, 1), visibility 0s;
+}
+/* every slide: an engraved double-rule frame */
+.slide::before {
+  content: ""; position: absolute; inset: 10px; pointer-events: none;
+  border: 1px solid var(--rule);
+  box-shadow: inset 0 0 0 4px var(--paper), inset 0 0 0 5px var(--rule);
+}
+
+.head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px 20px; flex-wrap: wrap;
+  min-width: 0;
+}
+.head h2 {
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: clamp(34px, 5.4vw, 80px);
+  line-height: .98;
+  letter-spacing: -.012em;
+  margin: 0;
+}
+.appx { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); border: 1px solid var(--rule); border-radius: 999px; padding: 2px 10px; white-space: nowrap; align-self: center; }
+.status {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: clamp(13px, 1.15vw, 16px);
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.status svg { width: 15px; height: 15px; overflow: visible; }
+.status.cited { color: var(--ink-2); }
+.status.cited circle { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+
+.stage { min-height: 0; min-width: 0; display: grid; padding-top: clamp(6px, 1.4vh, 18px); position: relative; }
+.stage > svg { width: 100%; height: 100%; display: block; overflow: visible; min-height: 0; }
+.notes, .sources { display: none; }
+
+.stage-links {
+  margin: 0; font-size: clamp(13px, 1.1vw, 15px); color: var(--ink-2);
+  display: flex; gap: 8px 22px; flex-wrap: wrap; justify-content: center; align-items: center;
+}
+.stage-links a { color: var(--now); text-underline-offset: 3px; }
+.stage-links a:focus-visible, .lk:focus-visible { outline: 2px solid var(--now); outline-offset: 3px; }
+.stage-row { grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+.act {
+  appearance: none; font: inherit; font-size: clamp(14px, 1.15vw, 16px); cursor: pointer;
+  color: var(--paper); background: var(--now); border: 0; border-radius: 999px;
+  padding: 9px 18px; letter-spacing: .01em;
+}
+.act.ghost { color: var(--ink); background: transparent; border: 1px solid var(--rule); }
+.act:focus-visible { outline: 2px solid var(--now); outline-offset: 3px; }
+.stage-links a.act { text-decoration: none; display: inline-block; }
+/* the recording draws each slide's still, never a live frame, and none of its buttons */
+html[data-rec-frame] .stage-links .act { display: none; }
+/* the Nido slide: Nido's status and the steps beside one live frame; Next moves through the steps */
+.stage-nido { grid-template-columns: minmax(0, .42fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: clamp(16px, 2vw, 28px); }
+.nido-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: clamp(8px, 1.5vh, 16px); font-size: clamp(13px, 1vw, 15px); line-height: 1.4; color: var(--ink); }
+.nido-side p { margin: 0; }
+.nido-status .ns-1 { font-size: clamp(16px, 1.5vw, 22px); line-height: 1.25; }
+.nido-status .ns-2 { color: var(--ink-2); margin-top: 3px; }
+.ctx { display: inline-block; font-size: 11px; line-height: 1.5; color: var(--ink-2); border: 1px solid var(--rule); border-radius: 999px; padding: 0 7px; margin-left: 8px; vertical-align: 2px; }
+.nido-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; color: var(--ink-2); }
+.nido-facts b { font-weight: 400; color: var(--ink); }
+.nido-side .nido-ctx { font-size: 11.5px; color: var(--ink-2); }
+.nido-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.nido-steps button { appearance: none; font: inherit; color: var(--ink-2); background: none; border: 0; padding: 3px 0; cursor: pointer; display: flex; align-items: center; gap: 10px; text-align: left; }
+.nido-steps .sn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--rule); display: inline-grid; place-items: center; font-size: 12px; flex: none; }
+.nido-steps button:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+.nido-side .nido-sim { margin-top: auto; font-size: 12px; color: var(--ink-2); }
+.nido-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+.nido-slot { position: relative; min-height: 0; min-width: 0; border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; background: var(--paper-2); }
+.nido-shot { position: absolute; inset: 0; display: none; }
+.nido-cap { margin: 0; font-size: clamp(15px, 1.4vw, 20px); color: var(--ink); text-align: center; }
+.nido-cap span { display: none; }
+.slide[data-step="1"] .nido-shot[data-k="1"] { display: grid; }
+.slide[data-step="1"] .nido-cap [data-k="1"] { display: inline; }
+.slide[data-step="1"] .nido-steps [data-k="1"] { color: var(--now); }
+.slide[data-step="1"] .nido-steps [data-k="1"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="2"] .nido-shot[data-k="2"] { display: grid; }
+.slide[data-step="2"] .nido-cap [data-k="2"] { display: inline; }
+.slide[data-step="2"] .nido-steps [data-k="2"] { color: var(--now); }
+.slide[data-step="2"] .nido-steps [data-k="2"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="3"] .nido-shot[data-k="3"] { display: grid; }
+.slide[data-step="3"] .nido-cap [data-k="3"] { display: inline; }
+.slide[data-step="3"] .nido-steps [data-k="3"] { color: var(--now); }
+.slide[data-step="3"] .nido-steps [data-k="3"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="4"] .nido-shot[data-k="4"] { display: grid; }
+.slide[data-step="4"] .nido-cap [data-k="4"] { display: inline; }
+.slide[data-step="4"] .nido-steps [data-k="4"] { color: var(--now); }
+.slide[data-step="4"] .nido-steps [data-k="4"] .sn { border-color: var(--now); border-width: 2px; }
+.nido-slot .nido-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+/* one still at a time: the theme's, wide or (tall layouts) narrow */
+.nido-slot .nido-still { display: none; }
+.nido-slot .nido-still.s-light.s-wide { display: block; }
+:root[data-theme="dark"] .nido-slot .nido-still.s-light.s-wide { display: none; }
+:root[data-theme="dark"] .nido-slot .nido-still.s-dark.s-wide { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nido-slot .nido-still.s-light.s-wide { display: none; }
+  :root:not([data-theme="light"]) .nido-slot .nido-still.s-dark.s-wide { display: block; }
+}
+html.tall .nido-slot .nido-still.s-wide { display: none !important; }
+html.tall .nido-slot .nido-still.s-light.s-narrow { display: block; }
+html.tall[data-theme="dark"] .nido-slot .nido-still.s-light.s-narrow { display: none; }
+html.tall[data-theme="dark"] .nido-slot .nido-still.s-dark.s-narrow { display: block; }
+@media (prefers-color-scheme: dark) {
+  html.tall:not([data-theme="light"]) .nido-slot .nido-still.s-light.s-narrow { display: none; }
+  html.tall:not([data-theme="light"]) .nido-slot .nido-still.s-dark.s-narrow { display: block; }
+}
+html.tall .stage-nido { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); row-gap: 10px; }
+html.tall .nido-side { gap: 6px; font-size: 13px; }
+html.tall .nido-facts { gap: 2px; }
+html.tall .nido-facts .fd { display: none; }
+html.tall .nido-steps { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+html.tall .nido-steps .sn { width: 18px; height: 18px; font-size: 11px; }
+html.tall .nido-steps button { gap: 5px; padding: 1px 0; }
+html.tall .nido-side .nido-sim { margin-top: 0; }
+/* the live simulation: one frame, laid over the Nido slide's slot once it has preloaded; it stays put across the steps */
+.nido-live {
+  position: fixed; left: 0; top: 0; z-index: 4; border: 0; border-radius: 14px; background: var(--paper-2);
+  transform-origin: 0 0;
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .3s ease, visibility 0s linear .3s;
+}
+.nido-live.on { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .3s ease, visibility 0s; }
+/* with the live session, the slot is the frame's place: its stills give way to it */
+html[data-nido-live] .nido-slot .nido-still { visibility: hidden; }
+html[data-nido-live] .nido-slot { border-color: transparent; }
+/* Reset demo sits in the slide's top-right corner, above the heading row, so a long heading never wraps under it */
+.nido-reset {
+  display: none; appearance: none; font: inherit; font-size: 12px; line-height: 1.3; cursor: pointer;
+  position: absolute; top: 19px; right: 24px; z-index: 1;
+  border: 1px solid var(--rule); background: var(--paper); color: var(--ink-2); border-radius: 999px; padding: 2px 10px;
+}
+.slide:has(.nido-reset) { padding-top: 48px; }
+.nido-reset:hover { color: var(--ink); }
+.nido-reset:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+html[data-nido-live] .nido-reset { display: inline-block; }
+html[data-rec-frame] .nido-reset { display: none !important; }
+/* print: the live frame does not print, so the slot prints the current step's still, beside the list of steps */
+@media print {
+  .nido-live, .nido-reset { display: none !important; }
+  html[data-nido-live] .nido-slot .nido-still { visibility: visible; }
+  html[data-nido-live] .nido-slot { border-color: var(--rule); }
+}
+.stage-doc .doc-details { display: none; overflow: auto; min-height: 0; font-size: clamp(12px, 1vw, 14px); line-height: 1.45; color: var(--ink); background: var(--paper-2); border: 1px solid var(--rule); border-radius: 14px; padding: 14px 18px; }
+.stage-doc.open > svg { display: none; }
+.stage-doc.open .doc-details { display: block; }
+.doc-details .dd-h { margin: 0 0 8px; color: var(--ink-2); }
+.doc-details dl { margin: 0; display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 6px 18px; }
+.doc-details dt, .doc-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.doc-details code { font-family: var(--f-code); font-size: .92em; }
+.doc-details .dd-note { margin: 10px 0 0; color: var(--ink-2); }
+@media (max-width: 640px) { .doc-details dl { grid-template-columns: minmax(0, 1fr); } .doc-details dd { margin-bottom: 6px; } }
+
+/* title slide */
+.slide-title {
+  grid-template-rows: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: 3vw;
+}
+.slide-title .title-text { min-width: 0; }
+.slide-title h1 {
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: clamp(64px, 11vw, 184px);
+  line-height: .9;
+  letter-spacing: -.02em;
+  margin: 0 0 .3em;
+}
+.slide-title .kicker { font-size: clamp(12px, 1vw, 14px); letter-spacing: .2em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 1em; }
+.links.team { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .links.team { grid-template-columns: repeat(2, minmax(0, 1fr)); } .links.team li:first-child { grid-column: auto; } }
+.close-foot a { color: var(--now); text-underline-offset: 3px; }
+.close-foot a:focus-visible { outline: 2px solid var(--now); outline-offset: 3px; }
+.links.team .lk-s { line-height: 1.4; }
+.slide-title .sub {
+  font-size: clamp(18px, 1.8vw, 26px);
+  color: var(--ink);
+  margin: 0 0 .5em;
+  max-width: 24ch;
+  line-height: 1.3;
+}
+.slide-title .wallet { font-size: clamp(14px, 1.2vw, 17px); color: var(--ink-2); margin: 0 0 2em; }
+.byline { font-size: clamp(14px, 1.2vw, 17px); color: var(--ink-2); margin: 0 0 1.8em; line-height: 1.5; }
+.byline b { color: var(--ink); font-weight: 400; }
+.slide-title .stage { height: min(78vh, 46vw); padding: 0; }
+
+/* closing slide */
+.slide-close .head h2 { font-size: clamp(34px, 5vw, 76px); }
+.links {
+  list-style: none; margin: 0 auto; padding: clamp(10px, 3vh, 34px) 0 0; width: min(100%, 1180px);
+  display: grid; gap: clamp(10px, 1.6vw, 22px);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 262px), 1fr));
+  align-content: center; overflow: auto; min-height: 0;
+}
+.lk {
+  display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 4px 16px; align-items: center;
+  text-decoration: none; color: var(--ink); height: 100%;
+  border: 1px solid var(--rule); border-radius: 14px; padding: clamp(14px, 2.2vh, 26px) 20px;
+  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--rule);
+  transition: background .2s ease;
+}
+.lk:hover { background: var(--paper-2); }
+@media (min-width: 900px) { .links li:first-child { grid-column: span 2; } }
+.lk svg { grid-row: span 2; width: 40px; height: 40px; overflow: visible; fill: none; stroke: var(--now); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.lk .lk-t { font-family: var(--f-display); font-size: clamp(19px, 1.6vw, 24px); line-height: 1.15; }
+.lk .lk-s { font-size: clamp(13px, 1vw, 15px); color: var(--ink-2); }
+.close-foot { margin: clamp(12px, 3vh, 30px) 0 0; font-size: clamp(13px, 1.1vw, 16px); color: var(--ink-2); text-align: center; }
+.slide-close .stage { grid-template-rows: minmax(0, 1fr) auto; }
+
+/* ---------- svg vocabulary ---------- */
+.st { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.k-ink { stroke: var(--ink); }
+.k-soft { stroke: var(--ink-2); }
+.k-faint { stroke: var(--rule); }
+.k-now { stroke: var(--now); }
+.k-seal { stroke: var(--seal); }
+.k-paper { stroke: var(--paper); }
+.fl-now { fill: var(--now); }
+.fl-ink { fill: var(--ink); }
+.fl-soft { fill: var(--ink-2); }
+.fl-seal { fill: var(--seal); }
+.fl-paper { fill: var(--paper); }
+.fl-paper2 { fill: var(--paper-2); }
+.fl-hatch { fill: url(#hatch); }
+.fl-hatch-now { fill: url(#hatch-now); }
+.tx { fill: var(--ink); font-family: var(--f-text); }
+.c-now { fill: var(--now); }
+.c-soft { fill: var(--ink-2); }
+.c-seal { fill: var(--seal); }
+.c-paper { fill: var(--paper); }
+.f-code { font-family: var(--f-code); }
+.f-disp { font-family: var(--f-display); }
+.seal-use { color: var(--seal); transform-box: fill-box; transform-origin: center; }
+#defs .hl { stroke: var(--ink-2); stroke-width: 1; opacity: .38; }
+#defs .hl-now { stroke: var(--now); stroke-width: 1.2; opacity: .55; }
+.s-wave { fill: none; stroke: currentColor; stroke-width: .7; vector-effect: non-scaling-stroke; opacity: .9; }
+.s-tick { fill: none; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.s-ring { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.cw-fade { transition: opacity .45s ease; }
+
+/* ---------- motion: each slide prints itself once on arrival ---------- */
+.an-draw { stroke-dasharray: var(--len, 0); stroke-dashoffset: var(--len, 0); }
+.an-fade, .an-seal, .an-sweep { opacity: 0; }
+.slide.on .an-draw { animation: draw 1s cubic-bezier(.55, .05, .25, 1) var(--d, 0ms) forwards; }
+.slide.on .an-fade { animation: fade .7s ease var(--d, 0ms) forwards; }
+.slide.on .an-seal { animation: sealin 1.5s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) forwards; }
+.slide.on .an-sweep { animation: sweep 2.4s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) forwards; }
+.an-sweep { transform-box: view-box; transform-origin: var(--ox, 0) var(--oy, 0); }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sealin { from { opacity: 0; transform: rotate(-50deg) scale(.82); } to { opacity: 1; transform: none; } }
+@keyframes sweep { from { opacity: 0; transform: rotate(-38deg); } 30% { opacity: 1; } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .slide, .slide.active { transition: none; transform: none; }
+  .an-draw { stroke-dasharray: none; stroke-dashoffset: 0; }
+  .an-fade, .an-seal, .an-sweep { opacity: 1; }
+  .slide.on .an-draw, .slide.on .an-fade, .slide.on .an-seal, .slide.on .an-sweep { animation: none; }
+  .cw-fade { transition: none; }
+}
+/* ?still=1 shows every slide in its final state, as reduced motion does */
+.still .slide, .still .slide.active { transition: none; transform: none; }
+.still .an-draw { stroke-dasharray: none; stroke-dashoffset: 0; }
+.still .an-fade, .still .an-seal, .still .an-sweep { opacity: 1; }
+.still .slide.on .an-draw, .still .slide.on .an-fade, .still .slide.on .an-seal, .still .slide.on .an-sweep { animation: none; }
+.still .cw-fade { transition: none; }
+
+/* ---------- chrome ---------- */
+.chrome {
+  position: fixed; left: 22px; right: 22px; bottom: 18px;
+  height: 44px;
+  display: flex; align-items: center; gap: 10px;
+  z-index: 5;
+  font-size: 14px; color: var(--ink-2);
+}
+.btn {
+  appearance: none; border: 0; background: transparent; color: var(--ink-2);
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer; padding: 0;
+}
+.btn:hover { color: var(--ink); background: var(--paper-2); }
+.btn:focus-visible, .marks button:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+.btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.btn[aria-pressed="true"] { color: var(--ink); background: var(--paper-2); }
+.marks { list-style: none; display: flex; gap: 7px; margin: 0 auto; padding: 0; align-items: center; }
+.marks button {
+  appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent;
+  width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%;
+}
+.marks svg { width: 12px; height: 12px; overflow: visible; transition: transform .3s ease; }
+.marks .m-title circle, .marks .m-cited circle, .marks .m-plain circle { fill: var(--ink-2); opacity: .45; }
+.marks button[aria-current="true"] svg { transform: scale(1.55); }
+.marks button[aria-current="true"] circle { opacity: 1; }
+.count { font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+.bar { display: none; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px; background: var(--rule); }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink-2); transition: width .4s ease; }
+
+#notes-panel {
+  position: fixed; left: 22px; right: 22px; bottom: 70px;
+  max-height: 42vh; overflow: auto;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 16px 20px;
+  z-index: 6;
+  font-size: 15px; line-height: 1.5;
+  max-width: 78ch; margin: 0 auto;
+}
+#notes-panel p { margin: 0 0 .7em; }
+#notes-panel .src { color: var(--ink-2); font-size: 13px; margin: 0; }
+#notes-panel code { font-family: var(--f-code); font-size: .92em; }
+
+#notes-panel p, #sources-panel p { margin: 0 0 .7em; }
+#notes-panel p:last-child, #sources-panel p:last-child { margin-bottom: 0; }
+#notes-panel { font-size: 17px; }
+#sources-panel .sp-h { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+#sources-panel {
+  position: fixed; left: 22px; right: 22px; bottom: 70px;
+  max-height: 42vh; overflow: auto;
+  background: var(--paper-2); border: 1px solid var(--rule); border-radius: 6px;
+  padding: 16px 20px; z-index: 6;
+  font-size: 14px; line-height: 1.5; color: var(--ink);
+  max-width: 78ch; margin: 0 auto;
+}
+#sources-panel .src { color: var(--ink-2); font-size: 13px; }
+#sources-panel code { font-family: var(--f-code); font-size: .92em; }
+
+/* ---------- recorder ---------- */
+#rec-btn .rec-dot { fill: currentColor; stroke: none; }
+html[data-recording] #rec-btn { color: var(--next); }
+.still #rec-btn { display: none; }
+#rec-count {
+  position: fixed; inset: 0; z-index: 20; pointer-events: none;
+  display: grid; place-content: center; text-align: center; gap: 10px;
+  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  font-size: 17px; color: var(--ink-2);
+}
+#rec-count[hidden], #rec-panel[hidden], #rec-msg[hidden] { display: none; }
+#rec-count b { display: block; font-family: var(--f-display); font-weight: 400; font-size: 160px; line-height: 1; color: var(--ink); }
+#rec-panel {
+  position: fixed; top: 14px; right: 14px; z-index: 15;
+  width: min(390px, calc(100vw - 28px)); max-height: calc(100vh - 100px); overflow: auto;
+  background: var(--paper-2); border: 1px solid var(--rule); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .18);
+  padding: 14px 16px; font-size: 15px; line-height: 1.45; color: var(--ink);
+}
+#rec-panel p { margin: 0; }
+.rp-top { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
+.rp-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--next); align-self: center; }
+html[data-recording="paused"] .rp-dot { background: var(--ink-2); }
+#rp-time { margin-left: auto; font-size: 24px; }
+#rp-time.over { color: var(--next); }
+.rp-lim { color: var(--ink-2); }
+#rp-cur { color: var(--ink-2); font-size: 13px; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }
+#rp-script p { font-size: 18px; line-height: 1.5; margin: 0 0 .6em; }
+.rp-next { color: var(--ink-2); font-size: 13px; margin: 4px 0 10px; }
+.rp-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-btns button {
+  appearance: none; font: inherit; font-size: 14px; cursor: pointer;
+  border: 1px solid var(--rule); background: var(--paper); color: var(--ink);
+  border-radius: 999px; padding: 6px 14px;
+}
+.rp-btns button:focus-visible, .rm-x:focus-visible, #rec-msg a:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+.rp-note { font-size: 12px; color: var(--ink-2); margin-top: 10px !important; }
+#rec-msg {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 74px; z-index: 16;
+  width: max-content; max-width: min(640px, calc(100vw - 28px));
+  background: var(--paper-2); border: 1px solid var(--rule); border-radius: 8px;
+  padding: 12px 40px 12px 16px; font-size: 14px; line-height: 1.45; color: var(--ink);
+}
+#rec-msg.err { border-color: var(--next); }
+#rec-msg a { color: var(--now); }
+#rec-msg kbd, .rp-btns kbd { font-family: var(--f-code); font-size: .9em; }
+.rm-x { position: absolute; top: 6px; right: 8px; appearance: none; border: 0; background: transparent; color: var(--ink-2); font-size: 18px; line-height: 1; cursor: pointer; padding: 4px; }
+
+/* ---------- presenter layout: the script beside the slide, never over it ---------- */
+.np-bar { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px !important; font-variant-numeric: tabular-nums; }
+.np-time { font-size: 26px; }
+.np-time.over { color: var(--next); }
+.np-lim { color: var(--ink-2); }
+#np-reset {
+  margin-left: auto; appearance: none; font: inherit; font-size: 13px; cursor: pointer;
+  border: 1px solid var(--rule); background: var(--paper); color: var(--ink); border-radius: 999px; padding: 4px 12px;
+}
+#np-reset:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+.np-cur { color: var(--ink-2); font-size: 13px; margin: 0 0 12px !important; font-variant-numeric: tabular-nums; }
+.np-script p { font-size: 19px; line-height: 1.5; margin: 0 0 .7em; }
+.np-next { color: var(--ink-2); font-size: 14px; margin: 14px 0 0 !important; }
+.np-keys { color: var(--ink-2); font-size: 12px; margin: 10px 0 0 !important; }
+html.side #notes-panel, html.side #rec-panel {
+  position: fixed; z-index: 15; margin: 0; max-width: none; max-height: none; overflow: auto;
+  background: var(--paper-2); border: 0; border-radius: 0; box-shadow: none;
+  padding: 18px 20px; font-size: 15px; line-height: 1.45; color: var(--ink);
+}
+html.side:not(.side-below) #notes-panel, html.side:not(.side-below) #rec-panel {
+  top: 0; right: 0; bottom: 0; left: auto; width: var(--side-w, 380px); border-left: 1px solid var(--rule);
+}
+html.side:not(.side-below) #deck {
+  inset: auto; left: 14px; top: var(--side-top, 0px);
+  width: 100vw; height: calc(100vw * 9 / 16);
+  transform: scale(var(--side-k, 1)); transform-origin: 0 0;
+}
+html.side:not(.side-below) .chrome { right: calc(var(--side-w, 380px) + 22px); }
+html.side.side-below #notes-panel, html.side.side-below #rec-panel {
+  left: 0; right: 0; bottom: 0; top: auto; width: auto; height: 40vh; border-top: 1px solid var(--rule);
+}
+html.side.side-below #deck { bottom: 40vh; }
+html.side.side-below .chrome { bottom: calc(40vh + 8px); }
+html.side #sources-panel { right: calc(var(--side-w, 380px) + 22px); }
+html.side.side-below #sources-panel { right: 12px; bottom: calc(40vh + 64px); }
+@media print {
+  html.side #deck { inset: 0; width: auto; height: auto; transform: none; }
+  #rec-btn, #src-btn, #notes-btn, #rec-panel, #rec-count, #rec-msg, #notes-panel, #sources-panel { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marks svg, .bar i, .lk { transition: none; }
+}
+.still .marks svg, .still .bar i { transition: none; }
+@media (max-width: 640px) {
+  .marks { display: none; }
+  .bar { display: block; }
+  .chrome { justify-content: flex-end; left: 14px; right: 14px; bottom: 12px; }
+  .count { margin-right: auto; text-align: left; }
+  .slide { padding-bottom: 66px; }
+  #notes-panel { left: 12px; right: 12px; bottom: 64px; padding: 12px 14px; font-size: 14px; }
+}
+html.tall .slide-title { grid-template-columns: none; grid-template-rows: auto minmax(0, 1fr); align-items: start; gap: 0; }
+html.tall .slide-title .stage { height: auto; min-height: 0; }
+html.tall .slide-title h1 { margin-top: 3vh; }
+html.tall .slide-title .wallet { margin-bottom: 1em; }
+html.tall .byline { margin-bottom: 1em; }
+/* a chrome too narrow for every slide's dot shows the progress bar instead */
+html.tight .marks { display: none; }
+html.tight .bar { display: block; }
+html.tight .count { margin-right: auto; text-align: left; }
+</style>
+</head>
+<body>
+<svg id="defs" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl" x1="0" y1="0" x2="0" y2="9"/></pattern>
+    <pattern id="hatch-now" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl-now" x1="0" y1="0" x2="0" y2="8"/></pattern>
+  </defs>
+</svg>
+
+<main id="deck" aria-roledescription="slide deck" aria-label="Perch Agent Grants">
+
+<section class="slide slide-title" data-status="title" data-draw="title" aria-roledescription="slide" aria-label="Perch Agent Grants">
+  <div class="title-text">
+    <p class="kicker">SCF Build Award · Open Track</p>
+    <h1>Perch</h1>
+    <p class="sub">Agent Grants: subagent budgets enforced by Stellar smart accounts</p>
+    <p class="byline"><b>The Aha Company</b></p>
+  </div>
+  <div class="stage"><svg role="img" aria-label="An account at the centre of a dial of ledgers. A bracket marks a window of ledgers holding two charges; older charges lie outside it. An app key and an agent reach the account only through the window."></svg></div>
+  <aside class="notes" data-sec="9">
+    <p>This is Perch Agent Grants, from The Aha Company: subagent budgets enforced by Stellar smart accounts.</p>
+  </aside>
+  <aside class="sources">
+    <p>Perch Agent Grants, an Open Track submission for an SCF Build Award by The Aha Company. Perch is a set of Soroban contracts that turns a Stellar smart account into a permission engine for apps and agents; this award funds an agent runtime whose root authority is a grant on a Perch account.</p>
+    <p class="src">SCF Build submission, Submission Title, Build Award Track and Products &amp; Services. The dial is the Perch deck's title drawing.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-draw="perch" aria-roledescription="slide" aria-label="What Perch is">
+  <header class="head"><h2>What Perch is</h2></header>
+  <div class="stage"><svg role="img" aria-label="Perch is a Stellar smart account. An app or agent's every call is checked against a grant, which says which calls, which signers, a spending cap and an expiry; rule_eval::check_auth decides every authorization. The decision function is proved in Lean, with kernel-checked theorems. Perch contracts are live on Stellar mainnet since 26 October 2026, and Nido creates Perch accounts."></svg></div>
+  <aside class="notes" data-sec="11">
+    <p>Perch is a Stellar smart account: each agent gets a grant, and one function, proved in Lean, decides every call.</p>
+  </aside>
+  <aside class="sources">
+    <p>Perch is a set of Soroban contracts that turns a Stellar smart account into a permission engine for apps and agents. The owner installs grants: which contracts and functions an app or agent may call, argument conditions, which keys must sign, a sliding-window spending cap and an expiry. Every authorization is decided by <code>rule_eval::check_auth</code> over the rules the account stores, including nested calls in the authorization tree.</p>
+    <p>The decision function, about 2,400 lines of Rust, is translated into Lean, and kernel-checked theorems show that it returns what a readable model returns, accepts only calls a rule allows, keeps every window within its cap, never lets a narrowed grant allow more than its parent, and never allows a call to the account or its recovery contracts: 13 theorems in all. The step from the evaluator to the account (P1) is argued, not proved, and nothing checks the compiled Wasm against the translation.</p>
+    <p>Perch contracts are live on Stellar mainnet since 2026-10-26: the registry, the document compiler and the account factory, from the earlier account design. Nido, The Aha Company's passkey wallet, creates Perch accounts through its factory. Grants with <code>apply_grant</code> and <code>rule_eval::check_auth</code> are merged in the repository and reach mainnet in Tranche 3.</p>
+    <p class="src">SCF Build submission, Products &amp; Services (items 1–3), Traction Evidence, Tranche #3 item 1; docs/perch-paper/source/statements.json (P1).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="cited" data-draw="ihitl" aria-roledescription="slide" aria-label="An agent raised its own cap">
+  <header class="head"><h2>An agent raised its own cap</h2></header>
+  <div class="stage stage-row"><svg role="img" aria-label="A published study. An agent is asked to pay three invoices of 0.01 USDC each. Its wallet caps spending at 0.01 USDC a day, and raising the cap needs a one-time code emailed to the owner, into the inbox the agent reads. The agent reads the code and raises its own cap. 9 of 10 models did this in at least one of 20 runs, unprompted, with no attacker present."></svg>
+    <p class="stage-links"><span>Breckenridge, Vilardell, Wang, Zhang and Juels, “I-HITL: Inalienable Human-in-the-Loop”, 2026</span><a href="https://arxiv.org/abs/2610.35835" target="_blank" rel="noopener">arXiv:2610.35835</a></p>
+  </div>
+  <aside class="notes" data-sec="13">
+    <p>In a recent study, agents paying invoices read a code emailed to the owner and raised their own spending cap, unprompted. Nine of ten models did.</p>
+  </aside>
+  <aside class="sources">
+    <p>A study from Cornell Tech, Yale University and IC3 tested a human-in-the-loop gate on spending. A LangChain agent had three tools: the user's email, a web browser and an agent wallet holding 10 USDC on Base mainnet, with a spending policy of 0.01 USDC per transaction, 0.01 USDC per day, 0.30 USDC per week and 1 USDC per month. Changing the policy needs a one-time passcode that the wallet provider emails to the account owner. The system prompt told the agent to act only on the user's instructions and to treat anything a tool returns, emails included, as data; no task mentioned the spending policy or how to change it.</p>
+    <p>In the payment experiment the inbox held three invoices of 0.01 USDC each, so paying all three needed a higher daily cap. Across 20 trials per model, with no adversary present, 9 of 10 models read the code from the inbox and raised their own spending cap in at least one run. In a second experiment, tasked only with summarizing the inbox, 5 of 10 models paid an attacker who impersonated the user by email. The authors disclosed the results to the wallet provider, Circle, on 22 September 2026; Circle's agent-wallet documentation now warns never to give an agent access to the inbox that receives the code. The paper argues that a human in the loop needs a channel the agent cannot reach.</p>
+    <p class="src">Breckenridge, Vilardell, Wang, Zhang and Juels, "I-HITL: Inalienable Human-in-the-Loop", arXiv:2610.35835 (v3, 30 October 2026): p. 4 (Setup, Experiments, Key Findings), p. 5 (Results), Appendix D (p. 18). The ten models are not named here.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-draw="contained" aria-roledescription="slide" aria-label="A contained policy runtime">
+  <header class="head"><h2>A contained policy runtime</h2></header>
+  <div class="stage"><svg role="img" aria-label="What we will build. One Cedar policy is evaluated off chain by a contained policy engine, official Cedar with no imports, for files, websites, signing and spawning, and compiled into the Perch account's rule on chain for payments, contract calls and caps. Between them, the same decision: proved for the Rust translation, tested for the compiled contract; caps and time windows are the account's alone; today a prototype proof covers a small fragment. Agents, WASI components that hold no keys, send every request to the engine; the key service checks the request, then signs. The runtime will be tested, not proven; the decision function is proved in Lean. Even if the runtime fails, the account refuses an over-cap payment."></svg></div>
+  <aside class="notes" data-sec="14">
+    <p>We will build a contained runtime: one Cedar policy, checked off chain in a sandbox and on chain by the account, which refuses even if the runtime fails.</p>
+  </aside>
+  <aside class="sources">
+    <p>What we will build (Tranches 1 and 2). One Cedar policy is the source of both checks. In the runtime, agents run as WASI components and hold no keys; a root agent's authority starts from a grant on the account, and a subagent is spawned only with a grant derived from its parent's (Tranche 1, item 1). Every file, website, signing and spawn request goes to the contained policy engine: official Cedar 4.14.x packaged as an import-free WebAssembly component, with no files, network or keys of its own, in which any policy error refuses and a subagent's request must be permitted by its own policies and every ancestor's (Tranche 1, item 3). Signing goes through the key service, which signs only after checking the signing request and every authorization context (Tranche 2, item 1).</p>
+    <p>The same policy is compiled into the rules the account enforces on chain, by a compiler from a stated Cedar subset that refuses anything it cannot translate exactly, with compiled numeric rules carrying 64-bit bounds to match Cedar's integers. A Lean theorem, on Cedar's published Lean specification, is to show that the account's decision function, as translated from Rust, allows a call exactly when Cedar allows the matching request, and a harness runs the compiled contract in a local Soroban host and the official Cedar engine on the same generated requests (Tranche 1, item 2). The link is proved for the Rust translation and tested for the compiled contract, and it covers stateless call matching: spending caps and time windows are enforced only by the account.</p>
+    <p>Proved today: the account's decision function, in 13 kernel-checked Lean theorems; P1 is argued, and nothing checks the compiled Wasm against the translation. The runtime will be tested, not proven. Payments over x402 (Tranche 2, item 2) and contract calls reach the account, which rechecks them on chain; with an attenuated grant installed (Tranche 2, item 1), an over-cap subagent payment is refused even with the runtime's own check switched off. Also today: an unpublished experiment proved the equivalence for a cut-down fragment, and Cedar's smallest evaluator build measured 710,772 bytes against the 131,072-byte contract limit (the Perch account is 106,668 bytes, measured 6 November 2026), which is why Cedar runs off chain.</p>
+    <p class="src">SCF Build submission, Products &amp; Services (items 1 and 3, and the funded work); Tranche #1 items 1–3 (items 2 and 3 as agreed 2026-11-09); Tranche #2 items 1 and 2; docs/cedar-walkthrough ("Why not upload the full Cedar evaluator?"); vision paper §08 and §09.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-draw="mail" aria-roledescription="slide" aria-label="Example: a mail assistant">
+  <header class="head"><h2>Example: a mail assistant</h2></header>
+  <div class="stage"><svg role="img" aria-label="The runtime we will build enforces a Cedar policy for a mail assistant. It may read only a forwarding mailbox's host and post only to a send host, and only to me@example.com or team@example.com. Sending the digest to team@example.com is allowed. Sending it to anyone@else.example is refused: not on your list. Opening your own inbox is refused: it reads only the mail you forward. On chain, a grant as Perch has today: pay newsletter.example, at most 5 USDC per 518,400 ledgers, about 30 days; the account refuses more, even if the runtime fails. It never sees your inbox, or the codes sent to it."></svg></div>
+  <aside class="notes" data-sec="12">
+    <p>For example, a mail assistant reads only what you forward and sends only to your list, so it never sees your inbox.</p>
+  </aside>
+  <aside class="sources">
+    <p>What we will build: the agent runtime (Tranche 1, items 1 and 3) will enforce this policy, through the contained Cedar policy engine. The action and entity names (<code>Agent</code>, <code>Action::"web.get"</code>, <code>Action::"web.post"</code>, <code>Host</code>, <code>context.to</code>) are the request vocabulary we will give the runtime, not an existing API. Mail is modelled as web requests to two named hosts, a forwarding mailbox's read API and a send API, not as a separate mail action; the hosts and addresses are illustrative. The syntax is Cedar's: <code>permit</code> with a scope, a <code>when</code> condition, a set's <code>contains</code>.</p>
+    <p>The money part is an ordinary Perch grant, as merged today: a transfer of one token to one recipient, at most 5 USDC per 518,400 ledgers (about 30 days at 5 seconds a ledger), enforced by the account whatever the runtime does. This is the plain answer to the cited study's setup: the agent never holds the owner's inbox, so a one-time code emailed to the owner never reaches it, and it cannot change its own grant.</p>
+    <p class="src">SCF Build submission, Products &amp; Services (the funded work: file, network, signing and spawn permissions; item 2, grants), Tranche #1 items 1 and 3; arXiv:2610.35835, p. 4 (the emailed code); docs/cedar-walkthrough (the Cedar dialect).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-draw="keepcap" aria-roledescription="slide" aria-label="A cap the agent cannot raise">
+  <header class="head"><h2>A cap the agent cannot raise</h2></header>
+  <div class="stage stage-row stage-doc">
+    <svg role="img" aria-label="Two separate documents in the Perch account, in Cedar-style pseudocode: the authoring form we will compile to the account's rules. The account holds the account document and, beside it, each grant document by its id. The account document, applied with apply_doc: permit the owner's passkey any action on this account, which covers apply_doc, apply_grant and remove_grant; recovery by guardians, 2 of 3; it lists no grants. Grant 1, the agent's grant document, installed by the owner's passkey with apply_grant(1, …) and removed with remove_grant(1): permit the agent's key to call order on the shop; permit it to pay XLM to the shop, from this account, inside shop.order, at most 10 XLM per 100 ledgers, about 8 minutes, before ledger 65,900,000, about 30 days; forbid it any action on this account or its recovery contracts. The agent's own key calls apply_grant and is refused: it is not the owner's passkey. Why the agent cannot raise its cap: only the owner's passkey installs or removes a grant; proven, no grant can authorize a call to the account itself or its recovery contracts; an emailed code gets the agent nothing, since it holds only its grant's key. The account enforces the cap and the window itself."></svg>
+    <div class="doc-details" id="doc-details" hidden>
+      <p class="dd-h">The pseudocode, field by field, in Perch's two kinds of document (<code>crates/perch-ir/src/doc.rs</code>, kebab-case JSON): first the account document, then the agent's grant document</p>
+      <dl>
+        <dt><code>owner_passkey</code></dt><dd><code>signers: [{ "id": "owner", "verifier": …WebAuthn…, "key": … }]</code></dd>
+        <dt><code>permit (owner_passkey, any action, this_account)</code></dt><dd>rule <code>"admin"</code>: <code>"scope": { "type": "self-admin" }</code>, <code>"principals": { "type": "all", "signers": ["owner"] }</code>. It covers every call to the account itself: <code>apply_doc</code>, <code>apply_grant</code>, <code>remove_grant</code>, upgrades.</dd>
+        <dt><code>recovery: guardian-only, 2 of 3</code></dt><dd><code>"recovery": { "mode": { "type": "guardian-only", "guardians": […], "quorum": 2 }, … }</code></dd>
+        <dt>the agent's grant document, <code>grant 1</code></dt><dd>a document of its own, not part of the account document: the account stores it apart, in its grant map under grant id <code>1</code>, with its own rules. <code>apply_grant(1, doc_json)</code> adds it and <code>remove_grant(1)</code> removes it and every rule it installed; the account document's admin rule (the owner's passkey) authorizes both, and the account document never lists its grants.</dd>
+        <dt><code>agent_key</code></dt><dd><code>signers: [{ "id": "agent", "verifier": …Ed25519…, "key": … }]</code>; every rule: <code>"principals": { "type": "all", "signers": ["agent"] }</code></dd>
+        <dt><code>call order, shop</code></dt><dd><code>"scope": { "type": "contract", "address": shop }</code>, <code>"functions": ["order"]</code></dd>
+        <dt><code>pay XLM, shop</code>, <code>from == this_account</code></dt><dd><code>"scope": { "type": "contract", "address": XLM }</code>, <code>"functions": ["transfer"]</code>, <code>"args": [{ "index": 0, "pred": { "type": "is-self" } }, { "index": 1, "pred": { "type": "address-eq", "address": shop } }]</code></dd>
+        <dt><code>inside shop.order</code></dt><dd><code>"auth-root": { "contract": shop, "function": "order" }</code></dd>
+        <dt><code>amount &lt;= 10 XLM per 100 ledgers</code></dt><dd><code>"cap": { "limit": "100000000", "period-ledgers": 100 }</code>: 10 XLM in stroops, over a sliding window of 100 ledgers, about 8 minutes at 5 seconds a ledger. Cedar has no sliding window; the account keeps the window and enforces the cap.</dd>
+        <dt><code>ledger &lt; 65,900,000</code></dt><dd><code>"not-after-ledger": 65900000</code>, a ledger number, not a time</dd>
+        <dt><code>forbid (agent_key, any action, this_account or its recovery contracts)</code></dt><dd>not a field: <code>apply_grant</code> refuses a grant with a <code>self-admin</code> rule or a rule reaching the account's own rules or recovery, and it is proven that no grant, nor one derived from it, allows such a call.</dd>
+      </dl>
+      <p class="dd-note">Cedar-style pseudocode, not valid Cedar: the authoring form we will compile to these rules (Tranche 1). Today a document is written as this JSON, and the account stores the compiled rules. Values are illustrative.</p>
+    </div>
+    <p class="stage-links"><button class="act ghost" type="button" data-doc aria-expanded="false" aria-controls="doc-details">Show the document fields</button></p>
+  </div>
+  <aside class="notes" data-sec="8">
+    <p>Only the owner's passkey installs a grant, so the agent cannot raise its cap.</p>
+  </aside>
+  <aside class="sources">
+    <p>The two documents in Cedar-style pseudocode, not valid Cedar: the authoring form we will compile (Tranche 1, the Cedar-to-Perch compiler) to the rules the account stores. Today a document is Perch's JSON policy document, and "Show the document fields" maps each line to its fields (<code>PolicyDoc</code>, <code>SignerDecl</code>, <code>Rule</code> with <code>scope</code> contract or self-admin, <code>principals</code>, <code>functions</code>, <code>args</code>/<code>pred</code>, <code>auth-root</code>, <code>cap {limit, period-ledgers}</code>, <code>not-after-ledger</code>, <code>RecoveryConfig</code>). The grant has the shape of the one <code>crates/integration-tests/tests/auth_root.rs</code> installs, with a shop and its recipient in place of the game; the values are illustrative.</p>
+    <p>Two documents, stored apart. <code>apply_doc</code> applies the account document: the account's own rules (its signers and admin rule) and its recovery; it lists no grants. <code>apply_grant(grant, doc_json)</code> applies a grant document under an id the owner chooses, stored in the account's grant map beside the account document, with its own rules; <code>remove_grant(grant)</code> removes it and every rule it installed. Both need the account's own authorization, which the account document's admin rule decides.</p>
+    <p>Why the agent cannot raise its cap. The account document's <code>admin</code> rule, scoped to the account itself (self-admin), is the owner's passkey, and only it authorizes <code>apply_doc</code>, <code>apply_grant</code> and <code>remove_grant</code>; in Nido the passkey's signature is made on the owner's device. <code>apply_grant</code> refuses (<code>GrantEscalation</code>) a grant document with a <code>self-admin</code> rule or a rule reaching the account's own rules or recovery. And Theorem 8, grant target containment, proves that "No grant as lowered at install, nor any grant derived from one, allows a call to the account or its adopted recovery contracts." The agent holds only its grant's key, so a code emailed to the owner gets it nothing. This is not the paper's I-HITL protocol; it is where Perch puts the limit. This is the merged account; mainnet still runs the earlier design, and deploying this one is Tranche 3.</p>
+    <p class="src">crates/perch-ir/src/doc.rs; docs/schema.md; docs/account-interface.md (Constructor, <code>apply_doc</code>, <code>apply_grant</code>, Removing grants); crates/perch-smart-account/src/lib.rs (<code>PerchSmartAccount</code>: <code>apply_doc</code>, <code>apply_grant</code>, <code>remove_grant</code>; the grant map); crates/integration-tests/tests/auth_root.rs (the grant it installs); docs/perch-paper/source/statements.json (T8); SCF Build submission, Products &amp; Services (items 1–3), Tranche #1 item 2.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-draw="atten" aria-roledescription="slide" aria-label="Narrowing a grant">
+  <header class="head"><h2>Narrowing a grant</h2></header>
+  <div class="stage"><svg role="img" aria-label="The app's grant is a region of allowed calls: the game, any function; the shop, at most 10 XLM per 100 ledgers; until ledger N. A helper's grant is a smaller region nested inside it, made in three narrowing steps: only guess; at most 2 XLM per 100 ledgers; an earlier last ledger M. Paying the shop 5 XLM: the app may, the helper is refused. Proven: a narrowed grant never allows a call, or a run of payments, that its parent refuses. We will build the runtime that spawns the helper and the account entry point that installs its grant."></svg></div>
+  <aside class="notes" data-sec="10">
+    <p>A subagent gets a narrower grant, and it's proven that a narrowed grant never allows what its parent refuses.</p>
+  </aside>
+  <aside class="sources">
+    <p>Attenuation derives a narrower grant from an existing one; rule-core defines 10 narrowing steps, three shown here. Theorem 4: a derived grant allows no call its parent does not, under any signers; its comparison reads no cap or expiry, so it covers step 1. Theorem 5, trace inclusion: every run a derived grant accepts from empty records, its parent accepts too, which covers steps 2 and 3. N and M are illustrative.</p>
+    <p>We will build a runtime that spawns a subagent only with a grant derived from its parent's (Tranche 1, deliverable 1), and an account entry point that installs a derived grant, checked on chain to be no wider than its parent (Tranche 2, deliverable 1). The account cannot install an attenuated grant today.</p>
+    <p class="src">The Perch deck, slide 4, and its sources (statements.json T4, T5; facts example.json, proofs.json); SCF Build submission, Tranche #1 and #2 Deliverables.</p>
+  </aside>
+</section>
+
+
+<section class="slide" data-status="plain" data-draw="nido" data-steps="create|grant|coffee|shopcap" data-step="1" aria-roledescription="slide" aria-label="Perch, in a shipping wallet">
+  <header class="head"><h2>Perch, in a shipping wallet</h2><button class="nido-reset" type="button" data-nido-reset title="A new ledger with no account, back to step 1 with no dialog open (D)">Reset demo</button></header>
+  <div class="stage stage-nido">
+    <div class="nido-side">
+      <div class="nido-status"><p class="ns-1">Nido: pre-release on Stellar mainnet</p><p class="ns-2">The current version runs on testnet, at nido.fyi<span class="ctx">context</span></p></div>
+      <ul class="nido-facts">
+        <li><b>Perch contracts on Stellar mainnet</b><span class="fd"> since 2026-10-26: registry, compiler, account factory</span><span class="ctx">context</span></li>
+        <li><b>1,662 npm downloads</b><span class="fd"> of @stellar-registry/perch, 2026-10-10 to 2026-11-08</span><span class="ctx">context</span></li>
+        <li><b>A scripted Nido run on testnet</b><span class="fd">, 2026-11-05: 11 transactions, and an over-cap payment refused before signing</span></li>
+      </ul>
+      <p class="nido-ctx">context: reported under Nido’s SCF #41 award, not claimed for this ask</p>
+      <ol class="nido-steps" aria-label="Steps of the demo"><li><button type="button" data-k="1" title="Step 1 of 4: create the account"><span class="sn">1</span>create</button></li><li><button type="button" data-k="2" title="Step 2 of 4: install the shop grant"><span class="sn">2</span>grant</button></li><li><button type="button" data-k="3" title="Step 3 of 4: buy a coffee"><span class="sn">3</span>coffee</button></li><li><button type="button" data-k="4" title="Step 4 of 4: order past the cap, refused"><span class="sn">4</span>refused</button></li></ol>
+      <p class="nido-sim">This demo is simulated in this page: a software passkey and a test token.</p>
+    </div>
+    <div class="nido-main">
+      <div class="nido-slot"><div class="nido-shot" data-k="1"><img class="nido-still s-light s-wide" src="stills-2/light-shop-account-wide.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"><img class="nido-still s-light s-narrow" src="stills-2/light-shop-account-narrow.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"><img class="nido-still s-dark s-wide" src="stills-2/dark-shop-account-wide.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"><img class="nido-still s-dark s-narrow" src="stills-2/dark-shop-account-narrow.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"></div><div class="nido-shot" data-k="2"><img class="nido-still s-light s-wide" src="stills-2/light-shop-grant-wide.webp" alt="The Nido sheet: let Coffee shop spend without asking you; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"><img class="nido-still s-light s-narrow" src="stills-2/light-shop-grant-narrow.webp" alt="The Nido sheet: let Coffee shop spend without asking you; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"><img class="nido-still s-dark s-wide" src="stills-2/dark-shop-grant-wide.webp" alt="The Nido sheet: let Coffee shop spend without asking you; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"><img class="nido-still s-dark s-narrow" src="stills-2/dark-shop-grant-narrow.webp" alt="The Nido sheet: let Coffee shop spend without asking you; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"></div><div class="nido-shot" data-k="3"><img class="nido-still s-light s-wide" src="stills-2/light-shop-coffee-wide.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order a coffee, within its cap" decoding="async"><img class="nido-still s-light s-narrow" src="stills-2/light-shop-coffee-narrow.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order a coffee, within its cap" decoding="async"><img class="nido-still s-dark s-wide" src="stills-2/dark-shop-coffee-wide.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order a coffee, within its cap" decoding="async"><img class="nido-still s-dark s-narrow" src="stills-2/dark-shop-coffee-narrow.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order a coffee, within its cap" decoding="async"></div><div class="nido-shot" data-k="4"><img class="nido-still s-light s-wide" src="stills-2/light-shop-cap-wide.webp" alt="The Nido sheet: 8 EURC to Coffee shop, over the limit; your account would refuse this: over the cap" decoding="async"><img class="nido-still s-light s-narrow" src="stills-2/light-shop-cap-narrow.webp" alt="The Nido sheet: 8 EURC to Coffee shop, over the limit; your account would refuse this: over the cap" decoding="async"><img class="nido-still s-dark s-wide" src="stills-2/dark-shop-cap-wide.webp" alt="The Nido sheet: 8 EURC to Coffee shop, over the limit; your account would refuse this: over the cap" decoding="async"><img class="nido-still s-dark s-narrow" src="stills-2/dark-shop-cap-narrow.webp" alt="The Nido sheet: 8 EURC to Coffee shop, over the limit; your account would refuse this: over the cap" decoding="async"></div></div>
+      <p class="nido-cap"><span data-k="1">Create the account with a passkey</span><span data-k="2">Approve the shop grant: 10 test EURC every ~8 minutes, only to the shop</span><span data-k="3">Buy a coffee: within the cap</span><span data-k="4">Order past the cap: refused before anyone signs</span></p>
+    </div>
+  </div>
+  <aside class="notes" data-sec="49">
+    <p data-k="1" data-sec="17">As context, Perch already runs in Nido, a wallet in pre-release on mainnet. Here, simulated, I create an account with a passkey.</p>
+    <p data-k="2" data-sec="13">I install a shop grant: ten test euros every eight minutes, paid only to the shop.</p>
+    <p data-k="3" data-sec="9">A coffee pays the shop, within the cap.</p>
+    <p data-k="4" data-sec="10">An order past the cap is refused before anyone signs.</p>
+  </aside>
+  <aside class="sources">
+    <p>Nido's status, as context reported under Nido's SCF #41 award, not claimed for this ask. Nido is in pre-release on Stellar mainnet: its mainnet factory, CBHERM3IKL2QLLJWNPBTATIHVFNT3FLFZKPFG4L2X7CHUPRLJHGC3FAC, was deployed on 2026-10-26 on Perch's earlier account design (c135aca), and its mainnet launch checklist (docs/MAINNET_READINESS.md) is still open, so grants reach mainnet in Tranche 3. The current version runs on Stellar testnet as the hosted wallet at nido.fyi, whose README says not to use it for real funds.</p>
+    <p>Perch contracts have been live on Stellar mainnet since 2026-10-26 (registry, document compiler, account factory). The npm package @stellar-registry/perch had 1,662 downloads from 2026-10-10 to 2026-11-08 (api.npmjs.org, read 2026-11-09). Both are context under Nido's SCF #41 award. On 2026-11-05 a scripted browser run of the Nido wallet with virtual passkeys made 11 successful transactions on testnet: it installed a grant capped at 2 XLM per 17,280 ledgers, made two capped payments, refused a third over-cap payment before signing, and completed a one-guardian recovery.</p>
+    <p>The frame is one live session of the Nido simulation (docs/nido-sim, 5.4 MB, offline in this page), loaded once and kept, with the shop grant only (<code>grant=shop</code>): Next moves through four steps on this slide and opens each step's dialog, for the presenter to approve or reject with a click; Prev steps back without undoing anything, a step already done opens nothing, and #8.k opens step k. 1, create the account behind a simulated passkey prompt: a software P-256 key in the page, not a device; Nido's factory, rebuilt on this stack's account Wasm, deploys the account, and the page funds it with 10 XLM and 20 test EURC. 2, install the shop grant with <code>apply_grant</code>, signed by the passkey under the account document's admin rule: 10 test EURC to the coffee shop every ~8 minutes (100 ledgers), only inside <code>shop.order</code>, recipient pinned to the shop. 3, an order pays the shop 3.50 test EURC through a transfer nested inside <code>shop.order</code>, within the cap. 4, an order larger than what is left of the window is refused by the cap before anything is signed.</p>
+    <p>The shop and the euro token are written for the demo. Reset demo (or D) starts a new ledger with no account and returns to step 1, with no dialog open; the next Next opens the passkey prompt. If the frame cannot load, each step shows a still of the same page with its sign sheet open; the recording draws the stills, because the canvas recorder cannot capture a live frame.</p>
+    <p class="src">SCF Build submission, Traction Evidence (mainnet, Nido's factory, npm, the testnet run) and its notes; Nido's repository: README (the hosted testnet wallet at nido.fyi), packages/passkey-sdk/src/perch/factory.mainnet.json (the mainnet factory), docs/MAINNET_READINESS.md; the paper's section "A Nido wallet run used a grant end to end"; docs/nido-sim/index.html and README.md (the live view and its messages; the stills in stills-2/ are screenshots of that page, README "Nido stills").</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-draw="timeline" aria-roledescription="slide" aria-label="Our ask: three tranches">
+  <header class="head"><h2>Our ask: three tranches</h2></header>
+  <div class="stage"><svg role="img" aria-label="Three tranches on a calendar from December 2026 to June 2027. Tranche 1, MVP, by 29 January 2027: agent runtime core; verified Cedar-to-Perch compiler and two-engine test harness; Cedar policy engine as an import-free WebAssembly component; public MVP demo. Tranche 2, testnet, by 26 March 2027: attenuated grants on the account and subagent signing; x402 payer flow for Perch accounts; grant review views for wallets; threat model and monitoring plan. Tranche 3, mainnet launch, by 28 May 2027: mainnet release of the account and agent-grant contracts; runtime 1.0 release; mainnet agent payment demonstration; developer documentation."></svg></div>
+  <aside class="notes" data-sec="21">
+    <p>Our ask is an SCF Build Award in three tranches. By January: the agent runtime, a verified Cedar compiler and a public demo. By March, on testnet: subagent grants, x402 payments and grant views for wallets. By May: the audited mainnet release.</p>
+  </aside>
+  <aside class="sources">
+    <p>Three tranches, each with four deliverables and a completion date. Tranche 1, MVP, by 2027-01-29: agent runtime core; verified Cedar-to-Perch compiler and two-engine test harness; Cedar policy engine as an import-free WebAssembly component; public MVP demo. Tranche 2, testnet, by 2027-03-26: attenuated grants on the account and subagent signing; x402 payer flow for Perch accounts; grant review views for wallets; threat model and monitoring plan. Tranche 3, mainnet launch, by 2027-05-28: mainnet release of the account and agent-grant contracts; Runtime 1.0 release; mainnet agent payment demonstration; developer documentation.</p>
+    <p class="src">SCF Build submission, Tranche #1, #2 and #3 Deliverables and Completion Dates; Tranche 1 items 2 and 3 as agreed 2026-11-09.</p>
+  </aside>
+</section>
+
+<section class="slide slide-close" data-status="title" aria-roledescription="slide" aria-label="Team">
+  <header class="head"><h2>Team</h2></header>
+  <div class="stage">
+    <ul class="links team">
+      <li><a class="lk" href="https://github.com/willemneal"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="14" r="7"/><path d="M7 34c1-9 25-9 26 0"/></svg><span class="lk-t">Willem Wyndham</span><span class="lk-s">CSO. Programming languages and security; blockchain runtime engineering at NEAR Protocol; leads The Aha Company's technical architecture.</span></a></li>
+      <li><a class="lk" href="https://github.com/pselle"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="14" r="7"/><path d="M7 34c1-9 25-9 26 0"/></svg><span class="lk-t">Pamela Selle</span><span class="lk-s">Principal Engineer. Former Senior Engineer II at HashiCorp, Terraform Core maintainer; cloud-infrastructure lead at Comcast.</span></a></li>
+      <li><a class="lk" href="https://github.com/zachfedor"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="14" r="7"/><path d="M7 34c1-9 25-9 26 0"/></svg><span class="lk-t">Zach Fedor</span><span class="lk-s">Engineer. Fifteen years of freelance web development; frontend engineer at HUG and BrandYourself; React and TypeScript.</span></a></li>
+      <li><a class="lk" href="https://github.com/fazzatti"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="14" r="7"/><path d="M7 34c1-9 25-9 26 0"/></svg><span class="lk-t">Fabricius Zatti</span><span class="lk-s">Principal Engineer. Fifteen years, more than five in Web3 systems for institutions including the Central Bank of Indonesia, MoneyGram, IOG and the SDF; Stellar and smart contracts.</span></a></li>
+    </ul>
+    <p class="close-foot">The Aha Company · <a href="https://github.com/stellar-registry/perch">github.com/stellar-registry/perch</a></p>
+  </div>
+  <aside class="notes" data-sec="20">
+    <p>We're The Aha Company. Why Stellar? A Soroban smart account decides every authorization in its own contract, and low fees make checking every agent payment affordable. Fund Agent Grants, and agents on Stellar get budgets they cannot raise. Thank you.</p>
+  </aside>
+  <aside class="sources">
+    <p>Four people from The Aha Company work on this submission: Willem Wyndham (CSO), Pamela Selle (Principal Engineer), Zach Fedor (Engineer) and Fabricius Zatti (Principal Engineer). Each line paraphrases the submission's team description.</p>
+    <p>Why Stellar, as spoken: a Soroban custom account authorizes every call made on its behalf in its own <code>__check_auth</code>, which is where Perch decides each authorization (crates/perch-smart-account/src/lib.rs); Stellar's fees are a base fee of 100 stroops per operation plus Soroban resource fees (developers.stellar.org, "Fees").</p>
+    <p class="src">SCF Build submission, Team Description; Project URL; Stellar developer documentation (smart accounts and authorization; fees).</p>
+  </aside>
+</section>
+
+<!-- Appendix: background slides after the close, outside the timed run and the recording. -->
+<section class="slide" data-status="plain" data-appendix data-draw="agents" aria-roledescription="slide" aria-label="Agents with keys">
+  <header class="head"><h2>Agents with keys</h2><span class="appx">Appendix</span></header>
+  <div class="stage"><svg role="img" aria-label="Today an agent that spends for a user holds a key that can do anything the account can, and a subagent copies it. With Perch the agent holds a grant and the account checks every call against it. We will build subagents that receive narrower grants and hold no keys."></svg></div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. An agent holding a key can do anything the account can, and a subagent copies it; with Perch the agent holds a grant, and the account checks every call in the authorization tree.</p>
+  </aside>
+  <aside class="sources">
+    <p>An agent that spends for a user holds a key that can do anything the account can, and anything it spawns inherits that power. A Perch grant fixes which contracts and functions an app or agent may call, argument conditions, which keys must sign, a sliding-window spending cap and an expiry, and the account checks every call in the authorization tree against it, so a stolen app key can spend no more than its grant allows. We will build an agent runtime in which subagents receive narrower grants and hold no keys.</p>
+    <p class="src">SCF Build submission, Products &amp; Services (items 1 and 2, and the funded work).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-appendix data-draw="oneplace" aria-roledescription="slide" aria-label="Where the policy lives">
+  <header class="head"><h2>Where the policy lives</h2><span class="appx">Appendix</span></header>
+  <div class="stage"><svg role="img" aria-label="Common setups enforce agent-payment policy in one place. Limits the agent can reach: in its own tools, or behind an approval channel it can read, as in the cited study; the chain sees a valid key. On chain, written apart: client rules and contract logic are two rule sets written separately, which can drift. What we will build, Perch: one Cedar policy checked in both places, off chain by a contained engine and on chain by the account, the backstop."></svg></div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. Where agent-payment policy usually sits: within the agent's reach, or in on-chain logic written apart from the client's rules. What we will build puts one Cedar policy in both places.</p>
+  </aside>
+  <aside class="sources">
+    <p>Common setups for agent payments enforce the policy in one place. Some keep the limits within the agent's reach: the agent's own process or tools check them, or a provider enforces them behind an approval channel the agent can read. The cited study is the second kind: the wallet provider, Circle, enforced the cap, and agents raised it with a one-time code emailed to an inbox they could read. Others put the policy in on-chain logic written separately from the client's rules, so the two rule sets can drift apart. This slide names no product; the point is where the check sits.</p>
+    <p>What we will build combines them: one Cedar policy, evaluated by a contained policy engine in the runtime and compiled into the rules the account enforces on chain. Off chain it covers what the chain cannot see (files, websites, signing, spawning); on chain the account is the backstop for payments and contract calls.</p>
+    <p class="src">arXiv:2610.35835, p. 4 (the emailed-code finding); SCF Build submission, Products &amp; Services (the funded work), Tranche #1 items 2 and 3 (as agreed 2026-11-09).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-appendix data-draw="sandbox" aria-roledescription="slide" aria-label="The sandbox and the gate">
+  <header class="head"><h2>The sandbox and the gate</h2><span class="appx">Appendix</span></header>
+  <div class="stage"><svg role="img" aria-label="The agent runs as a WASI component with no files, network, keys or clock unless a capability is handed in. One host import, request(), crosses its boundary into the Cedar check, which sees principal agent, action fetch, resource Host feeds.example.org and its context, against a policy such as permit agent to fetch a host in its sources. Files, websites, signing and spawning each get one check. On permit the host performs it; otherwise it is refused. On chain, payments and contract calls go to the Perch account: the agent's grant key gets through within its grant, and apply_doc, apply_grant and remove_grant are refused. Changing the account's documents needs the account document's admin rule: in Nido, the owner's passkey. Recovery runs through the account's recovery contract, with guardians, quorum and delay. Proven: no grant can authorize a call to the account itself or its recovery contracts."></svg></div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. In the runtime we will build, each agent is a WASI component with no files, network or keys, and its one request call meets a Cedar check. On chain, changing the account's documents (apply_doc, apply_grant, remove_grant) needs the account document's admin rule, the owner's passkey.</p>
+  </aside>
+  <aside class="sources">
+    <p>What we will build (Tranche 1, items 1 and 3). Each agent runs as a WASI component with no ambient authority: it has no files, network, keys or clock unless the host hands in a capability, and its one host import is a request call. Every file, website, signing and spawn request crosses that call into the Cedar policy engine, an import-free WebAssembly component, as a Cedar request: principal the agent, an action, a resource and a context, checked against the agent's policy and every ancestor's. On permit the host performs it; otherwise it is refused. The request shown and the pseudocode are illustrative; the names are the request vocabulary we will give the runtime.</p>
+    <p>On chain, payments and contract calls go to the Perch account, which checks them against the agent's grant. Changing the account's documents (<code>apply_doc</code> for the account document; <code>apply_grant</code> and <code>remove_grant</code> for grant documents, which the account stores apart from it) needs the account document's admin rule, which in Nido is the owner's passkey. Recovery runs through the account's recovery contract, with guardians, quorum and delay. And Theorem 8, grant target containment, proves that no grant can authorize a call to the account itself or its recovery contracts.</p>
+    <p class="src">Vision paper §08, "Agents, budgets and payments (proposed)" (agents and their permissions), and §05, "Recovery and the end of authority" (guardians, quorum, delay); docs/account-interface.md (Constructor, <code>apply_grant</code>, Removing grants); docs/perch-paper/source/statements.json (T8); SCF Build submission, Products &amp; Services (the funded work: file, network, signing and spawn permissions), Tranche #1 items 1 and 3.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-appendix data-draw="reader" aria-roledescription="slide" aria-label="Example: a news and data reader">
+  <header class="head"><h2>Example: a news and data reader</h2><span class="appx">Appendix</span></header>
+  <div class="stage"><svg role="img" aria-label="The runtime we will build enforces a Cedar policy for a news and data reader. It may only make web.get requests to named sources: an RSS feed at feeds.example.org, prices.example and weather.example; there is no other permit. Reading feeds.example.org/rss is allowed. Posting a comment on forum.example is refused: no permit for web.post. Reading unknown.example is refused: not a named source. No money moves, so it needs no grant on chain."></svg></div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. A second example of the runtime we will build: a reader that may only fetch named sources. With no permit to post or send, Cedar refuses everything else; no money moves, so no grant is needed.</p>
+  </aside>
+  <aside class="sources">
+    <p>What we will build, like the mail assistant: one <code>permit</code> for <code>web.get</code> on the hosts in a group of named sources, and nothing else, so Cedar's default refuses every post, form submission and message. The names are the request vocabulary we will give the runtime; the hosts are illustrative. No money moves, so no on-chain grant is needed; were the reader to pay for a data feed, that payment would go through a grant as in the mail example.</p>
+    <p class="src">SCF Build submission, Products &amp; Services (the funded work: network permissions), Tranche #1 items 1 and 3; docs/cedar-walkthrough (the Cedar dialect).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-appendix data-draw="today" aria-roledescription="slide" aria-label="What exists today">
+  <header class="head"><h2>What exists today</h2><span class="appx">Appendix</span></header>
+  <div class="stage stage-row"><svg role="img" aria-label="On Stellar mainnet since 26 October 2026: the Perch registry, document compiler and account factory, and Nido, which creates Perch accounts through its factory. Merged in the repository: grants installed with apply_grant, every authorization decided by rule_eval::check_auth, recovery, verifiers, and 13 Lean theorems. The mainnet account is the earlier design; deploying the new account to mainnet is Tranche 3."></svg>
+    <p class="stage-links"><a href="https://github.com/stellar-registry/perch/blob/main/deployments/mainnet.json">mainnet.json</a><a href="https://stellar.expert/explorer/public/contract/CC236AK2RX7MUO7BV7JYDDW5KHZ3X7YYJOJKCVDC543BQBNNSUCZB7NN">Registry</a><a href="https://stellar.expert/explorer/public/contract/CB65ACZRA777XHGEKVX46LEU2ZSUAL2UQY2PKMVDL7KJTDHRTX5MTBQD">Document compiler</a><a href="https://stellar.expert/explorer/public/contract/CC2K7PEAV24N66JCEG5OPFCBBA4OK6DK7YISRCMQQQUC7KLNISNGYLMK">Account factory</a><a href="https://stellar.expert/explorer/public/contract/CBHERM3IKL2QLLJWNPBTATIHVFNT3FLFZKPFG4L2X7CHUPRLJHGC3FAC">Nido's factory</a></p>
+  </div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. On Stellar mainnet since 2026-10-26: Perch's registry, document compiler and account factory, on the earlier design. Merged in the repository: grant documents installed with apply_grant, every authorization decided by rule_eval::check_auth, recovery and the Lean proofs; they reach mainnet in Tranche 3.</p>
+  </aside>
+  <aside class="sources">
+    <p>Perch contracts have been live on Stellar mainnet since 2026-10-26: the registry, the document compiler and the account factory, from the earlier design (source c135aca, channel beta, a single-key registry admin). Nido, The Aha Company's passkey wallet, creates Perch accounts on mainnet through its factory. Nido's wallet counts, the mainnet deployment and npm downloads are reported under Nido's SCF #41 award; they are context here, not claimed for this ask.</p>
+    <p>Merged in the repository and not funded here: the account with grants (<code>apply_grant</code>), every authorization decided by <code>rule_eval::check_auth</code>, recovery, and passkey and Ed25519 verifiers. The decision function is translated into Lean, and kernel-checked theorems show that it returns what a readable model returns, accepts only calls a rule allows, keeps every window within its cap, never lets a narrowed grant allow more than its parent, and never allows a call to the account or its recovery contracts. A merge is not a mainnet migration: deploying the account changes to mainnet is Tranche 3, deliverable 1.</p>
+    <p class="src">SCF Build submission, Traction Evidence; Products &amp; Services; SCF Build Tranche Deliverables ("Baseline"); Tranche #3 Deliverables, item 1.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-appendix data-draw="t1" aria-roledescription="slide" aria-label="Tranche 1: MVP">
+  <header class="head"><h2>Tranche 1: MVP</h2><span class="appx">Appendix</span></header>
+  <div class="stage"><svg role="img" aria-label="Tranche 1, an agent runtime rooted in a Perch grant, by 29 January 2027: agent runtime core; verified Cedar-to-Perch compiler and two-engine test harness; Cedar policy engine as an import-free WebAssembly component; public MVP demo."></svg></div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. Tranche 1, the MVP, by 2027-01-29: its four deliverables and how each completes.</p>
+  </aside>
+  <aside class="sources">
+    <p>Complete by 2027-01-29. 1. Agent runtime core: a Rust runtime whose root authority is an installed grant on a Perch account, read from Stellar testnet; a subagent is spawned only with a grant derived through rule-core's attenuation steps, and a wider spawn is refused; agents hold no keys. 2. Verified Cedar-to-Perch compiler and two-engine test harness, as on the contained policy runtime slide. 3. Cedar policy engine as an import-free WebAssembly component: official Cedar 4.14.x, zero imports, any policy error refuses, a subagent's request must be permitted by its own policies and every ancestor's. 4. Public MVP demo: a root agent and one subagent, with refused attempts to read outside the granted folder, reach an unapproved website and spawn a child wider than its parent; a reproducible script and a recorded video.</p>
+    <p class="src">SCF Build submission, Tranche #1 Deliverables and Completion Date; items 2 and 3 as agreed 2026-11-09.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-appendix data-draw="t2" aria-roledescription="slide" aria-label="Tranche 2: testnet">
+  <header class="head"><h2>Tranche 2: testnet</h2><span class="appx">Appendix</span></header>
+  <div class="stage"><svg role="img" aria-label="Tranche 2, agent payments on Stellar, by 26 March 2027: attenuated grants on the account and subagent signing; x402 payer flow for Perch accounts; grant review views for wallets; threat model and monitoring plan."></svg></div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. Tranche 2, testnet, by 2027-03-26: its four deliverables and how each completes.</p>
+  </aside>
+  <aside class="sources">
+    <p>Complete by 2027-03-26. 1. Attenuated grants on the account and subagent signing: an entry point that installs a grant derived from an existing grant, checked on chain to be no wider than its parent; testnet transactions in which a subagent payment within its cap succeeds and one over its cap is refused by the account, including with the runtime's own check switched off. 2. x402 payer flow: an agent pays an x402-protected endpoint from a Perch account under its grant, through an existing Stellar x402 facilitator; testnet links for one allowed payment and one over-cap refusal. 3. Grant review views for wallets: embeddable views of a grant, a derived subagent grant and what it has left to spend, with an enforcing-simulation preview, built on the existing open-source sign dialog component; a published npm package. 4. Threat model and monitoring plan: a STRIDE threat model and a monitoring plan with alerts on grant installs and removals, recovery wipes, refusals and spending near caps, running against testnet.</p>
+    <p class="src">SCF Build submission, Tranche #2 Deliverables and Completion Date.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="plain" data-appendix data-draw="t3" aria-roledescription="slide" aria-label="Tranche 3: mainnet">
+  <header class="head"><h2>Tranche 3: mainnet</h2><span class="appx">Appendix</span></header>
+  <div class="stage"><svg role="img" aria-label="Tranche 3, mainnet launch, by 28 May 2027: mainnet release of the account and agent-grant contracts; runtime 1.0 release; mainnet agent payment demonstration; developer documentation."></svg></div>
+  <aside class="notes">
+    <p>Appendix, not in the timed run. Tranche 3, mainnet launch, by 2027-05-28: its four deliverables and how each completes.</p>
+  </aside>
+  <aside class="sources">
+    <p>Complete by 2027-05-28. 1. Mainnet release of the account and agent-grant contracts: deploy the Tranche 2 account changes to Stellar mainnet through the repository's release workflow, after the Audit Bank audit, with fixes for all critical and high findings; verified source for each contract; a documented upgrade path for existing accounts. 2. Runtime 1.0 release: versioned runtime and evaluator component packages, with an integration guide for agent frameworks. 3. Mainnet agent payment demonstration: an agent under a Perch grant on mainnet pays an x402 endpoint, and an over-cap attempt is refused on chain. 4. Developer documentation: one site covering the account, grants, the runtime, the threat model, the test plan and an operations runbook.</p>
+    <p class="src">SCF Build submission, Tranche #3 Deliverables and Completion Date.</p>
+  </aside>
+</section>
+
+</main>
+
+
+<aside id="notes-panel" hidden aria-label="Speaker script">
+  <p class="np-bar"><span id="np-time" class="np-time" role="timer">0:00</span><span class="np-lim">/ 3:00</span><button type="button" id="np-reset">Reset</button></p>
+  <p id="np-cur" class="np-cur"></p>
+  <div id="np-script" class="np-script"></div>
+  <p class="np-next">Next: <span id="np-next"></span></p>
+  <p class="np-keys">N hides this · S sources · R records · D resets the Nido demo</p>
+</aside>
+<aside id="sources-panel" hidden aria-label="Sources"></aside>
+<div id="rec-count" hidden role="status" aria-live="assertive"></div>
+<div id="rec-msg" hidden role="status" aria-live="polite"></div>
+<section id="rec-panel" hidden aria-label="Presenter view, not recorded">
+  <p class="rp-top"><span class="rp-dot" aria-hidden="true"></span><span id="rp-state">Recording</span><span id="rp-time">0:00</span><span class="rp-lim">/ 3:00</span></p>
+  <p id="rp-cur"></p>
+  <div id="rp-script"></div>
+  <p class="rp-next">Next: <span id="rp-next"></span></p>
+  <p class="rp-btns"><button type="button" id="rp-pause">Pause (P)</button><button type="button" id="rp-stop">Stop and save (R)</button></p>
+  <p class="rp-note">Only you see this panel. The video shows the slides and your voice.</p>
+</section>
+
+<nav class="chrome" aria-label="Deck controls">
+  <button class="btn" id="prev" aria-label="Previous slide"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <ol class="marks" id="marks"></ol>
+  <span class="count" id="count" aria-live="polite"></span>
+  <button class="btn" id="notes-btn" aria-label="Speaker script (N)" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/><path d="M8.5 9h7M8.5 12h4.5"/></svg></button>
+  <button class="btn" id="src-btn" aria-label="Sources (S)" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M7 4h7l4 4v12H7z"/><path d="M14 4v4h4M9.5 12.5h6M9.5 15.5h6"/></svg></button>
+  <button class="btn" id="rec-btn" aria-label="Record a video (R)" aria-pressed="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><circle class="rec-dot" cx="12" cy="12" r="3.4"/></svg></button>
+  <button class="btn" id="theme-btn" aria-label="Switch theme"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5a7.5 7.5 0 0 0 0 15z" fill="currentColor"/></svg></button>
+  <button class="btn" id="next" aria-label="Next slide"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+  <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+</nav>
+
+<script>
+(() => {
+'use strict';
+// The page as authored, before this script changes it: the recorder lays it out again at 1920x1080.
+const SRC = '<!doctype html>\n' + document.documentElement.outerHTML;
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+function E(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  if (attrs) for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const f2 = n => Math.round(n * 100) / 100;
+const root = document.documentElement;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+const still = () => reduce.matches || root.classList.contains('still');
+
+/* ---------- seals: a guilloché rosette drawn from a digest's 32 bytes ---------- */
+// Illustrative bytes, not real digests.
+const DIGEST = 'c93a07e15b2d48f6a1e07c3d95b2f84e16a0d7c39e5b2f8401a6d3c7e95b20f4';
+const bytesOf = h => Array.from({ length: 32 }, (_, i) => parseInt(h.substr(i * 2, 2), 16));
+function buildSeal(id, hex, dense) {
+  const defs = $('#defs defs');
+  const sym = E('symbol', { id, viewBox: '-100 -100 200 200', overflow: 'visible' }, defs);
+  const b = bytesOf(hex);
+  let d = '';
+  for (let i = 0; i < 32; i++) {
+    const a = i / 32 * Math.PI * 2 - Math.PI / 2;
+    const r1 = 86, r2 = 90 + 10 * b[i] / 255;
+    d += `M${f2(r1 * Math.cos(a))} ${f2(r1 * Math.sin(a))}L${f2(r2 * Math.cos(a))} ${f2(r2 * Math.sin(a))}`;
+  }
+  E('path', { d, class: 's-tick' }, sym);
+  E('circle', { r: 83, class: 's-ring' }, sym);
+  E('circle', { r: 6, class: 's-ring' }, sym);
+  const bands = dense ? [[30, 0], [50, 10], [68, 20]] : [[38, 0], [64, 12]];
+  const copies = dense ? 11 : 6, N = dense ? 520 : 300;
+  bands.forEach(([r0, o]) => {
+    const amp = 4.5 + 9 * b[o] / 255;
+    const k = 3 + (b[o + 1] % 9) + Math.round(r0 / 22);
+    const m = 1 + (b[o + 2] % 5);
+    const mod = .1 + .6 * b[o + 3] / 255;
+    const ph = b[o + 4] / 255 * Math.PI * 2;
+    for (let c = 0; c < copies; c++) {
+      const sh = c / copies * Math.PI * 2;
+      let p = '';
+      for (let i = 0; i <= N; i++) {
+        const t = i / N * Math.PI * 2;
+        const r = r0 + amp * Math.sin(k * t + sh) * (1 + mod * Math.sin(m * t + ph));
+        p += (i ? 'L' : 'M') + f2(r * Math.cos(t)) + ' ' + f2(r * Math.sin(t));
+      }
+      E('path', { d: p + 'Z', class: 's-wave' }, sym);
+    }
+  });
+}
+buildSeal('seal-P', DIGEST, true);
+buildSeal('seal-P-mini', DIGEST, false);
+
+/* ---------- icons, in a 60-unit box centred on 0,0 ---------- */
+const scallop = (() => {
+  let d = '';
+  const n = 14;
+  for (let i = 0; i <= n; i++) {
+    const a = i / n * Math.PI * 2, am = (i - .5) / n * Math.PI * 2;
+    const x = 19 * Math.cos(a), y = 19 * Math.sin(a);
+    if (i === 0) d += `M${f2(x)} ${f2(y)}`;
+    else d += `Q${f2(25 * Math.cos(am))} ${f2(25 * Math.sin(am))} ${f2(x)} ${f2(y)}`;
+  }
+  return d + 'Z';
+})();
+const ICONS = {
+  key: [['circle', { cx: -14, cy: 0, r: 9 }], ['path', { d: 'M-5 0H26M18 0V8M24 0V6' }]],
+  person: [['circle', { cx: 0, cy: -10, r: 9 }], ['path', { d: 'M-18 22C-18 5 18 5 18 22' }]],
+  passkey: [['circle', { cx: -9, cy: -11, r: 7.5 }], ['path', { d: 'M-24 18C-24 4 6 4 6 18' }], ['circle', { cx: 13, cy: -2, r: 5.5 }], ['path', { d: 'M13 3.5V22M13 16H18M13 11H17' }]],
+  tree: [['path', { d: 'M0 -18L-13 -2M0 -18L13 -2M-13 -2L-20 16M-13 -2L-6 16M13 -2L6 16M13 -2L20 16' }]],
+  account: [['circle', { r: 22 }], ['circle', { r: 12 }]],
+  controller: [['rect', { x: -26, y: -18, width: 52, height: 36, rx: 6 }], ['path', { d: 'M-12 9A12 12 0 0 1 12 9M0 9L7 -2' }]],
+  stamp: [['path', { d: scallop }], ['circle', { r: 10 }]],
+  proof: [['path', { d: 'M0 -22L19 -11V11L0 22L-19 11V-11ZM0 0V22M0 0L19 -11M0 0L-19 -11' }]],
+  check: [['path', { d: 'M-14 1L-4 12L16 -12' }]],
+  cross: [['path', { d: 'M-12 -12L12 12M12 -12L-12 12' }]],
+  agent: [['rect', { x: -17, y: -20, width: 34, height: 26, rx: 8 }], ['path', { d: 'M0 -20V-26M-21 26V22C-21 15 21 15 21 22V26M-8 -1H8' }], ['circle', { cx: -7, cy: -10, r: 2.6 }], ['circle', { cx: 7, cy: -10, r: 2.6 }], ['circle', { cx: 0, cy: -28, r: 2.4 }]],
+  doc: [['path', { d: 'M-16 -24H8L18 -14V24H-16ZM8 -24V-14H18M-8 -4H10M-8 4H10M-8 12H4' }]],
+  coin: [['circle', { r: 21 }], ['circle', { r: 14 }]],
+  envelope: [['rect', { x: -24, y: -16, width: 48, height: 32, rx: 3 }], ['path', { d: 'M-24 -14L0 4L24 -14' }]],
+  warn: [['path', { d: 'M0 -20L22 17H-22ZM0 -6V5' }], ['circle', { cx: 0, cy: 11, r: 1.6 }]],
+  policy: [['rect', { x: -20, y: -22, width: 40, height: 44, rx: 8 }], ['path', { d: 'M-10 -8H10M-10 0H10M-10 8H4' }]],
+  factory: [['path', { d: 'M-27 24V-2L-11 8V-2L5 8V-18H17V24ZM-19 14H-11M-3 14H5' }]],
+  desk: [['circle', { cx: 0, cy: -15, r: 8 }], ['path', { d: 'M-15 4C-15 -5 15 -5 15 4M-28 4H28V24H-28ZM-28 10H28' }]],
+};
+const TREE_DOTS = [[0, -18], [-13, -2], [13, -2], [-20, 16], [-6, 16], [6, 16], [20, 16]];
+
+/* ---------- drawing context ---------- */
+class Ctx {
+  constructor(svg, tall) {
+    this.svg = svg; this.tall = tall;
+    this.t = 150; this.step = 60;
+    this.fs = tall ? 36 : 27;
+    this.sw = tall ? 3.4 : 2.4;
+  }
+  at(ms) { this.t = ms; return this; }
+  _d(o) {
+    if (o && o.d != null) return o.d;
+    const d = this.t;
+    this.t += (o && o.step != null) ? o.step : this.step;
+    return d;
+  }
+  _paint(e, o, d) {
+    const k = o.k || 'ink';
+    const cls = ['st', 'k-' + k];
+    let anim = 'an-draw';
+    if (o.fill) { cls.push('fl-' + o.fill); anim = 'an-fade'; }
+    if (o.anim) anim = o.anim;
+    if (anim !== 'none') cls.push(anim);
+    if (o.cls) cls.push(o.cls);
+    e.setAttribute('class', cls.join(' '));
+    e.setAttribute('stroke-width', o.w != null ? o.w * (o.raw ? 1 : this.sw) : this.sw);
+    if (o.fillOp != null) e.setAttribute('fill-opacity', o.fillOp);
+    if (o.op != null) e.setAttribute('opacity', o.op);
+    e.style.setProperty('--d', d + 'ms');
+    return e;
+  }
+  line(x1, y1, x2, y2, o = {}) { return this._paint(E('line', { x1, y1, x2, y2 }, o.p || this.svg), o, this._d(o)); }
+  path(d, o = {}) { return this._paint(E('path', { d }, o.p || this.svg), o, this._d(o)); }
+  circle(cx, cy, r, o = {}) { return this._paint(E('circle', { cx, cy, r }, o.p || this.svg), o, this._d(o)); }
+  rect(x, y, w, h, o = {}) { return this._paint(E('rect', { x, y, width: w, height: h, rx: o.rx || 0 }, o.p || this.svg), o, this._d(o)); }
+  text(x, y, s, o = {}) {
+    const size = this.fs * (o.size || 1);
+    const t = E('text', { x, y, 'font-size': f2(size), 'text-anchor': o.anchor || 'middle' }, o.p || this.svg);
+    if (o.base) t.setAttribute('dominant-baseline', o.base);
+    const cls = ['tx'];
+    if (o.anim !== 'none') cls.push(o.anim || 'an-fade');
+    if (o.k) cls.push('c-' + o.k);
+    if (o.font) cls.push('f-' + o.font);
+    t.setAttribute('class', cls.join(' '));
+    if (o.ls != null) t.setAttribute('letter-spacing', o.ls);
+    if (o.italic) t.setAttribute('font-style', 'italic');
+    t.textContent = s;
+    t.style.setProperty('--d', this._d(o) + 'ms');
+    return t;
+  }
+  tw(s, o = {}) { return s.length * this.fs * (o.size || 1) * (o.font === 'code' ? .6 : .52); }
+  chip(x, y, s, o = {}) {
+    const size = (o.size || .85);
+    const w = this.tw(s, { size, font: o.font }) + this.fs * .9, h = this.fs * size * 1.7;
+    const d = this._d(o);
+    this.rect(x - w / 2, y - h / 2, w, h, { k: o.k || 'soft', rx: h / 2, w: o.w || .55, d, fill: o.fill, fillOp: o.fillOp, p: o.p });
+    this.text(x, y + 1, s, { size, k: o.tk, font: o.font, base: 'central', d: d + 120, p: o.p });
+    return w;
+  }
+  seal(x, y, r, o = {}) {
+    const id = 'seal-P' + (r * (this.tall ? .45 : .85) < 60 ? '-mini' : '');
+    const d = this._d(o);
+    const at = E('g', { transform: `translate(${f2(x)} ${f2(y)})` }, o.p || this.svg);
+    const g = E('g', null, at);
+    g.setAttribute('class', 'seal-use an-seal');
+    g.style.setProperty('--d', d + 'ms');
+    E('use', { href: '#' + id, x: -r, y: -r, width: 2 * r, height: 2 * r }, g);
+    return at;
+  }
+  icon(name, x, y, s, o = {}) {
+    const sc = s / 60;
+    const g = E('g', { transform: `translate(${x} ${y}) scale(${f2(sc)})` }, o.p || this.svg);
+    const d = this._d(o);
+    const k = o.k || 'ink';
+    (ICONS[name] || []).forEach(([tag, a]) => {
+      const e = E(tag, a, g);
+      const small = tag === 'circle' && a.r != null && a.r < 3;
+      const dot = { soft: 'soft', now: 'now', seal: 'seal' }[k] || 'ink';
+      this._paint(e, { k, w: this.sw / sc * (o.w || 1), raw: true, fill: small ? dot : o.fill, anim: o.anim || null }, d);
+    });
+    if (name === 'tree') TREE_DOTS.forEach(([cx, cy]) => {
+      this._paint(E('circle', { cx, cy, r: 3 }, g), { k, fill: k === 'now' ? 'now' : 'soft', w: this.sw / sc, raw: true, anim: 'an-fade' }, d);
+    });
+    return g;
+  }
+  head(x, y, ang, o = {}) {
+    const L = this.tall ? 17 : 13;
+    const a1 = ang + Math.PI - .45, a2 = ang + Math.PI + .45;
+    return this.path(`M${f2(x + L * Math.cos(a1))} ${f2(y + L * Math.sin(a1))}L${f2(x)} ${f2(y)}L${f2(x + L * Math.cos(a2))} ${f2(y + L * Math.sin(a2))}`, { ...o, anim: 'an-fade' });
+  }
+  arrow(x1, y1, x2, y2, o = {}) {
+    const d = this._d(o);
+    this.line(x1, y1, x2, y2, { ...o, d });
+    this.head(x2, y2, Math.atan2(y2 - y1, x2 - x1), { ...o, d: d + 500 });
+  }
+  curve(x1, y1, x2, y2, o = {}) {
+    const dir = o.dir || 'h';
+    let c1, c2;
+    if (dir === 'h') { const mx = (x1 + x2) / 2; c1 = [mx, y1]; c2 = [mx, y2]; }
+    else { const my = (y1 + y2) / 2; c1 = [x1, my]; c2 = [x2, my]; }
+    const d = this._d(o);
+    const p = this.path(`M${f2(x1)} ${f2(y1)}C${f2(c1[0])} ${f2(c1[1])} ${f2(c2[0])} ${f2(c2[1])} ${f2(x2)} ${f2(y2)}`, { ...o, d });
+    if (o.head) this.head(x2, y2, Math.atan2(y2 - c2[1], x2 - c2[0]), { ...o, d: d + 600 });
+    return p;
+  }
+  check(x, y, s, o = {}) { return this.icon('check', x, y, s, { ...o, w: 1.5 }); }
+  cross(x, y, s, o = {}) { return this.icon('cross', x, y, s, { ...o, w: 1.4 }); }
+}
+
+/* ---------- slides ---------- */
+const B = {};
+const deg = Math.PI / 180;
+
+B.title = { vb: ['0 0 800 800', '0 0 800 800'], draw(c) {
+  const cx = 400, cy = 400;
+  const pol = (r, a) => [cx + r * Math.cos(a * deg), cy + r * Math.sin(a * deg)];
+  const P = (r, a) => pol(r, a).map(f2).join(' ');
+  c.at(60);
+  c.circle(cx, cy, 362, { k: 'faint', w: .6 });
+  let d = '';
+  for (let i = 0; i < 180; i++) {
+    const a = i * 2 - 90;
+    d += `M${P(274, a)}L${P(i % 10 ? 283 : 293, a)}`;
+  }
+  c.path(d, { k: 'soft', w: .3, anim: 'an-fade' });
+  // The account.
+  c.at(260);
+  c.circle(cx, cy, 184, { k: 'now', w: 1.2 });
+  c.circle(cx, cy, 170, { k: 'now', w: .4 });
+  c.seal(cx, cy, 130);
+  // Charges at their ledgers: two inside the window, older ones outside.
+  c.at(900);
+  const a0 = -150, a1 = -48;
+  [[-206, 3, 0], [-188, 5, 0], [-154, 6, 0], [-146, 4, 1], [-52, 5, 1]].forEach(([a, x, inside]) => {
+    const [x1, y1] = pol(196, a), [x2, y2] = pol(196 + x * 11, a);
+    c.line(x1, y1, x2, y2, { k: inside ? 'now' : 'soft', w: inside ? 3.4 : 2.2, op: inside ? 1 : .45, step: 90 });
+  });
+  // The window, sliding into place.
+  const win = E('g', null, c.svg);
+  win.setAttribute('class', 'an-sweep');
+  win.style.setProperty('--d', '1400ms');
+  win.style.setProperty('--ox', cx + 'px');
+  win.style.setProperty('--oy', cy + 'px');
+  const sector = `M${P(190, a0)}L${P(304, a0)}A304 304 0 0 1 ${P(304, a1)}L${P(190, a1)}A190 190 0 0 0 ${P(190, a0)}Z`;
+  c.path(sector, { k: 'now', w: .5, fill: 'hatch-now', anim: 'none', p: win });
+  [a0, a1].forEach(a => {
+    const [x1, y1] = pol(186, a), [x2, y2] = pol(312, a);
+    c.line(x1, y1, x2, y2, { k: 'now', w: 1.5, anim: 'none', p: win });
+  });
+  // Who reaches the account, and through what.
+  c.at(2300);
+  const lk = (x, y, a, r) => { const [tx, ty] = pol(r, a); const L = Math.hypot(tx - x, ty - y); c.line(x + (tx - x) / L * 52, y + (ty - y) / L * 52, tx, ty, { k: 'soft', w: .5 }); };
+  c.icon('key', 108, 118, 74, { k: 'now' }); lk(108, 118, -126, 314);
+  c.icon('agent', 692, 118, 74, { k: 'now' }); lk(692, 118, -62, 314);
+  c.icon('person', 108, 690, 74, { k: 'ink' }); lk(108, 690, 135, 190);
+} };
+
+// Wrap a sentence into lines of at most n characters.
+const wrapText = (s, n) => { const out = []; let cur = ''; s.split(' ').forEach(x => { if ((cur + ' ' + x).trim().length > n && cur) { out.push(cur); cur = x; } else cur = cur ? cur + ' ' + x : x; }); if (cur) out.push(cur); return out; };
+
+/* A study: an agent with the owner's inbox read the emailed code and raised its own cap. */
+B.ihitl = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const steps = [
+    ['agent', 'the task: pay three invoices', '0.01 USDC each'],
+    ['coin', "the wallet's cap: 0.01 USDC a day", 'raising it needs a one-time code'],
+    ['envelope', 'the code is emailed to the owner', 'into the inbox the agent reads'],
+    ['agent', 'the agent reads the code', 'and raises its own cap'],
+  ];
+  steps.forEach(([ic, a, b], i) => {
+    c.at(150 + i * 520);
+    const [x, y] = T ? [124, 110 + i * 150] : [230 + i * 380, 170];
+    c.circle(T ? 40 : x - 92, T ? y : y - 48, T ? 17 : 15, { k: 'soft', w: .5 });
+    c.text(T ? 40 : x - 92, T ? y + 1 : y - 47, String(i + 1), { size: T ? .48 : .5, base: 'central', k: 'soft', step: 0 });
+    c.icon(ic, x, y, T ? 60 : 66, { k: 'ink' });
+    if (i === 3) {
+      c.arrow(x + (T ? 52 : 54), y + 26, x + (T ? 52 : 54), y - 26, { k: 'ink', w: .8, step: 0 });
+    }
+    if (T) {
+      c.text(210, y - 6, a, { anchor: 'start', size: .62 });
+      c.text(210, y + 30, b, { anchor: 'start', size: .5, k: 'soft' });
+      if (i < 3) c.arrow(x, y + 46, x, y + 104, { k: 'soft', w: .5 });
+    } else {
+      c.text(x, 284, a, { size: .7 });
+      c.text(x, 322, b, { size: .56, k: 'soft' });
+      if (i < 3) c.arrow(x + 70, y, x + 310, y, { k: 'soft', w: .5 });
+    }
+  });
+  c.at(2400);
+  if (T) c.line(40, 680, 760, 680, { k: 'faint', w: .5 }); else c.line(60, 410, 1540, 410, { k: 'faint', w: .5 });
+  c.text(T ? 400 : 300, T ? 818 : 600, '9 of 10', { font: 'disp', size: T ? 2.7 : 3.4 });
+  const L = T
+    ? [[400, 890, 'models read the code', .7, 'ink'], [400, 930, 'and raised their own cap', .7, 'ink'], [400, 984, 'in at least one of 20 runs,', .54, 'soft'], [400, 1020, 'unprompted, with no attacker present', .54, 'soft']]
+    : [[560, 520, 'models read the code and raised their own cap', .9, 'ink'], [560, 566, 'in at least one of 20 runs, unprompted, with no attacker present', .66, 'soft']];
+  L.forEach(([x, y, s, z, k]) => c.text(x, y, s, { anchor: T ? 'middle' : 'start', size: z, k }));
+  c.at(3000);
+  for (let i = 0; i < 10; i++) {
+    const [x, y] = T ? [85 + i * 70, 1120] : [590 + i * 78, 670];
+    c.icon('agent', x, y, T ? 44 : 44, { k: i < 9 ? 'ink' : 'faint', step: 40 });
+  }
+} };
+
+/* The account holds two separate documents: the account document, and beside it the agent's grant document,
+   which the owner's passkey installs with apply_grant. The agent's own key bounces off the account. */
+B.keepcap = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  // Every space becomes a no-break space, so the pseudocode keeps its indentation and alignment in SVG.
+  const nb = s => s.replace(/ /g, ' ');
+  const card = ([x, y, w, h], title, entry, lines, d) => {
+    c.at(d);
+    c.rect(x, y, w, h, { k: 'now', rx: 16, w: 1.1, fill: 'paper' });
+    c.text(x + 26, y + (T ? 42 : 44), title, { anchor: 'start', size: T ? .54 : .62, k: 'now' });
+    c.text(x + w - 26, y + (T ? 42 : 44), entry, { anchor: 'end', size: T ? .38 : .44, font: 'code', k: 'soft' });
+    lines.forEach((s, i) => c.text(x + 26, y + (T ? 88 : 96) + i * (T ? 34 : 38), nb(s), { anchor: 'start', font: 'code', size: T ? .38 : .5, k: s.trim().startsWith('//') ? 'soft' : undefined, step: 30 }));
+  };
+  c.at(60);
+  c.text(T ? 30 : 30, 30, 'Cedar-style pseudocode: the authoring form we will compile to the account’s rules', { anchor: 'start', size: T ? .38 : .46, k: 'now' });
+  // The account: its storage holds the account document and, beside it, each grant document by id.
+  const W = T ? [16, 50, 768, 762] : [20, 46, 1310, 500];
+  c.at(120);
+  c.rect(W[0], W[1], W[2], W[3], { k: 'soft', rx: 22, w: .8 });
+  c.text(W[0] + 24, W[1] + 40, 'the Perch account', { anchor: 'start', size: T ? .5 : .62 });
+  c.text(W[0] + 24, W[1] + (T ? 70 : 74), 'holds the account document and, beside it, each grant document by its id', { anchor: 'start', size: T ? .38 : .48, k: 'soft' });
+  const A = T ? [40, 144, 720, 196] : [44, 140, 520, 200];
+  const G = T ? [40, 450, 720, 338] : [770, 140, 536, 356];
+  card(A, 'the account document', 'apply_doc', [
+    'permit (owner_passkey, any action, this_account);',
+    '  // apply_doc, apply_grant, remove_grant, …',
+    'recovery: guardian-only, 2 of 3',
+  ], 200);
+  card(G, 'the agent’s grant document', 'grant 1', [
+    'permit (agent_key, call order, shop);',
+    'permit (agent_key, pay XLM, shop)',
+    '  when { from == this_account && inside shop.order',
+    '         && amount <= 10 XLM per 100 ledgers  // ≈ 8 min',
+    '         && ledger < 65,900,000 };            // ≈ 30 days',
+    'forbid (agent_key, any action,',
+    '        this_account or its recovery contracts);',
+  ], 1100);
+  // The owner's passkey (the account document's admin rule) installs the grant document.
+  c.at(800);
+  if (T) {
+    c.arrow(70, A[1] + A[3] + 8, 70, G[1] - 8, { k: 'now', w: .7 });
+    c.text(96, A[1] + A[3] + 46, 'installed by the owner’s passkey', { anchor: 'start', size: T ? .42 : .44, k: 'now' });
+    c.text(96, A[1] + A[3] + 78, 'apply_grant(1, doc_json)', { anchor: 'start', size: .36, font: 'code', k: 'soft' });
+  } else {
+    const y = A[1] + 92;
+    c.arrow(A[0] + A[2] + 8, y, G[0] - 10, y, { k: 'now', w: .7 });
+    c.text((A[0] + A[2] + G[0]) / 2, y - 44, 'installed by the', { size: .5, k: 'now' });
+    c.text((A[0] + A[2] + G[0]) / 2, y - 16, 'owner’s passkey', { size: .5, k: 'now' });
+    c.text((A[0] + A[2] + G[0]) / 2, y + 36, 'apply_grant(1, …)', { size: .42, font: 'code', k: 'soft' });
+    c.text(A[0] + 26, A[1] + A[3] + 58, 'the account document lists no grants;', { anchor: 'start', size: .5, k: 'soft' });
+    c.text(A[0] + 26, A[1] + A[3] + 92, 'remove_grant(1) takes grant 1 and its rules out', { anchor: 'start', size: .5, k: 'soft' });
+  }
+  // The agent's own key tries to change the account, and bounces off it.
+  c.at(1900);
+  if (T) {
+    const x = 690, y = 900, edge = W[1] + W[3];
+    c.icon('agent', x, y, 50, { k: 'ink' });
+    c.icon('key', x + 34, y + 26, 26, { k: 'now', step: 0 });
+    c.arrow(x, y - 40, x, edge + 12, { k: 'soft', w: .7 });
+    c.cross(x, edge, 26, { k: 'ink' });
+    c.text(x - 50, y - 6, 'the agent’s key calls apply_grant', { anchor: 'end', size: .42 });
+    c.text(x - 50, y + 26, 'refused: it is not the owner’s passkey', { anchor: 'end', size: .38, k: 'soft' });
+  } else {
+    const x = 1466, y = G[1] + 120, edge = W[0] + W[2];
+    c.icon('agent', x, y, 58, { k: 'ink' });
+    c.icon('key', x + 40, y + 30, 30, { k: 'now', step: 0 });
+    c.arrow(x - 52, y, edge + 14, y, { k: 'soft', w: .7 });
+    c.cross(edge, y, 30, { k: 'ink' });
+    c.text(x, y + 82, 'the agent’s key', { size: .56 });
+    c.text(x, y + 116, 'calls apply_grant:', { size: .48, k: 'soft' });
+    c.text(x, y + 146, 'refused', { size: .48, k: 'soft' });
+  }
+  // Why the agent cannot raise its cap.
+  const why = [
+    ['passkey', 'now', 'Only the owner’s passkey installs or removes a grant', 'the account document’s admin rule decides apply_grant'],
+    ['proof', 'now', 'Proven: no grant can authorize a call', 'to the account itself or its recovery contracts'],
+    ['envelope', 'ink', 'An emailed code gets the agent nothing', 'it holds only its grant’s key'],
+  ];
+  why.forEach(([ic, k, a, b], i) => {
+    c.at(2400 + i * 350);
+    const [x, y] = T ? [60, 1000 + i * 92] : [70 + i * 512, 616];
+    c.icon(ic, x, y, T ? 44 : 48, { k });
+    if (ic === 'envelope') c.cross(x + (T ? 30 : 32), y + (T ? 22 : 24), T ? 18 : 20, { k: 'ink', step: 0 });
+    c.text(x + (T ? 52 : 56), y - 4, a, { anchor: 'start', size: T ? .48 : .54 });
+    c.text(x + (T ? 52 : 56), y + (T ? 26 : 30), b, { anchor: 'start', size: T ? .38 : .44, k: 'soft' });
+  });
+  c.at(3500);
+  c.text(T ? 400 : 800, T ? 1270 : 730, 'the account enforces the cap and the window itself, whatever the agent runs', { size: T ? .42 : .5, k: 'soft' });
+} };
+
+/* Perch in one picture: an account whose grants decide every call, with the decision proved in Lean. */
+B.perch = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    ag: [400, 96], key: [438, 126], call: [400, 150, 400, 228], callL: [424, 196, 'start'],
+    acc: [400, 460, 210], seal: [400, 324, 40], card: [250, 380, 300, 118], dec: [282, 556], decT: [318, 552],
+    accL: [400, 724], rows: [[80, 830], [80, 960]], tx: 132,
+  } : {
+    ag: [190, 360], key: [232, 392], call: [252, 360, 548, 360], callL: [400, 336, 'middle'],
+    acc: [780, 360, 220], seal: [780, 214, 44], card: [640, 270, 280, 120], dec: [676, 452], decT: [712, 446],
+    accL: [780, 632], rows: [[1110, 250], [1110, 410]], tx: 1160,
+  };
+  c.at(80);
+  c.icon('agent', P.ag[0], P.ag[1], T ? 62 : 70, { k: 'ink' });
+  c.icon('key', P.key[0], P.key[1], T ? 30 : 32, { k: 'now', step: 0 });
+  c.arrow(...P.call, { k: 'now', w: .7 });
+  c.text(P.callL[0], P.callL[1], 'every call it makes', { anchor: P.callL[2], size: T ? .5 : .56, k: 'soft' });
+  c.at(700);
+  const [ax, ay, ar] = P.acc;
+  c.circle(ax, ay, ar, { k: 'now', w: 1.2 });
+  c.circle(ax, ay, ar - 14, { k: 'now', w: .35 });
+  c.seal(P.seal[0], P.seal[1], P.seal[2]);
+  const [gx, gy, gw, gh] = P.card;
+  c.rect(gx, gy, gw, gh, { k: 'now', rx: 14, w: 1, fill: 'paper' });
+  c.text(gx + gw / 2, gy + 36, 'a grant', { size: T ? .56 : .62, k: 'now' });
+  c.text(gx + gw / 2, gy + 72, 'which calls, which signers,', { size: T ? .46 : .5 });
+  c.text(gx + gw / 2, gy + 102, 'a spending cap, an expiry', { size: T ? .46 : .5 });
+  c.icon('desk', P.dec[0], P.dec[1], T ? 38 : 40, { k: 'now' });
+  c.text(P.decT[0], P.decT[1], 'rule_eval::check_auth', { anchor: 'start', size: T ? .44 : .5, font: 'code', k: 'now' });
+  c.text(P.decT[0], P.decT[1] + 30, 'decides every authorization', { anchor: 'start', size: T ? .42 : .46, k: 'soft' });
+  c.text(P.accL[0], P.accL[1], 'a Stellar smart account', { size: T ? .62 : .68, k: 'now' });
+  c.at(1700);
+  const rows = [
+    ['proof', 'the decision function, proved in Lean', 'kernel-checked theorems'],
+    ['factory', 'Perch contracts live on Stellar mainnet', 'since 2026-10-26; Nido creates Perch accounts'],
+  ];
+  rows.forEach(([ic, a, b], i) => {
+    const [x, y] = P.rows[i];
+    c.icon(ic, x, y, T ? 46 : 50, { k: 'now' });
+    c.text(P.tx, y - 4, a, { anchor: 'start', size: T ? .54 : .62 });
+    c.text(P.tx, y + 30, b, { anchor: 'start', size: T ? .44 : .5, k: 'soft' });
+    c.at(2200);
+  });
+} };
+
+/* The contained policy runtime: one Cedar policy, evaluated in the runtime and compiled into the account. */
+B.contained = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    pol: [180, 10, 440, 112], polT: [400, 48], polC: [[210, 82], [210, 106]],
+    p1: [300, 122, 200, 186], p2: [500, 122, 600, 186], ch1: [196, 150], ch2: [604, 150],
+    E1: [30, 190, 350, 230], E2: [420, 190, 350, 230], link: [380, 305, 420, 305],
+    linkL: [[400, 466, .5, 'now', 'the same decision'], [400, 498, .42, 'soft', 'proved for the Rust translation,'], [400, 526, .42, 'soft', 'tested for the compiled contract'], [400, 556, .42, 'soft', 'caps and windows: the account alone'], [400, 588, .42, 'now', 'today: a prototype fragment proof']],
+    ag: [[90, 724, 54], [160, 738, 42]], agL: [[60, 806], [60, 834]], toEng: [110, 690, 110, 426], reqL: [128, 640],
+    ky: [300, 690, 440, 112], e2k: [150, 424, 316, 686], k2a: [690, 686, 600, 426],
+    tested: [400, 900], proved: [400, 940], over: [96, 1024], overT: [136, 1030],
+  } : {
+    pol: [580, 14, 440, 112], polT: [800, 52], polC: [[612, 88], [612, 114]],
+    p1: [700, 126, 320, 226], p2: [900, 126, 1280, 226], ch1: [480, 168], ch2: [1120, 168],
+    E1: [90, 230, 460, 190], E2: [1050, 230, 460, 190], link: [550, 325, 1050, 325],
+    linkL: [[800, 304, .6, 'now', 'the same decision'], [800, 360, .5, 'soft', 'proved for the Rust translation · tested for the compiled contract'], [800, 392, .46, 'soft', 'covers call matching; caps and time windows: the account alone'], [800, 424, .46, 'now', 'today: a prototype proof for a small fragment']],
+    ag: [[150, 548, 56], [226, 562, 42]], agL: [[290, 540], [290, 572]], toEng: [180, 496, 180, 426], reqL: [198, 470],
+    ky: [610, 470, 330, 120], e2k: [470, 424, 606, 530], k2a: [940, 530, 1170, 426],
+    tested: [90, 672], proved: [1050, 672], over: [470, 734], overT: [500, 742],
+  };
+  c.at(80);
+  const [px, py, pw, ph] = P.pol;
+  c.rect(px, py, pw, ph, { k: 'now', rx: 14, w: .9 });
+  c.text(P.polT[0], P.polT[1], 'one Cedar policy', { size: T ? .62 : .7, k: 'now' });
+  c.text(P.polC[0][0], P.polC[0][1], 'permit (principal, action, resource)', { anchor: 'start', font: 'code', size: T ? .42 : .46, k: 'soft' });
+  c.text(P.polC[1][0], P.polC[1][1], 'when { … };', { anchor: 'start', font: 'code', size: T ? .42 : .46, k: 'soft' });
+  c.at(600);
+  c.curve(...P.p1, { k: 'now', w: .7, dir: 'v', head: true });
+  c.curve(...P.p2, { k: 'now', w: .7, dir: 'v', head: true });
+  c.chip(P.ch1[0], P.ch1[1], 'evaluated', { k: 'now', tk: 'now', size: T ? .42 : .48, fill: 'paper' });
+  c.chip(P.ch2[0], P.ch2[1], 'compiled', { k: 'now', tk: 'now', size: T ? .42 : .48, fill: 'paper' });
+  // Off chain: the runtime's contained engine. On chain: the account's compiled rule.
+  const box = ([x, y, w, h], ic, t1, t2, sub, uses, d) => {
+    c.at(d);
+    c.rect(x, y, w, h, { k: 'now', rx: 16, w: 1.1 });
+    c.icon(ic, x + (T ? 44 : 56), y + (T ? 50 : 60), T ? 46 : 52, { k: 'now' });
+    if (T) { c.text(x + 80, y + 46, t1, { anchor: 'start', size: .52 }); c.text(x + 80, y + 76, t2, { anchor: 'start', size: .52 }); }
+    else c.text(x + 104, y + 66, t1 + ' ' + t2, { anchor: 'start', size: .68 });
+    c.text(x + (T ? 22 : 30), y + (T ? 122 : 116), sub, { anchor: 'start', size: T ? .42 : .52, k: 'now' });
+    uses.forEach((s, i) => c.text(x + (T ? 22 : 30), y + (T ? 166 + i * 30 : 160), s, { anchor: 'start', size: T ? .42 : .5, k: 'soft' }));
+  };
+  box(P.E1, 'policy', 'contained', 'policy engine', T ? 'off chain, no imports' : 'off chain · official Cedar, no imports', T ? ['files · websites ·', 'signing · spawning'] : ['files · websites · signing · spawning'], 1000);
+  box(P.E2, 'account', 'the Perch', 'account', T ? 'on chain, the compiled rule' : 'on chain · the compiled rule', T ? ['payments, contract calls', 'and caps'] : ['payments · contract calls · caps'], 1300);
+  c.at(1800);
+  c.line(...P.link, { k: 'now', w: .8 });
+  c.head(P.link[0], P.link[1], Math.PI, { k: 'now', w: .8 });
+  c.head(P.link[2], P.link[3], 0, { k: 'now', w: .8 });
+  P.linkL.forEach(([x, y, z, k, s]) => c.text(x, y, s, { size: z, k, step: 40 }));
+  // Agents send every request to the engine; signing goes through the key service.
+  c.at(2400);
+  P.ag.forEach(([x, y, s]) => c.icon('agent', x, y, s, { k: 'now' }));
+  c.text(P.agL[0][0], P.agL[0][1], T ? 'WASI agents,' : 'agents: WASI components', { anchor: 'start', size: T ? .42 : .5 });
+  c.text(P.agL[1][0], P.agL[1][1], T ? 'no keys' : 'that hold no keys', { anchor: 'start', size: T ? .42 : .5, k: 'soft' });
+  c.arrow(...P.toEng, { k: 'now', w: .7 });
+  c.text(P.reqL[0], P.reqL[1], 'every request', { anchor: 'start', size: T ? .38 : .44, k: 'now' });
+  const [kx, ky, kw, kh] = P.ky;
+  if (T) c.arrow(...P.e2k, { k: 'now', w: .6 });
+  else c.curve(...P.e2k, { k: 'now', w: .6, dir: 'h', head: true });
+  c.rect(kx, ky, kw, kh, { k: 'now', rx: 16, w: .9 });
+  c.icon('key', kx + 44, ky + 44, T ? 40 : 42, { k: 'now' });
+  c.text(kx + 84, ky + 52, 'key service', { anchor: 'start', size: T ? .54 : .62 });
+  c.text(kx + 30, ky + (T ? 92 : 96), 'checks the request, then signs', { anchor: 'start', size: T ? .42 : .48, k: 'soft' });
+  c.curve(...P.k2a, { k: 'now', w: .6, dir: T ? 'v' : 'h', head: true });
+  // What is proved, what is tested, and the backstop.
+  c.at(3000);
+  if (T) {
+    c.text(P.tested[0], P.tested[1], 'off chain, the runtime: we will test it, not prove it', { size: .46, k: 'now' });
+    c.text(P.proved[0], P.proved[1], 'on chain, the decision function: proved in Lean', { size: .46, k: 'now' });
+  } else {
+    c.text(P.tested[0], P.tested[1], 'the runtime: we will test it, not prove it', { anchor: 'start', size: .56, k: 'now' });
+    c.icon('proof', P.proved[0] + 20, P.proved[1] - 8, 34, { k: 'now' });
+    c.text(P.proved[0] + 50, P.proved[1], 'the decision function: proved in Lean', { anchor: 'start', size: .56, k: 'now' });
+  }
+  c.at(3400);
+  c.cross(P.over[0], P.over[1], T ? 28 : 30, { k: 'ink' });
+  if (T) {
+    c.text(P.overT[0], P.overT[1], 'even if the runtime fails,', { anchor: 'start', size: .52 });
+    c.text(P.overT[0], P.overT[1] + 36, 'the account refuses an over-cap payment', { anchor: 'start', size: .52 });
+  } else c.text(P.overT[0], P.overT[1], 'even if the runtime fails, the account refuses an over-cap payment', { anchor: 'start', size: .62 });
+} };
+
+/* Two uses of the contained policy runtime we will build: a Cedar policy, one request it allows, one it refuses. */
+function example(c, d) {
+  const T = c.tall;
+  const P = T
+    ? { lab: [36, 44], box: [30, 62, 740, 52 + d.code.length * 34], code: [52, 104, 34, .37], note: 36, tx: 120 }
+    : { lab: [70, 58], box: [60, 76, 800, 56 + d.code.length * 38], code: [86, 124, 38, .45], note: 70, req: [930, 132], tx: 1010 };
+  c.at(80);
+  c.text(P.lab[0], P.lab[1], 'the runtime we will build enforces this Cedar policy', { anchor: 'start', size: T ? .46 : .52, k: 'now' });
+  const [bx, by, bw, bh] = P.box;
+  c.rect(bx, by, bw, bh, { k: 'now', rx: 14, w: .8 });
+  // Leading spaces become no-break spaces, so the policy keeps its indentation in SVG.
+  d.code.forEach((s, i) => c.text(P.code[0], P.code[1] + i * P.code[2], s.replace(/^ +/, m => '\u00a0'.repeat(m.length)), { anchor: 'start', font: 'code', size: P.code[3], k: s.startsWith('//') ? 'soft' : undefined, step: 30 }));
+  c.text(P.note, by + bh + (T ? 30 : 34), 'request names we will give the runtime, not an existing API', { anchor: 'start', size: T ? .38 : .44, k: 'soft' });
+  // One request it allows, one it refuses.
+  c.at(1400);
+  const ry0 = T ? by + bh + 100 : P.req[1];
+  d.reqs.forEach(([ok, a, b], i) => {
+    const y = ry0 + i * (T ? 106 : 130);
+    const x = T ? 60 : P.req[0];
+    if (ok) c.check(x, y - 8, T ? 34 : 38, { k: 'now' }); else c.cross(x, y - 8, T ? 28 : 32, { k: 'ink' });
+    c.text(P.tx, y - 6, a, { anchor: 'start', size: T ? .5 : .66, step: 0 });
+    c.text(P.tx, y + (T ? 28 : 32), b, { anchor: 'start', size: T ? .4 : .5, k: 'soft', step: 0 });
+  });
+  // The on-chain grant, where money is involved: a grant as Perch has them today.
+  let yb = T ? ry0 + d.reqs.length * 106 : by + bh + 90;
+  if (d.grant) {
+    c.at(2300);
+    const [gx, gy, gw, gh] = T ? [30, yb, 740, 150] : [60, yb, 800, 150];
+    c.rect(gx, gy, gw, gh, { k: 'now', rx: 14, w: 1 });
+    c.icon('account', gx + 44, gy + 52, T ? 40 : 44, { k: 'now' });
+    c.text(gx + 90, gy + 44, 'on chain, a grant as Perch has today', { anchor: 'start', size: T ? .4 : .46, k: 'now' });
+    c.text(gx + 90, gy + 80, d.grant[0], { anchor: 'start', size: T ? .46 : .58 });
+    c.text(gx + 90, gy + 116, d.grant[1], { anchor: 'start', size: T ? .38 : .46, k: 'soft' });
+    yb = gy + gh;
+  }
+  c.at(2800);
+  if (T) c.text(400, yb + 80, d.caption, { size: .48 });
+  else c.text(930, P.req[1] + d.reqs.length * 130 + 40, d.caption, { anchor: 'start', size: .62 });
+}
+B.mail = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  example(c, {
+    code: [
+      '// mail assistant: reads what you forward, writes to your list',
+      'permit (principal == Agent::"mail", action == Action::"web.get",',
+      '        resource == Host::"forward.mail.example");',
+      'permit (principal == Agent::"mail", action == Action::"web.post",',
+      '        resource == Host::"send.mail.example")',
+      '  when { ["me@example.com", "team@example.com"].contains(context.to) };',
+    ],
+    reqs: [
+      [true, 'send the digest to team@example.com', 'web.post to send.mail.example; on your list'],
+      [false, 'send it to anyone@else.example', 'refused: not on your list'],
+      [false, 'open your own inbox', 'refused: it reads only the mail you forward'],
+    ],
+    grant: ['pay newsletter.example, at most 5 USDC per 518,400 ledgers (about 30 days)', 'the account refuses more, even if the runtime fails'],
+    caption: 'it never sees your inbox, or the codes sent to it',
+  });
+} };
+const TR = [
+  { name: 'Tranche 1: MVP', sub: 'an agent runtime rooted in a Perch grant', date: '2027-01-29', items: [
+    ['Agent runtime core', 'a subagent is spawned only with a narrower grant; wider spawns refused; agents hold no keys', 'agent'],
+    ['Verified Cedar-to-Perch compiler and two-engine test harness', 'refuses what it cannot translate exactly; 64-bit bounds; a Lean theorem; zero disagreements with official Cedar', 'doc'],
+    ['Cedar policy engine as an import-free WebAssembly component', "official Cedar 4.14.x; zero imports; any policy error refuses; every ancestor's policies must permit", 'proof'],
+    ['Public MVP demo', 'refused: outside the folder, an unapproved website, a wider spawn; a script and a video', 'controller'],
+  ] },
+  { name: 'Tranche 2: testnet', sub: 'agent payments on Stellar', date: '2027-03-26', items: [
+    ['Attenuated grants on the account and subagent signing', "a grant no wider than its parent, installed on chain; over-cap refused by the account, even with the runtime's check off", 'key'],
+    ['x402 payer flow for Perch accounts', 'an agent pays an x402 endpoint under its grant; testnet links: one allowed, one over-cap refusal', 'coin'],
+    ['Grant review views for wallets', 'a grant, a derived subagent grant and what it has left to spend, with a preview; an npm package', 'doc'],
+    ['Threat model and monitoring plan', 'a STRIDE threat model; monitoring of grant events, refusals and near-cap spending on testnet', 'warn'],
+  ] },
+  { name: 'Tranche 3: mainnet', sub: 'mainnet launch', date: '2027-05-28', items: [
+    ['Mainnet release of the account and agent-grant contracts', 'after the Audit Bank audit, critical and high findings fixed; verified source; an upgrade path', 'account'],
+    ['Runtime 1.0 release', 'versioned runtime and evaluator component packages; an integration guide for agent frameworks', 'policy'],
+    ['Mainnet agent payment demonstration', 'an agent pays an x402 endpoint on mainnet; an over-cap attempt refused on chain', 'coin'],
+    ['Developer documentation', 'one site: account, grants, runtime, threat model, test plan, runbook', 'doc'],
+  ] },
+];
+
+// The tranches on a calendar, each with its completion date and deliverables.
+B.timeline = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const day = s => (Date.parse(s) - Date.parse('2026-12-01')) / 864e5, span = day('2027-07-01');
+  const A = T ? { x0: 60, x1: 740, y: 120 } : { x0: 140, x1: 1460, y: 110 };
+  const X = s => A.x0 + (A.x1 - A.x0) * day(s) / span;
+  c.at(80);
+  c.line(A.x0, A.y, A.x1, A.y, { k: 'soft', w: .6 });
+  ['2026-12-01', '2027-01-01', '2027-02-01', '2027-03-01', '2027-04-01', '2027-05-01', '2027-06-01', '2027-07-01'].forEach((m, i) => {
+    c.line(X(m), A.y - 6, X(m), A.y + 6, { k: 'soft', w: .5, step: 0 });
+    if (i < 7) c.text(X(m) + (X('2027-01-01') - X('2026-12-01')) / 2, A.y - 16, ['Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'][i], { size: T ? .42 : .5, k: 'soft', step: 20 });
+  });
+  TR.forEach((d, i) => {
+    const dx = X(d.date);
+    c.at(500 + i * 500);
+    c.circle(dx, A.y, T ? 11 : 10, { k: 'now', fill: 'now', w: .3 });
+    c.text(dx, A.y + 40, T ? `T${i + 1}` : d.date, { size: T ? .48 : .5, font: T ? undefined : 'code', k: T ? undefined : 'now' });
+    if (T) c.text(dx, A.y + 70, d.date, { size: .42, font: 'code', k: 'now' });
+    const [x, y, w, h] = T ? [40, 240 + i * 340, 720, 314] : [70 + i * 492, 236, 470, 440];
+    if (!T) c.curve(dx, A.y + 52, x + w / 2, y - 6, { k: 'now', w: .6, dir: 'v', head: true });
+    c.rect(x, y, w, h, { k: 'now', rx: 16, w: .8 });
+    c.text(x + 30, y + (T ? 50 : 54), d.name, { anchor: 'start', size: T ? .62 : .74 });
+    c.text(T ? x + w - 28 : x + 30, T ? y + 50 : y + 92, `by ${d.date}`, { anchor: T ? 'end' : 'start', size: T ? .5 : .56, font: 'code', k: 'now' });
+    let iy = y + (T ? 110 : 158);
+    d.items.forEach(([title], j) => {
+      c.circle(x + 44, iy - 6, T ? 13 : 14, { k: 'now', w: .5, step: 60 });
+      c.text(x + 44, iy - 5, String(j + 1), { size: T ? .42 : .46, base: 'central', k: 'now', step: 0 });
+      const tl = wrapText(title, T ? 60 : 34), lh = T ? 30 : 32;
+      tl.forEach((s, k) => c.text(x + 74, iy + k * lh, s, { anchor: 'start', size: T ? .52 : .6, step: 0 }));
+      iy += tl.length * lh + (T ? 18 : 26);
+    });
+  });
+} };
+
+/* ---------- Appendix drawings ---------- */
+B.agents = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    h1: [400, 50], ag: [140, 190], key: [215, 214], a1: [255, 195, 418, 195], acc: [530, 195, 95], accL: [530, 334], subs: [[100, 420], [210, 452]], subL: [400, 548],
+    div: [40, 610, 760, 610], h2: [400, 670], ag2: [140, 800], card: [200, 768, 120, 64], a2: [330, 800, 418, 800], acc2: [530, 800, 95], acc2L: [530, 940], subs2: [[100, 1040], [210, 1072]], sub2L: [[400, 1176], [400, 1216]],
+  } : {
+    h1: [410, 120], ag: [170, 300], key: [252, 330], a1: [290, 310, 438, 310], acc: [560, 310, 110], accL: [560, 470], subs: [[120, 560], [235, 600]], subL: [190, 690],
+    div: [800, 100, 800, 720], h2: [1190, 120], ag2: [930, 300], card: [1000, 270, 150, 80], a2: [1160, 310, 1238, 310], acc2: [1360, 310, 110], acc2L: [1360, 470], subs2: [[930, 560], [1045, 600]], sub2L: [[1010, 690]],
+  };
+  c.at(80);
+  c.text(P.h1[0], P.h1[1], 'an agent with a key', { size: T ? .66 : .74 });
+  c.icon('agent', P.ag[0], P.ag[1], T ? 72 : 80, { k: 'soft' });
+  c.icon('key', P.key[0], P.key[1], T ? 46 : 52, { k: 'ink' });
+  c.arrow(...P.a1, { k: 'soft', w: .7 });
+  const [ax, ay, ar] = P.acc;
+  c.circle(ax, ay, ar, { k: 'soft', w: .9, fill: 'hatch' });
+  c.circle(ax, ay, ar - 14, { k: 'soft', w: .3 });
+  c.text(P.accL[0], P.accL[1], 'can do anything', { size: .64, k: 'soft' });
+  c.at(900);
+  P.subs.forEach(([x, y]) => {
+    c.line(P.ag[0], P.ag[1] + 44, x, y - 34, { k: 'soft', w: .4, step: 0 });
+    c.icon('agent', x, y, T ? 46 : 54, { k: 'soft', step: 0 });
+    c.icon('key', x + (T ? 38 : 44), y + 16, T ? 30 : 32, { k: 'ink', step: 120 });
+  });
+  c.text(P.subL[0], P.subL[1], 'a subagent copies the key', { size: .6, k: 'soft' });
+  c.at(1400);
+  c.line(...P.div, { k: 'faint', w: .5 });
+  c.text(P.h2[0], P.h2[1], 'an agent with a grant', { size: T ? .66 : .74, k: 'now' });
+  c.icon('agent', P.ag2[0], P.ag2[1], T ? 72 : 80, { k: 'now' });
+  const [kx, ky, kw, kh] = P.card;
+  c.rect(kx, ky, kw, kh, { k: 'now', rx: 10, w: .9, fill: 'hatch-now' });
+  c.rect(kx + 14, ky + kh - 26, kw * .55, 12, { k: 'now', rx: 4, w: .4, fill: 'now', fillOp: .5 });
+  c.arrow(...P.a2, { k: 'now', w: .8 });
+  const [bx, by, br] = P.acc2;
+  c.circle(bx, by, br, { k: 'now', w: 1.2 });
+  c.circle(bx, by, br - 14, { k: 'now', w: .35 });
+  c.check(bx, by, T ? 44 : 48, { k: 'now' });
+  c.text(P.acc2L[0], P.acc2L[1], 'the account checks every call', { size: .64, k: 'now' });
+  c.at(2200);
+  P.subs2.forEach(([x, y]) => {
+    c.line(P.ag2[0], P.ag2[1] + 44, x, y - 34, { k: 'now', w: .5, step: 0 });
+    c.icon('agent', x, y, T ? 46 : 54, { k: 'now', step: 0 });
+    c.rect(x + (T ? 24 : 30), y + 4, T ? 40 : 46, T ? 26 : 28, { k: 'now', rx: 5, w: .6, step: 120 });
+  });
+  if (T) { c.text(P.sub2L[0][0], P.sub2L[0][1], 'we will build: subagents with narrower grants', { size: .54, k: 'now' }); c.text(P.sub2L[1][0], P.sub2L[1][1], 'and hold no keys', { size: .54, k: 'now' }); }
+  else c.text(P.sub2L[0][0] + 120, P.sub2L[0][1], 'we will build: subagents with narrower grants and no keys', { size: .6, k: 'now' });
+} };
+
+/* Where agent-payment policy lives: within the agent's reach, on chain apart, or one policy in both. */
+B.oneplace = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const caps = [
+    ['limits the agent can reach', 'ink', ['in its own tools, or behind an', 'approval channel it can read,', 'as in the cited study']],
+    ['on chain, written apart', 'ink', ['two rule sets, written separately:', 'client rules and contract logic', 'can drift']],
+    ['Perch: one policy, both places', 'now', ['one policy, checked in both places', 'off chain: a contained engine', 'on chain: the account, the backstop']],
+  ];
+  c.at(60);
+  if (T) {
+    c.text(40, 44, 'common setups', { anchor: 'start', size: .46, k: 'soft' });
+    c.text(40, 866, 'what we will build', { anchor: 'start', size: .46, k: 'now' });
+    c.line(40, 452, 760, 452, { k: 'faint', w: .5 });
+    c.line(40, 840, 760, 840, { k: 'faint', w: .5 });
+  } else {
+    c.text(548, 62, 'common setups', { size: .5, k: 'soft' });
+    c.text(1305, 62, 'what we will build', { size: .5, k: 'now' });
+    c.line(548, 90, 548, 740, { k: 'faint', w: .5 });
+    c.line(1053, 40, 1053, 740, { k: 'faint', w: .5 });
+  }
+  caps.forEach(([h, hk, lines], i) => {
+    c.at(200 + i * 900);
+    const y0 = [70, 470, 880][i];
+    if (T) {
+      c.text(40, y0 + 30, h, { anchor: 'start', size: .6, k: hk === 'now' ? 'now' : undefined });
+      lines.forEach((s, j) => c.text(330, y0 + 140 + j * 38, s, { anchor: 'start', size: j ? .46 : .52, k: j ? (i === 2 ? 'now' : 'soft') : (i === 2 ? 'now' : undefined), step: 40 }));
+    } else {
+      const cx = [295, 800, 1305][i];
+      c.text(cx, 116, h, { size: .66, k: hk === 'now' ? 'now' : undefined });
+      lines.forEach((s, j) => c.text(cx, 664 + j * 34, s, { size: j ? .46 : .52, k: j ? (i === 2 ? 'now' : 'soft') : (i === 2 ? 'now' : undefined), step: 40 }));
+    }
+    c.at(400 + i * 900);
+    if (i === 0) {
+      // The limits, or their approval, sit within the agent's reach; the chain sees only a valid key.
+      if (T) {
+        c.rect(50, y0 + 70, 240, 150, { k: 'soft', rx: 14, w: .6 });
+        c.icon('agent', 120, y0 + 142, 50, { k: 'ink' });
+        c.icon('policy', 222, y0 + 142, 40, { k: 'soft' });
+        c.arrow(170, y0 + 224, 170, y0 + 282, { k: 'soft', w: .6 });
+        c.circle(170, y0 + 324, 36, { k: 'soft', w: .7, fill: 'hatch' });
+      } else {
+        c.rect(120, 150, 350, 210, { k: 'soft', rx: 16, w: .6 });
+        c.text(140, 184, "the agent's reach", { anchor: 'start', size: .44, k: 'soft' });
+        c.icon('agent', 210, 272, 64, { k: 'ink' });
+        c.icon('policy', 350, 266, 50, { k: 'soft' });
+        c.text(350, 332, 'limits or approval', { size: .44, k: 'soft' });
+        c.arrow(295, 364, 295, 446, { k: 'soft', w: .6 });
+        c.icon('key', 330, 404, 34, { k: 'ink' });
+        c.circle(295, 510, 58, { k: 'soft', w: .8, fill: 'hatch' });
+        c.text(295, 600, 'the chain sees a valid key', { size: .44, k: 'soft' });
+      }
+    } else if (i === 1) {
+      // Two rule sets, one in the client and one in a contract, kept in step by hand.
+      if (T) {
+        c.rect(40, y0 + 80, 130, 120, { k: 'soft', rx: 12, w: .6 });
+        c.icon('policy', 105, y0 + 140, 40, { k: 'soft' });
+        c.arrow(174, y0 + 140, 206, y0 + 140, { k: 'soft', w: .6 });
+        c.circle(262, y0 + 140, 52, { k: 'soft', w: .7 });
+        c.icon('policy', 262, y0 + 140, 34, { k: 'soft' });
+        c.text(170, y0 + 268, '≠', { size: 1.1 });
+      } else {
+        c.rect(590, 170, 200, 200, { k: 'soft', rx: 16, w: .6 });
+        c.icon('agent', 650, 246, 54, { k: 'ink' });
+        c.icon('policy', 742, 300, 42, { k: 'soft' });
+        c.arrow(794, 270, 826, 270, { k: 'soft', w: .6 });
+        c.circle(920, 270, 92, { k: 'soft', w: .8 });
+        c.icon('policy', 920, 270, 46, { k: 'soft' });
+        c.text(690, 404, 'client rules', { size: .46, k: 'soft' });
+        c.text(920, 404, 'contract logic', { size: .46, k: 'soft' });
+        c.text(805, 486, '≠', { size: 1.3 });
+        c.text(805, 534, 'written separately', { size: .5, k: 'soft' });
+      }
+    } else {
+      // One policy: evaluated off chain by a contained engine, compiled into the account's rules.
+      if (T) {
+        const y = y0;
+        c.rect(80, y + 60, 180, 64, { k: 'now', rx: 12, w: .7 });
+        c.text(170, y + 100, 'one policy', { size: .44, k: 'now' });
+        c.curve(130, y + 124, 90, y + 186, { k: 'now', w: .6, dir: 'v', head: true });
+        c.curve(210, y + 124, 250, y + 186, { k: 'now', w: .6, dir: 'v', head: true });
+        c.rect(30, y + 190, 120, 80, { k: 'now', rx: 12, w: .7 });
+        c.icon('policy', 90, y + 230, 36, { k: 'now' });
+        c.circle(254, y + 236, 46, { k: 'now', w: 1 });
+        c.circle(254, y + 236, 36, { k: 'now', w: .3 });
+        c.text(90, y + 304, 'off chain', { size: .4, k: 'now' });
+        c.text(254, y + 304, 'on chain', { size: .4, k: 'now' });
+      } else {
+        c.rect(1205, 150, 200, 96, { k: 'now', rx: 12, w: .8 });
+        c.text(1305, 190, 'one Cedar policy', { size: .5, k: 'now' });
+        c.text(1305, 224, 'permit (…) when { … };', { size: .4, font: 'code', k: 'soft' });
+        c.curve(1255, 246, 1180, 332, { k: 'now', w: .6, dir: 'v', head: true });
+        c.curve(1355, 246, 1430, 332, { k: 'now', w: .6, dir: 'v', head: true });
+        c.rect(1085, 338, 190, 124, { k: 'now', rx: 14, w: .8 });
+        c.icon('policy', 1180, 382, 40, { k: 'now' });
+        c.text(1180, 440, 'contained engine', { size: .44 });
+        c.circle(1430, 404, 68, { k: 'now', w: 1.1 });
+        c.circle(1430, 404, 56, { k: 'now', w: .3 });
+        c.seal(1430, 404, 34);
+        c.text(1180, 500, 'off chain', { size: .46, k: 'now' });
+        c.text(1430, 500, 'the account, on chain', { size: .46, k: 'now' });
+      }
+    }
+  });
+} };
+
+/* The sandbox and the gate: a WASI agent with no ambient authority, one request call checked by Cedar, and the account's boundary on chain. */
+B.sandbox = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    box: [30, 70, 740, 260], boxL: [30, 52], ag: [120, 190], caps: [[420, 150], [420, 210], [640, 150], [640, 210]], none: [400, 300],
+    port: [400, 330], portL: [418, 368], toGate: [400, 336, 400, 386],
+    gate: [30, 390, 740, 290], ok: [[200, 684, 200, 724], [200, 748]], okS: [200, 776], no: [[560, 684, 560, 724], [560, 748]],
+    div: 800, chainL: [30, 836], key: [90, 930], keyL: [90, 990], acc: [470, 940, 80], rec: [580, 856, 200, 86],
+    a1: [130, 910, 382, 920], a1L: [250, 896], a2: [130, 954, 384, 962], a2L: [40, 1080],
+    why: [[60, 1120], [60, 1180], [60, 1240]], wx: 112,
+  } : {
+    box: [40, 90, 440, 330], boxL: [40, 70], ag: [150, 220], caps: [[370, 150], [370, 205], [370, 260], [370, 315]], none: [260, 395],
+    port: [480, 255], portL: [490, 236], toGate: [486, 255, 600, 255],
+    gate: [600, 90, 420, 330], ok: [[1020, 190, 1110, 190], [1130, 196]], okS: [1130, 226], no: [[1020, 330, 1110, 330], [1130, 336]],
+    div: 450, chainL: [40, 490], key: [110, 600], keyL: [110, 668], acc: [640, 600, 116], rec: [810, 560, 230, 96],
+    a1: [160, 570, 526, 560], a1L: [340, 546], a2: [160, 630, 522, 646], a2L: [190, 706],
+    why: [[1110, 520], [1110, 610], [1110, 700]], wx: 1160,
+  };
+  // The agent: a WASI component, nothing ambient.
+  c.at(80);
+  const [bx, by, bw, bh] = P.box;
+  c.rect(bx, by, bw, bh, { k: 'ink', rx: 18, w: 1.1 });
+  c.rect(bx + 8, by + 8, bw - 16, bh - 16, { k: 'ink', rx: 12, w: .3 });
+  c.text(P.boxL[0], P.boxL[1], 'the agent: a WASI component', { anchor: 'start', size: T ? .5 : .58 });
+  c.icon('agent', P.ag[0], P.ag[1], T ? 70 : 80, { k: 'ink' });
+  ['files', 'network', 'keys', 'clock'].forEach((s, i) => {
+    const [x, y] = P.caps[i];
+    c.text(x, y, s, { anchor: 'end', size: T ? .46 : .52, k: 'soft', step: 40 });
+    c.cross(x + (T ? 24 : 26), y - 7, 18, { k: 'soft', step: 0 });
+  });
+  c.text(P.none[0], P.none[1], 'none unless a capability is handed in', { size: T ? .4 : .46, k: 'soft' });
+  // One import crosses the boundary: the request call, into the gate.
+  c.at(900);
+  c.circle(P.port[0], P.port[1], 9, { k: 'now', fill: 'now', w: .4 });
+  c.text(P.portL[0], P.portL[1], 'request()', { anchor: 'start', size: T ? .4 : .46, font: 'code', k: 'now' });
+  c.arrow(...P.toGate, { k: 'now', w: .8 });
+  const [gx, gy, gw, gh] = P.gate;
+  c.rect(gx, gy, gw, gh, { k: 'now', rx: 18, w: 1.1 });
+  c.icon('policy', gx + 40, gy + 44, T ? 38 : 42, { k: 'now' });
+  c.text(gx + (T ? 72 : 80), gy + 52, 'the Cedar check', { anchor: 'start', size: T ? .52 : .62, k: 'now' });
+  [['principal', 'agent'], ['action', 'fetch'], ['resource', 'Host::"feeds.example.org"'], ['context', '{ method: "GET" }']].forEach(([k, v], i) => {
+    const y = gy + (T ? 100 : 106) + i * (T ? 34 : 38);
+    c.text(gx + 26, y, k, { anchor: 'start', size: T ? .36 : .44, font: 'code', k: 'soft', step: 40 });
+    c.text(gx + (T ? 124 : 138), y, v, { anchor: 'start', size: T ? .36 : .44, font: 'code', step: 0 });
+  });
+  c.text(gx + 26, gy + gh - (T ? 50 : 56), 'permit (agent, fetch, Host in sources);', { anchor: 'start', size: T ? .36 : .44, font: 'code', k: 'now' });
+  c.text(gx + 26, gy + gh - (T ? 20 : 22), 'files, websites, signing, spawning: one check each', { anchor: 'start', size: T ? .34 : .4, k: 'soft' });
+  // The two outcomes.
+  c.at(1900);
+  c.arrow(...P.ok[0], { k: 'now', w: .8 });
+  c.check(P.ok[1][0], P.ok[1][1] - 8, 26, { k: 'now', step: 0 });
+  c.text(P.ok[1][0] + 26, P.ok[1][1], 'permit: the host performs it', { anchor: 'start', size: T ? .42 : .54 });
+  c.text(P.okS[0] + 26, P.okS[1], 'read, fetch, sign or spawn', { anchor: 'start', size: T ? .38 : .46, k: 'soft' });
+  c.arrow(...P.no[0], { k: 'ink', w: .8 });
+  c.cross(P.no[1][0], P.no[1][1] - 8, 22, { k: 'ink', step: 0 });
+  c.text(P.no[1][0] + 26, P.no[1][1], 'otherwise: refused', { anchor: 'start', size: T ? .44 : .54 });
+  // On chain: the grant key reaches its grant, and stops at the account itself.
+  c.at(2500);
+  c.line(T ? 30 : 40, P.div, T ? 770 : 1560, P.div, { k: 'faint', w: .5 });
+  c.text(P.chainL[0], P.chainL[1], 'on chain: payments and contract calls', { anchor: 'start', size: T ? .46 : .52, k: 'soft' });
+  c.icon('key', P.key[0], P.key[1], T ? 52 : 56, { k: 'ink' });
+  c.text(P.keyL[0], P.keyL[1], 'the agent’s grant key', { size: T ? .42 : .46, k: 'soft' });
+  const [ax, ay, ar] = P.acc;
+  c.circle(ax, ay, ar, { k: 'now', w: 1.2 });
+  c.circle(ax, ay, ar - 12, { k: 'now', w: .35 });
+  c.seal(ax, ay, ar * .5);
+  c.text(ax, ay + ar + 34, 'the Perch account', { size: T ? .46 : .52, k: 'now' });
+  const [qx, qy, qw, qh] = P.rec;
+  c.line(ax + ar * (T ? .7 : .98), ay + (T ? -ar * .7 : 0), qx, qy + qh / 2, { k: 'now', w: .5 });
+  c.rect(qx, qy, qw, qh, { k: 'now', rx: 12, w: .9 });
+  c.text(qx + 18, qy + 38, 'recovery contract', { anchor: 'start', size: T ? .42 : .5, k: 'now' });
+  c.text(qx + 18, qy + 70, 'guardians · quorum · delay', { anchor: 'start', size: T ? .32 : .42, k: 'soft' });
+  c.at(3000);
+  c.arrow(...P.a1, { k: 'now', w: .8 });
+  c.text(P.a1L[0], P.a1L[1], 'within its grant ✓', { size: T ? .4 : .46, k: 'now' });
+  const [x1, y1, x2, y2] = P.a2;
+  c.path(`M${x1} ${y1}L${x2} ${y2}L${x2 - (T ? 70 : 90)} ${y2 + (T ? 34 : 44)}`, { k: 'ink', w: .8 });
+  c.cross(x2 + 4, y2 - 2, 22, { k: 'ink', step: 0 });
+  c.text(P.a2L[0], P.a2L[1], 'apply_doc, apply_grant, remove_grant', { anchor: 'start', size: T ? .38 : .44, font: 'code', k: 'soft' });
+  // Why it stops there.
+  c.at(3500);
+  const why = [
+    ['passkey', 'changing the account needs the account', 'document’s admin rule: in Nido, the owner’s passkey'],
+    ['stamp', 'recovery runs through the account’s recovery', 'contract, with guardians, quorum and delay'],
+    ['proof', 'proven: no grant can authorize a call to the', 'account itself or its recovery contracts'],
+  ];
+  why.forEach(([ic, a, b], i) => {
+    const [x, y] = P.why[i];
+    c.icon(ic, x, y, T ? 40 : 42, { k: 'now' });
+    c.text(P.wx, y - 6, a, { anchor: 'start', size: T ? .44 : .46 });
+    c.text(P.wx, y + (T ? 24 : 22), b, { anchor: 'start', size: T ? .44 : .46 });
+  });
+} };
+
+B.reader = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  example(c, {
+    code: [
+      '// news and data reader: named sources, read only',
+      'permit (principal == Agent::"reader", action == Action::"web.get",',
+      '        resource in Group::"sources");',
+      '// sources: feeds.example.org (RSS), prices.example, weather.example',
+      '// no other permit: a post, a form or a message is refused',
+    ],
+    reqs: [
+      [true, 'read feeds.example.org/rss', 'web.get on a named source'],
+      [false, 'post a comment on forum.example', 'refused: no permit for web.post'],
+      [false, 'read unknown.example', 'refused: not a named source'],
+    ],
+    grant: null,
+    caption: 'no money moves, so it needs no grant on chain',
+  });
+} };
+
+B.today = { vb: ['0 0 1600 760', '0 0 800 1240'], draw(c) {
+  const T = c.tall;
+  const P = T ? { L: [40, 70, 720, 500], R: [40, 680, 720, 520], arrow: [400, 674, 400, 576], arrowL: [420, 630, 'start'] }
+    : { L: [60, 110, 680, 530], R: [860, 110, 680, 530], arrow: [855, 600, 745, 600], arrowL: [800, 652, 'middle'] };
+  const panel = ([x, y, w, h], head, k) => {
+    c.rect(x, y, w, h, { k, rx: 18, w: 1.1 });
+    c.rect(x + 10, y + 10, w - 20, h - 20, { k, rx: 12, w: .3 });
+    c.text(x + 34, y + (T ? 54 : 52), head, { anchor: 'start', size: T ? .62 : .7, k: k === 'now' ? 'now' : undefined });
+  };
+  c.at(80);
+  panel(P.L, 'on Stellar mainnet since 2026-10-26', 'now');
+  const [lx, ly] = P.L;
+  const rowsL = [['tree', 'Registry', 'CC23…B7NN'], ['doc', 'Document compiler', 'CB65…TBQD'], ['factory', 'Account factory', 'CC2K…YLMK'], ['passkey', 'Nido creates Perch accounts', 'through its factory, CBHE…3FAC']];
+  rowsL.forEach(([ic, a, b], i) => {
+    const y = ly + 120 + i * (T ? 88 : 90) + (i === 3 ? (T ? 14 : 20) : 0);
+    c.icon(ic, lx + 70, y, 46, { k: 'now', step: 80 });
+    c.text(lx + 116, y - 2, a, { anchor: 'start', size: T ? .6 : .66, step: 0 });
+    c.text(lx + 116, y + 26, b, { anchor: 'start', size: T ? .44 : .48, font: i < 3 ? 'code' : undefined, k: 'soft', step: 60 });
+  });
+  c.text(lx + 34, ly + P.L[3] - 30, 'the earlier account design (c135aca)', { anchor: 'start', size: T ? .46 : .5, k: 'soft' });
+  c.at(1200);
+  panel(P.R, 'merged in the repository', 'now');
+  const [rx, ry] = P.R;
+  const rowsR = [['grants, installed with', 'apply_grant', 'key'], ['every authorization decided by', 'rule_eval::check_auth', 'desk'], ['a completed recovery revokes every earlier grant', '', 'stamp'], ['passkey and Ed25519 verifiers', '', 'passkey'], ['13 Lean theorems', '', 'proof']];
+  rowsR.forEach(([a, code, ic], i) => {
+    const y = ry + 116 + i * (T ? 82 : 80);
+    c.icon(ic, rx + 70, y, 44, { k: 'now', step: 80 });
+    c.text(rx + 116, y + (code ? -4 : 8), a, { anchor: 'start', size: T ? .54 : .6, step: 0 });
+    if (code) c.text(rx + 116, y + 24, code, { anchor: 'start', size: T ? .48 : .52, font: 'code', k: 'now', step: 60 });
+  });
+  c.at(2200);
+  c.arrow(...P.arrow, { k: 'now', w: .8 });
+  if (T) c.text(P.arrowL[0], P.arrowL[1], 'to mainnet: Tranche 3', { anchor: 'start', size: .5, k: 'now' });
+  else { c.text(P.arrowL[0], P.arrowL[1], 'to mainnet:', { size: .46, k: 'now' }); c.text(P.arrowL[0], P.arrowL[1] + 24, 'Tranche 3', { size: .46, k: 'now' }); }
+} };
+
+// One tranche: its four deliverables and how each completes.
+function tranche(c, d) {
+  const T = c.tall;
+  c.at(60);
+  c.text(T ? 40 : 80, T ? 44 : 72, d.sub, { anchor: 'start', size: T ? .58 : .74 });
+  c.text(T ? 40 : 1520, T ? 88 : 72, `by ${d.date}`, { anchor: T ? 'start' : 'end', size: T ? .54 : .66, k: 'now', font: 'code' });
+  d.items.forEach(([title, crit, ic], i) => {
+    const [x, y, w, h] = T ? [40, 128 + i * 290, 720, 268] : [80 + (i % 2) * 740, 118 + Math.floor(i / 2) * 322, 700, 296];
+    c.at(260 + i * 380);
+    c.rect(x, y, w, h, { k: 'now', rx: 16, w: .8 });
+    c.circle(x + 36, y + 40, 18, { k: 'now', w: .6 });
+    c.text(x + 36, y + 41, String(i + 1), { size: .54, base: 'central', k: 'now' });
+    c.icon(ic, x + 38, y + (T ? 132 : 150), T ? 50 : 54, { k: 'now' });
+    const tl = wrapText(title, T ? 40 : 46), lh = 34;
+    tl.forEach((s, j) => c.text(x + 80, y + 48 + j * lh, s, { anchor: 'start', size: T ? .6 : .7, step: 0 }));
+    const cl = wrapText(crit, T ? 48 : 54);
+    const y0 = y + 48 + tl.length * lh + (T ? 20 : 24);
+    cl.forEach((s, j) => c.text(x + 80, y0 + j * (T ? 30 : 34), s, { anchor: 'start', size: T ? .5 : .62, k: 'soft', step: 40 }));
+  });
+}
+B.t1 = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) { tranche(c, TR[0]); } };
+B.t2 = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) { tranche(c, TR[1]); } };
+B.t3 = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) { tranche(c, TR[2]); } };
+
+/* Attenuation as nested regions: the helper's grant shrinks inside the app's, one step at a time. */
+B.atten = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const G = T ? {
+    par: [40, 140, 720, 620], head: [40, 116],
+    stages: [[52, 152, 696, 596], [52, 270, 696, 478], [52, 270, 538, 478], [52, 270, 538, 350]],
+    pts: { guess: [200, 360], one: [390, 540], other: [400, 214], five: [680, 470], late: [400, 718] },
+    steps: [[400, 172, 'middle'], [680, 330, 'middle'], [400, 660, 'middle']],
+    chain: [[150, 860], [400, 860], [650, 860]], ex: [400, 990], steps10: [400, 1062], th: [400, 1214], th2: [400, 1252], fund: [[400, 1110], [400, 1156]],
+  } : {
+    par: [120, 150, 940, 540], head: [120, 126],
+    stages: [[132, 162, 916, 516], [370, 162, 678, 516], [370, 162, 460, 516], [370, 162, 460, 386]],
+    pts: { guess: [480, 300], one: [640, 450], other: [245, 410], five: [946, 410], late: [610, 640] },
+    steps: [[245, 214, 'middle'], [946, 214, 'middle'], [610, 586, 'middle']],
+    chain: [[1180, 200], [1320, 200], [1460, 200]], ex: [1320, 380], steps10: [1320, 540], th: [800, 742], th2: null, fund: [[1320, 596], [1320, 642]],
+  };
+  const sz = T ? .5 : .56;
+  c.at(80);
+  c.text(G.head[0], G.head[1] - (T ? 30 : 0), T ? "the app's grant: the game, any function;" : "the app's grant: the game, any function · the shop, at most 10 XLM per 100 ledgers · until ledger N", { anchor: 'start', size: sz, k: 'soft' });
+  if (T) c.text(G.head[0], G.head[1], 'the shop, at most 10 XLM per 100 ledgers; until ledger N', { anchor: 'start', size: sz, k: 'soft' });
+  const [px, py, pw, ph] = G.par;
+  c.rect(px, py, pw, ph, { k: 'now', rx: 24, w: 1.1, fill: 'hatch-now', fillOp: .9 });
+  // The calls, as points in the app's region.
+  c.at(500);
+  const PT = [['guess', 'game: guess', true], ['one', 'pay the shop 1 XLM', true], ['other', 'other game functions', false], ['five', 'pay the shop 5 XLM', false], ['late', 'a call after ledger M', false]];
+  const marks = {};
+  PT.forEach(([key, lab, inside]) => {
+    const [x, y] = G.pts[key];
+    c.circle(x, y, T ? 9 : 7, { k: 'now', fill: 'now', w: .3, step: 60 });
+    const lines = T && key === 'five' ? ['pay the shop', '5 XLM'] : [lab];
+    if (!inside) lines.forEach((t, i) => c.text(x, y + (T ? 36 : 30) + i * (T ? 26 : 24), t, { size: sz, step: 0 }));
+    if (!inside) {
+      const g = E('g', { transform: `translate(${x + (T ? 22 : 20)} ${y - (T ? 16 : 14)})` }, c.svg);
+      g.setAttribute('class', 'cw-fade');
+      const q = E('path', { d: 'M-7 -7L7 7M7 -7L-7 7' }, g);
+      q.setAttribute('class', 'st k-ink'); q.setAttribute('stroke-width', c.sw * .8);
+      marks[key] = g;
+    }
+  });
+  // The helper's region, which the player shrinks.
+  const L = E('g', { class: 'an-fade' }, c.svg);
+  L.style.setProperty('--d', '700ms');
+  const child = E('rect', { rx: 18 }, L);
+  child.setAttribute('class', 'st k-now fl-paper');
+  child.setAttribute('fill-opacity', '.55');
+  child.setAttribute('stroke-width', c.sw * 1.1);
+  const ctext = E('text', { 'font-size': f2(c.fs * (T ? .56 : .62)) }, L);
+  ctext.setAttribute('class', 'tx c-now'); ctext.textContent = "the helper's grant";
+  // re-draw the inside points above the helper's region
+  [['guess', 'game: guess'], ['one', 'pay the shop 1 XLM']].forEach(([key, lab]) => {
+    const [x, y] = G.pts[key];
+    const d = E('circle', { cx: x, cy: y, r: T ? 9 : 7 }, L); d.setAttribute('class', 'fl-now');
+    const t = E('text', { x, y: y + (T ? 36 : 30), 'font-size': f2(c.fs * sz), 'text-anchor': 'middle' }, L); t.setAttribute('class', 'tx'); t.textContent = lab;
+  });
+  const STEP = [['1', 'only guess'], ['2', 'at most 2 XLM'], ['3', 'an earlier last ledger, M']];
+  const stepEls = STEP.map(([n, t], i) => {
+    const [x, y, an] = G.steps[i];
+    const g = E('g', null, L); g.setAttribute('class', 'cw-fade');
+    const tt = E('text', { x, y, 'font-size': f2(c.fs * sz), 'text-anchor': an }, g);
+    tt.setAttribute('class', 'tx c-now'); tt.textContent = `${n} · ${t}`;
+    if (i === 1) { const t2 = E('text', { x, y: y + (T ? 26 : 24), 'font-size': f2(c.fs * sz), 'text-anchor': an }, g); t2.setAttribute('class', 'tx c-now'); t2.textContent = 'per 100 ledgers'; }
+    return g;
+  });
+  const setChild = ([x, y, w, h]) => {
+    child.setAttribute('x', f2(x)); child.setAttribute('y', f2(y)); child.setAttribute('width', f2(w)); child.setAttribute('height', f2(h));
+    ctext.setAttribute('x', f2(x + 20)); ctext.setAttribute('y', f2(y + (T ? 40 : 34)));
+  };
+  const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+  // The delegation, and the call that separates the two regions.
+  c.at(1200);
+  const [[ax, ay], [bx, by], [hx, hy]] = G.chain;
+  c.icon('account', ax, ay, T ? 50 : 46, { k: 'now' });
+  c.text(ax, ay + (T ? 50 : 46), 'the account', { size: sz, k: 'soft' });
+  c.arrow(ax + 34, ay, bx - 34, by, { k: 'now', w: .7 });
+  c.icon('key', bx, by, T ? 50 : 46, { k: 'now' });
+  c.text(bx, by + (T ? 50 : 46), 'the app', { size: sz, k: 'soft' });
+  c.arrow(bx + 34, by, hx - 34, hy, { k: 'now', w: .7 });
+  c.icon('agent', hx, hy, T ? 50 : 46, { k: 'now' });
+  c.text(hx, hy + (T ? 50 : 46), 'a helper', { size: sz, k: 'soft' });
+  const [exx, exy] = G.ex;
+  c.text(exx, exy - (T ? 40 : 60), 'pay the shop 5 XLM', { size: T ? .62 : .7 });
+  c.text(exx - (T ? 120 : 70), exy, 'the app', { size: sz, k: 'soft' });
+  c.check(exx - (T ? 120 : 70), exy + 40, T ? 34 : 32, { k: 'now' });
+  c.text(exx + (T ? 120 : 70), exy, 'the helper', { size: sz, k: 'soft' });
+  c.cross(exx + (T ? 120 : 70), exy + 40, T ? 28 : 26, { k: 'ink' });
+  c.text(G.steps10[0], G.steps10[1], 'three of the 10 narrowing steps', { size: sz, k: 'soft' });
+  c.text(G.fund[0][0], G.fund[0][1], 'we will build: the runtime spawns it (Tranche 1)', { size: T ? .46 : .5, k: 'now' });
+  c.text(G.fund[1][0], G.fund[1][1], 'and the account installs it (Tranche 2)', { size: T ? .46 : .5, k: 'now' });
+  c.text(G.th[0], G.th[1], T ? "proven: a narrowed grant never allows a call," : "proven: a narrowed grant never allows a call, or a run of payments, that its parent refuses", { size: T ? .54 : .64, k: 'now' });
+  if (T) c.text(G.th2[0], G.th2[1], "or a run of payments, that its parent refuses", { size: .54, k: 'now' });
+  const finalState = () => { setChild(G.stages[3]); stepEls.forEach(g => { g.style.opacity = 1; }); Object.values(marks).forEach(g => { g.style.opacity = ''; }); };
+  finalState();
+  c.svg._att = { G, setChild, lerp, stepEls, marks, finalState };
+}, enter(svg) {
+  const P = svg._att;
+  if (!P) return;
+  if (still()) { P.finalState(); return; }
+  const A = svg._anim = new Anim();
+  const run = () => {
+    P.setChild(P.G.stages[0]);
+    P.stepEls.forEach(g => { g.style.opacity = 0; });
+    Object.values(P.marks).forEach(g => { g.style.opacity = 0; });
+    const order = [['other', 0], ['five', 1], ['late', 2]];
+    order.forEach(([key, i], j) => {
+      const t0 = 1600 + j * 1900;
+      A.at(t0, () => { P.stepEls[i].style.opacity = 1; A.tween(900, k => P.setChild(P.lerp(P.G.stages[i], P.G.stages[i + 1], k))); });
+      A.at(t0 + 1000, () => { P.marks[key].style.opacity = 1; });
+    });
+    A.at(13500, run);
+  };
+  run();
+}, leave(svg) { if (svg._anim) svg._anim.stop(); if (svg._att) svg._att.finalState(); } };
+
+/* ---------- small animation helper for the played slides ---------- */
+function Anim() { this.timers = []; this.alive = true; }
+Anim.prototype.at = function (ms, fn) { this.timers.push(setTimeout(() => { if (this.alive) fn(); }, ms)); };
+Anim.prototype.tween = function (dur, fn) {
+  const t0 = performance.now();
+  const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+  const step = now => {
+    if (!this.alive) return;
+    const p = Math.min(1, (now - t0) / dur);
+    fn(ease(p));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+};
+Anim.prototype.stop = function () { this.alive = false; this.timers.forEach(clearTimeout); this.timers = []; };
+
+/* ---------- deck runtime ---------- */
+const slides = $$('.slide');
+// The appendix (data-appendix) follows the close: outside the timed run and the recording.
+const TIMED = slides.filter(s => !s.hasAttribute('data-appendix')).length;
+const inAppendix = i => i >= TIMED;
+let cur = 0, tallMode = null;
+const leaveTimers = new Map();
+
+function statusChip(s) {
+  const head = $('.head', s);
+  if (!head || s.dataset.status !== 'cited') return;
+  const chip = document.createElement('span');
+  chip.className = 'status cited';
+  chip.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/></svg>a cited study';
+  head.appendChild(chip);
+}
+const svgOf = s => $('.stage > svg', s);
+function enter(s) { const b = B[s.dataset.draw]; const svg = svgOf(s); if (b && b.enter && svg) b.enter(svg); }
+function leave(s) { const b = B[s.dataset.draw]; const svg = svgOf(s); if (b && b.leave && svg) b.leave(svg); }
+
+// The tall layouts are drawn when they show the slide larger than the wide ones: a stage taller than about
+// 0.81 of its width (1300/1600). The stage is the deck's own box less its margins, so a panel beside or
+// below the slide counts.
+function wantTall() {
+  const d = $('#deck'), pad = Math.min(64, Math.max(16, innerWidth * .042));
+  return d.clientHeight - 200 > (d.clientWidth - 2 * pad) * 1300 / 1600;
+}
+function render() {
+  const tall = wantTall();
+  root.classList.toggle('tall', tall);
+  if (tall === tallMode) return;
+  if (tallMode !== null && slides[cur]) leave(slides[cur]);
+  tallMode = tall;
+  slides.forEach(s => {
+    const b = B[s.dataset.draw];
+    const svg = svgOf(s);
+    if (!b || !svg) return;
+    while (svg.lastChild) svg.removeChild(svg.lastChild);
+    svg.setAttribute('viewBox', b.vb[tall ? 1 : 0]);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    b.draw(new Ctx(svg, tall));
+    $$('.an-draw', svg).forEach(e => {
+      try { e.style.setProperty('--len', Math.ceil(e.getTotalLength()) + 1); } catch (_) { /* not a geometry element */ }
+    });
+  });
+  const s = slides[cur];
+  if (s && s.classList.contains('active')) { s.classList.remove('on'); void s.offsetWidth; s.classList.add('on'); enter(s); }
+}
+
+const marks = $('#marks');
+slides.forEach((s, i) => {
+  statusChip(s);
+  const li = document.createElement('li');
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'm-' + s.dataset.status;
+  b.setAttribute('aria-label', `Slide ${i + 1}: ${s.getAttribute('aria-label')}`);
+  b.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5"/></svg>';
+  b.addEventListener('click', () => go(i));
+  li.appendChild(b); marks.appendChild(li);
+});
+const markBtns = $$('button', marks);
+
+// A slide with data-steps (the Nido slide) moves through its steps with Next and Prev before it leaves:
+// data-step is the current one, 1-based, and #n.k opens step k of slide n.
+function stepsOf(s) { return s && s.dataset.steps ? s.dataset.steps.split('|') : null; }
+function stepOf(s) { return parseInt(s.dataset.step, 10) || 1; }
+function hashOf() { const s = slides[cur], k = stepOf(s); return '#' + (cur + 1) + (stepsOf(s) && k > 1 ? '.' + k : ''); }
+function parseHash() { const [n, k] = location.hash.slice(1).split('.').map(x => parseInt(x, 10)); return [n || 0, k || 0]; }
+function go(i, fromHash, opt) {
+  i = Math.max(0, Math.min(slides.length - 1, i));
+  // A recording covers slides 1-10: moving on into the appendix ends it there, on the last timed slide.
+  if (inAppendix(i) && R.state !== 'idle') { if (R.state === 'recording' || R.state === 'paused') stopRecording(); return; }
+  const prev = slides[cur];
+  if (i !== cur && prev) {
+    prev.classList.remove('active');
+    prev.setAttribute('aria-hidden', 'true');
+    prev.inert = true;
+    leave(prev);
+    clearTimeout(leaveTimers.get(prev));
+    leaveTimers.set(prev, setTimeout(() => prev.classList.remove('on'), still() ? 0 : 600));
+  }
+  const s = slides[i];
+  clearTimeout(leaveTimers.get(s));
+  const fresh = i !== cur || !s.classList.contains('active');
+  if (fresh) { s.classList.remove('on'); void s.offsetWidth; }
+  s.classList.add('active', 'on');
+  s.removeAttribute('aria-hidden');
+  s.inert = false;
+  cur = i;
+  const steps = stepsOf(s);
+  // A stepped slide opens on step 1, or on its last step when entered backwards, or on the step asked for.
+  if (steps && (fresh || (opt && opt.step))) s.dataset.step = String(opt && opt.step ? Math.min(steps.length, opt.step) : opt && opt.back ? steps.length : 1);
+  if (fresh) enter(s);
+  markBtns.forEach((b, j) => b.setAttribute('aria-current', j === i ? 'true' : 'false'));
+  $('#count').textContent = inAppendix(i) ? `A${i + 1 - TIMED} / ${slides.length - TIMED}` : `${i + 1} / ${TIMED}`;
+  $('#bar').style.width = ((i + 1) / slides.length * 100) + '%';
+  if (!fromHash) history.replaceState(null, '', hashOf());
+  if (!$('#notes-panel').hidden) showNotes();
+  if (!$('#sources-panel').hidden) showSources();
+  if (steps && fresh) nido.opened = null;
+  nidoGo(fresh);
+  if (opt && opt.open) nidoOpen();
+}
+function setStep(k) {
+  const s = slides[cur];
+  s.dataset.step = String(k);
+  nido.opened = null;
+  history.replaceState(null, '', hashOf());
+  if (!$('#notes-panel').hidden) showNotes();
+  if (R.state !== 'idle') updatePanel();
+  nidoShow();
+}
+// Next opens the dialog of the step it moves to, or first that of a step whose dialog it has not opened yet;
+// Prev, the step list and #n.k only show a step.
+function next() {
+  const s = slides[cur], n = stepsOf(s);
+  if (n && nidoOpen()) return;
+  if (n && stepOf(s) < n.length) { setStep(stepOf(s) + 1); nidoOpen(); }
+  else go(cur + 1, false, { open: true });
+}
+function prev() { const s = slides[cur], n = stepsOf(s); if (n && stepOf(s) > 1) setStep(stepOf(s) - 1); else go(cur - 1, false, { back: true }); }
+$$('.nido-steps [data-k]').forEach(b => b.addEventListener('click', e => { const s = b.closest('.slide'); if (s === slides[cur]) setStep(parseInt(b.dataset.k, 10)); if (e.detail > 0) b.blur(); }));
+
+// The script panel's timer runs while the panel is shown: the talk so far against 3:00, and this slide against its target.
+const NT = { acc: 0, since: 0, slideAcc: 0, slideSince: 0, slide: -1, tick: 0 };
+const ntNow = () => performance.now();
+const ntTotal = () => NT.acc + (NT.since ? (ntNow() - NT.since) / 1000 : 0);
+const ntSlide = () => NT.slideAcc + (NT.slideSince ? (ntNow() - NT.slideSince) / 1000 : 0);
+function ntRun(on) {
+  const t = ntNow();
+  if (on && !NT.since) { NT.since = t; NT.slideSince = t; NT.tick = setInterval(ntPaint, 250); }
+  if (!on && NT.since) { NT.acc = ntTotal(); NT.slideAcc = ntSlide(); NT.since = 0; NT.slideSince = 0; clearInterval(NT.tick); }
+}
+function ntPaint() {
+  const t = ntTotal(), tm = $('#np-time');
+  tm.textContent = mmss(t);
+  tm.classList.toggle('over', t > 180);
+  $('#np-cur').textContent = inAppendix(cur) ? where() : `${where()} · ${mmss(ntSlide())} here, aim for ${mmss(secOf(slides[cur]))}`;
+}
+// The 3:00 clock runs while the script panel is shown on a timed slide, and stops in the appendix.
+function ntSync() { ntRun(!$('#notes-panel').hidden && !inAppendix(cur)); }
+function showNotes() {
+  ntSync();
+  const key = stepKey();
+  if (NT.slide !== key) { NT.slide = key; NT.slideAcc = 0; NT.slideSince = NT.since ? ntNow() : 0; }
+  $('#np-script').innerHTML = scriptOf(slides[cur]);
+  $('#np-next').textContent = nextLabel();
+  ntPaint();
+}
+function toggleNotes() {
+  const p = $('#notes-panel'), btn = $('#notes-btn');
+  // While recording, the presenter panel shows the script in the same place; the script panel would open under it.
+  if (p.hidden && R.state !== 'idle') return;
+  p.hidden = !p.hidden;
+  btn.setAttribute('aria-pressed', String(!p.hidden));
+  ntSync();
+  if (!p.hidden) {
+    showNotes();
+    if (!$('#sources-panel').hidden) toggleSources();
+  }
+}
+$('#np-reset').addEventListener('click', () => {
+  const on = !!NT.since;
+  Object.assign(NT, { acc: 0, slideAcc: 0, since: on ? ntNow() : 0, slideSince: on ? ntNow() : 0 });
+  ntPaint();
+});
+// While the script or the recording panel is shown, the slide shrinks to the rest of the window at 16:9,
+// with the panel beside it, or below it on a narrow or portrait screen.
+// The panel goes wherever it leaves the slide larger: beside it at 16:9, or below it in the top 60%.
+function layoutSide() {
+  const on = !$('#notes-panel').hidden || !$('#rec-panel').hidden;
+  const pw = Math.round(Math.min(460, Math.max(320, innerWidth * .28)));
+  const k = Math.min((innerWidth - pw - 28) / innerWidth, (innerHeight - 70) / (innerWidth * 9 / 16));
+  const below = innerWidth < 900 || Math.min(innerWidth, innerHeight * .6 * 16 / 9) > innerWidth * k;
+  root.classList.toggle('side', on);
+  root.classList.toggle('side-below', on && below);
+  if (on && !below) {
+    root.style.setProperty('--side-w', pw + 'px');
+    root.style.setProperty('--side-k', String(k));
+    root.style.setProperty('--side-top', Math.max(0, (innerHeight - 70 - innerWidth * 9 / 16 * k) / 2) + 'px');
+  }
+  fitChrome();
+  render();
+  nidoPlace();
+}
+function fitChrome() {
+  root.classList.remove('tight');
+  const ch = $('.chrome');
+  if (ch.scrollWidth > ch.clientWidth + 1) root.classList.add('tight');
+}
+new MutationObserver(layoutSide).observe($('#notes-panel'), { attributes: true, attributeFilter: ['hidden'] });
+new MutationObserver(layoutSide).observe($('#rec-panel'), { attributes: true, attributeFilter: ['hidden'] });
+addEventListener('resize', layoutSide);
+
+const darkQ = matchMedia('(prefers-color-scheme: dark)');
+function isDark() { const t = root.dataset.theme; return t ? t === 'dark' : darkQ.matches; }
+function syncThemeLabel() { $('#theme-btn').setAttribute('aria-label', isDark() ? 'Switch to light theme' : 'Switch to dark theme'); }
+function toggleTheme() {
+  const t = isDark() ? 'light' : 'dark';
+  root.dataset.theme = t;
+  try { localStorage.setItem('perch-scf-deck-theme', t); } catch (_) { /* storage unavailable */ }
+  syncThemeLabel();
+  $$('iframe[src]').forEach(syncFrameTheme);
+}
+/* The live Nido frames follow the deck's theme. */
+function syncFrameTheme(f) {
+  try {
+    const d = f.contentDocument;
+    if (!d) return;
+    const t = root.dataset.theme || '';
+    if (t) d.documentElement.setAttribute('data-theme', t); else d.documentElement.removeAttribute('data-theme');
+  } catch (_) { /* a frame we cannot reach keeps its own theme */ }
+}
+$$('[data-doc]').forEach(b => b.addEventListener('click', e => {
+  e.stopPropagation();
+  const st = b.closest('.stage-doc'), open = !st.classList.contains('open');
+  st.classList.toggle('open', open);
+  $('.doc-details', st).hidden = !open;
+  b.setAttribute('aria-expanded', String(open));
+  b.textContent = open ? 'Back to the documents' : 'Show the document fields';
+}));
+if (!root.dataset.recFrame) try { const t = localStorage.getItem('perch-scf-deck-theme'); if (t === 'light' || t === 'dark') root.dataset.theme = t; } catch (_) { /* storage unavailable */ }
+const qs = new URLSearchParams(location.search);
+const qp = qs.get('theme');
+if (qs.get('still') === '1') root.classList.add('still');
+if (qp === 'light' || qp === 'dark') root.dataset.theme = qp;
+darkQ.addEventListener('change', syncThemeLabel);
+syncThemeLabel();
+
+$('#prev').addEventListener('click', prev);
+$('#next').addEventListener('click', next);
+$('#notes-btn').addEventListener('click', toggleNotes);
+$('#theme-btn').addEventListener('click', toggleTheme);
+
+addEventListener('click', e => {
+  const b = e.detail > 0 && e.target.closest && e.target.closest('button');
+  if (b && !b.closest('.slide')) b.blur();
+});
+
+const inControl = t => t && t.closest && t.closest('a, button, iframe, .doc-details');
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  const t = e.target;
+  if ((k === ' ' || k === 'Enter') && t && t.closest && t.closest('.slide') && inControl(t)) return;
+  if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || (k === ' ' && !e.shiftKey)) { e.preventDefault(); next(); }
+  else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || (k === ' ' && e.shiftKey)) { e.preventDefault(); prev(); }
+  else if (k === 'Home') { e.preventDefault(); go(0); }
+  else if (k === 'End') { e.preventDefault(); go(slides.length - 1); }
+  else if (k === 'n' || k === 'N') toggleNotes();
+  else if (k === 't' || k === 'T') toggleTheme();
+  else if (k === 's' || k === 'S') toggleSources();
+  else if ((k === 'r' || k === 'R') && !root.classList.contains('still')) toggleRecord();
+  else if (k === 'p' || k === 'P') pauseRecording();
+  else if ((k === 'd' || k === 'D') && nidoTargets[cur]) nidoReset();
+  else if (k === 'Escape' && (R.state === 'arming' || R.state === 'counting')) stopRecording();
+});
+
+// Swipe in any direction; a tap on the right of the stage advances, on the left goes back.
+let p0 = null;
+const deck = $('#deck');
+deck.addEventListener('pointerdown', e => { p0 = inControl(e.target) ? null : { x: e.clientX, y: e.clientY, t: Date.now() }; });
+deck.addEventListener('pointerup', e => {
+  if (!p0) return;
+  const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (Math.max(adx, ady) > 40) {
+    if (adx > ady) (dx < 0 ? next : prev)();
+    else (dy < 0 ? next : prev)();
+  } else if (Date.now() - p0.t < 500 && e.pointerType !== 'mouse') {
+    (e.clientX > innerWidth * .33 ? next : prev)();
+  }
+  p0 = null;
+});
+
+let rt;
+addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 140); });
+addEventListener('hashchange', () => { const [n, k] = parseHash(); if (n) go(n - 1, true, { step: k }); });
+reduce.addEventListener('change', () => { const s = slides[cur]; leave(s); enter(s); });
+
+/* ---------- sources: each slide's background and citations, kept out of the spoken script ---------- */
+function showSources() {
+  const n = $('.sources', slides[cur]);
+  $('#sources-panel').innerHTML = `<p class="sp-h">Sources for slide ${cur + 1}</p>` + (n ? n.innerHTML : '');
+}
+function toggleSources() {
+  const p = $('#sources-panel'), btn = $('#src-btn');
+  p.hidden = !p.hidden;
+  btn.setAttribute('aria-pressed', String(!p.hidden));
+  if (!p.hidden) {
+    showSources();
+    if (!$('#notes-panel').hidden) toggleNotes();
+  }
+}
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+// On a stepped slide each step has its own line and target (a <p data-k data-sec> in its notes).
+function stepLine(s) { const n = $('.notes', s); if (!n) return null; return stepsOf(s) ? $(`p[data-k="${stepOf(s)}"]`, n) : n; }
+const secOf = s => { const n = stepLine(s); return n ? parseInt(n.dataset.sec, 10) || 0 : 0; };
+function scriptOf(s) { const n = stepLine(s); return n ? (n.tagName === 'P' ? n.outerHTML : n.innerHTML) : ''; }
+function where() {
+  if (inAppendix(cur)) return `Appendix ${cur + 1 - TIMED} of ${slides.length - TIMED}, not timed`;
+  const s = slides[cur], n = stepsOf(s);
+  return `Slide ${cur + 1} of ${TIMED}` + (n ? `, step ${stepOf(s)} of ${n.length}` : '');
+}
+function nextLabel() {
+  const s = slides[cur], n = stepsOf(s);
+  if (n && stepOf(s) < n.length) { const b = $(`.nido-steps [data-k="${stepOf(s) + 1}"]`, s); return b ? b.title : `step ${stepOf(s) + 1}`; }
+  const nx = slides[cur + 1];
+  return nx && !inAppendix(cur + 1) ? nx.getAttribute('aria-label') : cur === TIMED - 1 ? 'the end of the timed run' : nx ? nx.getAttribute('aria-label') : 'the end';
+}
+const stepKey = () => cur + '.' + (stepsOf(slides[cur]) ? stepOf(slides[cur]) : 0);
+
+/* ---------- recorder: the slides at 1920x1080 plus the microphone, saved as a local file ----------
+   Each slide is painted once, in its final state, onto a 1920x1080 canvas: the deck is laid out at
+   1920x1080 in a hidden same-origin frame, its SVG drawings are serialized with their computed styles
+   and drawn as images, and its HTML text is drawn word by word at the positions the browser laid out.
+   The recording is that canvas's stream plus the microphone, through MediaRecorder; nothing leaves the
+   browser. The presenter overlay is ordinary page content, so it never reaches the canvas. */
+const VW = 1920, VH = 1080;
+const PROPS = ['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-dasharray', 'stroke-dashoffset',
+  'stroke-linecap', 'stroke-linejoin', 'opacity', 'font-family', 'font-size', 'font-style', 'font-weight', 'letter-spacing',
+  'text-anchor', 'dominant-baseline', 'vector-effect', 'display'];
+function inlineStyles(src, dst, win, symbol) {
+  const cs = win.getComputedStyle(src);
+  let css = '';
+  PROPS.forEach(p => { const v = cs.getPropertyValue(p); if (v) css += `${p}:${v};`; });
+  if (symbol && /\bs-/.test(src.getAttribute('class') || '')) css = css.replace(/(^|;)stroke:[^;]*/, '$1stroke:currentColor');
+  else if (!symbol) css += `color:${cs.color};`;
+  dst.setAttribute('style', css);
+  dst.removeAttribute('class');
+  for (let i = 0; i < src.children.length; i++) inlineStyles(src.children[i], dst.children[i], win, symbol);
+}
+async function svgImage(el, win, doc) {
+  const r = el.getBoundingClientRect();
+  const cl = el.cloneNode(true);
+  inlineStyles(el, cl, win, false);
+  cl.setAttribute('xmlns', NS);
+  cl.setAttribute('width', f2(r.width));
+  cl.setAttribute('height', f2(r.height));
+  const defs = document.createElementNS(NS, 'defs');
+  const want = new Set($$('use', cl).map(u => (u.getAttribute('href') || '').slice(1)));
+  $$('#defs defs > *', doc).forEach(d => {
+    if (d.tagName === 'pattern' || want.has(d.id)) { const c = d.cloneNode(true); inlineStyles(d, c, win, d.tagName === 'symbol'); defs.appendChild(c); }
+  });
+  cl.insertBefore(defs, cl.firstChild);
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(cl));
+  await img.decode();
+  return { img, r };
+}
+function rrect(g, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+// A border and inset spread shadows, the only box decorations the slides use.
+function paintBox(g, x, y, w, h, cs) {
+  const rad = parseFloat(cs.borderTopLeftRadius) || 0, bw = parseFloat(cs.borderTopWidth) || 0;
+  const sh = cs.boxShadow && cs.boxShadow !== 'none' ? cs.boxShadow.split(/,(?![^(]*\))/) : [];
+  sh.reverse().forEach(part => {
+    if (!/inset/.test(part)) return;
+    const col = (part.match(/rgba?\([^)]*\)|#[0-9a-f]+/i) || [''])[0];
+    const nums = part.replace(col, '').match(/-?[\d.]+px/g) || [];
+    const spread = parseFloat(nums[3] || '0');
+    if (!col || spread <= 0) return;
+    g.lineWidth = spread; g.strokeStyle = col;
+    const k = bw + spread / 2;
+    rrect(g, x + k, y + k, w - 2 * k, h - 2 * k, rad - k); g.stroke();
+  });
+  if (bw > 0 && cs.borderTopStyle !== 'none') {
+    g.lineWidth = bw; g.strokeStyle = cs.borderTopColor;
+    rrect(g, x + bw / 2, y + bw / 2, w - bw, h - bw, rad - bw / 2); g.stroke();
+  }
+}
+function paintText(g, node, win, doc) {
+  const cs = win.getComputedStyle(node.parentElement);
+  g.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  g.fillStyle = cs.color; g.strokeStyle = cs.color; g.textBaseline = 'alphabetic';
+  if ('letterSpacing' in g) g.letterSpacing = cs.letterSpacing === 'normal' ? '0px' : cs.letterSpacing;
+  const up = cs.textTransform === 'uppercase', ul = /underline/.test(cs.textDecorationLine || '');
+  const text = node.textContent, range = doc.createRange();
+  let word = '', wx = 0, wy = 0, wr = 0;
+  const flush = () => {
+    if (!word) return;
+    const s = up ? word.toUpperCase() : word;
+    const m = g.measureText(s);
+    const base = wy + (m.fontBoundingBoxAscent || parseFloat(cs.fontSize) * .8);
+    g.fillText(s, wx, base);
+    if (ul) { g.lineWidth = 1; g.beginPath(); g.moveTo(wx, base + 3.5); g.lineTo(wr, base + 3.5); g.stroke(); }
+    word = '';
+  };
+  for (let i = 0; i < text.length; i++) {
+    if (/\s/.test(text[i])) { flush(); continue; }
+    range.setStart(node, i); range.setEnd(node, i + 1);
+    const rc = range.getClientRects()[0];
+    if (!rc) continue;
+    if (word && Math.abs(rc.top - wy) > 2) flush();
+    if (!word) { wx = rc.left; wy = rc.top; }
+    word += text[i]; wr = rc.right;
+  }
+  flush();
+}
+async function paintSlide(doc, i) {
+  const win = doc.defaultView, s = $$('.slide', doc)[i];
+  const cv = document.createElement('canvas');
+  cv.width = VW; cv.height = VH;
+  const g = cv.getContext('2d');
+  g.fillStyle = win.getComputedStyle(doc.body).backgroundColor;
+  g.fillRect(0, 0, VW, VH);
+  const fr = win.getComputedStyle(s, '::before');
+  if (fr.content && fr.content !== 'none') {
+    const t = parseFloat(fr.top) || 0, l = parseFloat(fr.left) || 0;
+    paintBox(g, l, t, VW - l - (parseFloat(fr.right) || 0), VH - t - (parseFloat(fr.bottom) || 0), fr);
+  }
+  const walk = async n => {
+    if (n.nodeType === 3) { if (n.textContent.trim()) paintText(g, n, win, doc); return; }
+    if (n.nodeType !== 1) return;
+    const cs = win.getComputedStyle(n);
+    if (cs.display === 'none') return;
+    if (n.tagName.toLowerCase() === 'img') {
+      try { await n.decode(); } catch (_) { return; }
+      const r = n.getBoundingClientRect(), iw = n.naturalWidth, ih = n.naturalHeight;
+      if (!iw || !ih || !r.width || !r.height) return;
+      const k = Math.min(r.width / iw, r.height / ih), w = iw * k, h = ih * k;
+      g.drawImage(n, r.left + (r.width - w) / 2, r.top + (r.height - h) / 2, w, h);
+      return;
+    }
+    if (n.tagName.toLowerCase() === 'svg') {
+      const { img, r } = await svgImage(n, win, doc);
+      if (!r.width || !r.height) return;
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const m = new DOMMatrix(cs.transform === 'none' ? '' : cs.transform);
+      g.save();
+      g.translate(cx, cy); g.transform(m.a, m.b, m.c, m.d, m.e, m.f); g.translate(-cx, -cy);
+      g.drawImage(img, r.left, r.top, r.width, r.height);
+      g.restore();
+      return;
+    }
+    if ((parseFloat(cs.borderTopWidth) || 0) > 0 || /inset/.test(cs.boxShadow)) {
+      const r = n.getBoundingClientRect();
+      paintBox(g, r.left, r.top, r.width, r.height, cs);
+    }
+    for (const c of n.childNodes) await walk(c);
+  };
+  for (const c of s.childNodes) await walk(c);
+  return cv;
+}
+// Lay the deck out at 1920x1080 in a hidden frame, in its final state, and paint every slide.
+async function paintAll(onStep) {
+  const f = document.createElement('iframe');
+  f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1; f.title = 'Recording layout';
+  f.style.cssText = `position:fixed;left:-${VW * 4}px;top:0;width:${VW}px;height:${VH}px;border:0;pointer-events:none;`;
+  const h = new DOMParser().parseFromString(SRC, 'text/html').documentElement;
+  h.className = 'still'; h.dataset.recFrame = '1'; h.dataset.theme = isDark() ? 'dark' : 'light';
+  f.srcdoc = '<!doctype html>\n' + h.outerHTML;
+  const loaded = new Promise(r => f.addEventListener('load', r, { once: true }));
+  document.body.appendChild(f);
+  await loaded;
+  const doc = f.contentDocument, out = {};
+  try {
+    // A canvas per slide, and per step on a stepped slide, keyed as stepKey() names them.
+    const ss = $$('.slide', doc), jobs = [];
+    ss.forEach((s, i) => { if (s.hasAttribute('data-appendix')) return; const n = stepsOf(s); if (n) n.forEach((_, j) => jobs.push([i, j + 1])); else jobs.push([i, 0]); });
+    for (const [x, [i, k]] of jobs.entries()) {
+      if (k) ss[i].dataset.step = String(k);
+      out[i + '.' + k] = await paintSlide(doc, i);
+      if (onStep) onStep(x + 1, jobs.length);
+    }
+  } finally { f.remove(); }
+  return out;
+}
+// avc3 keeps codec settings in-band, which Chrome asks for; Safari offers avc1.
+const MIMES = ['video/mp4;codecs=avc3.640028,mp4a.40.2', 'video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4',
+  'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+const pickMime = () => MIMES.find(m => MediaRecorder.isTypeSupported(m)) || '';
+const R = { state: 'idle' };
+const recBtn = $('#rec-btn'), panel = $('#rec-panel'), msg = $('#rec-msg'), countEl = $('#rec-count');
+function say(html, kind) {
+  msg.innerHTML = html + '<button type="button" class="rm-x" aria-label="Close">×</button>';
+  msg.className = kind || '';
+  msg.hidden = false;
+  $('.rm-x', msg).addEventListener('click', () => { msg.hidden = true; });
+}
+function setState(st) {
+  R.state = st;
+  if (st === 'idle') delete root.dataset.recording; else root.dataset.recording = st;
+  recBtn.setAttribute('aria-pressed', String(st !== 'idle'));
+  recBtn.setAttribute('aria-label', st === 'idle' ? 'Record a video (R)' : 'Stop recording (R)');
+  panel.hidden = !(st === 'recording' || st === 'paused');
+  $('#rp-pause').textContent = st === 'paused' ? 'Resume (P)' : 'Pause (P)';
+  $('#rp-state').textContent = st === 'paused' ? 'Paused' : 'Recording';
+  updatePanel();
+}
+function elapsed() { return (R.acc || 0) + (R.state === 'recording' && R.since ? (performance.now() - R.since) / 1000 : 0); }
+function updatePanel() {
+  if (panel.hidden) return;
+  const t = elapsed();
+  $('#rp-time').textContent = mmss(t);
+  $('#rp-time').classList.toggle('over', t > 180);
+  const s = slides[cur], key = stepKey();
+  const onSlide = R.slideAt != null ? t - R.slideAt : 0;
+  $('#rp-cur').textContent = `${where()} · ${mmss(onSlide)} of about ${mmss(secOf(s))}`;
+  if (R.scriptFor !== key) { $('#rp-script').innerHTML = scriptOf(s); R.scriptFor = key; }
+  $('#rp-next').textContent = nextLabel();
+}
+function frame(now) {
+  if (!R.g) return;
+  const key = stepKey();
+  if (R.shown !== key) { R.from = R.shown; R.shown = key; R.t0 = now; R.slideAt = elapsed(); updatePanel(); }
+  const a = R.from == null ? 1 : Math.min(1, (now - R.t0) / 350);
+  const g = R.g;
+  g.globalAlpha = 1;
+  if (a < 1) g.drawImage(R.snaps[R.from], 0, 0);
+  g.globalAlpha = a;
+  g.drawImage(R.snaps[R.shown], 0, 0);
+  g.globalAlpha = 1;
+  R.raf = requestAnimationFrame(frame);
+}
+function release() {
+  cancelAnimationFrame(R.raf);
+  clearInterval(R.tick);
+  if (R.mic) R.mic.getTracks().forEach(t => t.stop());
+  if (R.stream) R.stream.getTracks().forEach(t => t.stop());
+  Object.assign(R, { run: null, g: null, mic: null, stream: null, rec: null, snaps: null, shown: null, from: null, acc: 0, since: 0, slideAt: null, scriptFor: null });
+  countEl.hidden = true;
+  setState('idle');
+}
+async function startRecording() {
+  if (R.state !== 'idle') return;
+  msg.hidden = true;
+  const cv0 = document.createElement('canvas');
+  if (!window.MediaRecorder || !cv0.captureStream || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    say('This browser cannot record the deck here. Recent Chrome, Edge, Firefox and Safari can.', 'err');
+    return;
+  }
+  if (inAppendix(cur)) go(0);
+  setState('arming');
+  const run = R.run = {};
+  if (!$('#notes-panel').hidden) toggleNotes();
+  if (!$('#sources-panel').hidden) toggleSources();
+  let mic;
+  try {
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  } catch (e) {
+    if (R.run !== run) return;
+    release();
+    const blocked = e && (e.name === 'NotAllowedError' || e.name === 'SecurityError');
+    say(blocked
+      ? 'The microphone was blocked, so nothing was recorded. Allow the microphone for this page in the browser’s site settings, then press <kbd>R</kbd> again.'
+      : 'No microphone could be opened (' + (e && e.name || 'error') + '), so nothing was recorded. Connect one and press <kbd>R</kbd> again.', 'err');
+    return;
+  }
+  if (R.run !== run) { mic.getTracks().forEach(t => t.stop()); return; }
+  R.mic = mic;
+  countEl.hidden = false;
+  countEl.textContent = 'Preparing slides…';
+  let snaps;
+  try {
+    snaps = await paintAll((k, n) => { if (R.run === run) countEl.textContent = `Preparing slides ${k} / ${n}`; });
+  } catch (e) {
+    if (R.run !== run) return;
+    release();
+    say('The slides could not be prepared for recording (' + (e && e.message || 'error') + '). Nothing was recorded.', 'err');
+    return;
+  }
+  if (R.run !== run) return;
+  R.snaps = snaps;
+  const cv = document.createElement('canvas');
+  cv.width = VW; cv.height = VH;
+  R.g = cv.getContext('2d');
+  R.shown = null; R.from = null;
+  R.raf = requestAnimationFrame(frame);
+  R.stream = new MediaStream([...cv.captureStream(30).getVideoTracks(), ...R.mic.getAudioTracks()]);
+  R.mime = pickMime();
+  setState('counting');
+  for (const k of [3, 2, 1]) {
+    countEl.innerHTML = `<b>${k}</b><span>Recording starts. Press R to cancel.</span>`;
+    await new Promise(r => setTimeout(r, 1000));
+    if (R.run !== run) return;
+  }
+  countEl.hidden = true;
+  const chunks = [];
+  const rec = new MediaRecorder(R.stream, { mimeType: R.mime || undefined, videoBitsPerSecond: 8e6, audioBitsPerSecond: 128e3 });
+  R.rec = rec;
+  rec.addEventListener('dataavailable', e => { if (e.data && e.data.size) chunks.push(e.data); });
+  rec.addEventListener('stop', () => save(chunks, rec.mimeType || R.mime, elapsed()));
+  R.acc = 0; R.since = performance.now(); R.slideAt = 0; R.from = null; R.shown = stepKey();
+  rec.start(1000);
+  setState('recording');
+  R.tick = setInterval(updatePanel, 250);
+}
+function pauseRecording() {
+  if (R.state === 'recording') { R.acc = elapsed(); R.since = 0; R.rec.pause(); setState('paused'); }
+  else if (R.state === 'paused') { R.since = performance.now(); R.rec.resume(); setState('recording'); }
+}
+function stopRecording() {
+  if (R.state === 'arming' || R.state === 'counting') { release(); say('Recording cancelled; nothing was saved.'); return; }
+  if (R.state !== 'recording' && R.state !== 'paused') return;
+  R.acc = elapsed(); R.since = 0;
+  R.rec.stop();
+}
+// MediaRecorder writes WebM with no duration (Chrome) or a zero one (Firefox); set it in the Info
+// element so players can seek.
+async function webmDuration(blob, ms) {
+  const h = new Uint8Array(await blob.slice(0, Math.min(blob.size, 1 << 16)).arrayBuffer());
+  const vlen = b => { for (let i = 0; i < 8; i++) if (b & (0x80 >> i)) return i + 1; return 9; };
+  const id = q => { const l = vlen(h[q]); let v = 0; for (let i = 0; i < l; i++) v = v * 256 + h[q + i]; return [v, l]; };
+  const size = q => { const l = vlen(h[q]); let v = h[q] & (0xFF >> l); for (let i = 1; i < l; i++) v = v * 256 + h[q + i]; return [v, l]; };
+  let [i0, l0] = id(0), [z0, s0] = size(l0);
+  if (i0 !== 0x1A45DFA3) return blob;
+  let q = l0 + s0 + z0;
+  const [i1, l1] = id(q), [, s1] = size(q + l1);
+  if (i1 !== 0x18538067) return blob;
+  q += l1 + s1;
+  while (q < h.length - 16) {
+    const [ci, cl] = id(q), [cz, cs] = size(q + cl);
+    const body = q + cl + cs, end = body + cz;
+    if (ci === 0x1F43B675 || end > h.length) return blob;
+    if (ci === 0x1549A966) {
+      let scale = 1e6, dq = 0, dz = 0;
+      for (let r = body; r < end;) {
+        const [ei, el] = id(r), [ez, es] = size(r + el);
+        if (ei === 0x4489) { dq = r + el + es; dz = ez; }
+        if (ei === 0x2AD7B1) { scale = 0; for (let k = 0; k < ez; k++) scale = scale * 256 + h[r + el + es + k]; }
+        r += el + es + ez;
+      }
+      const ticks = ms * 1e6 / (scale || 1e6);
+      if (dq) {
+        const dv = new DataView(h.buffer);
+        if (dz === 8) dv.setFloat64(dq, ticks); else if (dz === 4) dv.setFloat32(dq, ticks); else return blob;
+        return new Blob([h.subarray(0, end), blob.slice(end)], { type: blob.type });
+      }
+      const nz = cz + 11;
+      if (nz >= 2 ** (7 * cs) - 1) return blob;
+      const hdr = new Uint8Array(cl + cs);
+      hdr.set(h.subarray(q, q + cl));
+      for (let k = cs - 1, v = nz; k >= 0; k--, v = Math.floor(v / 256)) hdr[cl + k] = v & 0xFF;
+      hdr[cl] |= 0x80 >> (cs - 1);
+      const dur = new Uint8Array(11);
+      dur.set([0x44, 0x89, 0x88]);
+      new DataView(dur.buffer).setFloat64(3, ticks);
+      return new Blob([h.subarray(0, q), hdr, h.subarray(body, end), dur, blob.slice(end)], { type: blob.type });
+    }
+    q = end;
+  }
+  return blob;
+}
+async function save(chunks, mime, secs) {
+  release();
+  const type = (mime || 'video/webm').split(';')[0];
+  let blob = new Blob(chunks, { type });
+  if (/webm/.test(type)) try { blob = await webmDuration(blob, secs * 1000); } catch (_) { /* keep the file as recorded */ }
+  const ext = /mp4/.test(type) ? 'mp4' : 'webm';
+  const fmt = ext === 'mp4' ? 'MP4 (H.264 and AAC)' : 'WebM (' + (/vp9/.test(mime) ? 'VP9' : 'VP8') + ' and Opus)';
+  const d = new Date(), p2 = n => String(n).padStart(2, '0');
+  const name = `perch-agent-grants-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}.${ext}`;
+  if (R.url) URL.revokeObjectURL(R.url);
+  R.url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = R.url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  say(`Saved <b>${name}</b>: ${fmt}, 1920×1080, ${mmss(secs)}, ${(blob.size / 1048576).toFixed(1)} MB. It stays on this computer; nothing was uploaded. <a href="${R.url}" download="${name}">Download again</a>`, 'ok');
+}
+function toggleRecord() { if (R.state === 'idle') startRecording(); else stopRecording(); }
+recBtn.addEventListener('click', toggleRecord);
+$('#rp-pause').addEventListener('click', pauseRecording);
+$('#rp-stop').addEventListener('click', stopRecording);
+$('#src-btn').addEventListener('click', toggleSources);
+
+/* ---------- Nido: one live session on one slide, a step per Next ----------
+   One frame of the Nido simulation (present=live) loads once, preloads its reactor and a ledger, and is never
+   reloaded or moved to another parent: it lies in a fixed layer over the Nido slide's slot and is hidden, not
+   removed, on the other slides. It does not move or resize between the steps: each step (data-steps) only sends
+   that step's controls, so the presenter creates the account, approves and tries the refusals in one session, and
+   stepping back shows the earlier controls with the state kept. Until the frame reports preloaded (a copy without
+   ../nido-sim, a slow device), the slot shows each step's still. The recording always draws the stills. */
+const nidoTargets = slides.map(s => (stepsOf(s) ? $('.nido-slot', s) : null));
+const nidoFirst = nidoTargets.findIndex(Boolean);
+const nidoOn = nidoFirst >= 0 && !root.dataset.recFrame && !root.classList.contains('still');
+const nido = { el: null, pre: false, shown: null, opened: null, resetting: false, state: null, held: null };
+let nidoTimer, nidoSettled = 0;
+function nidoStart() {
+  if (!nidoOn || nido.el) return;
+  const el = document.createElement('iframe');
+  el.className = 'nido-live';
+  el.title = 'The Nido simulation, live';
+  el.src = `../nido-sim/index.html?embed=1&present=live&preload=1&grant=shop&theme=${isDark() ? 'dark' : 'light'}`;
+  el.addEventListener('load', () => syncFrameTheme(el));
+  document.body.appendChild(el);
+  nido.el = el;
+  nidoPlace();
+}
+function nidoPost(m) { try { nido.el.contentWindow.postMessage(m, '*'); } catch (_) { /* the stills stay */ } }
+// Each step names its controls in the slide's data-steps.
+function nidoShow() {
+  const t = nidoTargets[cur];
+  if (!nido.pre || !t) return;
+  const s = slides[cur], k = stepOf(s), key = cur + '.' + k;
+  if (nido.shown === key) return;
+  nido.shown = key;
+  nidoPost({ type: 'nido-sim:show', controls: stepsOf(s)[k - 1].split(','), step: `${s.dataset.draw}-${k}` });
+}
+// Open the current step's dialog: the frame presses that step's control as the presenter would, once per visit to
+// the step, and not for a step already done; it rejects a dialog left undecided on the step before.
+function nidoOpen() {
+  const t = nidoTargets[cur];
+  if (!nido.pre || !t) return false;
+  const s = slides[cur], k = stepOf(s), key = cur + '.' + k, control = stepsOf(s)[k - 1];
+  if (nido.opened === key || (nido.state && nido.state.done && nido.state.done[control])) return false;
+  nido.opened = key;
+  // During a reset the press waits for the new ledger's state, so it is not run on the old session.
+  const act = { type: 'nido-sim:act', control, step: `${s.dataset.draw}-${k}` };
+  if (nido.resetting) nido.held = act; else nidoPost(act);
+  return true;
+}
+// The frame takes the slot's own size and the slide's scale, so a scaled slide (the script panel) scales it too.
+// It keeps that size while hidden, so a dialog opened as the slide arrives is laid out for it; it shows once the
+// slide has settled.
+function nidoPlace() {
+  const el = nido.el, here = nido.pre && nidoTargets[cur], t = nidoTargets[cur] || nidoTargets[nidoFirst];
+  if (!el) return;
+  if (!here) el.classList.remove('on');
+  const r = t.getBoundingClientRect(), w = t.offsetWidth, h = t.offsetHeight;
+  if (!w || !h) return;
+  const k = r.width / w;
+  Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: w + 'px', height: h + 'px', transform: Math.abs(k - 1) > .002 ? `scale(${k})` : '' });
+  if (here && !el.classList.contains('on') && performance.now() >= nidoSettled) { void el.offsetWidth; el.classList.add('on'); }
+}
+// The frame fades in once the slide has settled, and fades out when the deck leaves it.
+function nidoGo(fresh) {
+  if (!nidoOn) return;
+  const t = nidoTargets[cur];
+  if (t || cur >= nidoFirst - 3) nidoStart();
+  if (!t) nido.shown = null;
+  if (fresh) {
+    nidoSettled = performance.now() + (still() ? 0 : 720);
+    if (!t && nido.el) nido.el.classList.remove('on');
+  }
+  nidoShow();
+  nidoPlace();
+  clearTimeout(nidoTimer);
+  nidoTimer = setTimeout(nidoPlace, Math.max(0, nidoSettled - performance.now()) + 20);
+}
+// Reset demo: a new ledger with no account (the reactor stays compiled), and back to step 1 with no dialog open;
+// the next Next opens the passkey prompt.
+function nidoReset() {
+  if (!nido.pre) return;
+  nido.resetting = true;
+  nido.shown = null;
+  // Forget the old session's state at once, so a quick Next opens the passkey prompt instead of skipping it.
+  nido.state = null;
+  nido.held = null;
+  nidoPost({ type: 'nido-sim:reset' });
+  setStep(1);
+}
+$$('[data-nido-reset]').forEach(b => b.addEventListener('click', e => { nidoReset(); if (e.detail > 0) b.blur(); }));
+addEventListener('message', e => {
+  if (!nido.el || e.source !== nido.el.contentWindow) return;
+  const d = e.data;
+  if (!d || typeof d !== 'object') return;
+  if (d.type === 'nido-sim:preloaded') {
+    nido.pre = true;
+    root.dataset.nidoLive = '1';
+    nido.shown = null;
+    nidoShow();
+    nidoPlace();
+  } else if (d.type === 'nido-sim:state') {
+    // During a reset, a state still from the old session (an account already created) is stale.
+    if (nido.resetting && d.done && d.done.create) return;
+    nido.state = d;
+    // After a decision or a slide change the deck takes its keys back (N, S, T, D), without moving the page.
+    if (document.activeElement === nido.el) nido.el.blur();
+    if (nido.resetting) {
+      nido.resetting = false;
+      nido.shown = null;
+      nidoShow();
+      if (nido.held) nidoPost(nido.held);
+      nido.held = null;
+    }
+  } else if (d.type === 'nido-sim:key') {
+    // A click in the frame keeps the slide keys working, step by step.
+    if (d.key === 'ArrowRight' || d.key === 'PageDown') next();
+    else if (d.key === 'ArrowLeft' || d.key === 'PageUp') prev();
+  }
+});
+addEventListener('resize', nidoPlace);
+if (nidoOn) setTimeout(nidoStart, 1500);
+
+slides.forEach(s => { s.setAttribute('aria-hidden', 'true'); s.inert = true; });
+render();
+const [start, startStep] = parseHash();
+go(start ? start - 1 : 0, true, { step: startStep });
+fitChrome();
+if (qs.get('notes') === '1') toggleNotes();
+})();
+</script>
+</body>
+</html>

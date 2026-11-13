@@ -1,0 +1,20 @@
+\paragraph{What was run.} Both runs of the task (\S\ref{sec:same-task}) are one
+task, on soroban-sim's recording-mode host build without exact metering, with
+different signer kinds on the two sides; they show verdicts and call structure,
+not cost.
+
+\paragraph{Proposed measurement.} We propose, and have not run, five workloads
+under one harness with exact metering, one host version and Ed25519 signers on
+both sides, reporting CPU instructions, memory, ledger I/O, fees and
+cross-contract calls: W1, one capped transfer; W2, a losing guess and the
+transfer it makes; W3, one grant install; W4, ending authority over $k$ grants
+(one recovery against $k$ calls to \code{remove\_context\_rule}); W5, storage
+after $n$ transfers.
+
+\paragraph{What we do not claim.} The recorded call traces describe this fixture
+only. Until W1--W5 run, we claim no general reduction in calls, cost, speed or
+code size. We do not claim that Perch
+binds more in general, or that oz-policy-builder is unproven or runs on mainnet
+(OpenZeppelin's \fact{oz-v072-tag} policies do). We do not claim that \code{spending\_limit} and Perch's cap behave alike
+beyond their shared eviction boundary, or that Perch lacking the features
+behind Table~\ref{tab:tab-disclosed}'s oz-policy-builder rows is a security property.

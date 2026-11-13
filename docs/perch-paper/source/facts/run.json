@@ -1,0 +1,116 @@
+{
+ "run-commands": {
+  "value": "27",
+  "source": "r2:503, 567; `GOLDEN` (C)"
+ },
+ "run-transactions": {
+  "value": "27",
+  "source": "r2:567 (C)"
+ },
+ "run-setup-transactions": {
+  "value": "11",
+  "source": "same (C)"
+ },
+ "run-game-deploy-transactions": {
+  "value": "2",
+  "source": "same (C)"
+ },
+ "run-operation-transactions": {
+  "value": "14",
+  "source": "same (C)"
+ },
+ "run-refused-in-simulation": {
+  "value": "11",
+  "source": "same (C)"
+ },
+ "run-view-only": {
+  "value": "1",
+  "source": "same (C)"
+ },
+ "run-start-balance-xlm": {
+  "value": "100",
+  "source": "r2:535 (C)"
+ },
+ "run-final-balance-xlm": {
+  "value": "93",
+  "source": "r2:567; `GOLDEN` `final_balance_stroops` 930000000 (C)"
+ },
+ "run-balance-path": {
+  "value": "100 − 6 − 2 − 1 − 1 + 3",
+  "source": "r2:567 (C)"
+ },
+ "run-final-generation": {
+  "value": "1",
+  "source": "`GOLDEN` (C)"
+ },
+ "run-game-payout-xlm": {
+  "value": "3",
+  "note": "the 1-XLM seed plus two lost guesses",
+  "source": "r2:561 (C)"
+ },
+ "cpu-reset": {
+  "value": "89,554,138; 95,112,535; 16,141,851; 12,030,445; 2,252,729; 55,790,398; 92,237; 1,779,290; 185,494; 1,508,981; 915,834",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-install-grant": {
+  "value": "8,670,608",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-spend-6": {
+  "value": "2,820,734",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-enroll": {
+  "value": "13,884,934",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-begin": {
+  "value": "13,734,497",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-guardian-1": {
+  "value": "1,718,635",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-guardian-2": {
+  "value": "2,606,753",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-complete": {
+  "value": "14,288,061",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-install-fresh": {
+  "value": "8,840,753",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-spend-grant2": {
+  "value": "2,874,899",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-gc": {
+  "value": "1,320,925",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-install-game": {
+  "value": "3,663,659; 1,006,385; 10,909,520",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin). Which number is the upload, the deploy and the install is **U**; print them unlabelled",
+  "unverified": true
+ },
+ "cpu-guess-1": {
+  "value": "4,085,879",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-guess-2": {
+  "value": "4,197,929",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "cpu-win": {
+  "value": "3,152,466",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
+ },
+ "demo-advance-ledgers": {
+  "value": "11",
+  "source": "the live experiment's default `advance-input` value and `GOLDEN` command 11 (`{\"op\": \"advance\", \"ledgers\": 11}`); r2:503 (C)"
+ }
+}

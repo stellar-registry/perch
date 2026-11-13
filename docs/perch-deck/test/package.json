@@ -1,0 +1,12 @@
+{
+  "name": "perch-deck-test",
+  "private": true,
+  "type": "module",
+  "description": "Browser check for the Perch deck's live Nido dialogs (not published)",
+  "scripts": {
+    "test": "node nido-dialog.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

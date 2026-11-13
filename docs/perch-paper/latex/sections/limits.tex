@@ -1,0 +1,9 @@
+The theorems concern the translation, not the Wasm rustc builds; the
+specification is trusted; the shell is tested; and no single theorem covers the
+whole authorization path. Table~\ref{tab:tab-grantee} lists what a grantee or a
+relayer can still do. Beyond it, a record holds at most
+\fact{spends-per-window} spends; two pre-signed installs for one grant
+can land in either order; and document caps (\fact{doc-max-rules} rules,
+\fact{doc-max-signers} signers, \fact{doc-max-canonical-bytes} canonical bytes)
+bound what a grant can say. Nothing is audited; the owner key, recovery and the
+trusted components are in the vision companion.

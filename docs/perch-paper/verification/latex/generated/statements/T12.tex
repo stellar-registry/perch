@@ -1,0 +1,12 @@
+% Generated from source/statements.json.
+\begin{perchstatement}{12}{Lowering equivalence.}\label{stmt:lowering-equivalence}
+\[\begin{aligned}&\mathit{LowerRoom}(d) \implies \exists R.\ \mathit{lower}_{\mathrm{T}}(d, A) = \mathsf{ok}(R)\\
+&\qquad \land\ \llbracket R \rrbracket = \mathit{lower}(\llbracket d \rrbracket, \llbracket A \rrbracket)\\
+&\mathit{ArgsRoom}(d) \implies \exists y.\\
+&\qquad \mathit{lowerScoped}_{\mathrm{T}}(d, A, X, g) = \mathsf{ok}(y)\\
+&\qquad \land\ \llbracket y \rrbracket = \mathit{lowerScoped}(\llbracket d \rrbracket,\\
+&\qquad\qquad \llbracket A \rrbracket, \llbracket X \rrbracket, \llbracket g \rrbracket)\end{aligned}\]
+Translated \code{lower} returns the model's lowering when the document leaves room in its bounded vectors (\code{LowerRoom}), and translated \code{lower\_scoped} does, refusals included, under the weaker \code{ArgsRoom}. For a valid document the lowered rules allow exactly what the document allows plus, when recovery is configured, every \code{apply\_doc} call through the recovery rule, which the shell refuses outside a completion (tested; O8).
+\statementhypotheses{\code{LowerRoom} for \code{lower}, \code{ArgsRoom} for \code{lower\_scoped}; \code{Doc.Valid} for the semantic part}
+\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Equiv/Lowering.lean\#L606}{Equiv.lower\_eq}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Equiv/Lowering.lean\#L721}{lower\_scoped\_eq} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} TRANSLATION}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/ExtractedLowering.lean\#L53}{Extracted.lower\_allows}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/ExtractedLowering.lean\#L84}{lower\_check\_auth} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}}
+\end{perchstatement}

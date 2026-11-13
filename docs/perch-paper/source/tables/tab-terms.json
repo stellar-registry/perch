@@ -1,0 +1,61 @@
+{
+ "title": "Eight words the two systems use differently.",
+ "caption": "Grant, scope, policy, interpreter, `execute`, recovery, cap and expiry mean different things in the two systems. *Scope* is Perch's JSON name for a rule's target. The last column gives the meaning in OpenZeppelin's account or in oz-policy-builder.",
+ "columns": [
+  "Term",
+  "In Perch",
+  "Name in the artifacts",
+  "In OpenZeppelin or oz-policy-builder"
+ ],
+ "latex_colspec": "@{}>{\\raggedright\\arraybackslash}p{0.13\\linewidth}LLL@{}",
+ "rows": [
+  [
+   "Grant",
+   "A bounded set of rules the owner installs so an app can act without a prompt for each call",
+   "grant",
+   "No single object: one context rule per contract, each with its policies"
+  ],
+  [
+   "Rule target",
+   "The contract whose functions a rule lets be called",
+   "JSON `\"scope\"`",
+   "The context rule's `CallContract` address"
+  ],
+  [
+   "Policy",
+   "—",
+   "—",
+   "A contract attached to a context rule; the account calls its `enforce` after authenticating (hooks `install`, `uninstall`, `enforce`)"
+  ],
+  [
+   "Interpreter",
+   "The policy contract of Perch's earlier design ({{fact:perch-deployed-account-version}}); its address is still pinned and reported, never called",
+   "`perch_interpreter`",
+   "oz-policy-builder's `policy-interpreter`, the shared predicate evaluator"
+  ],
+  [
+   "`execute`",
+   "The account's owner-authorized call as the account",
+   "`execute(target, function, args)`",
+   "The adapter's batch call `execute(calls, grants, wait)`"
+  ],
+  [
+   "Recovery",
+   "Replacing lost credentials through guardians, a zero-knowledge proof, or both",
+   "`rcv_*`, `apply_doc`",
+   "The Prime app's \"recovery\" moves custody funds to a fixed address"
+  ],
+  [
+   "Cap and window",
+   "At most *limit* charged over the last *P* ledgers: the window at ledger *L* is (*L* − *P*, *L*]",
+   "`cap`, `period-ledgers`",
+   "`spending_limit` uses the same window boundary. In an oz-policy-builder Intent, `cap` bounds one call (`lte`)"
+  ],
+  [
+   "Expiry",
+   "{{fact:perch-expiry-semantics}}",
+   "`not-after-ledger`",
+   "OpenZeppelin `valid_until` N authorizes through N"
+  ]
+ ]
+}

@@ -4,10 +4,6 @@ This file identifies the Perch code under audit, separates it from the
 deployment it was measured on, assigns every component to a review unit or
 a named exclusion, and gives the reading order.
 
-**Deferred until after the audit:** [`DEFERRED.md`](DEFERRED.md) lists the
-work deliberately outside this audit, each item with the current behaviour
-that is audited, its residual risk, its exit criterion, and its owner.
-
 ## Audit identity
 
 ### Reviewed source
@@ -36,11 +32,11 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 
 | Field | Manifest field | Value in the manifest at this commit |
 | --- | --- | --- |
-| Build commit | `source.commit`, `source.dirty` | `4e7ae8044b761c7e7ee8b82d3dd5d135f9905fd5`, the release commit on `main`; `dirty: true` (below) |
+| Build commit | `source.commit`, `source.dirty` | `c135aca277745434f2abf679edd9868c95204b51`, the release commit on `main`; `dirty: false` |
 | Network, channel | `network_passphrase`, `channel` | testnet (`Test SDF Network ; September 2015`), `beta` |
-| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-15T06:43:23Z, from ledger 5204567 |
-| Build toolchain | `toolchain` | rustc 1.99.0 (b940084d7 2026-09-28), stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork), scaffold 0.0.27 (`builder`: `scaffold`) |
-| Registry | `registry.id`, `registry.wasm_hash` | `CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7`, the canonical `constructorless` registry ([`testnet-deployment.md`](testnet-deployment.md)) |
+| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-22T13:41:43Z, from ledger 5330546 |
+| Build toolchain | `toolchain` | rustc 1.99.1 (58cf8f9c3 2026-10-13), stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork), scaffold 0.0.27 (`builder`: `scaffold`) |
+| Registry | `registry.id`, `registry.wasm_hash` | `CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM`, `perch/constructorless` under the testnet Stellar Registry root, the registry `crates/*/wasm/registry.path` derives ([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)); code `0acc4da2…` |
 | ZK circuit | `zk.circuit_id`, `zk.tree_depth` | the circuit in `circuits/manifest.json`, tree depth 32 |
 | Contracts | `contracts.<name>.version`, `.sha256`, `.address`, `.pins` | the ten below |
 
@@ -51,7 +47,9 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 | 2 | `perch-account-factory` | the account and the WebAuthn verifier |
 
 A redeploy rewrites the manifest, and the third column of the first table
-changes with it.
+changes with it. [`deployments/mainnet.json`](../deployments/mainnet.json)
+records the same ten hashes, from the same build commit, deployed to mainnet
+on 2026-10-26 into the registry `registry.path` derives there.
 
 **How these bytes were built.** `release.yml`'s `deploy-stack` job made
 this deployment in canonical mode
@@ -61,17 +59,13 @@ the ed25519 verifier. It reused the bytes the registry already serves for
 them, which `release.yml`'s attested release build produced. It built the
 other six with `scripts/build-stack.sh` on a GitHub-hosted Linux runner,
 using the manifest's toolchain, and attested each one's build provenance.
-`source.dirty` is `true`: when it built, the job's checkout had uncommitted
-changes in an input `scripts/source-dirty.sh` checks. The manifest does not
-record which input changed.
 
 **Reproduction record.** No reproduction of this manifest's hashes has been
-recorded. Because the tree was dirty, rebuilding `4e7ae80` is not
-guaranteed to give the six built hashes. The four reused contracts come
-from the attested release build, not from `build-stack.sh`, so rebuilding
-them with `build-stack.sh` gives other bytes
+recorded. The four reused contracts come from the attested release build,
+not from `build-stack.sh`, so rebuilding them with `build-stack.sh` gives
+other bytes
 ([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)).
-The previous deployment (build commit `7b164b6`, clean tree, manifest
+An earlier deployment (build commit `7b164b6`, clean tree, manifest
 [`deployments/testnet.json` at `845c49a`](https://github.com/stellar-registry/perch/blob/845c49a376c08aeeed9f5d3c63356b753dc617f4/deployments/testnet.json))
 was reproduced in full on 2026-10-14. On a macOS arm64 host with that
 manifest's toolchain, `scripts/build-stack.sh` built a `git archive` export
@@ -95,11 +89,12 @@ evidence does not.
 
 | Input | Pin | Where |
 | --- | --- | --- |
-| Rust | channel `stable`, target `wasm32v1-none`. **Not version-pinned**: reproducing the deployed hashes needs the recorded rustc 1.99.0 | `rust-toolchain.toml` |
+| Rust | rustc 1.97.1, target `wasm32v1-none`. A deployment built under another rustc is reproduced with the version its manifest records | `rust-toolchain.toml` |
 | Release profile | `opt-level = "z"`, `overflow-checks = true`, `panic = "abort"`, `lto = true`, `codegen-units = 1` | `Cargo.toml` `[profile.release]` |
 | Wasm stack | 64 KiB per contract, 128 KiB for the ZK adapter (an overflow traps) | `crates/*/build.rs` |
-| Soroban | `soroban-sdk` 27.0.6, `soroban-env-host` 27.0.1 (test host), `soroban-poseidon` 27.0.0 | `Cargo.lock` |
-| OpenZeppelin accounts | `stellar-accounts` 0.7.1 at theahaco/stellar-contracts-OZ `33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` | `Cargo.toml`, `Cargo.lock` |
+| Soroban | `soroban-sdk` 29.0.1, `soroban-env-host` 29.0.1 (test host), `stellar-xdr` 28.0.0 | `Cargo.lock` |
+| Vendored, moved to soroban-sdk 29 | `soroban-sdk-tools` 0.1.4, `soroban-poseidon` 28.0.0, `soroban-flux` 0.1.0, `admin-sep` 0.28.1, `registry-traits` at stellar-registry/contracts `884c1f94cbfcce249a5b8fa6325fb9052a90bd61`; each differs from upstream only by its documented SDK 29 delta | `vendor/*/NOTICE`, `UPSTREAM.sha256` |
+| OpenZeppelin accounts | `stellar-accounts` 0.7.1 at bitswell-hq/theahaco__stellar-contracts-OZ `42089fc90684fdab33a85eac3e8311259b69a61b`: theahaco/stellar-contracts-OZ `33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` moved to soroban-sdk 29.0.1 | `Cargo.toml`, `Cargo.lock` |
 | Stellar CLI | deployment build: stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork) and scaffold 0.0.27, SHA-256-checked by `release.yml`'s `deploy-stack` (manifest `toolchain`); CI: stellar-cli 27.1.0, SHA-256-checked | `.github/workflows/release.yml`, `.github/actions/setup-stellar` |
 | ZK proving | nargo 1.0.0-beta.9, bb 0.87.0, every download SHA-256-pinned per platform; proofs are `UltraKeccakZKFlavor` | `scripts/zk-toolchain.sh`, `circuits/manifest.json` |
 | ZK proving (JS) | `@noir-lang/noir_js` 1.0.0-beta.9, `@aztec/bb.js` 0.87.0, exact versions | `packages/perch-zk/package.json` |
@@ -108,14 +103,14 @@ evidence does not.
 
 ### Packages
 
-| npm package | Path | Manifest version | Published |
+| npm package | Path | Manifest version | Latest release tag |
 | --- | --- | --- | --- |
-| `@stellar-registry/perch` | `packages/perch-js` | 0.4.0 | 0.4.0 (2026-10-15), from tag `perch-js-v0.4.0`; `src/` there equals this source |
-| `@stellar-registry/perch-interpreter` | `packages/perch-interpreter-js` | 0.1.0 | 0.1.0 (2026-09-09) |
-| `@stellar-registry/perch-zk` | `packages/perch-zk` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-zk-v0.1.0`; `src/` there equals this source |
-| `@stellar-registry/perch-relay` | `packages/perch-relay` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-relay-v0.1.0`; `src/` there equals this source |
-| `@stellar-registry/perch-contracts` | `packages/perch-contracts` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-contracts-v0.1.0`, which predates the current deployment: its bindings and manifest name the previous one, so it differs from this source |
-| `@stellar-registry/perch-artifacts` | `packages/perch-artifacts` | 0.1.0 | 0.1.0 (2026-10-15), from tag `perch-artifacts-v0.1.0`, which predates the current deployment: its `deployments/testnet.json` is the previous one, so it differs from this source |
+| `@stellar-registry/perch` | `packages/perch-js` | 0.4.1 | `perch-js-v0.4.1`; `src/` has changed since |
+| `@stellar-registry/perch-interpreter` | `packages/perch-interpreter-js` | 0.1.1 | `perch-interpreter-js-v0.1.1`; `src/` there equals this source |
+| `@stellar-registry/perch-zk` | `packages/perch-zk` | 0.1.0 | `perch-zk-v0.1.0`; `src/` there equals this source |
+| `@stellar-registry/perch-relay` | `packages/perch-relay` | 0.1.0 | `perch-relay-v0.1.0`; `src/` there equals this source |
+| `@stellar-registry/perch-contracts` | `packages/perch-contracts` | 0.1.2 | `perch-contracts-v0.1.2`, which ships the current testnet deployment's bindings; `src/` has changed since |
+| `@stellar-registry/perch-artifacts` | `packages/perch-artifacts` | 0.2.2 | `perch-artifacts-v0.2.2`, which ships both current manifests; `src/` has changed since |
 
 `release.yml`'s `npm-publish` job publishes each package, with
 `npm publish --provenance`, when a merge bumps its manifest version.
@@ -130,7 +125,7 @@ published to crates.io; contract releases are on-chain Wasm publishes.
 | Unit | Covers | Who reviews |
 | --- | --- | --- |
 | **Perch core** | Backend-independent: the recovery controller's state machine, the statement, ZK circuit, pool, and adapter, revocation, the freeze, upgrades, the document compiler and CANON, the interpreter, the verifiers, the factory | This audit |
-| **Perch OZ materialization** | How a compiled document becomes OZ context rules: the delta reconcile, the install paths, the document caps, the spending-limit wrapper, and the `stellar-accounts` pin | This audit |
+| **Perch OZ materialization** | How a compiled document becomes the account's installed rules: its own rule registry, the delta reconcile, the install paths and checks, the document caps, the spending-limit wrapper, and the `stellar-accounts` pin | This audit |
 | **Explicit dependency review** | Code Perch does not own line by line but every contract or consumer relies on: the three OZ fork deltas, the UltraHonk ZK-flavour delta, the consumed JS packages, and artifact selection | This audit, as named dependency deltas |
 | **Nido integration and browser review** | How Nido deploys and calls this stack: its factory, wallet, and browser code | Nido's own audit manifest (`nidohq/nido`, `docs/AUDIT_SCOPE.md`) |
 
@@ -146,6 +141,7 @@ backend needs no integration review with the core paths it touches
 | OZ fork PR [#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3): CAP-0071 delegated auth | in theahaco/stellar-contracts-OZ `33726766` | Explicit dependency review |
 | OZ fork PR [#4](https://github.com/theahaco/stellar-contracts-OZ/pull/4): `_no_events` variants | in `33726766` | Explicit dependency review |
 | OZ fork PR [#5](https://github.com/theahaco/stellar-contracts-OZ/pull/5): `reconcile_signers` | head `33726766` | Explicit dependency review |
+| OZ fork soroban-sdk 29 move ([bitswell-hq #1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1)) | `33726766..42089fc9` | Explicit dependency review |
 | UltraHonk `UltraKeccakZKFlavor` delta | `vendor/ultrahonk-soroban-verifier/src/zk.rs` and the visibility-only changes NOTICE lists | Explicit dependency review |
 | Upstream UltraHonk verifier (non-ZK base) | `vendor/ultrahonk-soroban-verifier/**` except the delta | Named exclusion: covered by upstream's internal review and OpenZeppelin audit (NOTICE, `VERIFIER_PROVENANCE.md`); its bytes are checked against `UPSTREAM.sha256` by `crates/perch-zk-adapter/tests/vendor.rs` |
 | `@stellar-registry/perch` | `packages/perch-js` | Explicit dependency review |
@@ -154,20 +150,21 @@ backend needs no integration review with the core paths it touches
 | Generated contract clients | `packages/perch-contracts`, `packages/perch-interpreter-js` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Guardian-approval relay | `packages/perch-relay` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 | Deployment and release execution | `scripts/deploy-stack.sh`, `scripts/derive-id.py`, `scripts/bindings-contracts.sh`, `scripts/bootstrap-testnet.sh`, `.github/workflows/release.yml`, `crates/perch-deploy`, `crates/perch-derive-id` | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
-| Registry contract | Wasm `4b2d9ea4…` (manifest `registry`), built from `crates/perch-stateless-registry` (since renamed `crates/perch-constructorless-registry`) at an unrecorded commit | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
+| Registry contract | Wasm `0acc4da2…` (manifest `registry.wasm_hash`), a `crates/perch-constructorless-registry` build at an unrecorded commit | Named exclusion (see [Outside the review units](#outside-the-review-units)) |
 
 ## Perch core
 
 | Path | What |
 | --- | --- |
-| `crates/perch-recovery/**` | The controller: attempts, evidence, promotion, cancellation, `enforce` and `rcv_sync`, completion, the two-digest target binding, configuration changes, the enrollment-id check on a changed ZK factor |
+| `crates/perch-recovery/**` | The controller: attempts, evidence, promotion, cancellation, `rcv_complete` and `rcv_sync`, completion, the two-digest target binding, configuration changes, the enrollment-id check on a changed ZK factor |
 | `crates/perch-recovery-interface/**` | The statement and its encoding; the controller, account, pool, and configuration interfaces; credential fingerprints; `rule_hash` and `config_hash` |
 | `crates/perch-zk-primitives/**`, `crates/perch-zk-pool/**`, `crates/perch-zk-adapter/**` | Host-side Poseidon2 for the circuit's formulas, the membership pool, and the adapter that checks proofs for the controller |
 | `circuits/perch_zk/**`, `circuits/perch_zk_recovery/**`, `circuits/perch_zk_recovery_d24/**` | The Noir recovery circuit, its depth-32 release and depth-24 variants |
-| `crates/perch-ir/**`, [`CANONICAL.md`](../CANONICAL.md) | The document schema, validation, and CANON v1 canonical bytes |
+| `crates/perch-ir/**`, [`CANONICAL.md`](../CANONICAL.md) | The document schema, validation, CANON v1 canonical bytes, and the normal form a grant document must be in (`normal.rs`) |
 | `crates/perch-doc-compiler/**` except the caps | `compile_doc`, `derive_target`, `config_hash`, credential canonicalization |
-| `crates/perch-compile/**`, `crates/perch-interpreter/**`, `crates/perch-program/**` | Lowering rules to interpreter programs (with per-rule provenance) and the interpreter policy |
-| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth`, `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, the revision and consumer views, and inside `apply` the revocation and enrollment-id checks, `expected_revision`, and the `rcv_sync` gate |
+| `crates/perch-interpreter/**`, `crates/perch-program/**` | The interpreter policy, for OZ accounts that attach it; the account pins it (`infra`) and calls it from no rule |
+| `crates/perch-smart-account/src/lib.rs`: the recovery and capability paths | `check_auth` (with the grant generation gate, rule-eval's `check_auth` in `gate.rs` and the account's `authenticate` in `auth.rs`, and `authorize_completion` in `auth.rs`, the controller's `rcv_complete` for a completion), `is_completion`, `complete_recovery`, the freeze mirror and `rcv_gate`, reserved names, `cancel_recovery`, `schedule_upgrade`/`execute_upgrade`/`cancel_upgrade`, `renew`, `execute`, the revision and consumer views, and inside `apply` the revocation, credential-index, and enrollment-id checks, `expected_revision`, and the `rcv_sync` gate |
+| `crates/perch-account-types/**` | The account's signer, `__check_auth` payload, context rule, and refusal codes: the XDR and contract-spec twins of OZ's types |
 | `crates/perch-account/**` | The deployable account contract over `perch-smart-account` |
 | `crates/perch-webauthn-verifier/**`, `crates/perch-ed25519-verifier/**` | Constructorless signature verifiers for external signers (passkey over OZ `webauthn::verify`; ed25519) |
 | `crates/perch-account-factory/**` | Constructorless factory: deploys the pinned account build at an address bound to the admin signers |
@@ -181,55 +178,67 @@ statement vectors `testdata/recovery/statement-v2.json`; the Lean model
 (`formal/`); `release_stack.rs` on real Wasm with real proofs. The map from
 each spec requirement to its code and tests is
 [`recovery/implementation.md`](recovery/implementation.md). Coverage note:
-Perch's recovery integration world uses delegated stand-in keys, so recovery
-target binding with External (WebAuthn) credentials — where the credential-id
-suffix and key canonicalization matter — is exercised by Nido's suite
+Perch's recovery integration world uses delegated stand-in keys. Recovery
+target binding with External (WebAuthn) credentials, where the credential-id
+suffix and key canonicalization matter, is exercised by Nido's suite
 (`crates/integration-tests` in the superproject), not Perch's.
 
 ## Perch OZ materialization
 
 | Path | What |
 | --- | --- |
-| `crates/perch-smart-account/src/rules.rs` | The delta reconcile: rules matched by slot, the cheaper of an in-place edit and a replacement per rule (`Cost`, `Meter`), every OZ mutation through its `_no_events` variant, the `DeltaSummary` |
-| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the OZ rule views, `install_admin` |
-| `crates/perch-doc-compiler/src/lib.rs`: the caps | `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 11, `MAX_DOC_CANONICAL_BYTES` = 8,192, `MAX_RULE_NAME_BYTES` (OZ's `MAX_NAME_SIZE`, 20), and the `DocTooLarge` refusal |
+| `crates/perch-smart-account/src/rules.rs` | The account's rule registry and the delta reconcile: rules matched by slot, which changed rules keep their id (`keeps_id`), the id counter (`allocate`), the install-time limits (`check`), the recovery rule's controller `rcv_install`, the `DeltaSummary` |
+| `crates/perch-smart-account/src/auth.rs`: `check_distinct` | The constructor's canonical-duplicate check through the verifiers |
+| `crates/perch-smart-account/src/lib.rs`: the install paths | `apply_rules`, the install half of `apply` (rules, enrollment write, `DocApplied`), `installed_rules`, the rule views (`get_context_rule`, `get_context_rules_count`), `install_account_rules` and its `ContextRuleAdded`; the grant-document paths `apply_grant_doc`, `check_grant`, `rule_set::names_guardian_approval`, the normal-form refusal (`check_normal`), `excluded_contract`, the credential index (`check_unwiped`), `drop_grant`, and the grant index (spec §7.6) |
+| `crates/perch-doc-compiler/src/lib.rs`: the caps | An account document's `MAX_DOC_SIGNERS` = 8, `MAX_DOC_RULES` = 10, `MAX_DOC_CANONICAL_BYTES` = 8,192; a grant document's `MAX_GRANT_SIGNERS` = 15, `MAX_GRANT_RULES` = 50, `MAX_GRANT_CANONICAL_BYTES` = 8,192 (`limits_of`, by `perch_ir::is_account_document`), and the grant's stored entry at most `MAX_GRANT_STORED_BYTES` = 49,152 (`src/stored.rs`, `grant_stored_bytes`: the account's grant record computed from the document); `MAX_RULE_NAME_BYTES` (the account's `MAX_NAME_SIZE`, 20) for both; and the `DocTooLarge` refusal |
 | `crates/perch-spending-limit/**` | The deployable wrapper of OZ `spending_limit`, installing and uninstalling without events |
-| `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it (all but the ZK pool and adapter) |
+| `Cargo.toml`: `stellar-accounts` | The fork pin, which applies to every contract that links it: the interpreter, the spending limit, and the Ed25519, WebAuthn and ML-DSA verifiers. The account, the recovery controller, the factory, the doc compiler, the ZK pool and the ZK adapter link none of it |
 
-**Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps}.rs`;
+**Evidence:** `crates/integration-tests/tests/{apply_delta,delta_security,doc_caps,install_checks}.rs`;
+`oz_differential.rs` against the OZ-registry build it replaces;
 the full-replace oracle `crates/perch-testkit/src/delta.rs` and the fuzz
-target `fuzz/fuzz_targets/apply_doc_delta.rs`. The full replace shares
+target `fuzz/fuzz_targets/apply_doc_delta.rs`. The grant-document paths:
+`crates/integration-tests/tests/{grant_docs,grant_guardian_approvals,apply_grant_delta,rule_core_documents}.rs` and the
+fuzz target `fuzz/fuzz_targets/apply_grant_delta.rs`, which interleave account
+documents with `apply_grant`/`remove_grant` across several grants and check
+each grant, the account document and the other grants against the model after
+every step; `release_stack.rs` (`docsplit_*`). The full replace shares
 compile and the desired rule set (expiry drop, recovery rule) with the
 delta, so it checks the reconcile only; each accepted step is also checked
 against the grant the document model computes on its own
-(`DocModel::expected_rules` against `live_rules`, read from OZ's context
-rules and the policies' stored parameters). The generator reaches the
+(`DocModel::expected_rules` against `live_rules`, read from the account's
+rule views and its stored rules). The generator reaches the
 document caps, permutes signer lists, spells keys in either hex case and cap
 limits with leading zeros or a sign, and advances the ledger past rule
 expiries between documents; `release_stack.rs`
 (`worst_case_*`, `signer_transitions`, `cap_sweep`,
-`the_metered_footprint_is_the_simulated_transactions`);
-[`recovery/budgets.md`](recovery/budgets.md), "Document caps", which sizes
-the caps.
+`the_metered_footprint_is_the_simulated_transactions`,
+`worst_case_grant_flows_at_the_grant_caps`, `grant_cap_sweep`);
+[`recovery/budgets.md`](recovery/budgets.md), "Document caps" and
+"Grant-document caps", which size the caps.
 
 ## Explicit dependency review
 
 ### The OZ fork
 
-`stellar-accounts` is pinned to theahaco/stellar-contracts-OZ at
-`33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9`: upstream OpenZeppelin
-`fbfde38` (the fork's `main`) plus three commits, one for each of three
-open, stacked fork pull requests. Review the fork's changes as the diff
-from `fbfde38` to `33726766`.
+`stellar-accounts` is pinned to bitswell-hq/theahaco__stellar-contracts-OZ at
+`42089fc90684fdab33a85eac3e8311259b69a61b`. That is theahaco/stellar-contracts-OZ
+`33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9` (upstream OpenZeppelin `fbfde38`,
+the fork's `main`, plus three commits, one for each of three open, stacked
+fork pull requests) followed by a documentation commit and the move to
+soroban-sdk 29.0.1 (bitswell-hq/theahaco__stellar-contracts-OZ
+[#1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1)).
+Review the fork's changes as the diff from `fbfde38` to `42089fc9`.
 
 | Fork PR | What its commit changes |
 | --- | --- |
 | [#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3) | `Signer::Delegated` authenticates through `delegate_account_auth` (CAP-0071): one `AddressWithDelegates` auth entry instead of a separate `require_auth_for_args` entry per delegate |
 | [#4](https://github.com/theahaco/stellar-contracts-OZ/pull/4) | `_no_events` variants of every context-rule, signer, and policy mutation, and of `spending_limit`'s install and uninstall |
 | [#5](https://github.com/theahaco/stellar-contracts-OZ/pull/5) | `reconcile_signers[_no_events]`: one validated, atomic signer-set update |
+| bitswell-hq [#1](https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ/pull/1) | soroban-sdk 29.0.1: `ContextRuleType::CreateContractExternalRef` for CAP-0085 executable references, soroban-poseidon vendored |
 
-None of this code is in the Perch repository. It is in scope because every
-Perch contract except the ZK pool and adapter links it. The host and OZ behaviour the recovery design
+None of this code is in the Perch repository. Its contract consumers are
+listed under [Perch OZ materialization](#perch-oz-materialization). The host and OZ behaviour the recovery design
 relies on is pinned by tests in [`recovery/cap-0071.md`](recovery/cap-0071.md).
 Merging the pull requests is
 [deferred](DEFERRED.md#oz-quiet-events-fork-pull-requests).
@@ -251,7 +260,7 @@ any file outside the delta differs from upstream's `UPSTREAM.sha256` bytes; it
 does not re-audit the delta. No audit covered the delta
 before this one ([`zk/README.md`](zk/README.md)). For an offline handoff, a
 review of the delta needs the Barretenberg v0.87.0 reference sources the
-README maps to (the ZK-flavour reference files — e.g. `honk_zk_contract.hpp`,
+README maps to (the ZK-flavour reference files, such as `honk_zk_contract.hpp`,
 `small_subgroup_ipa.hpp`, `shplemini.hpp`, `sumcheck.hpp`, and
 `row_disabling_polynomial.hpp`) at their exact upstream commit, not only the
 `v0.87.0` release tag, plus the generated Solidity verifier for the committed
@@ -307,9 +316,8 @@ checked by hash. They are not reviewed line by line.
   they choose what is deployed and published. The deployed bytes are checked
   by hash against the manifest, and the manifest's hashes are reproducible
   from source ([Deployment provenance](#deployment-provenance)).
-- **The registry contract** (Wasm `4b2d9ea4…`): a
-  `crates/perch-stateless-registry` build (the crate is now
-  `crates/perch-constructorless-registry`) the canonical registries run;
+- **The registry contract** (Wasm `0acc4da2…`): a
+  `crates/perch-constructorless-registry` build the canonical registries run;
   `deploy-stack.sh` publishes into the instance `registry.path` derives and
   never deploys or rebuilds one, and this repository does not record which
   commit built it. Its `deploy_stateless` places code
@@ -319,8 +327,13 @@ checked by hash. They are not reviewed line by line.
 - **Off-chain tooling and harnesses** (`crates/perch-testnet`,
   `crates/perch-zk-prover`, `crates/perch-testkit`, `crates/perch-bench*`,
   `crates/perch-conformance`, `crates/perch-golden`, `crates/perch-analyze`,
-  `crates/integration-tests`): evidence and tools, not deployed contract
-  code.
+  `crates/perch-compile`, `crates/perch-review-core` and its `npm/`
+  wrapper, `crates/integration-tests`): evidence and tools,
+  not deployed contract code. `perch-compile` lowers rules to interpreter
+  programs with per-rule provenance; no deployable links it.
+  `perch-review-core` is off-chain and not deployed; its verdict is advisory
+  display for wallets before signing, and the account's on-chain
+  `__check_auth` remains the authority.
 - **Documentation and slides** (`docs/**`, `*.md`). The recovery spec is
   normative for both Perch units.
 
@@ -332,7 +345,7 @@ the generated paths in GitHub diffs.
 | Path | Produced by | Checked by |
 | --- | --- | --- |
 | `Cargo.lock`, `**/package-lock.json` | cargo, npm | `--locked` builds, `npm ci` |
-| `packages/perch-contracts/src/**` | `scripts/bindings-contracts.sh` from the deployed Wasm | `packages/perch-contracts/test` (`WASM_SHA256` equals the manifest's) |
+| `packages/perch-contracts/src/**` | `scripts/bindings-contracts.sh`; [deployed/undeployed ABI selection](../packages/perch-contracts/README.md) | `packages/perch-contracts/test` checks deployed hashes against the manifest and legacy/new ABI decoding |
 | `deployments/**` | `scripts/deploy-stack.sh`, `cargo run -p perch-testnet` | `scripts/verify-deployment.sh`, `testnet_pins` |
 | `circuits/artifacts/**`, `circuits/manifest.json`, `packages/perch-zk/artifacts/**`, `testdata/zk/**` | `nargo`/`bb` with the pinned toolchain, `perch-zk-fixtures` | CI's `zk` job (`perch-zk-fixtures check`) |
 | `vendor/ultrahonk-soroban-verifier/**` except the delta | NethermindEth's audited UltraHonk verifier | `UPSTREAM.sha256`, `CHECKSUMS.sha256`, `crates/perch-zk-adapter/tests/vendor.rs` |
@@ -362,8 +375,6 @@ Each is stated in full where linked.
   calls ([`zk/README.md`](zk/README.md)).
 - Client proving on the reference phone and laptop is unmeasured
   ([`recovery/budgets.md`](recovery/budgets.md) §1).
-- `rust-toolchain.toml` does not pin a Rust version (see the toolchain
-  table).
 
 ## Reading order
 

@@ -1,0 +1,14 @@
+<aside class="walkthrough" id="walkthrough" aria-labelledby="walkthrough-title"><p class="box-title" id="walkthrough-title">Walkthrough: both accounts, step by step</p><p>The walkthrough runs the task of {{ref:tab:tab-walkthrough}} through a Perch account and through an OpenZeppelin account with oz-policy-builder's interpreter: a setup step, then the table's seven requests, on a local Soroban host in this browser, with no network. It loads a second simulator, so it starts only when asked.</p><div class="walkthrough-actions"><button type="button" class="primary" id="walkthrough-load" hidden>Load the walkthrough here</button><a href="../oz-walkthrough/index.html">Open the full page</a></div><div class="walkthrough-frame" id="walkthrough-frame"></div><script>(() => {
+  const b = document.getElementById('walkthrough-load');
+  const box = document.getElementById('walkthrough-frame');
+  if (!b || !box) return;
+  b.hidden = false;
+  b.addEventListener('click', () => {
+    const f = document.createElement('iframe');
+    f.src = '../oz-walkthrough/index.html';
+    f.title = 'Walkthrough: Perch and an OpenZeppelin account with oz-policy-builder';
+    box.append(f);
+    b.hidden = true;
+    f.focus();
+  });
+})();</script></aside>

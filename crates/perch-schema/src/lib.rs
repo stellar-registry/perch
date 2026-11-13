@@ -11,7 +11,9 @@
 //! [`perch_ir::MAX_SIGNER_KEY_LEN`] and [`perch_ir::ACK_SENTINEL`] directly, the
 //! strkey/hex shapes and the `m <= N` / `quorum <= count` / `limit` rules
 //! behaviourally, and the `perch_doc_compiler` caps (`MAX_DOC_SIGNERS`,
-//! `MAX_DOC_RULES`, `MAX_RULE_NAME_BYTES`) read straight from the constants — so
+//! `MAX_DOC_RULES` for an account document, `MAX_GRANT_SIGNERS`,
+//! `MAX_GRANT_RULES` for a grant document, `MAX_RULE_NAME_BYTES`) read straight
+//! from the constants — so
 //! there is a single place each limit is declared. Two guards keep the
 //! projection honest:
 //!
@@ -20,8 +22,7 @@
 //! - the **limits-parity** test feeds real inputs through perch-ir's own
 //!   `from_json` + `validate` and asserts the schema accepts/rejects exactly at
 //!   the boundary where each limit sits (so the schema and the validator cannot
-//!   silently disagree — the brief's sanctioned alternative to generating the
-//!   numbers straight from the constants).
+//!   silently disagree).
 //!
 //! # What this generator is *not* in the build graph of
 //!
@@ -78,6 +79,20 @@ pub fn signer_key_pattern() -> String {
     format!("^([0-9a-fA-F]{{2}}){{1,{}}}$", perch_ir::MAX_SIGNER_KEY_LEN)
 }
 
+/// The `verifier-name` pattern: `<name>@<MAJOR>.<MINOR>.<PATCH>`, a registry
+/// name of 1..=[`perch_ir::MAX_VERIFIER_NAME_LEN`] bytes of `[a-z0-9-]`
+/// starting with a letter, and three decimal numbers of at most ten digits
+/// with no leading zero. Mirrors `perch_ir::parse_verifier_name`, which
+/// validation applies; whether the name resolves is the compiler's check.
+#[must_use]
+pub fn verifier_name_pattern() -> String {
+    let number = "(0|[1-9][0-9]{0,9})";
+    format!(
+        "^[a-z][a-z0-9-]{{0,{}}}@{number}\\.{number}\\.{number}$",
+        perch_ir::MAX_VERIFIER_NAME_LEN - 1
+    )
+}
+
 /// Rule names are capped at [`perch_doc_compiler::MAX_RULE_NAME_BYTES`] **bytes**
 /// by the compiler (OZ's context-rule name limit). JSON Schema's `maxLength`
 /// counts Unicode code points, not bytes, so a multi-byte character would let a
@@ -118,7 +133,7 @@ pub fn limit_pattern() -> String {
 /// For each list length `len` in `1..=cap`, when the tagged object carries
 /// `list_field` with exactly `len` items, the bounded `bound_field` is
 /// constrained to `maximum: len`. A valid list never exceeds `cap`
-/// (`MAX_DOC_SIGNERS`), so the chain is complete for every document perch-ir
+/// (the larger signer cap), so the chain is complete for every document perch-ir
 /// accepts; a longer list is already perch-ir-invalid for other reasons and the
 /// chain simply adds no bound there. See `docs/schema.md`.
 fn count_bound_chain(list_field: &str, bound_field: &str, cap: u32) -> Value {
@@ -201,20 +216,23 @@ pub fn policy_schema() -> Value {
             "signers": {
                 "type": "array",
                 "items": { "$ref": "#/$defs/signerDecl" },
-                "maxItems": perch_doc_compiler::MAX_DOC_SIGNERS,
+                "maxItems": max_signers(),
                 "description":
                     "Declared signers that rules reference by id. At most \
-                     MAX_DOC_SIGNERS (the compiler's per-document signer cap). The \
+                     MAX_DOC_SIGNERS in an account document (one with a self-admin \
+                     rule or a recovery member) and MAX_GRANT_SIGNERS in a grant \
+                     document (the compiler's per-document signer caps). The \
                      canonical-byte budget is a separate aggregate bound the schema \
                      cannot express — see `docs/schema.md`.",
             },
             "rules": {
                 "type": "array",
                 "items": { "$ref": "#/$defs/rule" },
-                "maxItems": perch_doc_compiler::MAX_DOC_RULES,
+                "maxItems": max_rules(),
                 "description":
                     "The policy rules. Order is preserved and significant to the hash. \
-                     At most MAX_DOC_RULES (the compiler's per-document rule cap).",
+                     At most MAX_DOC_RULES in an account document and MAX_GRANT_RULES \
+                     in a grant document (the compiler's per-document rule caps).",
             },
             "recovery": {
                 "$ref": "#/$defs/recoveryConfig",
@@ -225,9 +243,58 @@ pub fn policy_schema() -> Value {
                      as before this field existed.",
             },
         },
+        // The caps of the document's kind: an account document's when it has
+        // a recovery member or a self-admin rule
+        // (`perch_ir::is_account_document`), a grant document's otherwise.
+        "if": {
+            "anyOf": [
+                { "required": ["recovery"] },
+                {
+                    "required": ["rules"],
+                    "properties": {
+                        "rules": {
+                            "contains": {
+                                "type": "object",
+                                "required": ["scope"],
+                                "properties": {
+                                    "scope": {
+                                        "type": "object",
+                                        "required": ["type"],
+                                        "properties": { "type": { "const": "self-admin" } },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            ],
+        },
+        "then": {
+            "properties": {
+                "signers": { "maxItems": perch_doc_compiler::MAX_DOC_SIGNERS },
+                "rules": { "maxItems": perch_doc_compiler::MAX_DOC_RULES },
+            },
+        },
+        "else": {
+            "properties": {
+                "signers": { "maxItems": perch_doc_compiler::MAX_GRANT_SIGNERS },
+                "rules": { "maxItems": perch_doc_compiler::MAX_GRANT_RULES },
+            },
+        },
         "$defs": policy_defs(),
         "examples": [example_doc()],
     })
+}
+
+/// The most signers any document may declare: the larger of the account
+/// and grant caps. The document's own kind narrows it (`if`/`then`/`else`).
+fn max_signers() -> u32 {
+    perch_doc_compiler::MAX_DOC_SIGNERS.max(perch_doc_compiler::MAX_GRANT_SIGNERS)
+}
+
+/// The most rules any document may hold; see [`max_signers`].
+fn max_rules() -> u32 {
+    perch_doc_compiler::MAX_DOC_RULES.max(perch_doc_compiler::MAX_GRANT_RULES)
 }
 
 /// The schema serialized deterministically: sorted keys (serde_json's default
@@ -258,6 +325,17 @@ fn policy_defs() -> Value {
                     "properties": {
                         "id": { "type": "string", "description": "Document-local id rules reference. Uniqueness is a semantic check (outside this schema)." },
                         "verifier": contract_address("Verifier contract (C-address) that checks this signer's signatures."),
+                        "verifier-name": {
+                            "type": "string",
+                            "pattern": verifier_name_pattern(),
+                            "description":
+                                "The verifier's name and exact version in Perch's managed \
+                                 `perch/verifiers` registry. The compiler resolves it and \
+                                 refuses the document unless it names `verifier`. Absent, \
+                                 the verifier is unverified: an admin document may not name \
+                                 one, and a scoped document may hold one signer per \
+                                 unverified verifier in a rule.",
+                        },
                         "key": {
                             "type": "string",
                             "pattern": signer_key_pattern(),
@@ -289,6 +367,10 @@ fn policy_defs() -> Value {
             "type": "object",
             "additionalProperties": false,
             "required": ["name", "scope", "principals"],
+            "allOf": [{
+                "if": { "properties": { "scope": { "properties": { "type": { "const": "self-admin" } } } } },
+                "then": { "not": { "required": ["auth-root"] } },
+            }],
             "properties": {
                 "name": {
                     "type": "string",
@@ -328,6 +410,15 @@ fn policy_defs() -> Value {
                     1,
                 ),
                 "cap": { "$ref": "#/$defs/capConstraint" },
+                "auth-root": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["contract", "function"],
+                    "properties": {
+                        "contract": contract_address("Exact contract at the root of this account's authorization entry, not the outer transaction call."),
+                        "function": { "type": "string", "pattern": "^[a-zA-Z0-9_]{1,32}$" },
+                    },
+                },
             },
         },
 
@@ -364,9 +455,10 @@ fn policy_defs() -> Value {
             // `m <= N` for a threshold rule (its `m` at most its referenced
             // signer count). Only a `threshold` object carries both `signers`
             // and `m`, so the chain fires on no other variant. Enumerated up to
-            // MAX_DOC_SIGNERS — a threshold can reference at most that many
-            // declared signers, so this is complete for every valid document.
-            "allOf": count_bound_chain("signers", "m", perch_doc_compiler::MAX_DOC_SIGNERS),
+            // the larger signer cap — a threshold can reference at most that
+            // many declared signers, so this is complete for every valid
+            // document.
+            "allOf": count_bound_chain("signers", "m", max_signers()),
             "oneOf": [
                 {
                     "title": "All (N-of-N)",

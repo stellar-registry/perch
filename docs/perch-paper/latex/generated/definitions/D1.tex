@@ -1,0 +1,6 @@
+% Generated from source/definitions.json.
+\begin{perchdefinition}{1}{Contexts and authorizations}\label{def:contexts-and-authorizations}
+\[\begin{aligned}&c \;::=\; \mathsf{call}(C, f, \vec v) \;\mid\; \mathsf{create}(w)\\
+&a = (\vec c, \vec j, S, \ell, g)\end{aligned}\]
+A context is one call or contract creation in an authorization entry's invocation tree. An authorization \(a\) carries the entry's contexts \(\vec c = c_1, \dots, c_n\) in preorder, root first; one rule index \(j_i\) per context; the claimed signers \(S\); the ledger \(\ell\); and the account's grant generation \(g\).\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L114}{Chain.Context}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L80}{Authorization}}
+\end{perchdefinition}

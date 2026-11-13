@@ -1,0 +1,7 @@
+% Generated from source/definitions.json.
+\begin{perchdefinition}{5}{Derivation}\label{def:derivation}
+\[\begin{aligned}&\mathit{Derives}(R, R)\\
+&\mathit{Derives}(R, R') \land \mathit{attenuate}(R', \sigma) = R''\\
+&\qquad \implies \mathit{Derives}(R, R'')\end{aligned}\]
+\(\sigma\) is one of rule-core's ten attenuation steps: drop a rule; remove functions, or restrict functions; add an argument condition; remove signers, or raise a threshold; add a cap, lower its limit, or lengthen its period; set or lower the last ledger. No step changes a rule's target or generation. \(\mathit{attenuateAll}(R, \vec\sigma) = R'\) applies a list of steps and implies \(\mathit{Derives}(R, R')\).\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L442}{Chain.RuleSet.Derives}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L423}{Chain.RuleSet.attenuate}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean\#L410}{Chain.Attenuation}}
+\end{perchdefinition}

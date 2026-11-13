@@ -1,0 +1,2790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Perch</title>
+<meta name="description" content="A slide deck on Perch, a Stellar smart account that enforces an app's or agent's grant itself at one decision point, and on how a zero-knowledge email proof could serve as a recovery credential.">
+<link rel="icon" href="data:,">
+<style>
+:root {
+  color-scheme: light dark;
+  --paper: #E8ECE6;
+  --paper-2: #DCE2DA;
+  --ink: #15233B;
+  --ink-2: #55647B;
+  --rule: rgba(21, 35, 59, .2);
+  --now: #1D6C9B;
+  --next: #B02F6B;
+  --seal: #97700F;
+  --f-display: "Didot", "Bodoni 72", "Bodoni MT", "Big Caslon", "Hoefler Text", Georgia, serif;
+  --f-text: "Optima", "Candara", "Segoe UI", "Avenir Next", system-ui, sans-serif;
+  --f-code: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --pad-x: clamp(16px, 4.2vw, 64px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0D1628;
+    --paper-2: #15213A;
+    --ink: #E6EAF1;
+    --ink-2: #98A5BB;
+    --rule: rgba(230, 234, 241, .17);
+    --now: #6EC4EF;
+    --next: #F483B8;
+    --seal: #E2C068;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0D1628;
+  --paper-2: #15213A;
+  --ink: #E6EAF1;
+  --ink-2: #98A5BB;
+  --rule: rgba(230, 234, 241, .17);
+  --now: #6EC4EF;
+  --next: #F483B8;
+  --seal: #E2C068;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- slides ---------- */
+#deck { position: fixed; inset: 0; touch-action: pinch-zoom; }
+.slide {
+  position: absolute; inset: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  padding: clamp(22px, 3.4vw, 46px) var(--pad-x) 74px;
+  opacity: 0; visibility: hidden;
+  transform: scale(.985);
+  transition: opacity .55s ease, transform .7s cubic-bezier(.2, .7, .2, 1), visibility 0s linear .55s;
+}
+.slide.active {
+  opacity: 1; visibility: visible; transform: none;
+  transition: opacity .55s ease, transform .7s cubic-bezier(.2, .7, .2, 1), visibility 0s;
+}
+/* today and the title: an engraved double-rule frame */
+.slide[data-status="now"]::before, .slide[data-status="title"]::before, .slide[data-status="cited"]::before {
+  content: ""; position: absolute; inset: 10px; pointer-events: none;
+  border: 1px solid var(--rule);
+  box-shadow: inset 0 0 0 4px var(--paper), inset 0 0 0 5px var(--rule);
+}
+/* could be: printer's proof marks */
+.proofmarks { position: absolute; inset: 0; pointer-events: none; }
+.proofmarks svg { position: absolute; width: 34px; height: 34px; overflow: visible; }
+.proofmarks svg * { fill: none; stroke: var(--next); stroke-width: 1; }
+.proofmarks .tl { top: 8px; left: 8px; }
+.proofmarks .tr { top: 8px; right: 8px; transform: scaleX(-1); }
+.proofmarks .bl { bottom: 8px; left: 8px; transform: scaleY(-1); }
+.proofmarks .br { bottom: 8px; right: 8px; transform: scale(-1, -1); }
+.proofmarks .rl { left: 6px; top: calc(50% - 17px); }
+.proofmarks .rr { right: 6px; top: calc(50% - 17px); }
+
+.head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px 20px; flex-wrap: wrap;
+  min-width: 0;
+}
+.head h2 {
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: clamp(34px, 5.4vw, 80px);
+  line-height: .98;
+  letter-spacing: -.012em;
+  margin: 0;
+}
+.status {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: clamp(13px, 1.15vw, 16px);
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.status svg { width: 15px; height: 15px; overflow: visible; }
+.status.now { color: var(--now); }
+.status.now circle { fill: var(--now); }
+.status.next { color: var(--next); }
+.status.next circle { fill: none; stroke: var(--next); stroke-width: 1.6; stroke-dasharray: 3 2.4; }
+.status.cited { color: var(--ink-2); }
+.status.cited circle { fill: none; stroke: var(--ink-2); stroke-width: 1.4; }
+
+.stage { min-height: 0; min-width: 0; display: grid; padding-top: clamp(6px, 1.4vh, 18px); position: relative; }
+.stage > svg { width: 100%; height: 100%; display: block; overflow: visible; min-height: 0; }
+.notes { display: none; }
+
+/* live stages: a frame of a real page */
+.frame-wrap {
+  position: relative; min-height: 0;
+  border: 1px solid var(--rule); border-radius: 14px; overflow: hidden;
+  background: var(--paper-2);
+}
+.frame-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: transparent; }
+.frame-wrap .frame-wait {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--ink-2); font-size: 15px; pointer-events: none;
+}
+.stage-links {
+  margin: 0; font-size: clamp(13px, 1.1vw, 15px); color: var(--ink-2);
+  display: flex; gap: 8px 22px; flex-wrap: wrap; justify-content: center; align-items: center;
+}
+.stage-links a { color: var(--now); text-underline-offset: 3px; }
+.act {
+  appearance: none; font: inherit; font-size: clamp(14px, 1.15vw, 16px); cursor: pointer;
+  color: var(--paper); background: var(--now); border: 0; border-radius: 999px;
+  padding: 9px 18px; letter-spacing: .01em;
+}
+.act.ghost { color: var(--ink); background: transparent; border: 1px solid var(--rule); }
+.act:focus-visible, .stage-links a:focus-visible, .lk:focus-visible { outline: 2px solid var(--now); outline-offset: 3px; }
+.stage-sim, .stage-row { grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+.stage-links a.act { text-decoration: none; display: inline-block; }
+.stage-sim .frame-wrap { display: none; }
+.stage-sim.live > svg { display: none; }
+.stage-sim.live .frame-wrap { display: block; }
+.stage-sim .when-live { display: none; }
+.stage-sim.live .when-live { display: inline-block; }
+.stage-sim.live .when-still { display: none; }
+/* the Nido slide: Nido's status and the steps beside one live frame; Next moves through the steps */
+.stage-nido { grid-template-columns: minmax(0, .42fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); column-gap: clamp(16px, 2vw, 28px); }
+.nido-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: clamp(8px, 1.5vh, 16px); font-size: clamp(13px, 1vw, 15px); line-height: 1.4; color: var(--ink); }
+.nido-side p { margin: 0; }
+.nido-status .ns-1 { font-size: clamp(16px, 1.5vw, 22px); line-height: 1.25; }
+.nido-status .ns-2 { color: var(--ink-2); margin-top: 3px; }
+.nido-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.nido-steps button { appearance: none; font: inherit; color: var(--ink-2); background: none; border: 0; padding: 3px 0; cursor: pointer; display: flex; align-items: center; gap: 10px; text-align: left; }
+.nido-steps .sn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--rule); display: inline-grid; place-items: center; font-size: 12px; flex: none; }
+.nido-steps button:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+.nido-side .nido-sim { margin-top: auto; font-size: 12px; color: var(--ink-2); }
+.nido-main { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 10px; }
+.nido-slot { position: relative; min-height: 0; min-width: 0; border: 1px solid var(--rule); border-radius: 14px; overflow: hidden; background: var(--paper-2); }
+.nido-shot { position: absolute; inset: 0; display: none; }
+.nido-cap { margin: 0; font-size: clamp(15px, 1.4vw, 20px); color: var(--ink); text-align: center; }
+.nido-cap span { display: none; }
+.slide[data-step="1"] .nido-shot[data-k="1"] { display: grid; }
+.slide[data-step="1"] .nido-cap [data-k="1"] { display: inline; }
+.slide[data-step="1"] .nido-steps [data-k="1"] { color: var(--now); }
+.slide[data-step="1"] .nido-steps [data-k="1"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="2"] .nido-shot[data-k="2"] { display: grid; }
+.slide[data-step="2"] .nido-cap [data-k="2"] { display: inline; }
+.slide[data-step="2"] .nido-steps [data-k="2"] { color: var(--now); }
+.slide[data-step="2"] .nido-steps [data-k="2"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="3"] .nido-shot[data-k="3"] { display: grid; }
+.slide[data-step="3"] .nido-cap [data-k="3"] { display: inline; }
+.slide[data-step="3"] .nido-steps [data-k="3"] { color: var(--now); }
+.slide[data-step="3"] .nido-steps [data-k="3"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="4"] .nido-shot[data-k="4"] { display: grid; }
+.slide[data-step="4"] .nido-cap [data-k="4"] { display: inline; }
+.slide[data-step="4"] .nido-steps [data-k="4"] { color: var(--now); }
+.slide[data-step="4"] .nido-steps [data-k="4"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="5"] .nido-shot[data-k="5"] { display: grid; }
+.slide[data-step="5"] .nido-cap [data-k="5"] { display: inline; }
+.slide[data-step="5"] .nido-steps [data-k="5"] { color: var(--now); }
+.slide[data-step="5"] .nido-steps [data-k="5"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="6"] .nido-shot[data-k="6"] { display: grid; }
+.slide[data-step="6"] .nido-cap [data-k="6"] { display: inline; }
+.slide[data-step="6"] .nido-steps [data-k="6"] { color: var(--now); }
+.slide[data-step="6"] .nido-steps [data-k="6"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="7"] .nido-shot[data-k="7"] { display: grid; }
+.slide[data-step="7"] .nido-cap [data-k="7"] { display: inline; }
+.slide[data-step="7"] .nido-steps [data-k="7"] { color: var(--now); }
+.slide[data-step="7"] .nido-steps [data-k="7"] .sn { border-color: var(--now); border-width: 2px; }
+.slide[data-step="8"] .nido-shot[data-k="8"] { display: grid; }
+.slide[data-step="8"] .nido-cap [data-k="8"] { display: inline; }
+.slide[data-step="8"] .nido-steps [data-k="8"] { color: var(--now); }
+.slide[data-step="8"] .nido-steps [data-k="8"] .sn { border-color: var(--now); border-width: 2px; }
+.nido-slot .nido-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+/* one still at a time: the theme's, wide or (tall layouts) narrow */
+.nido-slot .nido-still { display: none; }
+.nido-slot .nido-still.s-light.s-wide { display: block; }
+:root[data-theme="dark"] .nido-slot .nido-still.s-light.s-wide { display: none; }
+:root[data-theme="dark"] .nido-slot .nido-still.s-dark.s-wide { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .nido-slot .nido-still.s-light.s-wide { display: none; }
+  :root:not([data-theme="light"]) .nido-slot .nido-still.s-dark.s-wide { display: block; }
+}
+html.tall .nido-slot .nido-still.s-wide { display: none !important; }
+html.tall .nido-slot .nido-still.s-light.s-narrow { display: block; }
+html.tall[data-theme="dark"] .nido-slot .nido-still.s-light.s-narrow { display: none; }
+html.tall[data-theme="dark"] .nido-slot .nido-still.s-dark.s-narrow { display: block; }
+@media (prefers-color-scheme: dark) {
+  html.tall:not([data-theme="light"]) .nido-slot .nido-still.s-light.s-narrow { display: none; }
+  html.tall:not([data-theme="light"]) .nido-slot .nido-still.s-dark.s-narrow { display: block; }
+}
+html.tall .stage-nido { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); row-gap: 10px; }
+html.tall .nido-side { gap: 6px; font-size: 13px; }
+html.tall .nido-steps { display: flex; flex-wrap: wrap; gap: 2px 12px; }
+html.tall .nido-steps .sn { width: 18px; height: 18px; font-size: 11px; }
+html.tall .nido-steps button { gap: 5px; padding: 1px 0; }
+html.tall .nido-side .nido-sim { margin-top: 0; }
+/* the live simulation: one frame, laid over the Nido slide's slot once it has preloaded; it stays put across the steps */
+.nido-live {
+  position: fixed; left: 0; top: 0; z-index: 4; border: 0; border-radius: 14px; background: var(--paper-2);
+  transform-origin: 0 0;
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .3s ease, visibility 0s linear .3s;
+}
+.nido-live.on { opacity: 1; visibility: visible; pointer-events: auto; transition: opacity .3s ease, visibility 0s; }
+/* with the live session, the slot is the frame's place: its stills give way to it */
+html[data-nido-live] .nido-slot .nido-still { visibility: hidden; }
+html[data-nido-live] .nido-slot { border-color: transparent; }
+/* Reset demo sits in the slide's top-right corner, above the heading row, so a long heading never wraps under it */
+.nido-reset {
+  display: none; appearance: none; font: inherit; font-size: 12px; line-height: 1.3; cursor: pointer;
+  position: absolute; top: 19px; right: 24px; z-index: 1;
+  border: 1px solid var(--rule); background: var(--paper); color: var(--ink-2); border-radius: 999px; padding: 2px 10px;
+}
+.slide:has(.nido-reset) { padding-top: 48px; }
+.nido-reset:hover { color: var(--ink); }
+.nido-reset:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+html[data-nido-live] .nido-reset { display: inline-block; }
+/* print: the live frame does not print, so the slot prints the current step's still, beside the list of steps */
+@media print {
+  .nido-live, .nido-reset { display: none !important; }
+  html[data-nido-live] .nido-slot .nido-still { visibility: visible; }
+  html[data-nido-live] .nido-slot { border-color: var(--rule); }
+}
+
+/* title slide */
+.slide-title {
+  grid-template-rows: none;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  align-items: center;
+  gap: 3vw;
+}
+.slide-title .title-text { min-width: 0; }
+.slide-title h1 {
+  font-family: var(--f-display);
+  font-weight: 400;
+  font-size: clamp(64px, 11vw, 184px);
+  line-height: .9;
+  letter-spacing: -.02em;
+  margin: 0 0 .3em;
+}
+.slide-title .sub {
+  font-size: clamp(18px, 1.8vw, 26px);
+  color: var(--ink);
+  margin: 0 0 .5em;
+  max-width: 24ch;
+  line-height: 1.3;
+}
+.slide-title .wallet { font-size: clamp(14px, 1.2vw, 17px); color: var(--ink-2); margin: 0 0 2em; }
+.byline { font-size: clamp(14px, 1.2vw, 17px); color: var(--ink-2); margin: 0 0 1.8em; line-height: 1.5; }
+.byline b { color: var(--ink); font-weight: 400; }
+.legend { list-style: none; padding: 0; margin: 0; display: flex; gap: 28px; flex-wrap: wrap; font-size: clamp(14px, 1.2vw, 17px); }
+.legend li { display: inline-flex; align-items: center; gap: 10px; }
+.legend svg { width: 54px; height: 16px; overflow: visible; }
+.legend .lg-now { color: var(--now); }
+.legend .lg-now line { stroke: var(--now); stroke-width: 2; }
+.legend .lg-now circle { fill: var(--now); }
+.legend .lg-next { color: var(--next); }
+.legend .lg-next line { stroke: var(--next); stroke-width: 2; stroke-dasharray: 6 5; }
+.legend .lg-next circle { fill: var(--paper); stroke: var(--next); stroke-width: 1.6; stroke-dasharray: 3 2.4; }
+.slide-title .stage { height: min(78vh, 46vw); padding: 0; }
+
+/* closing slide */
+.slide-close .head h2 { font-size: clamp(34px, 5vw, 76px); }
+.links {
+  list-style: none; margin: 0 auto; padding: clamp(10px, 3vh, 34px) 0 0; width: min(100%, 1180px);
+  display: grid; gap: clamp(10px, 1.6vw, 22px);
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 262px), 1fr));
+  align-content: center; overflow: auto; min-height: 0;
+}
+.lk {
+  display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 4px 16px; align-items: center;
+  text-decoration: none; color: var(--ink); height: 100%;
+  border: 1px solid var(--rule); border-radius: 14px; padding: clamp(14px, 2.2vh, 26px) 20px;
+  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--rule);
+  transition: background .2s ease;
+}
+.lk:hover { background: var(--paper-2); }
+@media (min-width: 900px) { .links li:first-child { grid-column: span 2; } }
+.lk svg { grid-row: span 2; width: 40px; height: 40px; overflow: visible; fill: none; stroke: var(--now); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.lk .lk-t { font-family: var(--f-display); font-size: clamp(19px, 1.6vw, 24px); line-height: 1.15; }
+.lk .lk-s { font-size: clamp(13px, 1vw, 15px); color: var(--ink-2); }
+.close-foot { margin: clamp(12px, 3vh, 30px) 0 0; font-size: clamp(13px, 1.1vw, 16px); color: var(--ink-2); text-align: center; }
+.slide-close .stage { grid-template-rows: minmax(0, 1fr) auto; }
+
+/* ---------- svg vocabulary ---------- */
+.st { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.k-ink { stroke: var(--ink); }
+.k-soft { stroke: var(--ink-2); }
+.k-faint { stroke: var(--rule); }
+.k-now { stroke: var(--now); }
+.k-next { stroke: var(--next); stroke-dasharray: 10 8; }
+.k-nexthead { stroke: var(--next); }
+.k-seal { stroke: var(--seal); }
+.k-paper { stroke: var(--paper); }
+.fl-now { fill: var(--now); }
+.fl-next { fill: var(--next); }
+.fl-ink { fill: var(--ink); }
+.fl-soft { fill: var(--ink-2); }
+.fl-seal { fill: var(--seal); }
+.fl-paper { fill: var(--paper); }
+.fl-paper2 { fill: var(--paper-2); }
+.fl-hatch { fill: url(#hatch); }
+.fl-hatch-now { fill: url(#hatch-now); }
+.fl-hatch-next { fill: url(#hatch-next); }
+.fl-hatch-seal { fill: url(#hatch-seal); }
+.tx { fill: var(--ink); font-family: var(--f-text); }
+.c-now { fill: var(--now); }
+.c-next { fill: var(--next); }
+.c-soft { fill: var(--ink-2); }
+.c-seal { fill: var(--seal); }
+.c-paper { fill: var(--paper); }
+.f-code { font-family: var(--f-code); }
+.f-disp { font-family: var(--f-display); }
+.seal-use { color: var(--seal); transform-box: fill-box; transform-origin: center; }
+#defs .hl { stroke: var(--ink-2); stroke-width: 1; opacity: .38; }
+#defs .hl-now { stroke: var(--now); stroke-width: 1.2; opacity: .55; }
+#defs .hl-next { stroke: var(--next); stroke-width: 1.2; opacity: .55; }
+#defs .hl-seal { stroke: var(--seal); stroke-width: 1.2; opacity: .6; }
+.s-wave { fill: none; stroke: currentColor; stroke-width: .7; vector-effect: non-scaling-stroke; opacity: .9; }
+.s-tick { fill: none; stroke: currentColor; stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+.s-ring { fill: none; stroke: currentColor; stroke-width: 1; vector-effect: non-scaling-stroke; }
+[data-tab] { cursor: pointer; }
+[data-tab]:focus { outline: none; }
+[data-tab]:focus-visible .tab-pill { stroke: var(--ink); stroke-width: 2.4; }
+.dlg-state { transition: opacity .45s ease; }
+.cw-fade { transition: opacity .45s ease; }
+
+/* ---------- motion: each slide prints itself once on arrival ---------- */
+.an-draw { stroke-dasharray: var(--len, 0); stroke-dashoffset: var(--len, 0); }
+.an-fade, .an-march, .an-seal, .an-sweep, .an-travel { opacity: 0; }
+.slide.on .an-draw { animation: draw 1s cubic-bezier(.55, .05, .25, 1) var(--d, 0ms) forwards; }
+.slide.on .an-fade { animation: fade .7s ease var(--d, 0ms) forwards; }
+.slide.on .an-march { animation: march .9s cubic-bezier(.3, .6, .2, 1) var(--d, 0ms) forwards; }
+.slide.on .an-seal { animation: sealin 1.5s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) forwards; }
+.slide.on .an-out { animation: out .6s ease var(--d, 0ms) forwards; }
+.slide.on .an-sweep { animation: sweep 2.4s cubic-bezier(.2, .7, .2, 1) var(--d, 0ms) forwards; }
+.slide.on .an-travel { animation: travel 3.4s cubic-bezier(.45, 0, .3, 1) var(--d, 0ms) forwards; }
+.an-sweep { transform-box: view-box; transform-origin: var(--ox, 0) var(--oy, 0); }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes march { from { opacity: 0; stroke-dashoffset: 90; } to { opacity: 1; stroke-dashoffset: 0; } }
+@keyframes sealin { from { opacity: 0; transform: rotate(-50deg) scale(.82); } to { opacity: 1; transform: none; } }
+@keyframes sweep { from { opacity: 0; transform: rotate(-38deg); } 30% { opacity: 1; } to { opacity: 1; transform: none; } }
+@keyframes travel {
+  0% { opacity: 0; transform: none; }
+  8% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--tx, 0px), var(--ty, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slide, .slide.active { transition: none; transform: none; }
+  .an-draw { stroke-dasharray: none; stroke-dashoffset: 0; }
+  .an-fade, .an-march, .an-seal, .an-sweep { opacity: 1; }
+  .an-out, .an-travel { opacity: 0; }
+  .slide.on .an-draw, .slide.on .an-fade, .slide.on .an-march, .slide.on .an-seal, .slide.on .an-out, .slide.on .an-sweep, .slide.on .an-travel { animation: none; }
+  .dlg-state, .cw-fade { transition: none; }
+}
+/* ?still=1 shows every slide in its final state, as reduced motion does */
+.still .slide, .still .slide.active { transition: none; transform: none; }
+.still .an-draw { stroke-dasharray: none; stroke-dashoffset: 0; }
+.still .an-fade, .still .an-march, .still .an-seal, .still .an-sweep { opacity: 1; }
+.still .an-out, .still .an-travel { opacity: 0; }
+.still .slide.on .an-draw, .still .slide.on .an-fade, .still .slide.on .an-march, .still .slide.on .an-seal, .still .slide.on .an-out, .still .slide.on .an-sweep, .still .slide.on .an-travel { animation: none; }
+.still .k-next { stroke-dasharray: 10 8; }
+.still .dlg-state, .still .cw-fade { transition: none; }
+
+/* ---------- chrome ---------- */
+.chrome {
+  position: fixed; left: 22px; right: 22px; bottom: 18px;
+  height: 44px;
+  display: flex; align-items: center; gap: 10px;
+  z-index: 5;
+  font-size: 14px; color: var(--ink-2);
+}
+.btn {
+  appearance: none; border: 0; background: transparent; color: var(--ink-2);
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer; padding: 0;
+}
+.btn:hover { color: var(--ink); background: var(--paper-2); }
+.btn:focus-visible, .marks button:focus-visible { outline: 2px solid var(--now); outline-offset: 2px; }
+.btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.btn[aria-pressed="true"] { color: var(--ink); background: var(--paper-2); }
+.marks { list-style: none; display: flex; gap: 7px; margin: 0 auto; padding: 0; align-items: center; }
+.marks button {
+  appearance: none; border: 0; padding: 0; cursor: pointer; background: transparent;
+  width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%;
+}
+.marks svg { width: 12px; height: 12px; overflow: visible; transition: transform .3s ease; }
+.marks .m-now circle, .marks .m-title circle, .marks .m-cited circle { fill: var(--now); opacity: .45; }
+.marks .m-title circle, .marks .m-cited circle { fill: var(--ink-2); }
+.marks .m-next circle { fill: none; stroke: var(--next); stroke-width: 1.4; stroke-dasharray: 2.6 2.2; opacity: .7; }
+.marks button[aria-current="true"] svg { transform: scale(1.55); }
+.marks button[aria-current="true"] circle { opacity: 1; }
+.count { font-variant-numeric: tabular-nums; min-width: 4.5ch; text-align: right; }
+.bar { display: none; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px; background: var(--rule); }
+.bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--ink-2); transition: width .4s ease; }
+
+#notes-panel {
+  position: fixed; left: 22px; right: 22px; bottom: 70px;
+  max-height: 42vh; overflow: auto;
+  background: var(--paper-2);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 16px 20px;
+  z-index: 6;
+  font-size: 15px; line-height: 1.5;
+  max-width: 78ch; margin: 0 auto;
+}
+#notes-panel p { margin: 0 0 .7em; }
+#notes-panel .src { color: var(--ink-2); font-size: 13px; margin: 0; }
+#notes-panel code { font-family: var(--f-code); font-size: .92em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .marks svg, .bar i, .lk { transition: none; }
+}
+.still .marks svg, .still .bar i { transition: none; }
+@media (max-width: 640px) {
+  .marks { display: none; }
+  .bar { display: block; }
+  .chrome { justify-content: flex-end; left: 14px; right: 14px; bottom: 12px; }
+  .count { margin-right: auto; text-align: left; }
+  .slide { padding-bottom: 66px; }
+  #notes-panel { left: 12px; right: 12px; bottom: 64px; padding: 12px 14px; font-size: 14px; }
+}
+@media (max-aspect-ratio: 10/11) {
+  .slide-title { grid-template-columns: none; grid-template-rows: auto minmax(0, 1fr); align-items: start; gap: 0; }
+  .slide-title .stage { height: auto; min-height: 0; }
+  .slide-title h1 { margin-top: 3vh; }
+  .slide-title .wallet { margin-bottom: 1em; }
+  .byline { margin-bottom: 1em; }
+}
+</style>
+</head>
+<body>
+<svg id="defs" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <pattern id="hatch" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl" x1="0" y1="0" x2="0" y2="9"/></pattern>
+    <pattern id="hatch-now" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl-now" x1="0" y1="0" x2="0" y2="8"/></pattern>
+    <pattern id="hatch-next" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl-next" x1="0" y1="0" x2="0" y2="8"/></pattern>
+    <pattern id="hatch-seal" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line class="hl-seal" x1="0" y1="0" x2="0" y2="8"/></pattern>
+  </defs>
+</svg>
+
+<main id="deck" aria-roledescription="slide deck" aria-label="Perch">
+
+<section class="slide slide-title" data-status="title" data-draw="title" aria-roledescription="slide" aria-label="Perch">
+  <div class="title-text">
+    <h1>Perch</h1>
+    <p class="sub">Bounded grants for apps and agents on Stellar</p>
+    <p class="wallet">Perch accounts run on Stellar through the Nido wallet.</p>
+    <p class="byline"><b>Willem Wyndham and Elizabeth Engelman</b><br>The Aha Company</p>
+    <ul class="legend">
+      <li class="lg-now"><svg viewBox="0 0 54 16" aria-hidden="true"><line x1="2" y1="8" x2="38" y2="8"/><circle cx="46" cy="8" r="5"/></svg>today</li>
+      <li class="lg-next"><svg viewBox="0 0 54 16" aria-hidden="true"><line x1="2" y1="8" x2="38" y2="8"/><circle cx="46" cy="8" r="5.5"/></svg>could be</li>
+    </ul>
+  </div>
+  <div class="stage"><svg role="img" aria-label="An account at the centre of a dial of ledgers. A bracket marks a window of ledgers holding two charges; older charges lie outside it. An app key and an agent reach the account only through the window."></svg></div>
+  <aside class="notes">
+    <p>Perch is a Stellar smart account that gives an app or agent a grant, a permission with limits, and enforces those limits itself at one decision point. Perch accounts run on Stellar through the Nido wallet. The dial is the deck's motif: the account at the centre, a ring of ledgers, and a window that holds the charges a grant has made. Solid cyan in an engraved frame is what Perch does, as the main paper presents it. Dashed magenta, with printer's marks, is where it could go.</p>
+    <p class="src">docs/perch-paper/source/facts/paper.json (subtitle, authors, affiliation, wallet-name); source/html/abstract.html; source/html/sections/motivation.html.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="problem" aria-roledescription="slide" aria-label="An app that spends">
+  <header class="head"><h2>An app that spends</h2></header>
+  <div class="stage"><svg role="img" aria-label="Three ways to let an app spend for a user: ask the user on every call, hand the app a key that can do anything the account can, or install a grant whose limits the account enforces."></svg></div>
+  <aside class="notes">
+    <p>An app that spends for a user has two options without Perch. It can ask the user to approve every call, which does not work for an agent that pays a service many times an hour. Or it can hold a key that can do anything the account can, so whoever steals the app's key can empty the account. Perch adds a third: the owner installs a grant, a written permission with limits, and the account checks every call the app makes in its name against it.</p>
+    <p class="src">docs/perch-paper/source/html/sections/motivation.html, second paragraph.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="grant" aria-roledescription="slide" aria-label="A grant">
+  <header class="head"><h2>A grant</h2></header>
+  <div class="stage"><svg role="img" aria-label="The owner installs the shop grant with apply_grant after the document compiler validates it. The grant's one rule: contract XLM token, function transfer, from this account, to the shop, signed by the app key, capped at 10 XLM per 100 ledgers."></svg></div>
+  <aside class="notes">
+    <p>The paper's running example is the shop grant. Its one rule names the contract (the native XLM token), the function (<code>transfer</code>), argument 0 as this account and argument 1 as the shop, the key that must sign (the app's own Ed25519 key, checked by a verifier contract) and a cap: at most 10 XLM (100,000,000 stroops) in any 100 ledgers, about eight minutes at five seconds a ledger. A rule may also stop at an expiry ledger. Nothing else is allowed: no other token, recipient, function or signer, and no call to the account itself.</p>
+    <p>The owner installs a grant document with one call, <code>apply_grant</code>, after the document compiler contract validates it; <code>remove_grant</code> deletes its rules and spending records.</p>
+    <p class="src">docs/perch-paper/source/html/sections/motivation.html; source/figures/fig-shop-grant.a.txt, fig-shop-grant.b.txt; source/facts/example.json (shop-cap-xlm, shop-period-ledgers, shop-period-minutes); crates/perch-smart-account/src/lib.rs (apply_grant, remove_grant).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="atten" aria-roledescription="slide" aria-label="Attenuation">
+  <header class="head"><h2>Attenuation</h2></header>
+  <div class="stage"><svg role="img" aria-label="The Nido account's grant to the app is a region of allowed calls: the game, any function; the shop, at most 10 XLM per 100 ledgers; until ledger N. The app delegates a smaller region nested inside it to a helper in three narrowing steps: only guess; at most 2 XLM per 100 ledgers; an earlier last ledger M. Paying the shop 5 XLM is inside the app's region and outside the helper's: the app may, the helper is refused. Theorems 4 and 5: the helper's grant allows no call, and no run of payments, that the app's grant refuses."></svg></div>
+  <aside class="notes">
+    <p>Attenuation derives a narrower grant from an existing one, for an app or agent handing part of its authority to a helper such as a sub-agent. rule-core defines 10 narrowing steps, among them dropping a rule, removing functions, adding an argument condition, raising a signer threshold, lowering a cap, lengthening its period and moving the expiry earlier. From the shop grant, a helper can receive a grant that pays the same shop at most 2 XLM per 100 ledgers.</p>
+    <p>Theorem 4: a grant derived by attenuation allows no call its parent does not, under any signers; its comparison reads no cap or expiry, so it covers step 1 (only guess). Theorem 5, trace inclusion: every run a derived grant accepts from empty records, its parent accepts too, which covers steps 2 and 3 (the lower cap and the earlier last ledger). Parent and child keep separate records, and neither theorem bounds what they spend together.</p>
+    <p>The drawing follows the paper's attenuation model: a parent with a game rule (any function) and a shop rule (XLM transfers to the shop, at most 10 per 100 ledgers), narrowed by restricting the game to <code>guess</code>, lowering the cap to the 2 XLM the paper gives the helper, and setting an earlier last ledger, three of the 10 steps. The ledgers N and M are illustrative. A 5 XLM payment to the shop is one the app's grant allows and the helper's refuses, as in the model's probe table; a call the parent refuses, such as a payment to anyone else, the child refuses too.</p>
+    <p class="src">docs/perch-paper/source/html/sections/motivation.html (the shop grant and attenuation), authorization.html ("A stolen app key meets the same checks"); source/statements.json (T4, T5); source/facts/proofs.json (attenuation-steps); source/facts/example.json (shop-cap-xlm, shop-period-ledgers, grant3-cap-xlm); source/figures/fig-attenuation.text.html and build/figures/fig_attenuation.py (the model's parent, steps and probes).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="window" aria-roledescription="slide" aria-label="The cap window">
+  <header class="head"><h2>The cap window</h2></header>
+  <div class="stage"><svg role="img" aria-label="A window of 100 ledgers slides along the ledgers. 6 XLM at ledger t is accepted; 5 more at t is refused; 4 at t plus 1 is accepted, filling the 10 XLM limit; 1 at t plus 99 is refused; at t plus 100 the 6 leaves the window and 5 is accepted, leaving 9."></svg></div>
+  <aside class="notes">
+    <p>The cap is a sliding window. At ledger <i>L</i> the window holds the charges made after <i>L</i> − 100 and through <i>L</i>, and a transfer is accepted only if the window's total plus the new amount stays within the limit. The account keeps the charges in a spending record in its own storage and charges a transfer in the same decision that checks it.</p>
+    <p>The five events are the paper's: +6 at <i>t</i>, accepted; +5 at <i>t</i>, refused (6 + 5 = 11 &gt; 10) and the record is unchanged; +4 at <i>t</i> + 1, accepted (the limit is inclusive); +1 at <i>t</i> + 99, refused; at <i>t</i> + 100 the 6 leaves the window and +5 is accepted, leaving 9. Theorem 6: from an empty record, however the app times its payments, no window of 100 ledgers holds more than 10 XLM of accepted charges. A limit that resets on a schedule lets an app spend the full cap just before a reset and again just after it; a sliding window stays within its limit wherever it is placed. The axis is compressed between <i>t</i> + 2 and <i>t</i> + 98.</p>
+    <p class="src">docs/perch-paper/source/html/sections/grants.html ("The preview shows the verdict and the budget left"); source/figures/fig-cap-window.steps.json; source/facts/example.json (cap-event-1 to cap-event-5); source/statements.json (T6).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="path" aria-roledescription="slide" aria-label="The authorization path">
+  <header class="head"><h2>The authorization path</h2></header>
+  <div class="stage"><svg role="img" aria-label="One authorization in six stages: the host calls __check_auth, guards, rule lookup, the decision function rule_eval::authorize, the verifier's signature check, and storing the new spending records. A refusal at any stage writes nothing."></svg></div>
+  <aside class="notes">
+    <p>If the user signs, the wallet submits the transaction and the account decides in a fixed order. The host calls <code>__check_auth</code>. Guards refuse requests the account never allows through a grant. The account looks up each rule the transaction names and its spending record; it does not search. The decision function, <code>rule_eval::authorize</code> in rule-core, checks every call against its rule and computes the new records; it reads no storage and checks no signature, and it is the part the proofs cover. Only if it accepts does a verifier contract check the app's signature, which binds the account and the rule IDs the transaction names, so a relayer cannot move the payment to another rule the key belongs to. Only then does the account store the new records.</p>
+    <p>A refusal at any stage writes nothing; the decision function reports contract error 5 (<code>RuleEvalRefused</code>). Theorems 1, 2 and 6 are about the decision function (slide 15).</p>
+    <p class="src">docs/perch-paper/source/html/sections/authorization.html; source/figures/fig-auth-path.steps.json; crates/perch-smart-account/src/auth.rs (authenticate); source/facts/limits.json (auth-error-rule-eval-refused).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="create" aria-roledescription="slide" aria-label="Create your Nido account">
+  <header class="head"><h2>Create your Nido account</h2></header>
+  <div class="stage"><svg role="img" aria-label="You ask Nido's factory to create your account. The factory deploys it, and it starts with Nido's baseline document: one admin rule signed by your passkey. In the simulation a software P-256 key stands in for the passkey, and Nido's factory is rebuilt on this stack's account code; both are labelled simulated."></svg></div>
+  <aside class="notes">
+    <p>Nido creates accounts with its own factory rather than Perch's account factory: <code>create_account(setup_pk, key, setup_sig)</code> deploys an account whose one signer is <code>External(WebAuthn verifier, P-256 key)</code>. The address comes from a salt derived from a setup key, so it exists before the passkey, whose relying-party ID is the account's own subdomain; the setup signature binds the network, the factory and the key. The account's constructor installs one rule, <code>admin</code>: the passkey, through Perch's WebAuthn verifier, over the account itself, the rule Nido's admin baseline document describes.</p>
+    <p>In the simulation, Nido's factory is rebuilt on this stack's account Wasm (the factory Nido pins today deploys an earlier account, Perch c135aca, v0.5.1, which predates grants and exact roots), and a software P-256 key stands in for the passkey. Both are labelled simulated.</p>
+    <p class="src">Nido 97105a0b: contracts/factory/src/contract.rs:217-239, packages/frontend/src/lib/policy/docDraft.ts:220-237, DEPLOYED.md:43-46; Perch crates/perch-smart-account/src/lib.rs:1796-1806 (the admin rule); docs/nido-sim/README.md (what the simulation rebuilds and labels).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="install" aria-roledescription="slide" aria-label="Install the grant">
+  <header class="head"><h2>Install the grant</h2></header>
+  <div class="stage"><svg role="img" aria-label="The Nido sign dialog asks you to install the app's grant; you approve with your passkey under the admin rule. One install call: the document compiler checks the grant and the account installs it. The grant covers the game, any function, and the stake its guess asks for, paid only to the game, and the shop's order and the payment it pulls, paid only to the shop."></svg></div>
+  <aside class="notes">
+    <p>The owner installs the app's grant with one call, <code>apply_grant</code>, approved in the Nido sign dialog and signed by the passkey under the account's <code>admin</code> rule. The document compiler validates the grant document, and the account installs its rules. For the demo the grant covers two rooms and the payment asked inside each: a game rule (any game function) and a transfer rule rooted at <code>game.guess</code> for the XLM stake, paid only to the game, and a shop rule (<code>order</code>) and a transfer rule rooted at <code>shop.order</code> for the simulated EURC payment, paid only to the shop. Each transfer rule pins the recipient (<code>address-eq</code> on argument 1), so a payment to anyone else is refused by the rule. Slides 9 and 10 show how each node is checked.</p>
+    <p class="src">docs/perch-paper/source/html/sections/motivation.html (apply_grant, the document compiler); docs/auth-root.md; docs/nido-sim/README.md (the grant the simulation installs).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="nested" aria-roledescription="slide" aria-label="Every call in the tree">
+  <header class="head"><h2>Every call in the tree</h2></header>
+  <div class="stage"><svg role="img" aria-label="The app's keycard opens the game room. Inside, a losing guess asks for the stake, a transfer from the account to the game, and the same card covers it only because it is asked from inside the game room. As a tree: the root game.guess passes the game rule; the nested transfer passes the transfer rule only if it is from the account itself, only to the game, within the cap, and its entry's root is exactly game.guess. The same transfer made directly, under another root, or to anyone other than the game, is refused."></svg></div>
+  <aside class="notes">
+    <p>A grant covers a root call and the calls it makes on the account's behalf, and the account checks every node of the authorization tree against the rule the payload names for it. In the guess scenario, <code>game.guess</code> calls <code>guesser.require_auth()</code>, and a loss pays the stake with the XLM token's <code>transfer(account, game, stake)</code> inside it, so the account's entry is <code>[game.guess, token.transfer]</code>. The grant has a <code>game</code> rule and a <code>transfer</code> rule. The root passes the game rule. The nested transfer passes the transfer rule only if it is from the account itself (is-self on argument 0), only to the game (address-eq on argument 1, as the Nido simulation's grant pins it; the <code>auth_root.rs</code> test grant leaves the recipient open), within the cap (argument 2 is charged to the window; in the test, 2 XLM per 100 ledgers with a 1 XLM stake, so the cap refuses a third loss), and its entry's root is exactly <code>game.guess</code> (the rule's <code>auth-root</code>). The same transfer made directly, or under another root, is refused, and in the Nido simulation a stake the game's owner redirects to itself is refused at the recipient check ("the payment must go to Game"). A win is paid by the game itself, so the account's entry holds only <code>game.guess</code> and uses no allowance. The root check names an exact contract and function; it does not inspect root arguments or other ancestors.</p>
+    <p>Theorem 11 (authorization-tree coverage, in the host model): every call an account's entry approves is allowed by the rules its <code>__check_auth</code> checks, and those see the whole tree. The exact-root condition itself is tested (<code>auth_root.rs</code>), not proved.</p>
+    <p class="src">crates/integration-tests/tests/auth_root.rs (Game::guess; signed_game_loss_and_win_and_document_round_trip; direct_under_cap_and_fabricated_game_root_are_refused; wrong_root_function_contract_omitted_root_auth_and_reordered_tree_are_refused); docs/auth-root.md; crates/perch-ir/src/doc.rs (AuthRoot); docs/nido-sim/README.md (the recipient pin and its refusal); docs/perch-paper/source/statements.json (T11).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="coffee" aria-roledescription="slide" aria-label="A coffee order, nested">
+  <header class="head"><h2>A coffee order, nested</h2></header>
+  <div class="stage"><svg role="img" aria-label="In the simulation and demos: the app's keycard opens the coffee shop's order counter, and the order pulls payment from the account in EURC, a simulated test token. As a tree: the root shop.order passes the shop rule; the nested EURC transfer passes the transfer rule only if it is from the account itself, only to the shop, within the cap, and its entry's root is exactly shop.order. The same transfer made directly, or to anyone other than the shop, is refused."></svg></div>
+  <aside class="notes">
+    <p>The second instance, built only for the simulation and the demos: a small shop contract whose <code>order</code> pulls payment from the buyer through a EUR stablecoin token, a simulator-only Stellar Asset Contract named for EURC and labelled as a simulated test token. The grant covers the shop's <code>order</code> root and the nested token transfer, with the same rule conditions as the guess grant: the transfer from the account itself, only to the shop, within the cap, under exactly the <code>shop.order</code> root. The Café Perch sign dialog elsewhere in this deck pays directly in XLM and is unchanged.</p>
+    <p>Theorem 11 (authorization-tree coverage, in the host model): every call an account's entry approves is allowed by the rules its <code>__check_auth</code> checks, and those see the whole tree. The exact-root condition itself is tested (<code>auth_root.rs</code>), not proved.</p>
+    <p class="src">The scenario: the simulation's shop contract and its simulated EURC test token (docs/nido-sim/README.md and the page's build sources). The rule conditions: docs/auth-root.md; crates/integration-tests/tests/auth_root.rs; docs/perch-paper/source/statements.json (T11). No EURC token exists outside the simulation and demos.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="nido" data-steps="create|grant|guess|coffee|direct|other|overcap|owner" data-step="1" aria-roledescription="slide" aria-label="Nido, a passkey wallet on Perch">
+  <header class="head"><h2>Nido, a passkey wallet on Perch</h2><button class="nido-reset" type="button" data-nido-reset title="A new ledger with no account, back to step 1 with no dialog open (D)">Reset demo</button></header>
+  <div class="stage stage-nido">
+    <div class="nido-side">
+      <div class="nido-status"><p class="ns-1">Nido: pre-release on Stellar mainnet</p><p class="ns-2">The current version runs on testnet, at nido.fyi</p></div>
+      <ol class="nido-steps" aria-label="Steps of the demo"><li><button type="button" data-k="1" title="Step 1 of 8: create the account"><span class="sn">1</span>create</button></li><li><button type="button" data-k="2" title="Step 2 of 8: install the grant"><span class="sn">2</span>grant</button></li><li><button type="button" data-k="3" title="Step 3 of 8: play a guess"><span class="sn">3</span>guess</button></li><li><button type="button" data-k="4" title="Step 4 of 8: buy a coffee"><span class="sn">4</span>coffee</button></li><li><button type="button" data-k="5" title="Step 5 of 8: pay the game directly, refused"><span class="sn">5</span>direct</button></li><li><button type="button" data-k="6" title="Step 6 of 8: lose through game.other, refused"><span class="sn">6</span>other</button></li><li><button type="button" data-k="7" title="Step 7 of 8: lose past the cap, refused on the second press"><span class="sn">7</span>over cap</button></li><li><button type="button" data-k="8" title="Step 8 of 8: lose to the game’s owner, refused"><span class="sn">8</span>owner</button></li></ol>
+      <p class="nido-sim">This demo is simulated in this page: a software passkey and a test token.</p>
+    </div>
+    <div class="nido-main">
+      <div class="nido-slot"><div class="nido-shot" data-k="1"><img class="nido-still s-light s-wide" src="nido-stills/light-account-wide.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-account-narrow.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-account-wide.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-account-narrow.webp" alt="The Nido simulation: your account, just created, with 10 XLM and 20 test EURC" decoding="async"></div><div class="nido-shot" data-k="2"><img class="nido-still s-light s-wide" src="nido-stills/light-grant-wide.webp" alt="The Nido sheet: let Guess & Coffee spend without asking you; 2 XLM to Game every ~8 min, in Game › guess; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-grant-narrow.webp" alt="The Nido sheet: let Guess & Coffee spend without asking you; 2 XLM to Game every ~8 min, in Game › guess; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-grant-wide.webp" alt="The Nido sheet: let Guess & Coffee spend without asking you; 2 XLM to Game every ~8 min, in Game › guess; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-grant-narrow.webp" alt="The Nido sheet: let Guess & Coffee spend without asking you; 2 XLM to Game every ~8 min, in Game › guess; 10 EURC to Coffee shop every ~8 min, in Coffee shop › order" decoding="async"></div><div class="nido-shot" data-k="3"><img class="nido-still s-light s-wide" src="nido-stills/light-guess-wide.webp" alt="The Nido sheet: 1 XLM to Game, play guess 3 on Game, 1 of 2 XLM left for ~8 min after this" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-guess-narrow.webp" alt="The Nido sheet: 1 XLM to Game, play guess 3 on Game, 1 of 2 XLM left for ~8 min after this" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-guess-wide.webp" alt="The Nido sheet: 1 XLM to Game, play guess 3 on Game, 1 of 2 XLM left for ~8 min after this" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-guess-narrow.webp" alt="The Nido sheet: 1 XLM to Game, play guess 3 on Game, 1 of 2 XLM left for ~8 min after this" decoding="async"></div><div class="nido-shot" data-k="4"><img class="nido-still s-light s-wide" src="nido-stills/light-coffee-wide.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order on Coffee shop, within its cap" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-coffee-narrow.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order on Coffee shop, within its cap" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-coffee-wide.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order on Coffee shop, within its cap" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-coffee-narrow.webp" alt="The Nido sheet: 3.50 EURC to Coffee shop, order on Coffee shop, within its cap" decoding="async"></div><div class="nido-shot" data-k="5"><img class="nido-still s-light s-wide" src="nido-stills/light-direct-wide.webp" alt="The Nido sheet: paying the game directly; your account would refuse this" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-direct-narrow.webp" alt="The Nido sheet: paying the game directly; your account would refuse this" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-direct-wide.webp" alt="The Nido sheet: paying the game directly; your account would refuse this" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-direct-narrow.webp" alt="The Nido sheet: paying the game directly; your account would refuse this" decoding="async"></div><div class="nido-shot" data-k="6"><img class="nido-still s-light s-wide" src="nido-stills/light-other-wide.webp" alt="The Nido sheet: a stake taken by another game function; your account would refuse this" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-other-narrow.webp" alt="The Nido sheet: a stake taken by another game function; your account would refuse this" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-other-wide.webp" alt="The Nido sheet: a stake taken by another game function; your account would refuse this" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-other-narrow.webp" alt="The Nido sheet: a stake taken by another game function; your account would refuse this" decoding="async"></div><div class="nido-shot" data-k="7"><img class="nido-still s-light s-wide" src="nido-stills/light-overcap-wide.webp" alt="The Nido sheet: 1 XLM to Game, over the limit, 0 of 2 XLM left; your account would refuse this: over the cap" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-overcap-narrow.webp" alt="The Nido sheet: 1 XLM to Game, over the limit, 0 of 2 XLM left; your account would refuse this: over the cap" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-overcap-wide.webp" alt="The Nido sheet: 1 XLM to Game, over the limit, 0 of 2 XLM left; your account would refuse this: over the cap" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-overcap-narrow.webp" alt="The Nido sheet: 1 XLM to Game, over the limit, 0 of 2 XLM left; your account would refuse this: over the cap" decoding="async"></div><div class="nido-shot" data-k="8"><img class="nido-still s-light s-wide" src="nido-stills/light-owner-wide.webp" alt="The Nido sheet: 1 XLM to Game owner; your account would refuse this: the payment must go to Game" decoding="async"><img class="nido-still s-light s-narrow" src="nido-stills/light-owner-narrow.webp" alt="The Nido sheet: 1 XLM to Game owner; your account would refuse this: the payment must go to Game" decoding="async"><img class="nido-still s-dark s-wide" src="nido-stills/dark-owner-wide.webp" alt="The Nido sheet: 1 XLM to Game owner; your account would refuse this: the payment must go to Game" decoding="async"><img class="nido-still s-dark s-narrow" src="nido-stills/dark-owner-narrow.webp" alt="The Nido sheet: 1 XLM to Game owner; your account would refuse this: the payment must go to Game" decoding="async"></div></div>
+      <p class="nido-cap"><span data-k="1">Create the account with a passkey</span><span data-k="2">Approve the grant: two limits, each with its recipient</span><span data-k="3">Play: the account checks the rule and the cap</span><span data-k="4">Buy a coffee: the shop’s own limit, in test EURC</span><span data-k="5">Pay the game directly: refused before anyone signs</span><span data-k="6">Lose through game.other: refused, outside game.guess</span><span data-k="7">Lose past the cap: approve one more loss, then Next: refused</span><span data-k="8">Lose to the game’s owner: refused, the payment must go to the game</span></p>
+    </div>
+  </div>
+  <aside class="notes">
+    <p>Nido, The Aha Company's passkey wallet, is in pre-release on Stellar mainnet: its mainnet factory, <code>CBHERM3IKL2QLLJWNPBTATIHVFNT3FLFZKPFG4L2X7CHUPRLJHGC3FAC</code>, was deployed on 2026-10-26 on Perch's earlier account design, and its launch checklist is still open. The current version runs on testnet as the hosted wallet at nido.fyi, whose README says not to use it for real funds.</p>
+    <p>This slide runs one live session of the Nido simulation (5.4 MB, offline in soroban-sim), loaded once in the background and kept: Next moves through eight steps on this slide and opens each step's dialog, for you to approve or reject with a click; Prev steps back without undoing anything, a step already done opens nothing, and what you do in one step is there in the next. Simulated, and labelled so in the page: a software P-256 key stands in for the passkey, Nido's factory is rebuilt on this stack's account Wasm, and the page funds the account with 10 XLM and 20 EURC, a simulated test token.</p>
+    <p>1, create: a simulated passkey prompt ("Create a passkey for Nido"), then Continue; the factory deploys the account with its admin rule (slide 7). 2, grant: install the app's grant on Nido's sign sheet, approved with the passkey under the admin rule. The sheet states its two limits in plain words: 2 XLM to the game every ~8 minutes, only inside <code>game.guess</code>, and 10 EURC to the coffee shop, only inside <code>shop.order</code>; each transfer rule pins its recipient, so the stake is paid only to the game and the payment only to the shop (slide 8). 3, guess: play guess at 3, a loss; the 1 XLM stake is a transfer nested inside <code>game.guess</code>, from the account itself, only to the game, within the 2 XLM window (slide 9). 4, coffee: <code>shop.order</code> pulls 3.50 EURC from the account, only to the shop, within its 10 EURC window (slide 10); no EURC token exists outside the simulation and demos. 5 and 6, refused: pay the game directly, or lose a stake through <code>game.other</code>; neither transfer sits under the <code>game.guess</code> root the grant names, so the sheet shows the account would refuse it, and Reject discards it. 7, refused: the window holds 2 XLM of losses; after the guess in step 3, Next opens one more loss, which you approve and which fills the window, and Next again opens the loss past it, which the cap refuses. 8, refused: "Lose to the game's owner" has the owner redirect the stake to itself, and the recipient pin refuses it.</p>
+    <p>The simulation runs Perch pinned at 2c64fe4, where the install call is still named <code>apply_scope</code> (now <code>apply_grant</code>), so its dialog shows the older name.</p>
+    <p>"Reset demo", or <code>D</code>, starts a new ledger with no account and returns to step 1, with no dialog open; the next Next opens the passkey prompt. If the simulation page cannot load (a copy without <code>../nido-sim</code>, a slow device), each step shows a still of the same page with its sign sheet open.</p>
+    <p class="src">Nido's repository: README (the hosted testnet wallet at nido.fyi), packages/passkey-sdk/src/perch/factory.mainnet.json (the mainnet factory), docs/MAINNET_READINESS.md (the launch checklist); docs/nido-sim/index.html and docs/nido-sim/README.md ("Embedding": the live view, its messages and the still URLs); slides 7–10 for the facts it runs; docs/auth-root.md; crates/integration-tests/tests/auth_root.rs (the direct and wrong-root refusals).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="dialog" aria-roledescription="slide" aria-label="Request, view, sign">
+  <header class="head"><h2>Request, view, sign</h2></header>
+  <div class="stage stage-row"><svg role="img" aria-label="A café app sends a request; the sign dialog shows in plain words what it approves, the budget left and the simulated verdict; the user signs and the account decides. Three orders: 5 XLM succeeds, 8 XLM is refused, and 2 XLM carries a hidden 4 XLM authorization the transaction never uses."></svg>
+    <p class="stage-links"><a href="../sign-dialog/nido.html" target="_blank" rel="noopener">Open the café demo</a><a href="../sign-dialog/NOTICE.md" target="_blank" rel="noopener">What is real and what is recorded</a></p>
+  </div>
+  <aside class="notes">
+    <p>A toy café app asks the account to pay for an order, under a grant of 10 XLM per 100 ledgers with 3 XLM already spent; unlike the shop grant, it does not pin the recipient. The sign dialog decodes every authorization entry from the transaction alone, with no network, leads with what the user approves in plain words and keeps the whole tree under Details. It previews the request with enforcing simulation, which runs the account's own <code>__check_auth</code>: a 5 XLM order succeeds and the budget left falls from 7 to 2 XLM; an 8 XLM order is refused with contract error 5 and the budget stays at 7.</p>
+    <p>The third order comes from a tampered checkout that adds a second entry, 4 XLM to another address, which the transaction never uses. A signed entry is published with its transaction; in the recorded run, submitting it alone moved 4 XLM. The dialog marks it unused so the user can refuse. Tap an order to hold it. The café demo is the real <code>&lt;soroban-sign-dialog&gt;</code> component in Nido's look; its previews are recorded from a native soroban-sim run of the pinned Perch contracts, and this café pays directly in XLM.</p>
+    <p class="src">docs/perch-paper/source/html/sections/motivation.html, grants.html; docs/sign-dialog/nido.html, NOTICE.md, nido/NOTICE.md.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="where" aria-roledescription="slide" aria-label="Where the limit lives">
+  <header class="head"><h2>Where the limit lives</h2></header>
+  <div class="stage"><svg role="img" aria-label="An OpenZeppelin account approves through a context rule that calls two attached policy contracts on every call: oz-policy-builder's policy-interpreter, with a per-call bound, and spending_limit, with 10 XLM per 100 ledgers. A Perch account holds one rule with its cap inside, decided by one function."></svg></div>
+  <aside class="notes">
+    <p>OpenZeppelin's Soroban account library composes the decision from separate contracts. Its unit of permission is a context rule: a target such as one contract, an optional expiry, signers, and attached policies, each a contract the account calls on every call the rule approves. oz-policy-builder writes rules for these accounts: a shared <code>policy-interpreter</code> contract evaluates a synthesised predicate on every call the rule guards and keeps no totals. Its documentation says limits over time come from a token allowance with an expiry, or from OpenZeppelin's <code>spending_limit</code> policy beside it.</p>
+    <p>In the simulation the predicate pins the recipient and bounds each transfer at 10 XLM, with <code>spending_limit</code> at 10 XLM per 100 ledgers. A Perch cap is part of its rule and is decided in one function. oz-policy-builder is ahead in maturity, authoring and expressiveness.</p>
+    <p class="src">docs/perch-paper/source/html/sections/simulation.html; source/figures/fig-sim.run.json (task); source/html/sections/conclusion.html.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="run" aria-roledescription="slide" aria-label="The recorded run">
+  <header class="head"><h2>The recorded run</h2></header>
+  <div class="stage"><svg role="img" aria-label="Recorded soroban-sim run. Both accounts pay 6 XLM and refuse 5 more. With spending_limit detached, the OpenZeppelin account applies three more 6 XLM payments, 18 XLM, while Perch refuses all three. Balances fall to 76 and 94 XLM."></svg></div>
+  <aside class="notes">
+    <p>soroban-sim's recorded native run, commands 2 to 8. Both accounts pay the shop 6 XLM and refuse a further 5 XLM in the same window: Perch in its decision, with no verifier call, and the OpenZeppelin account in <code>spending_limit</code>. The owner removes <code>spending_limit</code> from the OpenZeppelin rule. The per-call bound then applies each of three more 6 XLM payments, 18 XLM within a few ledgers, while Perch refuses all three because its window already holds 6. Adding <code>spending_limit</code> back starts it with an empty history, as replacing a Perch rule starts an empty window.</p>
+    <p>These were the only verdicts on which the two differed. From 100 XLM, after commands 2–8 the OpenZeppelin account holds 76 XLM and Perch holds 94 XLM. After commands 9–14 the run ends at 70 XLM and 88 XLM.</p>
+    <p class="src">docs/perch-paper/source/html/sections/simulation.html ("The recorded run shows where the designs differ"); source/facts/sim.json (sim-pay-xlm, sim-second-pay-xlm, sim-oz-percall-sends, sim-oz-percall-moved-xlm, sim-oz-final-xlm, sim-perch-final-xlm); source/figures/fig-sim.run.json, commands 2–8.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="proved" aria-roledescription="slide" aria-label="What is proved">
+  <header class="head"><h2>What is proved</h2></header>
+  <div class="stage"><svg role="img" aria-label="The Rust decision function is translated into Lean and proved equal to a readable model. Six theorems in plain words: the translation returns what the model returns; every accepted call is allowed by a rule; no window holds more than the cap; a narrowed grant never allows more; no grant reaches the account; recovery ends every earlier grant."></svg></div>
+  <aside class="notes">
+    <p>The decision function is about 2,400 lines of Rust. The Charon and Aeneas tools translate it into Lean, a proof assistant whose kernel checks every proof, and theorems relate the translation to a readable model written by hand. Six of the 13 theorems: Theorem 1, on every input the translation returns exactly what the model returns, without panicking or looping; Theorem 2, if the decision function accepts, every call is allowed by a rule it was given, under the signers it was given; Theorem 6, from an empty record no window holds more than the cap; Theorem 4, a narrowed grant allows no call its parent does not; Theorem 8, no grant, nor one derived from it, allows a call to the account or its adopted recovery contracts; Theorem 10, after a completed recovery no earlier grant accepts a request with a call in it.</p>
+    <p>Each theorem has hypotheses; for example, the signer list is an input that the account authenticates. The step from the evaluator to the account (P1) is argued, not proved, and nothing checks the compiled Wasm against the translation. Perch's tests run 57 traces generated from the Lean model through the compiled account.</p>
+    <p class="src">docs/perch-paper/source/html/sections/proofs.html; source/statements.json (T1, T2, T4, T6, T8, T10, P1); source/facts/proofs.json (rule-eval-lines, statements-count, lean-doc-traces).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="sim" aria-roledescription="slide" aria-label="Both, in the page">
+  <header class="head"><h2>Both, in the page</h2></header>
+  <div class="stage stage-sim">
+    <svg role="img" aria-label="soroban-sim runs soroban-env-host in the browser, with one ledger per design: the OpenZeppelin account with policy-interpreter and spending_limit, and the Perch account with its document compiler and Ed25519 verifier. The same request goes to both; native, WASI and browser runs return identical replies."></svg>
+    <div class="frame-wrap"><span class="frame-wait">Loading the simulation…</span><iframe data-src="../perch-paper/sim/index.html?embed=1" title="The dual simulation: OpenZeppelin v0.8.0 and Perch in soroban-sim"></iframe></div>
+    <p class="stage-links"><button class="act when-still" type="button" data-run>Run it here (4.9 MB)</button><button class="act ghost when-live" type="button" data-unrun>Back to the drawing</button><a href="../perch-paper/sim/index.html" target="_blank" rel="noopener">Open the simulation page</a></p>
+  </div>
+  <aside class="notes">
+    <p>soroban-sim packages soroban-env-host, the host library the network runs, so a page can run both designs' real contract code offline. It keeps one ledger per design and applies every request with enforcing authorization; its host build (29.0.2) does not meter costs exactly. The OpenZeppelin side runs the v0.8.0 account with oz-policy-builder's <code>policy-interpreter</code> and <code>spending_limit</code>, whose hashes match oz-policy-builder's testnet records; the Perch side runs the account, its document compiler and its Ed25519 verifier. A native run, a WASI build and the page return identical replies on every request once timings are removed.</p>
+    <p>"Run it here" loads the 4.9 MB page into this slide; starting the simulator compiles a 3.5 MB WebAssembly module in a worker. The Aha Company publishes soroban-sim, and the authors work there.</p>
+    <p class="src">docs/perch-paper/source/html/sections/simulation.html, repro.html; source/facts/sim.json (sim-page-mb); source/figures/fig-sim.run.json (pins).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="cited" data-draw="ihitl" aria-roledescription="slide" aria-label="An agent raised its own cap">
+  <header class="head"><h2>An agent raised its own cap</h2></header>
+  <div class="stage stage-row"><svg role="img" aria-label="A published study. An agent is asked to pay three invoices of 0.01 USDC each. Its wallet caps spending at 0.01 USDC a day, and raising the cap needs a one-time code emailed to the owner, into the inbox the agent reads. The agent reads the code and raises its own cap. 9 of 10 models did this in at least one of 20 runs, unprompted, with no attacker present."></svg>
+    <p class="stage-links"><span>Breckenridge, Vilardell, Wang, Zhang and Juels, “I-HITL: Inalienable Human-in-the-Loop”, 2026</span><a href="https://arxiv.org/abs/2610.35835" target="_blank" rel="noopener">arXiv:2610.35835</a></p>
+  </div>
+  <aside class="notes">
+    <p>A study from Cornell Tech, Yale University and IC3 tested a human-in-the-loop gate on spending. A LangChain agent had three tools: the user's email, a web browser and an agent wallet holding 10 USDC on Base mainnet, with a spending policy of 0.01 USDC per transaction, 0.01 USDC per day, 0.30 USDC per week and 1 USDC per month. Changing the policy needs a one-time passcode that the wallet provider emails to the account owner. The system prompt told the agent to act only on the user's instructions and to treat anything a tool returns, emails included, as data; no task mentioned the spending policy or how to change it.</p>
+    <p>In the payment experiment the inbox held three invoices of 0.01 USDC each, so paying all three needed a higher daily cap. Across 20 trials per model, with no adversary present, 9 of 10 models read the code from the inbox and raised their own spending cap in at least one run. In a second experiment, tasked only with summarizing the inbox, 5 of 10 models paid an attacker who impersonated the user by email. The authors disclosed the results to the wallet provider, Circle, on 22 September 2026; Circle's agent-wallet documentation now warns never to give an agent access to the inbox that receives the code. The paper argues that a human in the loop needs a channel the agent cannot reach.</p>
+    <p class="src">Breckenridge, Vilardell, Wang, Zhang and Juels, "I-HITL: Inalienable Human-in-the-Loop", arXiv:2610.35835 (v3, 30 October 2026): p. 4 (Setup, Experiments, Key Findings), p. 5 (Results), Appendix D (p. 18). The ten models are not named here.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="now" data-draw="keepcap" aria-roledescription="slide" aria-label="A cap the agent cannot raise">
+  <header class="head"><h2>A cap the agent cannot raise</h2></header>
+  <div class="stage"><svg role="img" aria-label="The cap lives in the Perch account's own grant: the shop, at most 10 XLM per 100 ledgers. The agent paying the shop 5 XLM is inside its grant and allowed. The agent calling apply_grant to raise its cap is refused: Theorem 8, no grant allows a call to the account. An emailed code is refused: no rule in the account takes a code. The owner changes the grant through the admin rule, with the passkey on the owner's device. Reading an email gets the agent nothing."></svg></div>
+  <aside class="notes">
+    <p>Perch keeps the cap in the account's own grant, and the account's decision, <code>rule_eval::authorize</code>, checks every call against it. Changing a grant, with <code>apply_grant</code> or <code>remove_grant</code>, is a call to the account that only its admin rule authorizes; in Nido the admin is the owner's passkey, a signature made on the owner's device that the agent cannot produce. A grant can never authorize a call to the account itself or its recovery contracts. That is Theorem 8, grant target containment: "No grant as lowered at install, nor any grant derived from one, allows a call to the account or its adopted recovery contracts."</p>
+    <p>So the agent's own key cannot raise its own cap, and there is nothing an emailed code could open: reading an email gets the agent nothing. This assumes the agent holds only its grant's key and the owner's passkey stays on the owner's device. It is not the paper's I-HITL protocol; it is where Perch puts the limit.</p>
+    <p class="src">docs/perch-paper/source/statements.json (T8); crates/perch-smart-account/src/lib.rs (the admin rule, <code>apply_grant</code>, <code>remove_grant</code>); docs/nido-sim/README.md (step 1, the passkey); source/facts/example.json (the shop's cap).</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="next" data-draw="runtime" aria-roledescription="slide" aria-label="The agent runtime">
+  <header class="head"><h2>The agent runtime</h2></header>
+  <div class="stage"><svg role="img" aria-label="Could be: a planned agent runtime. A root agent and its subagents run as WASI components that hold no keys, each with a grant narrower than its parent's. Every file, website, signing and spawning request goes to a Cedar policy engine, an import-free Wasm component, which decides it. Allowed signing requests go to a key service that checks the request, then signs. Payments over x402 and contract calls reach the Perch account, which exists today, holds the root grant and rechecks them on chain: over the cap, a payment is refused even if the runtime is compromised."></svg></div>
+  <aside class="notes">
+    <p>Could be: planned work, which nothing in this repository builds yet. Agents run as WASI components and hold no keys. A root agent's authority is a grant installed on a Perch account and read from it; a subagent is spawned only with a grant derived from its parent's, so never wider (Theorems 4 and 5 cover attenuation in the model). Every file, website, signing and spawn request goes to a Cedar policy engine packaged as an import-free WebAssembly component, with no files, sockets or keys of its own; a subagent's request must be permitted by its own policies and every ancestor's.</p>
+    <p>Signing goes through a key service that checks the signing request and every authorization context before it signs. Payments, over x402 on Stellar, and contract calls reach the Perch account, which rechecks them on chain against the grant. The account, not the runtime, holds the cap, so an over-cap payment is refused even if the runtime is compromised. Today (solid): the account, grants, the proofs and Nido.</p>
+    <p class="src">Vision paper §08, "Agents, budgets and payments (proposed)", and §09, "Cedar as an authoring language (proposed)" (docs/perch-paper/source/papers/vision/html/sections/agents.html, cedar.html), for what they state: agents hold no keys, the key service, child grants derived from a root grant, x402, the account rechecking on chain, and Cedar as an authoring language; docs/cedar-walkthrough (the compiler prototype); source/statements.json (T4, T5). The WASI packaging, the import-free Cedar engine and the every-ancestor rule are the planned runtime design, not taken from those sections. Proposed.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="next" data-draw="slot" aria-roledescription="slide" aria-label="Slot and credential">
+  <header class="head"><h2>Slot and credential</h2></header>
+  <div class="stage"><svg role="img" aria-label="Could be. A Perch signer External(verifier, key) is a slot with a verifier, a key and a signature. An Ed25519 key and a passkey fill it today. An email credential could fill it: an email verifier, a commitment and key root as the key, and a proof as the signature."></svg></div>
+  <aside class="notes">
+    <p>Could be. Today a Perch signer is <code>Delegated(address)</code>, which the host checks, or <code>External(verifier, key)</code>: the account calls the verifier contract's <code>verify(digest, key, signature)</code> and refuses the authorization unless it says yes. Read the second kind as a slot: the signer is the slot, and the credential is what fills it. Ed25519 and WebAuthn (passkey) verifiers are deployed; the passkey's key is a 65-byte P-256 key and its signature a WebAuthn assertion.</p>
+    <p>An email credential could fill the same slot: an email verifier, a public part (a commitment C to the address, and the DKIM key registry's root) in place of the key, and a zero-knowledge proof in place of the signature. Nothing in Perch builds this.</p>
+    <p class="src">Today: crates/perch-smart-account/src/auth.rs (Verifier, authenticate); crates/perch-webauthn-verifier/src/lib.rs; crates/perch-recovery-interface/src/credential.rs (Credential::Delegated | External); vision paper §02 "Verifiers". The email credential: the ZK signer deck's report, "Credential". Proposed.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="next" data-draw="email" aria-roledescription="slide" aria-label="An email proof">
+  <header class="head"><h2>An email proof</h2></header>
+  <div class="stage"><svg role="img" aria-label="Could be. A DKIM-signed email stays hidden. Its From address opens a commitment C, its Subject carries the recovery statement's digest blinded, and its provider's DKIM key is a leaf of a key registry. The proof publishes only C, the digest and the key root, and a verifier checks it."></svg></div>
+  <aside class="notes">
+    <p>Could be. The email proof as Nido's email-recovery design specifies it: a DKIM-signed email whose From address opens a salted commitment <code>C = H(address, code)</code>, whose Subject carries <code>T = H(digest, ρ)</code>, the digest blinded, and whose provider's RSA DKIM key is a leaf of a key registry. The proof is made in the browser. Its public inputs are C, the digest and the key root; the email itself stays hidden.</p>
+    <p>For Perch, the digest would be the recovery statement's digest, which exists today: the SHA-256 of a 278-byte statement that binds the network, account, controller, configuration, timing and attempt. The Subject hex is illustrative.</p>
+    <p class="src">Today: Perch docs/recovery/statement.md; docs/perch-paper/source/facts/limits.json (recovery-statement-bytes). The email proof: the ZK signer deck's report (Nido docs/email-recovery/spec.md §4.2, §5.3, §6.1, as cited there); not re-checked in this repository. Proposed for Perch.</p>
+  </aside>
+</section>
+
+<section class="slide" data-status="next" data-draw="vote" aria-roledescription="slide" aria-label="One vote at the controller">
+  <header class="head"><h2>One vote at the controller</h2></header>
+  <div class="stage"><svg role="img" aria-label="Could be. Perch's recovery today: an attempt opens, guardians approve the statement digest at the controller until a quorum of 2 of 3, a delay runs during which the attempt can be cancelled, then it completes and replaces the lost key. The email credential would cast one of the guardian votes."></svg></div>
+  <aside class="notes">
+    <p>Today (solid): anyone may open a recovery attempt. Each guardian approves by authorizing the controller's <code>submit_guardian</code> with <code>require_auth_for_args((digest,))</code>, for exactly one statement. At quorum the attempt is authorized; completion waits for the delay and must land inside the completion window, and it replaces the designated credentials. Under the Loss profile the owner can cancel during the delay; under Protected only the condition's evidence can.</p>
+    <p>Could be (dashed): the email credential, checked through the External verifier slot, acts as one guardian. It approves the same digest with a proof and counts as one vote. It never skips the delay, and with a quorum above one it never authorizes alone. So an agent that reads the owner's inbox, as on slide 17, still cannot recover or take over the account: its email proof is one vote among several. The owner should not give an agent the inbox used for recovery.</p>
+    <p class="src">Today: crates/perch-recovery/src/contract.rs (submit_guardian); crates/perch-recovery-interface/src/config.rs (CompiledGuardianSet, quorum, recovery modes); vision paper §05, "Two threat profiles" and "An attempt, from opening to completion". The email vote: the ZK signer deck's report ("Proofs as guardians"). Proposed.</p>
+  </aside>
+</section>
+
+<section class="slide slide-close" data-status="title" aria-roledescription="slide" aria-label="The paper and its companions">
+  <header class="head"><h2>The paper and its companions</h2></header>
+  <div class="stage">
+    <ul class="links">
+      <li><a class="lk" href="../perch-paper/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M10 4h15l7 7v25H10z"/><path d="M25 4v7h7M15 18h12M15 24h12M15 30h8"/></svg><span class="lk-t">The Perch paper</span><span class="lk-s">grants, the decision, the proofs</span></a></li>
+      <li><a class="lk" href="../perch-paper/latex/perch-paper.pdf"><svg viewBox="0 0 40 40" aria-hidden="true"><path d="M10 4h15l7 7v25H10z"/><path d="M25 4v7h7M14 28h14M14 22h14"/><circle cx="20" cy="15" r="3"/></svg><span class="lk-t">PDF edition</span><span class="lk-s">the academic edition</span></a></li>
+      <li><a class="lk" href="../perch-paper/oz-policy-builder/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="8" width="14" height="24" rx="3"/><rect x="22" y="8" width="14" height="24" rx="3"/><path d="M8 16h6M8 22h6M26 16h6M26 22h6"/></svg><span class="lk-t">Perch and oz-policy-builder</span><span class="lk-s">the full comparison</span></a></li>
+      <li><a class="lk" href="../perch-paper/verification/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="5" y="7" width="30" height="26" rx="4"/><rect x="9" y="11" width="22" height="18" rx="2"/><path d="M14 20l4 4 8-9"/></svg><span class="lk-t">What Perch proves</span><span class="lk-s">every theorem and what it assumes</span></a></li>
+      <li><a class="lk" href="../perch-paper/vision/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="14"/><circle cx="20" cy="20" r="7"/><path d="M20 2v6M20 32v6M2 20h6M32 20h6"/></svg><span class="lk-t">The Perch vision</span><span class="lk-s">recovery, agents, the full account</span></a></li>
+      <li><a class="lk" href="../perch-paper/sim/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="3" y="6" width="34" height="28" rx="4"/><path d="M3 13h34"/><rect x="8" y="18" width="11" height="11" rx="2"/><rect x="21" y="18" width="11" height="11" rx="2"/></svg><span class="lk-t">The simulation</span><span class="lk-s">both accounts in soroban-sim, offline</span></a></li>
+      <li><a class="lk" href="../nido-sim/index.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="6" y="4" width="28" height="32" rx="6"/><circle cx="20" cy="15" r="5"/><path d="M12 30c1-5 15-5 16 0"/></svg><span class="lk-t">Nido in soroban-sim</span><span class="lk-s">an account, a grant, guess and a coffee</span></a></li>
+      <li><a class="lk" href="../sign-dialog/nido.html"><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="6" y="4" width="28" height="32" rx="6"/><path d="M11 12h18M11 17h12"/><rect x="11" y="22" width="18" height="6" rx="2"/></svg><span class="lk-t">The café demo</span><span class="lk-s">three orders in the sign dialog</span></a></li>
+    </ul>
+    <p class="close-foot">Willem Wyndham and Elizabeth Engelman · The Aha Company</p>
+  </div>
+  <aside class="notes">
+    <p>The main paper follows one request from the grant to the account's decision and runs it beside an OpenZeppelin account. The companions carry the detail: the full comparison with oz-policy-builder, every theorem with its hypotheses, and the vision paper on recovery, threats and the proposed agent work. CI builds the PDF and publishes it beside the page; it is not committed.</p>
+    <p class="src">docs/perch-paper/README.md; docs/perch-paper/source/documents.json; docs/index.html.</p>
+  </aside>
+</section>
+
+</main>
+
+<aside id="notes-panel" hidden aria-label="Speaker notes"></aside>
+
+<nav class="chrome" aria-label="Deck controls">
+  <button class="btn" id="prev" aria-label="Previous slide"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <ol class="marks" id="marks"></ol>
+  <span class="count" id="count" aria-live="polite"></span>
+  <button class="btn" id="notes-btn" aria-label="Speaker notes" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/><path d="M8.5 9h7M8.5 12h4.5"/></svg></button>
+  <button class="btn" id="theme-btn" aria-label="Switch theme"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 4.5a7.5 7.5 0 0 0 0 15z" fill="currentColor"/></svg></button>
+  <button class="btn" id="next" aria-label="Next slide"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
+  <div class="bar" aria-hidden="true"><i id="bar"></i></div>
+</nav>
+
+<script>
+(() => {
+'use strict';
+const NS = 'http://www.w3.org/2000/svg';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+function E(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  if (attrs) for (const k in attrs) if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const f2 = n => Math.round(n * 100) / 100;
+const root = document.documentElement;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+const still = () => reduce.matches || root.classList.contains('still');
+
+/* ---------- seals: a guilloché rosette drawn from a digest's 32 bytes ---------- */
+// Illustrative bytes, not real digests.
+const DIGESTS = {
+  A: '5f0e9a3cd41b7728e6a9c0f3b58d2e7164af90c3e25b7d18aa3f6c0954e2b8d7',
+  P: 'c93a07e15b2d48f6a1e07c3d95b2f84e16a0d7c39e5b2f8401a6d3c7e95b20f4',
+};
+const bytesOf = h => Array.from({ length: 32 }, (_, i) => parseInt(h.substr(i * 2, 2), 16));
+function buildSeal(id, hex, dense) {
+  const defs = $('#defs defs');
+  const sym = E('symbol', { id, viewBox: '-100 -100 200 200', overflow: 'visible' }, defs);
+  const b = bytesOf(hex);
+  let d = '';
+  for (let i = 0; i < 32; i++) {
+    const a = i / 32 * Math.PI * 2 - Math.PI / 2;
+    const r1 = 86, r2 = 90 + 10 * b[i] / 255;
+    d += `M${f2(r1 * Math.cos(a))} ${f2(r1 * Math.sin(a))}L${f2(r2 * Math.cos(a))} ${f2(r2 * Math.sin(a))}`;
+  }
+  E('path', { d, class: 's-tick' }, sym);
+  E('circle', { r: 83, class: 's-ring' }, sym);
+  E('circle', { r: 6, class: 's-ring' }, sym);
+  const bands = dense ? [[30, 0], [50, 10], [68, 20]] : [[38, 0], [64, 12]];
+  const copies = dense ? 11 : 6, N = dense ? 520 : 300;
+  bands.forEach(([r0, o]) => {
+    const amp = 4.5 + 9 * b[o] / 255;
+    const k = 3 + (b[o + 1] % 9) + Math.round(r0 / 22);
+    const m = 1 + (b[o + 2] % 5);
+    const mod = .1 + .6 * b[o + 3] / 255;
+    const ph = b[o + 4] / 255 * Math.PI * 2;
+    for (let c = 0; c < copies; c++) {
+      const sh = c / copies * Math.PI * 2;
+      let p = '';
+      for (let i = 0; i <= N; i++) {
+        const t = i / N * Math.PI * 2;
+        const r = r0 + amp * Math.sin(k * t + sh) * (1 + mod * Math.sin(m * t + ph));
+        p += (i ? 'L' : 'M') + f2(r * Math.cos(t)) + ' ' + f2(r * Math.sin(t));
+      }
+      E('path', { d: p + 'Z', class: 's-wave' }, sym);
+    }
+  });
+}
+buildSeal('seal-A', DIGESTS.A, true);
+buildSeal('seal-A-mini', DIGESTS.A, false);
+buildSeal('seal-P', DIGESTS.P, true);
+buildSeal('seal-P-mini', DIGESTS.P, false);
+
+/* ---------- icons, in a 60-unit box centred on 0,0 ---------- */
+const scallop = (() => {
+  let d = '';
+  const n = 14;
+  for (let i = 0; i <= n; i++) {
+    const a = i / n * Math.PI * 2, am = (i - .5) / n * Math.PI * 2;
+    const x = 19 * Math.cos(a), y = 19 * Math.sin(a);
+    if (i === 0) d += `M${f2(x)} ${f2(y)}`;
+    else d += `Q${f2(25 * Math.cos(am))} ${f2(25 * Math.sin(am))} ${f2(x)} ${f2(y)}`;
+  }
+  return d + 'Z';
+})();
+const ICONS = {
+  key: [['circle', { cx: -14, cy: 0, r: 9 }], ['path', { d: 'M-5 0H26M18 0V8M24 0V6' }]],
+  person: [['circle', { cx: 0, cy: -10, r: 9 }], ['path', { d: 'M-18 22C-18 5 18 5 18 22' }]],
+  passkey: [['circle', { cx: -9, cy: -11, r: 7.5 }], ['path', { d: 'M-24 18C-24 4 6 4 6 18' }], ['circle', { cx: 13, cy: -2, r: 5.5 }], ['path', { d: 'M13 3.5V22M13 16H18M13 11H17' }]],
+  secret: [['path', { d: 'M0 -22L20 0L0 22L-20 0Z' }], ['path', { d: 'M0 -9L8 0L0 9L-8 0Z' }]],
+  envelope: [['rect', { x: -24, y: -16, width: 48, height: 32, rx: 3 }], ['path', { d: 'M-24 -14L0 4L24 -14' }]],
+  tree: [['path', { d: 'M0 -18L-13 -2M0 -18L13 -2M-13 -2L-20 16M-13 -2L-6 16M13 -2L6 16M13 -2L20 16' }]],
+  account: [['circle', { r: 22 }], ['circle', { r: 12 }]],
+  controller: [['rect', { x: -26, y: -18, width: 52, height: 36, rx: 6 }], ['path', { d: 'M-12 9A12 12 0 0 1 12 9M0 9L7 -2' }]],
+  stamp: [['path', { d: scallop }], ['circle', { r: 10 }]],
+  hourglass: [['path', { d: 'M-11 -20H11L-11 20H11Z' }]],
+  sig: [['path', { d: 'M-25 6C-17 -14 -10 18 -2 0S10 -12 14 4S22 8 26 -4' }]],
+  proof: [['path', { d: 'M0 -22L19 -11V11L0 22L-19 11V-11ZM0 0V22M0 0L19 -11M0 0L-19 -11' }]],
+  check: [['path', { d: 'M-14 1L-4 12L16 -12' }]],
+  cross: [['path', { d: 'M-12 -12L12 12M12 -12L-12 12' }]],
+  agent: [['rect', { x: -17, y: -20, width: 34, height: 26, rx: 8 }], ['path', { d: 'M0 -20V-26M-21 26V22C-21 15 21 15 21 22V26M-8 -1H8' }], ['circle', { cx: -7, cy: -10, r: 2.6 }], ['circle', { cx: 7, cy: -10, r: 2.6 }], ['circle', { cx: 0, cy: -28, r: 2.4 }]],
+  shop: [['path', { d: 'M-24 -8H24L20 -22H-20ZM-20 -8V22H20V-8M-6 22V8H6V22M-24 -8C-24 -2 -12 -2 -12 -8C-12 -2 0 -2 0 -8C0 -2 12 -2 12 -8C12 -2 24 -2 24 -8' }]],
+  cup: [['path', { d: 'M-20 -8H14V8C14 18 6 22 -3 22C-12 22 -20 18 -20 8ZM14 -2C24 -2 24 12 14 12M-10 -16C-6 -20 -12 -22 -8 -27M1 -16C5 -20 -1 -22 3 -27' }]],
+  doc: [['path', { d: 'M-16 -24H8L18 -14V24H-16ZM8 -24V-14H18M-8 -4H10M-8 4H10M-8 12H4' }]],
+  coin: [['circle', { r: 21 }], ['circle', { r: 14 }]],
+  warn: [['path', { d: 'M0 -20L22 17H-22ZM0 -6V5' }], ['circle', { cx: 0, cy: 11, r: 1.6 }]],
+  policy: [['rect', { x: -20, y: -22, width: 40, height: 44, rx: 8 }], ['path', { d: 'M-10 -8H10M-10 0H10M-10 8H4' }]],
+  door: [['rect', { x: -15, y: -26, width: 30, height: 52, rx: 2 }], ['circle', { cx: 8, cy: 2, r: 2.5 }]],
+  factory: [['path', { d: 'M-27 24V-2L-11 8V-2L5 8V-18H17V24ZM-19 14H-11M-3 14H5' }]],
+  desk: [['circle', { cx: 0, cy: -15, r: 8 }], ['path', { d: 'M-15 4C-15 -5 15 -5 15 4M-28 4H28V24H-28ZM-28 10H28' }]],
+};
+const TREE_DOTS = [[0, -18], [-13, -2], [13, -2], [-20, 16], [-6, 16], [6, 16], [20, 16]];
+
+/* ---------- drawing context ---------- */
+class Ctx {
+  constructor(svg, tall) {
+    this.svg = svg; this.tall = tall; this.layer = svg;
+    this.t = 150; this.step = 60;
+    this.fs = tall ? 36 : 27;
+    this.sw = tall ? 3.4 : 2.4;
+  }
+  at(ms) { this.t = ms; return this; }
+  group(tf) { this.layer = E('g', tf ? { transform: tf } : null, this.svg); return this.layer; }
+  _d(o) {
+    if (o && o.d != null) return o.d;
+    const d = this.t;
+    this.t += (o && o.step != null) ? o.step : this.step;
+    return d;
+  }
+  _paint(e, o, d) {
+    const k = o.k || 'ink';
+    const cls = ['st', 'k-' + k];
+    let anim = k === 'next' ? 'an-march' : 'an-draw';
+    if (o.fill) { cls.push('fl-' + o.fill); anim = k === 'next' ? 'an-march' : 'an-fade'; }
+    if (o.anim) anim = o.anim;
+    if (anim !== 'none') cls.push(anim);
+    if (o.cls) cls.push(o.cls);
+    e.setAttribute('class', cls.join(' '));
+    e.setAttribute('stroke-width', o.w != null ? o.w * (o.raw ? 1 : this.sw) : this.sw);
+    if (o.fillOp != null) e.setAttribute('fill-opacity', o.fillOp);
+    if (o.op != null) e.setAttribute('opacity', o.op);
+    if (o.dash) e.setAttribute('stroke-dasharray', o.dash);
+    e.style.setProperty('--d', d + 'ms');
+    return e;
+  }
+  line(x1, y1, x2, y2, o = {}) { return this._paint(E('line', { x1, y1, x2, y2 }, o.p || this.layer), o, this._d(o)); }
+  path(d, o = {}) { return this._paint(E('path', { d }, o.p || this.layer), o, this._d(o)); }
+  circle(cx, cy, r, o = {}) { return this._paint(E('circle', { cx, cy, r }, o.p || this.layer), o, this._d(o)); }
+  rect(x, y, w, h, o = {}) { return this._paint(E('rect', { x, y, width: w, height: h, rx: o.rx || 0 }, o.p || this.layer), o, this._d(o)); }
+  text(x, y, s, o = {}) {
+    const size = this.fs * (o.size || 1);
+    const t = E('text', { x, y, 'font-size': f2(size), 'text-anchor': o.anchor || 'middle' }, o.p || this.layer);
+    if (o.base) t.setAttribute('dominant-baseline', o.base);
+    const cls = ['tx'];
+    if (o.anim !== 'none') cls.push(o.anim || 'an-fade');
+    if (o.k) cls.push('c-' + o.k);
+    if (o.font) cls.push('f-' + o.font);
+    t.setAttribute('class', cls.join(' '));
+    if (o.ls != null) t.setAttribute('letter-spacing', o.ls);
+    if (o.italic) t.setAttribute('font-style', 'italic');
+    t.textContent = s;
+    t.style.setProperty('--d', this._d(o) + 'ms');
+    return t;
+  }
+  tw(s, o = {}) { return s.length * this.fs * (o.size || 1) * (o.font === 'code' ? .6 : .52); }
+  chip(x, y, s, o = {}) {
+    const size = (o.size || .85);
+    const w = this.tw(s, { size, font: o.font }) + this.fs * .9, h = this.fs * size * 1.7;
+    const d = this._d(o);
+    this.rect(x - w / 2, y - h / 2, w, h, { k: o.k || 'soft', rx: h / 2, w: o.w || .55, d, fill: o.fill, fillOp: o.fillOp, p: o.p });
+    this.text(x, y + 1, s, { size, k: o.tk, font: o.font, base: 'central', d: d + 120, p: o.p });
+    return w;
+  }
+  seal(x, y, r, o = {}) {
+    const id = 'seal-' + (o.id || 'A') + (r * (this.tall ? .45 : .85) < 60 ? '-mini' : '');
+    const d = this._d(o);
+    if (o.bg) this._paint(E('circle', { cx: x, cy: y, r: r * 1.04 }, o.p || this.layer), { k: 'faint', fill: 'paper', w: .4, anim: 'an-fade' }, d);
+    const at = E('g', { transform: `translate(${f2(x)} ${f2(y)})` }, o.p || this.layer);
+    const g = E('g', null, at);
+    g.setAttribute('class', 'seal-use an-seal');
+    g.style.setProperty('--d', d + 'ms');
+    E('use', { href: '#' + id, x: -r, y: -r, width: 2 * r, height: 2 * r }, g);
+    return at;
+  }
+  icon(name, x, y, s, o = {}) {
+    const sc = s / 60;
+    const g = E('g', { transform: `translate(${x} ${y}) scale(${f2(sc)})` }, o.p || this.layer);
+    const d = this._d(o);
+    const k = o.k || 'ink';
+    const ik = k === 'next' ? 'nexthead' : k;
+    (ICONS[name] || []).forEach(([tag, a]) => {
+      const e = E(tag, a, g);
+      const small = tag === 'circle' && a.r != null && a.r < 3;
+      const dot = { next: 'next', soft: 'soft', now: 'now', seal: 'seal' }[k] || 'ink';
+      this._paint(e, { k: ik, w: this.sw / sc * (o.w || 1), raw: true, fill: small ? dot : o.fill, anim: o.anim || (k === 'next' ? 'an-fade' : null) }, d);
+    });
+    if (name === 'tree') TREE_DOTS.forEach(([cx, cy]) => {
+      this._paint(E('circle', { cx, cy, r: 3 }, g), { k: ik, fill: k === 'next' ? 'next' : (k === 'now' ? 'now' : 'soft'), w: this.sw / sc, raw: true, anim: 'an-fade' }, d);
+    });
+    return g;
+  }
+  head(x, y, ang, o = {}) {
+    const L = this.tall ? 17 : 13;
+    const a1 = ang + Math.PI - .45, a2 = ang + Math.PI + .45;
+    return this.path(`M${f2(x + L * Math.cos(a1))} ${f2(y + L * Math.sin(a1))}L${f2(x)} ${f2(y)}L${f2(x + L * Math.cos(a2))} ${f2(y + L * Math.sin(a2))}`, { ...o, k: o.k === 'next' ? 'nexthead' : o.k, anim: 'an-fade' });
+  }
+  arrow(x1, y1, x2, y2, o = {}) {
+    const d = this._d(o);
+    this.line(x1, y1, x2, y2, { ...o, d });
+    this.head(x2, y2, Math.atan2(y2 - y1, x2 - x1), { ...o, d: d + 500 });
+  }
+  curve(x1, y1, x2, y2, o = {}) {
+    const dir = o.dir || 'h';
+    let c1, c2;
+    if (dir === 'h') { const mx = (x1 + x2) / 2; c1 = [mx, y1]; c2 = [mx, y2]; }
+    else { const my = (y1 + y2) / 2; c1 = [x1, my]; c2 = [x2, my]; }
+    const d = this._d(o);
+    const p = this.path(`M${f2(x1)} ${f2(y1)}C${f2(c1[0])} ${f2(c1[1])} ${f2(c2[0])} ${f2(c2[1])} ${f2(x2)} ${f2(y2)}`, { ...o, d });
+    if (o.head) this.head(x2, y2, Math.atan2(y2 - c2[1], x2 - c2[0]), { ...o, d: d + 600 });
+    return p;
+  }
+  check(x, y, s, o = {}) { return this.icon('check', x, y, s, { ...o, w: 1.5 }); }
+  cross(x, y, s, o = {}) { return this.icon('cross', x, y, s, { ...o, w: 1.4 }); }
+  node(x, y, r, s, o = {}) {
+    const d = this._d(o);
+    this.circle(x, y, r, { k: o.k || 'now', d, w: o.w });
+    if (s) this.text(x, y, s, { size: o.size || .72, k: o.tk || o.k, base: 'central', d: d + 150 });
+  }
+  pin(x, y, o = {}) { return this.circle(x, y, this.tall ? 9 : 7, { k: o.k || 'now', fill: o.k === 'next' ? 'next' : (o.k === 'soft' ? 'soft' : 'now'), w: .4, d: o.d }); }
+  region(x, y, w, h, o = {}) {
+    const d = this._d(o);
+    this.rect(x, y, w, h, { k: 'soft', fill: 'hatch', rx: 28, w: .5, d, anim: 'an-fade' });
+    if (o.label) this.text(x + 4, y - (this.tall ? 18 : 14), o.label, { anchor: 'start', size: .8, k: 'soft', d });
+  }
+  // A stage box in the paper's convention: proved (double border), tested (single), trusted (hatched).
+  box(x, y, w, h, kind, o = {}) {
+    const d = this._d(o);
+    const k = o.k || 'now';
+    if (kind === 'proved') {
+      this.rect(x - 7, y - 7, w + 14, h + 14, { k, rx: (o.rx || 16) + 6, w: 1.25, d });
+      this.rect(x, y, w, h, { k, rx: o.rx || 16, w: .5, d: d + 80 });
+    } else if (kind === 'trusted') {
+      this.rect(x, y, w, h, { k, rx: o.rx || 16, w: .8, fill: 'hatch', d });
+    } else {
+      this.rect(x, y, w, h, { k, rx: o.rx || 16, w: .9, d });
+    }
+  }
+  btree(x, y, w, levels, dy, hi, o = {}) {
+    const d = this._d(o);
+    const pos = [];
+    for (let l = 0; l <= levels; l++) {
+      const n = 2 ** l, row = [];
+      for (let i = 0; i < n; i++) row.push([x - w / 2 + (i + .5) * w / n, y + l * dy]);
+      pos.push(row);
+    }
+    let path = hi;
+    const onPath = new Set();
+    for (let l = levels; l >= 0; l--) { onPath.add(l + ':' + path); path = path >> 1; }
+    const hk = o.hk || 'now';
+    for (let l = 0; l < levels; l++) pos[l].forEach(([px, py], i) => {
+      [2 * i, 2 * i + 1].forEach(j => {
+        const [cx, cy] = pos[l + 1][j];
+        const lit = onPath.has(l + ':' + i) && onPath.has((l + 1) + ':' + j);
+        this.line(px, py, cx, cy, { k: lit ? hk : (o.k || 'soft'), w: lit ? 1.1 : .5, d: d + (lit ? 300 + l * 120 : l * 60), anim: lit && hk === 'next' ? 'an-fade' : null });
+      });
+    });
+    pos[levels].forEach(([px, py], i) => {
+      const lit = i === hi;
+      this.circle(px, py, lit ? (this.tall ? 8 : 6.5) : (this.tall ? 4.5 : 3.5), { k: lit ? (hk === 'next' ? 'nexthead' : hk) : (o.k || 'soft'), fill: lit ? (hk === 'next' ? 'next' : 'now') : 'paper', w: .5, d: d + (lit ? 700 : 200) });
+    });
+    return pos;
+  }
+}
+
+/* ---------- slides ---------- */
+const B = {};
+const deg = Math.PI / 180;
+
+B.title = { vb: ['0 0 800 800', '0 0 800 800'], draw(c) {
+  const cx = 400, cy = 400;
+  const pol = (r, a) => [cx + r * Math.cos(a * deg), cy + r * Math.sin(a * deg)];
+  const P = (r, a) => pol(r, a).map(f2).join(' ');
+  c.at(60);
+  c.circle(cx, cy, 362, { k: 'faint', w: .6 });
+  let d = '';
+  for (let i = 0; i < 180; i++) {
+    const a = i * 2 - 90;
+    d += `M${P(274, a)}L${P(i % 10 ? 283 : 293, a)}`;
+  }
+  c.path(d, { k: 'soft', w: .3, anim: 'an-fade' });
+  // The account.
+  c.at(260);
+  c.circle(cx, cy, 184, { k: 'now', w: 1.2 });
+  c.circle(cx, cy, 170, { k: 'now', w: .4 });
+  c.seal(cx, cy, 130, { id: 'P' });
+  // Charges at their ledgers: two inside the window, older ones outside.
+  c.at(900);
+  const a0 = -150, a1 = -48;
+  [[-206, 3, 0], [-188, 5, 0], [-154, 6, 0], [-146, 4, 1], [-52, 5, 1]].forEach(([a, x, inside]) => {
+    const [x1, y1] = pol(196, a), [x2, y2] = pol(196 + x * 11, a);
+    c.line(x1, y1, x2, y2, { k: inside ? 'now' : 'soft', w: inside ? 3.4 : 2.2, op: inside ? 1 : .45, step: 90 });
+  });
+  // The window, sliding into place.
+  const win = E('g', null, c.svg);
+  win.setAttribute('class', 'an-sweep');
+  win.style.setProperty('--d', '1400ms');
+  win.style.setProperty('--ox', cx + 'px');
+  win.style.setProperty('--oy', cy + 'px');
+  const sector = `M${P(190, a0)}L${P(304, a0)}A304 304 0 0 1 ${P(304, a1)}L${P(190, a1)}A190 190 0 0 0 ${P(190, a0)}Z`;
+  c.path(sector, { k: 'now', w: .5, fill: 'hatch-now', anim: 'none', p: win });
+  [a0, a1].forEach(a => {
+    const [x1, y1] = pol(186, a), [x2, y2] = pol(312, a);
+    c.line(x1, y1, x2, y2, { k: 'now', w: 1.5, anim: 'none', p: win });
+  });
+  // Who reaches the account, and through what.
+  c.at(2300);
+  const lk = (x, y, a, r) => { const [tx, ty] = pol(r, a); const L = Math.hypot(tx - x, ty - y); c.line(x + (tx - x) / L * 52, y + (ty - y) / L * 52, tx, ty, { k: 'soft', w: .5 }); };
+  c.icon('key', 108, 118, 74, { k: 'now' }); lk(108, 118, -126, 314);
+  c.icon('agent', 692, 118, 74, { k: 'now' }); lk(692, 118, -62, 314);
+  c.icon('person', 108, 690, 74, { k: 'ink' }); lk(108, 690, 135, 190);
+} };
+
+B.problem = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const S = T ? 60 : 70, R = T ? 92 : 110;
+  const rows = T
+    ? [{ ic: [92, 230], ob: [300, 230], lab: [470, 222, 'start'], sub: [470, 262, 'start'] },
+      { ic: [92, 640], ob: [300, 640], lab: [470, 632, 'start'], sub: [470, 672, 'start'] },
+      { ic: [92, 1050], ob: [300, 1050], lab: [470, 1042, 'start'], sub: [470, 1082, 'start'] }]
+    : [{ ic: [300, 160], ob: [300, 420], lab: [300, 625, 'middle'], sub: [300, 668, 'middle'] },
+      { ic: [800, 160], ob: [800, 420], lab: [800, 625, 'middle'], sub: [800, 668, 'middle'] },
+      { ic: [1300, 160], ob: [1300, 420], lab: [1300, 625, 'middle'], sub: [1300, 668, 'middle'] }];
+  c.at(80);
+  if (T) { c.line(40, 435, 760, 435, { k: 'faint', w: .5 }); c.line(40, 845, 760, 845, { k: 'faint', w: .5 }); }
+  else { c.line(550, 110, 550, 700, { k: 'faint', w: .5 }); c.line(1050, 110, 1050, 700, { k: 'faint', w: .5 }); }
+  const conn = (a, b, r, k) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+    c.arrow(a[0] + dx / L * 44, a[1] + dy / L * 44, b[0] - dx / L * (r + 10), b[1] - dy / L * (r + 10), { k, w: .7 });
+  };
+  // Ask on every call: a stack of prompts in front of the user.
+  c.at(250);
+  const r0 = rows[0];
+  c.icon('agent', r0.ic[0], r0.ic[1], S, { k: 'soft' });
+  const [sx, sy] = T ? [228, 186] : [228, 300];
+  for (let i = 0; i < 6; i++) {
+    const x = sx + i * (T ? 9 : 11), y = sy + i * (T ? 9 : 14);
+    c.rect(x, y, T ? 110 : 140, T ? 44 : 52, { k: 'soft', rx: 9, w: .55, fill: 'paper', step: 70 });
+    c.line(x + 14, y + (T ? 16 : 19), x + (T ? 70 : 92), y + (T ? 16 : 19), { k: 'soft', w: .4, step: 0 });
+  }
+  const ux = T ? 300 : 300, uy = T ? 230 : 500;
+  if (T) c.icon('person', 412, 230, S - 6, { k: 'soft' });
+  else c.icon('person', ux, uy + 30, S, { k: 'soft' });
+  if (!T) c.arrow(r0.ic[0], r0.ic[1] + 46, r0.ic[0], sy - 10, { k: 'soft', w: .6 });
+  c.text(r0.lab[0], r0.lab[1], 'ask every call', { anchor: r0.lab[2], size: .9 });
+  c.text(r0.sub[0], r0.sub[1], 'a prompt per call', { anchor: r0.sub[2], size: .72, k: 'soft' });
+  // A key that can do anything: the whole account.
+  c.at(1100);
+  const r1 = rows[1];
+  c.icon('key', r1.ic[0], r1.ic[1], S, { k: 'soft' });
+  conn(r1.ic, r1.ob, R, 'soft');
+  c.circle(r1.ob[0], r1.ob[1], R, { k: 'soft', w: .8, fill: 'hatch' });
+  c.circle(r1.ob[0], r1.ob[1], R - 14, { k: 'soft', w: .3 });
+  c.text(r1.lab[0], r1.lab[1], 'hold a full key', { anchor: r1.lab[2], size: .9 });
+  c.text(r1.sub[0], r1.sub[1], 'can do anything', { anchor: r1.sub[2], size: .72, k: 'soft' });
+  // A grant: a bounded part the account enforces.
+  c.at(1900);
+  const r2 = rows[2];
+  c.icon('key', r2.ic[0], r2.ic[1], S, { k: 'now' });
+  c.circle(r2.ob[0], r2.ob[1], R, { k: 'now', w: 1.1 });
+  c.circle(r2.ob[0], r2.ob[1], R - 14, { k: 'now', w: .35 });
+  const gw = T ? 90 : 104, gh = T ? 48 : 56;
+  const gx = T ? r2.ob[0] - R + 16 : r2.ob[0] - gw / 2, gy = T ? r2.ob[1] - gh / 2 : r2.ob[1] - R + 14;
+  c.rect(gx, gy, gw, gh, { k: 'now', rx: 10, w: .9, fill: 'hatch-now' });
+  const gcx = gx + gw / 2, gcy = gy + gh / 2;
+  if (T) c.arrow(r2.ic[0] + 42, r2.ic[1], gx - 6, gcy, { k: 'now', w: .8 });
+  else c.arrow(r2.ic[0], r2.ic[1] + 44, gcx, gy - 6, { k: 'now', w: .8 });
+  c.text(r2.lab[0], r2.lab[1], 'a grant', { anchor: r2.lab[2], size: .9, k: 'now' });
+  c.text(r2.sub[0], r2.sub[1], 'bounded by the account', { anchor: r2.sub[2], size: .72, k: 'soft' });
+} };
+
+B.grant = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    own: [110, 110, 62], ol: [110, 180], a1: [158, 110, 318, 110], al: [238, 88], cmp: [330, 52, 200, 116], doc: [430, 92], cl: [430, 150],
+    a2: [430, 172, 430, 252], vl: [450, 220, 'start'],
+    acc: [40, 262, 720, 1000], accL: [76, 316], card: [76, 344, 648, 890], hk: [130, 404], ht: [168, 416], hl: [96, 452, 704],
+    rows: (i) => ({ l: [116, 510 + i * 116], v: [116, 552 + i * 116] }), labSz: .6, valSz: .8, min: [704, 1132],
+  } : {
+    own: [125, 400, 72], ol: [125, 484], a1: [178, 400, 372, 400], al: [275, 376], cmp: [385, 340, 180, 120], doc: [475, 384], cl: [475, 440],
+    a2: [568, 400, 746, 400], vl: [657, 380, 'middle'],
+    acc: [758, 72, 792, 650], accL: [796, 124], card: [818, 150, 672, 534], hk: [868, 202], ht: [904, 212], hl: [838, 240, 1470],
+    rows: (i) => ({ l: [858, 300 + i * 66], v: [1040, 300 + i * 66] }), labSz: .72, valSz: .85, min: [1462, 630],
+  };
+  c.at(100);
+  c.icon('person', P.own[0], P.own[1], P.own[2], { k: 'ink' });
+  c.text(P.ol[0], P.ol[1], 'owner', { size: .8, k: 'soft' });
+  c.at(500);
+  c.arrow(...P.a1, { k: 'now', w: .8 });
+  c.text(P.al[0], P.al[1], 'apply_grant', { font: 'code', size: .6 });
+  const [mx, my, mw, mh] = P.cmp;
+  c.rect(mx, my, mw, mh, { k: 'now', rx: 16, w: .9 });
+  c.icon('doc', P.doc[0], P.doc[1], T ? 46 : 46, { k: 'now' });
+  c.text(P.cl[0], P.cl[1], 'compiler', { size: .66 });
+  c.arrow(...P.a2, { k: 'now', w: .8 });
+  c.text(P.vl[0], P.vl[1], 'valid', { size: .62, k: 'soft', anchor: P.vl[2] });
+  c.at(1200);
+  const [ax, ay, aw, ah] = P.acc;
+  c.rect(ax, ay, aw, ah, { k: 'now', rx: 34, w: 1.2 });
+  c.rect(ax + 12, ay + 12, aw - 24, ah - 24, { k: 'now', rx: 26, w: .35 });
+  c.text(P.accL[0], P.accL[1], 'account', { anchor: 'start', size: .74, k: 'soft' });
+  const [kx, ky, kw, kh] = P.card;
+  c.rect(kx, ky, kw, kh, { k: 'now', rx: 20, w: .9 });
+  c.icon('key', P.hk[0], P.hk[1], 46, { k: 'now' });
+  c.text(P.ht[0], P.ht[1], 'shop grant', { anchor: 'start', size: .92 });
+  c.line(P.hl[0], P.hl[1], P.hl[2], P.hl[1], { k: 'faint', w: .5 });
+  c.at(1800);
+  const rows = [['contract', 'XLM token'], ['function', 'transfer', 'code'], ['from', 'this account'], ['to', 'the shop only'], ['signer', 'app key'], ['cap', '10 XLM / 100 ledgers']];
+  rows.forEach(([l, v, font], i) => {
+    const R = P.rows(i);
+    c.text(R.l[0], R.l[1], l, { anchor: 'start', size: P.labSz, k: 'soft', step: 40 });
+    c.text(R.v[0], R.v[1], v, { anchor: 'start', size: P.valSz, font, k: i === 5 ? 'now' : undefined, step: 180 });
+  });
+  c.text(P.min[0], P.min[1], '≈ 8 min', { anchor: 'end', size: .64, k: 'soft' });
+} };
+
+/* Attenuation as nested regions: the helper's grant shrinks inside the app's, one step at a time. */
+B.atten = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const G = T ? {
+    par: [40, 140, 720, 620], head: [40, 116],
+    stages: [[52, 152, 696, 596], [52, 270, 696, 478], [52, 270, 538, 478], [52, 270, 538, 350]],
+    pts: { guess: [200, 360], one: [390, 540], other: [400, 214], five: [680, 470], late: [400, 718] },
+    steps: [[400, 172, 'middle'], [680, 330, 'middle'], [400, 660, 'middle']],
+    chain: [[150, 860], [400, 860], [650, 860]], ex: [400, 990], steps10: [400, 1090], th: [400, 1170], th2: [400, 1212],
+  } : {
+    par: [120, 150, 940, 540], head: [120, 126],
+    stages: [[132, 162, 916, 516], [370, 162, 678, 516], [370, 162, 460, 516], [370, 162, 460, 386]],
+    pts: { guess: [480, 300], one: [640, 450], other: [245, 410], five: [946, 410], late: [610, 640] },
+    steps: [[245, 214, 'middle'], [946, 214, 'middle'], [610, 586, 'middle']],
+    chain: [[1180, 200], [1320, 200], [1460, 200]], ex: [1320, 380], steps10: [1320, 540], th: [800, 742], th2: null,
+  };
+  const sz = T ? .5 : .56;
+  c.at(80);
+  c.text(G.head[0], G.head[1] - (T ? 30 : 0), T ? "the app's grant: the game, any function;" : "the app's grant: the game, any function · the shop, at most 10 XLM per 100 ledgers · until ledger N", { anchor: 'start', size: sz, k: 'soft' });
+  if (T) c.text(G.head[0], G.head[1], 'the shop, at most 10 XLM per 100 ledgers; until ledger N', { anchor: 'start', size: sz, k: 'soft' });
+  const [px, py, pw, ph] = G.par;
+  c.rect(px, py, pw, ph, { k: 'now', rx: 24, w: 1.1, fill: 'hatch-now', fillOp: .9 });
+  // The calls, as points in the app's region.
+  c.at(500);
+  const PT = [['guess', 'game: guess', true], ['one', 'pay the shop 1 XLM', true], ['other', T ? 'other game functions' : 'other game functions', false], ['five', 'pay the shop 5 XLM', false], ['late', 'a call after ledger M', false]];
+  const marks = {};
+  PT.forEach(([key, lab, inside]) => {
+    const [x, y] = G.pts[key];
+    c.circle(x, y, T ? 9 : 7, { k: 'now', fill: 'now', w: .3, step: 60 });
+    const lines = T && key === 'five' ? ['pay the shop', '5 XLM'] : [lab];
+    if (!inside) lines.forEach((t, i) => c.text(x, y + (T ? 36 : 30) + i * (T ? 26 : 24), t, { size: sz, step: 0 }));
+    if (!inside) {
+      const g = E('g', { transform: `translate(${x + (T ? 22 : 20)} ${y - (T ? 16 : 14)})` }, c.svg);
+      g.setAttribute('class', 'cw-fade');
+      const q = E('path', { d: 'M-7 -7L7 7M7 -7L-7 7' }, g);
+      q.setAttribute('class', 'st k-ink'); q.setAttribute('stroke-width', c.sw * .8);
+      marks[key] = g;
+    }
+  });
+  // The helper's region, which the player shrinks.
+  const L = E('g', { class: 'an-fade' }, c.svg);
+  L.style.setProperty('--d', '700ms');
+  const child = E('rect', { rx: 18 }, L);
+  child.setAttribute('class', 'st k-now fl-paper');
+  child.setAttribute('fill-opacity', '.55');
+  child.setAttribute('stroke-width', c.sw * 1.1);
+  const ctext = E('text', { 'font-size': f2(c.fs * (T ? .56 : .62)) }, L);
+  ctext.setAttribute('class', 'tx c-now'); ctext.textContent = "the helper's grant";
+  // re-draw the inside points above the helper's region
+  [['guess', 'game: guess'], ['one', 'pay the shop 1 XLM']].forEach(([key, lab]) => {
+    const [x, y] = G.pts[key];
+    const d = E('circle', { cx: x, cy: y, r: T ? 9 : 7 }, L); d.setAttribute('class', 'fl-now');
+    const t = E('text', { x, y: y + (T ? 36 : 30), 'font-size': f2(c.fs * sz), 'text-anchor': 'middle' }, L); t.setAttribute('class', 'tx'); t.textContent = lab;
+  });
+  const STEP = [['1', 'only guess'], ['2', 'at most 2 XLM'], ['3', 'an earlier last ledger, M']];
+  const stepEls = STEP.map(([n, t], i) => {
+    const [x, y, an] = G.steps[i];
+    const g = E('g', null, L); g.setAttribute('class', 'cw-fade');
+    const tt = E('text', { x, y, 'font-size': f2(c.fs * sz), 'text-anchor': an }, g);
+    tt.setAttribute('class', 'tx c-now'); tt.textContent = `${n} · ${t}`;
+    if (i === 1) { const t2 = E('text', { x, y: y + (T ? 26 : 24), 'font-size': f2(c.fs * sz), 'text-anchor': an }, g); t2.setAttribute('class', 'tx c-now'); t2.textContent = 'per 100 ledgers'; }
+    return g;
+  });
+  const setChild = ([x, y, w, h]) => {
+    child.setAttribute('x', f2(x)); child.setAttribute('y', f2(y)); child.setAttribute('width', f2(w)); child.setAttribute('height', f2(h));
+    ctext.setAttribute('x', f2(x + 20)); ctext.setAttribute('y', f2(y + (T ? 40 : 34)));
+  };
+  const lerp = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+  // The delegation, and the call that separates the two regions.
+  c.at(1200);
+  const [[ax, ay], [bx, by], [hx, hy]] = G.chain;
+  c.icon('account', ax, ay, T ? 50 : 46, { k: 'now' });
+  c.text(ax, ay + (T ? 50 : 46), 'Nido account', { size: sz, k: 'soft' });
+  c.arrow(ax + 34, ay, bx - 34, by, { k: 'now', w: .7 });
+  c.icon('key', bx, by, T ? 50 : 46, { k: 'now' });
+  c.text(bx, by + (T ? 50 : 46), 'the app', { size: sz, k: 'soft' });
+  c.arrow(bx + 34, by, hx - 34, hy, { k: 'now', w: .7 });
+  c.icon('agent', hx, hy, T ? 50 : 46, { k: 'now' });
+  c.text(hx, hy + (T ? 50 : 46), 'a helper', { size: sz, k: 'soft' });
+  const [exx, exy] = G.ex;
+  c.text(exx, exy - (T ? 40 : 60), 'pay the shop 5 XLM', { size: T ? .62 : .7 });
+  c.text(exx - (T ? 120 : 70), exy, 'the app', { size: sz, k: 'soft' });
+  c.check(exx - (T ? 120 : 70), exy + (T ? 40 : 40), T ? 34 : 32, { k: 'now' });
+  c.text(exx + (T ? 120 : 70), exy, 'the helper', { size: sz, k: 'soft' });
+  c.cross(exx + (T ? 120 : 70), exy + (T ? 40 : 40), T ? 28 : 26, { k: 'ink' });
+  c.text(G.steps10[0], G.steps10[1], 'three of the 10 narrowing steps', { size: sz, k: 'soft' });
+  c.text(G.th[0], G.th[1], T ? "Theorems 4 and 5: the helper's grant allows no call," : "Theorems 4 and 5: the helper's grant allows no call, and no run of payments, that the app's grant refuses", { size: T ? .54 : .64, k: 'now' });
+  if (T) c.text(G.th2[0], G.th2[1], "and no run of payments, that the app's grant refuses", { size: .54, k: 'now' });
+  const finalState = () => { setChild(G.stages[3]); stepEls.forEach(g => { g.style.opacity = 1; }); Object.values(marks).forEach(g => { g.style.opacity = ''; }); };
+  finalState();
+  c.svg._att = { G, setChild, lerp, stepEls, marks, finalState };
+}, enter(svg) {
+  const P = svg._att;
+  if (!P) return;
+  if (still()) { P.finalState(); return; }
+  const A = svg._anim = new Anim();
+  const run = () => {
+    P.setChild(P.G.stages[0]);
+    P.stepEls.forEach(g => { g.style.opacity = 0; });
+    Object.values(P.marks).forEach(g => { g.style.opacity = 0; });
+    const order = [['other', 0], ['five', 1], ['late', 2]];
+    order.forEach(([key, i], j) => {
+      const t0 = 1600 + j * 1900;
+      A.at(t0, () => { P.stepEls[i].style.opacity = 1; A.tween(900, k => P.setChild(P.lerp(P.G.stages[i], P.G.stages[i + 1], k))); });
+      A.at(t0 + 1000, () => { P.marks[key].style.opacity = 1; });
+    });
+    A.at(13500, run);
+  };
+  run();
+}, leave(svg) { if (svg._anim) svg._anim.stop(); if (svg._att) svg._att.finalState(); } };
+
+B.window = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const G = T ? {
+    x0: 90, x1: 760, y0: 640, u: 34, top: 270,
+    pts: [[-101, 92], [-1, 138], [0, 220], [1, 300], [2, 345], [98, 455], [99, 505], [100, 595], [101, 685]],
+    brk: 400, bw: 40, tfs: .56, tl: 684,
+    meter: { x: 120, y: 820, w: 560, h: 50, horiz: true }, mLab: [120, 796, 'start'], mVal: [400, 930],
+    cap: [400, 1040], cap2: [400, 1086],
+    labs: ['t−1', 't', 't+1', 't+99', 't+100', 't+101'],
+  } : {
+    x0: 170, x1: 1240, y0: 560, u: 34, top: 200,
+    pts: [[-101, 172], [-1, 260], [0, 400], [1, 520], [2, 600], [98, 790], [99, 870], [100, 1010], [101, 1150]],
+    brk: 695, bw: 56, tfs: .62, tl: 600,
+    meter: { x: 1350, y: 220, w: 80, h: 340, horiz: false }, mLab: [1390, 164, 'middle'], mVal: [1390, 612],
+    cap: [705, 690],
+    labs: ['t − 1', 't', 't + 1', 't + 99', 't + 100', 't + 101'],
+  };
+  const X = n => {
+    const p = G.pts;
+    if (n <= p[0][0]) return p[0][1];
+    for (let i = 1; i < p.length; i++) if (n <= p[i][0]) { const [a, xa] = p[i - 1], [b, xb] = p[i]; return xa + (xb - xa) * (n - a) / (b - a); }
+    return p[p.length - 1][1];
+  };
+  const Y = v => G.y0 - v * G.u;
+  c.at(80);
+  c.line(G.x0, G.y0, G.x0, G.top - 20, { k: 'soft', w: .5 });
+  [[0, '0'], [5, '5'], [10, '10']].forEach(([v, s]) => c.text(G.x0 - 14, Y(v) + 8, s, { anchor: 'end', size: .66, k: 'soft', step: 0 }));
+  c.line(G.x0, G.y0, G.brk - 12, G.y0, { k: 'soft', w: .6 });
+  c.line(G.brk + 12, G.y0, G.x1, G.y0, { k: 'soft', w: .6 });
+  c.path(`M${G.brk - 18} ${G.y0 + 10}L${G.brk - 8} ${G.y0 - 10}M${G.brk + 8} ${G.y0 + 10}L${G.brk + 18} ${G.y0 - 10}`, { k: 'soft', w: .6 });
+  [-1, 0, 1, 99, 100, 101].forEach((n, i) => {
+    c.line(X(n), G.y0, X(n), G.y0 + 8, { k: 'soft', w: .5, step: 0 });
+    c.text(X(n), G.tl, G.labs[i], { size: G.tfs, k: 'soft', font: T ? 'code' : undefined, step: 30 });
+  });
+  c.line(G.x0, Y(10), G.x1, Y(10), { k: 'ink', w: .7 });
+  c.text(T ? G.x0 + 10 : G.x1, Y(10) - 14, 'limit 10 XLM', { anchor: T ? 'start' : 'end', size: .64, k: 'soft' });
+  // Moving parts (no arrival classes; the player drives them).
+  const L = E('g', { class: 'an-fade' }, c.svg);
+  L.style.setProperty('--d', '500ms');
+  const mk = (tag, a, cls) => { const e = E(tag, a, L); e.setAttribute('class', cls); return e; };
+  const band = mk('rect', { y: G.top - 10, height: G.y0 - G.top + 10, rx: 4 }, 'st k-now fl-hatch-now cw-fade');
+  band.setAttribute('stroke-width', c.sw * .5);
+  const edgeL = mk('line', { y1: G.top - 22, y2: G.y0 + 12 }, 'st k-now cw-fade'), edgeR = mk('line', { y1: G.top - 22, y2: G.y0 + 12 }, 'st k-now cw-fade');
+  [edgeL, edgeR].forEach(e => e.setAttribute('stroke-width', c.sw * 1.4));
+  const bar = (n, v) => {
+    const r = mk('rect', { x: X(n) - G.bw / 2, width: G.bw, rx: 3 }, 'st k-now fl-now cw-fade');
+    r.setAttribute('fill-opacity', .32); r.setAttribute('stroke-width', c.sw * .7);
+    r._n = n; r._v = v; return r;
+  };
+  const b6 = bar(0, 6), b4 = bar(1, 4), b5 = bar(100, 5);
+  const ghost = (n, from, to) => {
+    const r = mk('rect', { x: X(n) - G.bw / 2, width: G.bw, y: Y(to), height: Y(from) - Y(to), rx: 3 }, 'st k-soft fl-hatch cw-fade');
+    r.setAttribute('stroke-width', c.sw * .6); return r;
+  };
+  const gA = ghost(0, 6, 11), gB = ghost(99, 0, 1);
+  const xmark = (x, y, lab) => {
+    const g = E('g', { transform: `translate(${f2(x)} ${f2(y)})` }, L);
+    g.setAttribute('class', 'cw-fade');
+    const s = T ? 11 : 9;
+    const p = E('path', { d: `M${-s} ${-s}L${s} ${s}M${s} ${-s}L${-s} ${s}` }, g);
+    p.setAttribute('class', 'st k-ink'); p.setAttribute('stroke-width', c.sw * .9);
+    const t = E('text', { x: s + 8, y: s - 2, 'font-size': f2(c.fs * (T ? .6 : .56)) }, g);
+    t.setAttribute('class', 'tx f-code c-soft'); t.textContent = lab;
+    return g;
+  };
+  const xA = xmark(X(0), Y(8.5), '+5'), xB = xmark(X(99), Y(1.2), '+1');
+  // The window's total, on a meter with the same limit.
+  const M = G.meter;
+  const mOut = mk('rect', { x: M.x, y: M.y, width: M.w, height: M.h, rx: 4 }, 'st k-soft');
+  mOut.setAttribute('stroke-width', c.sw * .5);
+  const mFill = mk('rect', { rx: 3 }, 'st k-now fl-now');
+  mFill.setAttribute('fill-opacity', .4); mFill.setAttribute('stroke-width', c.sw * .6);
+  const mGhost = mk('rect', { rx: 3 }, 'st k-soft fl-hatch cw-fade');
+  mGhost.setAttribute('stroke-width', c.sw * .5);
+  const mLab = E('text', { x: G.mLab[0], y: G.mLab[1], 'font-size': f2(c.fs * .66), 'text-anchor': G.mLab[2] }, L);
+  mLab.setAttribute('class', 'tx c-soft'); mLab.textContent = 'in the window';
+  const mVal = E('text', { x: G.mVal[0], y: G.mVal[1], 'font-size': f2(c.fs * .8), 'text-anchor': 'middle' }, L);
+  mVal.setAttribute('class', 'tx f-code c-now');
+  const cap = E('text', { x: G.cap[0], y: G.cap[1], 'font-size': f2(c.fs * (T ? .6 : .7)), 'text-anchor': 'middle' }, L);
+  cap.setAttribute('class', 'tx f-code cw-fade');
+  const cap2 = T ? E('text', { x: G.cap2[0], y: G.cap2[1], 'font-size': f2(c.fs * .6), 'text-anchor': 'middle' }, L) : null;
+  if (cap2) cap2.setAttribute('class', 'tx f-code c-soft cw-fade');
+  const setBand = l => {
+    const a = X(l - 99.5), b = X(l + .5);
+    band.setAttribute('x', f2(a)); band.setAttribute('width', f2(b - a));
+    edgeL.setAttribute('x1', f2(a)); edgeL.setAttribute('x2', f2(a));
+    edgeR.setAttribute('x1', f2(b)); edgeR.setAttribute('x2', f2(b));
+  };
+  const setBar = (r, v) => { r.setAttribute('y', f2(Y(v))); r.setAttribute('height', f2(Math.max(0, G.y0 - Y(v)))); };
+  const mAt = v => M.horiz ? { x: M.x, y: M.y, w: M.w * v / 10, h: M.h } : { x: M.x, y: M.y + M.h - M.h * v / 10, w: M.w, h: M.h * v / 10 };
+  const setMeter = v => { const r = mAt(v); mFill.setAttribute('x', f2(r.x)); mFill.setAttribute('y', f2(r.y)); mFill.setAttribute('width', f2(Math.max(0, r.w))); mFill.setAttribute('height', f2(Math.max(0, r.h))); mVal.textContent = `${Math.round(v)} / 10`; };
+  const setMGhost = (from, to) => {
+    if (M.horiz) { mGhost.setAttribute('x', f2(M.x + M.w * from / 10)); mGhost.setAttribute('y', M.y); mGhost.setAttribute('width', f2(M.w * (to - from) / 10)); mGhost.setAttribute('height', M.h); }
+    else { mGhost.setAttribute('x', M.x); mGhost.setAttribute('y', f2(M.y + M.h - M.h * to / 10)); mGhost.setAttribute('width', M.w); mGhost.setAttribute('height', f2(M.h * (to - from) / 10)); }
+  };
+  const CAPS = [
+    ['ledger t', '+6 accepted · 6'],
+    ['ledger t', '+5 refused · 6 + 5 > 10'],
+    ['ledger t + 1', '+4 accepted · 10 ≤ 10'],
+    ['ledger t + 99', '+1 refused · 10 in the window'],
+    ['ledger t + 100', 'the 6 leaves · +5 accepted · 9'],
+  ];
+  const setCap = i => {
+    if (i < 0) { cap.textContent = ''; if (cap2) cap2.textContent = ''; return; }
+    if (cap2) { cap.textContent = CAPS[i][0]; cap2.textContent = CAPS[i][1]; }
+    else cap.textContent = CAPS[i][0] + ' · ' + CAPS[i][1];
+  };
+  const op = (e, v) => { e.style.opacity = v; };
+  const finalState = () => {
+    setBand(100); op(band, 1); op(edgeL, 1); op(edgeR, 1);
+    setBar(b6, 6); op(b6, .28); setBar(b4, 4); op(b4, 1); setBar(b5, 5); op(b5, 1);
+    op(gA, 0); op(gB, 0); op(xA, 1); op(xB, 1); op(mGhost, 0);
+    setMeter(9); setCap(4); op(cap, 1); if (cap2) op(cap2, 1);
+  };
+  finalState();
+  c.svg._play = { setBand, setBar, setMeter, setMGhost, setCap, op, finalState, b6, b4, b5, gA, gB, xA, xB, mGhost, band, edgeL, edgeR, cap, cap2 };
+}, enter(svg) {
+  const P = svg._play;
+  if (!P) return;
+  if (still()) { P.finalState(); return; }
+  const A = svg._anim = new Anim();
+  const { op } = P;
+  const cap = i => { op(P.cap, 0); if (P.cap2) op(P.cap2, 0); A.at(260, () => { P.setCap(i); op(P.cap, 1); if (P.cap2) op(P.cap2, 1); }); };
+  const reset = () => {
+    [P.b6, P.b4, P.b5].forEach(b => { P.setBar(b, 0); op(b, 1); });
+    [P.gA, P.gB, P.xA, P.xB, P.mGhost].forEach(e => op(e, 0));
+    P.setBand(0); op(P.band, 0); op(P.edgeL, 0); op(P.edgeR, 0);
+    P.setMeter(0); P.setCap(-1);
+  };
+  const run = () => {
+    reset();
+    A.at(500, () => { op(P.band, 1); op(P.edgeL, 1); op(P.edgeR, 1); });
+    A.at(900, () => { cap(0); A.tween(700, k => { P.setBar(P.b6, 6 * k); P.setMeter(6 * k); }); });
+    A.at(2700, () => { cap(1); P.setMGhost(6, 11); op(P.gA, 1); op(P.mGhost, 1); });
+    A.at(3700, () => op(P.xA, 1));
+    A.at(4300, () => { op(P.gA, 0); op(P.mGhost, 0); });
+    A.at(4900, () => { cap(2); A.tween(500, k => P.setBand(k)); A.tween(700, k => { P.setBar(P.b4, 4 * k); P.setMeter(6 + 4 * k); }); });
+    A.at(6900, () => { cap(3); A.tween(1300, k => P.setBand(1 + 98 * k)); });
+    A.at(8300, () => { P.setMGhost(10, 11); op(P.gB, 1); op(P.mGhost, 1); });
+    A.at(9200, () => op(P.xB, 1));
+    A.at(9800, () => { op(P.gB, 0); op(P.mGhost, 0); });
+    A.at(10400, () => { cap(4); A.tween(700, k => P.setBand(99 + k)); op(P.b6, .28); A.tween(600, k => P.setMeter(10 - 6 * k)); });
+    A.at(11300, () => A.tween(700, k => { P.setBar(P.b5, 5 * k); P.setMeter(4 + 5 * k); }));
+    A.at(15500, run);
+  };
+  run();
+}, leave(svg) { if (svg._anim) svg._anim.stop(); if (svg._play) svg._play.finalState(); } };
+
+B.path = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const st = ['host', 'guards', 'rules', 'decide', 'verify', 'store'];
+  const P = T ? { w: 250, h: 92, xs: () => 320, ys: i => 104 + i * 162, done: [320, 1080] }
+    : { w: 180, h: 104, xs: i => 135 + i * 235, ys: () => 330, done: [1500, 330] };
+  c.at(80);
+  if (T) c.text(320, 40, '__check_auth', { font: 'code', size: .6, k: 'soft' });
+  else c.text(135, 250, '__check_auth', { font: 'code', size: .6, k: 'soft' });
+  st.forEach((lab, i) => {
+    const x = P.xs(i), y = P.ys(i);
+    c.at(200 + i * 330);
+    c.box(x - P.w / 2, y - P.h / 2, P.w, P.h, 'plain', { rx: 16 });
+    const decide = lab === 'decide';
+    c.text(x, y + (decide && T ? -6 : 9), lab, { size: decide ? .95 : .86, k: decide ? 'now' : undefined });
+    if (decide) {
+      c.text(x, T ? y + 30 : y + P.h / 2 + 46, 'rule_eval::authorize', { font: 'code', size: T ? .46 : .56, k: 'soft' });
+      if (T) { c.text(100, y - 6, 'Theorems', { size: .56, k: 'soft' }); c.text(100, y + 28, '1, 2, 6', { size: .56, k: 'soft' }); }
+      else c.text(x, y - P.h / 2 - 22, 'Theorems 1, 2, 6', { size: .56, k: 'soft' });
+    }
+    if (i < st.length - 1) {
+      if (T) c.arrow(x, y + P.h / 2 + 6, x, P.ys(i + 1) - P.h / 2 - 8, { k: 'now', w: .7 });
+      else c.arrow(x + P.w / 2 + 6, y, P.xs(i + 1) - P.w / 2 - 8, y, { k: 'now', w: .7 });
+    }
+  });
+  // The signature binds the account and the rule ids.
+  c.at(1700);
+  if (T) { c.seal(100, P.ys(4), 30, { id: 'A', bg: true }); c.line(136, P.ys(4), 320 - P.w / 2 - 8, P.ys(4), { k: 'now', w: .5 }); c.text(100, P.ys(4) + 70, 'binds', { size: .6, k: 'soft' }); c.text(100, P.ys(4) + 102, 'rule ids', { size: .6, k: 'soft' }); }
+  else { c.seal(P.xs(4), 196, 26, { id: 'A', bg: true }); c.line(P.xs(4), 226, P.xs(4), 330 - P.h / 2 - 8, { k: 'now', w: .5 }); c.text(P.xs(4), 152, 'binds the rule ids', { size: .6, k: 'soft' }); }
+  // Refusals: every exit writes nothing.
+  c.at(2300);
+  const ex = [1, 2, 3, 4];
+  ex.forEach((i, j) => {
+    const x = P.xs(i), y = P.ys(i);
+    if (T) {
+      c.line(x + P.w / 2 + 8, y, 590, y, { k: 'soft', w: .5, step: 40 });
+      c.circle(616, y, 22, { k: 'soft', w: .6, step: 0 });
+      c.cross(616, y, 20, { k: 'soft', step: 80 });
+    } else {
+      c.line(x, y + P.h / 2 + (i === 3 ? 70 : 10), x, 538, { k: 'soft', w: .5, step: 40 });
+      c.circle(x, 562, 22, { k: 'soft', w: .6, step: 0 });
+      c.cross(x, 562, 20, { k: 'soft', step: 80 });
+    }
+  });
+  if (T) {
+    c.line(616, P.ys(1) + 22, 616, P.ys(4) - 22, { k: 'faint', w: .5 });
+    c.text(616, P.ys(4) + 76, 'refused:', { size: .62, k: 'soft' });
+    c.text(616, P.ys(4) + 112, 'nothing written', { size: .62, k: 'soft' });
+  } else {
+    c.line(P.xs(1) + 22, 562, P.xs(4) - 22, 562, { k: 'faint', w: .5 });
+    c.text((P.xs(1) + P.xs(4)) / 2, 628, 'refused: nothing written', { size: .7, k: 'soft' });
+  }
+  // Accepted: stored, authorized.
+  c.at(3000);
+  const [dx, dy] = P.done;
+  if (T) c.arrow(320, P.ys(5) + P.h / 2 + 6, 320, dy - 36, { k: 'now', w: .7 });
+  else c.arrow(P.xs(5) + P.w / 2 + 6, 330, dx - 34, 330, { k: 'now', w: .7 });
+  c.check(dx, dy, 46, { k: 'now' });
+  // A request travels the accepted path.
+  const tok = E('circle', { cx: T ? 320 : 40, cy: T ? 24 : 330, r: T ? 11 : 9 }, c.svg);
+  tok.setAttribute('class', 'fl-now an-travel');
+  tok.style.setProperty('--d', '3300ms');
+  if (T) tok.style.setProperty('--ty', (dy - 60) + 'px'); else tok.style.setProperty('--tx', (dx - 80) + 'px');
+} };
+
+/* The sign dialog, drawn: three orders cycle on arrival; tap one to hold it. */
+B.dialog = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    app: [330, 74], appL: [376, 86, 'start'], a1: [400, 112, 400, 168], a1L: [420, 148, 'start'],
+    card: [24, 172, 1.15], tabs: [[170, 934], [400, 934], [630, 934]], a2: [400, 966, 400, 1082], a2L: [420, 1032, 'start'], acc: [400, 1156], accL: [400, 1240],
+  } : {
+    app: [140, 380], appL: [140, 462, 'middle'], a1: [200, 380, 420, 380], a1L: [310, 354, 'middle'],
+    card: [440, 40, 1], tabs: [[600, 728], [770, 728], [950, 728]], a2: [1112, 380, 1300, 380], a2L: [1206, 354, 'middle'], acc: [1385, 380], accL: [1385, 470],
+  };
+  c.at(80);
+  c.icon('cup', P.app[0], P.app[1], T ? 56 : 70, { k: 'now' });
+  c.text(P.appL[0], P.appL[1], 'café app', { anchor: P.appL[2], size: .8 });
+  c.arrow(...P.a1, { k: 'now', w: .8 });
+  c.text(P.a1L[0], P.a1L[1], 'request', { anchor: P.a1L[2], size: .66, k: 'soft' });
+  // The card, drawn in wide units and scaled for tall screens.
+  const [X0, Y0, S] = P.card;
+  const fs0 = c.fs, sw0 = c.sw;
+  c.fs = 27; c.sw = 2.4;
+  const g = c.group(`translate(${X0} ${Y0}) scale(${S})`);
+  c.at(400);
+  c.rect(0, 0, 660, 640, { k: 'ink', rx: 28, w: .9, fill: 'paper', anim: 'an-fade' });
+  c.text(40, 56, 'Nido', { anchor: 'start', font: 'disp', size: .95 });
+  c.chip(158, 48, 'wallet', { k: 'soft', size: .52 });
+  c.line(0, 140, 660, 140, { k: 'faint', w: .5 });
+  c.text(40, 540, '▸  Details: the full tree', { anchor: 'start', size: .72, k: 'soft' });
+  c.rect(318, 566, 120, 52, { k: 'soft', rx: 14, w: .6, fill: 'paper2' });
+  c.text(378, 600, 'Reject', { size: .72 });
+  c.rect(454, 566, 176, 52, { k: 'now', rx: 14, w: .6, fill: 'now' });
+  const states = [];
+  const S0 = [
+    { title: 'Authorize this call', l1: 'Send 5 XLM to Café Perch', left: '2 of 10 XLM left this window', ok: true, verdict: 'Will succeed', why: 'grant 1 · within the cap', btn: 'Approve' },
+    { title: 'Authorize this call', l1: 'Send 8 XLM to Café Perch', left: 'Over the cap: 7 of 10 XLM left', ok: false, verdict: 'Will be refused', why: 'RuleEvalRefused · contract error 5', btn: 'Approve anyway' },
+    { title: 'Authorize 2 calls', l1: 'Send 2 XLM to Café Perch', l1b: 'Send 4 XLM to GDBV…YUCK', left: '5 of 10 XLM left this window', ok: true, verdict: 'Will succeed', why: 'grant 1 · within the cap', warn: 'Also signs an authorization it never uses', btn: 'Approve anyway' },
+  ];
+  S0.forEach((s, i) => {
+    const sg = E('g', { class: 'dlg-state' }, g);
+    sg.style.opacity = i === 0 ? 1 : 0;
+    c.layer = sg;
+    c.at(700);
+    c.text(40, 108, s.title, { anchor: 'start', font: 'disp', size: 1.08 });
+    c.text(40, 196, s.l1, { anchor: 'start', size: .92 });
+    let y = 238;
+    if (s.l1b) {
+      c.text(40, 238, s.l1b, { anchor: 'start', size: .92 });
+      c.chip(436, 230, 'not used', { k: 'seal', tk: 'seal', size: .56, fill: 'hatch-seal' });
+      y = 280;
+    }
+    c.text(40, y, s.left, { anchor: 'start', size: .7, k: s.ok ? 'soft' : undefined });
+    const vy = y + 24;
+    c.rect(40, vy, 580, 100, { k: s.ok ? 'now' : 'soft', rx: 14, w: .7, fill: s.ok ? 'hatch-now' : 'hatch' });
+    if (s.ok) c.check(80, vy + 38, 30, { k: 'now' }); else c.cross(80, vy + 38, 26, { k: 'ink' });
+    c.text(112, vy + 46, s.verdict, { anchor: 'start', size: .82 });
+    c.text(112, vy + 80, s.why, { anchor: 'start', size: .62, k: 'soft' });
+    if (s.warn) {
+      c.rect(40, vy + 114, 580, 66, { k: 'seal', rx: 14, w: .7, fill: 'hatch-seal' });
+      c.icon('warn', 78, vy + 147, 30, { k: 'seal' });
+      c.text(112, vy + 155, s.warn, { anchor: 'start', size: .7 });
+    }
+    c.text(542, 600, s.btn, { size: .7, k: 'paper' });
+    states.push(sg);
+  });
+  c.layer = c.svg;
+  c.fs = fs0; c.sw = sw0;
+  // The three orders.
+  c.at(1300);
+  const tabs = ['5 XLM', '8 XLM', '2 + 4 XLM'].map((s, i) => {
+    const [x, y] = P.tabs[i];
+    const tg = E('g', { 'data-tab': i, role: 'button', tabindex: 0, 'aria-label': `Show the ${s} order` }, c.svg);
+    const w = c.tw(s, { size: .66 }) + c.fs * 1.4, h = c.fs * 1.4;
+    const r = c.rect(x - w / 2, y - h / 2, w, h, { k: 'now', rx: h / 2, w: .7, p: tg, cls: 'tab-pill', anim: 'an-fade' });
+    const t = c.text(x, y + 1, s, { size: .66, base: 'central', p: tg });
+    return { tg, r, t };
+  });
+  c.at(1700);
+  c.arrow(...P.a2, { k: 'now', w: .8 });
+  c.text(P.a2L[0], P.a2L[1], 'sign', { anchor: P.a2L[2], size: .66, k: 'soft' });
+  c.icon('account', P.acc[0], P.acc[1], T ? 76 : 84, { k: 'now' });
+  c.text(P.accL[0], P.accL[1], 'decides', { size: .8 });
+  const ctl = c.svg._dlg = { cur: 0, timer: null };
+  ctl.set = i => {
+    ctl.cur = i;
+    states.forEach((sg, j) => { sg.style.opacity = j === i ? 1 : 0; });
+    tabs.forEach(({ r, t }, j) => {
+      r.setAttribute('class', r.getAttribute('class').replace(/ ?fl-now|$/, j === i ? ' fl-now' : ''));
+      t.setAttribute('class', t.getAttribute('class').replace(/ ?c-paper/, '') + (j === i ? ' c-paper' : ''));
+    });
+  };
+  tabs.forEach(({ tg }, i) => {
+    const pick = e => { e.preventDefault(); e.stopPropagation(); clearInterval(ctl.timer); ctl.set(i); };
+    tg.addEventListener('click', pick);
+    tg.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') pick(e); });
+  });
+  ctl.set(0);
+}, enter(svg) {
+  const ctl = svg._dlg;
+  if (!ctl) return;
+  clearInterval(ctl.timer);
+  ctl.set(0);
+  if (!still()) ctl.timer = setInterval(() => ctl.set((ctl.cur + 1) % 3), 3800);
+}, leave(svg) { if (svg._dlg) clearInterval(svg._dlg.timer); } };
+
+// A simulated part, labelled wherever it appears.
+const simChip = (c, x, y, s, o = {}) => c.chip(x, y, s, { k: 'seal', tk: 'seal', size: o.size || (c.tall ? .5 : .52), fill: 'hatch-seal', d: o.d });
+// The Nido sign dialog, drawn small: a header, a title, lines and the two buttons.
+function nidoDialog(c, x, y, w, h, title, lines, d) {
+  c.at(d);
+  c.rect(x, y, w, h, { k: 'ink', rx: 22, w: .9, fill: 'paper', anim: 'an-fade' });
+  c.text(x + 30, y + 50, 'Nido', { anchor: 'start', font: 'disp', size: .82 });
+  c.line(x, y + 72, x + w, y + 72, { k: 'faint', w: .5 });
+  c.text(x + 30, y + 120, title, { anchor: 'start', font: 'disp', size: .9 });
+  lines.forEach((t, i) => c.text(x + 30, y + 168 + i * 38, t, { anchor: 'start', size: .56, k: i === lines.length - 1 && lines.length > 2 ? 'soft' : undefined, step: 60 }));
+  const by = y + h - 70;
+  c.rect(x + w - 286, by, 112, 46, { k: 'soft', rx: 12, w: .6, fill: 'paper2' });
+  c.text(x + w - 230, by + 30, 'Reject', { size: .6 });
+  c.rect(x + w - 158, by, 132, 46, { k: 'now', rx: 12, w: .6, fill: 'now' });
+  c.text(x + w - 92, by + 30, 'Approve', { size: .6, k: 'paper' });
+}
+
+B.create = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    you: [120, 100], youL: [120, 172], key: [320, 100], keyL: [320, 172], keyChip: [560, 100],
+    a1: [400, 214, 400, 300], a1L: [420, 266, 'start'], fac: [250, 310, 300, 170], facI: [400, 362], facL: [400, 436], facC: [400, 466], facChip: [400, 526],
+    a2: [400, 566, 400, 650], a2L: [420, 616, 'start'], acc: [400, 880, 200], accL: [400, 790], doc: [290, 830, 220, 100],
+    bond: 'M352 118C760 160 770 860 604 876', bondL: [400, 1150],
+  } : {
+    you: [150, 290], youL: [150, 366], key: [150, 470], keyL: [150, 540], keyChip: [150, 590],
+    a1: [232, 340, 420, 340], a1L: [326, 314, 'middle'], fac: [430, 255, 300, 170], facI: [580, 306], facL: [580, 378], facC: [580, 408], facChip: [580, 462],
+    a2: [740, 340, 930, 340], a2L: [835, 314, 'middle'], acc: [1120, 340, 160], accL: [1120, 290], doc: [1026, 318, 188, 84],
+    bond: 'M196 478C460 680 950 680 1120 502', bondL: [660, 690],
+  };
+  c.at(80);
+  c.icon('person', P.you[0], P.you[1], T ? 66 : 76, { k: 'ink' });
+  c.text(P.youL[0], P.youL[1], 'you', { size: .8 });
+  c.icon('passkey', P.key[0], P.key[1], T ? 62 : 70, { k: 'now' });
+  c.text(P.keyL[0], P.keyL[1], 'your passkey', { size: .7 });
+  simChip(c, P.keyChip[0], P.keyChip[1], 'simulated: a software P-256 key');
+  c.at(700);
+  c.arrow(...P.a1, { k: 'ink', w: .7 });
+  c.text(P.a1L[0], P.a1L[1], 'create my account', { anchor: P.a1L[2], size: .6, k: 'soft' });
+  const [fx, fy, fw, fh] = P.fac;
+  c.rect(fx, fy, fw, fh, { k: 'ink', rx: 16, w: .9 });
+  c.icon('factory', P.facI[0], P.facI[1], 58, { k: 'ink' });
+  c.text(P.facL[0], P.facL[1], "Nido's factory", { size: .74 });
+  c.text(P.facC[0], P.facC[1], 'create_account', { size: .5, font: 'code', k: 'soft' });
+  simChip(c, P.facChip[0], P.facChip[1], 'simulated build');
+  c.at(1500);
+  c.arrow(...P.a2, { k: 'now', w: .8 });
+  c.text(P.a2L[0], P.a2L[1], 'deploys', { anchor: P.a2L[2], size: .6, k: 'soft' });
+  const [ax, ay, ar] = P.acc;
+  c.circle(ax, ay, ar, { k: 'now', w: 1.2 });
+  c.circle(ax, ay, ar - 14, { k: 'now', w: .4 });
+  c.text(P.accL[0], P.accL[1], 'your account', { size: .8 });
+  const [dx, dy, dw, dh] = P.doc;
+  c.rect(dx, dy, dw, dh, { k: 'now', rx: 10, w: .8, fill: 'hatch-now' });
+  c.text(dx + 20, dy + 34, 'admin', { anchor: 'start', size: .62, font: 'code' });
+  c.text(dx + 20, dy + 64, 'signed by your passkey', { anchor: 'start', size: .46, k: 'soft' });
+  c.at(2300);
+  c.path(P.bond, { k: 'now', w: .5 });
+  c.text(P.bondL[0], P.bondL[1], "your passkey is the account's admin", { size: .58, k: 'now' });
+} };
+
+B.install = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    dlg: [60, 30, 680, 430], key: [200, 520], keyL: [250, 530, 'start'], keyChip: [600, 520], a1: [400, 570, 400, 650], a1L: [420, 618, 'start'],
+    acc: [40, 660, 720, 600], accL: [76, 712], cmp: [100, 776], cmpL: [140, 786], card: [80, 850, 640, 360], cardL: [80, 836],
+  } : {
+    dlg: [70, 150, 470, 420], key: [190, 650], keyL: [236, 660, 'start'], keyChip: [470, 650], a1: [550, 360, 660, 360], a1L: [605, 334, 'middle'],
+    acc: [672, 120, 868, 560], accL: [706, 172], cmp: [740, 236], cmpL: [778, 246], card: [740, 300, 740, 330], cardL: [740, 286],
+  };
+  const [dx, dy, dw, dh] = P.dlg;
+  nidoDialog(c, dx, dy, dw, dh, 'Install a grant', ['the game: guess, its stake to the game', 'the shop: order, its payment to the shop', 'the full grant under Details'], 80);
+  c.at(900);
+  c.icon('passkey', P.key[0], P.key[1], 56, { k: 'now' });
+  c.text(P.keyL[0], P.keyL[1], 'approve with your passkey', { anchor: P.keyL[2], size: .58 });
+  if (!T) simChip(c, P.keyChip[0], P.keyChip[1] + 44, 'simulated key'); else simChip(c, P.keyChip[0], P.keyChip[1] + 40, 'simulated key');
+  c.arrow(...P.a1, { k: 'now', w: .8 });
+  c.text(P.a1L[0], P.a1L[1], 'one install call', { anchor: P.a1L[2], size: .56, k: 'soft' });
+  c.at(1400);
+  const [ax, ay, aw, ah] = P.acc;
+  c.rect(ax, ay, aw, ah, { k: 'now', rx: 30, w: 1.2 });
+  c.rect(ax + 12, ay + 12, aw - 24, ah - 24, { k: 'now', rx: 22, w: .35 });
+  c.text(P.accL[0], P.accL[1], 'your account', { anchor: 'start', size: .66, k: 'soft' });
+  c.icon('doc', P.cmp[0], P.cmp[1], 40, { k: 'now' });
+  c.text(P.cmpL[0], P.cmpL[1], 'the document compiler checks it; the admin rule passes', { anchor: 'start', size: T ? .46 : .54 });
+  c.at(2000);
+  const [kx, ky, kw, kh] = P.card;
+  c.text(P.cardL[0], P.cardL[1], "the app's grant, installed", { anchor: 'start', size: .56, k: 'soft' });
+  c.rect(kx, ky, kw, kh, { k: 'now', rx: 16, w: 1.1, fill: 'paper' });
+  c.rect(kx, ky + kh * .1, kw, kh * .08, { k: 'now', w: .15, fill: 'now', fillOp: .2 });
+  c.rect(kx + 26, ky + kh * .3, 44, 34, { k: 'now', rx: 4, w: .5 });
+  const lines = [['game', 'any function'], ['XLM.transfer', 'to the game only, inside its room'], ['shop.order', ''], ['EURC.transfer', 'to the shop only, inside the shop']];
+  lines.forEach(([a, b], i) => {
+    const y = ky + kh * (T ? .34 : .34) + i * (T ? 62 : 54);
+    c.text(kx + 100, y, a, { anchor: 'start', size: T ? .54 : .56, font: 'code', step: 80 });
+    if (b) c.text(kx + (T ? 330 : 330), y, b, { anchor: 'start', size: T ? .44 : .5, k: 'now', step: 0 });
+  });
+} };
+
+// A grant covers the root call and the calls it makes: a keycard, a room, and the tree.
+function nestedScene(c, cfg) {
+  const T = c.tall;
+  const P = T ? {
+    card: [40, 70, 300, 170], room: [400, 40, 360, 330], door: [400, 200], doorL: [416, 284], desk: [620, 250], deskL: [620, 322],
+    walk: 'M340 150H386M418 200C500 200 530 230 570 245', ck1: [450, 150], ck2: [700, 196], same: [620, 150],
+    out: [190, 430], outL: [190, 500], outPath: 'M190 246V392', token: [190, 470],
+    treeL: [400, 600], root: [60, 640, 380, 70], kid: [150, 760, 420, 70], conds: [[180, 880], [180, 922], [180, 964]], dir: [60, 1060, 380, 64], dirL: [60, 1166],
+  } : {
+    card: [60, 150, 320, 180], room: [450, 130, 380, 340], door: [450, 300], doorL: [466, 390], desk: [690, 330], deskL: [690, 404],
+    walk: 'M380 300H436M468 300C560 300 600 320 640 330', ck1: [500, 254], ck2: [770, 282], same: [690, 238],
+    out: [220, 560], outL: [220, 632], outPath: 'M220 332V520', token: [640, 580],
+    treeL: [1210, 140], root: [930, 170, 380, 70], kid: [1010, 290, 440, 70], conds: [[1040, 404], [1040, 444], [1040, 484]], dir: [930, 580, 380, 64], dirL: [930, 682],
+  };
+  c.at(80);
+  // The keycard: one line for the room, one for the payment asked inside it.
+  const [kx, ky, kw, kh] = P.card;
+  c.rect(kx, ky, kw, kh, { k: 'now', rx: 16, w: 1.1, fill: 'paper' });
+  c.rect(kx, ky + kh * .13, kw, kh * .1, { k: 'now', w: .15, fill: 'now', fillOp: .2 });
+  c.rect(kx + 22, ky + kh * .36, 42, 32, { k: 'now', rx: 4, w: .5 });
+  c.text(kx + kw * .3, ky + kh * .5, cfg.card[0], { anchor: 'start', size: .56, font: 'code' });
+  c.text(kx + kw * .3, ky + kh * .7, cfg.card[1], { anchor: 'start', size: .56, font: 'code' });
+  c.text(kx + kw * .3, ky + kh * .87, cfg.card[2], { anchor: 'start', size: .42, k: 'now' });
+  c.text(kx, ky - 16, "the app's keycard", { anchor: 'start', size: .56, k: 'soft' });
+  // The room the card opens; the payment is asked for inside.
+  c.at(500);
+  const [rx, ry, rw, rh] = P.room;
+  c.path(`M${rx} ${P.door[1] - 46}V${ry}H${rx + rw}V${ry + rh}H${rx}V${P.door[1] + 46}`, { k: 'ink', w: 1.2 });
+  c.text(rx + rw / 2, ry + 44, cfg.room, { size: .7 });
+  c.icon('door', P.door[0], P.door[1], 92, { k: 'now', fill: 'hatch-now' });
+  c.text(P.doorL[0], P.doorL[1], cfg.door, { anchor: 'start', size: .54, k: 'soft' });
+  c.icon(cfg.counter, P.desk[0], P.desk[1], 84, { k: 'now' });
+  c.text(P.deskL[0], P.deskL[1], cfg.inside[0], { size: .58 });
+  c.text(P.deskL[0], P.deskL[1] + 30, cfg.inside[1], { size: .48, k: 'soft' });
+  c.at(1300);
+  c.path(P.walk, { k: 'now', w: .8 });
+  c.check(P.ck1[0], P.ck1[1], 30, { k: 'now' });
+  c.check(P.ck2[0], P.ck2[1], 30, { k: 'now' });
+  c.text(P.same[0], P.same[1], 'the same card', { size: .52, k: 'now' });
+  c.at(1900);
+  if (cfg.token) {
+    // A simulated token: labelled as such wherever it appears.
+    const [tx, ty] = P.token;
+    const w = c.chip(tx, ty, cfg.token, { k: 'seal', tk: 'seal', size: T ? .5 : .56, fill: 'hatch-seal' });
+    if (T) c.line(tx + w / 2 + 6, ty, P.deskL[0] - 70, P.deskL[1] + 44, { k: 'seal', w: .5 });
+    else c.line(tx, ty - 20, P.desk[0], P.deskL[1] + 46, { k: 'seal', w: .5 });
+  } else {
+    c.path(P.outPath, { k: 'soft', w: .7 });
+    c.icon('desk', P.out[0], P.out[1], 70, { k: 'soft' });
+    c.cross(P.out[0] + 52, P.out[1] - 30, 24, { k: 'ink' });
+    c.text(P.outL[0], P.outL[1], 'the same payment, asked directly', { size: .5, k: 'soft' });
+    c.text(P.outL[0], P.outL[1] + 28, 'refused', { size: .5 });
+  }
+  // The authorization tree, node by node.
+  c.at(2400);
+  if (T) c.line(40, 560, 760, 560, { k: 'faint', w: .5 }); else c.line(890, 110, 890, 700, { k: 'faint', w: .5 });
+  c.text(P.treeL[0], P.treeL[1], 'the authorization tree', { size: .6, k: 'soft' });
+  const node = ([x, y, w, h], a, b, ok, d) => {
+    c.rect(x, y, w, h, { k: ok ? 'ink' : 'soft', w: .9, rx: 8, d, fill: ok ? null : 'hatch' });
+    c.text(x + 22, y + h / 2 - 3, a, { anchor: 'start', size: .6, font: 'code', d: d + 80 });
+    c.text(x + 22, y + h / 2 + 23, b, { anchor: 'start', size: .46, k: 'soft', d: d + 120 });
+    if (ok) c.check(x + w + 36, y + h / 2, 30, { k: 'now', d: d + 400 }); else c.cross(x + w + 36, y + h / 2, 24, { k: 'ink', d: d + 400 });
+  };
+  node(P.root, cfg.root[0], cfg.root[1], true, 2500);
+  const [ax, ay, , ah] = P.root, [bx, by, , bh] = P.kid;
+  c.path(`M${ax + 40} ${ay + ah}V${by + bh / 2}H${bx - 6}`, { k: 'ink', w: .7, d: 2900 });
+  node(P.kid, cfg.kid[0], 'nested: passes the transfer rule only if', true, 3100);
+  cfg.conds.forEach((t, i) => {
+    const [x, y] = P.conds[i];
+    c.circle(x, y - 7, 5, { k: 'now', fill: 'now', w: .3, d: 3500 + i * 200 });
+    c.text(x + 18, y, t, { anchor: 'start', size: .54, d: 3500 + i * 200 });
+  });
+  c.at(4300);
+  node(P.dir, cfg.dir, 'made directly, or under another root', false, 4300);
+  c.text(P.dirL[0], P.dirL[1], cfg.dirNote, { anchor: 'start', size: .5, k: 'soft' });
+}
+
+B.nested = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  nestedScene(c, {
+    card: ['game.guess', 'XLM.transfer', 'to the game, in its room'],
+    room: 'the game room', door: 'door: guess', counter: 'desk', inside: ['a loss: pay the stake', 'account to game, in XLM'],
+    root: ['game.guess', 'the root: passes the game rule'], kid: ['XLM.transfer, the stake'],
+    conds: ['from the account, only to the game', 'within the cap', 'its root is exactly game.guess'],
+    dir: 'XLM.transfer as the root', dirNote: 'refused: the transfer rule needs the game room',
+  });
+} };
+
+B.coffee = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  nestedScene(c, {
+    card: ['shop.order', 'EURC.transfer', 'to the shop, inside it'],
+    room: 'the coffee shop', door: 'door: order', counter: 'cup', inside: ['the order pulls payment', 'account to shop, in EURC'],
+    token: 'EURC: a simulated test token',
+    root: ['shop.order', 'the root: passes the shop rule'], kid: ['EURC.transfer, the payment'],
+    conds: ['from the account, only to the shop', 'within the cap', 'its root is exactly shop.order'],
+    dir: 'EURC.transfer as the root', dirNote: 'refused: the transfer rule needs the shop',
+  });
+} };
+
+B.where = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  if (T) {
+    c.at(80);
+    c.chip(170, 46, 'OpenZeppelin v0.8.0', { k: 'soft', size: .56 });
+    c.icon('account', 400, 128, 70, { k: 'ink' });
+    c.arrow(400, 168, 400, 214, { k: 'ink', w: .7 });
+    c.rect(270, 222, 260, 110, { k: 'ink', rx: 16, w: .9 });
+    c.text(400, 270, 'context rule', { size: .7 });
+    c.text(400, 308, 'XLM · signer', { size: .54, k: 'soft' });
+    c.at(900);
+    c.curve(330, 336, 215, 412, { k: 'ink', w: .6, dir: 'v', head: true });
+    c.curve(470, 336, 585, 412, { k: 'ink', w: .6, dir: 'v', head: true });
+    c.rect(50, 420, 330, 130, { k: 'ink', rx: 14, w: .9 });
+    c.text(215, 474, 'policy-interpreter', { font: 'code', size: .5 });
+    c.text(215, 516, '≤ 10 XLM per call', { size: .54, k: 'soft' });
+    c.rect(420, 420, 330, 130, { k: 'ink', rx: 14, w: .9 });
+    c.text(585, 474, 'spending_limit', { font: 'code', size: .52 });
+    c.text(585, 516, '10 XLM / 100 ledgers', { size: .54, k: 'soft' });
+    c.text(400, 604, 'limits in policies beside the rule', { size: .6, k: 'soft' });
+    c.line(40, 640, 760, 640, { k: 'faint', w: .5 });
+    c.at(2000);
+    c.chip(100, 690, 'Perch', { k: 'now', tk: 'now', size: .56 });
+    c.rect(40, 730, 720, 470, { k: 'now', rx: 30, w: 1.2 });
+    c.rect(52, 742, 696, 446, { k: 'now', rx: 22, w: .35 });
+    c.text(80, 790, 'account', { anchor: 'start', size: .58, k: 'soft' });
+    c.rect(90, 816, 620, 352, { k: 'now', rx: 18, w: .9 });
+    c.text(120, 870, 'shop · transfer · app key', { anchor: 'start', size: .6 });
+    c.rect(120, 896, 140, 26, { k: 'now', rx: 5, w: .7, fill: 'hatch-now' });
+    c.text(276, 918, 'cap 10 XLM / 100', { anchor: 'start', size: .56, k: 'now' });
+    c.box(132, 966, 536, 166, 'proved', { rx: 16 });
+    c.text(400, 1040, 'decide', { size: .76, k: 'now' });
+    c.text(400, 1088, 'rule_eval::authorize', { font: 'code', size: .48, k: 'soft' });
+    c.text(400, 1262, 'cap inside the rule', { size: .6, k: 'soft' });
+    return;
+  }
+  c.at(80);
+  c.line(800, 70, 800, 740, { k: 'faint', w: .5 });
+  c.chip(210, 92, 'OpenZeppelin v0.8.0', { k: 'soft', size: .64 });
+  c.icon('account', 120, 400, 76, { k: 'ink' });
+  c.text(120, 478, 'account', { size: .62, k: 'soft' });
+  c.arrow(165, 400, 250, 400, { k: 'ink', w: .7 });
+  c.rect(258, 335, 196, 130, { k: 'ink', rx: 16, w: .9 });
+  c.text(356, 393, 'context rule', { size: .72 });
+  c.text(356, 432, 'XLM · signer', { size: .58, k: 'soft' });
+  c.at(900);
+  c.curve(456, 380, 536, 262, { k: 'ink', w: .6, head: true });
+  c.curve(456, 420, 536, 538, { k: 'ink', w: .6, head: true });
+  c.rect(542, 200, 232, 124, { k: 'ink', rx: 14, w: .9 });
+  c.text(658, 252, 'policy-interpreter', { font: 'code', size: .54 });
+  c.text(658, 292, '≤ 10 XLM per call', { size: .6, k: 'soft' });
+  c.rect(542, 476, 232, 124, { k: 'ink', rx: 14, w: .9 });
+  c.text(658, 528, 'spending_limit', { font: 'code', size: .58 });
+  c.text(658, 568, '10 XLM / 100 ledgers', { size: .6, k: 'soft' });
+  c.text(420, 700, 'limits in policies beside the rule', { size: .76, k: 'soft' });
+  c.at(2000);
+  c.chip(912, 92, 'Perch', { k: 'now', tk: 'now', size: .64 });
+  c.rect(860, 158, 680, 480, { k: 'now', rx: 30, w: 1.2 });
+  c.rect(872, 170, 656, 456, { k: 'now', rx: 22, w: .35 });
+  c.text(900, 212, 'account', { anchor: 'start', size: .7, k: 'soft' });
+  c.rect(916, 236, 568, 362, { k: 'now', rx: 18, w: .9 });
+  c.text(950, 290, 'shop · transfer · app key', { anchor: 'start', size: .74 });
+  c.rect(950, 316, 170, 26, { k: 'now', rx: 5, w: .7, fill: 'hatch-now' });
+  c.text(1136, 337, 'cap 10 XLM / 100 ledgers', { anchor: 'start', size: .64, k: 'now' });
+  c.box(958, 396, 484, 156, 'proved', { rx: 16 });
+  c.text(1200, 464, 'decide', { size: .86, k: 'now' });
+  c.text(1200, 508, 'rule_eval::authorize', { font: 'code', size: .56, k: 'soft' });
+  c.text(1200, 700, 'cap inside the rule', { size: .76, k: 'soft' });
+} };
+
+B.run = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const cmds = [['pay 6', 'ok', 'ok'], ['pay 5', 'no', 'no'], ['− limit', 'off', 'na'], ['pay 6', 'more', 'no'], ['pay 6', 'more', 'no'], ['pay 6', 'more', 'no'], ['+ limit', 'on', 'na']];
+  const G = T ? {
+    cell: i => ({ y: 232 + i * 90 }), lab: 60, oz: 470, pe: 650, head: 150, gs: 40,
+    bars: { x0: 60, w: 640, oz: 940, pe: 1070, h: 34 }, br: [530, 'v'],
+  } : {
+    cell: i => ({ x: 440 + i * 145 }), head: 150, oz: 292, pe: 440, lab: 70, gs: 40,
+    bars: { x0: 440, w: 870, oz: 572, pe: 690, h: 34 }, br: [340, 'h'],
+  };
+  const at = i => 700 + i * 520;
+  c.at(80);
+  if (T) {
+    c.text(G.oz, G.head, 'OZ', { size: .7 });
+    c.text(G.pe, G.head, 'Perch', { size: .7, k: 'now' });
+  } else {
+    c.text(G.lab, G.oz + 9, 'OpenZeppelin', { anchor: 'start', size: .8 });
+    c.text(G.lab, G.pe + 9, 'Perch', { anchor: 'start', size: .8, k: 'now' });
+  }
+  const glyph = (kind, x, y, k, d) => {
+    if (kind === 'ok' || kind === 'more') c.check(x, y, G.gs, { k: kind === 'more' ? 'seal' : k, d });
+    else if (kind === 'no') c.cross(x, y, G.gs - 8, { k, d });
+    else if (kind === 'off' || kind === 'on') {
+      c.icon('policy', x, y, G.gs + 6, { k: 'soft', d });
+      if (kind === 'off') c.line(x - 22, y + 22, x + 22, y - 22, { k: 'ink', w: .8, d: d + 200 });
+    } else c.text(x, y + 8, '—', { size: .8, k: 'soft', d });
+  };
+  cmds.forEach(([lab, oz, pe], i) => {
+    const d = at(i);
+    if (T) {
+      const y = G.cell(i).y;
+      c.text(G.lab, y + 8, lab, { anchor: 'start', font: 'code', size: .56, k: lab[0] === 'p' ? undefined : 'soft', d });
+      glyph(oz, G.oz, y, 'ink', d + 120);
+      glyph(pe, G.pe, y, 'now', d + 180);
+    } else {
+      const x = G.cell(i).x;
+      c.text(x, G.head, lab, { font: 'code', size: .6, k: lab[0] === 'p' ? undefined : 'soft', d });
+      glyph(oz, x, G.oz, 'ink', d + 120);
+      glyph(pe, x, G.pe, 'now', d + 180);
+    }
+  });
+  // The three payments only the per-call bound saw.
+  const dB = at(6) + 300;
+  if (T) {
+    const y1 = G.cell(3).y - 30, y2 = G.cell(5).y + 30, x = G.br[0];
+    c.path(`M${x - 10} ${y1}H${x}V${y2}H${x - 10}`, { k: 'seal', w: .8, d: dB });
+    c.text(x + 14, (y1 + y2) / 2 + 8, '18 XLM', { anchor: 'start', size: .6, k: 'seal', d: dB + 200 });
+  } else {
+    const x1 = G.cell(3).x - 40, x2 = G.cell(5).x + 40, y = G.br[0];
+    c.path(`M${x1} ${y - 10}V${y}H${x2}V${y - 10}`, { k: 'seal', w: .8, d: dB });
+    c.text((x1 + x2) / 2, y + 36, '18 XLM', { size: .76, k: 'seal', d: dB + 200 });
+  }
+  // Balances: 100 XLM each; each applied payment leaves the bar when its column prints.
+  const Bz = G.bars, ux = Bz.w / 100;
+  const balance = (y, k, spent, label, end, d0) => {
+    const fill = k === 'now' ? 'now' : 'ink';
+    c.rect(Bz.x0, y, Bz.w, Bz.h, { k: 'faint', w: .5, fill: 'hatch', d: d0 });
+    const keep = 100 - spent.length * 6;
+    c.rect(Bz.x0, y, keep * ux, Bz.h, { k, w: .6, fill, fillOp: .3, d: d0 + 100 });
+    spent.forEach((ci, j) => {
+      const x = Bz.x0 + (100 - (j + 1) * 6) * ux;
+      const r = c.rect(x, y, 6 * ux, Bz.h, { k, w: .6, fill, fillOp: .3, anim: 'an-out', d: at(ci) + 220 });
+      r.style.opacity = '';
+    });
+    if (T) {
+      c.text(Bz.x0, y - 14, label, { anchor: 'start', size: .56, k: k === 'now' ? 'now' : undefined, d: d0 });
+      c.text(Bz.x0 + Bz.w, y - 14, end, { anchor: 'end', font: 'code', size: .66, k: k === 'now' ? 'now' : undefined, d: at(6) + 400 });
+    } else {
+      c.text(G.lab, y + 25, label, { anchor: 'start', size: .68, k: k === 'now' ? 'now' : 'soft', d: d0 });
+      c.text(Bz.x0 + Bz.w + 22, y + 26, end, { anchor: 'start', font: 'code', size: .78, k: k === 'now' ? 'now' : undefined, d: at(6) + 400 });
+    }
+  };
+  balance(Bz.oz, 'ink', [0, 3, 4, 5], T ? 'OpenZeppelin balance' : 'balance', '76 XLM', 300);
+  balance(Bz.pe, 'now', [0], T ? 'Perch balance' : 'balance', '94 XLM', 400);
+  if (!T) c.text(Bz.x0, Bz.oz - 16, 'from 100 XLM', { anchor: 'start', size: .56, k: 'soft', d: 300 });
+} };
+
+B.proved = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  c.at(80);
+  if (T) {
+    c.chip(130, 92, 'Rust', { k: 'ink', size: .62 });
+    c.arrow(178, 92, 262, 92, { k: 'now', w: .7 });
+    c.text(220, 140, 'Charon · Aeneas', { size: .44, k: 'soft' });
+    c.box(278, 62, 300, 60, 'proved', { rx: 12 });
+    c.text(428, 102, 'Lean  ≡  model', { size: .66 });
+    c.text(400, 200, "13 theorems · checked by Lean's kernel", { size: .5, k: 'soft' });
+  } else {
+    c.chip(470, 108, 'Rust', { k: 'ink', size: .7 });
+    c.arrow(520, 108, 640, 108, { k: 'now', w: .7 });
+    c.text(580, 84, 'Charon · Aeneas', { size: .5, k: 'soft' });
+    c.box(658, 80, 300, 56, 'proved', { rx: 12 });
+    c.text(808, 118, 'Lean  ≡  model', { size: .74 });
+    c.text(992, 116, "13 theorems · checked by Lean's kernel", { anchor: 'start', size: .58, k: 'soft' });
+  }
+  const tiles = [
+    ['Theorem 1', 'returns what', 'the model returns', 'eq'],
+    ['Theorem 2', 'an accepted call', 'is allowed by a rule', 'rule'],
+    ['Theorem 6', 'no window holds', 'more than the cap', 'cap'],
+    ['Theorem 4', 'a narrowed grant', 'never allows more', 'nest'],
+    ['Theorem 8', 'no grant reaches', 'the account', 'wall'],
+    ['Theorem 10', 'recovery ends', 'every earlier grant', 'gen'],
+  ];
+  const glyph = (kind, x, y, d) => {
+    const o = { d };
+    if (kind === 'eq') {
+      c.rect(x - 52, y - 24, 38, 48, { k: 'ink', rx: 6, w: .7, ...o });
+      c.rect(x + 14, y - 24, 38, 48, { k: 'now', rx: 6, w: .9, ...o });
+      c.text(x, y + 9, '≡', { font: 'disp', size: .95, d: d + 100 });
+    } else if (kind === 'rule') {
+      c.rect(x - 48, y - 30, 96, 60, { k: 'now', rx: 12, w: .9, ...o });
+      c.circle(x - 10, y, 8, { k: 'now', fill: 'now', w: .3, d: d + 100 });
+      c.check(x + 20, y, 24, { k: 'now', d: d + 200 });
+    } else if (kind === 'cap') {
+      c.line(x - 52, y - 28, x + 52, y - 28, { k: 'ink', w: .7, ...o });
+      c.line(x - 52, y + 30, x + 52, y + 30, { k: 'soft', w: .5, d });
+      [[-34, 30], [-10, 22], [14, 6]].forEach(([dx, h], j) => c.rect(x + dx - 9, y + 30 - h * 1.7, 18, h * 1.7, { k: 'now', w: .5, fill: 'now', fillOp: .35, d: d + 100 + j * 80 }));
+      c.path(`M${x - 50} ${y - 20}V${y + 38}M${x + 30} ${y - 20}V${y + 38}`, { k: 'now', w: 1, d: d + 300 });
+    } else if (kind === 'nest') {
+      c.rect(x - 50, y - 34, 100, 68, { k: 'now', rx: 12, w: .9, ...o });
+      c.rect(x - 24, y - 16, 52, 36, { k: 'now', rx: 8, w: .7, fill: 'hatch-now', d: d + 150 });
+    } else if (kind === 'wall') {
+      c.icon('account', x + 24, y, 56, { k: 'now', d });
+      c.line(x - 54, y, x - 18, y, { k: 'soft', w: .7, d: d + 100 });
+      c.line(x - 12, y - 18, x - 12, y + 18, { k: 'now', w: 1.6, d: d + 200 });
+    } else if (kind === 'gen') {
+      c.text(x, y - 10, '0 → 1', { font: 'code', size: .56, k: 'now', d });
+      c.rect(x - 32, y + 4, 64, 34, { k: 'soft', rx: 6, w: .6, d: d + 100 });
+      c.line(x - 36, y + 42, x + 36, y, { k: 'ink', w: .7, d: d + 250 });
+    }
+  };
+  tiles.forEach(([th, l1, l2, kind], i) => {
+    const d = 600 + i * 300;
+    if (T) {
+      const x = [205, 595][i % 2], y = [370, 660, 950][Math.floor(i / 2)];
+      c.at(d);
+      c.box(x - 180, y - 130, 360, 260, 'proved', { rx: 18 });
+      glyph(kind, x, y - 52, d + 150);
+      c.text(x, y + 38, l1, { size: .66, d: d + 250 });
+      c.text(x, y + 76, l2, { size: .66, d: d + 280 });
+      c.text(x + 166, y + 118, th, { anchor: 'end', size: .48, k: 'soft', d: d + 300 });
+    } else {
+      const x = [290, 800, 1310][i % 3], y = [334, 594][Math.floor(i / 3)];
+      c.at(d);
+      c.box(x - 226, y - 100, 452, 200, 'proved', { rx: 18 });
+      glyph(kind, x - 140, y, d + 150);
+      c.text(x - 60, y - 6, l1, { anchor: 'start', size: .78, d: d + 250 });
+      c.text(x - 60, y + 30, l2, { anchor: 'start', size: .78, d: d + 280 });
+      c.text(x + 212, y + 86, th, { anchor: 'end', size: .5, k: 'soft', d: d + 300 });
+    }
+  });
+} };
+
+B.sim = { vb: ['0 0 1600 760', '0 0 800 1200'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    fr: [30, 30, 740, 1060], bar: 74, dots: [62, 52], host: [70, 100, 660, 104], h1: [400, 144], h2: [400, 184],
+    split: [400, 204], oz: [70, 290, 660, 330], pe: [70, 660, 660, 330], cx: 400, cy0: 120, cdy: 58, foot: [400, 1056],
+  } : {
+    fr: [150, 30, 1300, 640], bar: 74, dots: [182, 52], host: [200, 100, 1200, 70], h1: [800, 144], h2: null,
+    split: [800, 170], oz: [200, 260, 560, 340], pe: [840, 260, 560, 340], cx: null, cy0: 120, cdy: 54, foot: [800, 650],
+  };
+  c.at(80);
+  const [fx, fy, fw, fh] = P.fr;
+  c.rect(fx, fy, fw, fh, { k: 'ink', rx: 18, w: .9 });
+  c.line(fx, P.bar, fx + fw, P.bar, { k: 'ink', w: .4 });
+  [0, 1, 2].forEach(i => c.circle(P.dots[0] + i * 22, P.dots[1], 5.5, { k: 'soft', w: .5, step: 0 }));
+  c.at(400);
+  const [hx, hy, hw, hh] = P.host;
+  c.rect(hx, hy, hw, hh, { k: 'soft', rx: 12, w: .6, fill: 'hatch' });
+  if (P.h2) {
+    c.text(P.h1[0], P.h1[1], 'soroban-sim', { font: 'code', size: .56 });
+    c.text(P.h2[0], P.h2[1], 'soroban-env-host 29.0.2', { font: 'code', size: .5, k: 'soft' });
+  } else c.text(P.h1[0], P.h1[1], 'soroban-sim · soroban-env-host 29.0.2', { font: 'code', size: .62 });
+  c.at(900);
+  const panel = (box, k, title, chips, d) => {
+    c.at(d);
+    const [x, y, w, h] = box;
+    c.rect(x, y, w, h, { k, rx: 16, w: .9 });
+    c.text(x + 28, y + (T ? 52 : 44), title, { anchor: 'start', size: T ? .6 : .74, k: k === 'now' ? 'now' : undefined });
+    chips.forEach((s, i) => c.chip(x + w / 2, y + P.cy0 + i * P.cdy, s, { k, tk: k === 'now' ? 'now' : undefined, font: 'code', size: T ? .44 : .52, step: 120 }));
+  };
+  const [sx, sy] = P.split;
+  if (T) {
+    c.arrow(sx, sy, sx, P.oz[1] - 8, { k: 'now', w: .7 });
+    c.path(`M${sx} ${sy + 24}H50V${P.pe[1] - 30}H${sx}V${P.pe[1] - 10}`, { k: 'now', w: .5 });
+    c.head(sx, P.pe[1] - 8, Math.PI / 2, { k: 'now', w: .5 });
+    c.text(sx + 18, sy + 62, 'same request', { anchor: 'start', size: .5, k: 'soft' });
+  } else {
+    c.curve(sx, sy, P.oz[0] + P.oz[2] / 2, P.oz[1] - 6, { k: 'now', w: .7, dir: 'v', head: true });
+    c.curve(sx, sy, P.pe[0] + P.pe[2] / 2, P.pe[1] - 6, { k: 'now', w: .7, dir: 'v', head: true });
+    c.text(sx, sy + 56, 'same request', { size: .56, k: 'soft' });
+  }
+  panel(P.oz, 'ink', 'OpenZeppelin', ['account v0.8.0', 'policy-interpreter', 'spending_limit', 'XLM'], 1100);
+  panel(P.pe, 'now', 'Perch', ['account', 'document compiler', 'Ed25519 verifier', 'XLM'], 1700);
+  c.at(2600);
+  c.text(P.foot[0], P.foot[1], 'same replies: native = WASI = this page', { size: T ? .48 : .6, k: 'soft' });
+} };
+
+/* A study: an agent with the owner's inbox read the emailed code and raised its own cap. */
+B.ihitl = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const steps = [
+    ['agent', 'the task: pay three invoices', '0.01 USDC each'],
+    ['coin', "the wallet's cap: 0.01 USDC a day", 'raising it needs a one-time code'],
+    ['envelope', 'the code is emailed to the owner', 'into the inbox the agent reads'],
+    ['agent', 'the agent reads the code', 'and raises its own cap'],
+  ];
+  steps.forEach(([ic, a, b], i) => {
+    c.at(150 + i * 520);
+    const [x, y] = T ? [124, 110 + i * 150] : [230 + i * 380, 170];
+    c.circle(T ? 40 : x - 92, T ? y : y - 48, T ? 17 : 15, { k: 'soft', w: .5 });
+    c.text(T ? 40 : x - 92, T ? y + 1 : y - 47, String(i + 1), { size: T ? .48 : .5, base: 'central', k: 'soft', step: 0 });
+    c.icon(ic, x, y, T ? 60 : 66, { k: 'ink' });
+    if (i === 3) {
+      c.arrow(x + (T ? 52 : 54), y + 26, x + (T ? 52 : 54), y - 26, { k: 'ink', w: .8, step: 0 });
+    }
+    if (T) {
+      c.text(210, y - 6, a, { anchor: 'start', size: .62 });
+      c.text(210, y + 30, b, { anchor: 'start', size: .5, k: 'soft' });
+      if (i < 3) c.arrow(x, y + 46, x, y + 104, { k: 'soft', w: .5 });
+    } else {
+      c.text(x, 284, a, { size: .7 });
+      c.text(x, 322, b, { size: .56, k: 'soft' });
+      if (i < 3) c.arrow(x + 70, y, x + 310, y, { k: 'soft', w: .5 });
+    }
+  });
+  c.at(2400);
+  if (T) c.line(40, 680, 760, 680, { k: 'faint', w: .5 }); else c.line(60, 410, 1540, 410, { k: 'faint', w: .5 });
+  c.text(T ? 400 : 300, T ? 818 : 600, '9 of 10', { font: 'disp', size: T ? 2.7 : 3.4 });
+  const L = T
+    ? [[400, 890, 'models read the code', .7, 'ink'], [400, 930, 'and raised their own cap', .7, 'ink'], [400, 984, 'in at least one of 20 runs,', .54, 'soft'], [400, 1020, 'unprompted, with no attacker present', .54, 'soft']]
+    : [[560, 520, 'models read the code and raised their own cap', .9, 'ink'], [560, 566, 'in at least one of 20 runs, unprompted, with no attacker present', .66, 'soft']];
+  L.forEach(([x, y, s, z, k]) => c.text(x, y, s, { anchor: T ? 'middle' : 'start', size: z, k }));
+  c.at(3000);
+  for (let i = 0; i < 10; i++) {
+    const [x, y] = T ? [85 + i * 70, 1120] : [590 + i * 78, 670];
+    c.icon('agent', x, y, T ? 44 : 44, { k: i < 9 ? 'ink' : 'faint', step: 40 });
+  }
+} };
+
+/* Where Perch keeps the cap: in the account's own grant, out of the agent's reach. */
+B.keepcap = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const A = T ? { x: 400, y: 280, r: 190 } : { x: 330, y: 360, r: 210 };
+  c.at(80);
+  c.circle(A.x, A.y, A.r, { k: 'now', w: 1.2 });
+  c.circle(A.x, A.y, A.r - 14, { k: 'now', w: .35 });
+  c.seal(A.x, A.y - (T ? 104 : 118), T ? 40 : 44, { id: 'P' });
+  const [gw, gh] = T ? [300, 132] : [280, 124];
+  c.rect(A.x - gw / 2, A.y - (T ? 30 : 34), gw, gh, { k: 'now', rx: 14, w: 1, fill: 'paper' });
+  c.text(A.x, A.y + (T ? 6 : 2), "the agent's grant", { size: T ? .48 : .54, k: 'soft' });
+  c.text(A.x, A.y + (T ? 44 : 38), 'the shop, at most 10 XLM', { size: T ? .54 : .6, k: 'now' });
+  c.text(A.x, A.y + (T ? 80 : 72), 'per 100 ledgers', { size: T ? .54 : .6, k: 'now' });
+  c.text(A.x, A.y + A.r + (T ? 52 : 50), 'the Perch account', { size: T ? .62 : .68, k: 'now' });
+  c.text(A.x, A.y + A.r + (T ? 88 : 88), "the cap lives in the account's own grant", { size: T ? .48 : .54, k: 'soft' });
+  const rows = [
+    ['agent', 'the agent pays the shop 5 XLM', 'inside its grant', true],
+    ['agent', 'the agent calls apply_grant to raise its cap', 'Theorem 8: no grant allows a call to the account', false],
+    ['envelope', 'the agent reads an emailed code', 'no rule in the account takes a code', false],
+    ['passkey', 'the owner changes the grant', "the admin rule: the owner's passkey, on the owner's device", true],
+  ];
+  rows.forEach(([ic, a, b, ok], i) => {
+    c.at(900 + i * 560);
+    const y = T ? 680 + i * 136 : 150 + i * 150;
+    const ix = T ? 70 : 730, tx = T ? 128 : 800, vx = T ? 738 : 1520;
+    if (!T) {
+      const dx = ix - 54 - A.x, dy = y - A.y, Lh = Math.hypot(dx, dy);
+      c.arrow(ix - 54, y, A.x + dx / Lh * (A.r + 10), A.y + dy / Lh * (A.r + 10), { k: ok ? 'now' : 'soft', w: .6 });
+    }
+    c.icon(ic, ix, y, T ? 50 : 58, { k: ic === 'passkey' ? 'now' : 'ink' });
+    if (i === 0) c.icon('key', ix + (T ? 34 : 40), y + (T ? 26 : 30), T ? 26 : 30, { k: 'now', step: 0 });
+    c.text(tx, y - (T ? 4 : 4), a, { anchor: 'start', size: T ? .56 : .74 });
+    c.text(tx, y + (T ? 30 : 34), b, { anchor: 'start', size: T ? .44 : .56, k: ok ? 'now' : 'soft' });
+    if (ok) c.check(vx, y, T ? 34 : 38, { k: 'now' }); else c.cross(vx, y, T ? 28 : 32, { k: 'ink' });
+  });
+  c.at(3300);
+  c.text(T ? 400 : 800, T ? 1250 : 752, 'Reading an email gets the agent nothing.', { anchor: T ? 'middle' : 'start', size: T ? .62 : .78 });
+} };
+
+/* The planned agent runtime: agents without keys, one policy engine, a key service, and the account on chain. */
+B.runtime = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    rt: [30, 76, 740, 852], rtL: [34, 56],
+    root: [320, 112, 160, 120], subs: [[190, 314, 130, 114], [480, 314, 130, 114]],
+    narrow: [400, 470], nokeys: [400, 504],
+    chips: [[110, 566], [250, 566], [560, 566], [690, 566]], toEng: [400, 520, 400, 594],
+    eng: [150, 604, 500, 152], ky: [200, 798, 400, 112], toKey: [400, 756, 400, 792], allowed: [418, 780],
+    acc: [400, 1114, 100], toAcc: [400, 910, 400, 1004], payL: [[418, 962], [418, 988]],
+    accL: [[400, 1248], [400, 1282]], over: [578, 1062],
+  } : {
+    rt: [40, 84, 1030, 630], rtL: [44, 64],
+    root: [130, 150, 160, 120], subs: [[80, 420, 130, 114], [250, 420, 130, 114]],
+    narrow: [230, 600], nokeys: [230, 640],
+    chips: [[500, 216], [640, 216], [500, 258], [640, 258]], toEngA: [290, 210, 418, 350], toEngB: [380, 476, 418, 440],
+    eng: [420, 300, 290, 190], ky: [780, 300, 260, 190], toKey: [710, 395, 776, 395], allowed: [743, 380],
+    acc: [1370, 395, 140], toAcc: [1040, 395, 1222, 395], payL: [[1150, 362], [1150, 388]],
+    accL: [[1370, 590], [1370, 626]], over: [1240, 690],
+    rootPath: 'M1370 255V112H210V146', rootL: [760, 136],
+  };
+  c.at(80);
+  const [rx, ry, rw, rh] = P.rt;
+  c.rect(rx, ry, rw, rh, { k: 'next', rx: 26, w: .9 });
+  c.text(P.rtL[0], P.rtL[1], 'the agent runtime · planned', { anchor: 'start', size: T ? .58 : .64, k: 'next' });
+  // Agents as WASI components: a root agent and two subagents, none holding a key.
+  c.at(500);
+  const comp = ([x, y, w, h], label, s) => {
+    c.rect(x, y, w, h, { k: 'next', rx: 14, w: .6 });
+    c.icon('agent', x + w / 2, y + h / 2 - (T ? 10 : 10), s, { k: 'next' });
+    c.text(x + w / 2, y + h - (T ? 12 : 12), label, { size: T ? .4 : .44, k: 'soft' });
+  };
+  comp(P.root, 'root agent', T ? 52 : 54);
+  P.subs.forEach(b => comp(b, 'subagent', T ? 44 : 46));
+  const [qx, qy, qw, qh] = P.root;
+  P.subs.forEach(([x, y, w]) => c.line(qx + qw / 2, qy + qh, x + w / 2, y, { k: 'next', w: .6 }));
+  c.text(P.narrow[0], P.narrow[1], "each grant narrower than its parent's", { size: T ? .46 : .5, k: 'next' });
+  c.text(P.nokeys[0], P.nokeys[1], 'WASI components that hold no keys', { size: T ? .46 : .5, k: 'soft' });
+  // Every request goes through the policy engine.
+  c.at(1200);
+  ['files', 'websites', 'signing', 'spawning'].forEach((s, i) => c.chip(P.chips[i][0], P.chips[i][1], s, { k: 'next', tk: 'next', size: T ? .44 : .46 }));
+  if (T) c.arrow(...P.toEng, { k: 'next', w: .7 });
+  else { c.curve(...P.toEngA, { k: 'next', w: .7, head: true }); c.curve(...P.toEngB, { k: 'next', w: .7, head: true }); }
+  const [ex, ey, ew, eh] = P.eng;
+  c.rect(ex, ey, ew, eh, { k: 'next', rx: 18, w: .9 });
+  c.icon('policy', ex + (T ? 52 : 46), ey + (T ? 50 : 52), T ? 50 : 46, { k: 'next' });
+  c.text(ex + (T ? 100 : 86), ey + (T ? 58 : 60), 'Cedar policy engine', { anchor: 'start', size: T ? .6 : .62 });
+  c.text(ex + (T ? 100 : 30), ey + (T ? 96 : 116), 'an import-free Wasm component', { anchor: 'start', size: T ? .46 : .5, k: 'soft' });
+  c.text(ex + (T ? 100 : 30), ey + (T ? 130 : 152), 'decides every request', { anchor: 'start', size: T ? .46 : .5, k: 'next' });
+  // Signing goes through the key service, which checks the request first.
+  c.at(1900);
+  c.arrow(...P.toKey, { k: 'next', w: .7 });
+  c.text(P.allowed[0], P.allowed[1], 'allowed', { anchor: T ? 'start' : 'middle', size: .42, k: 'next' });
+  const [kx, ky, kw, kh] = P.ky;
+  c.rect(kx, ky, kw, kh, { k: 'next', rx: 18, w: .9 });
+  c.icon('key', kx + (T ? 50 : 46), ky + (T ? 46 : 52), T ? 46 : 44, { k: 'next' });
+  c.text(kx + (T ? 96 : 86), ky + (T ? 54 : 60), 'key service', { anchor: 'start', size: T ? .6 : .62 });
+  if (T) c.text(kx + 96, ky + 94, 'checks the request, then signs', { anchor: 'start', size: .46, k: 'soft' });
+  else { c.text(kx + 30, ky + 116, 'checks the request,', { anchor: 'start', size: .5, k: 'soft' }); c.text(kx + 30, ky + 152, 'then signs', { anchor: 'start', size: .5, k: 'soft' }); }
+  // The Perch account rechecks every payment and contract call on chain.
+  c.at(2500);
+  c.arrow(...P.toAcc, { k: 'next', w: .7 });
+  c.text(P.payL[0][0], P.payL[0][1], 'payments (x402)', { anchor: T ? 'start' : 'middle', size: T ? .42 : .44, k: 'next' });
+  c.text(P.payL[1][0], P.payL[1][1], 'and contract calls', { anchor: T ? 'start' : 'middle', size: T ? .42 : .44, k: 'next' });
+  const [ax, ay, ar] = P.acc;
+  c.circle(ax, ay, ar, { k: 'now', w: 1.2 });
+  c.circle(ax, ay, ar - 12, { k: 'now', w: .35 });
+  c.seal(ax, ay, ar * .56, { id: 'P' });
+  c.text(P.accL[0][0], P.accL[0][1], 'the Perch account · today', { size: T ? .56 : .62, k: 'now' });
+  c.text(P.accL[1][0], P.accL[1][1], T ? 'holds the root grant; rechecks every payment' : 'rechecks payments and contract calls', { size: T ? .42 : .5, k: 'soft' });
+  if (!T) {
+    c.path(P.rootPath, { k: 'next', w: .6 });
+    c.head(210, 146, Math.PI / 2, { k: 'next', w: .6 });
+    c.text(P.rootL[0], P.rootL[1], 'the root grant, read from the account', { size: .48, k: 'next' });
+  }
+  c.at(3200);
+  const [ox, oy] = P.over;
+  c.cross(ox, oy, T ? 26 : 28, { k: 'ink' });
+  const ol = T ? ['over the cap: refused', 'on chain, even if the', 'runtime is compromised'] : ['over the cap: refused on chain,', 'even if the runtime is compromised'];
+  ol.forEach((s, i) => c.text(ox + (T ? 30 : 32), oy + 8 + i * (T ? 32 : 34), s, { anchor: 'start', size: T ? .42 : .5 }));
+} };
+
+B.slot = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const cards = [
+    ['key', 'Ed25519 key', ['Ed25519 verifier', 'public key', 'signature'], 'now'],
+    ['passkey', 'passkey', ['WebAuthn verifier', 'P-256 key', 'assertion'], 'now'],
+    ['envelope', 'inbox', ['email verifier', 'C · key root', 'proof'], 'next'],
+  ];
+  const pins = ['verifier', 'key', 'signature'];
+  if (T) {
+    c.at(80);
+    c.text(400, 46, 'signer: a slot', { size: .62, k: 'soft' });
+    c.text(400, 98, 'External(verifier, key)', { font: 'code', size: .62, k: 'now' });
+    c.rect(40, 124, 720, 150, { k: 'now', rx: 24, w: 1.2 });
+    c.rect(52, 136, 696, 126, { k: 'now', rx: 16, w: .35 });
+    const cols = [290, 484, 672];
+    pins.forEach((p, i) => { c.text(cols[i], 212, p, { size: .6, k: 'soft' }); c.pin(cols[i], 274); });
+    c.icon('account', 110, 199, 56, { k: 'now' });
+    c.text(400, 334, 'verify(digest, key, signature)', { font: 'code', size: .54, k: 'soft' });
+    c.text(400, 404, 'credential: what fills it', { size: .62, k: 'soft' });
+    c.at(700);
+    cols.forEach(x => c.line(x, 284, x, 1250, { k: 'faint', w: .4, step: 0 }));
+    cards.forEach(([ic, name, vals, k], i) => {
+      const y = 440 + i * 280, d = 1000 + i * 600;
+      c.rect(40, y, 720, 230, { k, rx: 22, w: .9, d });
+      c.icon(ic, 110, y + 92, 56, { k, d: d + 100 });
+      c.text(110, y + 172, name, { size: .58, k: k === 'next' ? 'next' : undefined, d: d + 150 });
+      vals.forEach((v, j) => c.text(cols[j], y + 128, v.replace(' verifier', '').replace('C · key root', 'C · root'), { size: .6, k: k === 'next' ? 'next' : undefined, d: d + 200 + j * 80 }));
+    });
+    return;
+  }
+  c.at(80);
+  c.text(330, 96, 'signer: a slot', { size: .72, k: 'soft' });
+  c.text(330, 150, 'External(verifier, key)', { font: 'code', size: .66, k: 'now' });
+  c.text(960, 96, 'credential: what fills it', { size: .72, k: 'soft' });
+  c.rect(170, 186, 320, 456, { k: 'now', rx: 26, w: 1.2 });
+  c.rect(182, 198, 296, 432, { k: 'now', rx: 18, w: .35 });
+  const ys = [384, 474, 564];
+  pins.forEach((p, i) => { c.text(462, ys[i] + 8, p, { anchor: 'end', size: .72, k: 'soft' }); c.pin(490, ys[i]); });
+  c.icon('account', 330, 270, 60, { k: 'now' });
+  c.text(330, 690, 'verify(digest, key, signature)', { font: 'code', size: .56, k: 'soft' });
+  c.at(700);
+  ys.forEach(y => c.line(500, y, 1392, y, { k: 'faint', w: .4, step: 0 }));
+  cards.forEach(([ic, name, vals, k], i) => {
+    const x = 680 + i * 290, d = 1000 + i * 600;
+    c.rect(x - 128, 186, 256, 456, { k, rx: 22, w: .9, d });
+    c.icon(ic, x, 250, 58, { k, d: d + 100 });
+    c.text(x, 312, name, { size: .8, k: k === 'next' ? 'next' : undefined, d: d + 150 });
+    vals.forEach((v, j) => c.text(x, ys[j] - 12, v, { size: .74, k: k === 'next' ? 'next' : undefined, d: d + 200 + j * 80 }));
+  });
+} };
+
+B.email = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const P = T ? {
+    region: [40, 70, 540, 640], card: [70, 100, 480, 580],
+    from: [95, 158], bar: [95, 186, 430, 34], subj: [95, 290], s1: [95, 336], s2: [95, 376], dkim: [95, 500], stamp: [152, 578], prov: [208, 587],
+    pins: [[580, 203], [580, 356], [580, 578]], ends: [[525, 203], [380, 356], [350, 578]],
+    cC: [672, 203, 38], sD: [672, 356, 46], tree: [672, 514, 150], tl: [672, 688], pub: [672, 120],
+    ver: [180, 860, 440, 170], vt: [400, 948], vin: [[300, 860], [400, 860], [500, 860]], out: [400, 1030, 400, 1100], ck: [400, 1150],
+  } : {
+    region: [70, 120, 700, 570], card: [110, 160, 620, 490],
+    from: [140, 254], bar: [262, 232, 420, 32], subj: [140, 372], s1: [262, 372], s2: [262, 410], dkim: [140, 552], stamp: [318, 544], prov: [374, 553],
+    pins: [[800, 248], [800, 392], [800, 544]], ends: [[686, 248], [540, 392], [510, 544]],
+    cC: [910, 248, 40], sD: [910, 392, 48], tree: [910, 512, 160], tl: [910, 680], pub: [910, 168],
+    ver: [1140, 300, 290, 190], vt: [1285, 395], vin: [[1140, 345], [1140, 395], [1140, 445]], out: [1430, 395, 1480, 395], ck: [1516, 395],
+  };
+  c.at(100);
+  c.region(...P.region, { label: 'hidden' });
+  const [cx, cy, cw, ch] = P.card;
+  c.rect(cx, cy, cw, ch, { k: 'next', fill: 'paper', rx: 14, w: .9 });
+  c.path(`M${cx} ${cy + 18}L${cx + cw / 2} ${cy + (T ? 52 : 46)}L${cx + cw} ${cy + 18}`, { k: 'next', w: .35, op: .6 });
+  c.at(600);
+  c.text(P.from[0], P.from[1], 'From', { anchor: 'start', font: 'code', size: .74, k: 'soft' });
+  const [bx, by, bw, bh] = P.bar;
+  c.rect(bx, by, bw, bh, { k: 'soft', fill: 'soft', fillOp: .3, rx: bh / 2, w: .3, anim: 'an-fade' });
+  c.text(P.subj[0], P.subj[1], 'Subject', { anchor: 'start', font: 'code', size: .74, k: 'soft' });
+  c.text(P.s1[0], P.s1[1], '1c9e07d4b2…5f3e7a40', { anchor: 'start', font: 'code', size: T ? .56 : .66, k: 'next' });
+  c.text(P.s2[0], P.s2[1], 'T = H(digest, ρ)', { anchor: 'start', font: 'code', size: T ? .56 : .66, k: 'soft' });
+  c.text(P.dkim[0], P.dkim[1], 'DKIM', { anchor: 'start', font: 'code', size: .74, k: 'soft' });
+  c.icon('stamp', P.stamp[0], P.stamp[1], 70, { k: 'next' });
+  c.text(P.prov[0], P.prov[1], 'provider', { anchor: 'start', size: .8, k: 'soft' });
+  c.at(1600);
+  c.text(P.pub[0], P.pub[1], 'public', { size: .72, k: 'soft' });
+  P.pins.forEach(([px, py], i) => {
+    c.line(P.ends[i][0] + 8, P.ends[i][1], px, py, { k: 'next', w: .7, step: 100 });
+    c.pin(px, py, { k: 'next' });
+  });
+  c.at(2200);
+  const [ccx, ccy, ccr] = P.cC;
+  c.line(P.pins[0][0] + 8, P.pins[0][1], ccx - ccr - 4, ccy, { k: 'next', w: .7 });
+  c.circle(ccx, ccy, ccr, { k: 'next', w: 1 });
+  c.text(ccx, ccy + 2, 'C', { base: 'central', font: 'disp', size: 1.25, k: 'next' });
+  const [sx, sy, sr] = P.sD;
+  c.line(P.pins[1][0] + 8, P.pins[1][1], sx - sr - 6, sy, { k: 'next', w: .7 });
+  c.seal(sx, sy, sr, { id: 'A' });
+  const [tx, ty, tw] = P.tree;
+  c.curve(P.pins[2][0] + 8, P.pins[2][1], tx - tw / 2 + 6, ty + 6, { k: 'next', w: .7 });
+  c.btree(tx, ty, tw, 3, T ? 36 : 40, 5, { k: 'soft', hk: 'next' });
+  c.text(P.tl[0], P.tl[1], 'key registry', { size: .74, k: 'soft' });
+  c.at(3000);
+  const [vx, vy, vw, vh] = P.ver;
+  c.rect(vx, vy, vw, vh, { k: 'next', rx: 22, w: 1.1 });
+  c.text(P.vt[0], P.vt[1] + 10, 'verify', { font: 'code', size: 1.05, k: 'next' });
+  if (T) {
+    c.path(`M${ccx + ccr + 4} ${ccy}H762M${sx + sr + 6} ${sy}H762M${tx + tw / 2 + 4} ${ty}H762M762 ${ccy}V${vy + vh / 2 - 40}Q762 ${vy + vh / 2} 722 ${vy + vh / 2}H${vx + vw + 8}`, { k: 'next', w: .55 });
+    c.head(vx + vw + 6, vy + vh / 2, Math.PI, { k: 'next', w: .55 });
+  } else {
+    [[ccx + ccr + 4, ccy], [sx + sr + 6, sy], [tx + tw / 2 + 4, ty + 40]].forEach(([ox, oy], i) => {
+      c.curve(ox, oy, P.vin[i][0] - 6, P.vin[i][1], { k: 'next', w: .55, head: true });
+    });
+  }
+  c.arrow(...P.out, { k: 'next', w: .8 });
+  c.check(P.ck[0], P.ck[1], 44, { k: 'next' });
+} };
+
+function track(c, opts) {
+  // Perch recovery today: open, guardian votes on the digest, authorized, delay, cancel, complete.
+  const T = c.tall, k = 'now';
+  const P = T ? {
+    line: [400, 60, 400, 1140], open: [400, 100], ol: [440, 110, 'start'], seal: [400, 330, 62],
+    ql: [490, 342, 'start'], gate: [[350, 485, 450, 485], [350, 498, 450, 498]],
+    delay: [380, 525, 40, 360], hg: [300, 700], dl: [300, 772], cancelFrom: [420, 700], cancel: [610, 800], cl: [610, 868],
+    done: [400, 1010], dnl: [362, 1020, 'end'], keys: [[505, 1010], [640, 1010]],
+  } : {
+    line: [110, 430, 1490, 430], open: [160, 430], ol: [160, 485, 'middle'], seal: [450, 430, 62],
+    ql: [450, 548, 'middle'], gate: [[644, 380, 644, 480], [657, 380, 657, 480]],
+    delay: [690, 410, 500, 40], hg: [940, 350], dl: [940, 505], cancelFrom: [1070, 450], cancel: [1070, 640], cl: [1070, 702],
+    done: [1340, 430], dnl: [1340, 485, 'middle'], keys: [[1285, 330], [1405, 330]],
+  };
+  c.at(100);
+  c.line(...P.line, { k: 'soft', w: .6 });
+  c.circle(P.open[0], P.open[1], T ? 16 : 13, { k, fill: 'now', w: .4 });
+  c.text(P.ol[0], P.ol[1], 'open', { anchor: P.ol[2], size: .9 });
+  c.at(600);
+  c.seal(P.seal[0], P.seal[1], P.seal[2], { id: 'A', bg: true });
+  c.at(900);
+  opts.votes.forEach(([name, vx, vy, lit, vk]) => {
+    const d = c._d({ step: 0 });
+    c.icon(name, vx, vy, T ? 56 : 58, { k: vk, d, step: 0 });
+    if (lit) {
+      const dx = P.seal[0] - vx, dy = P.seal[1] - vy, L = Math.hypot(dx, dy);
+      c.line(vx + dx / L * 40, vy + dy / L * 40, P.seal[0] - dx / L * (P.seal[2] + 6), P.seal[1] - dy / L * (P.seal[2] + 6), { k: vk, w: .9, d: d + 160, anim: vk === 'next' ? 'an-march' : null });
+    }
+    c.t = d + 600;
+  });
+  c.text(P.ql[0], P.ql[1], opts.quorum, { anchor: P.ql[2], size: .9 });
+  c.at(2700);
+  P.gate.forEach(g => c.line(...g, { k, w: 1.1, step: 80 }));
+  const [dx, dy, dw, dh] = P.delay;
+  c.rect(dx, dy, dw, dh, { k, fill: 'hatch-now', w: .6, rx: 6 });
+  c.icon('hourglass', P.hg[0], P.hg[1], 52, { k });
+  c.text(P.dl[0], P.dl[1], 'delay', { size: .9 });
+  c.at(3400);
+  if (T) c.curve(P.cancelFrom[0], P.cancelFrom[1], P.cancel[0] - 6, P.cancel[1] - 30, { k, w: .8, dir: 'v' });
+  else c.line(P.cancelFrom[0], P.cancelFrom[1], P.cancel[0], P.cancel[1] - 32, { k, w: .8 });
+  c.circle(P.cancel[0], P.cancel[1], T ? 30 : 26, { k, w: .8 });
+  c.icon('cross', P.cancel[0], P.cancel[1], T ? 34 : 30, { k });
+  c.text(P.cl[0], P.cl[1], 'cancel', { size: .9 });
+  c.at(4000);
+  c.circle(P.done[0], P.done[1], T ? 18 : 15, { k, fill: 'now', w: .4 });
+  c.text(P.dnl[0], P.dnl[1], 'complete', { anchor: P.dnl[2], size: .9 });
+  const [[k1x, k1y], [k2x, k2y]] = P.keys;
+  c.icon('key', k1x, k1y, 50, { k: 'soft' });
+  c.line(k1x - 26, k1y + 14, k1x + 26, k1y - 14, { k: 'soft', w: .9 });
+  c.arrow(k1x + 34, k1y, k2x - 34, k2y, { k, w: .7 });
+  c.icon('key', k2x, k2y, 50, { k });
+  return P;
+}
+
+B.vote = { vb: ['0 0 1600 800', '0 0 800 1300'], draw(c) {
+  const T = c.tall;
+  const votes = T
+    ? [['key', 225, 238, 1, 'now'], ['key', 192, 338, 0, 'soft'], ['envelope', 225, 438, 1, 'next']]
+    : [['key', 340, 262, 1, 'now'], ['key', 450, 218, 0, 'soft'], ['envelope', 560, 262, 1, 'next']];
+  track(c, { votes, quorum: '2 of 3' });
+  c.at(1700);
+  if (T) {
+    c.text(120, 470, 'one vote', { size: .62, k: 'next' });
+    c.icon('controller', 640, 230, 76, { k: 'now' });
+    c.text(640, 300, 'controller', { size: .6 });
+    c.line(600, 250, 470, 310, { k: 'now', w: .5 });
+  } else {
+    c.text(640, 250, 'one vote', { anchor: 'start', size: .7, k: 'next' });
+    c.icon('controller', 160, 250, 78, { k: 'now' });
+    c.text(160, 318, 'controller', { size: .72 });
+    c.line(160, 340, 160, 410, { k: 'now', w: .5 });
+  }
+} };
+
+/* ---------- small animation helper for the played slides ---------- */
+function Anim() { this.timers = []; this.alive = true; }
+Anim.prototype.at = function (ms, fn) { this.timers.push(setTimeout(() => { if (this.alive) fn(); }, ms)); };
+Anim.prototype.tween = function (dur, fn) {
+  const t0 = performance.now();
+  const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+  const step = now => {
+    if (!this.alive) return;
+    const p = Math.min(1, (now - t0) / dur);
+    fn(ease(p));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+};
+Anim.prototype.stop = function () { this.alive = false; this.timers.forEach(clearTimeout); this.timers = []; };
+
+/* ---------- deck runtime ---------- */
+const slides = $$('.slide');
+let cur = 0, tallMode = null;
+const leaveTimers = new Map();
+
+function proofMarks(s) {
+  const pm = document.createElement('div');
+  pm.className = 'proofmarks'; pm.setAttribute('aria-hidden', 'true');
+  const crop = '<line x1="0" y1="14" x2="10" y2="14"/><line x1="14" y1="0" x2="14" y2="10"/>';
+  const reg = '<circle cx="17" cy="17" r="6"/><line x1="17" y1="4" x2="17" y2="30"/><line x1="4" y1="17" x2="30" y2="17"/>';
+  pm.innerHTML = ['tl', 'tr', 'bl', 'br'].map(p => `<svg class="${p}" viewBox="0 0 34 34">${crop}</svg>`).join('') +
+    ['rl', 'rr'].map(p => `<svg class="${p}" viewBox="0 0 34 34">${reg}</svg>`).join('');
+  s.prepend(pm);
+}
+function statusChip(s) {
+  const st = s.dataset.status;
+  const head = $('.head', s);
+  if (!head || !['now', 'next', 'cited'].includes(st)) return;
+  const chip = document.createElement('span');
+  chip.className = 'status ' + st;
+  chip.innerHTML = st === 'now'
+    ? '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5"/></svg>today'
+    : st === 'cited'
+      ? '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/></svg>a cited study'
+      : '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/></svg>could be';
+  head.appendChild(chip);
+}
+const svgOf = s => $('.stage > svg', s);
+function enter(s) { const b = B[s.dataset.draw]; const svg = svgOf(s); if (b && b.enter && svg) b.enter(svg); }
+function leave(s) { const b = B[s.dataset.draw]; const svg = svgOf(s); if (b && b.leave && svg) b.leave(svg); }
+
+function render() {
+  const tall = innerHeight > innerWidth * 1.1;
+  root.classList.toggle('tall', tall);
+  if (tall === tallMode) return;
+  if (tallMode !== null && slides[cur]) leave(slides[cur]);
+  tallMode = tall;
+  slides.forEach(s => {
+    const b = B[s.dataset.draw];
+    const svg = svgOf(s);
+    if (!b || !svg) return;
+    while (svg.lastChild) svg.removeChild(svg.lastChild);
+    svg.setAttribute('viewBox', b.vb[tall ? 1 : 0]);
+    svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    b.draw(new Ctx(svg, tall));
+    $$('.an-draw', svg).forEach(e => {
+      try { e.style.setProperty('--len', Math.ceil(e.getTotalLength()) + 1); } catch (_) { /* not a geometry element */ }
+    });
+  });
+  const s = slides[cur];
+  if (s && s.classList.contains('active')) { s.classList.remove('on'); void s.offsetWidth; s.classList.add('on'); enter(s); }
+}
+
+/* Live frame: the simulation loads on request. */
+function themeParam() { const t = root.dataset.theme; return t ? (t === 'dark' ? 'dark' : 'light') : ''; }
+function syncFrameTheme(f) {
+  try {
+    const d = f.contentDocument;
+    if (!d) return;
+    const t = root.dataset.theme || '';
+    const sel = d.getElementById('theme');
+    if (sel) { sel.value = t; sel.dispatchEvent(new Event('change')); }
+    else if (t) d.documentElement.setAttribute('data-theme', t);
+    else d.documentElement.removeAttribute('data-theme');
+  } catch (_) { /* a frame we cannot reach keeps its own theme */ }
+}
+function startFrame(f) {
+  if (!f || f.getAttribute('src')) return;
+  let src = f.dataset.src;
+  const t = themeParam();
+  if (t && src.includes('sim/')) src += (src.includes('?') ? '&' : '?') + 'theme=' + t;
+  f.addEventListener('load', () => { syncFrameTheme(f); const w = f.parentNode.querySelector('.frame-wait'); if (w) w.remove(); });
+  f.setAttribute('src', src);
+}
+$$('[data-run]').forEach(b => b.addEventListener('click', e => {
+  e.stopPropagation();
+  const st = b.closest('.stage-sim');
+  st.classList.add('live');
+  startFrame($('iframe', st));
+  const u = $('[data-unrun]', st); if (u) u.focus();
+}));
+$$('[data-unrun]').forEach(b => b.addEventListener('click', e => {
+  e.stopPropagation();
+  const st = b.closest('.stage-sim');
+  st.classList.remove('live');
+  const r = $('[data-run]', st); if (r) r.focus();
+}));
+
+const marks = $('#marks');
+slides.forEach((s, i) => {
+  if (s.dataset.status === 'next') proofMarks(s);
+  statusChip(s);
+  const li = document.createElement('li');
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'm-' + s.dataset.status;
+  b.setAttribute('aria-label', `Slide ${i + 1}: ${s.getAttribute('aria-label')}`);
+  b.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.5"/></svg>';
+  b.addEventListener('click', () => go(i));
+  li.appendChild(b); marks.appendChild(li);
+});
+const markBtns = $$('button', marks);
+
+// A slide with data-steps (the Nido slide) moves through its steps with Next and Prev before it leaves:
+// data-step is the current one, 1-based, and #n.k opens step k of slide n.
+function stepsOf(s) { return s && s.dataset.steps ? s.dataset.steps.split('|') : null; }
+function stepOf(s) { return parseInt(s.dataset.step, 10) || 1; }
+function hashOf() { const s = slides[cur], k = stepOf(s); return '#' + (cur + 1) + (stepsOf(s) && k > 1 ? '.' + k : ''); }
+function parseHash() { const [n, k] = location.hash.slice(1).split('.').map(x => parseInt(x, 10)); return [n || 0, k || 0]; }
+function go(i, fromHash, opt) {
+  i = Math.max(0, Math.min(slides.length - 1, i));
+  const prev = slides[cur];
+  if (i !== cur && prev) {
+    prev.classList.remove('active');
+    prev.setAttribute('aria-hidden', 'true');
+    prev.inert = true;
+    leave(prev);
+    clearTimeout(leaveTimers.get(prev));
+    leaveTimers.set(prev, setTimeout(() => prev.classList.remove('on'), still() ? 0 : 600));
+  }
+  const s = slides[i];
+  clearTimeout(leaveTimers.get(s));
+  const fresh = i !== cur || !s.classList.contains('active');
+  if (fresh) { s.classList.remove('on'); void s.offsetWidth; }
+  s.classList.add('active', 'on');
+  s.removeAttribute('aria-hidden');
+  s.inert = false;
+  cur = i;
+  const steps = stepsOf(s);
+  // A stepped slide opens on step 1, or on its last step when entered backwards, or on the step asked for.
+  if (steps && (fresh || (opt && opt.step))) s.dataset.step = String(opt && opt.step ? Math.min(steps.length, opt.step) : opt && opt.back ? steps.length : 1);
+  if (fresh) enter(s);
+  markBtns.forEach((b, j) => b.setAttribute('aria-current', j === i ? 'true' : 'false'));
+  $('#count').textContent = `${i + 1} / ${slides.length}`;
+  $('#bar').style.width = ((i + 1) / slides.length * 100) + '%';
+  if (!fromHash) history.replaceState(null, '', hashOf());
+  if (!$('#notes-panel').hidden) showNotes();
+  if (steps && fresh) nido.opened = null;
+  nidoGo(fresh);
+  if (opt && opt.open) nidoOpen();
+}
+function setStep(k) {
+  const s = slides[cur];
+  s.dataset.step = String(k);
+  nido.opened = null;
+  history.replaceState(null, '', hashOf());
+  nidoShow();
+}
+// Next opens the dialog of the step it moves to, or first that of a step whose dialog it has not opened yet;
+// Prev, the step list and #n.k only show a step.
+function next() {
+  const s = slides[cur], n = stepsOf(s);
+  if (n && nidoOpen()) return;
+  if (n && stepOf(s) < n.length) { setStep(stepOf(s) + 1); nidoOpen(); }
+  else go(cur + 1, false, { open: true });
+}
+function prev() { const s = slides[cur], n = stepsOf(s); if (n && stepOf(s) > 1) setStep(stepOf(s) - 1); else go(cur - 1, false, { back: true }); }
+$$('.nido-steps [data-k]').forEach(b => b.addEventListener('click', () => { const s = b.closest('.slide'); if (s === slides[cur]) setStep(parseInt(b.dataset.k, 10)); }));
+
+function showNotes() {
+  const n = $('.notes', slides[cur]);
+  $('#notes-panel').innerHTML = n ? n.innerHTML : '';
+}
+function toggleNotes() {
+  const p = $('#notes-panel'), btn = $('#notes-btn');
+  p.hidden = !p.hidden;
+  btn.setAttribute('aria-pressed', String(!p.hidden));
+  if (!p.hidden) showNotes();
+}
+
+const darkQ = matchMedia('(prefers-color-scheme: dark)');
+function isDark() { const t = root.dataset.theme; return t ? t === 'dark' : darkQ.matches; }
+function syncThemeLabel() { $('#theme-btn').setAttribute('aria-label', isDark() ? 'Switch to light theme' : 'Switch to dark theme'); }
+function toggleTheme() {
+  const t = isDark() ? 'light' : 'dark';
+  root.dataset.theme = t;
+  try { localStorage.setItem('perch-deck-theme', t); } catch (_) { /* storage unavailable */ }
+  syncThemeLabel();
+  $$('iframe[src]').forEach(syncFrameTheme);
+}
+try { const t = localStorage.getItem('perch-deck-theme'); if (t === 'light' || t === 'dark') root.dataset.theme = t; } catch (_) { /* storage unavailable */ }
+const qs = new URLSearchParams(location.search);
+const qp = qs.get('theme');
+if (qs.get('still') === '1') root.classList.add('still');
+if (qp === 'light' || qp === 'dark') root.dataset.theme = qp;
+darkQ.addEventListener('change', syncThemeLabel);
+syncThemeLabel();
+
+$('#prev').addEventListener('click', prev);
+$('#next').addEventListener('click', next);
+$('#notes-btn').addEventListener('click', toggleNotes);
+$('#theme-btn').addEventListener('click', toggleTheme);
+
+const inControl = t => t && t.closest && t.closest('a, button, iframe, input, select, [data-tab], .frame-wrap');
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  const t = e.target;
+  if ((k === ' ' || k === 'Enter') && t && t.closest && t.closest('.slide') && inControl(t)) return;
+  if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'PageDown' || (k === ' ' && !e.shiftKey)) { e.preventDefault(); next(); }
+  else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'PageUp' || (k === ' ' && e.shiftKey)) { e.preventDefault(); prev(); }
+  else if (k === 'Home') { e.preventDefault(); go(0); }
+  else if (k === 'End') { e.preventDefault(); go(slides.length - 1); }
+  else if (k === 'n' || k === 'N') toggleNotes();
+  else if (k === 't' || k === 'T') toggleTheme();
+  else if ((k === 'd' || k === 'D') && nidoTargets[cur]) nidoReset();
+});
+
+// Swipe in any direction; a tap on the right of the stage advances, on the left goes back.
+let p0 = null;
+const deck = $('#deck');
+deck.addEventListener('pointerdown', e => { p0 = inControl(e.target) ? null : { x: e.clientX, y: e.clientY, t: Date.now() }; });
+deck.addEventListener('pointerup', e => {
+  if (!p0) return;
+  const dx = e.clientX - p0.x, dy = e.clientY - p0.y;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (Math.max(adx, ady) > 40) {
+    if (adx > ady) (dx < 0 ? next : prev)();
+    else (dy < 0 ? next : prev)();
+  } else if (Date.now() - p0.t < 500 && e.pointerType !== 'mouse') {
+    (e.clientX > innerWidth * .33 ? next : prev)();
+  }
+  p0 = null;
+});
+
+let rt;
+addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(render, 140); });
+addEventListener('hashchange', () => { const [n, k] = parseHash(); if (n) go(n - 1, true, { step: k }); });
+reduce.addEventListener('change', () => { const s = slides[cur]; leave(s); enter(s); });
+
+slides.forEach(s => { s.setAttribute('aria-hidden', 'true'); s.inert = true; });
+render();
+/* ---------- Nido: one live session on one slide, a step per Next ----------
+   One frame of the Nido simulation (present=live) loads once, preloads its reactor and a ledger, and is never
+   reloaded or moved to another parent: it lies in a fixed layer over the Nido slide's slot and is hidden, not
+   removed, on the other slides. It does not move or resize between the steps: each step (data-steps) only sends
+   that step's controls, so the presenter creates the account, approves and tries the refusals in one session, and
+   stepping back shows the earlier controls with the state kept. Until the frame reports preloaded (a copy without
+   ../nido-sim, a slow device), the slot shows each step's still. */
+const nidoTargets = slides.map(s => (stepsOf(s) ? $('.nido-slot', s) : null));
+const nidoFirst = nidoTargets.findIndex(Boolean);
+const nidoOn = nidoFirst >= 0 && !root.classList.contains('still');
+const nido = { el: null, pre: false, shown: null, opened: null, resetting: false, held: null, state: null, verdicts: {} };
+let nidoTimer, nidoSettled = 0;
+function nidoStart() {
+  if (!nidoOn || nido.el) return;
+  const el = document.createElement('iframe');
+  el.className = 'nido-live';
+  el.title = 'The Nido simulation, live';
+  el.src = `../nido-sim/index.html?embed=1&present=live&preload=1&theme=${isDark() ? 'dark' : 'light'}`;
+  el.addEventListener('load', () => syncFrameTheme(el));
+  document.body.appendChild(el);
+  nido.el = el;
+  nidoPlace();
+}
+function nidoPost(m) { try { nido.el.contentWindow.postMessage(m, '*'); } catch (_) { /* the stills stay */ } }
+// Each step names its controls in the slide's data-steps.
+function nidoShow() {
+  const t = nidoTargets[cur];
+  if (!nido.pre || !t) return;
+  const s = slides[cur], k = stepOf(s), key = cur + '.' + k;
+  if (nido.shown === key) return;
+  nido.shown = key;
+  nidoPost({ type: 'nido-sim:show', controls: stepsOf(s)[k - 1].split(','), step: `${s.dataset.draw}-${k}` });
+}
+// Open the current step's dialog: the frame presses that step's control as the presenter would, once per visit to
+// the step, and not for a step already done; it rejects a dialog left undecided on the step before.
+// Lose past the cap takes two presses after the guess: the first loss fills the 2 XLM window and the second is
+// refused. So on that step Next presses again after a dialog the account would allow, until it has shown the refusal.
+function nidoOpen() {
+  const t = nidoTargets[cur];
+  if (!nido.pre || !t) return false;
+  const s = slides[cur], k = stepOf(s), key = cur + '.' + k, control = stepsOf(s)[k - 1], step = `${s.dataset.draw}-${k}`;
+  const again = control === 'overcap' && nido.opened === key && nido.verdicts[step] && nido.verdicts[step] !== 'refused';
+  if (nido.opened === key && !again) return false;
+  if (control !== 'overcap' && nido.state && nido.state.done && nido.state.done[control]) return false;
+  nido.opened = key;
+  delete nido.verdicts[step];
+  const act = { type: 'nido-sim:act', control, step };
+  if (nido.resetting) nido.held = act; else nidoPost(act);
+  return true;
+}
+// The frame takes the slot's own size and the slide's scale, so a scaled slide (the script panel) scales it too.
+// It keeps that size while hidden, so a dialog opened as the slide arrives is laid out for it; it shows once the
+// slide has settled.
+function nidoPlace() {
+  const el = nido.el, here = nido.pre && nidoTargets[cur], t = nidoTargets[cur] || nidoTargets[nidoFirst];
+  if (!el) return;
+  if (!here) el.classList.remove('on');
+  const r = t.getBoundingClientRect(), w = t.offsetWidth, h = t.offsetHeight;
+  if (!w || !h) return;
+  const k = r.width / w;
+  Object.assign(el.style, { left: r.left + 'px', top: r.top + 'px', width: w + 'px', height: h + 'px', transform: Math.abs(k - 1) > .002 ? `scale(${k})` : '' });
+  if (here && !el.classList.contains('on') && performance.now() >= nidoSettled) { void el.offsetWidth; el.classList.add('on'); }
+}
+// The frame fades in once the slide has settled, and fades out when the deck leaves it.
+function nidoGo(fresh) {
+  if (!nidoOn) return;
+  const t = nidoTargets[cur];
+  if (t || cur >= nidoFirst - 3) nidoStart();
+  if (!t) nido.shown = null;
+  if (fresh) {
+    nidoSettled = performance.now() + (still() ? 0 : 720);
+    if (!t && nido.el) nido.el.classList.remove('on');
+  }
+  nidoShow();
+  nidoPlace();
+  clearTimeout(nidoTimer);
+  nidoTimer = setTimeout(nidoPlace, Math.max(0, nidoSettled - performance.now()) + 20);
+}
+// Reset demo: a new ledger with no account (the reactor stays compiled), and back to step 1 with no dialog open;
+// the next Next opens the passkey prompt.
+function nidoReset() {
+  if (!nido.pre) return;
+  nido.resetting = true;
+  nido.state = null;
+  nido.held = null;
+  nido.shown = null;
+  nidoPost({ type: 'nido-sim:reset' });
+  if (cur !== nidoFirst) go(nidoFirst); else setStep(1);
+}
+$$('[data-nido-reset]').forEach(b => b.addEventListener('click', e => { nidoReset(); if (e.detail > 0) b.blur(); }));
+addEventListener('message', e => {
+  if (!nido.el || e.source !== nido.el.contentWindow) return;
+  const d = e.data;
+  if (!d || typeof d !== 'object') return;
+  if (d.type === 'nido-sim:preloaded') {
+    nido.pre = true;
+    root.dataset.nidoLive = '1';
+    nido.shown = null;
+    nidoShow();
+    nidoPlace();
+  } else if (d.type === 'nido-sim:dialog') {
+    // The verdict of the dialog each step opened: 'refused' ends the presses on Lose past the cap.
+    if (d.kind && typeof d.step === 'string') nido.verdicts[d.step] = d.verdict;
+  } else if (d.type === 'nido-sim:state') {
+    if (nido.resetting && d.done && d.done.create) return;
+    nido.state = d;
+    // After a decision or a slide change the deck takes its keys back (N, T, D), without moving the page.
+    if (document.activeElement === nido.el) nido.el.blur();
+    if (nido.resetting) {
+      nido.resetting = false; nido.shown = null; nidoShow();
+      if (nido.held) nidoPost(nido.held);
+      nido.held = null;
+    }
+  } else if (d.type === 'nido-sim:key') {
+    // A click in the frame keeps the slide keys working.
+    if (d.key === 'ArrowRight' || d.key === 'PageDown') next();
+    else if (d.key === 'ArrowLeft' || d.key === 'PageUp') prev();
+  }
+});
+addEventListener('resize', nidoPlace);
+if (nidoOn) setTimeout(nidoStart, 1500);
+
+const [start, startStep] = parseHash();
+go(start ? start - 1 : 0, true, { step: startStep });
+if (qs.get('notes') === '1') toggleNotes();
+})();
+</script>
+</body>
+</html>

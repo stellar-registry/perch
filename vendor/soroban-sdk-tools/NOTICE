@@ -1,0 +1,54 @@
+Vendored third-party dependency, moved to soroban-sdk 29
+========================================================
+
+  Library:  soroban-sdk-tools 0.1.4 (Rust, no_std)
+  Upstream: https://github.com/BlaineHeffron/soroban-sdk-tools
+  Release:  crates.io soroban-sdk-tools 0.1.4 (.crate sha256
+            1ac9ff2d918e0ca97ee7b29f887192afe157c95ecb0a4db94f6811ae8de682fe),
+            published from commit 2143316cbd325ff9c76e1720bfe47fbe29627a8e
+            ("chore: release v0.1.4 (#43)"), path soroban-sdk-tools
+  License:  Apache-2.0 (see LICENSE)
+  Used by:  perch-smart-account, perch-doc-compiler,
+            perch-recovery-interface, perch-recovery, perch-zk-pool,
+            perch-testnet (`scerr`, typed storage)
+
+Why vendored
+------------
+soroban-sdk-tools 0.1.4, its newest release, requires soroban-sdk ^28, and
+no upstream branch moves it to 29 (checked 2026-11-03). Perch builds with
+soroban-sdk 29.0.1 / soroban-env-host 29.0.1, and a crate that requires
+another soroban-sdk major cannot share its types, so this copy is built as a
+path dependency with the soroban-sdk pin moved. No change was proposed
+upstream.
+
+Upstream files
+--------------
+Every file is upstream's bytes except Cargo.toml (the published, normalized
+manifest), whose delta is below. UPSTREAM.sha256 lists the sha256 of every
+vendored file as published, with LICENSE taken from the repository root at
+the commit above (the published crate carries none).
+
+Not vendored: tests/, Cargo.lock, Cargo.toml.orig. The proc-macro crate it
+depends on, soroban-sdk-tools-macro 0.1.4, stays on crates.io: it links no
+soroban-sdk (its soroban-spec 28 and stellar-xdr =28.0.0 are build-time
+only, and stellar-xdr 28.0.0 is the version soroban-sdk 29 uses).
+
+SDK 29 delta
+------------
+Cargo.toml only:
+
+  - `[dependencies.soroban-sdk]` version "28.0.0" became "29.0.1";
+  - the `[dev-dependencies]` table and the `[[test]]` targets were dropped
+    (the tests are not vendored).
+
+The source builds unchanged: soroban-sdk 29 has no API changes from 28
+(soroban-sdk's own migration notes: "Migrating from v28 to v29: None").
+
+Updating
+--------
+Replace the directory with the new upstream files, re-apply the delta above,
+regenerate UPSTREAM.sha256 from the unmodified upstream files, and update
+this NOTICE. crates/integration-tests/tests/vendor.rs requires every
+vendored file other than Cargo.toml to hash to UPSTREAM.sha256 (after
+reversing any source delta above) and the directory to hold nothing else but
+NOTICE and UPSTREAM.sha256, so no other upstream byte can change unnoticed.

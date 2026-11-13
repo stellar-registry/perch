@@ -10,17 +10,25 @@ holds the full recovery transactions.
 **Provenance.** Measured 2026-10-06 on an Apple M5 Max (18 cores, 128 GB,
 macOS 26), a shared machine at a load average of about 3.5. The toolchain
 was nargo 1.0.0-beta.9, bb 0.87.0, bb.js 0.87.0, noir_js 1.0.0-beta.9,
-soroban-sdk 27.0.6, rustc 1.97.1, and Node 24.18. Proofs are zero-knowledge
+soroban-sdk 27.0.6, rustc 1.97.1, and Node 24.18. The workspace builds
+with soroban-sdk 29.0.1 / soroban-env-host 29.0.1, under which the metered
+on-chain costs are lower than the tables below (instructions: about 5% for
+`rcv_insert`, 9% for `is_known_root`, 12% for `verify`; resource fees in
+proportion; entries, bytes, and rent unchanged). `just zk-bench` prints
+the current values. Proofs are zero-knowledge
 (`UltraKeccakZKFlavor`: `bb prove --zk`, bb.js `keccakZK`), and the adapter
 verifies them with the vendored verifier's ZK delta
 ([`README.md`](README.md)). The source is pre-merge commit
-`af9b442200ef20dcecace0ba97f211a5497c198b`. The deployed source
-(`7ae915dc1ac6ae36cacf6db87794b056923d3b1f`) differs from it in the ZK
+`af9b442200ef20dcecace0ba97f211a5497c198b`. The deployment of that time
+(`7ae915dc1ac6ae36cacf6db87794b056923d3b1f`) differed from it in the ZK
 crates, the verifier, and the circuits only in comments and contract-spec
 doc strings, and in the per-contract wasm stack setting (`build.rs`,
-[`budgets.md`](../recovery/budgets.md#wasm-stack)). The measured wasm links
-rustc's default 1 MiB stack, so the memory figures below are higher than
-the release builds' (64 KiB pool stack, 128 KiB adapter stack).
+[`budgets.md`](../recovery/budgets.md#wasm-stack)). The current deployments
+(`deployments/testnet.json`, `deployments/mainnet.json`) are built from
+`c135aca277745434f2abf679edd9868c95204b51`, after the soroban-sdk 29.0.1
+move. The measured wasm links rustc's default 1 MiB stack, so the memory
+figures below are higher than the release builds' (64 KiB pool stack,
+128 KiB adapter stack).
 
 Reproduce with `just zk-bench`. It builds with the small stacks, so its
 memory figures are lower than these. The on-chain rows come from
@@ -122,8 +130,8 @@ stroops per KB. Fees are in stroops (10^7 per XLM).
   circuit is 14,592). With the tree id, root, and nullifier, `ZkEvidence` is
   about 16.3 KB against `tx_max_size_bytes` of 132,096.
 - **Contract size.** The deployed wasm (`stellar scaffold build`, sizes in
-  `deployments/testnet.json`) is 68,502 B for the adapter, which carries the
-  verifier and VK (52% of the 131,072 B allowed), and 46,179 B for the pool.
+  `deployments/testnet.json`) is 69,803 B for the adapter, which carries the
+  verifier and VK (53% of the 131,072 B allowed), and 47,959 B for the pool.
   A plain `cargo build --release` of the measured source, which does not
   shake the contract spec, is 116,776 B and 75,264 B; in that build the ZK
   delta accounts for about 14.5 KB of the adapter.

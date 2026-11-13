@@ -1,0 +1,50 @@
+% Generated from source/outline.json and source/figures/fig-shop-grant.svg; edit those.
+\begin{figure}[tbp]
+\centering
+\begin{minipage}[t]{0.49\linewidth}\footnotesize\textbf{(a) The grant document}
+\begin{Verbatim}[fontsize=\scriptsize,frame=single,framesep=1.5mm]
+{ "version": 1,
+  "network": "Standalone Network ; February 2017",
+  "signers": [
+    { "id": "app", "verifier": "C...ED25519",       ①
+      "key": "...32-byte Ed25519 key, hex..." } ],
+  "rules": [
+    { "name": "pay-shop",
+      "scope": { "type": "contract",                ②
+                 "address": "C...XLM" },
+      "principals": { "type": "all",                ③
+                      "signers": ["app"] },
+      "functions": ["transfer"],                    ④
+      "args": [                                     ⑤
+        { "index": 0,
+          "pred": { "type": "is-self" } },
+        { "index": 1,
+          "pred": { "type": "address-eq",
+                    "address": "G...SHOP" } } ],
+      "cap": { "limit": "100000000",                ⑥
+               "period-ledgers": 100 } } ] }
+\end{Verbatim}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\linewidth}\footnotesize\textbf{(b) In words}
+\begin{Verbatim}[fontsize=\scriptsize,frame=single,framesep=1.5mm]
+① The app signs with its own Ed25519 key;
+  a verifier contract checks the signature.
+② One target contract: the native XLM
+  token.
+③ Every listed signer must sign: here,
+  the app alone.
+④ Only transfer; any other function
+  on XLM is refused.
+⑤ Argument 0 is this account and
+  argument 1 is the shop: money leaves
+  this account, and only to the shop.
+⑥ At most 10 XLM (100,000,000 stroops) in
+  any 100 ledgers, about eight minutes.
+
+Nothing else: no other token, recipient,
+function or signer, and no call to the
+account itself.
+\end{Verbatim}
+\end{minipage}
+\caption{\textbf{The running example: an app may pay the shop at most \fact{shop-cap-xlm} XLM in any \fact{shop-period-ledgers} ledgers (\fact{shop-period-minutes}).} (a) The grant document as the simulation installs it, with addresses and the key abbreviated: \code{C...} is a contract, \code{G...} an account controlled by a key pair. (b) Each marked field in words.}\label{fig:fig-shop-grant}
+\end{figure}

@@ -1,0 +1,52 @@
+Vendored third-party dependency, moved to soroban-sdk 29
+========================================================
+
+  Library:  soroban-flux 0.1.0 (Rust, no_std)
+  Upstream: https://github.com/nidohq/soroban-flux
+  Release:  crates.io soroban-flux 0.1.0 (.crate sha256
+            9273167cce4d4005c4eca46c3bb271ba4e681867b180bdc3f403ceb90170a731),
+            published from commit 3170467df435aff14e9d7413659f4d04c25e5013
+            ("feat: vendor the flux attribute stack — every crate now
+            crates.io-publishable"), path crates/soroban-flux
+  License:  Apache-2.0 (see LICENSE)
+  Used by:  perch-program (Flux refinement attributes and extern specs)
+
+Why vendored
+------------
+soroban-flux 0.1.0, its only release, requires soroban-sdk >=26.0.1, <28,
+and no upstream branch moves it to 29 (checked 2026-11-03). Perch builds
+with soroban-sdk 29.0.1 / soroban-env-host 29.0.1, and a crate that requires
+another soroban-sdk major cannot share its types, so this copy is built as a
+path dependency with the soroban-sdk pin moved. No change was proposed
+upstream.
+
+Upstream files
+--------------
+Every file is upstream's bytes except Cargo.toml (the published, normalized
+manifest), whose delta is below. UPSTREAM.sha256 lists the sha256 of every
+vendored file as published, with LICENSE taken from the repository root at
+the commit above (the published crate carries none).
+
+Not vendored: tests/, Cargo.lock, Cargo.toml.orig. The attribute crates it
+depends on (soroban-flux-rs, soroban-flux-attrs, soroban-flux-attrs-impl
+0.1.0) stay on crates.io: none of them links soroban-sdk.
+
+SDK 29 delta
+------------
+Cargo.toml only:
+
+  - `[dependencies.soroban-sdk]` version ">=26.0.1, <28" became "29.0.1";
+  - the `[dev-dependencies]` table and the `[[test]]` target were dropped
+    (the tests are not vendored).
+
+The source compiles unchanged on soroban-sdk 29. CI's flux job (`cargo flux
+-p perch-program`) checks perch-program against its extern specs.
+
+Updating
+--------
+Replace the directory with the new upstream files, re-apply the delta above,
+regenerate UPSTREAM.sha256 from the unmodified upstream files, and update
+this NOTICE. crates/integration-tests/tests/vendor.rs requires every
+vendored file other than Cargo.toml to hash to UPSTREAM.sha256 (after
+reversing any source delta above) and the directory to hold nothing else but
+NOTICE and UPSTREAM.sha256, so no other upstream byte can change unnoticed.

@@ -1,0 +1,25 @@
+\paragraph{RQ1: enforcement.} Perch's tests run \fact{lean-doc-traces}
+Lean-generated traces through the natively compiled account and check every
+verdict and spending record against the model. In the recorded run
+(\S\ref{sec:simulation}) each Perch verdict is the one the shop grant
+specifies, and the designs agreed except on the \fact{sim-oz-percall-sends}
+sends after the owner removed \code{spending\_limit}.
+
+\paragraph{Testnet preview, earlier build.} On \fact{nido-run-date}, a scripted
+run of \fact{wallet-name}'s preview, on a deployment built from Perch
+\code{\fact{perch-preview-source}} before the pin, with virtual passkeys made
+\fact{nido-run-transactions} testnet transactions, among them a game's two-rule
+grant, \fact{nido-run-lost-guesses} lost guesses and a
+\fact{nido-run-guardians}-guardian recovery to completion; the wallet,
+not the chain, declined a third guess over the cap.
+
+\paragraph{Cost, Perch only.} On that earlier build, a passkey-signed transfer
+through a grant paid a testnet fee of \fact{smoke-fee-stroops} stroops, WebAuthn verification included;
+a fresh preview account holding the game's grant, after two capped transfers
+(\fact{census-bytes} bytes), pays \fact{census-rent-xlm-year}~XLM a year in rent
+at the floor rate.
+
+\paragraph{Threats to validity.} One task; one host version, recording-mode, without
+exact metering; signer kinds that differ by necessity; testnet resets, with
+envelopes not yet archived; and a game run from a branch with an uncommitted
+patch.

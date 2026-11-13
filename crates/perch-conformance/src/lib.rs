@@ -1,4 +1,4 @@
-//! Eval-semantics conformance vectors (#PLAN phase 0).
+//! Eval-semantics conformance vectors.
 //!
 //! Each [`Case`] is a `(program, invocation) → (validate outcome, verdict)`
 //! pair whose expectations are **hand-authored against `CANONICAL.md` and the

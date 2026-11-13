@@ -1,0 +1,17 @@
+① The app signs with its own Ed25519 key;
+  a verifier contract checks the signature.
+② One target contract: the native XLM
+  token.
+③ Every listed signer must sign: here,
+  the app alone.
+④ Only transfer; any other function
+  on XLM is refused.
+⑤ Argument 0 is this account and
+  argument 1 is the shop: money leaves
+  this account, and only to the shop.
+⑥ At most 10 XLM (100,000,000 stroops) in
+  any 100 ledgers, about eight minutes.
+
+Nothing else: no other token, recipient,
+function or signer, and no call to the
+account itself.

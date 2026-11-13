@@ -1,0 +1,9 @@
+% Generated from source/definitions.json.
+\begin{perchdefinition}{2}{Rules and \emph{allows}}\label{def:rules-and-allows}
+\[\begin{aligned}&\mathit{allows}(r, c, S) \iff \mathit{sc}_r(c) \land \bigwedge_{\varphi \in \Phi_r} \varphi(c)\\
+&\qquad\qquad \land\ k_r \le |\Sigma_r \cap S|\\
+&\mathit{allows}(R, c, S) \iff \exists r \in R.\ \mathit{allows}(r, c, S)\\
+&R' \sqsubseteq R \iff \forall c, S.\ \mathit{allows}(R', c, S)\\
+&\qquad\qquad \implies \mathit{allows}(R, c, S)\end{aligned}\]
+A rule \(r\) has a scope \(\mathit{sc}_r\) (one contract and a function list; false on creations), argument conditions \(\Phi_r\), signers \(\Sigma_r\) and a threshold \(k_r\) over distinct signers, and optionally a cap \((\lambda_r, P_r)\), a last ledger \(u_r\) and a generation \(g_r\). \emph{allows} reads none of the last three; \emph{checkAuth} checks them. A rule set allows what one of its rules allows; \(R' \sqsubseteq R\) when \(R\) allows, under the same signers, everything \(R'\) allows.\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean\#L95}{Rule.allows}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean\#L98}{RuleSet.allows}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean\#L126}{RuleSet.narrower}}
+\end{perchdefinition}

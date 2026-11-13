@@ -1,0 +1,8 @@
+<p class="lede">Run the same payments through Perch and an OpenZeppelin account with oz-policy-builder.</p>
+<p>Both enforce the shop's cap when configured with it. Perch integrates the cap into its rule; the OpenZeppelin fixture composes a predicate with <code>spending_limit</code>. The difference is how the checks are assembled and reviewed. {{cite:oz-stellar-accounts,oz-policy-builder,soroban-sim}}</p>
+{{include:sim-panel.html}}
+<details class="technical"><summary>What this comparison does—and does not—show</summary>
+<p>The browser runs the pinned contracts in soroban-sim, offline, with enforcing authorization. It is not an exact cost benchmark. Perch uses an external Ed25519 signer; this oz-policy-builder interpreter requires a delegated signer. These are disclosed configuration differences.</p>
+<p>Both sides accept 6 XLM and refuse a further 5. The demo can then remove OpenZeppelin's spending policy <strong>with owner authority</strong>; subsequent payments differ because the configurations now differ. That is a composition experiment, not an attacker bypass. Re-adding that policy resets its history, just as replacing or changing a Perch cap can reset its record.</p>
+<p>Perch's advantage here is one document and one integrated decision to inspect. oz-policy-builder offers broader authoring and predicate features. <a href="{{doc:oz-policy-builder}}">Full comparison →</a></p>
+</details>

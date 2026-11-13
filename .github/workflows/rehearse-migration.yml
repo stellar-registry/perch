@@ -1,0 +1,101 @@
+name: Rehearse migration
+
+# The release's migration of testnet and mainnet, end to end, on soroban-sim
+# forks (scripts/rehearse-migration.sh): the registry-chain bootstrap; on
+# testnet, release.yml's infra publishes and stack deploy at the versions
+# release-pr would pick; on mainnet, release-mainnet.yml with testnet's
+# bytes; then what Nido and the current deployments read. Throwaway keys
+# stand in for every real signer, every transaction is validated and applied
+# on a local fork, and nothing reaches either network. No secret is used.
+# The forks read the live public RPCs, so a run reflects the chains as they
+# are now; keep this out of the required checks.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - scripts/bootstrap-registry.sh
+      - scripts/build-stack.sh
+      - scripts/deploy-stack.sh
+      - scripts/derive-id.py
+      - scripts/fetch-infra-wasm.sh
+      - scripts/mainnet-settings.sh
+      - scripts/manifest-registry.sh
+      - scripts/publish-wasm.sh
+      - scripts/registry-target.sh
+      - scripts/rehearse-migration.sh
+      - scripts/release-deps.py
+      - scripts/verify-deployment.sh
+      - crates/*/wasm/registry.path
+      - crates/*/wasm/verifiers.path
+      - deployments/*.json
+      - testdata/deploy/perch-author-*.json
+      - .github/actions/setup-stellar-fork/**
+      - .github/workflows/rehearse-migration.yml
+      - .github/workflows/release.yml
+      - .github/workflows/release-mainnet.yml
+
+permissions: {}
+
+concurrency:
+  group: rehearse-migration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rehearse:
+    # One job for both networks: the mainnet release fetches testnet's bytes
+    # by hash from the testnet fork, which lives only as long as the run.
+    name: Rehearse (testnet, then mainnet)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the release's versions are git-cliff's, over the whole history
+      # No toolchain action: rustup installs the channel and the wasm32v1-none
+      # target from rust-toolchain.toml on first use.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      # The perch author's publishes are signed through the stellar-cli fork,
+      # as release.yml signs them; the release builds with stellar scaffold.
+      - uses: ./.github/actions/setup-stellar-fork
+        with:
+          scaffold: "true"
+      - name: Install git-cliff (release-pr's)
+        run: |
+          mkdir -p "$RUNNER_TEMP/gc"
+          curl -fsSL https://github.com/orhun/git-cliff/releases/download/v2.14.1/git-cliff-2.14.1-x86_64-unknown-linux-gnu.tar.gz -o "$RUNNER_TEMP/gc.tar.gz"
+          echo "bb40f68e752db1a32526c43e0108e8eff785f7c24c67024cffe1c316e034372975fd78c9af8e9a48148235aad15c9a103f1a5b490c282f1db09a7a793794b69f  $RUNNER_TEMP/gc.tar.gz" | sha512sum -c -
+          tar -xz -C "$RUNNER_TEMP/gc" --strip-components=1 -f "$RUNNER_TEMP/gc.tar.gz"
+          echo "$RUNNER_TEMP/gc" >>"$GITHUB_PATH"
+      - name: soroban-sim commit
+        id: sim
+        run: echo "rev=$(sed -n 's/^SOROBAN_SIM_REV=\([0-9a-f]*\).*/\1/p' scripts/rehearse-migration.sh)" >>"$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/soroban-sim/${{ steps.sim.outputs.rev }}
+          key: soroban-sim-${{ runner.os }}-${{ steps.sim.outputs.rev }}
+      - name: Rehearse the migration on forks of testnet and mainnet
+        env:
+          # Read-only: `gh attestation verify` looks up each wasm's public
+          # attestations. A mainnet bootstrap needs the attested
+          # perch-account and perch-constructorless-registry releases of this
+          # checkout's versions (docs/deploy/README.md).
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/rehearse-migration.sh
+      - name: Summarize
+        if: ${{ !cancelled() && hashFiles('target/rehearse-migration/summary.md') != '' }}
+        run: cat target/rehearse-migration/summary.md >>"$GITHUB_STEP_SUMMARY"
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rehearse-migration
+          path: |
+            target/rehearse-migration
+            !target/rehearse-migration/*/stellar-config
+            !target/rehearse-migration/*/stellar-data
+            !target/rehearse-migration/release/src
+            !target/rehearse-migration/release/build
+          if-no-files-found: ignore

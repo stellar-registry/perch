@@ -1,7 +1,11 @@
-//! End-to-end matrix (#9): compile the ci-publish document, install the real
+//! End-to-end matrix: compile the ci-publish document, install the real
 //! interpreter as an OZ policy, and drive the real `do_check_auth` with real
 //! ed25519 signatures. No mocked auth for the signer under test — the ci key is
 //! verified on-chain by a real verifier contract.
+//!
+//! The account is a bare contract with OZ's registry, as an OZ account that
+//! attaches the interpreter has; a Perch account attaches no policy and
+//! decides with rule-eval (`account.rs` holds the same matrix on it).
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_compile::{compile, CompileConfig};
@@ -16,7 +20,10 @@ use stellar_accounts::smart_account::{
     add_context_rule, remove_context_rule, AuthPayload, ContextRuleType, Signer,
 };
 
-use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY as REGISTRY};
+use soroban_sdk::xdr::ToXdr;
+use stellar_accounts::smart_account::do_check_auth;
+
+use perch_testkit::{fixture, FIXTURE_REGISTRY as REGISTRY};
 
 // --- the account under test (bare); the verifier is the real deployable -----
 
@@ -48,7 +55,6 @@ fn setup(valid_until: Option<u32>) -> World {
     let signing_key = SigningKey::from_bytes(&[7u8; 32]);
     let pubkey = BytesN::from_array(&env, &signing_key.verifying_key().to_bytes());
 
-    // Compile the real document → the ci-publish install params.
     let doc = perch_ir::from_json(&fixture()).expect("parse");
     perch_ir::validate(&doc).expect("valid");
     let cfg = CompileConfig {
@@ -86,10 +92,13 @@ fn setup(valid_until: Option<u32>) -> World {
     }
 }
 
-/// A signed auth payload from the ci key for `rule_id`.
+/// A signed auth payload from the ci key for `rule_id`, over OZ's digest
+/// `sha256(payload || rule_ids)`.
 fn signed_payload(w: &World, payload: &Hash<32>) -> AuthPayload {
     let ids = vec![&w.env, w.rule_id];
-    let digest = auth_digest(&w.env, &w.account, &payload.to_bytes(), &ids);
+    let mut preimage = payload.to_bytes().to_bytes();
+    preimage.append(&ids.clone().to_xdr(&w.env));
+    let digest = w.env.crypto().sha256(&preimage).to_array();
     let sig = w.signing_key.sign(&digest).to_bytes();
     let sig_bytes = Bytes::from_array(&w.env, &sig);
     let signer = Signer::External(w.verifier.clone(), w.pubkey.clone().into());
@@ -126,10 +135,7 @@ fn run(w: &World, payload: &AuthPayload, ctx: Context) -> Result<(), ()> {
     let contexts = vec![&w.env, ctx];
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         w.env.as_contract(&w.account, || {
-            // The account's own `check_auth` (which binds the digest to the
-            // account address) around OZ's `do_check_auth`, so rule selection
-            // runs against the address-bound digest the signer actually signed.
-            perch_smart_account::check_auth(&w.env, &hash, payload, &contexts).unwrap();
+            do_check_auth(&w.env, &hash, payload, &contexts).unwrap();
         });
     }));
     r.map_err(|_| ())

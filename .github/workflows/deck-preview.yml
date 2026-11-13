@@ -1,6 +1,6 @@
 name: Deck preview
 
-# Per-PR preview of docs/ (the slide deck): deploys to the gh-pages branch
+# Per-PR preview of docs/: deploys to the gh-pages branch
 # under /pr-preview/pr-<number>/ and maintains a sticky PR comment with the
 # link. The preview is deployed on open/update and removed when the PR closes.
 on:
@@ -13,9 +13,36 @@ permissions: {}
 concurrency: preview-${{ github.ref }}
 
 jobs:
+  # The papers' PDF editions are built here, without write access, and uploaded
+  # as the perch-paper-pdf build artifact. Fork PRs get the artifact too; for
+  # same-repo PRs the preview job also publishes the PDFs beside the HTML
+  # editions that link them.
+  paper-pdf:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-tectonic
+      - run: docs/perch-paper/latex/build.sh --stage "$PDF_STAGE"
+        env:
+          PDF_STAGE: ${{ runner.temp }}/perch-pdfs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perch-paper-pdf
+          path: ${{ runner.temp }}/perch-pdfs
+          if-no-files-found: error
+
   preview:
+    needs: paper-pdf
     # Previews push to gh-pages, which forks cannot do; same-repo PRs only.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # A closed PR only removes its preview, so it needs no PDF.
+    if: >-
+      always() && github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action == 'closed' || needs.paper-pdf.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -24,6 +51,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         # the preview action pushes gh-pages with the checkout token, so
         # credentials must persist for this job (unlike the rest of CI).
+      - if: github.event.action != 'closed'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: perch-paper-pdf
+          path: docs/perch-paper
       - uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
         with:
           source-dir: docs

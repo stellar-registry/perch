@@ -1,0 +1,1260 @@
+{
+ "_source": "Recorded native reference run of docs/perch-paper/sim/index.html (evidence/native-golden.jsonl in its embedded build sources). The page hashes each browser reply minus wall-clock timings and compares it with this run; the WASI build gives the same replies.",
+ "page_sha256": "156f9875cdde076ddf728bc43e5caff9650179dcc296199362ed246c86c453e0",
+ "golden_sha256": "bde6a1e79f37e69f34ae3bafad63fa606c64680399e2739b5ac922f97d62ce97",
+ "replies_sha256": "925d02cbea59b1fb0fbd17d462463605ce2f82bc5a0a4e907bbcebc2ff4f8372",
+ "replies_sha256_note": "SHA-256 of the fifteen replies minus every `ms` field, one JSON line each (replies.mjs); native, WASI and the browser agree on it.",
+ "pins": {
+  "soroban_sim": "d02938430f0ac41f34e5e3e4c8c48d85b871bd68",
+  "soroban_env_host": "29.0.2",
+  "perch": "0b3752d8a179a5952b05fbebd29131dbbf99fa80",
+  "rule_core": "a3c92ba074dcac4052727b7599e5fd8674af6c0a",
+  "openzeppelin_stellar_contracts": "ddc327eb92d63709436da3a8455f641c2d5476c5 (v0.8.0)",
+  "oz_policy_builder": "43b13ed1d9c6662afd74f446006e69bfcf21259b",
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
+  "stellar_cli": "stellar 27.0.0 (5a7c5fe76530bf4248477ac812fc757146b98cc4)"
+ },
+ "contracts": {
+  "perch_doc_compiler.wasm": "e89d977ac2bebaf935720a7a3408f6cd57b5940a02b0476e7b8e071e224b0fe3",
+  "perch_interpreter.wasm": "4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f",
+  "perch_spending_limit.wasm": "ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b",
+  "perch_ed25519_verifier.wasm": "27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c",
+  "perch_account.wasm": "cc56a2d36669dba65c9089ba9c133e284d4b2f9bff826e2d52876e66b5e14428",
+  "verifiers_stub.wasm": "65a4168ba2123c22dee2d30e0341f420db1dae59bef7b207ba0c8da3f55f5d14",
+  "oz_account_0_8_0.wasm": "8286422f205951f37f4249401b403471fc432340dde6925432d31bb8a90cce27",
+  "oz_spending_limit_0_8_0.wasm": "65e70aad310bcaf7025aedc97e70cde098e1dd6c22d5153879c9cc64ea7da8e2",
+  "policy_interpreter.wasm": "6704996f626904a4e33b95bda17b73963fc9cf502ffdfdbe9d85b4b10288e0d4"
+ },
+ "reactor_sha256": "a7f6f4220e9eb561d6452a9e071b0348e3387a457a4f481ed09511b76708269b",
+ "task": "An app key may send XLM from the account only to the shop. OpenZeppelin: the oz-policy-builder predicate pins the recipient and bounds each transfer at 10 XLM; spending_limit (10 XLM per 100 ledgers) sits beside it on rule 1 and is removed and re-added in this run. Perch: one grant, recipient pinned, 10 XLM per 100-ledger cap.",
+ "steps": [
+  {
+   "command": 0,
+   "label": "Set up both ledgers",
+   "request": {
+    "op": "reset"
+   },
+   "designs": {
+    "oz": {
+     "ledger": 10000009,
+     "balance_xlm": "100"
+    },
+    "perch": {
+     "ledger": 10000009,
+     "balance_xlm": "100"
+    }
+   }
+  },
+  {
+   "command": 1,
+   "label": "The owner installs the rule",
+   "request": {
+    "op": "install"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "OpenZeppelin account",
+       "fn": "add_context_rule"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 1,
+       "contract": "spending_limit",
+       "fn": "install"
+      },
+      {
+       "depth": 1,
+       "contract": "policy-interpreter",
+       "fn": "install"
+      }
+     ],
+     "ledger": 10000010,
+     "balance_xlm": "100",
+     "policies": [
+      "spending_limit",
+      "policy-interpreter"
+     ],
+     "window": {
+      "stored_xlm": "0",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": []
+     }
+    },
+    "perch": {
+     "status": "applied",
+     "code": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "Perch account",
+       "fn": "apply_grant"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      },
+      {
+       "depth": 1,
+       "contract": "document compiler",
+       "fn": "compile_doc"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "batch_canonicalize_key"
+      }
+     ],
+     "ledger": 10000010,
+     "balance_xlm": "100",
+     "window": {
+      "stored_xlm": "0",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": []
+     }
+    }
+   }
+  },
+  {
+   "command": 2,
+   "label": "The app pays the shop 6 XLM",
+   "request": {
+    "amount_xlm": 6,
+    "op": "pay",
+    "signer": "app",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      }
+     ],
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "policies": [
+      "spending_limit",
+      "policy-interpreter"
+     ],
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    },
+    "perch": {
+     "status": "applied",
+     "code": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      }
+     ],
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 3,
+   "label": "5 XLM more in the same window",
+   "request": {
+    "amount_xlm": 5,
+    "op": "pay",
+    "signer": "app",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": 3221,
+     "entries": 2,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      },
+      {
+       "depth": 3,
+       "contract": "spending_limit",
+       "error": "Error(Contract(3221))"
+      },
+      {
+       "depth": 3,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Contract(3221))"
+      },
+      {
+       "depth": 3,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "policies": [
+      "spending_limit",
+      "policy-interpreter"
+     ],
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "entries": 1,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 4,
+   "label": "The owner removes spending_limit from the OZ rule",
+   "request": {
+    "op": "oz_policy",
+    "spending_limit": "off"
+   },
+   "note": "OZ only: Perch has no separate policy contract; its cap is part of grant 1's rule.",
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "OpenZeppelin account",
+       "fn": "remove_policy"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 1,
+       "contract": "spending_limit",
+       "fn": "uninstall"
+      }
+     ],
+     "ledger": 10000012,
+     "balance_xlm": "94",
+     "policies": [
+      "policy-interpreter"
+     ],
+     "window": null
+    },
+    "perch": {
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 5,
+   "label": "6 XLM to the shop",
+   "request": {
+    "amount_xlm": 6,
+    "op": "pay",
+    "signer": "app",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      }
+     ],
+     "ledger": 10000013,
+     "balance_xlm": "88",
+     "policies": [
+      "policy-interpreter"
+     ],
+     "window": null
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "entries": 1,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 6,
+   "label": "6 XLM to the shop again",
+   "request": {
+    "amount_xlm": 6,
+    "op": "pay",
+    "signer": "app",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      }
+     ],
+     "ledger": 10000014,
+     "balance_xlm": "82",
+     "policies": [
+      "policy-interpreter"
+     ],
+     "window": null
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "entries": 1,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 7,
+   "label": "6 XLM to the shop a third time",
+   "request": {
+    "amount_xlm": 6,
+    "op": "pay",
+    "signer": "app",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      }
+     ],
+     "ledger": 10000015,
+     "balance_xlm": "76",
+     "policies": [
+      "policy-interpreter"
+     ],
+     "window": null
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "entries": 1,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 8,
+   "label": "The owner adds spending_limit back",
+   "request": {
+    "op": "oz_policy",
+    "spending_limit": "on"
+   },
+   "note": "OZ only: Perch has no separate policy contract; its cap is part of grant 1's rule.",
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "OpenZeppelin account",
+       "fn": "add_policy"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 1,
+       "contract": "spending_limit",
+       "fn": "install"
+      }
+     ],
+     "ledger": 10000016,
+     "balance_xlm": "76",
+     "policies": [
+      "policy-interpreter",
+      "spending_limit"
+     ],
+     "window": {
+      "stored_xlm": "0",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": []
+     }
+    },
+    "perch": {
+     "ledger": 10000011,
+     "balance_xlm": "94",
+     "window": {
+      "stored_xlm": "6",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 9,
+   "label": "1 XLM to the shop",
+   "request": {
+    "amount_xlm": 1,
+    "op": "pay",
+    "signer": "app",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      }
+     ],
+     "ledger": 10000017,
+     "balance_xlm": "75",
+     "policies": [
+      "policy-interpreter",
+      "spending_limit"
+     ],
+     "window": {
+      "stored_xlm": "1",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "1",
+        "ledger": 10000016
+       }
+      ]
+     }
+    },
+    "perch": {
+     "status": "applied",
+     "code": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      }
+     ],
+     "ledger": 10000012,
+     "balance_xlm": "93",
+     "window": {
+      "stored_xlm": "7",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       },
+       {
+        "xlm": "1",
+        "ledger": 10000011
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 10,
+   "label": "1 XLM to another recipient",
+   "request": {
+    "amount_xlm": 1,
+    "op": "pay",
+    "signer": "app",
+    "to": "mallory"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": 100,
+     "entries": 2,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      },
+      {
+       "depth": 3,
+       "contract": "policy-interpreter",
+       "error": "Error(Contract(100))"
+      },
+      {
+       "depth": 3,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Contract(100))"
+      },
+      {
+       "depth": 3,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000017,
+     "balance_xlm": "75",
+     "policies": [
+      "policy-interpreter",
+      "spending_limit"
+     ],
+     "window": {
+      "stored_xlm": "1",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "1",
+        "ledger": 10000016
+       }
+      ]
+     }
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "entries": 1,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000012,
+     "balance_xlm": "93",
+     "window": {
+      "stored_xlm": "7",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       },
+       {
+        "xlm": "1",
+        "ledger": 10000011
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 11,
+   "label": "Another key signs in the app's name",
+   "request": {
+    "amount_xlm": 1,
+    "op": "pay",
+    "signer": "forged",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": null,
+     "host_error": "Error(Crypto(InvalidInput))",
+     "entries": 2,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Crypto(InvalidInput))"
+      },
+      {
+       "depth": 2,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Auth(InvalidAction))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000017,
+     "balance_xlm": "75",
+     "policies": [
+      "policy-interpreter",
+      "spending_limit"
+     ],
+     "window": {
+      "stored_xlm": "1",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "1",
+        "ledger": 10000016
+       }
+      ]
+     }
+    },
+    "perch": {
+     "status": "refused",
+     "code": null,
+     "host_error": "Error(Crypto(InvalidInput))",
+     "entries": 1,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      },
+      {
+       "depth": 3,
+       "contract": "Ed25519 verifier",
+       "error": "Error(Crypto(InvalidInput))"
+      },
+      {
+       "depth": 3,
+       "contract": "Perch account",
+       "error": "Error(Crypto(InvalidInput))"
+      },
+      {
+       "depth": 3,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000012,
+     "balance_xlm": "93",
+     "window": {
+      "stored_xlm": "7",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       },
+       {
+        "xlm": "1",
+        "ledger": 10000011
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 12,
+   "label": "A key not on the rule signs as itself",
+   "request": {
+    "amount_xlm": 1,
+    "op": "pay",
+    "signer": "unlisted",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "refused",
+     "code": 3016,
+     "entries": 2,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "OpenZeppelin account",
+       "error": "Error(Contract(3016))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000017,
+     "balance_xlm": "75",
+     "policies": [
+      "policy-interpreter",
+      "spending_limit"
+     ],
+     "window": {
+      "stored_xlm": "1",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "1",
+        "ledger": 10000016
+       }
+      ]
+     }
+    },
+    "perch": {
+     "status": "refused",
+     "code": 5,
+     "entries": 1,
+     "state_unchanged": true,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Perch account",
+       "error": "Error(Contract(5))"
+      },
+      {
+       "depth": 2,
+       "contract": "XLM contract",
+       "error": "Error(Auth(InvalidAction))"
+      }
+     ],
+     "ledger": 10000012,
+     "balance_xlm": "93",
+     "window": {
+      "stored_xlm": "7",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       },
+       {
+        "xlm": "1",
+        "ledger": 10000011
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 13,
+   "label": "Close 100 ledgers",
+   "request": {
+    "ledgers": 100,
+    "op": "advance"
+   },
+   "designs": {
+    "oz": {
+     "ledger": 10000117,
+     "balance_xlm": "75",
+     "policies": [
+      "policy-interpreter",
+      "spending_limit"
+     ],
+     "window": {
+      "stored_xlm": "1",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "1",
+        "ledger": 10000016
+       }
+      ]
+     }
+    },
+    "perch": {
+     "ledger": 10000112,
+     "balance_xlm": "93",
+     "window": {
+      "stored_xlm": "7",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "6",
+        "ledger": 10000010
+       },
+       {
+        "xlm": "1",
+        "ledger": 10000011
+       }
+      ]
+     }
+    }
+   }
+  },
+  {
+   "command": 14,
+   "label": "5 XLM to the shop, 100 ledgers later",
+   "request": {
+    "amount_xlm": 5,
+    "op": "pay",
+    "signer": "app",
+    "to": "shop"
+   },
+   "designs": {
+    "oz": {
+     "status": "applied",
+     "code": null,
+     "entries": 2,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "OpenZeppelin account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "policy-interpreter",
+       "fn": "enforce"
+      },
+      {
+       "depth": 2,
+       "contract": "spending_limit",
+       "fn": "enforce"
+      }
+     ],
+     "ledger": 10000118,
+     "balance_xlm": "70",
+     "policies": [
+      "policy-interpreter",
+      "spending_limit"
+     ],
+     "window": {
+      "stored_xlm": "5",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "5",
+        "ledger": 10000117
+       }
+      ]
+     }
+    },
+    "perch": {
+     "status": "applied",
+     "code": null,
+     "entries": 1,
+     "hops": [
+      {
+       "depth": 0,
+       "contract": "XLM contract",
+       "fn": "transfer"
+      },
+      {
+       "depth": 1,
+       "contract": "Perch account",
+       "fn": "__check_auth"
+      },
+      {
+       "depth": 2,
+       "contract": "Ed25519 verifier",
+       "fn": "verify"
+      }
+     ],
+     "ledger": 10000113,
+     "balance_xlm": "88",
+     "window": {
+      "stored_xlm": "5",
+      "limit_xlm": "10",
+      "period_ledgers": 100,
+      "spends": [
+       {
+        "xlm": "5",
+        "ledger": 10000112
+       }
+      ]
+     }
+    }
+   }
+  }
+ ]
+}

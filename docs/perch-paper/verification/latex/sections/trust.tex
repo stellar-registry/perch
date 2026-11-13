@@ -1,0 +1,41 @@
+\begin{perchbox}
+\textbf{The proofs trust} Lean's kernel (\fact{lean-rule-core};
+\fact{lean-perch-canon} for the canonical-encoding package) and its axioms,
+\fact{standard-axioms}; Charon \fact{charon-rev}, Aeneas \fact{aeneas-rev} and
+Aeneas's Lean library, which models Rust's primitives; the MIR of rustc
+\fact{rustc-mir-nightly}; the specification, that is the denotations and the
+document meaning \code{Doc.allows}, written from Perch's earlier account at
+\fact{doc-allows-source}; the host models, tested against
+\fact{host-model-tested-versions}; and, for
+Theorem~\ref{stmt:canonical-identity}, that its Lean emitter matches Perch's
+\code{canon.rs}, which golden fixtures and fuzzing test. \textbf{The deployed
+account also trusts} rustc \fact{rustc-perch} and its WebAssembly back end; the
+document compiler; the tested account shell, verifiers and recovery controller;
+and soroban-env-host.
+\end{perchbox}
+
+\paragraph{Cryptographic assumptions.} Lemma~\ref{lem:binding} assumes an
+EUF-CMA-secure scheme and a collision-resistant SHA-256, and
+Theorem~\ref{stmt:canonical-identity} gives hash identity only up to SHA-256
+collisions. Ed25519~\cite{rfc8032} is checked with strict verification; P-256 is
+ECDSA with low $S$ enforced; the WebAuthn verifier~\cite{webauthn2} checks
+neither the relying-party ID nor the origin; \fact{mldsa-verifier} is pure
+FIPS~204~\cite{fips204} with a fixed context string. The compiler requires keys
+in verifier-canonical form, but thresholds count configured identities: a
+verifier-address/key pair for an external signer, or an address for a delegated
+one. Distinct identities may share a physical key or controlling party;
+independent custody is an authoring assumption.
+The deployed Ed25519 and WebAuthn verifiers trap on a bad signature
+(\fact{verifier-trap-error} for Ed25519). The zero-knowledge recovery factor
+(\perchdoc{vision}) proves knowledge of a secret behind a public Poseidon2
+commitment, using an UltraHonk proof with KZG commitments over BN254 and
+Fiat--Shamir with Keccak; Perch's documents do not name the setup ceremony. The
+secret needs at least \fact{zk-secret-entropy-bits} bits of entropy, and Perch's
+zero-knowledge verifier is unaudited. Ed25519, P-256 and BN254 are not
+post-quantum, so an \fact{mldsa-verifier} signer resists a quantum adversary only
+if every path that can change the account's rules does. A contract ID commits to
+its deployer and salt, not its code, so calling fixed infrastructure code assumes
+that the registry deploys each pinned Wasm hash at the salt derived from it and
+that those contracts cannot replace their code. rule-core's claims ledger lists
+its \fact{claims-assumed} assumed and \fact{claims-unproven} unproven claims
+(Appendix~\ref{sec:reproduce}).

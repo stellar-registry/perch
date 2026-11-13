@@ -1,6 +1,6 @@
 # Komet (Runtime Verification, K framework) property tests over the frozen RPN
 # evaluator — an INDEPENDENT second opinion on the wasm-artifact semantics
-# (PLAN.md phase 3). The evaluator is compiled into this test contract's wasm
+# (docs/verification/PLAN.md). The evaluator is compiled into this test contract's wasm
 # and executed under Komet's mechanized Soroban + wasm (KWasm) semantics, so
 # `komet prove run` gives an all-inputs guarantee at the bytecode level whose
 # trusted base is the K semantics rather than rustc/LLVM+wasmi (the wasm leg's
@@ -14,8 +14,8 @@
 members = ["."]
 
 [workspace.dependencies]
-soroban-sdk = "27.0.2"
-soroban-flux = { git = "https://github.com/nidohq/soroban-flux.git", rev = "3170467" }
+soroban-sdk = "29.0.1"
+soroban-flux = { version = "0.1.0", path = "../vendor/soroban-flux" }
 
 [package]
 name = "perch-komet-tests"

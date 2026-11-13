@@ -7,9 +7,7 @@
 //!
 //! The wire format is FROZEN: postfix (RPN) is perch-program v1, chosen by
 //! the metered benchmark in `crates/perch-program/BENCH.md`
-//! (<https://github.com/stellar-registry/perch/issues/2>). The op set and
-//! evaluation semantics land in
-//! <https://github.com/stellar-registry/perch/issues/5>.
+//! (<https://github.com/stellar-registry/perch/issues/2>).
 //!
 //! [`rpn`] encodes programs as postfix ops over a verdict stack, with the
 //! leaf semantics and fail-closed rule in `leaf`.
@@ -32,8 +30,8 @@
 //!   trips eval's defensive `Unknown` paths (underflow, overflow past
 //!   [`MAX_STACK_DEPTH`], not-single-result): its verdict is a pure function of
 //!   its leaves. That is what lets static analysis answer "can this ever
-//!   authorize?" and "which calls does it reach?" over the ops alone (#19 PR4),
-//!   and it is the second leg — beside the compiler's INV-1/INV-2 — under the
+//!   authorize?" and "which calls does it reach?" over the ops alone, and it
+//!   is the second leg — beside the compiler's INV-1/INV-2 — under the
 //!   claim that a validated program can neither diverge nor brick an account.
 
 mod leaf;

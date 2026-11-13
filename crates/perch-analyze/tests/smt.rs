@@ -1,12 +1,14 @@
 //! SMT-prover checks: curated docs with known answers, the flagship
-//! CI-publish intent proof over the real testdata fixture, and directional
-//! agreement with the coarse op-level analyzer (`can_ever_authorize`).
+//! CI-publish intent proof over the real testdata fixture, and the
+//! encoding's agreement with `rule_eval::rule_allows` on concrete
+//! invocations.
 //!
 //! Requires `z3` on PATH; skips (loudly) when absent so local dev without z3
 //! stays unblocked. CI installs z3, so these always run there.
 
 use perch_analyze::{
-    can_call, dead_rules, narrows, only_calls, run_z3, z3_available, Encoder, Z3Verdict,
+    can_call, dead_rules, lowered, narrows, only_calls, run_z3, z3_available, Encoder,
+    WideningFinding, Z3Verdict,
 };
 use perch_ir::PolicyDoc;
 
@@ -86,7 +88,8 @@ fn ci_publish_fixture_only_calls_publish() {
 }
 
 /// A rule whose only string-in candidates are over-long can never authorize:
-/// provably dead here, invisible to the coarse op-shape analyzer.
+/// the lowering drops a candidate over 256 bytes, which never matches an
+/// argument on chain, so the rule's condition has none left.
 #[test]
 fn overlong_string_in_rule_is_provably_dead() {
     if skip() {
@@ -112,23 +115,10 @@ fn overlong_string_in_rule_is_provably_dead() {
         "over-long-candidates rule must be provably dead, got {:?}",
         liveness[0].verdict
     );
-
-    // Directional agreement with the coarse analyzer: it reads op shapes only,
-    // so it must NOT claim liveness the SMT layer refutes... it may (and does)
-    // over-approximate to "not provably dead" — assert only the sound
-    // direction: if the coarse analyzer says dead, SMT agrees. (Here coarse
-    // says live, SMT proves dead: the SMT layer is strictly sharper.)
-    let env = soroban_sdk::Env::default();
-    let cfg = perch_compile::CompileConfig {
-        interpreter_wasm_hash: soroban_sdk::BytesN::from_array(&env, &[7u8; 32]),
-    };
-    let plan = perch_compile::compile(&env, &d, &cfg).expect("compiles");
-    let install = plan.rules[0]
-        .install
-        .as_ref()
-        .expect("interpreter attached");
-    // Coarse analyzer: over-approximates to live; SMT proves dead.
-    assert!(perch_compile::can_ever_authorize(&install.program));
+    assert!(
+        matches!(&lowered(&d)[0].rule.conds[..], [rule_eval::Cond::ArgIn(0, vs)] if vs.is_empty()),
+        "the stored rule's condition has no candidate"
+    );
 }
 
 /// A `string-prefix` rule authorizes an argument of any length that starts
@@ -157,7 +147,7 @@ fn string_prefix_rule_authorizes_an_argument_of_any_length() {
     let long_arg = format!("perch:{}", "a".repeat(300));
     let allows_long_arg = |d: &PolicyDoc| {
         let mut enc = Encoder::new();
-        let allow = enc.rule_allows(&d.rules[0]);
+        let allow = enc.rule_allows(&lowered(d)[0].rule);
         run_z3(&format!(
             "{}(assert {allow})\n(assert (= arg0_str \"{long_arg}\"))\n(check-sat)\n",
             enc.declarations()
@@ -176,8 +166,8 @@ fn string_prefix_rule_authorizes_an_argument_of_any_length() {
 }
 
 /// Narrowing: function-subset narrows; adding a function, loosening an arg
-/// bound, extending expiry, or dropping a cap all widen. The arg-bound case
-/// is invisible to `perch_compile::attenuation::is_narrowing`.
+/// bound, or extending expiry all widen. The arg-bound case is invisible to
+/// a `(scope, function-set)` comparison.
 #[test]
 fn narrows_catches_semantic_widening() {
     if skip() {
@@ -259,4 +249,247 @@ fn narrows_catches_semantic_widening() {
     assert!(narrows(&parent, &expiry_widened)
         .iter()
         .any(|f| matches!(f, perch_analyze::WideningFinding::ExpiryExtended { .. })));
+}
+
+/// A capped rule allows only what the account's rule for it allows: a
+/// `transfer` whose argument 2 is an `i128`, whatever else its document
+/// lists.
+#[test]
+fn a_capped_rule_allows_only_a_metered_transfer() {
+    if skip() {
+        return;
+    }
+    let capped = |functions: &str| {
+        doc(&format!(
+            r#"{{
+              "version": 1,
+              "signers": [{{ "id": "ci", "verifier": "{VERIFIER}", "key": "0102" }}],
+              "rules": [{{
+                "name": "spend",
+                "scope": {{ "type": "contract", "address": "{REGISTRY}" }},
+                "principals": {{ "type": "all", "signers": ["ci"] }},
+                {functions}
+                "cap": {{ "token": "{REGISTRY}", "limit": "100", "period-ledgers": 10 }}
+              }}]
+            }}"#
+        ))
+    };
+    let d = capped(r#""functions": ["transfer", "approve"],"#);
+    assert!(only_calls(&d, REGISTRY, &["transfer".into()]).is_empty());
+    let mut enc = Encoder::new();
+    let allow = enc.rule_allows(&lowered(&d)[0].rule);
+    assert!(
+        matches!(
+            run_z3(&format!(
+                "{}(assert {allow})\n(assert (not (= arg2_type 3)))\n(check-sat)\n",
+                enc.declarations()
+            )),
+            Z3Verdict::Unsat
+        ),
+        "a capped transfer's argument 2 is an i128"
+    );
+    // A capped rule whose functions do not cover `transfer` allows nothing.
+    let d = capped(r#""functions": ["approve"],"#);
+    assert!(matches!(dead_rules(&d)[0].verdict, Z3Verdict::Unsat));
+}
+
+/// A child rule whose signer is another key widens its parent, even at the
+/// same threshold: the child's signer authorizes what the parent's refuses.
+#[test]
+fn narrows_catches_a_changed_signer() {
+    if skip() {
+        return;
+    }
+    let with_key = |key: &str| {
+        doc(&format!(
+            r#"{{
+              "version": 1,
+              "signers": [{{ "id": "ci", "verifier": "{VERIFIER}", "key": "{key}" }}],
+              "rules": [{{
+                "name": "ci",
+                "scope": {{ "type": "contract", "address": "{REGISTRY}" }},
+                "principals": {{ "type": "all", "signers": ["ci"] }},
+                "functions": ["publish"]
+              }}]
+            }}"#
+        ))
+    };
+    assert!(narrows(&with_key("0102"), &with_key("0102")).is_empty());
+    assert!(narrows(&with_key("0102"), &with_key("0304"))
+        .iter()
+        .any(|f| matches!(f, WideningFinding::SemanticWidening { .. })));
+}
+
+#[test]
+fn exact_roots_are_conjunctive_and_cannot_be_erased_by_narrowing() {
+    if skip() {
+        return;
+    }
+    let exact = fixture("auth-root.json");
+    let i = exact
+        .rules
+        .iter()
+        .position(|r| r.auth_root.is_some())
+        .unwrap();
+    let mut unrestricted = exact.clone();
+    unrestricted.rules[i].auth_root = None;
+    assert!(narrows(&unrestricted, &exact).is_empty());
+    assert!(narrows(&exact, &exact).is_empty());
+    for change in [0, 1, 2] {
+        let mut child = exact.clone();
+        match change {
+            0 => child.rules[i].auth_root = None,
+            1 => child.rules[i].auth_root.as_mut().unwrap().function = "other".into(),
+            _ => child.rules[i].auth_root.as_mut().unwrap().contract = REGISTRY.into(),
+        }
+        assert!(narrows(&exact, &child)
+            .iter()
+            .any(|f| matches!(f, WideningFinding::AuthRootChanged { .. })));
+    }
+    let rule = &lowered(&exact)[i].rule;
+    for (root_call, function, accepted) in [
+        (true, "guess", true),
+        (true, "transfer", false),
+        (false, "guess", false),
+    ] {
+        let mut enc = Encoder::new();
+        let predicate = enc.rule_allows_in(rule);
+        let script = format!("{}(assert {predicate})\n(assert (= root_call {root_call}))\n(assert (= root_fn \"{function}\"))\n(check-sat)\n", enc.declarations());
+        assert_eq!(matches!(run_z3(&script), Z3Verdict::Sat(_)), accepted);
+    }
+}
+
+/// A document literal must not alias the analyzer's symbolic account.
+#[test]
+fn a_literal_matching_the_lowering_placeholder_does_not_mean_self() {
+    if skip() {
+        return;
+    }
+    let parent = doc(&format!(
+        r#"{{
+          "version": 1,
+          "signers": [{{ "id": "ci", "verifier": "{VERIFIER}", "key": "0102" }}],
+          "rules": [{{
+            "name": "ci",
+            "scope": {{ "type": "contract", "address": "{REGISTRY}" }},
+            "principals": {{ "type": "all", "signers": ["ci"] }},
+            "args": [{{ "index": 0, "pred": {{ "type": "is-self" }} }}]
+          }}]
+        }}"#
+    ));
+    let mut child = parent.clone();
+    child.rules[0].args.as_mut().unwrap()[0].pred =
+        perch_ir::ArgPred::AddressEq(perch_ir::AddressEqPred {
+            address: "CDXO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO4M7R".into(),
+        });
+    perch_ir::validate(&child).unwrap();
+    assert!(narrows(&parent, &child)
+        .iter()
+        .any(|f| matches!(f, WideningFinding::SemanticWidening { .. })));
+
+    // The same separation applies to a self-admin scope versus a literal
+    // contract scope, not just to argument predicates.
+    let mut self_admin = parent.clone();
+    self_admin.rules[0].args = None;
+    self_admin.rules[0].scope = perch_ir::Scope::self_admin();
+    let mut literal_scope = self_admin.clone();
+    literal_scope.rules[0].scope =
+        perch_ir::Scope::contract("CDXO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO4M7R");
+    perch_ir::validate(&self_admin).unwrap();
+    perch_ir::validate(&literal_scope).unwrap();
+    assert!(narrows(&self_admin, &literal_scope)
+        .iter()
+        .any(|f| matches!(f, WideningFinding::ScopeChanged { .. })));
+}
+
+/// SMT escape sequences in document text are literal policy bytes, not
+/// instructions to the SMT parser.
+#[test]
+fn literal_smt_escapes_do_not_alias_the_characters_they_spell() {
+    if skip() {
+        return;
+    }
+    for (escape, character) in [
+        (r"\u{61}", "a"),
+        (r"\u0061", "a"),
+        (r"\u{22}", "\""),
+        (r"\u{5c}", "\\"),
+        (r"\u{e9}", "é"),
+        (r"\u{1f600}", "😀"),
+    ] {
+        for prefix in [false, true] {
+            let predicate = |text: &str| {
+                if prefix {
+                    perch_ir::ArgPred::StringPrefix(perch_ir::StringPrefixPred {
+                        prefix: text.into(),
+                    })
+                } else {
+                    perch_ir::ArgPred::StringIn(perch_ir::StringInPred {
+                        values: vec![text.into()],
+                    })
+                }
+            };
+            let mut parent = fixture("ci-publish.json");
+            let i = parent
+                .rules
+                .iter()
+                .position(|r| matches!(r.scope, perch_ir::Scope::Contract(_)))
+                .unwrap();
+            parent.rules[i].args = Some(vec![perch_ir::ArgConstraint {
+                index: 0,
+                pred: predicate(escape),
+            }]);
+            let mut child = parent.clone();
+            child.rules[i].args.as_mut().unwrap()[0].pred = predicate(character);
+            perch_ir::validate(&parent).unwrap();
+            perch_ir::validate(&child).unwrap();
+            assert!(
+                narrows(&parent, &child)
+                    .iter()
+                    .any(|f| matches!(f, WideningFinding::SemanticWidening { .. })),
+                "{escape:?}, prefix={prefix}"
+            );
+            assert!(narrows(&child, &child).is_empty(), "{character:?}");
+        }
+    }
+}
+
+/// The public encoder accepts rule-core's byte strings, which need not be
+/// UTF-8. Distinct invalid UTF-8 bytes must not become one replacement char.
+#[test]
+fn encoder_preserves_arbitrary_byte_strings() {
+    if skip() {
+        return;
+    }
+    let d = fixture("ci-publish.json");
+    for (left, right) in [
+        (&[0xff][..], &[0xfe][..]),
+        (&[0xff][..], "�".as_bytes()),
+        ("é".as_bytes(), &[0xe9][..]),
+        ("\"\\\n\0😀".as_bytes(), "\"\\\n\0😀".as_bytes()),
+    ] {
+        let mut l = lowered(&d).remove(0).rule;
+        let mut r = lowered(&d).remove(0).rule;
+        l.conds = vec![rule_eval::Cond::ArgEq(
+            0,
+            rule_eval::Val::String(left.to_vec()),
+        )];
+        r.conds = vec![rule_eval::Cond::ArgEq(
+            0,
+            rule_eval::Val::String(right.to_vec()),
+        )];
+        let mut enc = Encoder::new();
+        let l = enc.rule_allows(&l);
+        let r = enc.rule_allows(&r);
+        let result = run_z3(&format!(
+            "{}(assert (and {l} {r}))\n(check-sat)\n",
+            enc.declarations(),
+        ));
+        assert_eq!(
+            matches!(result, Z3Verdict::Sat(_)),
+            left == right,
+            "{result:?}"
+        );
+        assert!(!matches!(result, Z3Verdict::Unknown(_)), "{result:?}");
+    }
 }

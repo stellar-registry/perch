@@ -2,16 +2,41 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="refresh" content="0; url=slides/">
-<title>Perch — redirecting to the slide deck</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Perch — papers and walkthroughs</title>
 <style>
   body { background:#0B1116; color:#93A4AE; font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-         display:flex; align-items:center; justify-content:center; height:100vh; margin:0; }
+         display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; }
   a { color:#E8B45A; }
+  main { max-width:42rem; padding:2rem; line-height:1.6; }
+  h1 { color:#edf2f5; }
+  li { margin:1rem 0; }
 </style>
 </head>
 <body>
-<p>Redirecting to <a href="slides/">the perch slide deck</a>…</p>
-<script>window.location.replace("slides/");</script>
+<main>
+<h1>Perch</h1>
+<p>Safe, bounded delegation for apps and agents on Stellar: the paper, its companions, and a simulation that runs Perch and OpenZeppelin side by side.</p>
+<nav aria-label="Documentation">
+<ul>
+<li><a href="perch-paper/">Perch paper</a> — bounded grants for apps and agents on Stellar: what a grant can say, how the account decides, what is proved, and both designs run side by side. The <a href="perch-paper/latex/perch-paper.pdf">academic edition (PDF)</a> is built from the same source, and <a href="perch-paper-deck/">its slides</a> follow it section by section.</li>
+<li><a href="perch-deck/">Perch slides</a> — the paper's story as a short deck, with the sign dialog in Nido's look and where ZK email recovery could fit.</li>
+<li><a href="perch-paper-deck/">Perch paper slides</a> — the academic edition, section by section, through one picture: the account as a building, a grant as a keycard, the proofs as an inspector.</li>
+<li><a href="perch-scf-deck/">Perch Agent Grants slides</a> — the SCF Build Award submission deck: subagent budgets enforced by Stellar smart accounts, in 10 timed slides and an appendix.</li>
+<li><a href="nido-sim/">Nido in soroban-sim</a> — create a Nido account, give an app a grant, then play a guessing game and buy a coffee through the sign dialog, with each nested call checked; offline, with the passkey, the factory build and the test token simulated.</li>
+<li><a href="perch-paper/sim/">Simulation</a> — an OpenZeppelin account with oz-policy-builder's policy and a Perch account, run side by side in soroban-sim in the browser, offline.</li>
+<li>Companion papers:
+<ul>
+<li><a href="perch-paper/oz-policy-builder/">Perch and oz-policy-builder</a> — the full comparison, where each design does better, and lessons for Perch (<a href="perch-paper/oz-policy-builder/latex/oz-policy-builder.pdf">PDF</a>).</li>
+<li><a href="perch-paper/verification/">What Perch proves</a> — every theorem and definition, the translated evaluator and its models (<a href="perch-paper/verification/latex/verification.pdf">PDF</a>).</li>
+<li><a href="perch-paper/vision/">The Perch vision</a> — recovery, the full account, and proposed agent and Cedar work, with the recovery experiment.</li>
+</ul></li>
+<li><a href="oz-walkthrough/">Walkthrough</a> — one payment, step by step, under both designs.</li>
+<li><a href="slides/">Slide deck</a> — an introduction to an earlier Perch design, which compiled documents into OpenZeppelin context rules and policies.</li>
+<li><a href="cedar-walkthrough/">Cedar walkthrough</a> — an interactive guide to Cedar, with an official-engine lab and a separate <a href="cedar-walkthrough/index.html#perch">Perch compiler prototype</a>.</li>
+</ul>
+</nav>
+<p>The experiments describe their source revisions and limitations. Proposed extensions are not deployed features.</p>
+</main>
 </body>
 </html>

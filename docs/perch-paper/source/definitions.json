@@ -1,0 +1,115 @@
+[
+ {
+  "id": "contexts-and-authorizations",
+  "label": "D1",
+  "title": "Contexts and authorizations",
+  "docs": [
+   "main",
+   "verification"
+  ],
+  "math": "c \\;::=\\; \\mathsf{call}(C, f, \\vec v) \\;\\mid\\; \\mathsf{create}(w)\n\\\\\na = (\\vec c, \\vec j, S, \\ell, g)",
+  "reading": "A request is the list of calls an entry approves, with the rule named for each, the signers, the ledger and the generation.",
+  "text": "A context is one call or contract creation in an authorization entry's invocation tree. An authorization \\(a\\) carries the entry's contexts \\(\\vec c = c_1, \\dots, c_n\\) in preorder, root first; one rule index \\(j_i\\) per context; the claimed signers \\(S\\); the ledger \\(\\ell\\); and the account's grant generation \\(g\\).",
+  "lean": "[Chain.Context](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean#L114); [Authorization](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean#L80)"
+ },
+ {
+  "id": "rules-and-allows",
+  "label": "D2",
+  "title": "Rules and *allows*",
+  "docs": [
+   "main",
+   "verification"
+  ],
+  "math": "\\mathit{allows}(r, c, S) \\iff \\mathit{sc}_r(c) \\land \\bigwedge_{\\varphi \\in \\Phi_r} \\varphi(c)\n\\\\\n\\qquad\\qquad \\land\\ k_r \\le |\\Sigma_r \\cap S|\n\\\\\n\\mathit{allows}(R, c, S) \\iff \\exists r \\in R.\\ \\mathit{allows}(r, c, S)\n\\\\\nR' \\sqsubseteq R \\iff \\forall c, S.\\ \\mathit{allows}(R', c, S)\n\\\\\n\\qquad\\qquad \\implies \\mathit{allows}(R, c, S)",
+  "reading": "A rule allows a call when it names that contract and function, every argument condition holds, and enough of its signers signed.",
+  "text": "A rule \\(r\\) has a scope \\(\\mathit{sc}_r\\) (one contract and a function list; false on creations), argument conditions \\(\\Phi_r\\), signers \\(\\Sigma_r\\) and a threshold \\(k_r\\) over distinct signers, and optionally a cap \\((\\lambda_r, P_r)\\), a last ledger \\(u_r\\) and a generation \\(g_r\\). *allows* reads none of the last three; *checkAuth* checks them. A rule set allows what one of its rules allows; \\(R' \\sqsubseteq R\\) when \\(R\\) allows, under the same signers, everything \\(R'\\) allows.",
+  "lean": "[Rule.allows](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean#L95); [RuleSet.allows](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean#L98); [RuleSet.narrower](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/RuleSet.lean#L126)"
+ },
+ {
+  "id": "check-auth-and-runs",
+  "label": "D3",
+  "title": "*checkAuth* and runs",
+  "docs": [
+   "main",
+   "verification"
+  ],
+  "math": "\\mathit{checkAuth}(R, \\rho, (\\vec c, \\vec j, S, \\ell, g)) = \\rho' \\iff\n\\\\\n\\quad |\\vec j| = |\\vec c| \\land |\\rho| = |R|\n\\\\\n\\quad \\land\\ \\forall i.\\ j_i < |R| \\land \\ell \\le u_{r_i} \\land g_{r_i} \\in \\{\\bot, g\\}\n\\\\\n\\qquad\\qquad \\land\\ \\mathit{allows}(r_i, c_i, S)\n\\\\\n\\quad \\land\\ \\forall s \\in S.\\ \\exists i.\\ s \\in \\Sigma_{r_i}\n\\\\\n\\quad \\land\\ \\rho' = \\mathit{charge}(\\cdots \\mathit{charge}(\\rho, c_1, j_1) \\cdots, c_n, j_n)",
+  "reading": "*checkAuth* accepts a request only if each named rule is live and allows its call, every signer belongs to a named rule, and every charge fits.",
+  "text": "Here \\(r_i = R_{j_i}\\). \\(\\mathit{charge}(\\rho, c, j)\\) leaves \\(\\rho\\) unchanged when \\(R_j\\) has no cap; otherwise it reads the amount \\(c\\) carries, refusing a call that carries none, and applies Definition 4's check to rule \\(j\\)'s record. Each charge must succeed. *checkAuth* returns the next records or the first refusal, and a refusal changes nothing. A run applies authorizations in order, keeping the records on a refused one.",
+  "lean": "[RuleSet.checkAuth](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean#L147); [RuleSet.checkAuth_eq_ok_iff](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Authorize.lean#L182); [RuleSet.run](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean#L168); [RuleSet.Accepts](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean#L178)"
+ },
+ {
+  "id": "window-check-and-spent",
+  "label": "D4",
+  "title": "Window, check and *spent*",
+  "docs": [
+   "main",
+   "verification"
+  ],
+  "math": "\\mathit{inWindow}_P(L, t) \\iff \\max(0,\\, L - P) < t \\le L\n\\\\\n\\mathit{check}_{\\lambda, P}(h, \\ell, x) = h' \\;\\land\\; x > 0 \\implies\n\\\\\n\\qquad \\sum_{k:\\ \\mathit{inWindow}_P(\\ell,\\, t_k)} y_k \\;+\\; x \\;\\le\\; \\lambda\n\\\\\n\\qquad \\land\\ h' = ((t_k, y_k))_{k:\\ \\mathit{inWindow}_P(\\ell,\\, t_k)}\n\\\\\n\\qquad\\qquad \\cdot\\, (\\ell, x)",
+  "reading": "The window at ledger L holds the charges made after L − P and through L; a new charge must fit under the limit.",
+  "text": "A record is a list \\(h = ((t_k, y_k))_{k=1}^{m}\\) of positive charges in ledger order, its total their sum. The check of a charge \\(x\\) at ledger \\(\\ell\\) refuses \\(x < 0\\); accepts \\(x = 0\\), leaving \\(h\\); and otherwise refuses a ledger before the newest charge, an overflow, {{fact:evaluator-history-bound}} entries already kept, or a window total above \\(\\lambda\\). On acceptance it keeps the entries in the window at \\(\\ell\\) and appends \\((\\ell, x)\\). \\(\\mathit{spent}_j(R, \\rho, \\vec a)\\) lists \\((\\ell_a, x)\\) for each positive charge that the accepted authorizations of run \\(\\vec a\\) make to rule \\(j\\), in order.",
+  "lean": "[Params.inWindow](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Cap.lean#L205); [Params.check](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Cap.lean#L122); [RuleSet.spent](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean#L200)"
+ },
+ {
+  "id": "derivation",
+  "label": "D5",
+  "title": "Derivation",
+  "docs": [
+   "main",
+   "verification"
+  ],
+  "math": "\\mathit{Derives}(R, R)\n\\\\\n\\mathit{Derives}(R, R') \\land \\mathit{attenuate}(R', \\sigma) = R''\n\\\\\n\\qquad \\implies \\mathit{Derives}(R, R'')",
+  "reading": "A derived grant comes from its parent by zero or more of the ten attenuation steps.",
+  "text": "\\(\\sigma\\) is one of rule-core's ten attenuation steps: drop a rule; remove functions, or restrict functions; add an argument condition; remove signers, or raise a threshold; add a cap, lower its limit, or lengthen its period; set or lower the last ledger. No step changes a rule's target or generation. \\(\\mathit{attenuateAll}(R, \\vec\\sigma) = R'\\) applies a list of steps and implies \\(\\mathit{Derives}(R, R')\\).",
+  "lean": "[Chain.RuleSet.Derives](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean#L442); [Chain.RuleSet.attenuate](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean#L423); [Chain.Attenuation](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Chain.lean#L410)"
+ },
+ {
+  "id": "documents-and-lowering",
+  "label": "D6",
+  "title": "Documents and lowering",
+  "docs": [
+   "verification"
+  ],
+  "math": "X = \\mathit{excluded}(d_s, A)",
+  "reading": "A grant document is lowered into stored rules under the account's address, excluded set and current generation, or refused.",
+  "text": "For a document \\(d\\) on account \\(A\\), \\(\\mathit{Doc.allows}(d, A, c, S)\\) holds when some rule of \\(d\\) covers \\(c\\)'s contract and function, its argument constraints hold and its principals are signed by \\(S\\); no rule allows a creation. \\(\\mathit{Doc.Valid}(d)\\) holds when every rule that requires all its signers names distinct signers, fewer than \\(2^{32}\\) of them, and no rule has a not-after ledger of 0. \\(\\mathit{lower}(d, A)\\) is the rules of an account document, followed by the recovery rule when \\(d\\) configures recovery. With \\(X = \\mathit{excluded}(d_s, A)\\) for the account document \\(d_s\\), which is \\(A\\), the adopted controller and, if configured, the zero-knowledge adapter and pool, \\(\\mathit{lowerScoped}(d, A, X, g)\\) refuses a document that configures recovery or has a rule whose target is \\(A\\), a member of \\(X\\) or the account's self-administration, and otherwise lowers \\(d\\)'s rules stamped with generation \\(g\\). Document conditions lower to rule-core's {{fact:rule-core-conditions}} as {{ref:tab:tab-attenuation}} says; a cap adds the upper bound of the largest `i128` on argument 2, a type guard.",
+  "lean": "[Doc.allows](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Document.lean#L236); [Doc.Valid](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Document.lean#L358); [Doc.lower](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Lowering.lean#L133); [Doc.excluded](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Lowering.lean#L151); [Doc.lowerScoped](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Lowering.lean#L177)"
+ },
+ {
+  "id": "account-events",
+  "label": "D7",
+  "title": "Account events",
+  "docs": [
+   "verification",
+   "vision"
+  ],
+  "math": "\\mathsf{applyDoc}(d'):\\ (A, d_s, g) \\mapsto (A, d', g)\n\\\\\n\\mathsf{completeRecovery}(t):\n\\\\\n\\quad (A, d_s, g) \\mapsto (A, t, g + 1) \\quad (g < 2^{64} - 1)\n\\\\\n\\mathit{issue}((A, d_s, g), d)\n\\\\\n\\quad = \\mathit{lowerScoped}(d, A, \\mathit{excluded}(d_s, A), g)",
+  "reading": "Applying a document keeps the generation; a completed recovery advances it by one.",
+  "text": "An account state \\(s = (A, d_s, g)\\) is the account's address, its account document and its grant generation. \\(\\mathsf{applyDoc}(d')\\) replaces the account document; \\(\\mathsf{completeRecovery}(t)\\) installs the recovery target \\(t\\) and advances the generation, and is refused when \\(g\\) is the largest `u64`. A refused event leaves the state unchanged. \\(\\mathit{run}(s, \\vec e)\\) applies events in order, and \\(\\mathit{completions}(s, \\vec e)\\) counts the completed recoveries among them. A grant document \\(d\\) is *issued* in \\(s\\) by lowering it under the account's address, the excluded set of its account document and its generation.",
+  "lean": "[Account.step](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean#L50); [Account.run](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean#L58); [Account.completions](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean#L66); [Account.issue](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean#L76)"
+ },
+ {
+  "id": "host-run",
+  "label": "D8",
+  "title": "Host run",
+  "docs": [
+   "verification"
+  ],
+  "reading": "A model of the Soroban host running one transaction under enforcing authorization.",
+  "text": "A model of soroban-env-host running a transaction of contract calls under enforcing authorization. Every call is a frame that a failure rolls back. `require_auth` of an address holds when the frame's direct caller is that address (invoker authority), or when an authorization entry of the address matches; on its first match the address's `__check_auth` runs on the entry's contexts in preorder, then the expiration is checked and the nonce consumed. Stellar-account signers, `require_auth` inside `__check_auth`, `require_auth_for_args`, `authorize_as_current_contract`, contract creation as a call and source-account credentials are outside the model.",
+  "lean": "[Soroban.Tx.run](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Soroban/Host.lean#L342)"
+ },
+ {
+  "id": "denotation",
+  "label": "D9",
+  "title": "Denotation",
+  "docs": [
+   "verification"
+  ],
+  "math": "\\forall x.\\ \\exists y.\\ f_{\\mathrm{T}}(x) = \\mathsf{ok}(y) \\land \\llbracket y \\rrbracket = f(\\llbracket x \\rrbracket)",
+  "reading": "Denotation maps the translation's values to the model's, so the two can be compared.",
+  "text": "\\(\\llbracket \\cdot \\rrbracket\\) maps the translation's values (byte vectors, `u32` and `u64` scalars, rules, caps, records, contexts, signers and outcomes) to the model's. A translated function \\(f_{\\mathrm{T}}\\) agrees with its model \\(f\\) when, for every input, it succeeds and its result denotes the model's result on the denoted input. {{ref:stmt:total-equivalence-of-the-evaluator}} and {{ref:stmt:lowering-equivalence}} are stated this way.",
+  "lean": "[Equiv.denoteRules](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Equiv/Denote.lean#L108); [denoteAuthorized](https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Equiv/Authorize.lean#L60)"
+ }
+]

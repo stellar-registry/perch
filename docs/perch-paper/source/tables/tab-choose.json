@@ -1,0 +1,70 @@
+{
+ "title": "oz-policy-builder and Perch, side by side.",
+ "caption": "Read from source at the pins; nothing here is measured. The full table, with a source for each cell, is in the oz-policy-builder companion paper.",
+ "columns": [
+  "",
+  "oz-policy-builder on an OpenZeppelin account (`{{fact:opb-pin-short}}`)",
+  "Perch (`{{fact:perch-pin-short}}`)"
+ ],
+ "latex_colspec": "@{}>{\\raggedright\\arraybackslash}p{0.13\\linewidth}L>{\\raggedright\\arraybackslash}p{0.27\\linewidth}@{}",
+ "rows": [
+  [
+   "Status",
+   "Release {{fact:opb-release}} and later commits; interpreter pinned on testnet, none on mainnet (`config.ts:57-80`); installs on existing OpenZeppelin accounts (0.7.2-line and {{fact:oz-v080-tag}} builds, `policy-synth/README.md:143`)",
+   "On Perch's `dev` branch, not yet `main`; an earlier build as a testnet preview; earlier design on mainnet; a grant needs a Perch account"
+  ],
+  [
+   "External review",
+   "Audit of {{fact:opb-release}} {{fact:opb-audit-status}} since {{fact:opb-audit-start}}; off-chain packages hardened after a penetration test (PR {{fact:opb-pentest-pr}}, {{fact:opb-pentest-branch}}, merged at `{{fact:opb-pin-short}}`) (`README.md:57-59, 166-171`)",
+   "None completed"
+  ],
+  [
+   "Tested on real transactions",
+   "{{fact:opb-corpus-calls}} mainnet transactions of {{fact:opb-corpus-shapes}} shapes, including SEP-41 transfers, Soroswap swaps and Blend submits, taken from synthesis to the interpreter (`packages/policy-synth/src/corpus.test.ts:1-3`; `fixtures/corpus/mainnet.json`); scripted testnet runs of the executor binding, the adapter, a no-gate liquidation and the {{fact:oz-v080-tag}} migration (`evidence/README.md:18-24`)",
+   "{{fact:nido-run-transactions}} transactions through {{fact:wallet-name}}'s testnet preview; local reference runs"
+  ],
+  [
+   "Authoring",
+   "Record a transaction or state an Intent, synthesise a predicate and test that each conjunct is needed, verify it against the deployed `check`, review, unsigned install; {{fact:opb-tools-count}} tools over a CLI and an MCP server; three packages at {{fact:opb-packages-version}} (`README.md:13-24`; `packages/*/package.json:3`)",
+   "Write a grant document (perch-js builder); the account's compiler validates it at install"
+  ],
+  [
+   "Conditions on a call",
+   "And/or, comparisons, quantifiers over lists, ledger-clock windows (`until`/`from`), slippage floors (`minOut`), reads of other contracts (`dsl.rs:84-158`; `intent.ts:18-49`)",
+   "Target, functions, {{fact:doc-conditions-count}} conjunctive argument conditions, threshold, expiry; no reads"
+  ],
+  [
+   "Limit over time",
+   "OpenZeppelin `spending_limit`, a separate opt-in policy on `transfer` (`docs/stellar.md:404-407`; `install.ts:957-967`)",
+   "A window cap inside the rule, charged in the same decision (T6)"
+  ],
+  [
+   "Where it is decided",
+   "The account's checks, then each attached policy in stored order",
+   "One decision function in the account"
+  ],
+  [
+   "Signers",
+   "Delegated signers on policed rules; thresholds through a threshold policy (`README.md:122-125`)",
+   "External (passkey, Ed25519) and delegated; threshold in the rule"
+  ],
+  [
+   "What a refusal reports",
+   "A deny code per reason (`policy-interpreter/src/storage.rs:27-86`)",
+   "Auth error {{fact:auth-error-stale-grant}} or {{fact:auth-error-rule-eval-refused}}"
+  ],
+  [
+   "Evidence about the decision",
+   "Tests, partly on the shipped Wasm; a STRIDE threat register",
+   "Lean proofs about the evaluator's translation; the account code around it tested"
+  ],
+  [
+   "Ending authority",
+   "Rules removed one at a time",
+   "One owner call per grant; a completed recovery stops every earlier grant from authorizing through the account"
+  ]
+ ],
+ "editions": [
+  "latex"
+ ]
+}

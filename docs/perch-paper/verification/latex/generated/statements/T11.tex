@@ -1,0 +1,11 @@
+% Generated from source/statements.json.
+\begin{perchstatement}{11}{Authorization-tree coverage.}\label{stmt:authorization-tree-coverage}
+\[\begin{aligned}&\mathsf{authorized}(A, f, \mathsf{entry}) \in \mathit{new}\\
+&\quad \land\ \mathsf{checkRules}(R, S) \in \mathit{program}(A)\\
+&\qquad \implies \mathit{allows}(R, f, S)\\
+&\mathsf{checkAuth}(A, p, \sigma, \vec c) \in \mathit{new}\\
+&\qquad \implies \vec c = \mathit{preorder}(p) \land \vec c \neq [\,]\end{aligned}\]
+Here $\mathit{new}$ is the events a transaction's run appends. In the host model, every \code{require\_auth} that an account's authorization entry satisfies is for a call that every rule set the modeled \code{\_\_check\_auth} checks allows, and \code{\_\_check\_auth} receives the entry's invocation tree in preorder, root first, so never an empty batch. Authorization by invoker, as in the owner's \code{execute}, is outside the statement, and the modeled account checks the stateless \textit{allows}, not Perch's shell. The model agreed with \fact{host-model-tested-versions} on every case it expresses, over \fact{host-traces-generated} generated and \fact{host-traces-transcribed} transcribed traces; Definition~\ref{def:host-run} and \S\ref{sec:unproved} list what it leaves out, and the simulator's host, \fact{soroban-env-host-sim}, was not tested.
+\statementhypotheses{Contract accounts; \code{require\_auth} satisfied by an authorization entry}
+\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Soroban.lean\#L705}{Soroban.Tx.run\_authorized\_allowed}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Soroban.lean\#L717}{Tx.run\_checkAuth\_contexts} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} HOST MODEL} (model tested against the host)}
+\end{perchstatement}

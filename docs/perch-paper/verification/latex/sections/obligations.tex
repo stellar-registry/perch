@@ -1,0 +1,79 @@
+The account calls the Rust \code{lower} and \code{lower\_scoped} on install and
+\code{rule\_eval::}\allowbreak\code{check\_auth} in \code{\_\_check\_auth}.
+Theorem~\ref{stmt:lowering-equivalence} does for lowering what
+Theorem~\ref{stmt:total-equivalence-of-the-evaluator} does for \code{check\_auth};
+Theorem~\ref{stmt:canonical-identity}, in Perch's own Lean package, is about a
+grant's \code{doc\_hash}, the SHA-256 of its CANON~v1 bytes (RFC~8785~\cite{rfc8785}
+restricted).
+
+\input{generated/statements/T12}
+\input{generated/statements/T13}
+
+\noindent Perch's
+integration suite runs rule-core's \fact{lean-doc-traces} Lean-generated document
+traces through natively compiled \code{apply\_doc}, \code{apply\_grant} and
+\code{check\_auth}, with the real Ed25519 verifier, enforcing authorization and
+the generation set from each trace, and checks the stored rules, every verdict
+and every spending record against the model; Perch's CI also replays rule-core's
+conformance vectors. The theorems hold over one fixed rule slice, while the shell
+builds a slice of the selected rules for each authorization; carrying them
+through that selection is obligation O2 (Table~\ref{tab:tab-obligations}).
+
+\perchtable{tab-obligations}
+
+\input{generated/statements/P1}
+
+\paragraph{What a signature binds.} A signature must commit to the rule IDs the
+evaluator decides over. With $H$ = SHA-256, the account's
+\fact{contract-id-bytes}-byte ID $\mathit{id}_A$, the tag $\tau$ =
+\facthash{auth-domain-tag} and the selected rule IDs $\mathit{ids}$, an external
+signer signs $D$:
+\begin{align*}
+  P &= H\bigl(\mathrm{XDR}(\mathtt{SorobanAuthorization}\{\mathit{nid}, \mathit{nonce}, \mathit{exp}, \mathit{inv}\})\bigr),\\
+  B &= H(\tau \,\|\, \mathit{id}_A \,\|\, P), \qquad
+  D = H\bigl(B \,\|\, \mathrm{XDR}(\mathtt{Vec}\langle\mathtt{u32}\rangle\ \mathit{ids})\bigr).
+\end{align*}
+$P$ is the host's payload for a legacy \code{Address} credential; CAP-0071's
+address-bound credentials~\cite{cap-0071} hash \code{SorobanAuthorizationWithAddress}, which adds $A$. A
+delegated signer approves the host's address-bound payload, which omits
+$\mathit{ids}$. In OpenZeppelin's account~\cite{oz-stellar-accounts} at \fact{oz-v080-tag}, an
+external signer signs $H(\mathrm{XDR}(\mathtt{AuthDigestPreimage}\{A, P,
+\mathit{ids}\}))$ and a delegated one authorizes that preimage through \code{require\_auth\_for\_args}
+(Table~\ref{tab:tab-binding}). The lemma is a paper proof, not mechanized.
+
+\begin{lemma}[binding]\label{lem:binding}
+Suppose the verifier named for an external signer correctly verifies an
+EUF-CMA-secure scheme and $H$ is collision resistant. An adversary given
+signatures on $D(t_1),\dots,D(t_q)$ for tuples
+$t_i = (A, \mathit{nid}, \mathit{nonce}, \mathit{exp}, \mathit{inv}, \mathit{ids})$
+of its choice outputs a $t \notin \{t_i\}$ with a signature accepted on $D(t)$
+only with negligible probability.
+\end{lemma}
+
+\begin{proof}
+The map from $t$ to $D$ composes injective encodings with $H$: XDR encodes
+$(\mathit{nid}, \mathit{nonce}, \mathit{exp}, \mathit{inv})$ injectively, and its
+union discriminant separates the two credential forms; $\tau$ is constant and
+$\mathit{id}_A$ and $P$ have fixed lengths; $B$ has a fixed length and the XDR of $\mathit{ids}$ is
+self-delimiting. If $D(t) = D(t_i)$ for some $i$, this gives a collision of $H$;
+otherwise the output is a forgery. For WebAuthn the signed message carries $D$ as
+the client-data challenge. \qed
+\end{proof}
+
+\noindent The lemma covers signatures on $D$ values only; a key that also signs
+elsewhere, such as a Stellar account key, is covered only if no message it signs
+there can equal a $D$ value. $D$ does not depend on the contents of the rules
+$\mathit{ids}$ names, the account's revision, the transaction's other entries or
+its fee payer.
+
+\paragraph{Domain tags.} Perch separates its hash domains with
+\facthash{auth-domain-tag} (the payload $B$, scheme
+\fact{auth-scheme-name}), \fact{domain-tag-rule} (one rule's bytes),
+\fact{domain-tags-recovery} (recovery statements, configurations, credentials and
+replacement sets) and, as Poseidon2 constants, \fact{domain-tags-zk}. CANON
+document hashes carry no tag; \code{configPreimage\_ne\_emitDoc},
+\code{rulePreimage\_ne\_configPreimage} and \code{rulePreimage\_ne\_emitDoc} in
+Perch's canonical-encoding package prove that configuration, rule and document
+preimages never coincide. Each SHA-256 tag begins its preimage and none is a
+prefix of another, so preimages from different domains differ (by inspection,
+not proved). oz-policy-builder uses \fact{opb-domain-tags}.

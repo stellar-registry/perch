@@ -1,0 +1,58 @@
+\paragraph{oz-policy-builder.} oz-policy-builder has two halves
+(\srcpath{README.md:13-24}). Off chain, a synthesiser,
+\code{\fact{opb-synth-package}}, records a transaction or takes a declared
+Intent, writes a predicate in the interpreter's wire form, verifies it through the
+interpreter's \code{check} (a dry run that always fails with its verdict),
+renders a review, and returns an unsigned install transaction; a command-line
+tool and an MCP server expose the same \fact{opb-tools-count} tools. On chain, one
+shared \code{policy-interpreter} contract, attached to an OpenZeppelin context
+rule as a policy, evaluates the stored predicate in \code{enforce} on every
+guarded call (\srcpath{policy-interpreter/src/lib.rs:192-277}). Much of
+\srcpath{docs/stellar.md} describes Prime, a custody product built on these parts;
+the interpreter and the synthesiser correspond to Perch's evaluator and document
+compiler.
+
+\paragraph{The OpenZeppelin order.} An OpenZeppelin \fact{oz-v080-tag} account's
+\code{\_\_check\_auth} validates each selected rule (it exists, matches the
+context and has not expired) and refuses any signer on no selected rule; then it
+authenticates the signers; then it calls \code{enforce} on each policy attached
+to the rule, in the rule's stored order, which for policies given at creation is
+their address order (\srcpath{storage.rs:629-690} in \code{stellar-contracts}). The
+interpreter, \code{spending\_limit} and the threshold policies are such policies,
+each with its own state keyed by account and rule.
+
+\paragraph{Perch.} For ordinary authorization, a Perch account's
+\code{\_\_check\_auth} calls rule-core's
+linked \code{rule\_eval::}\allowbreak\code{check\_auth} on the selected rules and their spending
+records, which decides the whole authorization, caps included, before any signer
+is authenticated (Perch \srcpath{gate.rs:93-113}); it then authenticates external
+signers through verifier contracts and delegated signers through the host, and
+writes the new spending records only when authentication also succeeds
+(\srcpath{gate.rs:114-121}). An evaluator refusal calls no verifier; a bad
+signature fails during authentication. Recovery completion uses the controller's
+separate path. Perch's deployed build \fact{perch-deployed-source-short} used the
+attached-policy shape on a fork of OpenZeppelin's library; the design compared
+here moves the decision into the account.
+
+\paragraph{Three ideas from oz-policy-builder.} A \emph{predicate} is the
+interpreter's stored expression for one (account, rule) pair; it denies by
+default and has no \code{not}, and its \code{ne} and \code{nin} deny when an
+operand does not resolve (\srcpath{policy-interpreter/README.md:632-639}). An
+\emph{execution adapter} runs a batch of calls atomically, since Soroban allows
+one host-function invocation per transaction, and a predicate on its
+\code{execute} can relate the batch's calls (\srcpath{docs/stellar.md:191-195}). A
+\emph{keyless rule} has no signer; the interpreter admits one only when it is
+bound to an adapter, and anyone may then run what the predicate permits
+(\srcpath{policy-interpreter/src/lib.rs:210-223}). Perch refuses a rule with no
+signer.
+
+Figure~\ref{fig:fig-two-paths} follows one guarded call through both accounts, as
+read from source, under the game grant of \S\ref{sec:spellings}: the app may call
+\code{guess} on a game, which takes a \fact{game-wrong-guess-xlm}-XLM stake
+through a transfer it makes, and may pay XLM only to the game, within a cap. Over
+the cap, Perch refuses in its decision, before any signer is authenticated, and
+the OpenZeppelin account in \code{spending\_limit}, after authentication. A
+direct transfer to the game, with no guess, passes in both, because each rule
+sees its own context alone.
+
+\perchfigure{fig-two-paths}

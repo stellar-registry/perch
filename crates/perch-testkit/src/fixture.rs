@@ -1,12 +1,12 @@
 //! Frozen conformance fixtures and the shared cryptographic helpers the e2e
-//! suites depend on. This module absorbs what used to be
-//! `integration-tests/tests/common/mod.rs` (`fixture`, `auth_digest`) plus the
-//! stand-ins and constants that `apply_doc.rs` kept locally (`AnyKeyVerifier`,
-//! `FIXTURE_VERIFIERS`, `FIXTURE_NETWORK`, `CI_PUBLISH_DOC_HASH`), so an
-//! upstream layout change is fixed once, not per test file.
+//! suites depend on (`fixture`, `auth_digest`, `AnyKeyVerifier`,
+//! `FIXTURE_VERIFIERS`, `FIXTURE_NETWORK`, `CI_PUBLISH_DOC_HASH`), in one place
+//! so an upstream layout change is fixed once, not per test file.
 
 use soroban_sdk::xdr::ToXdr;
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Vec};
+use soroban_sdk::{
+    contract, contractimpl, Address, Bytes, BytesN, Env, IntoVal, TryFromVal, Val, Vec,
+};
 use std::fs;
 use std::path::PathBuf;
 use stellar_accounts::verifiers::Verifier;
@@ -48,10 +48,19 @@ pub fn ci_publish_doc_hash(env: &Env) -> BytesN<32> {
     )
 }
 
+/// `v` read as its twin type `T` through its host value: an OZ
+/// `AuthPayload`, `Signer`, or `ContextRule` as the account's
+/// (`perch-account-types`), or the reverse. Panics unless the host value
+/// reads as a `T`.
+pub fn twin<T: TryFromVal<Env, Val>>(env: &Env, v: impl IntoVal<Env, Val>) -> T {
+    let v: Val = v.into_val(env);
+    T::try_from_val(env, &v).unwrap_or_else(|_| panic!("not the twin type's host value"))
+}
+
 /// The digest a Perch account's `check_auth` makes an `External` signer
 /// authenticate against: `sha256(bound_payload || rule_ids.to_xdr())`, where
 /// `bound_payload = sha256(AUTH_ADDR_DOMAIN || account_id || payload)` folds
-/// the account's own address in (the `addr_oz_v1` scheme). THE reference copy;
+/// the account's own address in (the `addr_oz_v1` scheme). The reference copy;
 /// `integration-tests/tests/auth_vectors.rs` pins it against the digest the
 /// on-chain `check_auth` actually hands a verifier.
 pub fn auth_digest(env: &Env, account: &Address, payload: &BytesN<32>, ids: &Vec<u32>) -> [u8; 32] {
@@ -59,6 +68,47 @@ pub fn auth_digest(env: &Env, account: &Address, payload: &BytesN<32>, ids: &Vec
     let mut preimage = Bytes::from_array(env, &bound.to_array());
     preimage.append(&ids.clone().to_xdr(env));
     env.crypto().sha256(&preimage).to_array()
+}
+
+/// The fixture's `ci-publish` rule as an account stores it once the
+/// document is applied (`perch_smart_account::StoredRule`), with `signers` in
+/// place of the fixture's ci key, named by position in `signers`, and
+/// `valid_until` as its last ledger: `publish` or `publish_hash` on
+/// `registry`, argument 1 (the author) the account itself, and every signer
+/// required. Install it with
+/// `perch_smart_account::testutils::install_rule(.., &rule, &signers)`;
+/// `apply_doc.rs` checks it against the rule `apply_doc` stores for the
+/// fixture.
+pub fn ci_publish_rule(
+    env: &Env,
+    account: &Address,
+    registry: &Address,
+    signers: &Vec<perch_account_types::Signer>,
+    valid_until: Option<u32>,
+) -> perch_smart_account::StoredRule {
+    use perch_rule_eval::{StoredCond, StoredFunctions, StoredVal};
+    let mut positions = Vec::new(env);
+    for i in 0..signers.len() {
+        positions.push_back(i);
+    }
+    perch_smart_account::StoredRule(
+        registry.clone(),
+        StoredFunctions::Only(soroban_sdk::vec![
+            env,
+            soroban_sdk::Symbol::new(env, "publish"),
+            soroban_sdk::Symbol::new(env, "publish_hash"),
+        ]),
+        soroban_sdk::vec![
+            env,
+            StoredCond::ArgEq(1, StoredVal::Address(account.clone()))
+        ],
+        positions,
+        signers.len(),
+        Vec::new(env),
+        valid_until,
+        None,
+        None,
+    )
 }
 
 /// Stand-in for the fixture's verifier contracts (whose addresses the frozen

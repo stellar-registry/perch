@@ -1,0 +1,18 @@
+<p class="lede"><strong>Everything in this section is proposed, not built, except the model results it cites ({{ref:stmt:attenuation-narrows-authority}}, {{ref:stmt:trace-inclusion}}, {{ref:stmt:delegation-tree-budgets}}), and exact entry roots, which are built ({{fact:exact-roots-prs}}).</strong></p>
+<h3 id="runtime">An agent runtime</h3>
+<p>We propose applying the engine-and-host split to an agent runtime: a pure engine decides whether an action is permitted and computes its accounting effect, and a host mediates the action and commits state. The rule model is generic in action and signer types, and the evaluator can run outside Soroban. In the proposed architecture, a root agent holds a Perch grant on a Stellar account and derives child grants from it, with budgets and with file, network, signing and spawn permissions. Agents hold no signing keys: a separate host and key service mediate signing, and the account independently rechecks the resulting payments and signature authorizations. For payments we propose x402, a protocol that carries payments in HTTP using the <code>402 Payment Required</code> status, on Stellar.</p>
+<p>Each new kind of permission needs a specification, an implementation correspondence and test vectors. A file rule needs canonical, component-aware paths rather than raw string prefixes; a network rule needs host, port and redirect semantics; a signing rule needs decoded payload semantics. Process isolation is a separate layer: a theorem that the evaluator refuses an action cannot prove that a process lacks another route to perform it.</p>
+<h3 id="budgets">Delegation-tree budgets</h3>
+<p>A delegation-tree budget charges spending to ancestors. Child allowances may oversubscribe a parent, yet spending beneath each node never exceeds that node's allowance. rule-core proves this for its budget model and its translation; it is a model result, because deploying it needs a host that keeps the tree and mediates every spend, which the account's grant interface does not provide.</p>
+{{statements:T7}}
+<h3 id="handing-on">Handing part of a grant to a helper</h3>
+<p>Attenuation derives a narrower grant from an existing one, for an agent handing part of its authority to a sub-agent. rule-core defines {{fact:attenuation-steps}} attenuation steps; each only narrows, and the theorems show that a derived grant allows no call its parent does not ({{ref:stmt:attenuation-narrows-authority}}) and that every run it accepts, its parent accepts too ({{ref:stmt:trace-inclusion}}). The account cannot install an attenuated grant at the pinned build. We propose an account entry point that does.</p>
+<h3 id="proposals">The proposals in one list</h3>
+<ul>
+<li>A runtime for delegation-tree budgets, and an account entry point that installs attenuated grants.</li>
+<li>Cedar as an authoring language for a restricted Perch policy fragment ({{ref:sec:cedar}}).</li>
+<li>A recording front end that emits a grant document for the owner to review, simulation of a grant against the account's own evaluator before install, minimality and overlap checks, a spending record kept across a limit change, a corpus of real transactions, and an external audit: the lessons from oz-policy-builder (<a href="{{doc:oz-policy-builder}}#lessons">Perch and oz-policy-builder</a>).</li>
+<li>A comparative measurement of Perch and oz-policy-builder with exact metering, in one harness, over five workloads (<a href="{{doc:oz-policy-builder}}#limits">Perch and oz-policy-builder</a>).</li>
+<li>Checking this paper's proofs in the page ({{ref:sec:in-page}}).</li>
+<li>Exporting the entry-point names this paper uses ({{ref:tab:tab-api}}).</li>
+</ul>

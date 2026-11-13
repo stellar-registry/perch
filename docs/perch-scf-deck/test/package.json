@@ -1,0 +1,12 @@
+{
+  "name": "perch-scf-deck-test",
+  "private": true,
+  "type": "module",
+  "description": "Browser checks for the SCF deck's script panel, recorder and live Nido dialogs (not published)",
+  "scripts": {
+    "test": "node side-panel.test.mjs && node nido-dialog.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

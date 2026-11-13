@@ -1,0 +1,150 @@
+{
+ "rule-eval-lines": {
+  "value": "2,500",
+  "note": "prints about 2,400",
+  "source": "`rc:crates/rule-eval/src/*.rs`: 2,539 lines in 14 files (V, `wc -l`)"
+ },
+ "extracted-lean-lines": {
+  "value": "3,875",
+  "source": "`rc:formal/RuleCore/Extracted/RuleEval.lean` (V, line count)"
+ },
+ "exported-theorems": {
+  "value": "1,005",
+  "source": "`rc:formal/RuleCore/Axioms.lean`: one `info:` line per exported theorem (V)"
+ },
+ "standard-axioms": {
+  "value": "`propext`, `Quot.sound`, `Classical.choice`",
+  "markup": true,
+  "source": "same (C)"
+ },
+ "claims-total": {
+  "value": "184",
+  "source": "`rc:claims.yaml`, status counts (V)"
+ },
+ "claims-proven": {
+  "value": "110",
+  "source": "same (V)"
+ },
+ "claims-tested": {
+  "value": "41",
+  "source": "same (V)"
+ },
+ "claims-assumed": {
+  "value": "19",
+  "source": "same (V)"
+ },
+ "claims-unproven": {
+  "value": "14",
+  "source": "same (V)"
+ },
+ "claim-perch-validation": {
+  "value": "unproven.perch-validation",
+  "code": true,
+  "source": "`rc:claims.yaml:3001` (V)"
+ },
+ "claim-scoped-admin-change": {
+  "value": "unproven.scoped-admin-change",
+  "code": true,
+  "source": "`rc:claims.yaml:3027` (V)"
+ },
+ "statements-count": {
+  "value": "13",
+  "source": "`source/statements.json` (V)"
+ },
+ "lean-doc-traces": {
+  "value": "58",
+  "source": "`rc:conformance/vectors/documents/` (58 files), loaded by `P:crates/integration-tests/tests/perch_rule_eval.rs:452` (V)"
+ },
+ "host-traces-generated": {
+  "value": "95",
+  "source": "r2:481; r1-plan C8 (C); `rc:conformance/vectors/soroban/` is byte-identical at a3c92ba (V)"
+ },
+ "host-traces-named": {
+  "value": "35",
+  "source": "same (C); `rc:conformance/vectors/soroban/` is byte-identical at a3c92ba (V)"
+ },
+ "host-traces-random": {
+  "value": "60",
+  "source": "same (C); `rc:conformance/vectors/soroban/` is byte-identical at a3c92ba (V)"
+ },
+ "host-traces-transcribed": {
+  "value": "39",
+  "note": "34 authorization, 5 storage",
+  "source": "r2:481; r2-final (C); `rc:conformance/vectors/soroban/` is byte-identical at a3c92ba (V)"
+ },
+ "host-tests-expressed": {
+  "value": "27 of 74 tests in five host test files",
+  "source": "same (C); `rc:conformance/vectors/soroban/` is byte-identical at a3c92ba (V)"
+ },
+ "host-cases-agreeing": {
+  "value": "155 of 213",
+  "source": "`rc:conformance/vectors/soroban/seed/coverage.json` (C)"
+ },
+ "attenuation-steps": {
+  "value": "10",
+  "source": "`rc:crates/rule-eval/src/attenuate.rs`; r2:167 (C)"
+ },
+ "evaluator-history-bound": {
+  "value": "1,000",
+  "source": "r2:191 (C)"
+ },
+ "doc-conditions": {
+  "value": "`is-self`, `address-eq`, `string-in`, `string-prefix`, `u32-eq`",
+  "markup": true,
+  "source": "`P:crates/perch-ir/src/doc.rs:296-319` (V)"
+ },
+ "doc-conditions-count": {
+  "value": "five",
+  "source": "same (V)"
+ },
+ "rule-core-conditions": {
+  "value": "`ArgEq`, `ArgIn`, `ArgStrPrefix`, `ArgI128AtMost`",
+  "markup": true,
+  "source": "`rc:crates/rule-eval/src/rule.rs:20-36` (V)"
+ },
+ "inpage-theorems": {
+  "value": "768",
+  "source": "r2:645 (C); measured on rule-core cbabe59, not re-run at a3c92ba"
+ },
+ "inpage-declarations": {
+  "value": "10,306",
+  "source": "r2:645 (C); measured on rule-core cbabe59, not re-run at a3c92ba"
+ },
+ "inpage-size": {
+  "value": "9.5 MB under brotli",
+  "source": "r2:645 (C); measured on rule-core cbabe59, not re-run at a3c92ba"
+ },
+ "inpage-check-time": {
+  "value": "2.2 s",
+  "source": "r2:645 (C); measured on rule-core cbabe59, not re-run at a3c92ba"
+ },
+ "claims-assumed-ids": {
+  "value": "`rule.cond-room`, `rule.functions-room`, `rule.lower-room`, `rule.empty-batch`, `rule.no-creation-vocabulary`, `rule.ledgers-start-at-1`, `trusted.rustc`, `trusted.charon`, `trusted.aeneas`, `trusted.aeneas-result-loop`, `trusted.aeneas-library-items`, `trusted.lean-kernel`, `trusted.denotations`, `trusted.document-meaning`, `trusted.soroban-models`, `trusted.soroban-host`, `trusted.sdk-items`, `trusted.facade-conversion`, `trusted.host-harness`",
+  "markup": true,
+  "source": "`rc:claims.yaml` at a3c92ba, every claim with `status: assumed` (19), in file order (V, LaTeX author)"
+ },
+ "claims-unproven-ids": {
+  "value": "`conformance.encoding`, `unproven.narrower-converse`, `unproven.openzeppelin-signer-mapping`, `unproven.openzeppelin-spending-limit`, `unproven.openzeppelin-authorization`, `unproven.openzeppelin-spending-limit-metering`, `unproven.openzeppelin-expiry-and-signers`, `unproven.generation-counter`, `unproven.perch-meaning`, `unproven.perch-validation`, `unproven.lowering-shell`, `unproven.scoped-admin-change`, `unproven.history-bound-on-mainnet`, `unproven.budget-shell`",
+  "markup": true,
+  "source": "`rc:claims.yaml` at a3c92ba, every claim with `status: unproven` (14), in file order (V, LaTeX author)"
+ },
+ "recovery-statement-layout": {
+  "value": "a 24-byte domain tag, a version byte and an action byte; the network ID and the account and controller contract IDs (32 bytes each); the configuration epoch (8 bytes) and configuration hash (32 bytes); the delay, expiry and valid-until ledgers (4 bytes each); and, for a lost-key or compromise attempt, the attempt ID (8 bytes) and the hashes of the source document, the target document and the replacement set (32 bytes each)",
+  "source": "`P:docs/recovery/statement.md:32-58` (V, LaTeX author); sums to 278"
+ },
+ "domain-tag-rule": {
+  "value": "perch/rule",
+  "code": true,
+  "source": "`P:crates/perch-recovery-interface/src/fragment.rs:19`; `crates/perch-ir/src/canon.rs:95` (V, LaTeX author)"
+ },
+ "domain-tags-recovery": {
+  "value": "`perch/recovery/statement`, `perch/recovery/config`, `perch/recovery/credential`, `perch/recovery/replacements`",
+  "markup": true,
+  "source": "`P:crates/perch-recovery-interface/src/{statement.rs:27,config.rs:15,credential.rs:18-20}` (V, LaTeX author)"
+ },
+ "domain-tags-zk": {
+  "value": "`perch/recovery/zk/v2/leaf`, `perch/recovery/zk/v2/bind`, `perch/recovery/zk/v2/nullifier`, `perch/recovery/zk/v2/auth`",
+  "markup": true,
+  "source": "`P:crates/perch-recovery-interface/src/zk.rs:40-43`; `docs/zk/circuit.md` (V, LaTeX author)"
+ }
+}

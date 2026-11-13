@@ -23,7 +23,7 @@ jobs:
       # `stable` branch is regenerated, which orphans any commit pinned on it.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           targets: wasm32v1-none
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -119,7 +119,7 @@ jobs:
             --skip cap_sweep
       # Wasm leg of the conformance vectors: the compiled artifact must agree
       # with the vectors under the soroban host (rustc/LLVM/wasmi in the loop).
-      - run: cargo build -p perch-bench-rpn --target wasm32v1-none --release
+      - run: stellar contract build --package perch-bench-rpn --optimize=false
       - run: cargo test -p perch-conformance --test wasm_leg -- --ignored
       # The ML-DSA verifier verifies in guest wasm, so its cost is its own
       # code: the release wasm's metered instructions and memory, within the
@@ -143,7 +143,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           targets: wasm32v1-none
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - uses: ./.github/actions/setup-stellar
@@ -171,10 +171,9 @@ jobs:
   # pins must equal deployments/testnet.json (its registry the one the path
   # derives, or a migration deployments/pending-registry.json declares), the
   # release scripts' derivation must be the account's own, and
-  # perch-smart-account,
-  # perch-account, and perch-account-factory, depended on by git rev, must
-  # build offline from cargo's clean checkout, to the same wasm as this
-  # checkout.
+  # perch-smart-account, perch-account, and perch-account-factory, depended on
+  # by git rev, must build offline from cargo's clean checkout, to the same
+  # wasm as this checkout.
   committed-pins:
     runs-on: ubuntu-latest
     permissions:
@@ -185,7 +184,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           targets: wasm32v1-none
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Committed pins match deployments/testnet.json
@@ -205,8 +204,7 @@ jobs:
         run: scripts/check-git-dep.sh --compare --out target/git-dep
 
   # Flux refinement verification of perch-program (nidohq/soroban-flux).
-  # Runs under flux's pinned nightly; the deploy/test toolchain stays stable.
-  # Graduated from burn-in: a flux failure now fails CI.
+  # Runs under flux's pinned nightly; the deploy/test toolchain stays 1.97.1.
   flux:
     runs-on: ubuntu-latest
     permissions:
@@ -225,7 +223,7 @@ jobs:
             --profile minimal
       # restore/save split (not actions/cache): the post-job save of the combined
       # action caches whatever exists even when the install step died midway,
-      # poisoning the immutable key with a partial toolchain. Save is now an
+      # poisoning the immutable key with a partial toolchain. Save is an
       # explicit step that only runs after a successful install, and the presence
       # check re-installs if a restored cache is missing any binary.
       - name: Restore flux toolchain cache
@@ -316,6 +314,39 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  # perch-review-core's browser builds and their npm wrapper
+  # (crates/perch-review-core/npm, private: nothing is published): both wasm
+  # modules built for wasm32v1-none, then the wrapper's tests, which check
+  # that each module imports nothing and stays within its size budget, that
+  # it answers as the native core on the committed fixtures (gate cases the
+  # account decided), and the sign dialog's verdicts against the account's.
+  review-core:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: crates/perch-review-core/npm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
+        with:
+          toolchain: 1.97.1
+          targets: wasm32v1-none
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: crates/perch-review-core/npm/package-lock.json
+      - run: npm ci
+      - run: npm run build:wasm
+      - run: npm run check
+      - run: npm run build
+      - run: npm test
+
   # The release workflow's version-bump scoping (scripts/release-deps.py:
   # what re-releases a contract besides its crate trees, and that every
   # paths_for() list covers the crates its contract links), that its npm
@@ -374,6 +405,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # scripts/zk-toolchain.sh installs the pinned nargo/bb under target/
       # (checksummed) on first use and prints NARGO/BB; later calls are no-ops.
+      # The Stellar CLI builds the pool and adapter wasm below.
+      - uses: ./.github/actions/setup-stellar
       - name: Circuit tests
         run: |
           eval "$(scripts/zk-toolchain.sh)"
@@ -386,11 +419,39 @@ jobs:
         run: |
           eval "$(scripts/zk-toolchain.sh)"
           cargo run -q -p perch-zk-prover --bin perch-zk-fixtures -- bench 1
-          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter
-          cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter \
-            --features perch-zk-pool/tree-depth-24,perch-zk-adapter/tree-depth-24 \
-            --target-dir target/zk-d24
+          zk_wasm() {
+            stellar contract build --package perch-zk-pool --optimize=false "$@"
+            stellar contract build --package perch-zk-adapter --optimize=false "$@"
+          }
+          zk_wasm
+          CARGO_TARGET_DIR=target/zk-d24 zk_wasm --features tree-depth-24
           cargo test -q -p perch-zk-adapter --test costs -- --ignored --nocapture --test-threads 1
+
+  # The Perch papers: every edition comes from docs/perch-paper/source, so the
+  # committed pages and latex/generated/ folders must match it (paper.py --check),
+  # and each LaTeX edition must build with no undefined reference or citation.
+  paper:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # The explorables' in-page models (PerchModel in source/html/figures.js) against the paper's definitions.
+      - run: node docs/perch-paper/build/figures/test_model.mjs
+      - uses: ./.github/actions/setup-tectonic
+      - run: docs/perch-paper/latex/build.sh --stage "$PDF_STAGE"
+        env:
+          PDF_STAGE: ${{ runner.temp }}/perch-pdfs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perch-paper-pdf
+          path: ${{ runner.temp }}/perch-pdfs
+          if-no-files-found: error
 
   zizmor:
     runs-on: ubuntu-latest

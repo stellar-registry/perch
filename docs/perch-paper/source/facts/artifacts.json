@@ -1,0 +1,69 @@
+{
+ "deployed-account-wasm": {
+  "value": "2c976bfd98678f3b6fcf5514420a81ef5e5b9fc1c5b6c60ec6f2dd64448479d5",
+  "source": "`P:deployments/mainnet.json:107` (V)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "deployed-account-bytes": {
+  "value": "70,702",
+  "source": "`…/mainnet.json:108` (V)"
+ },
+ "deployed-policy-1-wasm": {
+  "value": "f884913eba4a9491f8bcf89d1a687381c7c0699b148f98f8dc344e9a6223b26e",
+  "source": "`…/mainnet.json:44` (V)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "deployed-policy-1-bytes": {
+  "value": "17,999",
+  "source": "`…/mainnet.json:45` (V)"
+ },
+ "deployed-policy-2-wasm": {
+  "value": "8c043dcc24f944d7c3e349fb5fd83cedba4a9124b5791b625bd76b520b0f4a80",
+  "source": "`…/mainnet.json:53` (V)",
+  "anon": "[withheld; in the artifact]"
+ },
+ "deployed-policy-2-bytes": {
+  "value": "12,923",
+  "source": "`…/mainnet.json:54` (V)"
+ },
+ "embedded-compiler": {
+  "value": "perch_doc_compiler.wasm · 116,502 B · e89d977ac2bebaf935720a7a3408f6cd57b5940a02b0476e7b8e071e224b0fe3",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-policy-1": {
+  "value": "perch_interpreter.wasm · 18,806 B · 4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-policy-2": {
+  "value": "perch_spending_limit.wasm · 13,720 B · ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-ed25519": {
+  "value": "perch_ed25519_verifier.wasm · 1,634 B · 27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-recovery": {
+  "value": "perch_recovery.wasm · 67,856 B · 3eb50b602bd2cfafafffea6cfc51d0fc74cfa08510401b4373ab37dcd27a7487",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-account": {
+  "value": "perch_account.wasm · 109,625 B · cc56a2d36669dba65c9089ba9c133e284d4b2f9bff826e2d52876e66b5e14428",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-account-short": {
+  "value": "cc56a2d3…",
+  "source": "same (V)"
+ },
+ "embedded-stub": {
+  "value": "verifiers_stub.wasm · 562 B · 65a4168ba2123c22dee2d30e0341f420db1dae59bef7b207ba0c8da3f55f5d14",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-game": {
+  "value": "guess_the_number.wasm · 3,217 B · 882b950b11ee752f99a4149fc5c238dac03ee7091ba2723adfb87b5e029d4b42",
+  "source": "vision/index.html embedded build manifest (`build-page.mjs` `manifest.json`), rebuilt from the Perch pin (V)"
+ },
+ "embedded-reactor": {
+  "value": "perch_browser.wasm · 3,379,169 B · a3505466ba85335eff5381e94d3da989ebeaa400d9e3dcab04165ad5258cdf3b",
+  "source": "same (V)"
+ }
+}

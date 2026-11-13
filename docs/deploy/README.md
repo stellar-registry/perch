@@ -63,7 +63,8 @@ every consumer reads.
 | Field | |
 | --- | --- |
 | `registry` | the content-addressing registry: id, its own wasm hash, admin/manager, root |
-| `contracts.<name>` | `version`, `sha256`, `address` (absent for the account), `tier`, `bytes`, and `pins`: the sha256 of every contract it was built against |
+| `verifiers` | `perch/verifiers`, which `verifiers.path` derives: id, its own wasm hash, admin/manager, root, and `contracts.<name>` for each stack verifier it serves: `version`, `sha256`, `bytes`, `name` (the `verifier-name`, `<name>@<version>`) and `address`, its content address there. The factory pins the WebAuthn one, and a document names these. Absent from a manifest that predates `perch/verifiers` |
+| `contracts.<name>` | `version`, `sha256`, `address` (absent for the account), `tier`, `bytes`, and `pins`: the sha256 of every contract it was built against. A verifier's `address` is its copy in `registry`, which no account admits as an admin verifier: consumers take `verifiers.contracts.<name>.address` |
 | `zk` | the circuit id (the adapter's VK hash) and tree depth |
 | `source`, `toolchain` | the commit the stack was built from, whether the tree was clean, and rustc / stellar-cli / scaffold versions |
 | `deployed_ledger` | where an indexer starts scanning the pool's events |
@@ -72,21 +73,21 @@ every consumer reads.
 
 | Command | Does |
 | --- | --- |
-| `scripts/build-stack.sh` | Records the registry `crates/*/wasm/registry.path` derives on the build's network (`--network-passphrase`, default `$STELLAR_NETWORK_PASSPHRASE` or testnet's), and refuses a `--registry` naming another. Builds tier 0, stages its wasm as the account's pins, builds the account, stages it and the WebAuthn verifier as the factory's pins, builds the factory. `target/stack/build.json` records every hash and the pins each consumer was built against. Deployments build with `stellar scaffold build`; `--builder contract` uses core `stellar contract build`, the same code without scaffold's metadata. `--reuse "<names>"` fetches those tier-0 from that registry by the hash it serves for each crate's version (no key) and pins them instead of rebuilding — the canonical path (see [The canonical registry](#the-canonical-registry-and-publishing-the-stack-to-it)). It overwrites the account's and factory's committed pins: run `fetch-infra-wasm.sh` (or `git checkout crates/*/wasm`) afterwards to pin the deployment again, unless this build is the new deployment. |
-| `scripts/deploy-stack.sh --author <address>` | Publishes a built stack (`--stack`, default `target/stack`) into the registry `registry.path` derives on the network, and nowhere else. Builds nothing and runs no compiled code: computes the registry and every content address (`derive-id.py`), checks each wasm against `build.json`, then publishes tier 0 and the factory with `publish-wasm.sh` (upload with hash check, `publish_hash`, `deploy_stateless`, code-hash check) and checks each address, installs the account, and writes the manifest. `--author <C…>` binds every name to a smart account whose authorization the delegate (`STELLAR_ACCOUNT`, or `STELLAR_SIGN_WITH_KEY`) signs through the `theahaco/stellar-cli` fork. `--reuse "<names>"` publishes nothing for those tier-0: the registry must already serve the stack's bytes for them. `--plan` simulates every transaction and prints its fee, submitting nothing. Idempotent. Run `verify-deployment.sh` on the manifest afterwards. |
+| `scripts/build-stack.sh` | Records the registry `crates/*/wasm/registry.path` derives on the build's network (`--network-passphrase`, default `$STELLAR_NETWORK_PASSPHRASE` or testnet's), and refuses a `--registry` naming another. Builds tier 0, stages its wasm as the account's pins, builds the account, stages it and the WebAuthn verifier as the factory's pins, builds the factory. `target/stack/build.json` records every hash and the pins each consumer was built against. Deployments build with `stellar scaffold build`; `--builder contract` uses core `stellar contract build`, the same code without scaffold's metadata. `--reuse "<names>"` fetches those tier-0 from that registry by the hash it serves for each crate's version (no key) and pins them instead of rebuilding: the canonical path (see [The canonical registry](#the-canonical-registry-and-publishing-the-stack-to-it)). It overwrites the account's and factory's committed pins: run `fetch-infra-wasm.sh` (or `git checkout crates/*/wasm`) afterwards to pin the deployment again, unless this build is the new deployment. |
+| `scripts/deploy-stack.sh --author <address>` | Publishes a built stack (`--stack`, default `target/stack`) into the registry `registry.path` derives on the network, and nowhere else. Builds nothing and runs no compiled code: computes the registry and every content address (`derive-id.py`), checks each wasm against `build.json`, first publishes each stack verifier `perch/verifiers` does not serve yet into it as `--author` (through the author's [rule there](#the-perch-authors-rule-on-perchverifiers)), refuses a stack whose WebAuthn verifier `perch/verifiers` then does not serve at its content address (the factory pins it there), then publishes tier 0 and the factory with `publish-wasm.sh` (upload with hash check, `publish_hash`, `deploy_stateless`, code-hash check) and checks each address, installs the account, and writes the manifest, `verifiers` included. `--author <C…>` binds every name to a smart account whose authorization the delegate (`STELLAR_ACCOUNT`, or `STELLAR_SIGN_WITH_KEY`) signs through the `theahaco/stellar-cli` fork. `--reuse "<names>"` publishes nothing for those tier-0: the registry must already serve the stack's bytes for them. `--plan` simulates every transaction and prints its fee, submitting nothing. Idempotent. Run `verify-deployment.sh` on the manifest afterwards. |
 | `scripts/publish-wasm.sh` | Publishes one wasm under its name and version and deploys its content-addressed instance, or (`--plan`) simulates each transaction for its fee. The stack deploy and the mainnet publishes both run it. |
 | `scripts/derive-id.py` | The contract-id derivation every release script uses, in the Python standard library: `content`, `name`, the `registry` and `root` a `registry.path` derives on a network, and its whole `chain`; `key` prints the ed25519 key inside a `G…` address. CI checks it against the account's own (`perch-derive-id`) on every network and every recorded address. |
 | `scripts/bootstrap-registry.sh --network <n> --source <id> <step>` | Creates a network's registry chain, the four tier-0 an author needs, and the perch and nido authors, then binds every name; a dry run unless `--send`. See [Bootstrapping a network's registry chain](#bootstrapping-a-networks-registry-chain). |
-| `scripts/rehearse-bootstrap.sh` | Runs that bootstrap with `--send` on a soroban-sim fork of testnet and mainnet, with throwaway keys, and checks every derived address and the fork's report. Sends nothing to a network. |
+| `scripts/rehearse-migration.sh` | Rehearses the release's migration on soroban-sim forks of testnet and mainnet, with throwaway keys: that bootstrap with `--send`, then the release path's own scripts (the testnet publishes and stack deploy, then the mainnet ones on testnet's bytes), what Nido and the current deployment read, and each fork's report. Sends nothing to a network. See [Rehearsing the migration on forks](#rehearsing-the-migration-on-forks). |
 | `scripts/registry-target.sh <network> <passphrase>` | The registry a network's publishes go to: the derived one, or the recorded one while `deployments/pending-registry.json` declares a migration that has not switched; and whether the stack deploys (only into the derived one). See [Registry migration](#registry-migration). |
-| `scripts/verify-deployment.sh` | Read-only, by hash and address only: the registry's code; each contract at its content address, running its recorded wasm, served by the registry for its name and version; the account installed; the manifest's recorded pins equal to the deployed hashes; and what consumers resolve on-chain, from the factory's `account_wasm_hash`/`webauthn_verifier`, the adapter's `circuit_id`/`tree_depth` against the pool's `depth`, to the code hash and `infra()` of every account the exercise report lists. A report from another stack commit is skipped with a notice. |
+| `scripts/verify-deployment.sh` | Read-only, by hash and address only: the registry's code; each contract at its content address, running its recorded wasm, served by the registry for its name and version; the account installed; `perch/verifiers`'s code and each verifier the manifest records there at its content address, running and served as the stack's bytes; the manifest's recorded pins equal to the deployed hashes; and what consumers resolve on-chain, from the factory's `account_wasm_hash`/`webauthn_verifier` (the WebAuthn verifier's content address in `perch/verifiers`, or its copy in `registry` for a manifest without `verifiers`), the adapter's `circuit_id`/`tree_depth` against the pool's `depth`, to the code hash and `infra()` of every account the exercise report lists. A report from another stack commit is skipped with a notice. |
 | `scripts/fetch-infra-wasm.sh` | Fetches the account's and factory's pinned wasm from the manifest and rewrites their committed hash pins (`<name>.sha256`), refusing a manifest whose registry is not the one `registry.path` derives on its network, unless `deployments/pending-registry.json` declares that migration. Each wasm is fetched by its recorded address (the account by its hash) and refused unless its sha256 and content address match. `--stack <dir>` fetches every deployed artifact with a `build.json`. |
 | `scripts/check-pins.sh` | The committed `registry.path` derives the manifest's registry id on its network (or a declared pending migration, reported as a warning), and the committed hashes equal the manifest's. A new deployment commits its pins with its manifest. |
 | `scripts/check-git-dep.sh --compare` | Builds the account, the factory, and `perch-smart-account` as cargo git dependencies from cargo's clean checkout, offline and without fetching, and requires the same wasm as this checkout. |
 | `cargo test -p perch-integration-tests --test testnet_pins` | The pins actually compiled into the account and the factory equal the manifest's. |
-| `cargo test -p perch-integration-tests --test release_stack -- --ignored` | Every recovery flow through the stack's wasm, with real proofs (`PERCH_STACK_DIR`, default `target/stack`). |
+| `cargo test -p perch-integration-tests --test release_stack -- --ignored` | Every recovery flow through the stack's wasm, with real proofs (`PERCH_STACK_DIR`, default `target/stack`). On a rehearsal's stack, add `--skip one_build_resolves_each_networks_own_registry`, which checks the canonical registries. |
 | `cargo run -p perch-testnet` | The same flows on the deployed contracts (see [`testnet-exercise.md`](testnet-exercise.md)). |
-| `scripts/bindings-contracts.sh` | Regenerates `packages/perch-contracts` from the deployed wasm and the manifest. |
+| `scripts/bindings-contracts.sh` | Regenerates `packages/perch-contracts`; [the package README](../../packages/perch-contracts/README.md) covers deployed and undeployed inputs. |
 | `scripts/check-packages.sh` | Packs every npm package, installs the tarballs into an empty project, imports every entry point, and runs every command they install. Publishes nothing. |
 
 CI's `rust` job runs `fetch-infra-wasm.sh --stack`, the workspace tests
@@ -131,36 +132,38 @@ salt and the named deploys `perch/constructorless` below it, every hop
 derived under the ledger's network id
 ([`crates/perch-smart-account/wasm/README.md`](../../crates/perch-smart-account/wasm/README.md)),
 so one account build and one factory build serve every network. On testnet
-that is `CDZGU4AI…BZTM`, on mainnet `CC236AK2…B7NN`; neither exists yet.
+that is `CDZGU4AI…BZTM`, on mainnet `CC236AK2…B7NN`; both manifests record
+it.
 
-The current testnet deployment still lives in the earlier layout's
-registry, `unverified/perch/constructorless` (`CDX2DMYM…PDA7`;
+Testnet deployments before 2026-10-22 live in the earlier layout's registry,
+`unverified/perch/constructorless` (`CDX2DMYM…PDA7`;
 [`../testnet-deployment.md`](../testnet-deployment.md)), which this source
-no longer derives. `deployments/pending-registry.json` declares that
-migration, so the pin checks accept and report it (`scripts/manifest-registry.sh`),
-the testnet infra publishes keep going to `CDX2DMYM…`, and the `deploy-stack`
-jobs skip with a notice rather than publish an account that would not
-resolve its infra ([Registry migration](#registry-migration)).
-Creating `perch/constructorless` under the testnet root and redeploying the
-stack there is the dry run of the mainnet layout.
-The `unverified/perch/stateless` registry is
-retired: it keeps `perch-spending-limit` 0.1.1 and earlier, and nothing new is
-published there.
+no longer derives. The `deploy(testnet)` commit that recorded the stack in
+`perch/constructorless` completed that [registry migration](#registry-migration)
+and emptied `deployments/pending-registry.json`. The
+`unverified/perch/stateless` registry is retired: it keeps
+`perch-spending-limit` 0.1.1 and earlier, and nothing new is published there.
 
 `deploy-stack.sh` publishes only into the registry `registry.path` derives
 on its network. A **rehearsal** therefore builds from a dev `registry.path`
 (never committed) that derives a registry of its own: deploy an instance of
-the registry wasm (`4b2d9ea4…`) at a derivable address (`stellar contract
+the registry wasm (the manifest's `registry.wasm_hash`, `0acc4da2…`) at a derivable address (`stellar contract
 deploy --salt`, a throwaway key as admin and manager), name its deployer and
 salt with `path /`, then run `build-stack.sh` and `deploy-stack.sh` with that
-key as `STELLAR_ACCOUNT` and `--author`. It is self-contained: it builds and
-publishes its own bytes, and the account pins exactly those. The
+key as `STELLAR_ACCOUNT` and `--author`. Its dev `verifiers.path` names a
+second such instance, its `perch/verifiers`, where `deploy-stack.sh`
+publishes and deploys the stack's verifiers itself, as `--author`: that key
+is the instance's manager too, so it makes each name's first publish
+(`bootstrap-registry.sh` seeds only the canonical one). It is
+self-contained: it builds and publishes its own bytes, and the account pins
+exactly those. Its `release_stack` run skips
+`one_build_resolves_each_networks_own_registry`. The
 **canonical** mode (`--author <smart account> --reuse …`) is what CI runs.
 
 The current deployment
 ([`deployments/testnet.json`](../../deployments/testnet.json)) is canonical:
-`release.yml`'s `deploy-stack` job published it into the `constructorless`
-registry, reusing the four published tier-0 contracts.
+`release.yml`'s `deploy-stack` job published it into `perch/constructorless`,
+reusing the four published tier-0 contracts.
 
 **The same version is different bytes in the two modes.** A rehearsal's
 interpreter, compiler, spending limit, and ed25519 verifier carry versions
@@ -178,34 +181,123 @@ Three signers, the same split as the constructorless publishes
 
 | Signer | Role |
 | --- | --- |
-| `perch-author` smart account (`vars.PERCH_AUTHOR_ADDRESS`, `CDIFS3JD…`) | **author** of every published name. The registry has no author transfer, so the binding is permanent. |
-| `ci-publish` delegate (`secrets.CI_PUBLISH_SECRET_KEY`, in the `testnet` environment) | signs the account's `publish_hash` authorization and pays the fees; a CAP-71 delegate rule, expiry-bounded. Where each secret lives: [`../testnet-deployment.md`](../testnet-deployment.md#secrets-and-environments). |
-| manager (`GA327GGW…`, human-held) | the **one-time initial publish of each new name** (`#12 ManagerRequired` otherwise), which binds that name's author. |
+| `perch-author` smart account (`vars.PERCH_AUTHOR_ADDRESS`) | author of every published name. The registry has no author transfer, so the binding is permanent. |
+| `ci-publish` delegate (`secrets.CI_PUBLISH_SECRET_KEY`, in the `testnet` environment) | signs the account's `publish_hash` authorization and pays the fees; a CAP-71 delegate rule, expiry-bounded. The same delegate signs the stack's verifiers into `perch/verifiers` through `ci-publish-verifiers` ([below](#the-perch-authors-rule-on-perchverifiers)). Where each secret lives: [`../testnet-deployment.md`](../testnet-deployment.md#secrets-and-environments). |
+| manager (the manifest's `registry.manager`, human-held) | the one-time initial publish of each new name (`#12 ManagerRequired` otherwise), which binds that name's author. |
 
 Canonical mode mirrors `release.yml`'s constructorless publishes exactly:
 `--author` is the smart account, the source/fee key is the delegate
 (`STELLAR_ACCOUNT`), and the delegate signs the account's authorization through
 the `theahaco/stellar-cli` fork, which discovers the account's context rule
-on-chain (`STELLAR_SIGN_WITH_KEY`). No new authority is introduced.
+on-chain (`STELLAR_SIGN_WITH_KEY`). The one addition is the stack's
+verifiers in `perch/verifiers`, below.
+
+### The perch author's rule on `perch/verifiers`
+
+The factory pins its WebAuthn verifier at its content address in
+`perch/verifiers`, so a release whose stack carries a new WebAuthn verifier
+must publish it there before the factory. The bootstrap's `seed-verifiers`
+binds each verifier name there to the perch author, and a later version of a
+bound name needs that author's own authorization. So the perch author holds
+a fourth rule, beside `admin`, `ci-publish` and `admin-registry`:
+
+```json
+{"name": "ci-publish-verifiers", "scope": {"type": "contract", "address": "<perch/verifiers>"},
+ "principals": {"type": "all", "signers": ["ci"]}, "functions": ["publish_hash"],
+ "args": [{"index": 1, "pred": {"type": "is-self"}}], "not-after-ledger": <ci-publish's>}
+```
+
+It is `ci-publish` on `perch/verifiers`, with `publish_hash` alone: the same
+delegate, the author must be the account itself, and it expires with
+`ci-publish` (renew both together,
+[#145](https://github.com/stellar-registry/perch/issues/145)).
+`deploy-stack.sh` uses it: before anything else, it publishes each stack
+verifier `perch/verifiers` does not serve yet (`publish-wasm.sh`, the same
+path as the stack: a version already published with the same hash is not
+published again, another hash is refused), and a reused one only as the
+bytes the registry already serves. Without the rule, or once it has
+expired, a stack with a new WebAuthn verifier is refused before anything is
+sent, as before; a new ed25519 verifier is only warned about.
+`bootstrap-registry.sh create-author --project perch` writes it into a new
+author's document.
+
+The live perch authors predate it. Each needs one `apply_doc` signed by its
+admin key, the human-held `GAMPJROH…` (External key `18f4c5c7…`; it also
+pays the fee), before the first release whose stack deploy needs it. It can
+be applied now: `perch/verifiers` is at its derived address
+(`deployer(perch, sha256("verifiers"))`) before the bootstrap creates it,
+and only perch's named deploy can put a contract there. The documents are
+committed: each is the document the author applied, as its on-chain
+`applied_doc_hash` reads, plus this rule
+(`crates/perch-deploy/tests/perch_author_docs.rs` checks both).
+
+| Network | Author | Document | `applied_doc_hash` now | after the apply | `ci-publish-verifiers` scope, delegate, `not-after-ledger` |
+| --- | --- | --- | --- | --- | --- |
+| testnet | `CAAGHKZBUOQVVDB6LZCMCJHHSLAMBIPUYN3VU57NOLTVNYWMBI3T4KZ4` | [`testdata/deploy/perch-author-testnet.json`](../../testdata/deploy/perch-author-testnet.json) | `79e90f3a…419d` | `d9e69c50…4c7b` | `CCHJ7RWP…N5HW`, `GCYKIEDE…X2X7C`, 6999999 |
+| mainnet | `CDZWM45C6N6YBH73KNUDOTOI7P6K5UQDCRMHSQ76YSCERLS66FPZ253O` | [`testdata/deploy/perch-author-mainnet.json`](../../testdata/deploy/perch-author-mainnet.json) | `2fb21e99…9158` | `4bb8f166…7441` | `CCDCKRUV…GDPH`, `GCU2TBV6…RXHE`, 71430000 |
+
+For each network, from a checkout of `main` (testnet shown; for mainnet use
+`--rpc-url https://mainnet.sorobanrpc.com --network-passphrase 'Public
+Global Stellar Network ; September 2015'`, the mainnet author and its
+document):
+
+```sh
+author=CAAGHKZBUOQVVDB6LZCMCJHHSLAMBIPUYN3VU57NOLTVNYWMBI3T4KZ4
+doc=testdata/deploy/perch-author-testnet.json
+net=(--rpc-url https://soroban-testnet.stellar.org --network-passphrase 'Test SDF Network ; September 2015')
+
+# 1. Review (read-only): the rules the document lowers to, and its hash.
+cargo run -q -p perch-deploy -- compose --doc "$doc" --account "$author" >author.rules.json
+jq -r .doc_hash author.rules.json          # d9e69c50681dc63c2aab9379903986e8dbd86405306c93d479732ca27ad44c7b
+
+# 2. Simulate, then apply. PERCH_ADMIN_KEY is the admin key's secret, in the
+#    environment only; perch-deploy signs the account's `admin` rule with it.
+export PERCH_ADMIN_KEY="$(stellar keys secret <identity of GAMPJROH…>)"
+cargo run -q -p perch-deploy -- "${net[@]}" apply --account "$author" --doc "$doc" --dry-run
+cargo run -q -p perch-deploy -- "${net[@]}" apply --account "$author" --doc "$doc"
+unset PERCH_ADMIN_KEY
+
+# 3. Verify (read-only): the applied hash is the document's, and the four
+#    rules are installed by name and scope. Exits 3 (PARTIAL) on these
+#    authors when every row is OK.
+cargo run -q -p perch-deploy -- "${net[@]}" verify --account "$author" --rules author.rules.json --legacy-no-rule-set
+```
+
+`verify` prints `OK` for the applied hash, `admin`, `ci-publish`,
+`admin-registry`, `ci-publish-verifiers` and the rule count. These authors
+predate the account's `rule_set` view, which `verify` reads to compare each
+installed rule's signers and predicates with the reviewed ones. Without the
+view `verify` fails; `--legacy-no-rule-set`, for these two authors only,
+lets it run the other checks. Its last line is then
+`verification PARTIAL: …`, never `verification OK: installed == reviewed`,
+and it exits 3: the expected result here, where the applied hash still pins
+the whole document. Exit 1 is a mismatch or a failed read. Before the
+apply, the same command reports the old hash, `ci-publish-verifiers`
+`MISSING` and 3 rules for 4, and exits 1.
+
+The bootstrap does not do this: `bootstrap-registry.sh create-author`
+leaves an author that already holds `ci-publish` alone, with a warning when
+the perch author has no `ci-publish-verifiers` yet. An existing author gains
+the rule only by this apply.
 
 ### The `deploy-stack` jobs (`release.yml`)
 
 On a release that bumps a recovery-stack contract, four gated jobs build
-the stack and publish it to the registry `registry.path` derives on testnet
-— SA-authored, in pin order — attest each built wasm, and open a
+the stack, publish it SA-authored and in pin order to the registry
+`registry.path` derives on testnet, attest each built wasm, and open a
 `deploy(<network>)` PR with the manifest, the regenerated bindings, and the
-`@stellar-registry/perch-artifacts` release that ships the manifest (below)
-for a human to merge (merging the manifest PR is the deliberate human act
-that flips consumers and CI's deployed-bytes checks onto the new
-deployment). The jobs run only when `vars.PERCH_DEPLOY_STACK` is `true` —
-see the bootstrap below — and `deploy-plan` skips them, with a notice,
-while a testnet [registry migration](#registry-migration) is pending.
+`@stellar-registry/perch-artifacts` release that ships the manifest (below).
+A human merges it, and that merge moves consumers and CI's deployed-bytes
+checks onto the new deployment. The jobs run only when
+`vars.PERCH_DEPLOY_STACK` is `true` (see the bootstrap below), and
+`deploy-plan` skips them, with a notice, while a testnet
+[registry migration](#registry-migration) is pending.
 
 | Job | Runs | Holds |
 | --- | --- | --- |
 | `deploy-plan` | which recovery-stack contracts the run released, and whether the stack may deploy (`registry-target.sh`) | nothing |
 | `deploy-stack-build` | `build-stack.sh --reuse`: fetches the reused tier-0, compiles the stack; hands on only its wasm and `build.json` | no secret, no environment |
-| `deploy-stack` | `deploy-stack.sh`: computes the registry and every content address, uploads, publishes, deploys, writes the manifest; compiles nothing and runs no compiled code | the delegate seed (`testnet` environment), in the environment only, never argv |
+| `deploy-stack` | `deploy-stack.sh`: computes the registry and every content address, publishes the stack's verifiers into `perch/verifiers`, then uploads, publishes, deploys, writes the manifest; compiles nothing and runs no compiled code | the delegate seed (`testnet` environment), in the environment only, never argv |
 | `deploy-stack-attest` | attests each freshly built wasm (not the reused tier-0); checks out nothing and runs no repository code | the attestation token (`id-token`, `attestations: write`), no secret |
 | `deploy-stack-record` | settles a completed registry migration (`manifest-registry.sh --settle`), `verify-deployment.sh`, `bindings-contracts.sh` (which also rewrites the hash pins from the manifest), the perch-artifacts bump, and the PR; compiles nothing | no secret |
 
@@ -219,34 +311,31 @@ The build decides the bytes and nothing more: `deploy-stack` computes every
 address itself, and `deploy-stack-record` takes only the manifest and pins
 from it, each wasm fetched from the chain and checked.
 
-**Why it reuses the published tier-0 rather than rebuilding them.** The
-account pins the compiler, interpreter, and spending-limit by the sha256 of
-the exact bytes on-chain, and those (with the ed25519 verifier) are the
-allow-listed tier-0 the constructorless jobs already published — built with
-`stellar scaffold build` **and** `stellar contract optimize` on the reusable
-build workflow's `rustup update` toolchain. `build-stack.sh` here builds with
-`stellar scaffold build` on the pinned toolchain and does not optimize, so for
-the same source it produces **different bytes**: `perch-doc-compiler` 0.3.2 is
-`f8bc1b…` canonically but `ccea12…` from `build-stack.sh`. An account built
-against the rebuild would pin a hash the registry never `deploy_stateless`'d.
-So canonical mode `--reuse`s those names — fetching each by the hash the
-registry serves and pinning exactly that — and publishes only the
+**Why it reuses the published tier-0.** The account pins the compiler,
+interpreter, and spending-limit by the sha256 of the exact bytes on-chain,
+and those (with the ed25519 verifier) are the allow-listed tier-0 the
+constructorless jobs already published, built with `stellar scaffold build`
+and `stellar contract optimize` on the reusable build workflow's
+`rustup update` toolchain. `build-stack.sh` builds with `stellar scaffold
+build` on the pinned toolchain and does not optimize, so for the same source
+it produces different bytes: `perch-doc-compiler` 0.3.2 is `f8bc1b…`
+canonically but `ccea12…` from `build-stack.sh`. An account built against
+the rebuild would pin a hash the registry never `deploy_stateless`'d. So
+canonical mode `--reuse`s those names, fetching each by the hash the
+registry serves and pinning exactly that, and publishes only the
 recovery-specific names (webauthn verifier, ZK pool/adapter, controller) and
 the factory. Pinning the shared `contract-release` toolchain to a concrete
-rustc + stellar-cli would make the rebuilds byte-identical and remove the need
-to reuse; that is a follow-up (design step 7), tracked outside this
-workstream.
+rustc and stellar-cli would make the rebuilds byte-identical and remove the
+need to reuse; that is not done.
 
 ### One-time manager bootstrap
 
-The registry is managed, so the **first** publish of each new name needs the
+The registry is managed, so the first publish of each new name needs the
 manager's signature; afterward the delegate alone (the account's `ci-publish`
-rule) publishes every later version. The stack deploys only into the
-registry `registry.path` derives, which on testnet is new
-([Registry migration](#registry-migration)), so there every name the release
-path publishes needs it: the four allow-listed tier-0 (`perch-doc-compiler`,
-`perch-interpreter`, `perch-spending-limit`, `perch-ed25519-verifier`, which
-the earlier `CDX2DMYM…PDA7` already binds) and the five recovery-stack names:
+rule) publishes every later version. In a network's new registry every name
+the release path publishes needs it: the four allow-listed tier-0
+(`perch-doc-compiler`, `perch-interpreter`, `perch-spending-limit`,
+`perch-ed25519-verifier`) and the five recovery-stack names:
 
 - `perch-webauthn-verifier`
 - `perch-recovery`
@@ -254,8 +343,9 @@ the earlier `CDX2DMYM…PDA7` already binds) and the five recovery-stack names:
 - `perch-zk-adapter`
 - `perch-account-factory`
 
-(`perch-account` is install-only — uploaded, never `publish_hash`'d, because
-the factory deploys it by its pinned hash — so it needs no name binding.)
+`perch-account` is install-only: it is uploaded, never `publish_hash`'d,
+because the factory deploys it by its pinned hash, so it needs no name
+binding.
 
 [`scripts/bootstrap-registry.sh`](../../scripts/bootstrap-registry.sh)
 makes every one of these first publishes, signed by the registry's manager
@@ -309,7 +399,8 @@ While a network has an entry:
   `deploy-plan`);
 - no manifest of the network is announced to Nido.
 
-Moving testnet to the derived registry takes, in order:
+Testnet moved to the derived registry with these steps, in order; the
+`deploy(testnet)` commit of 2026-10-22 completed the move:
 
 1. On-chain, the root's manager deploys `perch` with
    `root.deploy("registry", "perch", …)` and no `deployer` argument, and
@@ -341,7 +432,7 @@ Moving testnet to the derived registry takes, in order:
 
 Until step 4 merges, nothing publishes to the new registry, so a step left
 undone fails closed (`#12 ManagerRequired`, or the author's authorization)
-rather than publishing somewhere accounts do not resolve. Mainnet starts in
+rather than publishing somewhere accounts do not resolve. Mainnet started in
 the derived registry: `scripts/mainnet-settings.sh` refuses a mainnet entry.
 
 ### Notifying Nido (`nido-dispatch.yml`)
@@ -389,7 +480,7 @@ receiver consumes:
 | `schema` | `1`. Bumped on any incompatible change; a receiver rejects a schema it does not know. |
 | `repository` | `stellar-registry/perch` |
 | `network` | `testnet` or `mainnet`; equals the manifest's own `network` field |
-| `perch_sha` | the 40-hex `main` commit the manifest was read at — the ref to repin to; the `perch-artifacts-v<version>` tag's commit |
+| `perch_sha` | the 40-hex `main` commit the manifest was read at, and the ref to repin to; the `perch-artifacts-v<version>` tag's commit |
 | `manifest_path` | `deployments/<network>.json` |
 | `manifest_sha256` | sha256 of the manifest file's bytes at `perch_sha` |
 | `source_commit` | the manifest's `source.commit`: the commit the stack was built from |
@@ -420,11 +511,11 @@ narrowed to `contents: write` on `nidohq/nido`, which the dispatches endpoint
 requires). Each environment (`testnet`, and `mainnet` before a mainnet
 manifest exists) needs two secrets:
 
-- `PERCH_NIDO_SYNC_CLIENT_ID` — the app's Client ID (`Iv…`, from the app's settings page)
-- `PERCH_NIDO_SYNC_PRIVATE_KEY` — the app's PEM private key
+- `PERCH_NIDO_SYNC_CLIENT_ID`: the app's Client ID (`Iv…`, from the app's settings page)
+- `PERCH_NIDO_SYNC_PRIVATE_KEY`: the app's PEM private key
 
 Without them the send step fails with an error naming the environment. To
-re-send — after adding the secrets, or after a receiver failure — run the
+re-send after adding the secrets or after a receiver failure, run the
 workflow by hand (`workflow_dispatch` from `main`, choosing the network). It
 re-sends that network's manifest in the latest perch-artifacts release, with
 the same registry checks. If the publish itself failed, re-run the release
@@ -439,16 +530,20 @@ never creates a tag.
 ## Bootstrapping a network's registry chain
 
 [`scripts/bootstrap-registry.sh`](../../scripts/bootstrap-registry.sh)
-creates, on one network, everything `registry.path` derives and everything
-the release path then needs there:
+creates, on one network, everything `registry.path` and `verifiers.path`
+derive and everything the release path then needs there:
 
 ```text
 root                deployer(GAMPJROH…, sha256("2026-04-24T13:41:00"))   exists on both networks
 ├─ perch            root.deploy("registry", <root's version>, "perch", …)   testnet CBZGS6DZ…, mainnet CCDXWLV6…
 │  └─ constructorless   perch.deploy("perch-constructorless-registry", "0.1.0", "constructorless", …)
 │                       testnet CDZGU4AI…, mainnet CC236AK2…
-│     ├─ compiler, interpreter, spending limit, ed25519 verifier at deployer(constructorless, wasm hash)
-│     └─ every other stack name, bound to the perch author
+│  │  ├─ compiler, interpreter, spending limit, ed25519 verifier at deployer(constructorless, wasm hash)
+│  │  └─ every other stack name, bound to the perch author
+│  └─ verifiers     perch.deploy("perch-constructorless-registry", "0.1.0", "verifiers", …)
+│                   testnet CCHJ7RWP…, mainnet CCDCKRUV…
+│     └─ ed25519 and WebAuthn verifiers at deployer(verifiers, wasm hash): what a document's
+│        verifier-name resolves to, an admin signer's verifier, and the factory's passkey pin
 └─ nido             testnet CDTMMWLB…, mainnet CDPA3SYN…; its names bound to the nido author
 perch author        deployer(<source>, sha256("perch-author")), a design-A perch-account
 nido author         deployer(<source>, sha256("nido-author"))
@@ -456,8 +551,8 @@ nido author         deployer(<source>, sha256("nido-author"))
 
 The same code runs on both networks. `--network` chooses only the RPC and
 the passphrase. Every address is derived (`derive-id.py chain`, `name`,
-`content`), the script asserts the perch, constructorless and nido ids
-above, and it reads the root's registry version and manager and each
+`content`), the script asserts the perch, constructorless, verifiers and nido
+ids above, and it reads the root's registry version and manager and each
 registry's admin and manager from the chain. The tier-0 hashes and versions
 come from `deployments/testnet.json`, checked against the account's committed
 pins. Every wasm the script uploads, publishes or deploys must hash to its pin,
@@ -536,11 +631,18 @@ only with `--allow-unattested perch-constructorless-registry`.
 | 3 | `publish-constructorless` | `perch.publish_hash("perch-constructorless-registry", <perch author>, <its hash>, "0.1.0")` | perch's manager |
 | 4 | `constructorless` | `perch.deploy("perch-constructorless-registry", "0.1.0", "constructorless", owner, [admin, manager, root], None)`: a named deploy with no `deployer`, so it lands at `deployer(perch, sha256("constructorless"))` | perch's manager |
 | 5 | `seed` | upload the four tier-0 if missing; `constructorless.publish_hash(name, <perch author>, <released hash>, <released version>)` for each, then `deploy_stateless` (permissionless) | constructorless's manager |
-| 6 | `create-author --project perch` | deploy the account with an `External(ed25519 verifier, admin key)` admin, check its `infra()` resolves in constructorless, then `apply_doc` with `admin`, `ci-publish` (scoped to constructorless, until `--ci-expiry-ledger`) and `admin-registry` | the source deploys; the admin key signs `apply_doc` |
-| 7 | `names --project perch` | `publish_hash(name, <perch author>, sha256("perch-bootstrap:<name>"), "0.0.0")` for every other name `deployments/testnet.json` deploys ([#142](https://github.com/stellar-registry/perch/issues/142)); refused until step 6 is on chain | constructorless's manager |
-| 8 | `create-author --project nido`, `names --project nido` | as 6 and 7, scoped to `nido`; `--nido-names` (default `nido-factory nido-name-registry`) | the source, the admin key, nido's manager |
+| 6 | `verifiers` | `perch.deploy("perch-constructorless-registry", "0.1.0", "verifiers", owner, [admin, manager, root], None)`: the managed registry a document's `verifier-name` resolves in, at `deployer(perch, sha256("verifiers"))` | perch's manager |
+| 7 | `seed-verifiers` | for the ed25519 and WebAuthn verifiers, at their released versions and hashes: upload if missing, `verifiers.publish_hash(name, <perch author>, <released hash>, <released version>)`, then `deploy_stateless`. Admitting a new verifier later is the same first publish, which only the manager approves | verifiers's manager |
+| 8 | `create-author --project perch` | deploy the account with an `External(ed25519 verifier, admin key)` admin, check its `infra()` resolves in constructorless, then `apply_doc` with `admin`, `ci-publish` (scoped to constructorless, until `--ci-expiry-ledger`), `admin-registry` and `ci-publish-verifiers` (`ci-publish` on `perch/verifiers`, `publish_hash` alone). An author that already holds `ci-publish` is left alone: one from before `ci-publish-verifiers` gains it by its admin's `apply_doc` ([The perch author's rule on `perch/verifiers`](#the-perch-authors-rule-on-perchverifiers)). Where the compiler resolves verifier names (its `verifier_registry` view), the admin verifier is the one in `perch/verifiers`, named in the document (`perch-ed25519-verifier@<version>`), as such an account requires; with an earlier compiler, the one in constructorless, by contract id | the source deploys; the admin key signs `apply_doc` |
+| 9 | `names --project perch` | `publish_hash(name, <perch author>, sha256("perch-bootstrap:<name>"), "0.0.0")` for every other name `deployments/testnet.json` deploys ([#142](https://github.com/stellar-registry/perch/issues/142)); refused until step 8 is on chain | constructorless's manager |
+| 10 | `create-author --project nido`, `names --project nido` | as 8 and 9, scoped to `nido`, without `ci-publish-verifiers`; `--nido-names` (default `nido-factory nido-name-registry`) | the source, the admin key, nido's manager |
 
-`all` runs 2 to 8 in that order (`--no-nido` leaves out 8).
+`all` runs 2 to 10 in that order (`--no-nido` leaves out 10).
+
+A verifier's tagged release publishes into `perch/constructorless`
+(`release.yml`'s `ALLOW`). Its new version reaches `perch/verifiers` with the
+stack: `deploy-stack.sh` publishes it there as the perch author, through
+`ci-publish-verifiers`.
 
 ### Signers
 
@@ -556,14 +658,15 @@ only with `--allow-unattested perch-constructorless-registry`.
   `PERCH_ADMIN_KEY`, its secret, signs `apply_doc` through this checkout's
   `perch-deploy apply`, the one tool here that signs the `addr_oz_v1` digest a
   design-A account checks. Its account pays for the apply.
-  `--admin-signer delegated` gives a `Delegated(G)` admin instead, and the
+  `--account-signer delegated` gives a `Delegated(G)` admin instead, and the
   script then prints the `apply_doc` for a CAP-71 signer and refuses `--send`
   for it.
-- **`--ci-key`** is the `ci-publish` delegate: the G of
-  `CI_PUBLISH_SECRET_KEY` (testnet) or `CI_PUBLISH_MAINNET_SECRET_KEY`. It
-  signs nothing here. From the author's `apply_doc` on, it signs every later
-  publish of the author's names, and pays for them.
-  `--ci-expiry-ledger` is the rule's `not-after-ledger`. Mainnet closes about
+- **`--ci-key`** is the `ci-publish` (and `ci-publish-verifiers`) delegate:
+  the G of `CI_PUBLISH_SECRET_KEY` (testnet) or
+  `CI_PUBLISH_MAINNET_SECRET_KEY`. It signs nothing here. From the author's
+  `apply_doc` on, it signs every later publish of the author's names, and
+  pays for them. `--ci-expiry-ledger` is both rules' `not-after-ledger`. Both
+  describe a new author: an existing one is not touched. Mainnet closes about
   17,280 ledgers a day, and renewing the rule means re-applying the document
   ([#145](https://github.com/stellar-registry/perch/issues/145)).
 
@@ -575,18 +678,18 @@ need the author's own signature:
 - Its constructor registers an `External` admin through that signer's
   verifier (`batch_canonicalize_key`). So the account cannot even be
   deployed until the ed25519 verifier exists at
-  `deployer(constructorless, 97f5c4c0…)`.
+  `deployer(constructorless, <its pinned hash>)`.
 - `apply_doc` compiles through the compiler the account derives,
-  `deployer(constructorless, 960b2ce7…)`. `compile_doc` calls the admin's
+  `deployer(constructorless, <its pinned hash>)`. `compile_doc` calls the admin's
   verifier too, and installing `ci-publish` installs the interpreter policy.
 - A fresh author's only rule is `admin`, scoped to the account itself. It
   can sign its own `apply_doc` and nothing else, so it cannot author a
   publish of those contracts.
 
-Two registry rules break the cycle. A managed registry's **first** publish
+Two registry rules break the cycle. A managed registry's first publish
 of a name needs only the manager, and the author it names neither signs nor
 needs to exist. And `deploy_stateless` is permissionless. So `seed` has the
-manager first-publish the four contracts' **released** hashes, naming the
+manager first-publish the four contracts' released hashes, naming the
 perch author, and deploys them. Only then do the authors deploy and apply
 their documents. The other names are bound last, because `names` binds only
 to an author that holds `ci-publish` on that registry.
@@ -629,35 +732,18 @@ real publish of each name is not refused as `#11 HashAlreadyPublished`.
 
 ### Rehearsing on a fork
 
-[`scripts/rehearse-bootstrap.sh`](../../scripts/rehearse-bootstrap.sh) runs
-the bootstrap with `--send` against
-[soroban-sim](https://github.com/theahaco/soroban-sim), installed from the
-commit the script pins. `soroban-sim serve --fork <network>` is a Stellar RPC
-facade over a forked ledger: it validates every transaction, checks real
-signatures, and applies it locally, and nothing reaches the network. Throwaway
-keys stand in for every signer. The operator key is added to the account that
-holds the role (`fork_addSigner`), and that account and the admin key are
-funded (`fork_setBalance`). The stellar CLI gets a profile holding only those
-keys. The script then checks every derived address on the fork, and that a
-dry rerun of `all` finds nothing left to do. It also checks the fork's
-report: it passed, no envelope carries a signature the real network would
-accept, and it lists exactly the overrides the run made.
+The bootstrap is the first step of
+[the migration rehearsal](#rehearsing-the-migration-on-forks), on forks of
+both networks. The operator key is added to the account that holds the
+role (`fork_addSigner`), that account and the admin key are funded
+(`fork_setBalance`), and the bootstrap runs with `--send`. The rehearsal then
+checks every derived address on the fork, and that a dry rerun of `all` finds
+nothing left to do. `--bootstrap-only` stops there.
 
 `--account-wasm` and `--constructorless-wasm` pass through to the bootstrap.
 Without them it uses the testnet deployment's bytes. With `build`, a testnet
 rehearsal passes `--allow-unattested` for that wasm; a mainnet rehearsal
 stops instead, because mainnet takes only attested wasm.
-
-```sh
-scripts/rehearse-bootstrap.sh                     # testnet, then mainnet
-scripts/rehearse-bootstrap.sh --network mainnet   # reports under target/rehearse-bootstrap/mainnet
-```
-
-The `Rehearse bootstrap` workflow runs it for both networks on
-`workflow_dispatch` and on pull requests that touch the bootstrap, the
-rehearsal, `derive-id.py` or `registry.path`, and uploads each report. The
-fork reads the live public RPC, so a run reflects the chains as they are
-then. It is not a required check.
 
 ### Afterwards
 
@@ -714,9 +800,7 @@ networks, and the tier-0 pin nothing. That is why a stack must reach testnet
 first: its attestations come from the testnet deployment's attest job. A stack
 tag from before `registry.path` (whose account compiled in one network's
 registry) is refused, and so is a testnet deployment that records another
-registry than the one `registry.path` derives there, as
-`deployments/pending-registry.json`'s pending testnet migration does today:
-the first mainnet stack follows testnet's move to `perch/constructorless`.
+registry than the one `registry.path` derives there.
 
 The `deploy(mainnet)` PR records `deployments/mainnet.json` and the
 `perch-artifacts` release that ships it; merging it notifies Nido with
@@ -740,7 +824,7 @@ the derived registry.
 
 | Name | Kind | |
 | --- | --- | --- |
-| `CI_PUBLISH_MAINNET_SECRET_KEY` | secret | the mainnet delegate's seed: fee source, and signer of `perch-author`'s authorization on its own context rule, which must allow `publish_hash` on the derived registry. Never the testnet key. |
+| `CI_PUBLISH_MAINNET_SECRET_KEY` | secret | the mainnet delegate's seed: fee source, and signer of `perch-author`'s authorization on its own context rules, which must allow `publish_hash` on the derived registry and, for a stack, on `perch/verifiers` (`ci-publish-verifiers`). Never the testnet key. |
 | `PERCH_MAINNET_AUTHOR_ADDRESS` | variable | the mainnet `perch-author` smart account (C…), bound to every name |
 
 The submitting jobs (`mainnet-publish`, `mainnet-deploy-stack`) set
@@ -752,12 +836,14 @@ the bid.
 
 ### Before the first mainnet release
 
-None of this exists yet, so no mainnet job can publish today:
+A mainnet job can publish only once these exist. They were in place for the
+first `deploy(mainnet)` (2026-10-26):
 
 1. The `perch` and `perch/constructorless` registries under the mainnet root,
    at the addresses `registry.path` derives, and the settings above.
 2. The mainnet `perch-author` account, with a delegate rule for the mainnet
-   key.
+   key, and, before a stack deploy that brings a new verifier,
+   `ci-publish-verifiers` ([The perch author's rule on `perch/verifiers`](#the-perch-authors-rule-on-perchverifiers)).
 3. The manager's one-time initial publish of every name, as on testnet
    ([One-time manager bootstrap](#one-time-manager-bootstrap)).
 
@@ -772,6 +858,179 @@ from a job that compiled: it fetches every byte it publishes from testnet
 itself and checks each against the testnet deployment's manifest and
 attestations, so the mainnet delegate never signs for bytes a build runner
 handed it.
+
+## Rehearsing the migration on forks
+
+[`scripts/rehearse-migration.sh`](../../scripts/rehearse-migration.sh) runs
+a release's whole migration against
+[soroban-sim](https://github.com/theahaco/soroban-sim) forks of testnet and
+mainnet: the bootstrap, then `release.yml`'s testnet legs, then
+`release-mainnet.yml` on testnet's bytes. `soroban-sim serve --fork
+<network>` is a Stellar RPC facade over a forked ledger: it validates every
+transaction, checks real signatures, and applies it locally. Nothing reaches
+either network and no real key is used. The release path's own scripts run
+unchanged against the facade, throwaway keys stand in for every signer, and
+each substitution is an override the fork's report lists.
+
+| Step | Testnet | Mainnet | Stands for |
+| --- | --- | --- | --- |
+| Bootstrap | `bootstrap-registry.sh create-registry` and `all --send` as the account holding the role, then every derived address and a dry rerun | the same | [Bootstrapping](#bootstrapping-a-networks-registry-chain) |
+| Versions | a scratch clone of the checkout (HEAD and its uncommitted changes) at the versions `release-pr` would pick now: git-cliff over each contract's `paths_for()` scope against `stellar-registry/perch`'s release tags, with its pin and lockfile sync | the testnet leg's | the release PR |
+| Tier-0 | each released `ALLOW` contract built with `stellar scaffold build` and published, authored by the perch author, into the registry `registry-target.sh` names | the same bytes, checked against their testnet hash and `binver`; `mainnet-settings.sh`, `publish-wasm.sh --plan`, then `publish-wasm.sh` | `constructorless-build` and `constructorless-publish`; `mainnet-publish` |
+| Stack | `build-stack.sh --reuse`, [the bridge](#known-gap-the-releases-webauthn-verifier-in-perchverifiers) while the gap is real, `deploy-stack.sh --plan`, `deploy-stack.sh` | the testnet fork's deployment fetched by hash (`fetch-infra-wasm.sh --stack`), the bridge while the gap is real, `deploy-stack.sh --plan`, `deploy-stack.sh` | `deploy-stack-build` and `deploy-stack`; `mainnet-deploy-stack` |
+| Record | `manifest-registry.sh` and `verify-deployment.sh` on the new manifest | the same | `deploy-stack-record`; `mainnet-deploy-stack-record` |
+| Consumers | Nido's receiver (`fetch-infra-wasm.sh --stack` on the new manifest); the factory's `account_wasm_hash` and `webauthn_verifier`; a simulated `create_passkey`; the `perch-deployed` payload; `deployments/<network>.json` and the accounts its exercise report lists, still verifying | the same | [Notifying Nido](#notifying-nido-nido-dispatchyml) |
+| Report | passed, no failures, no envelope a real signer signed, exactly this run's overrides | the same | |
+
+The overrides, all listed in each fork's report:
+
+- `fork_addSigner`: the operator key signs for the account that holds the
+  bootstrap's role (perch's manager). The fork sets that account's master key
+  weight to 0, so no real signature counts.
+- `fork_setBalance`: that account, the admin key and the ci key are funded.
+- `fork_setLedgerEntry`: the perch author's `ci-publish` delegate becomes the
+  ci key. The `theahaco/stellar-cli` fork signs an author's authorization
+  only for a key that one of the author's rules names, and the rehearsal
+  holds no real key. So the one entry that stores the author's ci signer
+  (`SignerData`) names the ci key instead. The author's code, the rule's
+  registry, functions, `is-self` argument and expiry, and its policy are the
+  chain's.
+- `fork_setLedgerEntry` and `fork_removeLedgerEntry`, only when
+  `testdata/deploy/perch-author-<network>.json` exists: the perch author's
+  admin key becomes the throwaway admin key in the entries that store it
+  (`SignerData`, `SignerLookup`, `InstalledRules`), so that the document can
+  be applied to the author on the fork (below).
+- `fork_setLedgerEntry`, labelled `KNOWN GAP, fork only`, only while the
+  perch author has no rule on `perch/verifiers`: `perch/verifiers` binds
+  `perch-webauthn-verifier` to the ci key, so that the release's version can
+  be published there. It stands in for a step the real migration has no way
+  to take (below). The registry's own `publish_hash` and `deploy_stateless`
+  then run, through `publish-wasm.sh`.
+
+### Known gap: the release's WebAuthn verifier in `perch/verifiers`
+
+`deploy-stack.sh` refuses a stack whose WebAuthn verifier
+`perch/verifiers` does not serve, because the factory pins it there. Before
+the perch author's `ci-publish-verifiers`, a release that changes the
+verifier's bytes (the next release bumps it from 0.1.2 to 0.1.3) had no way
+to publish it there:
+
+- the bootstrap seeds `perch/verifiers` from `deployments/testnet.json`, with
+  the current deployment's verifiers, and that first publish binds each name
+  to the perch author;
+- a later version of a bound name needs that author's authorization (the
+  manager approves only a name's first publish);
+- the perch authors on testnet and mainnet hold `admin` (on the account
+  itself), and `ci-publish` and `admin-registry` (on `perch/constructorless`).
+  No rule covers `perch/verifiers`.
+
+[The perch author's rule on `perch/verifiers`](#the-perch-authors-rule-on-perchverifiers)
+closes it: `ci-publish-verifiers`, and `deploy-stack.sh` publishing the
+stack's verifiers there as the author. On the live networks the gap stays
+until the admin key applies `testdata/deploy/perch-author-<network>.json`;
+until then the release's `deploy-stack` stops at that check on both, and
+the mainnet stack, which takes testnet's, cannot follow.
+
+A rehearsal whose perch author has no such rule bridges the gap on the fork.
+The bridge lets every later step run, on both networks, and the script then
+exits with status 3 (a failed step exits 1) and this message, which is also
+the first line of `summary.md` and, in CI, an error annotation:
+
+```
+migration blocked: perch/verifiers has no publish path for perch-webauthn-verifier 0.1.3 - see docs/deploy/README.md Known gap
+```
+
+The version is the one the run bridged. The gap is detected, not assumed:
+the bridge runs only while the perch author has no `ci-publish-verifiers`
+rule on `perch/verifiers`. The author's document with that rule,
+`testdata/deploy/perch-author-<network>.json`, is committed for both
+networks. While that file exists, the rehearsal
+applies it to the author on the fork before the bootstrap (`perch-deploy
+apply`, then `perch-deploy verify --legacy-no-rule-set`, whose PARTIAL exit
+3 is the expected result on these authors), with the throwaway admin key
+substituted for the author's admin key, and checks the rule among the
+derived addresses. Those substitutions are overrides the fork's report
+lists. The release path then publishes the verifier itself, nothing is
+bridged, and the rehearsal passes. To inspect a run locally despite the
+gap, pass `--accept-known-gaps` or set `REHEARSE_ACCEPT_KNOWN_GAPS=verifiers`:
+the message becomes a warning and the exit status 0. The workflow sets
+neither.
+
+### Running it
+
+Locally, from a full clone (not a shallow one), with on `PATH`:
+
+- the `theahaco/stellar-cli` fork as `stellar` (the release
+  `.github/actions/setup-stellar-fork` installs, for your platform) and its
+  `stellar-scaffold` plugin;
+- `git-cliff`;
+- `gh`, logged in: the bootstrap verifies attestations;
+- `cargo`: the script installs soroban-sim under `target/soroban-sim/`.
+
+```sh
+scripts/rehearse-migration.sh                     # testnet, then mainnet on testnet's bytes
+scripts/rehearse-migration.sh --network testnet   # testnet only
+scripts/rehearse-migration.sh --bootstrap-only    # the bootstrap on both networks, no release
+scripts/rehearse-migration.sh --accept-known-gaps # exit 0 over the known gap, with a warning
+```
+
+Without `--accept-known-gaps` (or `REHEARSE_ACCEPT_KNOWN_GAPS=verifiers`), a
+run that passes every step still exits 3 while
+[the known gap](#known-gap-the-releases-webauthn-verifier-in-perchverifiers)
+is real. `--bootstrap-only` bridges nothing, so it is unaffected.
+
+Everything lands under `target/rehearse-migration/`. `<network>/` holds each
+fork's report (`report.md`, `report.json`), the bootstrap and release logs,
+the address and consumer checks, the new `deployment.json`, and
+`nido-payload.json`. `release/` holds the versions, the tier-0 builds, and the
+stack. `summary.md` sums up both networks, under the known gap's message
+when a fork was bridged.
+
+In CI, the `Rehearse migration` workflow runs it on `workflow_dispatch` and
+on pull requests that touch the release path's scripts, `registry.path` or
+`verifiers.path`, the manifests, the perch author's document, or the release
+workflows (its `paths` is the list). It runs both networks in one job, because the mainnet leg fetches from the testnet fork.
+It writes the summary to the job's page and uploads `target/rehearse-migration`,
+without the throwaway keys or the scratch clone. It uses no secret, only
+`github.token` for `gh attestation verify`. While the known gap is real the
+job fails, with the gap's message as an error annotation and at the top of
+the summary, after every step has run; it never accepts the gap. It is not a
+required check: the forks read the live public RPCs, so a run reflects the
+chains as they are then.
+
+### soroban-sim and protocols
+
+The script installs the soroban-sim commit it pins (`SOROBAN_SIM_REV`),
+which links the protocol-29 and protocol-30 hosts and runs, for each fork,
+the one the network's `protocolVersion` names
+([theahaco/soroban-sim#38](https://github.com/theahaco/soroban-sim/pull/38)).
+Mainnet runs protocol 29 and testnet 30. A network on a protocol that build
+does not link stops the rehearsal with soroban-sim's message naming the
+protocols it supports; moving the pin to a soroban-sim release that links it
+fixes that. `SOROBAN_SIM=<binary>` forks every network with that binary
+instead.
+
+### What it does not cover
+
+- **The release's bytes.** Its versions are the ones the release PR would
+  pick on the day it runs, and its tier-0 are its own `stellar scaffold
+  build`s. Contract-release's attested builds are other bytes, so every hash,
+  address and account pin differs from the real release's. No attestation
+  check runs on them: not `release-mainnet.yml`'s, and not the bootstrap's.
+- **Real signers and settings:** the manager's, admin's and delegates' keys,
+  the GitHub environments and their reviewers, `vars.PERCH_DEPLOY_STACK`,
+  `PERCH_AUTHOR_ADDRESS` and `PERCH_MAINNET_AUTHOR_ADDRESS`.
+- **Everything off-chain:** the release PR itself, tags, GitHub releases,
+  npm, the `deploy(<network>)` PRs, the regenerated bindings, the
+  perch-artifacts bump, and notify-nido's dispatch (only its payload is
+  written). Nido's own factory redeploy and repin are Nido's.
+- **Accounts already deployed.** They move only through their own delayed
+  upgrade. The rehearsal checks that they still verify, not an upgrade.
+- **The chain on the day.** The forks read live state, so the real run meets
+  whatever has changed since. Fees charged on a fork come from its own
+  simulation.
+- The multisig and timelock path, and a durable store for the deployed
+  bytes.
 
 ## Release-path settings
 
@@ -847,7 +1106,7 @@ gh api repos/stellar-registry/perch/environments/testnet/deployment-branch-polic
   --jq '.branch_policies[].name'   # expect: main
 ```
 
-Create `mainnet` now, before anything names it. `nido-dispatch.yml` binds a
+Create `mainnet` before anything names it. `nido-dispatch.yml` binds a
 job to `environment: <network>`, and a job naming an environment that does
 not exist creates it with no protection:
 
@@ -956,9 +1215,9 @@ Once it is merged to that repository's `main`:
 
 A completion is `apply_doc` of the attempt's target, authorized through the
 zero-signer recovery rule. The controller recognizes it from a marker its
-`enforce` writes inside the account's `__check_auth`. Recording-mode
+`rcv_complete` writes inside the account's `__check_auth`. Recording-mode
 simulation, the default way a client learns a transaction's auth entries,
-never runs `__check_auth`, so `enforce` never runs, `rcv_sync` sees no
+never runs `__check_auth`, so `rcv_complete` never runs, `rcv_sync` sees no
 marker, and the simulation fails with `AttemptAuthorized`, as if the call
 were a policy change during the window.
 
@@ -993,7 +1252,7 @@ hashes do not change unless the source does.
 | `@stellar-registry/perch-interpreter` | interpreter bindings |
 | `@stellar-registry/perch-zk` | commitments, witnesses, bb.js proving; `/indexer`: the trust-free pool indexer, serving witnesses from `PoolWitnessIndex` (one chunk of leaves per witness; node stores and a snapshot to resume) |
 | `@stellar-registry/perch-relay` | the guardian-approval relay: admits an approval only once authenticated (enforcing simulation of the controller call, or a `G...` guardian's own signature with the call rebuilt from the posted statement), including CAP-0071 delegated entries; `/node` and the `perch-relay` command serve it from one process |
-| `@stellar-registry/perch-contracts` | bindings for every stack contract, from the deployed wasm, and the manifests |
+| `@stellar-registry/perch-contracts` | stack bindings and manifests; [ABI selection and generation](../../packages/perch-contracts/README.md) |
 | `@stellar-registry/perch-artifacts` | the deployment manifests, Noir circuits and their manifest, test vectors, and document and program limits as files; `perch-fetch-infra-wasm --stack` and `perch-zk-toolchain` run the repository's scripts against them. Changing a shipped file re-releases it |
 
 All six are published to npm by `release.yml`'s `npm-pack` and

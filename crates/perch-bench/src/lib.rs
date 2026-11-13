@@ -1,7 +1,7 @@
 //! Harness-only crate for the metered RPN benchmark — the
-//! instruction-count canary for the frozen v1 wire format (originally the
-//! decision benchmark of
-//! <https://github.com/stellar-registry/perch/issues/2>).
+//! instruction-count canary for the frozen v1 wire format, the format the
+//! decision benchmark of <https://github.com/stellar-registry/perch/issues/2>
+//! chose.
 //!
 //! The measurement lives in `tests/metered.rs`, which is `#[ignore]`d in
 //! plain `cargo test` because it needs the bench contract wasm built

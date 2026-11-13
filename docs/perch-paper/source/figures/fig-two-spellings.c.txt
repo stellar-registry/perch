@@ -1,0 +1,15 @@
+["and", [["eq", ["call_contract"], "C...XLM"],
+         ["eq", ["call_fn"], "transfer"],
+         ["eq", ["call_arg", 1], "C...GAME"],
+         ["lte", ["call_arg", 2],          ②
+                 {"i128": "20000000"}]]]
+
+{ "network": "testnet",
+  "smartAccount": "C...ACCOUNT",
+  "sourceAccount": "G...OWNER",
+  "intent": { "...": "(b)" },
+  "contract": "C...XLM",                   ③
+  "signers": ["G...APP"],                  ④
+  "validUntilLedger": N - 1,               ⑤
+  "spendingLimit": { "amount": "20000000", ②
+                     "periodLedgers": 17280 } }

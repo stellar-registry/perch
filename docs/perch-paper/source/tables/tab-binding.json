@@ -1,0 +1,64 @@
+{
+ "title": "What a signature binds.",
+ "caption": "The first two rows come from the host's signature payload. OpenZeppelin columns are read from `stellar-contracts` {{fact:oz-v080-tag}} and {{fact:oz-v072-tag}} source; the 0.7.2-line build that oz-policy-builder signs for ({{fact:oz-v072-line-account-build}}) has no recorded source, and its digest is taken from oz-policy-builder's documentation. ¹With a legacy `Address` credential; CAP-0071's address-bound credentials add the account to the host's payload. oz-policy-builder's interpreter refuses external signers in the rules it polices (error {{fact:opb-error-external-signer}}); read in source, not run.",
+ "columns": [
+  "Bound to",
+  "Perch external",
+  "Perch delegated",
+  "OZ v0.8.0",
+  "0.7.2-line external",
+  "0.7.2-line delegated"
+ ],
+ "latex_colspec": "@{}L*{5}{>{\\centering\\arraybackslash}p{0.105\\linewidth}}@{}",
+ "rows": [
+  [
+   "Network, nonce, signature-expiration ledger",
+   "yes",
+   "yes",
+   "yes",
+   "yes",
+   "yes"
+  ],
+  [
+   "Calls in this entry's invocation tree",
+   "yes",
+   "yes",
+   "yes",
+   "yes",
+   "yes"
+  ],
+  [
+   "This account",
+   "yes",
+   "yes",
+   "yes",
+   "**no**¹",
+   "yes"
+  ],
+  [
+   "Selected rule IDs",
+   "yes",
+   "**no**",
+   "yes",
+   "yes",
+   "yes"
+  ],
+  [
+   "Rule contents; account revision",
+   "no",
+   "no",
+   "no",
+   "no",
+   "no"
+  ],
+  [
+   "Other entries in the transaction; fee payer",
+   "no",
+   "no",
+   "no",
+   "no",
+   "no"
+  ]
+ ],
+ "latex_section": "reproduce"
+}

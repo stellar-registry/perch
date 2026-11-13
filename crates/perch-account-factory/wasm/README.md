@@ -5,14 +5,19 @@ The factory pins, at build time:
 | file | committed | pin |
 |---|---|---|
 | `perch-account.sha256` | yes | the account wasm hash every `create` deploys |
-| `perch-webauthn-verifier.sha256` | yes | with `registry.path`, the verifier's content address |
-| `registry.path` | yes | how to derive the registry the verifier was `deploy_stateless`'d from, on any network |
+| `perch-webauthn-verifier.sha256` | yes | with `verifiers.path`, the verifier's content address |
+| `verifiers.path` | yes | how to derive `perch/verifiers`, the registry the verifier was `deploy_stateless`'d from, on any network |
 | `<name>.wasm` | no | the fetched bytes; only tests read them |
 
-`registry.path` is the same file as the account's, and it works the same
-way: the root and each named deploy are derived under the ledger's network
-id. What it derives, and what that assumes, is in
+`verifiers.path` is the same file as the account's and the compiler's, and
+it works the same way as the account's `registry.path`: the root and each
+named deploy are derived under the ledger's network id. What it derives,
+and what that assumes, is in
 [`../../perch-smart-account/wasm/README.md`](../../perch-smart-account/wasm/README.md).
+The account's constructor admits an external admin signer only under a
+verifier `perch/verifiers` deployed, so `create_passkey` works on a network
+once the pinned WebAuthn hash is published and deployed there
+(`scripts/bootstrap-registry.sh` `seed-verifiers`).
 The account it deploys is one build for every network, so the factory pins
 one account hash for all of them.
 

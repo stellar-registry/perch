@@ -1,0 +1,61 @@
+{
+ "intro": "Commands 5 to 18 of the reference run ({{fact:recovery-profile-demo}} profile, {{fact:recovery-guardians-demo}} guardians). Each item names the command, its result and what it changes.",
+ "steps": [
+  {
+   "n": "5",
+   "text": "Command 5. Collect grant 1: refused with `GrantLive` ({{fact:account-error-grant-live}}), because grant 1 is still current. In the experiment: *Collect grant 1*."
+  },
+  {
+   "n": "6",
+   "text": "Command 6. Enroll recovery: applied, with the {{fact:recovery-profile-demo}} profile and {{fact:recovery-guardians-demo}} guardians. The recovery generation goes from 0 to 1. In the experiment: *Enroll recovery*."
+  },
+  {
+   "n": "7",
+   "text": "Command 7. Begin an attempt: applied; the attempt collects approvals. In the experiment: *Begin attempt*."
+  },
+  {
+   "n": "8",
+   "text": "Command 8. Guardian 1 approves: applied; one of two approvals. In the experiment: *Guardian 1*."
+  },
+  {
+   "n": "9",
+   "text": "Command 9. Guardian 2 approves: applied. The attempt is authorized at ledger A and can complete in {{fact:recovery-window}}. In the experiment: *Guardian 2*."
+  },
+  {
+   "n": "10",
+   "text": "Command 10. Complete: refused by the controller with `NotExecutableYet` ({{fact:controller-error-not-executable-yet}}), because ledger A + {{fact:recovery-delay-ledgers}} has not arrived. In the experiment: *Attempt completion*."
+  },
+  {
+   "n": "11",
+   "text": "Command 11. Advance 11 ledgers: no transaction. In the experiment: *Advance clock*."
+  },
+  {
+   "n": "12",
+   "text": "Command 12. Complete: applied in one transaction. The grant generation goes from 0 to 1, the recovery generation from 1 to 2, and the replaced owner key is revoked. Grant 1 stops authorizing but stays stored, and its key is barred. In the experiment: *Attempt completion*."
+  },
+  {
+   "n": "13",
+   "text": "Command 13. Spend 1 with grant 1: refused with `StaleGrant` ({{fact:auth-error-stale-grant}}); grant 1 is stored but stale. In the experiment: *Attempt spend*, grant 1, amount 1."
+  },
+  {
+   "n": "14",
+   "text": "Command 14. The old owner installs a grant: refused with `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}}), because the old owner key is revoked. In the experiment: *Try old owner*."
+  },
+  {
+   "n": "15",
+   "text": "Command 15. Re-grant the wiped key: refused with `WipedCredential` ({{fact:account-error-wiped-credential}}); the credential index bars grant 1's key. In the experiment: *Reuse wiped credential*."
+  },
+  {
+   "n": "16",
+   "text": "Command 16. Install a fresh credential: applied; the new owner signs grant 2. In the experiment: *Install fresh credential*."
+  },
+  {
+   "n": "17",
+   "text": "Command 17. Spend 2 with grant 2: applied; the balance goes from 94 to 92 XLM. In the experiment: *Attempt spend*, grant 2, amount 2."
+  },
+  {
+   "n": "18",
+   "text": "Command 18. Collect grant 1: applied. Anyone may collect a stale grant; its storage goes, and the credential index keeps its key barred. In the experiment: *Collect grant 1*."
+  }
+ ]
+}

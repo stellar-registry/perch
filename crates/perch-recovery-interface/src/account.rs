@@ -14,19 +14,10 @@ pub const LEDGERS_PER_DAY_NOMINAL: u32 = 17_280;
 /// and the delay is enforced in ledgers regardless.
 pub const ACCOUNT_UPGRADE_DELAY_LEDGERS: u32 = 7 * LEDGERS_PER_DAY_NOMINAL;
 
-/// One pending account upgrade (spec §12).
-///
-/// Staleness is judged against the account's own **recovery generation**, a
-/// `u64` the account keeps in its own storage. It starts at 0 and is never
-/// reset. It advances on every `rcv_sync` outcome other than `Unchanged`
-/// (`controller::SyncOutcome::bumps_generation`) and on every executed
-/// upgrade.
-///
-/// The controller's epoch cannot play this role. It belongs to one
-/// controller and does not exist while the account is unenrolled, so a
-/// request scheduled unenrolled would survive enrolling recovery and
-/// removing it again: the final state has no controller, just as at
-/// scheduling.
+/// A pending account upgrade.
+// Spec §12. Why staleness is judged against the account's recovery
+// generation rather than the controller's epoch: docs/account-interface.md,
+// "UpgradeRequest and the recovery generation".
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeRequest {
@@ -36,9 +27,9 @@ pub struct UpgradeRequest {
     pub wasm_hash: BytesN<32>,
     /// The account's recovery generation when the request was scheduled.
     pub generation: u64,
-    /// The adopted controller's epoch when scheduled, if a controller was
-    /// adopted. Passed back as `UpgradeStep::Execute` so the controller can
-    /// check it too.
+    /// The adopted controller's epoch when scheduled, if any.
+    // Passed back as `UpgradeStep::Execute` so the controller can check it
+    // too.
     pub controller_epoch: Option<u64>,
     /// The first ledger at which the request may execute.
     pub executable_at: u32,
@@ -108,25 +99,32 @@ impl UpgradeRequest {
 /// address also covers controllers and policies the account adopted in the
 /// past.
 ///
-/// - `install`, `uninstall`, `enforce`: OZ `Policy` lifecycle hooks, called
-///   by the account while (re)installing rules and from `do_check_auth`.
+/// - `install`, `uninstall`, `enforce`: OZ `Policy` lifecycle hooks. The
+///   account calls none of them, but an OZ policy starts each with
+///   `smart_account.require_auth()`, as perch controllers deployed with
+///   OZ's hooks do.
 /// - `rcv_sync`: the controller hook `apply_doc` calls to apply a recovery
 ///   configuration transition (enroll, reconfigure, remove, complete).
 /// - `rcv_cancel`: the controller hook for a `Loss` owner's cancellation.
 /// - `rcv_upgrade`: the controller hook that checks upgrade evidence.
+/// - `rcv_install`: the controller hook the account calls when it installs
+///   the recovery rule.
+/// - `rcv_complete`: the controller hook that decides a completion.
 /// - `rcv_insert`: the pool's account-bound leaf insertion.
 /// - `rcv_gate`: the account's own hook through which its adopted
 ///   controller sets or clears the `Protected` freeze mirror. It requires
 ///   the controller's authorization, which only the controller's own code
 ///   can give; listing it here also stops the account from being steered
 ///   into calling another account's gate.
-pub const RESERVED_INVOKER_ONLY_FNS: [&str; 8] = [
+pub const RESERVED_INVOKER_ONLY_FNS: [&str; 10] = [
     "install",
     "uninstall",
     "enforce",
     "rcv_sync",
     "rcv_cancel",
     "rcv_upgrade",
+    "rcv_install",
+    "rcv_complete",
     "rcv_insert",
     "rcv_gate",
 ];
@@ -134,6 +132,31 @@ pub const RESERVED_INVOKER_ONLY_FNS: [&str; 8] = [
 /// Whether `fn_name` is in [`RESERVED_INVOKER_ONLY_FNS`].
 pub fn is_reserved_invoker_only(e: &Env, fn_name: &Symbol) -> bool {
     RESERVED_INVOKER_ONLY_FNS
+        .iter()
+        .any(|name| Symbol::new(e, name) == *fn_name)
+}
+
+/// The recovery controller's guardian-approval entry points (spec §15, I2).
+/// Each collects a guardian's `require_auth_for_args((digest,))` for a
+/// statement about another account, so an account that is a guardian
+/// authorizes a context naming one of these on that account's controller.
+///
+/// A guardian approval is owner-level authority over the accounts that list
+/// this one as a guardian, which only the account document may hold (spec §2,
+/// §7.6). The account's `__check_auth` therefore refuses a context naming
+/// one of these for any rule a grant document installed, on any contract,
+/// and `apply_grant` refuses a grant rule whose `functions` names one.
+/// Matching by name covers every controller deployment, not only the one
+/// the account adopted.
+///
+/// - `submit_guardian`: guardian evidence for a recovery attempt (T2).
+/// - `approve_change`: a guardian's approval of a reconfiguration or an
+///   upgrade.
+pub const GUARDIAN_APPROVAL_FNS: [&str; 2] = ["submit_guardian", "approve_change"];
+
+/// Whether `fn_name` is in [`GUARDIAN_APPROVAL_FNS`].
+pub fn is_guardian_approval(e: &Env, fn_name: &Symbol) -> bool {
+    GUARDIAN_APPROVAL_FNS
         .iter()
         .any(|name| Symbol::new(e, name) == *fn_name)
 }
@@ -181,10 +204,10 @@ mod test {
         assert_eq!(ACCOUNT_UPGRADE_DELAY_LEDGERS, 120_960);
     }
 
-    /// The sequence reproduced against the WS3 implementation: schedule
-    /// while unenrolled, enroll `Loss` recovery, remove it, wait out the
-    /// delay, execute. The final state has no controller, as at scheduling,
-    /// but the account's generation moved twice, so the request is stale.
+    /// Schedule while unenrolled, enroll `Loss` recovery, remove it, wait
+    /// out the delay, execute. The final state has no controller, as at
+    /// scheduling, but the account's generation moved twice, so the request
+    /// is stale.
     #[test]
     fn enroll_then_remove_stales_an_unenrolled_upgrade() {
         use crate::controller::SyncOutcome;
@@ -274,6 +297,23 @@ mod test {
             "enforce_",
         ] {
             assert!(!is_reserved_invoker_only(&e, &Symbol::new(&e, name)));
+        }
+    }
+
+    #[test]
+    fn guardian_approval_names_match_exactly_and_are_not_reserved() {
+        let e = Env::default();
+        for name in GUARDIAN_APPROVAL_FNS {
+            assert!(is_guardian_approval(&e, &Symbol::new(&e, name)));
+            assert!(!is_reserved_invoker_only(&e, &Symbol::new(&e, name)));
+        }
+        for name in RESERVED_INVOKER_ONLY_FNS.into_iter().chain([
+            "submit_zk",
+            "begin_lost_key",
+            "submit_guardian_",
+            "approve",
+        ]) {
+            assert!(!is_guardian_approval(&e, &Symbol::new(&e, name)));
         }
     }
 

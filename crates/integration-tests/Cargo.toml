@@ -1,6 +1,6 @@
 [package]
 name = "perch-integration-tests"
-description = "End-to-end tests: compile → install → do_check_auth against real stellar-accounts"
+description = "End-to-end tests: compile → install → authorize through the Perch account, with differentials against stellar-accounts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -32,14 +32,31 @@ proptest = "1"
 perch-zk-primitives = { version = "0.1.0", path = "../perch-zk-primitives" }
 perch-zk-prover = { version = "0.1.0", path = "../perch-zk-prover" }
 perch-account-factory = { version = "0.3.1", path = "../perch-account-factory" }
+# The `perch/verifiers` registry's real code (`verifier_names.rs`): the
+# compiler resolves a published name through its `fetch_hash`.
+perch-constructorless-registry = { version = "0.1.1", path = "../perch-constructorless-registry" }
 sha2 = "0.10"
 stellar-accounts = { workspace = true }
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
 soroban-sdk = { workspace = true, features = ["testutils"] }
 # `e2e_invoke` (simulation in recording mode) for release_stack.rs's footprint
 # check; the same version soroban-sdk pins.
-soroban-env-host = { version = "=27.0.1", features = ["recording_mode"] }
+soroban-env-host = { version = "=29.0.1", features = ["recording_mode"] }
 ed25519-dalek = "2"
 # Signs as an ML-DSA-65 key for perch-mldsa-verifier (deterministic, no RNG).
 fips204 = { workspace = true }
 hex = "0.4"
 serde_json = "1"
+# base64 for the npm fixtures review_core_differential.rs writes.
+base64 = "0.22"
+# rule-core's evaluator, Soroban facade and conformance runner (document
+# traces and the rule-eval baseline), at the workspace's one rev.
+rule-eval = { workspace = true }
+rule-eval-conformance = { workspace = true }
+soroban-facade = { workspace = true, features = ["sdk"] }
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }
+# The off-chain verdict differential-tested against the account
+# (`review_core_differential.rs`).
+perch-review-core = { version = "0.1.0", path = "../perch-review-core" }
+# Perch's hand-written eval vectors, against rule-eval (tests/leaf_vectors.rs).
+perch-conformance = { version = "0.1.1", path = "../perch-conformance" }

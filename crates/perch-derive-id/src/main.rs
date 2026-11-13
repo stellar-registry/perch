@@ -11,6 +11,10 @@
 //!     the registry this checkout's account derives its infra from on that
 //!     network (`perch_smart_account::constructorless_registry`, from
 //!     `crates/perch-smart-account/wasm/registry.path`)
+//! perch-derive-id verifiers <network-passphrase>
+//!     the registry a document's `verifier-name` resolves in on that network,
+//!     `perch/verifiers` (`perch_smart_account::verifier_registry`, from
+//!     `crates/perch-smart-account/wasm/verifiers.path`)
 //! ```
 //!
 //! The bare three-argument form `<parent> <name> <passphrase>` is the `name`
@@ -21,7 +25,8 @@ fn usage() -> ! {
     eprintln!(
         "usage: perch-derive-id content <registry> <wasm-hash-hex> <passphrase>\n       \
          perch-derive-id name <parent> <name> <passphrase>\n       \
-         perch-derive-id registry <passphrase>"
+         perch-derive-id registry <passphrase>\n       \
+         perch-derive-id verifiers <passphrase>"
     );
     std::process::exit(2)
 }
@@ -55,6 +60,9 @@ fn main() {
     let id = match args.as_slice() {
         [m, passphrase] if m == "registry" => {
             perch_smart_account::constructorless_registry(&on(passphrase))
+        }
+        [m, passphrase] if m == "verifiers" => {
+            perch_smart_account::verifier_registry(&on(passphrase))
         }
         [m, p, v, n] if m == "content" || m == "name" => derive(m, p, v, n),
         [p, v, n] => derive("name", p, v, n),

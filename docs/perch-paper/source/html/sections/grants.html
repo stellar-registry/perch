@@ -1,0 +1,7 @@
+<p class="lede">The limit follows the spending history: <span class="inline-formula">Σ recent charges + payment ≤ cap.</span></p>
+<p>With a {{fact:shop-cap-xlm}} XLM cap, pay 6 and then try 5. The second payment is refused. Advance {{fact:shop-period-ledgers}} ledgers and the old charge leaves the window.</p>
+{{fig:fig-cap-window}}
+<details class="technical"><summary>Window boundaries, replacement, and what the model leaves out</summary>
+<p>The rule counts accepted positive charges in the trailing ledger window. This example is a model, not a transaction or fee estimate. The window theorem starts from empty records for one unchanged cap; negative charges and positive charges at backwards ledgers are rejected. Replacing a rule or changing its cap can reset its record; the cap is not a lifetime limit across owner reconfiguration.</p>
+<p>For the same cap and period, a sliding window avoids spending a full fixed-period allowance on both sides of a reset. Some systems deliberately use fixed periods; MetaMask's <code>ERC20PeriodTransferEnforcer</code> is one example. {{cite:metamask-delegation}} The <a href="{{doc:verification}}#spending">verification companion</a> gives the invariant and hypotheses.</p>
+</details>

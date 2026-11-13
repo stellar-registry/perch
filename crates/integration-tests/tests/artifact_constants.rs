@@ -18,6 +18,10 @@ fn constants() -> serde_json::Value {
             "MAX_DOC_SIGNERS": perch_doc_compiler::MAX_DOC_SIGNERS,
             "MAX_DOC_RULES": perch_doc_compiler::MAX_DOC_RULES,
             "MAX_DOC_CANONICAL_BYTES": perch_doc_compiler::MAX_DOC_CANONICAL_BYTES,
+            "MAX_GRANT_SIGNERS": perch_doc_compiler::MAX_GRANT_SIGNERS,
+            "MAX_GRANT_RULES": perch_doc_compiler::MAX_GRANT_RULES,
+            "MAX_GRANT_CANONICAL_BYTES": perch_doc_compiler::MAX_GRANT_CANONICAL_BYTES,
+            "MAX_GRANT_STORED_BYTES": perch_doc_compiler::MAX_GRANT_STORED_BYTES,
             "MAX_RULE_NAME_BYTES": perch_doc_compiler::MAX_RULE_NAME_BYTES,
         },
         "program": {

@@ -1,0 +1,51 @@
+{
+ "columns": [
+  "Mechanism",
+  "Triggered by",
+  "Stops authorizing",
+  "Removes storage",
+  "Bars the credential later"
+ ],
+ "rows": [
+  [
+   "Expiry (`not-after-ledger` N: the rule authorizes through ledger N − 1)",
+   "The ledger reaching N",
+   "That rule",
+   "No",
+   "No"
+  ],
+  [
+   "`remove_grant`",
+   "Owner",
+   "That grant's rules",
+   "Rules, tags, spending records",
+   "No"
+  ],
+  [
+   "Completed recovery",
+   "The controller's approved completion",
+   "Every earlier grant (generation + 1); replaced and removed administrative credentials",
+   "No",
+   "Yes: grant credentials through the credential index, administrative credentials through the revoked set"
+  ],
+  [
+   "`gc_grant`",
+   "Anyone, only for a grant whose generation is older; an expired but current grant is not collectable",
+   "Nothing new",
+   "Rules, tags, spending records; the credential index is kept",
+   "Unchanged"
+  ],
+  [
+   "Archival (TTL lapse)",
+   "Rent not paid",
+   "Nothing; the entry is unavailable, never absent, until restored",
+   "No",
+   "No"
+  ]
+ ],
+ "title": "Ending authority.",
+ "caption": "Invalidation is a policy event, collection a storage operation, and archival neither. Only a completed recovery moves the grant generation; otherwise the owner revokes grants one at a time.",
+ "editions": [
+  "html"
+ ]
+}

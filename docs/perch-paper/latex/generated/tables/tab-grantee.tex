@@ -1,0 +1,13 @@
+% Generated from source/tables/tab-grantee.json; edit that.
+\begin{table}[tbp]
+\centering
+\caption{\textbf{What a grantee or a relayer can do, and what holds.} T2, T6 and T8 are Theorems 2, 6 and 8 of the formal results; O-labels name the obligations on the account code around the decision function, which the verification companion paper lists. The vision companion paper covers owner-key theft, guardians and the verifier registry.}\label{tab:tab-grantee}
+\scriptsize\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.1\linewidth}>{\raggedright\arraybackslash}p{0.19\linewidth}L>{\raggedright\arraybackslash}p{0.27\linewidth}@{}}
+\toprule
+\textbf{Who} & \textbf{Can do} & \textbf{What holds (evidence)} & \textbf{What remains} \\
+\midrule
+A1 Grantee (app or agent key) & Sign within rules naming its key; build any invocation tree; choose among rules naming its key & T2: every call of an accepted request is allowed by an installed rule (signer authentication, selection and context conversion tested, O1, O2, O7). T6: each capped rule's window stays within its limit (selection and record persistence tested, O2, O6). T8: no grant rule allows a call to the account or its adopted recovery contracts (proved for lowering; the runtime recheck tested) & The union of authority across rules naming its key; caps per rule, not per grant; each call checked alone; allowances and \code{execute}; \code{approve} through a token rule with no function list; replacing a rule starts a new window \\
+A2 Submitter or relayer & Wrap signed entries, choose timing and fee, resubmit a refused entry until its expiration ledger & An external signer's signature binds this account, the entry and the selected rule IDs (tested; a paper proof under signature and hash assumptions) & Delegated signers do not bind rule IDs. A rule edited in place between signing and inclusion decides under its new contents \\
+\bottomrule
+\end{tabularx}
+\end{table}

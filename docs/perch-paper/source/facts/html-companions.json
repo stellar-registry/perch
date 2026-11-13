@@ -1,0 +1,10 @@
+{
+ "wt-page-sha256-short": {
+  "value": "a329cc61…",
+  "source": "`shasum -a 256 docs/oz-walkthrough/index.html` = a329cc612472cce1ba9211de83a0b19adada64686326d1a48b6b954a01e99bce (V)"
+ },
+ "wt-golden-sha256-short": {
+  "value": "62c79b4f…",
+  "source": "SHA-256 of the walkthrough's embedded `evidence/native-golden.jsonl` = 62c79b4f614411dbcd60081f722afbccc58efe90219526695eae9bfbb226f1c0, as `source/figures/fig-same-task.run.json` `golden_sha256` records (V)"
+ }
+}

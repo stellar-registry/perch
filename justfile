@@ -4,8 +4,8 @@ test:
 build:
     cargo build --workspace
 
-# Builds every cdylib package (interpreter, account, verifier, bench-rpn) to
-# target/stellar/$STELLAR_NETWORK/ ("local" when unset). The three deployable
+# Builds every cdylib package (the deployable contracts and bench-rpn) to
+# target/stellar/$STELLAR_NETWORK/ ("local" when unset). The deployable
 # crates carry [package.metadata.stellar] cargo_inherit, so scaffold injects
 # their name/binver wasm meta; bench-rpn has no metadata section (it is never
 # published) and builds meta-less. Plain `stellar contract build` would produce
@@ -41,12 +41,17 @@ schema:
     cargo run -q -p perch-schema --bin perch-schema-gen -- --write
 
 # Build the ZK recovery pool and adapter wasm, plus the depth-24 fallback build
-# of both under target/zk-d24/ (for the depth comparison in docs/zk/).
+# of both under target/zk-d24/ (for the depth comparison in docs/zk/). Wasm
+# builds go through `stellar contract build` (soroban-sdk 28+ refuses any
+# build system that does not shake the contract spec); `--optimize=false`
+# keeps the bytes cargo emits.
 zk-wasm:
-    cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter
-    cargo build --release --target wasm32v1-none -p perch-zk-pool -p perch-zk-adapter \
-      --features perch-zk-pool/tree-depth-24,perch-zk-adapter/tree-depth-24 \
-      --target-dir target/zk-d24
+    stellar contract build --package perch-zk-pool --optimize=false
+    stellar contract build --package perch-zk-adapter --optimize=false
+    CARGO_TARGET_DIR=target/zk-d24 stellar contract build --package perch-zk-pool \
+      --optimize=false --features tree-depth-24
+    CARGO_TARGET_DIR=target/zk-d24 stellar contract build --package perch-zk-adapter \
+      --optimize=false --features tree-depth-24
 
 # Regenerate (or `just zk-artifacts check`) the circuit artifacts, VKs, proof
 # fixtures, and circuits/manifest.json. Installs the pinned nargo/bb under
@@ -75,7 +80,7 @@ fmt:
 
 # Build the RPN bench contract to metered wasm.
 bench-build:
-    cargo build -p perch-bench-rpn --target wasm32v1-none --release
+    stellar contract build --package perch-bench-rpn --optimize=false
 
 # Run the metered RPN benchmark — the instruction-count canary for the frozen
 # v1 format. Reference numbers: crates/perch-program/BENCH.md.
@@ -98,6 +103,7 @@ formal:
 drt: formal
     cargo test -p perch-conformance
     cd formal && lake exe drt ../testdata/eval/eval-vectors.json \
+      ../testdata/auth-root.canonical.json \
       ../testdata/ci-publish.canonical.json \
       ../testdata/ci-publish-delegated.canonical.json \
       ../testdata/ci-publish-threshold.canonical.json \
@@ -118,7 +124,7 @@ analyze *ARGS:
 # wasm32 artifact under the soroban test host — rustc, LLVM, and the wasm
 # interpreter join the parity boundary.
 conformance-wasm:
-    cargo build -p perch-bench-rpn --target wasm32v1-none --release
+    stellar contract build --package perch-bench-rpn --optimize=false
     cargo test -p perch-conformance --test wasm_leg -- --ignored
 
 # Coverage-guided fuzzing of a target in fuzz/fuzz_targets/ (default: the
@@ -151,7 +157,7 @@ coverage:
 # komet (via Nix) + stellar-cli; see komet/README.md. `komet test` is what CI
 # runs; `komet prove run` is the stronger symbolic check (local — too slow for CI).
 komet:
-    cd komet && cargo build --release --target wasm32v1-none
+    cd komet && stellar contract build --optimize=false
     cd komet && python3 strip_datacount.py \
       target/wasm32v1-none/release/perch_komet_tests.wasm \
       target/perch_komet_tests.komet.wasm
@@ -159,7 +165,7 @@ komet:
     cd komet && komet prove run --wasm target/perch_komet_tests.komet.wasm
 
 # Flux refinement verification of perch-program (nidohq/soroban-flux). Runs
-# under flux's pinned nightly toolchain; the repo's stable pin is untouched —
+# under flux's pinned nightly toolchain; the repo's toolchain pin is untouched —
 # the flux attributes are no-ops in normal builds. Setup: see
 # https://github.com/nidohq/soroban-flux (`just flux-setup` there).
 flux:

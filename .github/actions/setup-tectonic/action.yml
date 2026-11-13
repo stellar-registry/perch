@@ -1,0 +1,18 @@
+name: Set up Tectonic
+description: >
+  Install the pinned, checksummed Tectonic that builds the Perch paper's LaTeX
+  edition (docs/perch-paper/latex/build.sh checks the same version and pins the
+  TeX bundle).
+runs:
+  using: composite
+  steps:
+    - name: Install Tectonic
+      shell: bash
+      run: |
+        v=0.17.0
+        sha=8533d07f9ccbd7a65824b9e0459041bca34af1eb33daba48f59215593753a3b7
+        curl -fsSL -o /tmp/tectonic.tar.gz \
+          "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${v}/tectonic-${v}-x86_64-unknown-linux-musl.tar.gz"
+        echo "$sha  /tmp/tectonic.tar.gz" | sha256sum -c -
+        sudo tar -xzf /tmp/tectonic.tar.gz -C /usr/local/bin tectonic
+        tectonic --version

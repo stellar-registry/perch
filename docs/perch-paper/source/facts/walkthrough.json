@@ -1,0 +1,91 @@
+{
+ "wt-task": {
+  "value": "an app key may send XLM from the account only to the shop, at most 10 XLM in any 100-ledger window",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-steps": {
+  "value": "8",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-host": {
+  "value": "soroban-env-host 29.0.2 in soroban-sim, protocol 29, applying with enforcing authorization; simulation's recording-mode host build, not the exact-metering one",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section; soroban-sim d029384 crates/soroban-sim-core/src/session/applier.rs:1-7, 18-27 (V, editor r3)"
+ },
+ "wt-oz-account-build": {
+  "value": "8286422f…",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section(rebuilt byte-identical)"
+ },
+ "wt-oz-spending-limit-build": {
+  "value": "65e70aad…",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-calls-oz": {
+  "value": "2",
+  "note": "contract calls inside __check_auth per payment: spending_limit, interpreter",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-calls-perch": {
+  "value": "1",
+  "note": "the verifier",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-entries-oz": {
+  "value": "2",
+  "note": "authorization entries and nonces per payment",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-entries-perch": {
+  "value": "1",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-cpu-install-oz": {
+  "value": "5,681,179",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-cpu-install-perch": {
+  "value": "10,071,769",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-cpu-pay-oz": {
+  "value": "4,337,137",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-cpu-pay-perch": {
+  "value": "2,926,205",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-cpu-pay2-oz": {
+  "value": "4,343,344",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "wt-cpu-pay2-perch": {
+  "value": "3,026,487",
+  "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "oz-error-unauthorized-signer": {
+  "value": "3016",
+  "source": "OZ storage.rs:667-674; docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
+ },
+ "opb-error-arg-mismatch-name": {
+  "value": "ArgMismatch",
+  "source": "policy-interpreter storage.rs:51"
+ },
+ "opb-rust-test-runs": {
+  "value": "575",
+  "note": "557 distinct tests plus 18 conformance cases re-run in release; 0 failures",
+  "source": "the authors' examination of oz-policy-builder 43b13ed on a local network (not archived in this repository)"
+ },
+ "opb-ts-tests": {
+  "value": "1,823",
+  "source": "the authors' examination of oz-policy-builder 43b13ed on a local network (not archived in this repository)"
+ },
+ "opb-local-network": {
+  "value": "a local Stellar quickstart network (protocol 30)",
+  "source": "the authors' examination of oz-policy-builder 43b13ed on a local network (not archived in this repository)"
+ },
+ "verifier-trap-error": {
+  "value": "Error(Crypto, InvalidInput)",
+  "code": true,
+  "source": "`P:crates/perch-ed25519-verifier/src/lib.rs:19-29` (V); walkthrough step 5"
+ }
+}

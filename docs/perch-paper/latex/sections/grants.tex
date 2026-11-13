@@ -1,0 +1,39 @@
+\perchfigure{fig-cap-window}
+
+\paragraph{Installing a grant.} The owner calls \code{apply\_grant} with a grant
+document (Fig.~\ref{fig:fig-shop-grant}a). A stateless document compiler
+validates the JSON; the account lowers it with rule-core's \code{lower\_scoped}
+under its own address, its \emph{excluded set} (its adopted recovery
+controller, and the zero-knowledge adapter and pool of its recovery
+configuration) and its grant generation, refusing any rule that targets the
+account or that set (Theorem~\ref{stmt:grant-target-containment}).
+
+\paragraph{What a rule checks.} One target contract and a function list;
+\fact{doc-conditions-count} kinds of argument condition (\fact{doc-conditions}),
+all of which must hold; a threshold over distinct listed signers; optionally an
+expiry (\code{not-after-ledger}~$N$ authorizes through ledger $N-1$); and
+optionally a cap, when the function list is exactly \code{["transfer"]}. The
+payload names one rule per context, the account does not search, and a signer
+that no chosen rule names is refused.
+
+\paragraph{The spending window.} For a cap of $\lambda$ per $P$ ledgers, the
+window at ledger $L$ holds the charges made after $L-P$ and through $L$
+(Fig.~\ref{fig:fig-cap-window}). The decision that checks a call also charges
+it, contexts of one authorization that select the same rule see each other's
+charges, and a refusal changes nothing. The record lives in the account's
+storage and holds up to \fact{spends-per-window} spends; replacing a capped
+rule starts an empty window. Theorem~\ref{stmt:cap-window-safety} bounds every
+window from empty records.
+
+\paragraph{Attenuation (modelled; not installable).} A grant derived for a helper
+by rule-core's \fact{attenuation-steps} attenuation steps allows no call its
+parent does not (Theorem~\ref{stmt:attenuation-narrows-authority}); caps and expiry
+narrow by trace inclusion (Theorem~5 of the verification companion), and
+neither bounds what parent and child spend together. Installing one is
+proposed.
+
+\paragraph{Ending a grant.} A grant stops at its expiry, by one owner call
+(\code{remove\_grant}, which deletes its storage), or, with every earlier grant,
+when a recovery completes; anyone may then remove a stale grant's storage with
+\code{gc\_grant}, which refuses a current-generation grant.
+

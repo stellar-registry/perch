@@ -11,10 +11,15 @@
 //!   zero-signature authorization. Mechanism: a policy-free rule relies on OZ's
 //!   native all-signers-must-match; an interpreter-attached rule folds
 //!   `MinSigners(n>=1)` into its program.
-//! - **INV-2 (liveness).** A constraint-free rule (no function/arg limits)
-//!   lowers *policy-free*, so it rides OZ's independently audited signer check
-//!   instead of the shared interpreter — a deny-bug in the interpreter can
-//!   never brick an account's admin path.
+//! - **INV-2 (liveness).** The admin rule is the proven exact lowering of a
+//!   constraint-free rule, and completions never depend on the evaluator. A
+//!   constraint-free rule (no function/arg limits) lowers *policy-free*: it
+//!   allows every function of its scope to all of its signers, with no
+//!   interpreter program. The account stores rule-core's lowering of the
+//!   same rule and decides it with rule-eval's `check_auth`
+//!   (`perch-smart-account`'s `rule_set` and `gate`). A recovery completion
+//!   is left to OZ and the recovery controller, so no deny bug in the
+//!   evaluator can keep an account from recovering.
 //!
 //! Rule expiry lowers to OZ's native `valid_until` (a ledger sequence),
 //! enforced before any policy runs; in-program ledger ops are reserved for
@@ -106,8 +111,8 @@ pub struct LoweredRule {
     pub signers: Vec<SignerSpec>,
     /// From `not-after-ledger`; lowers to OZ `valid_until`.
     pub valid_until: Option<u32>,
-    /// `Some` → attach the interpreter with these params; `None` → policy-free
-    /// (INV-2), OZ enforces all-signers-must-match natively.
+    /// `Some` → the interpreter program the rule's constraints compile to;
+    /// `None` → policy-free (INV-2): every signer must sign, nothing else.
     pub install: Option<InstallParams>,
     /// `Some` → also attach OZ's `spending_limit` policy (a stateful cumulative
     /// cap) alongside the interpreter on this rule. A capped rule always carries
@@ -167,6 +172,12 @@ pub fn compile(env: &Env, doc: &PolicyDoc, cfg: &CompileConfig) -> Result<Plan, 
 }
 
 fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, LowerError> {
+    if rule.auth_root.is_some() {
+        return Err(LowerError::Unsupported {
+            rule: rule.name.clone(),
+            reason: "auth-root requires the account batch evaluator; the legacy per-call interpreter cannot enforce it",
+        });
+    }
     let scope = match &rule.scope {
         Scope::Contract(c) => ScopeSpec::Contract(c.address.clone()),
         Scope::SelfAdmin(_) => ScopeSpec::SelfAdmin,
@@ -193,7 +204,7 @@ fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, Lo
             }
         })?;
         signers.push(match &decl.method {
-            perch_ir::SignerMethod::External { verifier, key } => SignerSpec::External {
+            perch_ir::SignerMethod::External { verifier, key, .. } => SignerSpec::External {
                 verifier: verifier.clone(),
                 key_hex: key.clone(),
             },
@@ -221,8 +232,8 @@ fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, Lo
         }
     };
 
-    // INV-2: only a bare `all` (N-of-N) rule lowers policy-free and rides OZ's
-    // native all-signers check. It must also be function/arg/cap-free — a capped
+    // INV-2: only a bare `all` (N-of-N) rule lowers policy-free, requiring
+    // every signer. It must also be function/arg/cap-free — a capped
     // rule always attaches the interpreter so INV-1's `MinSigners(n)` floor
     // enforces the full signer set (spending_limit's own single-signer floor is
     // not a substitute). A `threshold` rule is never constraint-free: it must
@@ -236,8 +247,8 @@ fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, Lo
         None
     } else {
         let program = build_program(env, rule, min_signers)?;
-        // Provenance is the rule's own canonical hash (its field keeps the
-        // `doc_hash` name; the interpreter's type is unchanged).
+        // Provenance is the rule's own canonical hash, held in the
+        // interpreter type's `doc_hash` field.
         Some(InstallParams {
             program,
             doc_hash: rule_hash_onchain(env, rule),

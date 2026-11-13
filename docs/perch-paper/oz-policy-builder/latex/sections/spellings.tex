@@ -1,0 +1,39 @@
+Figure~\ref{fig:fig-two-spellings} writes one intent in both systems: the app key
+may call \code{guess} on the game, and may send XLM only to the game, at most
+\fact{preview-game-cap-xlm}~XLM per \fact{preview-game-period-ledgers} ledgers
+(\fact{preview-game-period-label}), through ledger $N-1$. It is the game grant the
+testnet preview of the \fact{wallet-name} wallet installed through Perch
+(Perch \srcpath{release_stack.rs:4019-4030}). oz-policy-builder's side is an Intent
+(\srcpath{packages/policy-synth/src/intent.ts:18-59}), the predicate it lowers to
+for the XLM rule (\srcpath{intent.ts:117-140}) and the \code{install\_policy}
+arguments (\srcpath{src/tools.ts:588-640}), read from source; we did not run these
+installs. The marks in the figure match the notes.
+
+\perchfigure{fig-two-spellings}
+
+\begin{enumerate}[label=\protect\callout{\arabic*},leftmargin=*,itemsep=1pt]
+\item Both select one rule per context, and each transfer rule sees only the
+transfer (\srcpath{policy-interpreter/README.md:647-649}), so in both a transfer to
+the game is allowed without a \code{guess}.
+\item Perch's window cap is part of the rule; a document cannot bound one call's
+amount. oz-policy-builder requires a per-call bound (\code{lte}) unless the owners
+set \code{allowUnboundedAmount}, and attaches \code{spending\_limit} for the
+window, because the interpreter keeps no totals (\srcpath{dsl.rs:65-72}).
+\item Perch installs both rules with one \code{apply\_grant} call;
+oz-policy-builder builds one \code{add\_context\_rule} per \code{install\_policy}
+call (\srcpath{tools.ts:588-590}).
+\item Perch's rule holds a passkey as an external signer. oz-policy-builder writes
+every rule signer as delegated (\srcpath{install.ts:148}) and the interpreter refuses
+external signers (error \fact{opb-error-external-signer}), so its app signs as a
+Stellar or contract address; its install is authorized by \code{sourceAccount}, a
+signer of rule~0 (\srcpath{tools.ts:590}). Any account may submit a Perch install
+that carries the owner's authorization.
+\item In Perch, \fact{perch-expiry-semantics}. In OpenZeppelin a rule is
+\fact{oz-valid-until-semantics} (\srcpath{storage.rs:321-322} in
+\code{stellar-contracts}); \code{validUntilLedger}~$N-1$ therefore names the same
+last ledger.
+\end{enumerate}
+
+\noindent One more difference has no mark. oz-policy-builder can consult live
+state, for example a \code{read} asking a registry whether the recipient is listed
+(\srcpath{docs/stellar.md:369-375}); a Perch rule reads nothing outside the account.

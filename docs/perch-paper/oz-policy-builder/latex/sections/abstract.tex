@@ -1,0 +1,19 @@
+\begin{abstract}
+Perch and oz-policy-builder bound what an app may do from an OpenZeppelin-style
+Soroban smart account in two different ways. oz-policy-builder composes a
+decision from separate contracts attached to the account's rules: a shared
+interpreter checks each call against a predicate synthesised from a recorded
+transaction or a declared intent, OpenZeppelin's \code{spending\_limit} keeps
+totals, and threshold policies count signers. Perch decides at one point inside
+the account, with the window cap in the same decision. We compare the two from
+their public documentation and source at fixed revisions, and from one task run
+in both in soroban-sim. Both enforce the configured window in that task.
+Perch integrates the window cap into its decision function and supplies proofs
+about the function's Lean translation; the account shell remains tested.
+oz-policy-builder is stronger in maturity, authoring and expressiveness: a
+testnet deployment, external review, tests on real mainnet transactions,
+record-and-synthesise authoring, and live reads, clock windows and quantifiers.
+We end with what Perch should adopt from it.
+\keywords{Smart accounts \and Authorization \and Soroban \and Policy
+composition \and Policy synthesis}
+\end{abstract}

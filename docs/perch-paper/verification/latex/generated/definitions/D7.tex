@@ -1,0 +1,9 @@
+% Generated from source/definitions.json.
+\begin{perchdefinition}{7}{Account events}\label{def:account-events}
+\[\begin{aligned}&\mathsf{applyDoc}(d'):\ (A, d_s, g) \mapsto (A, d', g)\\
+&\mathsf{completeRecovery}(t):\\
+&\quad (A, d_s, g) \mapsto (A, t, g + 1) \quad (g < 2^{64} - 1)\\
+&\mathit{issue}((A, d_s, g), d)\\
+&\quad = \mathit{lowerScoped}(d, A, \mathit{excluded}(d_s, A), g)\end{aligned}\]
+An account state \(s = (A, d_s, g)\) is the account's address, its account document and its grant generation. \(\mathsf{applyDoc}(d')\) replaces the account document; \(\mathsf{completeRecovery}(t)\) installs the recovery target \(t\) and advances the generation, and is refused when \(g\) is the largest \code{u64}. A refused event leaves the state unchanged. \(\mathit{run}(s, \vec e)\) applies events in order, and \(\mathit{completions}(s, \vec e)\) counts the completed recoveries among them. A grant document \(d\) is \emph{issued} in \(s\) by lowering it under the account's address, the excluded set of its account document and its generation.\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean\#L50}{Account.step}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean\#L58}{Account.run}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean\#L66}{Account.completions}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Vocab/Account.lean\#L76}{Account.issue}}
+\end{perchdefinition}

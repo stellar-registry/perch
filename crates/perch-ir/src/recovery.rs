@@ -29,7 +29,9 @@ pub enum DeriveAction {
     Compromise,
 }
 
-/// One declared replacement: the target gives `signer_id` this method.
+/// One declared replacement: the target gives `signer_id` this method. An
+/// external replacement gives only its key: the signer keeps its verifier
+/// and its verifier's name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Replacement {
     pub signer_id: String,
@@ -139,20 +141,30 @@ pub fn derive_target(
             .ok_or_else(|| DeriveError::UndeclaredSigner {
                 id: r.signer_id.clone(),
             })?;
-        let same_kind = match (&decl.method, &r.method) {
+        // An external replacement takes only the key: the signer keeps its
+        // verifier, and with it the verifier's name.
+        decl.method = match (&decl.method, &r.method) {
             (
-                SignerMethod::External { verifier: a, .. },
-                SignerMethod::External { verifier: b, .. },
-            ) => a == b,
-            (SignerMethod::Delegated { .. }, SignerMethod::Delegated { .. }) => true,
-            _ => false,
+                SignerMethod::External {
+                    verifier: a,
+                    verifier_name,
+                    ..
+                },
+                SignerMethod::External {
+                    verifier: b, key, ..
+                },
+            ) if a == b => SignerMethod::External {
+                verifier: a.clone(),
+                key: key.clone(),
+                verifier_name: verifier_name.clone(),
+            },
+            (SignerMethod::Delegated { .. }, SignerMethod::Delegated { .. }) => r.method.clone(),
+            _ => {
+                return Err(DeriveError::KindMismatch {
+                    id: r.signer_id.clone(),
+                })
+            }
         };
-        if !same_kind {
-            return Err(DeriveError::KindMismatch {
-                id: r.signer_id.clone(),
-            });
-        }
-        decl.method = r.method.clone();
     }
 
     let factor = match &mut recovery.mode {

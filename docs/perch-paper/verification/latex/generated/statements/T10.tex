@@ -1,0 +1,13 @@
+% Generated from source/statements.json.
+\begin{perchstatement}{10}{Recovery invalidation.}\label{stmt:recovery-invalidation}
+\[\begin{aligned}&\mathit{gen}(\mathit{run}(s, \vec e))\\
+&\quad = \mathit{gen}(s) + \mathit{completions}(s, \vec e)\\
+&\mathit{issue}(s, d) = R \;\land\; \mathit{attenuateAll}(R, \vec\sigma) = R'\\
+&\quad \land\ \mathit{completions}(s, \vec e) > 0\\
+&\quad \land\ g = \mathit{gen}(\mathit{run}(s, \vec e))\\
+&\quad \land\ \mathit{checkAuth}(R', \rho, (\vec c, \vec j, S, \ell, g)) = \rho'\\
+&\qquad \implies \vec c = [\,]\end{aligned}\]
+In the account event model, the generation advances by exactly the number of completed recoveries, and a grant issued before one, or derived from such a grant, accepts no nonempty batch at the new generation. Administrative rules are generation-independent.
+\statementhypotheses{The authorization carries the account's current generation (O3)}
+\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Scoped.lean\#L224}{Document.Account.run\_generation}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Scoped.lean\#L251}{Account.issued\_stale}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Scoped.lean\#L321}{Account.chain\_after\_recovery} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} ACCOUNT MODEL} (no Rust counterpart); stale-rule rejection: \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/ExtractedAuthorize.lean\#L612}{Extracted.check\_auth\_generation} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}}
+\end{perchstatement}

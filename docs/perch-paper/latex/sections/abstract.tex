@@ -1,0 +1,24 @@
+\begin{abstract}
+Soroban smart accounts can let an application or agent act without a signature
+prompt per call, but the bound on that authority must hold across nested calls,
+repeated calls over time, and rule selection by whoever submits the
+transaction. We present Perch, a smart account in which the owner installs
+grants: rules that fix a target contract, functions, argument conditions, a
+signer threshold, an optional expiry and an optional sliding-window spending
+cap. The account decides ordinary authorizations at one point, with a pure function
+over the selected rules and their account-held spending records, linked into
+the contract. We translate this Rust function into Lean with Charon and Aeneas
+and prove that the translation agrees with a model on every input, that
+acceptance implies permission, and that attenuation, which the account cannot yet
+install, narrows authority. From empty records, each fixed capped rule's
+accepted charges stay within its limit over every window of positive ledgers;
+scoped lowering excludes the account and the supplied recovery contracts.
+These are properties of the translation under stated hypotheses; recovery
+completion follows a separate controller path.
+The account code around it is tested,
+not proved, and unaudited. We
+run Perch and an OpenZeppelin account with oz-policy-builder side by side in
+soroban-sim on one task, and compare the two designs.
+\keywords{Smart accounts \and Authorization \and Delegation \and Soroban
+\and Formal verification \and Lean}
+\end{abstract}

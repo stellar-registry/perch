@@ -323,7 +323,7 @@ fn a_completed_recovery_clears_the_pending_upgrade() {
     assert_eq!(w.client().recovery_generation(), generation + 1);
 }
 
-/// The review's sequence: schedule while unenrolled, enroll, remove, wait
+/// Schedule while unenrolled, enroll, remove, wait
 /// out the delay. The account ends with no controller, as at scheduling,
 /// but its recovery generation moved twice, so the request is dead. Only an
 /// account-owned counter catches this: no controller epoch spans the

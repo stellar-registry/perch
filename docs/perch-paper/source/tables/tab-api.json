@@ -1,0 +1,44 @@
+{
+ "columns": [
+  "Export",
+  "Inputs → result",
+  "Authority and effect"
+ ],
+ "rows": [
+  [
+   "`apply_doc`",
+   "Document bytes, approval-valid-until ledger, optional expected revision → document hash",
+   "Owner authorization, or the recovery-completion path ({{ref:sec:recovery}}); installs account policy."
+  ],
+  [
+   "`apply_grant`",
+   "Grant ID (`u32`), document bytes → document hash",
+   "Owner authorization; installs or replaces a grant stamped with the current generation."
+  ],
+  [
+   "`remove_grant`",
+   "Grant ID → unit",
+   "Owner authorization; removes the grant's rules, tags and spending records."
+  ],
+  [
+   "`gc_grant`",
+   "Grant ID → unit",
+   "Anyone, only when the grant's generation is not the account's current one; otherwise `GrantLive`."
+  ],
+  [
+   "`grant` / `grants`",
+   "ID → optional grant view; start and count → IDs",
+   "Read-only; the list includes stale grants not yet collected."
+  ],
+  [
+   "`grant_generation`",
+   "None → generation",
+   "Read-only; only a recovery completion advances it."
+  ]
+ ],
+ "title": "Account operations.",
+ "caption": "*Owner authorization* means an account-document rule that targets the account and whose function policy allows the entry point; a rule with no function list, like the constructor's, allows all of them. [`docs/account-interface.md`](https://github.com/bitswell-hq/stellar-registry__perch/blob/0b3752d8a179a5952b05fbebd29131dbbf99fa80/docs/account-interface.md) lists the account's other entry points.",
+ "editions": [
+  "html"
+ ]
+}

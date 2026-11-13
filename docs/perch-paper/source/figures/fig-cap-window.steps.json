@@ -1,0 +1,26 @@
+{
+ "intro": "The shop grant caps transfers at {{fact:grant1-cap-xlm}} XLM per {{fact:grant1-period-ledgers}} ledgers; *t* is an illustrative ledger. At ledger *L* the window holds the charges made after *L* − 100 and through *L*.",
+ "steps": [
+  {
+   "n": "1",
+   "text": "{{fact:cap-event-1}}"
+  },
+  {
+   "n": "2",
+   "text": "{{fact:cap-event-2}}"
+  },
+  {
+   "n": "3",
+   "text": "{{fact:cap-event-3}}"
+  },
+  {
+   "n": "4",
+   "text": "{{fact:cap-event-4}}"
+  },
+  {
+   "n": "5",
+   "text": "{{fact:cap-event-5}}"
+  }
+ ],
+ "outro": "The charge of 6 made at *t* stops counting at *t* + 100, and the charge of 4 made at *t* + 1 stops counting at *t* + 101, when the window holds only the 5."
+}

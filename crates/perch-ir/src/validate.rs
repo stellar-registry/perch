@@ -100,6 +100,15 @@ pub enum ValidationError {
         /// The malformed address string.
         address: String,
     },
+    /// A signer's `verifier-name` is not spelled `<name>@<version>` with a
+    /// registry name and an exact `MAJOR.MINOR.PATCH` version
+    /// ([`crate::verifier::parse_verifier_name`]).
+    InvalidVerifierName {
+        /// The offending signer id.
+        id: String,
+        /// The malformed name.
+        name: String,
+    },
     /// A delegated signer's `address` is not shaped like a G- or C-address
     /// strkey (including the CRC16 checksum).
     InvalidDelegatedAddress {
@@ -209,6 +218,12 @@ pub enum ValidationError {
         /// The invalid function name.
         name: String,
     },
+    /// An auth-root contract is not a valid contract-address strkey.
+    InvalidAuthRootContract { rule: String, address: String },
+    /// An auth-root function is not a nonempty Soroban symbol.
+    InvalidAuthRootFunction { rule: String, name: String },
+    /// Self-administration cannot depend on an authorization root.
+    AuthRootOnSelfAdmin { rule: String },
     /// A rule's `args` list is present but empty — ambiguous for the same
     /// reason as [`ValidationError::EmptyFunctions`]. Omit the field to mean
     /// "unconstrained".
@@ -354,8 +369,8 @@ pub enum ValidationError {
     /// entirely — the enrolled condition must always be able to cancel a
     /// live attempt.
     ZeroRecoveryMaxCancels,
-    /// `recovery.controller` is not shaped like a C-address strkey (checksum
-    /// not verified — see module docs).
+    /// `recovery.controller` is not shaped like a C-address strkey
+    /// (including the CRC16 checksum).
     InvalidRecoveryController {
         /// The malformed address string.
         address: String,
@@ -448,6 +463,10 @@ impl fmt::Display for ValidationError {
                 f,
                 "signer `{id}`: verifier `{address}` is not a C-address strkey"
             ),
+            E::InvalidVerifierName { id, name } => write!(
+                f,
+                "signer `{id}`: verifier-name `{name}` is not `<name>@<MAJOR>.<MINOR>.<PATCH>`"
+            ),
             E::InvalidDelegatedAddress { id, address } => write!(
                 f,
                 "signer `{id}`: delegated address `{address}` is not a G- or C-address strkey"
@@ -497,6 +516,9 @@ impl fmt::Display for ValidationError {
             E::InvalidFunctionName { rule, name } => {
                 write!(f, "rule `{rule}`: function `{name}` is not a valid Soroban Symbol")
             }
+            E::InvalidAuthRootContract { rule, address } => write!(f, "rule `{rule}`: auth-root contract `{address}` is not a C-address strkey"),
+            E::InvalidAuthRootFunction { rule, name } => write!(f, "rule `{rule}`: auth-root function `{name}` is not a valid Soroban Symbol"),
+            E::AuthRootOnSelfAdmin { rule } => write!(f, "rule `{rule}`: self-admin cannot carry auth-root"),
             E::EmptyArgs { rule } => write!(
                 f,
                 "rule `{rule}`: args list is present but empty (omit it for unconstrained)"
@@ -611,9 +633,8 @@ impl fmt::Display for ValidationError {
 
 impl core::error::Error for ValidationError {}
 
-/// Structural strkey shape check: length 56, base32 alphabet (`A-Z2-7`), and
-/// a leading version letter from `leads`. Does **not** verify the CRC16
-/// checksum (see module docs).
+/// Strkey check: length 56, base32 alphabet (`A-Z2-7`), a leading version
+/// letter from `leads`, and a valid CRC16 checksum.
 fn is_strkey_shape(s: &str, leads: &[u8]) -> bool {
     let bytes = s.as_bytes();
     bytes.len() == 56
@@ -677,14 +698,14 @@ fn strkey_checksum_ok(bytes: &[u8]) -> bool {
 }
 
 /// Whether `s` is shaped like a contract address strkey (`C...`, 56 chars,
-/// base32 alphabet). Checksum is not verified.
+/// base32 alphabet, valid CRC16 checksum).
 #[must_use]
 pub fn is_contract_address_shape(s: &str) -> bool {
     is_strkey_shape(s, b"C")
 }
 
 /// Whether `s` is shaped like a contract (`C...`) or account (`G...`) address
-/// strkey. Checksum is not verified.
+/// strkey, including its CRC16 checksum.
 #[must_use]
 pub fn is_address_shape(s: &str) -> bool {
     is_strkey_shape(s, b"CG")
@@ -720,7 +741,19 @@ pub fn validate(doc: &PolicyDoc) -> Result<(), Vec<ValidationError>> {
             });
         }
         match &signer.method {
-            SignerMethod::External { verifier, key } => {
+            SignerMethod::External {
+                verifier,
+                key,
+                verifier_name,
+            } => {
+                if let Some(name) = verifier_name {
+                    if crate::verifier::parse_verifier_name(name).is_none() {
+                        errors.push(ValidationError::InvalidVerifierName {
+                            id: signer.id.clone(),
+                            name: name.clone(),
+                        });
+                    }
+                }
                 match hex::decode(key) {
                     Err(_) => errors.push(ValidationError::InvalidSignerKeyHex {
                         id: signer.id.clone(),
@@ -851,6 +884,24 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
         Scope::SelfAdmin(_) => {}
     }
 
+    if let Some(root) = &rule.auth_root {
+        if !is_contract_address_shape(&root.contract) {
+            errors.push(ValidationError::InvalidAuthRootContract {
+                rule: name(),
+                address: root.contract.clone(),
+            });
+        }
+        if !is_valid_symbol(&root.function) {
+            errors.push(ValidationError::InvalidAuthRootFunction {
+                rule: name(),
+                name: root.function.clone(),
+            });
+        }
+        if matches!(rule.scope, Scope::SelfAdmin(_)) {
+            errors.push(ValidationError::AuthRootOnSelfAdmin { rule: name() });
+        }
+    }
+
     match &rule.principals {
         Principals::All(all) => {
             validate_principal_signers(&rule.name, &all.signers, declared, errors);
@@ -936,13 +987,8 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
                                 value: value.clone(),
                             });
                         }
-                        // An over-long `string-in` value is a dead candidate,
-                        // not an unsatisfiable predicate: the set stays live
-                        // through its other values, and the interpreter skips a
-                        // candidate it cannot hold. It is left to the analyzer
-                        // rather than refused here. Only `string-prefix`, whose
-                        // single over-long prefix kills the whole predicate, is
-                        // refused below.
+                        // An over-long `string-in` value is not refused: see
+                        // `MAX_STRING_PRED_LEN`.
                     }
                 }
                 ArgPred::StringPrefix(pred) => {

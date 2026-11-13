@@ -1,0 +1,51 @@
+Vendored third-party dependency, moved to soroban-sdk 29
+========================================================
+
+  Library:  soroban-poseidon 28.0.0 (Rust, no_std)
+  Upstream: https://github.com/stellar/rs-soroban-poseidon
+  Release:  crates.io soroban-poseidon 28.0.0 (.crate sha256
+            9d3c971964bbff3b7f716b251e3cd8caa71ab4fbe33aa8fc845570dcdbe97582),
+            published from commit 521da986541843a5cd1a94f36f681f14bdad3b90
+            ("Bump version to 28.0.0 (#19)")
+  License:  Apache-2.0 (see LICENSE)
+  Used by:  perch-zk-primitives (Poseidon2 on the host)
+
+Why vendored
+------------
+soroban-poseidon 28.0.0, its newest release, requires soroban-sdk ^28, and
+no upstream branch moves it to 29 (checked 2026-11-03). Its src/ is
+byte-identical to 27.0.0, the release perch used before. Perch builds with
+soroban-sdk 29.0.1 / soroban-env-host 29.0.1, and a crate that requires
+another soroban-sdk major cannot share its types, so this copy is built as a
+path dependency with the soroban-sdk pin moved. No change was proposed
+upstream.
+
+Upstream files
+--------------
+Every file is upstream's bytes except Cargo.toml (the published, normalized
+manifest), whose delta is below. UPSTREAM.sha256 lists the sha256 of every
+vendored file as published.
+
+Not vendored: Cargo.lock, Cargo.toml.orig, Makefile, CONTRIBUTING.md,
+RELEASING.md, rust-toolchain.toml.
+
+SDK 29 delta
+------------
+Cargo.toml only:
+
+  - `[dependencies.soroban-sdk]` version "28.0.0" became "29.0.1";
+  - the `[dev-dependencies]` table was dropped (the tests are not vendored),
+    and so was `[profile.release]`, which cargo ignores in a dependency and
+    warns about.
+
+The source builds unchanged: soroban-sdk 29 has no API changes from 28
+(soroban-sdk's own migration notes: "Migrating from v28 to v29: None").
+
+Updating
+--------
+Replace the directory with the new upstream files, re-apply the delta above,
+regenerate UPSTREAM.sha256 from the unmodified upstream files, and update
+this NOTICE. crates/integration-tests/tests/vendor.rs requires every
+vendored file other than Cargo.toml to hash to UPSTREAM.sha256 (after
+reversing any source delta above) and the directory to hold nothing else but
+NOTICE and UPSTREAM.sha256, so no other upstream byte can change unnoticed.

@@ -1,0 +1,13 @@
+<p class="lede">A shop app can pay its merchant automatically while the account keeps every payment inside the owner's grant.</p>
+<div class="grant-equation" aria-label="Example grant: app key, XLM transfer, shop only, 10 XLM per 100 ledgers">
+<span class="equation-name">G =</span><dl><div><dt>Who</dt><dd>App key</dd></div><div><dt>What</dt><dd>XLM · transfer</dd></div><div><dt>Where</dt><dd>Shop only</dd></div><div><dt>Budget</dt><dd>{{fact:shop-cap-xlm}} XLM / {{fact:shop-period-ledgers}} ledgers</dd></div></dl>
+</div>
+<p>The owner installs the document once. The app can then sign eligible calls without asking for each payment. A stolen app key meets the same restrictions. <a href="#stolen-key">The limits of that protection →</a></p>
+<details class="technical"><summary>How this fits Stellar, and the exact grant</summary>
+<p>A Stellar smart account is a contract that approves calls in its name. Soroban runs that contract. Perch packages target, function, argument predicates, signer requirements, optional expiry and a spending cap into a policy document. Other designs offer bounded delegation too; Perch's focus is a single account-owned decision with an inspectable document. {{cite:stellar-custom-account,metamask-delegation,oz-policy-builder}}</p>
+{{fig:fig-overview}}
+<h3 id="step-request">From an app request to an installed grant</h3>
+<p>The owner installs a grant with <code>apply_grant</code>, after the document compiler validates it. The shop rule pins the recipient and allows {{fact:shop-cap-xlm}} XLM in any {{fact:shop-period-ledgers}} ledgers ({{fact:shop-period-minutes}} at the nominal ledger interval).</p>
+{{fig:fig-shop-grant}}
+<p><strong>Helper grants are future integration work.</strong> Rule-core proves narrowing transformations, written G′ ⊆ G: removing functions, adding predicates or lowering a budget cannot enlarge the local permission set under the stated hypotheses. The account has no entry point that installs an attenuated child grant. This is a model guarantee, not an app-to-helper delegation feature. <a href="{{doc:verification}}#attenuation">The precise result →</a></p>
+</details>

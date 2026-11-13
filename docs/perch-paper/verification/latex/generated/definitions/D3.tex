@@ -1,0 +1,10 @@
+% Generated from source/definitions.json.
+\begin{perchdefinition}{3}{\emph{checkAuth} and runs}\label{def:check-auth-and-runs}
+\[\begin{aligned}&\mathit{checkAuth}(R, \rho, (\vec c, \vec j, S, \ell, g)) = \rho' \iff\\
+&\quad |\vec j| = |\vec c| \land |\rho| = |R|\\
+&\quad \land\ \forall i.\ j_i < |R| \land \ell \le u_{r_i} \land g_{r_i} \in \{\bot, g\}\\
+&\qquad\qquad \land\ \mathit{allows}(r_i, c_i, S)\\
+&\quad \land\ \forall s \in S.\ \exists i.\ s \in \Sigma_{r_i}\\
+&\quad \land\ \rho' = \mathit{charge}(\cdots \mathit{charge}(\rho, c_1, j_1) \cdots, c_n, j_n)\end{aligned}\]
+Here \(r_i = R_{j_i}\). \(\mathit{charge}(\rho, c, j)\) leaves \(\rho\) unchanged when \(R_j\) has no cap; otherwise it reads the amount \(c\) carries, refusing a call that carries none, and applies Definition 4's check to rule \(j\)'s record. Each charge must succeed. \emph{checkAuth} returns the next records or the first refusal, and a refusal changes nothing. A run applies authorizations in order, keeping the records on a refused one.\leannames{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L147}{RuleSet.checkAuth}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Authorize.lean\#L182}{RuleSet.checkAuth\_eq\_ok\_iff}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L168}{RuleSet.run}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Model/Authorize.lean\#L178}{RuleSet.Accepts}}
+\end{perchdefinition}

@@ -1,0 +1,21 @@
+<p class="lede"><strong>Every number in this paper comes from pinned sources, the recorded simulation run or a published transaction.</strong></p>
+<dl class="provenance">
+<dt>Perch</dt><dd><code>{{fact:perch-repo}}</code> at <code>{{fact:perch-pin}}</code></dd>
+<dt>rule-core</dt><dd><code>{{fact:rule-core-repo}}</code> at <code>{{fact:rule-core-pin}}</code></dd>
+<dt>soroban-sim</dt><dd><code>{{fact:soroban-sim-repo}}</code> at <code>{{fact:soroban-sim-pin}}</code> (soroban-env-host {{fact:soroban-env-host-sim}}, protocol {{fact:sim-protocol}}; testnet now runs protocol {{fact:testnet-protocol}})</dd>
+<dt>OpenZeppelin stellar-contracts</dt><dd>{{fact:oz-v080-tag}} (<code>{{fact:oz-v080-commit}}</code>)</dd>
+<dt>oz-policy-builder</dt><dd><code>{{fact:opb-repo}}</code> at <code>{{fact:opb-pin}}</code> ({{fact:opb-release}} and {{fact:opb-commits-after-release}} later commits)</dd>
+<dt>Simulation page</dt><dd><a href="{{root}}sim/index.html"><code>sim/index.html</code></a>, {{fact:sim-page-mb}} MB, SHA-256 <code>{{fact:sim-page-sha256}}</code></dd>
+<dt>Nido simulation</dt><dd><a href="{{root}}../nido-sim/index.html"><code>nido-sim/index.html</code></a>, {{fact:nido-sim-page-mb}} MB, SHA-256 <code>{{fact:nido-sim-page-sha256}}</code>: Perch at <code>{{fact:nido-sim-perch-pin}}</code>, which has exact roots from <code>{{fact:auth-root-pin}}</code>; rule-core at <code>{{fact:nido-sim-rule-core-pin}}</code>; Nido at <code>{{fact:nido-pin}}</code>. Its {{fact:nido-sim-replies}} reference replies are identical in the native, WASI and browser runs once timings are removed (SHA-256 <code>{{fact:nido-sim-replies-sha256}}</code>); <code>nido-sim/README.md</code> lists every contract's hash and the rebuild.</dd>
+<dt>Recorded run</dt><dd>reference run SHA-256 <code>{{fact:sim-golden-sha256}}</code>; its {{fact:sim-commands}} replies with timings removed, identical in the native, WASI and browser runs, SHA-256 <code>{{fact:sim-replies-sha256}}</code></dd>
+<dt>Contract Wasm (SHA-256)</dt><dd><ul>
+<li>Perch account <code>{{fact:sim-wasm-perch-account}}</code></li>
+<li>Perch document compiler <code>{{fact:sim-wasm-perch-doc-compiler}}</code></li>
+<li>Perch Ed25519 verifier <code>{{fact:sim-wasm-perch-ed25519-verifier}}</code></li>
+<li>OpenZeppelin account <code>{{fact:sim-wasm-oz-account}}</code></li>
+<li>OpenZeppelin <code>spending_limit</code> <code>{{fact:sim-wasm-oz-spending-limit}}</code></li>
+<li>oz-policy-builder <code>policy-interpreter</code> <code>{{fact:sim-wasm-policy-interpreter}}</code></li>
+</ul>The Perch account's infrastructure pins are rewritten to the builds of the same run, so its bytes differ from a deployed account's. The three OpenZeppelin-side hashes equal oz-policy-builder's testnet records once <code>normalize-oz.py</code> sets the CLI version string in the account's and <code>spending_limit</code>'s metadata to 27.1.0's.</dd>
+</dl>
+<p><strong>Rebuilding the simulation.</strong> The page carries its build sources, whose <code>BUILD.md</code> fetches the pinned trees and rebuilds the contracts, the driver, the recorded run and the page; <code>sim/README.md</code> gives the commands.</p>
+<p><strong>Reproducing the proofs.</strong> In rule-core, with Charon <code>{{fact:charon-rev}}</code>, Aeneas <code>{{fact:aeneas-rev}}</code> and Lean {{fact:lean-rule-core}}, run <code>tools/extract.sh --check</code>, then <code>lake build</code> in <code>formal/</code>.</p>

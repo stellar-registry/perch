@@ -1,0 +1,54 @@
+Perch offers three architectural advantages, each with a caveat, and one
+recovery stops every earlier grant.
+
+\paragraph{A limit over time inside the decision.} A Perch rule's window cap is
+charged in the decision that checks the call. The cap theorem (Theorem~6 of
+\perchdoc{verification}) states that from empty records, in any run, the accepted
+charges $x_k$ at ledgers $t_k$ to a rule capped at $\lambda$ per $P$ ledgers stay
+within the limit in every window:
+\[
+  \forall L.\ \sum_{k:\ \max(0,\,L-P) < t_k \le L} x_k \;\le\; \lambda .
+\]
+In oz-policy-builder the interpreter bounds each call, and the window comes from
+\code{spending\_limit}, an opt-in policy on \code{transfer} only; with it removed,
+the recorded dual run moved \fact{sim-oz-percall-moved-xlm}~XLM in one window
+while Perch held to its cap (\S\ref{sec:same-task}). Both enforce the window
+when configured with one: the difference here is where the cap is expressed
+and checked, not whether a window can be enforced. \emph{Caveat:} the theorem
+is about the evaluator's Lean translation; that the shell selects rules and
+persists records as it assumes is argued and tested, not proved (obligations O2
+and O6). On chain a record holds at most \fact{spends-per-window} spends per
+window, and replacing a capped rule starts an empty window.
+
+\paragraph{One decision point.} All the state that decides a grant's call lives
+in the account: rules, grants, spending records and the grant generation
+(Perch \srcpath{lib.rs:597-636}). The decision comes before authentication, so a
+call refused by the evaluator invokes no verifier and writes nothing. A bad
+signature instead fails during authentication. One \code{apply\_grant} installs a
+grant whose rules span several contracts, and a grant rule may name a passkey or
+Ed25519 key as an external signer, which the interpreter refuses in the rules it
+polices. \emph{Caveat:} one point decides only what the evaluator can express
+(\S\ref{sec:composition}).
+
+\paragraph{A proved core.} The evaluator is about \fact{rule-eval-lines} lines of
+\code{no\_std} Rust in a subset that Charon~\cite{charon} and Aeneas~\cite{aeneas} translate
+into Lean. Kernel-checked theorems state that the translation returns what a
+readable model returns on every input, without panicking or diverging
+(Theorem~1); that when the decision function accepts,
+each call is allowed by some rule it was given (Theorem~2); that attenuation never widens the calls a grant allows (Theorem~4); the window bound
+above (Theorem~6, for fixed rules and empty initial records); and that no grant
+produced by scoped lowering, nor one derived from it, allows a call to the
+account or the recovery contracts excluded at install (Theorem~8). The shell
+rechecks the current excluded set when recovery configuration changes. We
+found no formal model in oz-policy-builder's tree (a search, not a proof of
+absence); its evidence is testing, partly on the shipped Wasm.
+\emph{Caveat:} the theorems are about the translation, not the compiled Wasm; the
+shell is tested, not proved; attenuation cannot yet be installed; and nothing in
+Perch has been audited.
+
+\paragraph{Stopping every earlier grant.} A completed recovery advances the grant
+generation, after which no earlier grant, nor one derived from it, accepts a
+nonempty authorization (Theorem~10). \emph{Caveat:} this is a theorem about an
+account model with no Rust counterpart; the shell's part is tested (O3).
+oz-policy-builder has no account-key recovery, a difference in scope, not a
+defect.

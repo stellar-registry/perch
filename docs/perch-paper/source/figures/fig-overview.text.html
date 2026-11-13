@@ -1,0 +1,7 @@
+<ol>
+<li>The owner installs a grant in the Perch account.</li>
+<li>The app or agent signs a call with its own key. The Soroban host asks the account to authorize it.</li>
+<li>The account's decision function checks the installed rules and spending window. A refusal stops here without storing a new record.</li>
+<li>Only after the decision accepts does the verifier contract check the signature. A failed signature also leaves the record unchanged.</li>
+<li>Only after both checks pass does the account store the new spending record.</li>
+</ol>

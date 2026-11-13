@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Café Perch sign mock (single file)</title>
+<meta name="description" content="Mock of the soroban-sign-dialog web component embedded in a toy dapp: Perch grant transfers within cap, over cap, and with a smuggled authorization entry.">
+<style>
+  :root {
+    --bg: #f6f3ee; --panel: #fffdf9; --ink: #221d17; --muted: #6d6458; --line: #e4dccf;
+    --brand: #7a3e12; --brand-ink: #fff8f0; --code: #f0eadf;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15120f; --panel: #1f1b17; --ink: #f1ebe2; --muted: #a99d8d; --line: #39322a;
+      --brand: #e0a06a; --brand-ink: #1a1007; --code: #2a241e; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15120f; --panel: #1f1b17; --ink: #f1ebe2; --muted: #a99d8d; --line: #39322a;
+    --brand: #e0a06a; --brand-ink: #1a1007; --code: #2a241e; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 Georgia, "Iowan Old Style", serif; }
+  .wrap { max-width: 68rem; margin: 0 auto; padding: 1.25rem 16px 3rem; }
+  .notice { font: 13.5px/1.45 system-ui, sans-serif; background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.8rem; color: var(--muted); }
+  .notice b { color: var(--ink); }
+  header.shop { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin: 1.4rem 0 1rem; }
+  h1 { margin: 0; font-size: clamp(1.8rem, 5vw, 2.6rem); letter-spacing: -0.01em; }
+  h1 small { display: block; font: 600 0.8rem/1.4 system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--brand); }
+  .controls { display: flex; gap: 0.5rem; flex-wrap: wrap; font: 14px system-ui, sans-serif; }
+  .controls label { display: flex; gap: 0.35rem; align-items: center; color: var(--muted); }
+  select { font: inherit; padding: 0.3rem 0.4rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  .grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+  @media (max-width: 820px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .menu { display: grid; gap: 0.8rem; }
+  .item { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.3rem 1rem; align-items: center; }
+  .item h2 { margin: 0; font-size: 1.2rem; }
+  .item p { margin: 0; color: var(--muted); font: 14px/1.45 system-ui, sans-serif; grid-column: 1; }
+  .item .tag { font: 600 12px/1 system-ui, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; padding: 0.3rem 0.5rem; border-radius: 999px; background: var(--code); color: var(--muted); justify-self: start; }
+  .item button { grid-column: 2; grid-row: 1 / span 3; font: 600 15px system-ui, sans-serif; padding: 0.65rem 1rem; border-radius: 10px; border: 0; background: var(--brand); color: var(--brand-ink); cursor: pointer; white-space: nowrap; }
+  .item button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  aside { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 1rem 1.1rem; font: 14px/1.5 system-ui, sans-serif; min-width: 0; }
+  aside h2 { font: 600 0.8rem/1.4 system-ui, sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.5rem; }
+  pre { background: var(--code); border-radius: 8px; padding: 0.6rem 0.7rem; overflow-x: auto; font: 12.5px/1.5 ui-monospace, Menlo, monospace; margin: 0.4rem 0 0.8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #log:empty::before { content: "Nothing yet. Pick an order."; color: var(--muted); }
+  .ev { border-top: 1px solid var(--line); padding: 0.6rem 0; }
+  .ev:first-child { border-top: 0; padding-top: 0; }
+  .ev b.ok { color: #2f7a43; } .ev b.no { color: #a33a2a; }
+  /* A dapp can brand the dialog through its custom properties: */
+  soroban-sign-dialog.brand {
+    --ssd-accent: #7a3e12; --ssd-accent-fg: #fff8f0; --ssd-radius: 18px;
+    --ssd-font: Georgia, "Iowan Old Style", serif;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="notice"><b>Demo.</b> The dialog is the real <code>&lt;soroban-sign-dialog&gt;</code> component (soroban-sim fb38b9c), and its authorization tree is decoded from each order's real transaction XDR. The outcome preview returns results recorded from a native soroban-sim run of the pinned Perch contracts (account with grant 1: 10 XLM per 100 ledgers, 3 XLM already spent). The 0.7 s delay is artificial. See <code>NOTICE.md</code>.</p>
+
+  <header class="shop">
+    <h1><small>A toy dapp</small>Café Perch</h1>
+    <div class="controls">
+      <label>Page theme <select id="theme"><option value="">auto</option><option>light</option><option>dark</option></select></label>
+      <label>Dialog style <select id="brand"><option value="">default</option><option value="brand">shop brand</option></select></label>
+      <label>Preview <select id="preview"><option value="manual">on request</option><option value="auto">automatic</option><option value="off">off</option></select></label>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="menu" aria-label="Orders">
+      <div class="item">
+        <h2>Flat white</h2><span class="tag">5 XLM · within the cap</span>
+        <p>Paid from your Nido account under the shop's grant: 10 XLM per 100 ledgers, 7 XLM left.</p>
+        <button data-scenario="within-cap">Pay 5 XLM</button>
+      </div>
+      <div class="item">
+        <h2>Bag of beans</h2><span class="tag">8 XLM · over the cap</span>
+        <p>More than the grant has left in this window. The tree looks fine; the preview shows Perch would refuse it.</p>
+        <button data-scenario="over-cap">Pay 8 XLM</button>
+      </div>
+      <div class="item">
+        <h2>Espresso</h2><span class="tag">2 XLM · compromised checkout</span>
+        <p>A tampered checkout script adds a second authorization (4 XLM to another address) that this transaction never uses.</p>
+        <button data-scenario="smuggled-entry">Pay 2 XLM</button>
+      </div>
+    </section>
+
+    <aside>
+      <h2>Embed</h2>
+<pre>&lt;script type="module" src="soroban-sign-dialog.js"&gt;&lt;/script&gt;
+&lt;soroban-sign-dialog engine="soroban-sim-preview.js"&gt;&lt;/soroban-sign-dialog&gt;
+
+const r = await dialog.request({ transaction, signer, dapp });
+if (r.approved) wallet.sign(r.entries);  // keys stay in the wallet</pre>
+      <h2>What the wallet receives</h2>
+      <div id="log" aria-live="polite"></div>
+    </aside>
+  </div>
+</div>
+
+<soroban-sign-dialog id="dialog"></soroban-sign-dialog>
+
+<script type="module">
+var Et=Object.defineProperty;var zt=(e,t)=>{for(var s in t)Et(e,s,{get:t[s],enumerable:!0})};var rt={};zt(rt,{NETWORKS:()=>B,STRINGS:()=>K,SorobanSignDialog:()=>T,TAG:()=>z,VERSION:()=>Ut,XdrError:()=>u,authPayloadHash:()=>mt,compareAuth:()=>H,decodeAuthEntry:()=>j,decodeEnvelope:()=>O,decodeEvent:()=>U,decodeLedgerEntry:()=>pt,decodeLedgerKey:()=>lt,decodeScVal:()=>ht,define:()=>R,formatAmount:()=>b,fromStrkey:()=>gt,nativeAssetContract:()=>F,networkId:()=>M,request:()=>wt,strkeyFor:()=>g,transactionHash:()=>D});var u=class extends Error{},Q=64,L=new TextDecoder("utf-8",{fatal:!1}),$=class{constructor(t){this.b=t,this.v=new DataView(t.buffer,t.byteOffset,t.byteLength),this.o=0}need(t){if(t<0||this.o+t>this.b.length)throw new u("truncated XDR")}u32(){this.need(4);let t=this.v.getUint32(this.o);return this.o+=4,t}i32(){this.need(4);let t=this.v.getInt32(this.o);return this.o+=4,t}u64(){this.need(8);let t=this.v.getBigUint64(this.o);return this.o+=8,t}i64(){this.need(8);let t=this.v.getBigInt64(this.o);return this.o+=8,t}bool(){let t=this.u32();if(t>1)throw new u("bad bool");return t===1}fixed(t){let s=t+3&-4;this.need(s);let r=this.b.subarray(this.o,this.o+t);for(let a=this.o+t;a<this.o+s;a++)if(this.b[a])throw new u("non-zero padding");return this.o+=s,r}var(t=1/0){let s=this.u32();if(s>t)throw new u(`length ${s} over limit ${t}`);return this.fixed(s)}str(t){return L.decode(this.var(t))}arr(t,s=1/0){let r=this.u32();if(r>s||r>this.b.length-this.o)throw new u("bad array length");let a=new Array(r);for(let n=0;n<r;n++)a[n]=t();return a}opt(t){return this.bool()?t():null}span(t){let s=this.o;return[t(),this.b.subarray(s,this.o)]}done(){if(this.o!==this.b.length)throw new u(`${this.b.length-this.o} trailing bytes`)}},Tt=e=>{let t=atob(String(e).trim()),s=new Uint8Array(t.length);for(let r=0;r<t.length;r++)s[r]=t.charCodeAt(r);return s},P=e=>{let t="";for(let s=0;s<e.length;s+=32768)t+=String.fromCharCode(...e.subarray(s,s+32768));return btoa(t)},f=e=>Array.from(e,t=>t.toString(16).padStart(2,"0")).join(""),S=e=>e instanceof Uint8Array?e:Tt(e);function v(e){let t=e.u32();if(t!==0)throw new u(`public key type ${t}`);return e.fixed(32)}function x(e){let t=e.u32();switch(t){case 0:return y("account",v(e));case 1:return y("contract",e.fixed(32));case 2:{let s=e.u64();return y("muxed",e.fixed(32),s)}case 3:{let s=e.u32();if(s!==0)throw new u(`claimable balance id type ${s}`);return y("claimable",e.fixed(32))}case 4:return y("pool",e.fixed(32));case 5:{let s=e.u64(),r=y("contract",e.fixed(32));return{...r,kind:"muxed-contract",id:s,str:r.str,muxId:s}}default:throw new u(`unsupported address type ${t}`)}}function y(e,t,s){return{t:"address",kind:e,key:t,id:s,str:g(e,t,s)}}function m(e,t=0){if(t>Q)throw new u("ScVal nested too deeply");let s=e.u32(),r=()=>m(e,t+1);switch(s){case 0:return{t:"bool",v:e.bool()};case 1:return{t:"void"};case 2:return{t:"error",type:e.u32(),code:e.u32()};case 3:return{t:"u32",v:e.u32()};case 4:return{t:"i32",v:e.i32()};case 5:return{t:"u64",v:e.u64()};case 6:return{t:"i64",v:e.i64()};case 7:return{t:"timepoint",v:e.u64()};case 8:return{t:"duration",v:e.u64()};case 9:return{t:"u128",v:e.u64()<<64n|e.u64()};case 10:return{t:"i128",v:e.i64()<<64n|e.u64()};case 11:case 12:{let a=s===12?e.i64():e.u64(),n=e.u64(),o=e.u64(),c=e.u64();return{t:s===12?"i256":"u256",v:a<<192n|n<<128n|o<<64n|c}}case 13:return{t:"bytes",v:e.var()};case 14:return{t:"string",v:e.str()};case 15:return{t:"symbol",v:e.str(32)};case 16:return{t:"vec",v:e.opt(()=>e.arr(r))??[]};case 17:return{t:"map",v:e.opt(()=>e.arr(()=>({k:r(),v:r()})))??[]};case 18:return x(e);case 19:{let a=ot(e),n=e.opt(()=>e.arr(()=>({k:r(),v:r()})));return{t:"instance",executable:a,storage:n}}case 20:return{t:"instanceKey"};case 21:return{t:"nonceKey",v:e.i64()};case 22:return{t:"executableTag",v:e.str()};default:throw new u(`unsupported ScVal type ${s}`)}}function ot(e){let t=e.u32();if(t===0)return{kind:"wasm",hash:e.fixed(32)};if(t===1)return{kind:"stellar-asset"};if(t===2)return{kind:"external",owner:x(e),tag:e.str()};throw new u(`executable type ${t}`)}function Ct(e){let t=e.u32();if(t===0)return{native:!0,code:"XLM"};if(t===1||t===2)return{native:!1,code:L.decode(e.fixed(t===1?4:12)).replace(/\0+$/,""),issuer:g("account",v(e))};throw new u(`asset type ${t}`)}function it(e){let t=x(e),s=e.str(32),r=e.arr(()=>m(e));return{kind:"call",contract:t,fn:s,args:r}}function Pt(e){let t=e.u32();if(t===0)return{from:"address",address:x(e),salt:e.fixed(32)};if(t===1)return{from:"asset",asset:Ct(e)};throw new u(`contract id preimage ${t}`)}function N(e,t){let s=Pt(e),r=ot(e),a=t?e.arr(()=>m(e)):[];return{kind:"create",preimage:s,executable:r,args:a}}function dt(e,t=0){if(t>Q)throw new u("invocation nested too deeply");let[s,r]=e.span(()=>{let a=e.u32(),n;if(a===0)n=it(e);else if(a===1)n=N(e,!1);else if(a===2)n=N(e,!0);else throw new u(`authorized function type ${a}`);let o=e.arr(()=>dt(e,t+1));return{fn:n,subs:o}});return s.raw=r,s}function G(e){let[t,s]=e.span(()=>x(e));return{address:t,addressRaw:s,nonce:e.i64(),expiration:e.u32(),signature:m(e)}}function ct(e,t=0){if(t>Q)throw new u("delegates nested too deeply");return{address:x(e),signature:m(e),nested:e.arr(()=>ct(e,t+1))}}function jt(e){let t=e.u32();if(t===0)return{type:"source-account"};if(t===1)return{type:"address",...G(e)};if(t===2)return{type:"address-v2",...G(e)};if(t===3)return{type:"address-with-delegates",...G(e),delegates:e.arr(()=>ct(e))};throw new u(`credentials type ${t}`)}function ut(e){let[t,s]=e.span(()=>({credentials:jt(e),root:dt(e)}));return t.raw=s,t}function Bt(e){let t=e.u32();if(t===0)return it(e);if(t===1)return N(e,!1);if(t===2)return{kind:"upload",wasm:e.var()};if(t===3)return N(e,!0);throw new u(`host function type ${t}`)}function Z(e){let t=e.u32();if(t===0)return y("account",e.fixed(32));if(t===256){let s=e.u64();return y("muxed",e.fixed(32),s)}throw new u(`muxed account type ${t}`)}function Y(e){let[t,s]=e.span(()=>{let r=e.u32();switch(r){case 0:return{type:"account",account:g("account",v(e))};case 1:{let a=g("account",v(e)),n=e.u32(),o;return n===3?o={pool:f(e.fixed(32))}:n===0?o={native:!0,code:"XLM"}:o={code:L.decode(e.fixed(n===1?4:12)).replace(/\0+$/,""),issuer:g("account",v(e))},{type:"trustline",account:a,asset:o}}case 2:return{type:"offer",seller:g("account",v(e)),id:e.i64()};case 3:return{type:"data",account:g("account",v(e)),name:e.str(64)};case 4:return e.u32(),{type:"claimable-balance",id:f(e.fixed(32))};case 5:return{type:"liquidity-pool",id:f(e.fixed(32))};case 6:return{type:"contract-data",contract:x(e),key:m(e),durability:e.u32()?"persistent":"temporary"};case 7:return{type:"contract-code",hash:f(e.fixed(32))};case 8:return{type:"config-setting",id:e.u32()};case 9:return{type:"ttl",hash:f(e.fixed(32))};default:throw new u(`ledger key type ${r}`)}});return t.xdr=P(s),t}function Mt(e){let t=e.u32(),s=t===1?e.arr(()=>e.u32()):[];if(t>1)throw new u(`soroban data ext ${t}`);let r=e.arr(()=>Y(e)),a=e.arr(()=>Y(e));return{readOnly:r,readWrite:a,archived:s,instructions:e.u32(),diskReadBytes:e.u32(),writeBytes:e.u32(),resourceFee:e.i64()}}function Rt(e){let t=e.u32();if(t===0)return null;if(t===1)return{minTime:e.u64(),maxTime:e.u64()};if(t!==2)throw new u(`preconditions ${t}`);let s=e.opt(()=>({minTime:e.u64(),maxTime:e.u64()})),r=e.opt(()=>({minLedger:e.u32(),maxLedger:e.u32()}));return e.opt(()=>e.i64()),e.u64(),e.u32(),e.arr(()=>{let a=e.u32();e.fixed(32),a===3&&e.var(64)},2),{...s,...r}}function It(e){let t=e.u32();if(t===0)return null;if(t===1)return{text:e.str(28)};if(t===2)return{id:e.u64()};if(t===3||t===4)return{hash:f(e.fixed(32))};throw new u(`memo ${t}`)}function Nt(e){let t=e.opt(()=>Z(e)),s=e.u32();if(s===24)return{type:"invoke",source:t,hostFunction:Bt(e),auth:e.arr(()=>ut(e))};if(s===25)return e.u32(),{type:"extend-ttl",source:t,extendTo:e.u32()};if(s===26)return e.u32(),{type:"restore",source:t};throw new u(`operation type ${s} is not a Soroban operation`)}function nt(e){let[t,s]=e.span(()=>{let r=Z(e),a=e.u32(),n=e.i64(),o=Rt(e),c=It(e),d=e.arr(()=>Nt(e),100),l=e.u32(),p=l===1?Mt(e):null;if(l>1)throw new u(`transaction ext ${l}`);return{source:r,fee:a,seq:n,cond:o,memo:c,operations:d,soroban:p}});return t.raw=s,t}function O(e){let t=new $(S(e)),s=t.u32(),r,a=null;if(s===2)r=nt(t);else if(s===5){let o=Z(t),c=t.i64();if(t.u32()!==2)throw new u("fee bump inner envelope type");r=nt(t),t.arr(()=>{t.fixed(4),t.var(64)},20),t.u32(),a={feeSource:o,fee:c}}else throw new u(s===0?"v0 envelopes cannot carry Soroban operations":`envelope type ${s}`);let n=t.arr(()=>({hint:f(t.fixed(4)),signature:t.var(64)}),20);return t.done(),{tx:r,feeBump:a,signatures:n}}function j(e){let t=new $(S(e)),s=ut(t);return t.done(),s}function lt(e){let t=new $(S(e)),s=Y(t);return t.done(),s}function ht(e){let t=new $(S(e)),s=m(t);return t.done(),s}function U(e){let t=new $(S(e));t.u32();let s=t.opt(()=>y("contract",t.fixed(32))),r=t.u32();if(t.u32()!==0)throw new u("event body version");let a=t.arr(()=>m(t)),n=m(t);return t.done(),{contract:s,type:r,topics:a,data:n}}function pt(e){let t=new $(S(e)),s=t.u32(),r=t.u32();switch(r){case 0:return{type:"account",lastModified:s,account:g("account",v(t)),balance:t.i64()};case 1:{let a=g("account",v(t)),n=t.u32(),o;return n===3?o={pool:f(t.fixed(32))}:n===0?o={native:!0,code:"XLM"}:o={code:L.decode(t.fixed(n===1?4:12)).replace(/\0+$/,""),issuer:g("account",v(t))},{type:"trustline",lastModified:s,account:a,asset:o,balance:t.i64()}}case 6:{if(t.u32()!==0)throw new u("contract data ext");let a=x(t),n=m(t),o=t.u32()?"persistent":"temporary";return{type:"contract-data",lastModified:s,contract:a,key:n,durability:o,val:m(t)}}case 7:{let a=t.u32();if(a===1)t.fixed(48);else if(a!==0)throw new u(`contract code ext ${a}`);let n=f(t.fixed(32));return{type:"contract-code",lastModified:s,hash:n,code:t.var()}}default:return{type:["account","trustline","offer","data","claimable-balance","liquidity-pool","contract-data","contract-code","config-setting","ttl"][r]??`type-${r}`,lastModified:s}}}var J="ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";function ft(e){let t=0;for(let s of e){t^=s<<8;for(let r=0;r<8;r++)t=t&32768?(t<<1^4129)&65535:t<<1&65535}return t}function C(e,t){let s=new Uint8Array(t.length+3);s[0]=e,s.set(t,1);let r=ft(s.subarray(0,t.length+1));s[t.length+1]=r&255,s[t.length+2]=r>>8;let a=0,n=0,o="";for(let c of s)for(n=n<<8|c,a+=8;a>=5;)o+=J[n>>>a-5&31],a-=5;return a>0&&(o+=J[n<<5-a&31]),o}function gt(e){let t={G:48,C:16},s=0,r=0,a=[];for(let c of String(e)){let d=J.indexOf(c);if(d<0)throw new u(`not a StrKey: ${e}`);s=s<<5|d,r+=5,r>=8&&(r-=8,a.push(s>>r&255))}let n=Uint8Array.from(a);if(n.length!==35||n[0]!==t[e[0]])throw new u(`not an account or contract StrKey: ${e}`);let o=ft(n.subarray(0,33));if(n[33]!==(o&255)||n[34]!==o>>8)throw new u(`bad StrKey checksum: ${e}`);return n.subarray(1,33)}function g(e,t,s){switch(e){case"account":return C(48,t);case"contract":return C(16,t);case"muxed":{let r=new Uint8Array(40);return r.set(t),new DataView(r.buffer).setBigUint64(32,s),C(96,r)}case"claimable":{let r=new Uint8Array(33);return r.set(t,1),C(8,r)}case"pool":return C(88,t);default:return f(t)}}var E=async e=>new Uint8Array(await crypto.subtle.digest("SHA-256",e)),k=e=>{let t=new Uint8Array(4);return new DataView(t.buffer).setUint32(0,e),t},at=e=>{let t=new Uint8Array(8);return new DataView(t.buffer).setBigInt64(0,BigInt(e)),t},q=(...e)=>{let t=new Uint8Array(e.reduce((r,a)=>r+a.length,0)),s=0;for(let r of e)t.set(r,s),s+=r.length;return t},B={testnet:"Test SDF Network ; September 2015",mainnet:"Public Global Stellar Network ; September 2015",futurenet:"Test SDF Future Network ; October 2022",local:"Standalone Network ; February 2017"},M=e=>E(new TextEncoder().encode(e));async function F(e){let t=q(k(8),await M(e),k(1),k(0));return g("contract",await E(t))}async function mt(e,t,s){let r=e.credentials;if(!r.address)return null;let a=await M(t),n=k(s??r.expiration),o=r.type==="address"?q(k(9),a,at(r.nonce),n,e.root.raw):q(k(10),a,at(r.nonce),n,r.addressRaw,e.root.raw);return E(o)}async function D(e,t){return E(q(await M(t),k(2),e.tx.raw))}var _={transfer:["from","to","amount"],transfer_from:["spender","from","to","amount"],approve:["from","spender","amount","expiration_ledger"],burn:["from","amount"],burn_from:["spender","from","amount"],mint:["to","amount"],clawback:["from","amount"],set_admin:["new_admin"],set_authorized:["id","authorize"]},tt={apply_doc:["doc_json","approval_valid_until","expected_revision"],apply_scope:["grant_id","doc_json"],remove_scope:["grant_id"],execute:["target","target_fn","target_args"]};function b(e,t=7){let s=e<0n,r=(s?-e:e).toString().padStart(t+1,"0"),a=r.slice(0,r.length-t).replace(/\B(?=(\d{3})+(?!\d))/g,","),n=t?r.slice(r.length-t).replace(/0+$/,""):"";return(s?"\u2212":"")+a+(n?"."+n:"")}var A=e=>e&&e.length>14?`${e.slice(0,4)}\u2026${e.slice(-4)}`:e;function vt(e){if(!e||e.length<2||e[0]!==123)return null;try{return JSON.parse(new TextDecoder("utf-8",{fatal:!0}).decode(e))}catch{return null}}var qt=(e,t)=>e.length===t.length&&e.every((s,r)=>s===t[r]),I=e=>e.credentials.address?.str??"source-account";function H(e,t){let s=t.map((n,o)=>({e:n,i:o,used:!1})),r=e.map((n,o)=>{let c=s.find(d=>!d.used&&I(d.e)===I(n)&&qt(d.e.root.raw,n.root.raw));return c?(c.used=!0,{index:o,status:"match",recorded:c.i}):{index:o,status:"unmatched"}});for(let n of r){if(n.status!=="unmatched")continue;let o=e[n.index],c=s.find(d=>!d.used&&I(d.e)===I(o));c?(c.used=!0,n.status="differs",n.recorded=c.i):n.status="extra"}let a=s.filter(n=>!n.used).map(n=>n.i);return{entries:r,missing:a}}var K={networks:{testnet:"Testnet",mainnet:"Mainnet",futurenet:"Futurenet",local:"Local network"},customNetwork:"Custom network",requestFrom:e=>`Request from <b>${e.dapp}</b>`,titleOne:"Authorize this call",titleMany:e=>`Authorize ${e.count} calls`,titleTransaction:"Approve this transaction",titleUnreadable:"This request could not be read",titleEmpty:"No request",summary:e=>`Fee up to ${e.fee} XLM, paid by ${e.payer}`,reject:"Reject",approveButton:"Approve",approveAnyway:"Approve anyway",confirmApproveAnyway:"Confirm: approve anyway",summarySend:e=>`Send ${e.amount} to ${e.to}`,summaryUnusedTag:"not used",summaryBudget:e=>e.over?`Over the cap: ${e.left} of ${e.limit} ${e.code} left this window`:`${e.left} of ${e.limit} ${e.code} left this window after this`,statusSuccess:"Will succeed",statusRefused:"Will be refused",statusUnknown:"Outcome unknown",statusChecking:"Checking the outcome\u2026",statusIdle:"Outcome not checked yet",simulatedOk:"The simulation against current ledger state completed.",notSimulated:"This request was not simulated.",unusedWarning:e=>`This request also asks you to sign an authorization the transaction does not use: ${e.what}. If you approve, the signature is published with the transaction and anyone can submit that authorization later, until it expires.`,differsWarning:"The simulation needs a different authorization from the one you are asked to sign.",missingWarning:"The transaction needs an authorization this request does not include, so it is likely to fail.",details:"Details",nothingToReview:"Nothing to review.",unreadable:e=>`${e.error}. Nothing has been signed. Reject the request.`,whatYouAuthorize:"What you authorize",authorizedBy:e=>`${e.index}. Authorized by <b>${e.who}</b>`,sourceAccount:"the transaction source account",addressBound:"address-bound",sourceAuthority:"Runs with the source account\u2019s authority",operation:e=>`${e.type} operation`,you:"you",nativeAsset:"XLM (native asset)",argument:e=>`arg ${e.index}`,argumentCount:e=>e.count===1?"1 argument":`${e.count} arguments`,contract:"contract",none:"none",yes:"yes",no:"no",bytes:e=>`${e.length} bytes`,seconds:e=>`${e.value} s`,send:e=>`Send ${e.amount} from ${e.from} to ${e.to}`,approve:e=>`Let ${e.spender} spend up to ${e.amount} of ${e.from}\u2019s balance until ledger ${e.until}`,transferFrom:e=>`${e.spender} sends ${e.amount} from ${e.from} to ${e.to}`,burn:e=>`Burn ${e.amount} from ${e.from}`,mint:e=>`Mint ${e.amount} to ${e.to}`,deployAsset:e=>`Deploy the ${e.code} asset contract`,deploy:e=>e.code?`Deploy a new contract from code ${e.code}`:"Deploy a new contract",upload:e=>`Upload contract code (${e.length} bytes)`,installGrant:e=>`Install grant #${e.grant} on your account`,replacePolicy:"Replace your account\u2019s policy document",call:e=>`Call <code>${e.fn}</code> on ${e.contract}`,policyDocument:e=>`Policy document (${e.network??"network not named"})`,rules:"Rules",signers:"Signers",anyFunction:"any function",ruleLine:e=>`<b>${e.name}</b>: ${e.functions} on ${e.scope}${e.by?` by ${e.by}`:""}${e.cap?`; at most <b>${e.cap}</b> per ${e.period} ledgers`:""}`,signerKey:e=>`key ${e.key}`,badgeMatch:"\u2713 Matches simulation",badgeExtra:"\u26A0 Not used by this transaction",badgeDiffers:"\u26A0 Differs from simulation",extraNote:"This entry is not needed to run the transaction. If you sign it, the signature is published with the transaction and anyone can submit it later, until it expires.",differsNote:"The simulation recorded a different authorization for this signer. Compare the trees before signing.",authMatch:"\u2713 The simulation recorded the same authorization tree independently.",authMismatch:e=>`\u26A0 The simulation\u2019s own recording of the authorization tree does not match the request: ${e.extra} not used, ${e.differs} different, ${e.missing} missing.`,neededNotSupplied:"Needed but not supplied:",effects:"Effects",previewButton:"Check outcome",previewUnavailable:"Preview unavailable.",treeStillExact:"The authorization tree in Details is still exact.",previewFailed:e=>`Preview failed: ${e.error}`,wouldAccept:e=>`<b>Would be accepted</b> by ${e.account}${e.rule?` under rule <code>${e.rule}</code>`:""}.`,wouldRefuse:e=>`<b>Would be refused</b> by ${e.account}${e.rule?` under rule <code>${e.rule}</code>`:""}.`,verdictUnknown:e=>`<b>Verdict unknown</b> for ${e.account}.`,contractError:e=>`Contract error ${e.code}`,spendingCap:"Spending cap",capRule:e=>` \xB7 rule <code>${e.rule}</code>`,capMeter:e=>`${e.spent} spent of ${e.limit}; this request ${e.amount}`,capLeft:e=>`${e.remaining} of ${e.limit} left in the current window of ${e.period} ledgers.`,capAfter:e=>`After this: <b>${e.after}</b> left.`,capOver:e=>`<b>This request (${e.amount}) is over the remaining cap.</b>`,capRelease:e=>`The oldest spend leaves the window at ledger ${e.ledger}${e.minutes!=null?` (about ${e.minutes} min)`:""}.`,balanceChanges:"Balance changes",balanceHeaders:["Account","Asset","Before","After","Change"],noBalanceChanges:"No balance changes.",events:"Events",transferEvent:e=>`<b>transfer</b> ${e.amount} from ${e.from} to ${e.to}`,undecodableEvent:e=>`undecodable event (${e.error})`,wouldFail:e=>`The transaction would fail: ${e.error}${e.codes?` (contract error ${e.codes})`:""}`,footnote:e=>`Simulated locally${e.ledger?` at ledger ${e.ledger}`:""}, protocol ${e.protocol}, with ledger state from ${e.source}. The result is a prediction, not a guarantee.`,notices:{protocol:e=>`The network is on protocol ${e.protocol}, and this preview supports protocols ${e.builds.join(" and ")}. Effects are not shown, because a simulation under other rules can be wrong.`,"no-rpc":"No RPC is configured for this network, so ledger state cannot be read.","no-transaction":"A preview needs the whole transaction. For bare authorization entries the dialog shows the tree only.","fee-bump":"Preview the inner transaction of a fee bump.","not-invoke":e=>`This ${e.operation} operation authorizes nothing; there is nothing to preview.`,"no-hint":"No signer hint was given, so the account\u2019s own policy was not evaluated; effects assume every authorization passes."},reasons:{accepted:e=>`Accepted${e.rule?` under ${e.grant!=null?`grant ${e.grant}, `:""}rule \u2018${e.rule}\u2019`:""}, assuming a valid signature from this key.`,refused:e=>`The account refuses it${e.cause?` because of ${e.cause}`:""} (contract error ${e.code}).`,"refused-over-cap":e=>`The account refuses it${e.cause?` because of ${e.cause}`:""} (contract error ${e.code}). The request is more than the cap has left in this window.`,failed:e=>`The enforcing simulation failed: ${e.error}.`,"unsigned-others":"Other parties have not signed yet, so this account\u2019s verdict is unknown."}};function et(e={}){let t={...K,...e};for(let s of["networks","notices","reasons"])t[s]={...K[s],...e[s]??{}};return t}var bt=`
+  --ssd-bg: #17191e; --ssd-surface: #20232a; --ssd-fg: #eceef2; --ssd-muted: #a3aab6;
+  --ssd-border: #33373f; --ssd-accent: #7f9cff; --ssd-accent-fg: #0d1020;
+  --ssd-ok: #6fd39a; --ssd-ok-bg: #173323; --ssd-warn: #f2c063; --ssd-warn-bg: #3a2c10;
+  --ssd-danger: #ff8a7e; --ssd-danger-bg: #3d1c19; --ssd-danger-fg: #1a0705;
+  --ssd-backdrop: rgba(0, 0, 0, 0.65); --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;`,st=`
+:host {
+  /* Colour */
+  --ssd-bg: #ffffff;
+  --ssd-surface: #f5f6f8;
+  --ssd-fg: #16181d;
+  --ssd-muted: #5d6470;
+  --ssd-border: #dde1e7;
+  --ssd-accent: #2f5bd8;
+  --ssd-accent-fg: #ffffff;
+  --ssd-ok: #1d7a46;
+  --ssd-ok-bg: #e5f4ea;
+  --ssd-warn: #8a5a00;
+  --ssd-warn-bg: #fdf1d8;
+  --ssd-danger: #b42318;
+  --ssd-danger-bg: #fde8e6;
+  --ssd-danger-fg: #ffffff;
+  --ssd-backdrop: rgba(10, 12, 16, 0.55);
+  /* Typography */
+  --ssd-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ssd-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --ssd-font-size: 15px;
+  --ssd-line-height: 1.45;
+  --ssd-title-size: 1.12rem;
+  --ssd-small-size: 0.84rem;
+  --ssd-weight-strong: 600;
+  /* Shape */
+  --ssd-radius: 12px;
+  --ssd-radius-sm: 8px;
+  --ssd-radius-pill: 999px;
+  --ssd-border-width: 1px;
+  --ssd-width: 34rem;
+  /* Spacing */
+  --ssd-space-1: 0.25rem;
+  --ssd-space-2: 0.5rem;
+  --ssd-space-3: 0.75rem;
+  --ssd-space-4: 1.25rem;
+  /* Elevation */
+  --ssd-shadow: 0 18px 50px rgba(0, 0, 0, 0.25);
+  /* Motion */
+  --ssd-duration: 160ms;
+  --ssd-easing: cubic-bezier(0.2, 0, 0, 1);
+  display: contents;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :host(:not([theme="light"])) {${bt}
+  }
+}
+:host([theme="dark"]) {${bt}
+}
+dialog {
+  box-sizing: border-box; width: min(var(--ssd-width), calc(100vw - 2rem)); max-height: min(46rem, calc(100dvh - 2rem));
+  padding: 0; border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius);
+  background: var(--ssd-bg); color: var(--ssd-fg); font-family: var(--ssd-font); font-size: var(--ssd-font-size);
+  line-height: var(--ssd-line-height); box-shadow: var(--ssd-shadow); overflow: hidden;
+}
+dialog[open] { display: flex; flex-direction: column; animation: ssd-in var(--ssd-duration) var(--ssd-easing); }
+dialog::backdrop { background: var(--ssd-backdrop); }
+@keyframes ssd-in { from { opacity: 0; transform: translateY(0.5rem); } }
+:host([inline]) dialog { position: static; width: 100%; max-height: none; box-shadow: none; margin: 0; animation: none; }
+@media (max-width: 560px) {
+  :host(:not([inline])) dialog {
+    width: 100vw; max-width: 100vw; max-height: 92dvh; margin: auto 0 0; border-radius: var(--ssd-radius) var(--ssd-radius) 0 0;
+  }
+}
+header { padding: calc(var(--ssd-space-4) - var(--ssd-space-1)) var(--ssd-space-4) var(--ssd-space-3); border-bottom: var(--ssd-border-width) solid var(--ssd-border); }
+.meta { display: flex; flex-wrap: wrap; gap: var(--ssd-space-2); align-items: center; color: var(--ssd-muted); font-size: var(--ssd-small-size); }
+::slotted([slot="logo"]) { max-height: 1.5rem; }
+.chip { border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-pill); padding: 0 var(--ssd-space-2); background: var(--ssd-surface); }
+h2 { margin: var(--ssd-space-2) 0 var(--ssd-space-1); font-size: var(--ssd-title-size); line-height: 1.3; font-weight: var(--ssd-weight-strong); }
+.sub { margin: 0; color: var(--ssd-muted); font-size: var(--ssd-small-size); }
+.body { overflow: auto; padding: var(--ssd-space-3) var(--ssd-space-4) var(--ssd-space-4); flex: 1 1 auto; min-height: 0; }
+h3 { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ssd-muted); margin: var(--ssd-space-4) 0 var(--ssd-space-2); }
+h3:first-child { margin-top: var(--ssd-space-2); }
+b { font-weight: var(--ssd-weight-strong); }
+.what ul { list-style: none; margin: var(--ssd-space-2) 0; padding: 0; }
+.what li { font-size: var(--ssd-title-size); font-weight: var(--ssd-weight-strong); line-height: 1.35; overflow-wrap: anywhere; margin: 0 0 var(--ssd-space-1); }
+.budget-line { margin: 0 0 var(--ssd-space-2); color: var(--ssd-muted); font-size: var(--ssd-small-size); }
+.budget-line[data-over="true"] { color: var(--ssd-danger); font-weight: var(--ssd-weight-strong); }
+.status { display: flex; gap: var(--ssd-space-2); align-items: flex-start; border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: var(--ssd-space-2) 0; background: var(--ssd-surface); }
+.status .icon { font-weight: 700; font-size: 1.1rem; line-height: 1.2; color: var(--ssd-muted); }
+.status[data-state="success"] { background: var(--ssd-ok-bg); border-color: color-mix(in srgb, var(--ssd-ok) 45%, transparent); }
+.status[data-state="success"] .icon { color: var(--ssd-ok); }
+.status[data-state="refused"] { background: var(--ssd-danger-bg); border-color: color-mix(in srgb, var(--ssd-danger) 45%, transparent); }
+.status[data-state="refused"] .icon { color: var(--ssd-danger); }
+.status .spinner { margin-top: 0.25em; }
+.status button { margin-top: var(--ssd-space-2); }
+details.more { margin-top: var(--ssd-space-3); border-top: var(--ssd-border-width) solid var(--ssd-border); padding-top: var(--ssd-space-2); }
+details.more > summary { font-size: var(--ssd-font-size); font-weight: var(--ssd-weight-strong); color: var(--ssd-fg); padding: var(--ssd-space-1) 0; }
+.entry { border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: 0 0 var(--ssd-space-2); background: var(--ssd-bg); min-width: 0; }
+.entry[data-status="extra"], .entry[data-status="differs"] { border-color: var(--ssd-danger); background: var(--ssd-danger-bg); }
+.entry[data-status="match"] { border-color: color-mix(in srgb, var(--ssd-ok) 55%, var(--ssd-border)); }
+.entry-head { display: flex; justify-content: space-between; gap: var(--ssd-space-2); flex-wrap: wrap; font-size: var(--ssd-small-size); color: var(--ssd-muted); }
+.entry-head b { color: var(--ssd-fg); }
+.badge { font-size: 0.75rem; font-weight: var(--ssd-weight-strong); border-radius: var(--ssd-radius-pill); padding: 0 var(--ssd-space-2); white-space: nowrap; }
+.badge.ok { color: var(--ssd-ok); background: var(--ssd-ok-bg); }
+.badge.bad { color: var(--ssd-danger); background: var(--ssd-danger-bg); }
+ol.tree, ol.tree ol { list-style: none; margin: 0; padding: 0; }
+ol.tree ol { margin-left: var(--ssd-space-2); padding-left: var(--ssd-space-3); border-left: 2px solid var(--ssd-border); }
+li.node { margin: var(--ssd-space-2) 0 0; min-width: 0; }
+.sentence { font-weight: var(--ssd-weight-strong); overflow-wrap: anywhere; }
+details { margin-top: var(--ssd-space-1); }
+summary { cursor: pointer; color: var(--ssd-muted); font-size: var(--ssd-small-size); overflow-wrap: anywhere; }
+summary:focus-visible, button:focus-visible { outline: 2px solid var(--ssd-accent); outline-offset: 2px; }
+dl.args { display: grid; grid-template-columns: minmax(4rem, max-content) minmax(0, 1fr); gap: var(--ssd-space-1) var(--ssd-space-3); margin: var(--ssd-space-2) 0 var(--ssd-space-1); font-size: var(--ssd-small-size); }
+dt { color: var(--ssd-muted); }
+dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+code, .mono { font-family: var(--ssd-mono); font-size: 0.82em; }
+.addr { white-space: nowrap; }
+.doc { border: var(--ssd-border-width) dashed var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin-top: var(--ssd-space-1); background: var(--ssd-surface); }
+.doc ul { margin: var(--ssd-space-1) 0 0; padding-left: var(--ssd-space-4); }
+.notice { border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: var(--ssd-space-2) 0; font-size: var(--ssd-small-size); background: var(--ssd-warn-bg); color: var(--ssd-fg); border: var(--ssd-border-width) solid color-mix(in srgb, var(--ssd-warn) 45%, transparent); }
+.notice.bad { background: var(--ssd-danger-bg); border-color: color-mix(in srgb, var(--ssd-danger) 45%, transparent); }
+.notice.ok { background: var(--ssd-ok-bg); border-color: color-mix(in srgb, var(--ssd-ok) 45%, transparent); }
+.preview { border-top: var(--ssd-border-width) solid var(--ssd-border); margin-top: var(--ssd-space-3); padding-top: var(--ssd-space-1); }
+.card { border: var(--ssd-border-width) solid var(--ssd-border); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-3); margin: var(--ssd-space-2) 0; background: var(--ssd-surface); }
+.verdict { display: flex; gap: var(--ssd-space-2); align-items: flex-start; }
+.verdict .icon { font-weight: 700; font-size: 1.1rem; line-height: 1.2; }
+.verdict[data-allowed="true"] .icon { color: var(--ssd-ok); }
+.verdict[data-allowed="false"] .icon { color: var(--ssd-danger); }
+.verdict[data-allowed="null"] .icon { color: var(--ssd-muted); }
+.meter { height: 0.6rem; border-radius: var(--ssd-radius-pill); background: var(--ssd-border); overflow: hidden; display: flex; margin: var(--ssd-space-2) 0 var(--ssd-space-1); }
+.meter span { display: block; height: 100%; width: 0; transition: width var(--ssd-duration) var(--ssd-easing); }
+.meter .spent { background: var(--ssd-muted); }
+.meter .this { background: var(--ssd-accent); }
+.meter .over { background: var(--ssd-danger); }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: var(--ssd-small-size); }
+th, td { text-align: left; padding: var(--ssd-space-1) var(--ssd-space-2); border-bottom: var(--ssd-border-width) solid var(--ssd-border); vertical-align: top; }
+th { color: var(--ssd-muted); font-weight: 500; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.neg { color: var(--ssd-danger); }
+.pos { color: var(--ssd-ok); }
+ul.events { margin: 0; padding-left: var(--ssd-space-4); font-size: var(--ssd-small-size); }
+.muted { color: var(--ssd-muted); }
+.small { font-size: var(--ssd-small-size); }
+footer { display: flex; gap: var(--ssd-space-2); align-items: center; justify-content: space-between; flex-wrap: wrap; padding: var(--ssd-space-3) var(--ssd-space-4); border-top: var(--ssd-border-width) solid var(--ssd-border); background: var(--ssd-surface); }
+.footer-slot { color: var(--ssd-muted); font-size: var(--ssd-small-size); min-width: 0; }
+.actions { display: flex; gap: var(--ssd-space-2); margin-left: auto; }
+button { font: inherit; font-weight: var(--ssd-weight-strong); border-radius: var(--ssd-radius-sm); padding: var(--ssd-space-2) var(--ssd-space-4); border: var(--ssd-border-width) solid var(--ssd-border); background: var(--ssd-bg); color: var(--ssd-fg); cursor: pointer; min-height: 2.5rem; transition: background-color var(--ssd-duration) var(--ssd-easing), border-color var(--ssd-duration) var(--ssd-easing); }
+button.primary { background: var(--ssd-accent); color: var(--ssd-accent-fg); border-color: var(--ssd-accent); }
+button.danger { background: var(--ssd-danger); color: var(--ssd-danger-fg); border-color: var(--ssd-danger); }
+button[disabled] { opacity: 0.55; cursor: not-allowed; }
+.spinner { display: inline-block; width: 0.9em; height: 0.9em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: ssd-spin 0.8s linear infinite; vertical-align: -0.1em; margin-right: 0.35em; }
+@keyframes ssd-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  dialog[open], .spinner { animation: none; }
+  .meter span, button { transition: none; }
+}
+`;var z="soroban-sign-dialog",i=e=>String(e).replace(/[&<>"']/g,t=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[t]),W=null;function Lt(e){if(typeof CSSStyleSheet=="function"&&"adoptedStyleSheets"in e)try{W||(W=new CSSStyleSheet,W.replaceSync(st)),e.adoptedStyleSheets=[W];return}catch{}let t=document.createElement("style");t.textContent=st,e.append(t)}var Ot=globalThis.HTMLElement??class{},T=class extends Ot{static observedAttributes=["transaction","auth-entries","network","signer","dapp","open","preview","engine","rpc-url","strict","details"];#c;#h=new Map;#p=new Map;#u=et();#y=null;#e=null;#s=[];#a=null;#o=null;#i="idle";#r=null;#l=null;#w=!1;#$=null;#E=!1;#x=null;#k=null;#z=null;constructor(){super(),this.#c=this.attachShadow({mode:"open"}),Lt(this.#c),this.dialog=document.createElement("dialog"),this.dialog.setAttribute("part","dialog"),this.dialog.setAttribute("aria-labelledby","ssd-title"),this.dialog.setAttribute("aria-describedby","ssd-what ssd-status"),this.#c.append(this.dialog),this.dialog.addEventListener("cancel",t=>{t.preventDefault(),this.#S("dismissed")}),this.dialog.addEventListener("click",t=>this.#G(t)),this.dialog.addEventListener("keydown",t=>this.#Q(t))}connectedCallback(){this.#f(),this.hasAttribute("open")&&queueMicrotask(()=>this.show())}attributeChangedCallback(t,s,r){s!==r&&((t==="transaction"||t==="auth-entries"||t==="network"||t==="signer")&&this.#I(),t==="open"&&(r!==null&&!this.dialog.open&&this.show(),r===null&&this.dialog.open&&this.#S("closed")),this.#f())}get transaction(){return this.getAttribute("transaction")}set transaction(t){t?this.setAttribute("transaction",t):this.removeAttribute("transaction")}get authEntries(){let t=this.getAttribute("auth-entries");return t?t.split(/[\s,]+/).filter(Boolean):[]}set authEntries(t){t?.length?this.setAttribute("auth-entries",t.join(" ")):this.removeAttribute("auth-entries")}get network(){return this.networkPassphrase}set network(t){this.setAttribute("network",t)}get networkPassphrase(){let t=this.getAttribute("network")??"testnet";return B[t]??t}set networkPassphrase(t){this.setAttribute("network",t)}get signer(){return this.getAttribute("signer")}set signer(t){t?this.setAttribute("signer",t):this.removeAttribute("signer")}get dapp(){return this.getAttribute("dapp")}set dapp(t){t?this.setAttribute("dapp",t):this.removeAttribute("dapp")}get engine(){return this.getAttribute("engine")}set engine(t){t?this.setAttribute("engine",t):this.removeAttribute("engine")}get rpcUrl(){return this.getAttribute("rpc-url")}set rpcUrl(t){t?this.setAttribute("rpc-url",t):this.removeAttribute("rpc-url")}get strict(){return this.hasAttribute("strict")}set strict(t){this.toggleAttribute("strict",!!t)}get labels(){return Object.fromEntries([...this.#h].map(([t,s])=>[t,this.#p.has(t)?{name:s,token:this.#p.get(t)}:s]))}set labels(t){this.#h=new Map,this.#p=new Map;for(let[s,r]of Object.entries(t??{}))typeof r=="string"?this.#h.set(s,r):r&&(r.name&&this.#h.set(s,r.name),r.token&&this.#p.set(s,r.token));this.#f()}get strings(){return this.#u}set strings(t){this.#u=et(t??{}),this.#f()}get previewProvider(){return this.#y}set previewProvider(t){this.#y=t,this.#f(),queueMicrotask(()=>this.#T())}get previewResult(){return this.#o}get flags(){return this.#g()}get open(){return!!this.dialog?.open}show(){this.isConnected||document.body.append(this),this.#b(),!this.dialog.open&&(this.hasAttribute("inline")?this.dialog.show():this.dialog.showModal(),this.#c.querySelector('[data-act="reject"]')?.focus(),this.dispatchEvent(new CustomEvent("open",{bubbles:!0,composed:!0})),this.#T())}get#B(){return this.getAttribute("preview")??"auto"}get#M(){return!!(this.#y||this.hasAttribute("engine"))&&this.#B!=="off"}#T(){this.dialog?.open&&this.#B==="auto"&&this.#M&&this.#i==="idle"&&this.runPreview()}close(){this.#S("closed")}request(t={}){t.labels&&(this.labels=t.labels),t.strings&&(this.strings=t.strings),t.previewProvider&&(this.previewProvider=t.previewProvider);let s={network:t.network??t.networkPassphrase,signer:t.signer,dapp:t.dapp,transaction:t.authEntries?.length?null:t.transaction,"auth-entries":t.authEntries?.join(" ")};for(let[r,a]of Object.entries(s))a?this.setAttribute(r,a):this.removeAttribute(r);for(let[r,a]of[["engine","engine"],["rpcUrl","rpc-url"],["theme","theme"],["preview","preview"]])t[r]&&this.setAttribute(a,t[r]);return t.strict!=null&&(this.strict=t.strict),this.#I(),this.#l?.resolve({approved:!1,reason:"superseded"}),new Promise(r=>{this.#l={resolve:r},this.show()})}async runPreview(){if(this.#i==="loading"||!this.#e)return;this.#x?.abort();let t=this.#x=new AbortController;this.#i="loading",this.#b();try{let r=await(this.#y??await this.#O())({transaction:this.transaction,authEntries:this.#s.map(a=>P(a.raw)),networkPassphrase:this.networkPassphrase,signer:this.signer,rpcUrl:this.getAttribute("rpc-url"),decoded:this.#e,signal:t.signal});if(t.signal.aborted)return;this.#R(r)}catch(s){if(s?.name==="AbortError"||t.signal.aborted)return;this.#R({status:"error",code:"error",params:{error:s?.message??String(s)},notice:`Preview failed: ${s?.message??s}`})}}async#O(){let t=this.getAttribute("engine");if(!t)throw new Error("no preview engine configured (set the engine attribute or previewProvider)");let s=await import(new URL(t,document.baseURI).href);return r=>s.preview(r)}#R(t){if(this.#o=t,this.#i=t?.status==="ok"?"done":t?.status??"error",this.#r=null,t?.recordedAuth)try{let s=t.recordedAuth.map(j);this.#r=H(this.#s,s),this.#r.recorded=s}catch(s){t.notice=`${t.notice??""} Recorded tree could not be decoded: ${s.message}`.trim()}this.#w=!1,this.#b(),this.dispatchEvent(new CustomEvent("preview",{bubbles:!0,composed:!0,detail:{result:t,flags:this.#g()}}))}#I(){this.#e=null,this.#s=[],this.#a=null,this.#o=null,this.#r=null,this.#i="idle",this.#w=!1,this.#z=null,this.#x?.abort();try{if(this.transaction){let t=O(this.transaction),s=t.tx.operations[0];if(t.tx.operations.length!==1)throw new u("a Soroban transaction carries exactly one operation");this.#e={kind:"transaction",envelope:t,op:s},this.#s=s.type==="invoke"?s.auth:[]}else this.authEntries.length&&(this.#s=this.authEntries.map(j),this.#e={kind:"auth-entries"})}catch(t){this.#a=t}this.#k=this.#a||!this.#e?null:this.#Y(),this.#k?.catch(()=>{}),this.dialog?.open&&queueMicrotask(()=>this.#T()),F(this.networkPassphrase).then(t=>{t!==this.#$&&(this.#$=t,this.#f())},()=>{})}#f(){this.#E||(this.#E=!0,queueMicrotask(()=>{this.#E=!1,this.#b()}))}#g(){let t=[],s=this.#o;if(this.#r){for(let r of this.#r.entries)r.status!=="match"&&t.push({kind:r.status,entry:r.index});for(let r of this.#r.missing)t.push({kind:"missing",recorded:r})}for(let r of s?.verdicts??[])r.allowed===!1&&t.push({kind:"refused",address:r.address,code:r.code});return s?.outcome&&!s.outcome.ok&&!(s.verdicts??[]).some(r=>r.allowed===!1)&&t.push({kind:"fails",error:s.outcome.error}),t}#t(t,s={}){let r=this.#u[t];return typeof r=="function"?r(s):r}#A(t,s,r,a){let n=s!=null?this.#u[t]?.[s]:void 0;if(n==null)return i(a??"");let o=Object.fromEntries(Object.entries(r??{}).map(([c,d])=>[c,Array.isArray(d)?d.map(i):d==null?d:i(d)]));return typeof n=="function"?n(o):n}#C(t){return t?t===this.#$?this.#h.get(t)??this.#t("nativeAsset"):this.#h.get(t)??null:""}#m(t){return t===this.#$?this.#p.get(t)??{code:"XLM",decimals:7}:this.#p.get(t)??null}#n(t){let s=typeof t=="string"?t:t?.str??"",r=this.#C(s),a=(s&&s===this.signer?` (${i(this.#t("you"))})`:"")+(t?.muxId!=null?` #${i(t.muxId)}`:"");return r?`<span class="addr" title="${i(s)}">${i(r)}${a} <span class="mono muted">${i(A(s))}</span></span>`:`<span class="addr mono" title="${i(s)}">${i(A(s))}${a}</span>`}#v(t,s){return`${i(b(t,s.decimals))} ${i(s.code)}`}#d(t,s,r){switch(t.t){case"address":return this.#n(t);case"i128":case"u128":case"i256":case"u256":case"i64":case"u64":return r&&/amount|limit/.test(s??"")?`<b>${this.#v(t.v,r)}</b> <span class="muted small">(${i(t.v.toString())})</span>`:`<span class="mono">${i(t.v.toString())}</span>`;case"u32":case"i32":return`<span class="mono">${t.v}</span>`;case"timepoint":return i(new Date(Number(t.v)*1e3).toISOString());case"duration":return this.#t("seconds",{value:i(t.v.toString())});case"bool":return this.#t(t.v?"yes":"no");case"void":return`<span class="muted">${this.#t("none")}</span>`;case"symbol":return`<code>${i(t.v)}</code>`;case"string":return`\u201C${i(t.v)}\u201D`;case"bytes":{let a=vt(t.v);if(a)return this.#U(a);let n=f(t.v);return`<span class="mono" title="${i(n)}">0x${i(n.length>32?n.slice(0,32)+"\u2026":n)}</span> <span class="muted small">(${this.#t("bytes",{length:t.v.length})})</span>`}case"vec":return t.v.length?`[${t.v.map(a=>this.#d(a)).join(", ")}]`:"[ ]";case"map":return`{ ${t.v.map(a=>`${this.#d(a.k)}: ${this.#d(a.v,a.k.v)}`).join(", ")} }`;case"error":return`<span class="mono">error(${t.type}, ${t.code})</span>`;default:return`<span class="mono">${i(t.t)}</span>`}}#U(t){let s=Array.isArray(t.rules)?t.rules:[],r=Array.isArray(t.signers)?t.signers:[],a=s.map(o=>{let c=o.scope?.type==="contract"?this.#n(String(o.scope.address)):i(o.scope?.type??"any"),d=Array.isArray(o.functions)?o.functions.map(h=>`<code>${i(h)}</code>`).join(", "):this.#t("anyFunction"),l=null;if(o.cap?.limit){let h=this.#m(o.cap.token??o.scope?.address)??{code:"units",decimals:0};try{l=this.#v(BigInt(o.cap.limit),h)}catch{l=i(o.cap.limit)}}let p=Array.isArray(o.principals?.signers)?o.principals.signers.map(h=>`<code>${i(h)}</code>`).join(" + "):null;return`<li>${this.#t("ruleLine",{name:i(o.name??"rule"),functions:d,scope:c,by:p,cap:l,period:i(o.cap?.["period-ledgers"]??"?")})}</li>`}).join(""),n=r.map(o=>`<li><code>${i(o.id)}</code>: ${o.key?this.#t("signerKey",{key:`<span class="mono">${i(A(String(o.key)))}</span>`}):this.#n(String(o.address??""))}</li>`).join("");return`<div class="doc" part="doc"><div class="small muted">${this.#t("policyDocument",{network:t.network==null?null:i(t.network)})}</div>
+      ${a?`<div class="small">${this.#t("rules")}</div><ul>${a}</ul>`:""}${n?`<div class="small">${this.#t("signers")}</div><ul>${n}</ul>`:""}</div>`}#N(t){if(t.kind==="create")return t.preimage.from==="asset"?this.#t("deployAsset",{code:i(t.preimage.asset.code)}):this.#t("deploy",{code:t.executable.kind==="wasm"?i(A(f(t.executable.hash))):null});if(t.kind==="upload")return this.#t("upload",{length:t.wasm.length});let s=t.contract.str,r=this.#m(s),a=r?_[t.fn]:null;if(r&&a&&t.args.length===a.length){let n=d=>t.args[a.indexOf(d)],o=d=>d&&/128|64/.test(d.t)?this.#v(d.v,r):"?",c=d=>this.#n(n(d));switch(t.fn){case"transfer":return this.#t("send",{amount:o(n("amount")),from:c("from"),to:c("to")});case"approve":return this.#t("approve",{spender:c("spender"),amount:o(n("amount")),from:c("from"),until:i(n("expiration_ledger").v)});case"transfer_from":return this.#t("transferFrom",{spender:c("spender"),amount:o(n("amount")),from:c("from"),to:c("to")});case"burn":return this.#t("burn",{amount:o(n("amount")),from:c("from")});case"mint":return this.#t("mint",{amount:o(n("amount")),to:c("to")});default:break}}return s===this.signer&&t.fn==="apply_scope"?this.#t("installGrant",{grant:i(t.args[0]?.v??"?")}):s===this.signer&&t.fn==="apply_doc"?this.#t("replacePolicy"):this.#t("call",{fn:i(t.fn),contract:this.#n(t.contract)})}#F(t){return t.kind!=="call"?[]:this.#m(t.contract.str)&&_[t.fn]?.length===t.args.length?_[t.fn]:t.contract.str===this.signer&&tt[t.fn]?.length===t.args.length?tt[t.fn]:[]}#P(t){let s=t.fn,r=this.#F(s),a=s.kind==="call"?this.#m(s.contract.str):null,n=s.args.map((p,h)=>`<dt>${r[h]?i(r[h]):this.#t("argument",{index:h+1})}</dt><dd>${this.#d(p,r[h],a)}</dd>`).join(""),o=s.kind==="call"?`<code>${i(s.fn)}</code> \xB7 ${i(this.#C(s.contract.str)??A(s.contract.str))}`:i(s.kind),c=s.args.length?` \xB7 ${this.#t("argumentCount",{count:s.args.length})}`:"",d=`<details part="node-details"><summary>${o}${c}</summary>
+      ${s.kind==="call"?`<dl class="args"><dt>${this.#t("contract")}</dt><dd class="mono">${i(s.contract.str)}</dd>${n}</dl>`:n?`<dl class="args">${n}</dl>`:""}</details>`,l=t.subs.length?`<ol role="list">${t.subs.map(p=>this.#P(p)).join("")}</ol>`:"";return`<li class="node" part="node"><div class="sentence">${this.#N(s)}</div>${d}${l}</li>`}#q(t,s){let r=t.credentials,a=r.type==="source-account"?this.#t("sourceAccount"):this.#n(r.address),n=s>=0?this.#r?.entries[s]:null,o=n?n.status==="match"?`<span class="badge ok">${this.#t("badgeMatch")}</span>`:n.status==="extra"?`<span class="badge bad">${this.#t("badgeExtra")}</span>`:`<span class="badge bad">${this.#t("badgeDiffers")}</span>`:"",c=n?.status==="extra"?`<div class="notice bad small" part="unused-entry">${this.#t("extraNote")}</div>`:n?.status==="differs"?`<div class="notice bad small">${this.#t("differsNote")}</div>`:"",d=!!r.address&&r.address.str===this.signer,l=s>=0?this.#t("authorizedBy",{index:s+1,who:a}):`<b>${a}</b>`;return`<article class="entry" part="entry" data-status="${n?.status??"unchecked"}" data-mine="${d}">
+      <div class="entry-head"><span>${l}${r.type==="address-v2"?` \xB7 ${this.#t("addressBound")}`:""}</span>${o}</div>
+      ${c}<ol class="tree" role="list">${this.#P(t.root)}</ol></article>`}#D(){let t=this.#o;if(this.#i!=="done")return"";let s=[];(t.notice||t.code&&this.#u.notices[t.code])&&s.push(`<div class="notice" part="notice">${this.#A("notices",t.code,t.params,t.notice)}</div>`);let r=this.#r;if(r){let a=o=>r.entries.filter(c=>c.status===o).length,n=r.entries.length-a("match")+r.missing.length;s.push(n?`<div class="notice bad" part="auth-check">${this.#t("authMismatch",{extra:a("extra"),differs:a("differs"),missing:r.missing.length})}</div>`:`<div class="notice ok" part="auth-check">${this.#t("authMatch")}</div>`),r.missing.length&&s.push(`<div class="small">${this.#t("neededNotSupplied")}</div>${r.missing.map(o=>this.#q(r.recorded[o],-1)).join("")}`)}for(let a of t.verdicts??[]){let n={account:this.#n(a.address),rule:a.rule?i(a.rule.name??a.rule.id):null},o=a.reasonCode||a.reason?this.#A("reasons",a.reasonCode,a.params,a.reason):"",c=typeof a.allowed=="boolean";s.push(`<div class="card verdict" part="verdict" data-allowed="${c?a.allowed:"null"}"><span class="icon" aria-hidden="true">${c?a.allowed?"\u2713":"\u2715":"?"}</span>
+        <div>${this.#t(c?a.allowed?"wouldAccept":"wouldRefuse":"verdictUnknown",n)}
+        ${o?`<div class="small">${o}</div>`:a.code!=null?`<div class="small muted">${this.#t("contractError",{code:i(a.code)})}</div>`:""}</div></div>`)}for(let a of t.budgets??[])s.push(this.#V(a));if(t.balances?.length){let a=t.balances.map(o=>{let c=BigInt(o.before??0),d=BigInt(o.after??0),l=d-c,p=o.asset??{code:"",decimals:0};return`<tr><td>${this.#n(o.address)}</td><td>${i(p.code)}</td><td class="num">${i(b(c,p.decimals))}</td><td class="num">${i(b(d,p.decimals))}</td><td class="num ${l<0n?"neg":"pos"}">${l>0n?"+":""}${i(b(l,p.decimals))}</td></tr>`}).join(""),n=this.#u.balanceHeaders;s.push(`<h3>${this.#t("balanceChanges")}</h3><div class="scroll"><table part="balances"><thead><tr><th>${n[0]}</th><th>${n[1]}</th><th class="num">${n[2]}</th><th class="num">${n[3]}</th><th class="num">${n[4]}</th></tr></thead><tbody>${a}</tbody></table></div>`)}else t.outcome?.ok&&s.push(`<p class="small muted">${this.#t("noBalanceChanges")}</p>`);if(t.events?.length){let a=t.events.map(n=>{try{return`<li>${this.#X(U(n))}</li>`}catch(o){return`<li class="muted">${this.#t("undecodableEvent",{error:i(o.message)})}</li>`}}).join("");s.push(`<h3>${this.#t("events")}</h3><ul class="events" part="events">${a}</ul>`)}if(t.outcome&&!t.outcome.ok&&!(t.verdicts??[]).length){let a=(t.outcome.codes??[]).map(n=>`${i(n.code)}${n.contract?` (${this.#n(n.contract)})`:""}`).join(", ");s.push(`<div class="notice bad">${this.#t("wouldFail",{error:i(t.outcome.error??"unknown error"),codes:a||null})}</div>`)}return s.push(`<p class="small muted">${this.#t("footnote",{ledger:t.ledger?i(t.ledger.sequence):null,protocol:i(t.ledger?.protocol??t.engine?.protocol??"?"),source:i(t.stateSource??"RPC")})}</p>`),`<section class="preview" part="preview"><h3>${this.#t("effects")}</h3>${s.join("")}</section>`}#_(){let t=this.#i,s=this.#o;if(t==="loading")return{state:"checking"};if(t==="idle")return this.#M?{state:"idle"}:{state:"unknown",reason:this.#t("notSimulated")};if(t!=="done")return{state:"unknown",reason:`${s?.code==="error"?this.#t("previewFailed",{error:i(s.params?.error??"")}):this.#A("notices",s?.code,s?.params,s?.notice??this.#t("previewUnavailable"))} ${this.#t("treeStillExact")}`};let r=d=>d.reasonCode||d.reason?this.#A("reasons",d.reasonCode,d.params,d.reason):"",a=s.verdicts??[],n=a.find(d=>d.allowed===!1);if(n)return{state:"refused",reason:r(n)||this.#t("contractError",{code:i(n.code??"?")})};let o=a.find(d=>d.allowed==null);if(s.outcome&&!s.outcome.ok&&!o){let d=(s.outcome.codes??[]).map(l=>i(l.code??l)).join(", ");return{state:"refused",reason:this.#t("wouldFail",{error:i(s.outcome.error??"unknown error"),codes:d||null})}}if(o)return{state:"unknown",reason:r(o)};let c=a.find(d=>d.allowed);return{state:"success",reason:c&&r(c)||this.#t("simulatedOk")}}#H(){let t=this.#_(),s={success:"\u2713",refused:"\u2715",unknown:"?",idle:"\u2022"}[t.state],r=this.#t({success:"statusSuccess",refused:"statusRefused",unknown:"statusUnknown",checking:"statusChecking",idle:"statusIdle"}[t.state]),a=t.state==="checking"?'<span class="spinner" aria-hidden="true"></span>':`<span class="icon" aria-hidden="true">${s}</span>`,n=t.state==="idle"?`<button type="button" data-act="preview" part="preview-button">${this.#t("previewButton")}</button>`:"";return`<section id="ssd-status" class="status" part="status" data-state="${t.state}" role="status" aria-live="polite">${a}
+      <div><b>${r}</b>${t.reason?`<div class="small" part="status-reason">${t.reason}</div>`:""}${n}</div></section>`}#j(t){if(t.kind==="call"&&t.fn==="transfer"&&t.args.length===3){let s=this.#m(t.contract.str),[r,a,n]=t.args;if(s&&r?.str===this.signer&&/128|64/.test(n?.t??""))return this.#t("summarySend",{amount:this.#v(n.v,s),to:this.#n(a)})}return this.#N(t)}#K(){let t=this.#e.op,s=this.#r,r=this.#s.length?this.#s.map((n,o)=>`<li>${this.#j(n.root.fn)}${s?.entries[o]?.status==="extra"?` <span class="badge bad">${this.#t("summaryUnusedTag")}</span>`:""}</li>`):t?.type==="invoke"?[`<li>${this.#j(t.hostFunction)}</li>`]:[`<li>${this.#t("operation",{type:i(t?.type??"unknown")})}</li>`],a=(this.#i==="done"?this.#o.budgets??[]:[]).map(n=>{let o=n.token??{code:"",decimals:0},c=BigInt(n.limit),d=c-BigInt(n.spentInWindow),l=BigInt(n.amount??0),p=l>d,h=p?d>0n?d:0n:d-l;return`<p class="budget-line" part="budget-line" data-over="${p}">${this.#t("summaryBudget",{left:i(b(h,o.decimals)),limit:i(b(c,o.decimals)),code:i(o.code),over:p})}</p>`}).join("");return`<section id="ssd-what" class="what" part="what"><ul>${r.join("")}</ul>${a}</section>`}#W(){let t=this.#r;if(!t)return"";let s=[];for(let r of t.entries)r.status==="extra"&&s.push(this.#t("unusedWarning",{what:this.#j(this.#s[r.index].root.fn)})),r.status==="differs"&&s.push(this.#t("differsWarning"));return t.missing.length&&s.push(this.#t("missingWarning",{count:t.missing.length})),s.map(r=>`<div class="notice bad" part="warning" role="alert">${r}</div>`).join("")}#V(t){let s=t.token??{code:"",decimals:0},r=BigInt(t.limit),a=BigInt(t.spentInWindow),n=BigInt(t.amount??0),o=r-a,c=n<=o,d=h=>r>0n?Math.max(0,Math.min(100,Number(h*10000n/r)/100)):0,l=h=>this.#v(h,s),p=t.nextReleaseLedger&&t.ledger?Math.round((t.nextReleaseLedger-t.ledger)*5/60):null;return`<div class="card" part="budget"><b>${this.#t("spendingCap")}</b>${t.rule?this.#t("capRule",{rule:i(t.rule.name??t.rule.id)}):""}
+      <div class="meter" role="img" aria-label="${i(this.#t("capMeter",{spent:l(a),limit:l(r),amount:l(n)}).replace(/<[^>]*>/g,""))}">
+        <span class="spent" data-pct="${d(a)}"></span><span class="${c?"this":"over"}" data-pct="${d(c?n:o>0n?o:0n)}"></span></div>
+      <div class="small">${this.#t("capLeft",{remaining:l(o),limit:l(r),period:i(t.periodLedgers)})}
+      ${c?this.#t("capAfter",{after:l(o-n)}):this.#t("capOver",{amount:l(n)})}
+      ${t.nextReleaseLedger?`<span class="muted">${this.#t("capRelease",{ledger:i(t.nextReleaseLedger),minutes:p})}</span>`:""}</div></div>`}#X(t){let[s,...r]=t.topics,a=t.contract?this.#m(t.contract.str):null,n=`<span class="muted small">(${i(this.#C(t.contract?.str)??A(t.contract?.str??""))})</span>`;if(s?.t==="symbol"&&s.v==="transfer"&&r.length>=2){let o=t.data.t==="map"?t.data.v.find(d=>d.k.v==="amount")?.v:t.data,c=o&&a&&typeof o.v=="bigint"?this.#v(o.v,a):i(o?.v?.toString()??"?");return`${this.#t("transferEvent",{amount:c,from:this.#d(r[0]),to:this.#d(r[1])})} ${n}`}return`<code>${i(s?.v??s?.t??"?")}</code> ${r.map(o=>this.#d(o)).join(" ")} \u2192 ${this.#d(t.data)} ${n}`}#b(){let t=this.dialog;if(!t)return;let s=this.#c.activeElement?.closest?.("[data-act]")?.dataset.act,r=t.querySelector('details[part="details"]');r&&(this.#z=r.open);let a=this.getAttribute("dapp"),n=Object.entries(B).find(([,w])=>w===this.networkPassphrase)?.[0],o=n?this.#u.networks[n]??n:this.#t("customNetwork"),c,d,l="";if(this.#a)d=this.#t("titleUnreadable"),c=`<div class="notice bad" role="alert">${this.#t("unreadable",{error:i(this.#a.message)})}</div>`;else if(!this.#e)d=this.#t("titleEmpty"),c=`<p class="muted">${this.#t("nothingToReview")}</p>`;else{let w=this.#s.length,V=this.#e.op;d=w===1?this.#t("titleOne"):w?this.#t("titleMany",{count:w}):this.#t("titleTransaction");let X=this.#e.envelope?.tx;X&&(l=this.#t("summary",{fee:i(b(BigInt(X.fee),7)),payer:this.#n(X.source)}));let xt=w?this.#s.map((At,St)=>this.#q(At,St)).join(""):V?.type==="invoke"?`<article class="entry" part="entry"><div class="entry-head"><span>${this.#t("sourceAuthority")}</span></div><ol class="tree" role="list">${this.#P({fn:V.hostFunction,subs:[]})}</ol></article>`:`<p>${this.#t("operation",{type:i(V?.type??"unknown")})}</p>`,kt=this.#z??this.getAttribute("details")==="open";c=`${this.#K()}${this.#H()}${this.#W()}
+        <details class="more" part="details"${kt?" open":""}><summary part="details-summary">${this.#t("details")}</summary>
+        <h3>${this.#t("whatYouAuthorize")}</h3><div part="tree">${xt}</div>${this.#D()}</details>`}let h=this.#g().length>0||!!this.#a,yt=this.hasAttribute("strict"),$t=this.#a?this.#t("approveButton"):this.#w?this.#t("confirmApproveAnyway"):h?this.#t("approveAnyway"):this.#t("approveButton");t.innerHTML=`<header part="header">
+        <div class="meta"><slot name="logo"></slot><span class="chip" part="network">${i(o)}</span>${a?`<span part="dapp">${this.#t("requestFrom",{dapp:i(a)})}</span>`:""}</div>
+        <h2 id="ssd-title" part="title">${d}</h2>
+        <p id="ssd-sub" class="sub" part="fee">${l}</p>
+        <slot name="header"></slot></header>
+      <div class="body" part="body">${c}</div>
+      <footer part="footer">
+        <div class="footer-slot"><slot name="footer"></slot></div>
+        <div class="actions">
+          <button type="button" data-act="reject" part="reject">${this.#t("reject")}</button>
+          <button type="button" data-act="approve" part="approve" class="${h?"danger":"primary"}" ${this.#a||yt&&h||!this.#e?"disabled":""}>${$t}</button>
+        </div>
+      </footer>`;for(let w of t.querySelectorAll("[data-pct]"))w.style.width=`${w.dataset.pct}%`;s&&t.open&&(t.querySelector(`[data-act="${s}"]:not([disabled])`)??t.querySelector('[data-act="reject"]'))?.focus()}#G(t){let s=t.target.closest?.("[data-act]")?.dataset.act;if(s==="reject")this.#S("rejected");else if(s==="preview")this.runPreview();else if(s==="approve"){if(this.#g().length&&!this.#w){this.#w=!0,this.#b(),this.#c.querySelector('[data-act="approve"]')?.focus();return}this.#J()}}async#Y(){let t=this.networkPassphrase,s=this.signer,r=await Promise.all(this.#s.map(async(n,o)=>({index:o,address:n.credentials.address?.str??null,credentials:n.credentials.type,nonce:n.credentials.nonce?.toString()??null,entryXdr:P(n.raw),invocationXdr:P(n.root.raw),invocationHash:f(await E(n.root.raw)),forSigner:!!s&&n.credentials.address?.str===s}))),a=this.#e?.envelope;return{transaction:this.transaction??null,transactionHash:a?f(await D(a,t)):null,networkPassphrase:t,signer:s,entries:r}}async#J(){let t=this.#k,s;try{s=await t}catch(n){this.#a=n,this.#b();return}if(!s||t!==this.#k)return;let r={...s,flags:this.#g(),preview:this.#o};this.dispatchEvent(new CustomEvent("approve",{bubbles:!0,composed:!0,cancelable:!0,detail:r}))&&(this.#L(),this.#l?.resolve({approved:!0,...r}),this.#l=null)}#S(t){!this.dialog.open&&!this.#l||(this.dispatchEvent(new CustomEvent("reject",{bubbles:!0,composed:!0,detail:{reason:t,flags:this.#g()}})),this.#L(),this.#l?.resolve({approved:!1,reason:t}),this.#l=null)}#L(){this.#x?.abort(),this.dialog.open&&this.dialog.close(),this.removeAttribute("open"),this.dispatchEvent(new CustomEvent("close",{bubbles:!0,composed:!0}))}#Q(t){if(t.key!=="Tab"||this.hasAttribute("inline"))return;let s=[...this.dialog.querySelectorAll('button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')].filter(o=>o.offsetParent!==null);if(!s.length)return;let r=s[0],a=s[s.length-1],n=this.#c.activeElement;t.shiftKey&&n===r?(t.preventDefault(),a.focus()):!t.shiftKey&&n===a&&(t.preventDefault(),r.focus())}};function R(e=z){let t=globalThis.customElements;t&&(t.get(e)||t.define(e,e===z?T:class extends T{}))}function wt(e={}){R();let t=document.querySelector(`${z}[data-shared]`);return t||(t=document.createElement(z),t.dataset.shared="",document.body.append(t)),t.request(e)}var Ut="0.1.0";R();globalThis.SorobanSignDialog??=rt;export{B as NETWORKS,K as STRINGS,T as SorobanSignDialog,z as TAG,Ut as VERSION,u as XdrError,mt as authPayloadHash,H as compareAuth,j as decodeAuthEntry,O as decodeEnvelope,U as decodeEvent,pt as decodeLedgerEntry,lt as decodeLedgerKey,ht as decodeScVal,R as define,b as formatAmount,gt as fromStrkey,F as nativeAssetContract,M as networkId,wt as request,g as strkeyFor,D as transactionHash};
+
+</script>
+<script type="module">
+// Generated by make-canned.py from a captured soroban-sim run. Do not edit.
+globalThis.CANNED = {
+ "network": "Standalone Network ; February 2017",
+ "signer": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+ "labels": {
+  "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM": "Your Nido account",
+  "GCUVC6XONHNFB5OT7JZLWXLTTLDB5ZB36CTM67UNR7MZH2KUWFU75HPY": "Caf\u00e9 Perch",
+  "GATHL67I6ID4TMHI2M4EGVEPWEZ3PCJ5HI7LHXOQMB4PGPFJ5TKB2LAF": "Caf\u00e9 Perch fee payer",
+  "CBOGZ4BQX2UC52M5FMLCKCDELIJQWNPVRLHJXXPFYBB2X4QNBN7ZQ2ET": "Perch ed25519 verifier"
+ },
+ "scenarios": [
+  {
+   "id": "within-cap",
+   "title": "Pay the shop 5 XLM",
+   "amountXlm": 5,
+   "transaction": "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAAvrwgAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAL68IAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA="
+  },
+  {
+   "id": "over-cap",
+   "title": "Pay the shop 8 XLM",
+   "amountXlm": 8,
+   "transaction": "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAABMS0AAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAATEtAAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA="
+  },
+  {
+   "id": "smuggled-entry",
+   "title": "Pay the shop 2 XLM (dapp adds a hidden entry)",
+   "amountXlm": 2,
+   "transaction": "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAATEtAAAAAAIAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAExLQAAAAAAAAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mQ/aAAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAADDUjdklj8GBpUjkxgJIugBQ3BUAXqmqcADzI8ZhSbM7AAAAAoAAAAAAAAAAAAAAAACYloAAAAAAAAAAAEAAAAAAAAAAwAAAAYAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAAUAAAAAQAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAUAAAAAQAAAAcwOPXcUK2AOs/XVn8Q3qvAskztsrjVt+qDAwQYtJFFJwAAAAMAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABUz1TLbfZlRNwAAAAAAAAAGAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAAEAAAAAEAAAACAAAADwAAAAdCYWxhbmNlAAAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAABAD8NKwAAAJAAAAG4AAAAAAANqYIAAAAA"
+  }
+ ],
+ "previews": {
+  "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAAvrwgAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAL68IAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA=": {
+   "version": 1,
+   "status": "ok",
+   "engine": {
+    "name": "soroban-sim",
+    "host": "soroban-env-host 29.0.2",
+    "protocol": 29
+   },
+   "ledger": {
+    "sequence": 10000019,
+    "protocol": 29
+   },
+   "stateSource": "a local fixture ledger (captured run)",
+   "recordedAuth": [
+    "AAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mVE3AAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAACpUXruadpQ9dP6crtdc5rGHuQ78KbPfo2P2ZPpVLFp/gAAAAoAAAAAAAAAAAAAAAAC+vCAAAAAAA=="
+   ],
+   "outcome": {
+    "ok": true,
+    "error": null,
+    "codes": []
+   },
+   "verdicts": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "kind": "perch",
+     "allowed": true,
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "code": null,
+     "reason": "Grant 1, rule \u2018spend\u2019: transfer on XLM signed by the app key, within the cap."
+    }
+   ],
+   "budgets": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "token": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "limit": "100000000",
+     "periodLedgers": 100,
+     "spentInWindow": "30000000",
+     "amount": "50000000",
+     "ledger": 10000019,
+     "nextReleaseLedger": 10000113
+    }
+   ],
+   "balances": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "970000000",
+     "after": "920000000"
+    },
+    {
+     "address": "GCUVC6XONHNFB5OT7JZLWXLTTLDB5ZB36CTM67UNR7MZH2KUWFU75HPY",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "40000000",
+     "after": "90000000"
+    }
+   ],
+   "events": [
+    "AAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAEAAAAAAAAABAAAAA8AAAAIdHJhbnNmZXIAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAOAAAABm5hdGl2ZQAAAAAACgAAAAAAAAAAAAAAAAL68IA="
+   ],
+   "resources": {
+    "instructions": 2918617
+   },
+   "captured": {
+    "timingsMs": {
+     "enforcing": 1.309666,
+     "recording": 0.06466599999999999
+    },
+    "replayOfUnusedEntries": []
+   }
+  },
+  "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAABMS0AAAAAAEAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAATEtAAAAAAAAAAAAQAAAAAAAAADAAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABQAAAABAAAABgAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAABQAAAABAAAABzA49dxQrYA6z9dWfxDeq8CyTO2yuNW36oMDBBi0kUUnAAAAAwAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAGAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAFTPVMtt9mVE3AAAAAAAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAQAAAAAQAAAAIAAAAPAAAAB0JhbGFuY2UAAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAAAEAPw0rAAAAkAAAAbgAAAAAAA2pggAAAAA=": {
+   "version": 1,
+   "status": "ok",
+   "engine": {
+    "name": "soroban-sim",
+    "host": "soroban-env-host 29.0.2",
+    "protocol": 29
+   },
+   "ledger": {
+    "sequence": 10000019,
+    "protocol": 29
+   },
+   "stateSource": "a local fixture ledger (captured run)",
+   "recordedAuth": [
+    "AAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mVE3AAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAACpUXruadpQ9dP6crtdc5rGHuQ78KbPfo2P2ZPpVLFp/gAAAAoAAAAAAAAAAAAAAAAExLQAAAAAAA=="
+   ],
+   "outcome": {
+    "ok": false,
+    "error": "Error(Auth, InvalidAction)",
+    "codes": [
+     5
+    ]
+   },
+   "verdicts": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "kind": "perch",
+     "allowed": false,
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "code": 5,
+     "reason": "Perch refused the authorization (PerchAuthError::RuleEvalRefused, contract error 5). The rule's cap has 7 XLM left in this window and the request is 8 XLM."
+    }
+   ],
+   "budgets": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "token": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "limit": "100000000",
+     "periodLedgers": 100,
+     "spentInWindow": "30000000",
+     "amount": "80000000",
+     "ledger": 10000019,
+     "nextReleaseLedger": 10000113
+    }
+   ],
+   "balances": [],
+   "events": [],
+   "resources": {
+    "instructions": 1966656
+   },
+   "captured": {
+    "timingsMs": {
+     "enforcing": 1.140583,
+     "recording": 0.067125
+    },
+    "replayOfUnusedEntries": []
+   }
+  },
+  "AAAAAgAAAAAmdfvo8gfJsOjTOENUj7Ezt4k9Oj6z3dBgePM8qezUHQANqeYAmJYcAAAADgAAAAAAAAAAAAAAAQAAAAAAAAAYAAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAh0cmFuc2ZlcgAAAAMAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAKAAAAAAAAAAAAAAAAATEtAAAAAAIAAAABAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nM9Uy232ZUTcAAAAAAAAAAQAAAAAAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAIdHJhbnNmZXIAAAADAAAAEgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABIAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAACgAAAAAAAAAAAAAAAAExLQAAAAAAAAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mQ/aAAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAADDUjdklj8GBpUjkxgJIugBQ3BUAXqmqcADzI8ZhSbM7AAAAAoAAAAAAAAAAAAAAAACYloAAAAAAAAAAAEAAAAAAAAAAwAAAAYAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAAUAAAAAQAAAAYAAAAB2LKxTGD+y2X7KqgcvqedCDXK/A4NhR+GESV8HltB4cIAAAAUAAAAAQAAAAcwOPXcUK2AOs/XVn8Q3qvAskztsrjVt+qDAwQYtJFFJwAAAAMAAAAAAAAAAKlReu5p2lD10/pyu11zmsYe5Dvwps9+jY/Zk+lUsWn+AAAABgAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJwAAABUz1TLbfZlRNwAAAAAAAAAGAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAAEAAAAAEAAAACAAAADwAAAAdCYWxhbmNlAAAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAABAD8NKwAAAJAAAAG4AAAAAAANqYIAAAAA": {
+   "version": 1,
+   "status": "ok",
+   "engine": {
+    "name": "soroban-sim",
+    "host": "soroban-env-host 29.0.2",
+    "protocol": 29
+   },
+   "ledger": {
+    "sequence": 10000019,
+    "protocol": 29
+   },
+   "stateSource": "a local fixture ledger (captured run)",
+   "recordedAuth": [
+    "AAAAAQAAAAF/YNzdZahg/hQkLKB2RC6ipgD2BaQLWZRUy1WhxTjeJzPVMtt9mVE3AAAAAAAAAAEAAAAAAAAAAdiysUxg/stl+yqoHL6nnQg1yvwODYUfhhElfB5bQeHCAAAACHRyYW5zZmVyAAAAAwAAABIAAAABf2Dc3WWoYP4UJCygdkQuoqYA9gWkC1mUVMtVocU43icAAAASAAAAAAAAAACpUXruadpQ9dP6crtdc5rGHuQ78KbPfo2P2ZPpVLFp/gAAAAoAAAAAAAAAAAAAAAABMS0AAAAAAA=="
+   ],
+   "outcome": {
+    "ok": true,
+    "error": null,
+    "codes": []
+   },
+   "verdicts": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "kind": "perch",
+     "allowed": true,
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "code": null,
+     "reason": "Grant 1, rule \u2018spend\u2019: transfer on XLM signed by the app key, within the cap."
+    }
+   ],
+   "budgets": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "rule": {
+      "id": 1,
+      "name": "spend",
+      "grant": 1
+     },
+     "token": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "limit": "100000000",
+     "periodLedgers": 100,
+     "spentInWindow": "30000000",
+     "amount": "20000000",
+     "ledger": 10000019,
+     "nextReleaseLedger": 10000113
+    }
+   ],
+   "balances": [
+    {
+     "address": "CB7WBXG5MWUGB7QUEQWKA5SEF2RKMAHWAWSAWWMUKTFVLIOFHDPCODNM",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "970000000",
+     "after": "950000000"
+    },
+    {
+     "address": "GCUVC6XONHNFB5OT7JZLWXLTTLDB5ZB36CTM67UNR7MZH2KUWFU75HPY",
+     "asset": {
+      "code": "XLM",
+      "decimals": 7,
+      "contract": "CDMLFMKMMD7MWZP3FKUBZPVHTUEDLSX4BYGYKH4GCESXYHS3IHQ4EIG4"
+     },
+     "before": "40000000",
+     "after": "60000000"
+    }
+   ],
+   "events": [
+    "AAAAAAAAAAHYsrFMYP7LZfsqqBy+p50INcr8Dg2FH4YRJXweW0HhwgAAAAEAAAAAAAAABAAAAA8AAAAIdHJhbnNmZXIAAAASAAAAAX9g3N1lqGD+FCQsoHZELqKmAPYFpAtZlFTLVaHFON4nAAAAEgAAAAAAAAAAqVF67mnaUPXT+nK7XXOaxh7kO/Cmz36Nj9mT6VSxaf4AAAAOAAAABm5hdGl2ZQAAAAAACgAAAAAAAAAAAAAAAAExLQA="
+   ],
+   "resources": {
+    "instructions": 2950038
+   },
+   "captured": {
+    "timingsMs": {
+     "enforcing": 1.337958,
+     "recording": 0.069875
+    },
+    "replayOfUnusedEntries": [
+     {
+      "applied": true,
+      "balancesAfterReplay": {
+       "account": "910000000",
+       "mallory": "50000000"
+      },
+      "detail": "()",
+      "function": "transfer"
+     }
+    ]
+   }
+  }
+ },
+ "notice": "Captured from a native soroban-sim run (soroban-env-host 29.0.2) of the pinned Perch contracts; see proto/perch-fixture."
+};
+
+</script>
+<script type="module">
+// Toy dapp glue for the mock. It uses only the component's public API:
+// labels, previewProvider, request(), and the approve / reject / preview events.
+const C = globalThis.CANNED;
+const dialog = document.getElementById('dialog');
+const log = document.getElementById('log');
+const short = (s) => (s ? `${s.slice(0, 4)}…${s.slice(-4)}` : '');
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+dialog.labels = C.labels;
+
+// Canned stand-in for the simulator engine: same request in, same
+// PreviewResult shape out as the real engine module.
+dialog.previewProvider = ({ transaction, signal }) =>
+  new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      const result = C.previews[transaction];
+      resolve(result ? structuredClone(result) : { status: 'fallback', notice: 'No canned preview for this transaction.' });
+    }, 700);
+    signal?.addEventListener('abort', () => { clearTimeout(t); reject(new DOMException('aborted', 'AbortError')); });
+  });
+
+const set = (id, fn) => document.getElementById(id).addEventListener('change', (e) => fn(e.target.value));
+set('theme', (v) => {
+  v ? document.documentElement.setAttribute('data-theme', v) : document.documentElement.removeAttribute('data-theme');
+  v ? dialog.setAttribute('theme', v) : dialog.removeAttribute('theme');
+});
+set('brand', (v) => dialog.classList.toggle('brand', v === 'brand'));
+set('preview', (v) => dialog.setAttribute('preview', v));
+dialog.setAttribute('preview', 'manual');
+
+for (const button of document.querySelectorAll('[data-scenario]')) {
+  button.addEventListener('click', async () => {
+    const s = C.scenarios.find((x) => x.id === button.dataset.scenario);
+    const r = await dialog.request({ transaction: s.transaction, network: C.network, signer: C.signer, dapp: 'cafe-perch.example' });
+    const item = document.createElement('div');
+    item.className = 'ev';
+    if (r.approved) {
+      const mine = r.entries.filter((e) => e.forSigner);
+      item.innerHTML = `<b class="ok">approve</b> · ${esc(s.title)}<br>
+        The wallet now signs ${mine.length} entr${mine.length === 1 ? 'y' : 'ies'} for ${esc(short(r.signer))}:
+        <pre>${esc(mine.map((e) => `#${e.index + 1} ${e.credentials} nonce ${e.nonce}\n   invocationHash ${e.invocationHash}`).join('\n'))}</pre>
+        ${r.flags.length ? `Signed despite: ${esc(r.flags.map((f) => f.kind).join(', '))}` : 'No flags.'}`;
+    } else {
+      item.innerHTML = `<b class="no">reject</b> · ${esc(s.title)} · reason <code>${esc(r.reason)}</code>`;
+    }
+    log.prepend(item);
+    button.focus();
+  });
+}
+
+</script>
+</body>
+</html>

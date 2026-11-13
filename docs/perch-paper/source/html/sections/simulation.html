@@ -12,17 +12,17 @@
 <p>A Perch cap is part of its rule, so it cannot be removed on its own; changing it means replacing the rule. A reviewer reads one document and one decision function, rather than the account's checks plus every policy attached to each rule. One owner call also removes a grant across every contract it covers, where an OpenZeppelin account's rules are removed one at a time.</p>
 <h3 id="sim-how">How the comparison runs</h3>
 <p>soroban-sim {{cite:soroban-sim}} packages soroban-env-host, the host library the Stellar network runs, so this page can run both designs' real contract code in the browser, offline. It keeps a separate ledger for each account and checks authorization on every request, as the network does, though it does not measure costs exactly. Both sides run contracts built from pinned sources, next to the native XLM contract. The OpenZeppelin side runs the OpenZeppelin {{fact:oz-v080-tag}} account and oz-policy-builder's <code>policy-interpreter</code> and <code>spending_limit</code>, whose hashes match oz-policy-builder's testnet records. The Perch side runs the Perch account, its document compiler and its Ed25519 verifier. The same requests give identical replies, apart from timings, when run natively, as a WASI build and in this page; <a href="#repro">Provenance</a> lists every contract's hash. The Aha Company publishes soroban-sim ({{fact:soroban-sim-license}}), and the authors work there.</p>
-<h3 id="stronger">Each design is stronger somewhere</h3>
+<h3 id="stronger">Each design has its strengths</h3>
 <div class="each">
 <div><h4>oz-policy-builder</h4><ul>
 <li><strong>Maturity.</strong> Its interpreter is pinned on testnet, the project is under external audit, its off-chain packages were hardened after a penetration test, and it is exercised on recorded mainnet transactions.</li>
 <li><strong>Authoring.</strong> It tests that each condition of a synthesised predicate is needed and verifies the predicate against the deployed interpreter; a CLI and an MCP server expose its {{fact:opb-tools-count}} tools.</li>
-<li><strong>Expressiveness and reach.</strong> <em>Or</em>, comparisons, conditions over lists, clock windows, slippage floors, reads of other contracts, threshold policies and a deny code for each reason. Its installer supports existing OpenZeppelin account builds, including the 0.7.2 line in use on mainnet (<a href="https://github.com/{{fact:opb-repo}}/blob/{{fact:opb-pin}}/packages/policy-synth/README.md#L143"><code>policy-synth/README.md:143</code></a>).</li>
+<li><strong>Expressiveness and reach.</strong> <em>Or</em>, comparisons, conditions over lists, clock windows, slippage floors, reads of other contracts, threshold policies and a deny code for each reason. Its installer works with existing OpenZeppelin accounts, including the 0.7.2 line in use on mainnet (<a href="https://github.com/{{fact:opb-repo}}/blob/{{fact:opb-pin}}/packages/policy-synth/README.md#L143"><code>policy-synth/README.md:143</code></a>). A Perch grant, by contrast, works only on a Perch account.</li>
 </ul></div>
 <div><h4>Perch</h4><ul>
 <li><strong>Limits over time.</strong> Every capped rule's decision includes its window.</li>
 <li><strong>One decision point.</strong> One contract holds the rules and their state, installs one document that covers several contracts, and accepts passkey signers on grant rules.</li>
 <li><strong>Proved decision logic.</strong> The decision function is proved in Lean to accept only what the rules allow and to keep each window within its cap.</li>
-</ul><p>A Perch grant needs a Perch account.</p></div>
+</ul></div>
 </div>
 <p>The companion paper <a href="{{doc:oz-policy-builder}}">Perch and oz-policy-builder</a> sets out every dimension with a source for each cell, and the <a href="{{root}}../oz-walkthrough/index.html">oz-policy-builder walkthrough</a> replays one task in both designs step by step.</p>

@@ -37,7 +37,7 @@
  },
  "preview-game-cap-xlm": {
   "value": "2",
-  "source": "`P:crates/integration-tests/tests/release_stack.rs:4019-4030` (V)"
+  "source": "`P:crates/integration-tests/tests/release_stack.rs:4896-4907` (V)"
  },
  "preview-game-cap-stroops": {
   "value": "20000000",
@@ -53,7 +53,7 @@
  },
  "passkey-key-bytes": {
   "value": "65",
-  "source": "`P:release_stack.rs:4005-4006` (V)"
+  "source": "`P:crates/integration-tests/tests/release_stack.rs:4882-4883` (V)"
  },
  "game-wrong-guess-xlm": {
   "value": "1",
@@ -110,7 +110,7 @@
  "recovery-modes": {
   "value": "`guardian-only`, `zk-only`, `combined`",
   "markup": true,
-  "source": "`P:crates/perch-ir/src/doc.rs:403-413` (R)"
+  "source": "`P:crates/perch-ir/src/doc.rs:418-428` (R)"
  },
  "shop-cap-xlm": {
   "value": "10",

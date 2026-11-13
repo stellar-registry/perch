@@ -724,7 +724,10 @@ def build_html(p, blocks):
             label = f'{n} · {s["nav"]}' if n and n.isdigit() else s['nav']
             nav.append(f'<a href="#{s["id"]}">{html.escape(label)}</a>')
     nav.append(f'</div><small>{o["nav_note"]}</small></nav>')
-    css = '\n'.join(read(SHARED_HTML / n).strip() for n in ('style.css', 'page.css', 'figures.css')
+    styles = ['style.css', 'page.css', 'figures.css']
+    if DOC['id'] == 'main':
+        styles.append('journey.css')
+    css = '\n'.join(read(SHARED_HTML / n).strip() for n in styles
                     if (SHARED_HTML / n).exists())
     font = SHARED_HTML / 'fonts' / 'perch-math.woff2'
     if font.exists():
@@ -746,12 +749,19 @@ def build_html(p, blocks):
         body = card_heads(expand_html(p, read(HTMLDIR / 'sections' / f'{s["id"]}.html'), s['id'], blocks, seen).strip())
         head = f'<h2><span class="n">{n}</span>{html.escape(s["title_html"])}</h2>' if n else f'<h2>{html.escape(s["title_html"])}</h2>'
         alias = ''.join(f'<span class="alias" id="{a}"></span>' for a in s.get('aliases', []))
-        parts.append(f'<section id="{s["id"]}">{alias}{head}{body}</section>')
+        if s.get('collapse_html'):
+            parts.append(f'<section id="{s["id"]}" class="section-appendix">{alias}'
+                         f'<details class="section-disclosure"><summary>{head}</summary>{body}</details></section>')
+        else:
+            parts.append(f'<section id="{s["id"]}">{alias}{head}{body}</section>')
     parts.append(expand_html(p, read(html_file('footer.html')), 'footer', blocks, seen).strip())
     parts.append('</main></div>')
     if DOC.get('carried'):
         parts.append(blocks['EMBEDDED_ASSETS'])
-    for js in ('model.js', 'figures.js'):
+    scripts = ['model.js', 'figures.js']
+    if DOC['id'] == 'main':
+        scripts.append('journey.js')
+    for js in scripts:
         if (SHARED_HTML / js).exists():
             parts.append('<script>' + read(SHARED_HTML / js).strip() + '</script>')
     parts.append('</body></html>\n')

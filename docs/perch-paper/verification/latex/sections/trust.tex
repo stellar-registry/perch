@@ -20,8 +20,11 @@ Theorem~\ref{stmt:canonical-identity} gives hash identity only up to SHA-256
 collisions. Ed25519~\cite{rfc8032} is checked with strict verification; P-256 is
 ECDSA with low $S$ enforced; the WebAuthn verifier~\cite{webauthn2} checks
 neither the relying-party ID nor the origin; \fact{mldsa-verifier} is pure
-FIPS~204~\cite{fips204} with a fixed context string. The compiler refuses a key
-not in its verifier's canonical form, so a threshold cannot count one key twice.
+FIPS~204~\cite{fips204} with a fixed context string. The compiler requires keys
+in verifier-canonical form, but thresholds count configured identities: a
+verifier-address/key pair for an external signer, or an address for a delegated
+one. Distinct identities may share a physical key or controlling party;
+independent custody is an authoring assumption.
 The deployed Ed25519 and WebAuthn verifiers trap on a bad signature
 (\fact{verifier-trap-error} for Ed25519). The zero-knowledge recovery factor
 (\perchdoc{vision}) proves knowledge of a secret behind a public Poseidon2

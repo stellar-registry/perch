@@ -19,7 +19,7 @@
   ],
   [
    "Order of checks",
-   "Whole rule decision, caps included, before authentication; a refused batch calls no verifier (`gate.rs:93-113`)",
+   "Whole rule decision, caps included, before authentication; a batch refused by the evaluator calls no verifier (`gate.rs:93-113`)",
    "Rule existence, scope and expiry, then a refusal of any signer on no selected rule, before authentication; then each attached policy's `enforce` (predicate, spending total, threshold) in the rule's stored order: address order for the policies it was created with, then any added later (OZ `storage.rs:629-689, 830, 1304, 1588-1596`; observed in the walkthrough)",
    "V"
   ],
@@ -37,7 +37,7 @@
   ],
   [
    "Relating calls in one transaction",
-   "None: each context is checked alone against its rule; draft changes after the pinned build ({{fact:exact-roots-prs}}) add entry roots",
+   "A rule may require its entry's root call to be one contract and function (exact roots, {{fact:exact-roots-prs}}); otherwise each context is checked alone against its rule",
    "One predicate over the execution adapter's batch argument can relate its calls (`docs/stellar.md:350-352`; `policy-interpreter/README.md:390-397`)",
    "V"
   ],
@@ -121,13 +121,13 @@
   ],
   [
    "Keeping state alive",
-   "Rule set extended on every authorization; grants on read; spending records to the maximum on write; `renew` omits grants (`gate.rs:64, 114-119`; `lib.rs:936-959`)",
+   "Rule-set TTL extended on the ordinary evaluator path; grants on read; spending records to the maximum on write; `renew` omits grants (`gate.rs:64, 114-119`; `lib.rs:936-959`)",
    "Interpreter entry bumped on a permit when fewer than 100 ledgers remain; instance and read targets need a keep-alive job (`lib.rs:256-265`; `docs/stellar.md:304-308`)",
    "V/R"
   ],
   [
    "What a refusal reports",
-   "`StaleGrant` ({{fact:auth-error-stale-scope}}) or `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}}); a wallet re-runs the evaluator off chain for the reason",
+   "`StaleGrant` ({{fact:auth-error-stale-grant}}) or `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}}); a wallet re-runs the evaluator off chain for the reason",
    "A specific deny code per reason (`storage.rs:27-86`)",
    "V"
   ]

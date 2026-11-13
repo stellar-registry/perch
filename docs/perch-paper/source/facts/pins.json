@@ -1,11 +1,11 @@
 {
  "perch-pin": {
-  "value": "f0275f41c5ab47c903bbfe9986b4bf3239c01b11",
+  "value": "0b3752d8a179a5952b05fbebd29131dbbf99fa80",
   "anon": "[withheld]",
-  "source": "this repo, `git cat-file` (V)"
+  "source": "this repo, `git rev-parse origin/dev` (the merge of #100), `git cat-file` (V)"
  },
  "perch-pin-short": {
-  "value": "f0275f4",
+  "value": "0b3752d",
   "anon": "[withheld]",
   "source": "same (V)"
  },
@@ -22,7 +22,7 @@
  "perch-preview-source": {
   "value": "a410123",
   "anon": "[withheld]",
-  "source": "r1 blockchain-accounts H3: `a410123..f0275f4` changes no contract source (C)"
+  "source": "r1 blockchain-accounts H3: `a410123..f0275f4` changes no contract source (C); an earlier revision of the stack whose contracts predate the pin (V: `git log a410123..0b3752d`)"
  },
  "perch-deployed-source": {
   "value": "c135aca277745434f2abf679edd9868c95204b51",
@@ -70,8 +70,8 @@
  "exact-roots-prs": {
   "value": "Perch #69 and rule-core #17",
   "anon": "[withheld]",
-  "note": "drafts",
-  "source": "r2:66, 86 (C)"
+  "note": "merged",
+  "source": "r2:66, 86 (C); merged as Perch 46ed1e7 and rule-core 3aff6f1, both before the pins (V)"
  },
  "completion-marker-issue": {
   "value": "#15",
@@ -79,11 +79,11 @@
   "source": "r2:619 (C)"
  },
  "rule-core-pin": {
-  "value": "cbabe594ae2df408991e825e56ddd618ea29541b",
-  "source": "local checkout `soroban-rule-core/cbabe59`, `git log` (V)"
+  "value": "a3c92ba074dcac4052727b7599e5fd8674af6c0a",
+  "source": "`P:Cargo.toml` `rule-eval` git rev at the Perch pin; local checkout `soroban-rule-core/a3c92ba`, `git log` (V)"
  },
  "rule-core-pin-short": {
-  "value": "cbabe59",
+  "value": "a3c92ba",
   "source": "same (V)"
  },
  "rule-core-repo": {
@@ -125,5 +125,13 @@
  "soroban-sim-pin-short": {
   "value": "d029384",
   "source": "first seven hex digits of soroban-sim-pin (facts/pins.json, d02938430f0ac41f34e5e3e4c8c48d85b871bd68); r4 plan, Pins"
+ },
+ "rule-core-earlier-pin-short": {
+  "value": "cbabe59",
+  "source": "rule-core at the paper's earlier pin, where the in-page check was measured (C)"
+ },
+ "perch-branch": {
+  "value": "dev",
+  "source": "`git branch -r --contains 0b3752d`: origin/dev; `origin/main` does not contain the grant API (V)"
  }
 }

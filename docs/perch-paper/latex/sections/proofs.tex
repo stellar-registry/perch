@@ -31,7 +31,7 @@ $R$'s spending records, one per rule; $r_i = R_{j_i}$ is the rule chosen for
 context $c_i$; $u_r = \infty$ and $g_r = \bot$ when absent; $\varnothing$ is
 the empty records; ledgers are natural numbers. \emph{allows}$(r, c, S)$: $c$
 calls $r$'s contract and a function it allows, meets $r$'s argument
-conditions, and $S$ holds at least $k_r$ of $r$'s signers. \emph{authorize}
+conditions, and $S$ holds at least $k_r$ of $r$'s signers. \emph{checkAuth}
 returns records $\rho'$ when each chosen rule allows its context, has not
 expired and carries generation $\bot$ or $g$, every signer is on a chosen
 rule, and every cap charge passes. $\mathit{spent}_j$ lists each positive

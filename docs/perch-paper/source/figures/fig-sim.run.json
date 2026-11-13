@@ -1,31 +1,31 @@
 {
  "_source": "Recorded native reference run of docs/perch-paper/sim/index.html (evidence/native-golden.jsonl in its embedded build sources). The page hashes each browser reply minus wall-clock timings and compares it with this run; the WASI build gives the same replies.",
- "page_sha256": "ce8174dc3ac325deb511a3fecfa8127d72477ac7d47a1a4a5040680c906b982e",
- "golden_sha256": "38da174d3bc6d7242f788ac2bf479545e3bce18aefbcd578966341c53cbe3dea",
- "replies_sha256": "88bf930eea70cb7344c912049c77e44b134b3806993c12cc7c4edabd52a38136",
+ "page_sha256": "156f9875cdde076ddf728bc43e5caff9650179dcc296199362ed246c86c453e0",
+ "golden_sha256": "bde6a1e79f37e69f34ae3bafad63fa606c64680399e2739b5ac922f97d62ce97",
+ "replies_sha256": "925d02cbea59b1fb0fbd17d462463605ce2f82bc5a0a4e907bbcebc2ff4f8372",
  "replies_sha256_note": "SHA-256 of the fifteen replies minus every `ms` field, one JSON line each (replies.mjs); native, WASI and the browser agree on it.",
  "pins": {
   "soroban_sim": "d02938430f0ac41f34e5e3e4c8c48d85b871bd68",
   "soroban_env_host": "29.0.2",
-  "perch": "f0275f41c5ab47c903bbfe9986b4bf3239c01b11",
-  "rule_core": "cbabe594ae2df408991e825e56ddd618ea29541b",
+  "perch": "0b3752d8a179a5952b05fbebd29131dbbf99fa80",
+  "rule_core": "a3c92ba074dcac4052727b7599e5fd8674af6c0a",
   "openzeppelin_stellar_contracts": "ddc327eb92d63709436da3a8455f641c2d5476c5 (v0.8.0)",
   "oz_policy_builder": "43b13ed1d9c6662afd74f446006e69bfcf21259b",
   "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)",
   "stellar_cli": "stellar 27.0.0 (5a7c5fe76530bf4248477ac812fc757146b98cc4)"
  },
  "contracts": {
-  "perch_doc_compiler.wasm": "60f470704831852e67835379187a32058d9636b3783bf5ad9e625a29fc8da86f",
+  "perch_doc_compiler.wasm": "e89d977ac2bebaf935720a7a3408f6cd57b5940a02b0476e7b8e071e224b0fe3",
   "perch_interpreter.wasm": "4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f",
   "perch_spending_limit.wasm": "ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b",
   "perch_ed25519_verifier.wasm": "27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c",
-  "perch_account.wasm": "3038f5dc50ad803acfd7567f10deabc0b24cedb2b8d5b7ea83030418b4914527",
+  "perch_account.wasm": "cc56a2d36669dba65c9089ba9c133e284d4b2f9bff826e2d52876e66b5e14428",
   "verifiers_stub.wasm": "65a4168ba2123c22dee2d30e0341f420db1dae59bef7b207ba0c8da3f55f5d14",
   "oz_account_0_8_0.wasm": "8286422f205951f37f4249401b403471fc432340dde6925432d31bb8a90cce27",
   "oz_spending_limit_0_8_0.wasm": "65e70aad310bcaf7025aedc97e70cde098e1dd6c22d5153879c9cc64ea7da8e2",
   "policy_interpreter.wasm": "6704996f626904a4e33b95bda17b73963fc9cf502ffdfdbe9d85b4b10288e0d4"
  },
- "reactor_sha256": "a2352156fda3b91648dba2c218f883e248f20eac2c5ee1bb59cce699c13bd0da",
+ "reactor_sha256": "a7f6f4220e9eb561d6452a9e071b0348e3387a457a4f481ed09511b76708269b",
  "task": "An app key may send XLM from the account only to the shop. OpenZeppelin: the oz-policy-builder predicate pins the recipient and bounds each transfer at 10 XLM; spending_limit (10 XLM per 100 ledgers) sits beside it on rule 1 and is removed and re-added in this run. Perch: one grant, recipient pinned, 10 XLM per 100-ledger cap.",
  "steps": [
   {
@@ -99,7 +99,7 @@
       {
        "depth": 0,
        "contract": "Perch account",
-       "fn": "apply_scope"
+       "fn": "apply_grant"
       },
       {
        "depth": 1,

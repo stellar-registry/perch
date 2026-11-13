@@ -1,7 +1,7 @@
 {
- "about": "Data for fig-two-paths: the phases of one __check_auth in a Perch account and in an OpenZeppelin v0.8.0 account whose rules carry oz-policy-builder's policy-interpreter and OpenZeppelin's spending_limit. Read from source, not measured. Sources: P = Perch at f0275f4; oz8 = OpenZeppelin stellar-contracts v0.8.0 packages/accounts/src; opb = oz-policy-builder at 43b13ed. The SVG, its narrow form and the text alternative are generated from this file.",
+ "about": "Data for fig-two-paths: the phases of one __check_auth in a Perch account and in an OpenZeppelin v0.8.0 account whose rules carry oz-policy-builder's policy-interpreter and OpenZeppelin's spending_limit. Read from source, not measured. Sources: P = Perch at 0b3752d; oz8 = OpenZeppelin stellar-contracts v0.8.0 packages/accounts/src; opb = oz-policy-builder at 43b13ed. The SVG, its narrow form and the text alternative are generated from this file.",
  "repos": {
-  "P": "Perch f0275f4 ",
+  "P": "Perch 0b3752d ",
   "oz8": "stellar-contracts v0.8.0 packages/accounts/src/",
   "opb": "oz-policy-builder 43b13ed "
  },
@@ -31,7 +31,7 @@
     "src": [
      [
       "P",
-      "crates/perch-smart-account/src/lib.rs:1842-1849"
+      "crates/perch-smart-account/src/lib.rs:1950-1957"
      ]
     ],
     "io": "receives the payload's rule IDs and signers"
@@ -57,14 +57,14 @@
     "src": [
      [
       "P",
-      "crates/perch-smart-account/src/lib.rs:1113-1147"
+      "crates/perch-smart-account/src/lib.rs:1164-1204"
      ],
      [
       "P",
-      "crates/perch-smart-account/src/gate.rs:70-90"
+      "crates/perch-smart-account/src/gate.rs:89-110"
      ]
     ],
-    "io": "reads the rule set, scope tags, freeze and spending records"
+    "io": "reads the rule set, grant tags, freeze and spending records"
    },
    "oz": {
     "text": "Each rule must exist, be unexpired and match its context's contract; a signer on no selected rule is refused (3016).",
@@ -91,7 +91,7 @@
     "src": [
      [
       "P",
-      "crates/perch-smart-account/src/gate.rs:91-105"
+      "crates/perch-smart-account/src/gate.rs:111-133"
      ]
     ],
     "io": "reads rules, records, ledger and grant generation; writes nothing",
@@ -123,11 +123,11 @@
     "src": [
      [
       "P",
-      "crates/perch-smart-account/src/lib.rs:1155"
+      "crates/perch-smart-account/src/lib.rs:1212"
      ],
      [
       "P",
-      "crates/perch-smart-account/src/gate.rs:106-110"
+      "crates/perch-smart-account/src/gate.rs:134-138"
      ]
     ],
     "io": "computes the digest an external signer signs",
@@ -192,7 +192,7 @@
     "src": [
      [
       "P",
-      "crates/perch-smart-account/src/gate.rs:56-123"
+      "crates/perch-smart-account/src/gate.rs:71-151"
      ]
     ],
     "io": "no call",
@@ -243,7 +243,7 @@
     "src": [
      [
       "P",
-      "crates/perch-smart-account/src/gate.rs:114-121"
+      "crates/perch-smart-account/src/gate.rs:142-149"
      ]
     ],
     "io": "writes the spending record",

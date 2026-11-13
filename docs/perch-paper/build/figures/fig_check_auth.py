@@ -14,13 +14,13 @@ STEPS = [
     (3, 'tested', 'Frozen by an authorized `Protected` attempt, and this is not its completion?',
      [f'AccountFrozen · {fact("auth-error-account-frozen")}']),
     (4, 'tested', 'A selected grant rule calls the recovery controller, its ZK adapter or its ZK pool?',
-     [f'GrantEscalation · {fact("auth-error-scope-escalation")}']),
+     [f'GrantEscalation · {fact("auth-error-grant-escalation")}']),
     (5, 'tested', f'bound = SHA-256(domain ‖ account ‖ signature payload), with domain `"{fact("auth-domain-tag")}"`', []),
     (6, 'tested', 'Resolve the selected rule IDs to stored rules and spending records; convert the contexts.',
      [f'ContextRuleNotFound · {fact("oz-error-context-rule-not-found")}', f'RuleEvalRefused · {fact("auth-error-rule-eval-refused")}']),
     (7, 'proved', '`rule_eval::check_auth`: rules, records, contexts, choices, signers, ledger, generation → next records. '
      'No storage, no signatures.',
-     [f'StaleGrant · {fact("auth-error-stale-scope")}', f'RuleEvalRefused · {fact("auth-error-rule-eval-refused")}']),
+     [f'StaleGrant · {fact("auth-error-stale-grant")}', f'RuleEvalRefused · {fact("auth-error-rule-eval-refused")}']),
     (8, 'tested', 'digest = SHA-256(bound ‖ XDR(selected rule IDs)). For each claimed signer:', []),
     (9, 'tested', 'Store each capped spending record that changed. Authorized.', []),
 ]
@@ -141,7 +141,7 @@ def steps():
             {'n': '4', 'text': 'Refuse a selected grant rule that calls the recovery controller or its zero-knowledge adapter '
              'or pool. A completion leaves here: the controller\'s `rcv_complete` checks the approved document bytes and '
              'the completion window.',
-             'exits': ['`GrantEscalation` ({{fact:auth-error-scope-escalation}})', 'a completion: decided by the recovery controller'],
+             'exits': ['`GrantEscalation` ({{fact:auth-error-grant-escalation}})', 'a completion: decided by the recovery controller'],
              'assurance': 'tested'},
             {'n': '5', 'text': 'bound = SHA-256(domain ‖ account ‖ signature payload), with domain {{fact:auth-domain-tag}}.',
              'exits': [], 'assurance': 'tested'},
@@ -150,7 +150,7 @@ def steps():
                        '`RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}})'], 'assurance': 'tested'},
             {'n': '7', 'text': '`rule_eval::check_auth` maps rules, records, contexts, choices, signers, ledger and generation '
              'to the next records. It reads no storage and checks no signature.',
-             'exits': ['stale grant: `StaleGrant` ({{fact:auth-error-stale-scope}})',
+             'exits': ['stale grant: `StaleGrant` ({{fact:auth-error-stale-grant}})',
                        'otherwise `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}})'],
              'assurance': 'proved'},
             {'n': '8', 'text': 'digest = SHA-256(bound ‖ XDR(rule IDs)). Authenticate each signer: an external one through '

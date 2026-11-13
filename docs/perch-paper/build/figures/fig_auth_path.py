@@ -3,7 +3,7 @@
 Writes the wide and narrow SVG and fig-auth-path.steps.json (the algorithm figure's text,
 which the LaTeX edition prints as a table). The stages and their exits restate
 fig-check-auth's nine steps; error numbers come from the facts. The right column,
-"where each scenario stops", is computed with perchmodel.py (rule-core's authorize), and
+"where each scenario stops", is computed with perchmodel.py (rule-core's check_auth), and
 the forged-signer exit quotes the recorded run (fig-sim.run.json). The <g data-stage>,
 <g data-check> and <g data-exit> groups are the controller's hooks; marks carry
 data-print="no".
@@ -30,7 +30,7 @@ STAGES = [
      'A recovery completion leaves here.',
      'Reserved hook names, an account frozen during a recovery, a grant rule on the account\u2019s adopted recovery contracts.',
      ['`ReservedFunction` ({{fact:auth-error-reserved-function}})', '`AccountFrozen` ({{fact:auth-error-account-frozen}})',
-      '`GrantEscalation` ({{fact:auth-error-scope-escalation}})', 'a completion: decided by the recovery controller'],
+      '`GrantEscalation` ({{fact:auth-error-grant-escalation}})', 'a completion: decided by the recovery controller'],
      'tested'),
     ('select', 'Select rules',
      'Resolve each named rule ID to a stored rule and its spending record; the account does not search.',
@@ -40,12 +40,12 @@ STAGES = [
      '`rule_eval::check_auth` maps the rules, records, contexts, choices, claimed signers, ledger and generation to the '
      'next records or a refusal. It reads no storage and checks no signature.',
      '`rule_eval::check_auth`: no storage read, no signature checked.',
-     ['stale grant: `StaleGrant` ({{fact:auth-error-stale-scope}})',
+     ['stale grant: `StaleGrant` ({{fact:auth-error-stale-grant}})',
       'otherwise `RuleEvalRefused` ({{fact:auth-error-rule-eval-refused}})'], 'proved'),
     ('authenticate', 'Authenticate',
      'Hash the payload, the account and the rule IDs into a digest; each external signer’s verifier contract '
      'checks it (trusted); a delegated signer authorizes through the host.',
-     'A digest of the payload, the account and the rule IDs; each signer’s verifier checks it.',
+     'External signers: verifier checks the digest. Delegated signers: host checks approval.',
      ['bad signature: the verifier traps ({{fact:verifier-trap-error}} for Ed25519)',
       '`ExternalVerificationFailed` ({{fact:oz-error-external-verification-failed}})'], 'tested; verifier trusted'),
     ('store', 'Store', 'Store each changed spending record. Authorized.', 'Write each changed spending record. Authorized.',

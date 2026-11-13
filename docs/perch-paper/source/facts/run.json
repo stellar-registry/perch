@@ -49,65 +49,65 @@
   "source": "r2:561 (C)"
  },
  "cpu-reset": {
-  "value": "87,218,534; 91,002,996; 16,141,851; 12,030,445; 2,252,729; 55,758,065; 92,237; 1,760,165; 185,494; 1,508,981; 915,820",
-  "source": "`GOLDEN` (C)"
+  "value": "89,554,138; 95,112,535; 16,141,851; 12,030,445; 2,252,729; 55,790,398; 92,237; 1,779,290; 185,494; 1,508,981; 915,834",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-install-grant": {
-  "value": "8,493,201",
-  "source": "`GOLDEN` (C)"
+  "value": "8,670,608",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-spend-6": {
-  "value": "2,752,173",
-  "source": "`GOLDEN` (C)"
+  "value": "2,820,734",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-enroll": {
-  "value": "13,733,435",
-  "source": "`GOLDEN` (C)"
+  "value": "13,884,934",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-begin": {
-  "value": "13,670,993",
-  "source": "`GOLDEN` (C)"
+  "value": "13,734,497",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-guardian-1": {
-  "value": "1,719,379",
-  "source": "`GOLDEN` (C)"
+  "value": "1,718,635",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-guardian-2": {
-  "value": "2,595,288",
-  "source": "`GOLDEN` (C)"
+  "value": "2,606,753",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-complete": {
-  "value": "14,220,904",
-  "source": "`GOLDEN` (C)"
+  "value": "14,288,061",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-install-fresh": {
-  "value": "8,674,696",
-  "source": "`GOLDEN` (C)"
+  "value": "8,840,753",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-spend-grant2": {
-  "value": "2,815,558",
-  "source": "`GOLDEN` (C)"
+  "value": "2,874,899",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-gc": {
-  "value": "1,365,038",
-  "source": "`GOLDEN` (C)"
+  "value": "1,320,925",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-install-game": {
-  "value": "3,663,659; 1,006,385; 10,697,803",
-  "source": "`GOLDEN` (C). Which number is the upload, the deploy and the install is **U**; print them unlabelled",
+  "value": "3,663,659; 1,006,385; 10,909,520",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin). Which number is the upload, the deploy and the install is **U**; print them unlabelled",
   "unverified": true
  },
  "cpu-guess-1": {
-  "value": "3,992,899",
-  "source": "`GOLDEN` (C)"
+  "value": "4,085,879",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-guess-2": {
-  "value": "4,104,949",
-  "source": "`GOLDEN` (C)"
+  "value": "4,197,929",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "cpu-win": {
-  "value": "3,082,877",
-  "source": "`GOLDEN` (C)"
+  "value": "3,152,466",
+  "source": "`GOLDEN` (V, rebuilt from the Perch pin)"
  },
  "demo-advance-ledgers": {
   "value": "11",

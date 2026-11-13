@@ -1,9 +1,10 @@
 Perch is a Soroban smart account in which the owner installs \emph{grants},
 bounded permissions that let an app or agent act without a signature prompt for
-each call. The account decides each authorization with one pure function,
-rule-core's \code{rule\_eval::}\allowbreak\code{authorize}~\cite{rule-core},
+each call. The account decides ordinary authorizations with one pure function,
+rule-core's \code{rule\_eval::}\allowbreak\code{check\_auth}~\cite{rule-core},
 linked into the account; the contract code around it, the account \emph{shell},
-stores state, selects rules and checks signatures. The Perch paper,
+stores state, selects rules and checks signatures. Recovery completion instead
+uses the controller's separate authorization path. The Perch paper,
 \perchdoc{main}, states five theorems about the function; this companion gives
 the definitions and all thirteen statements, and says what carries them to the
 deployed account, what they trust and what they leave unproved. Theorem and

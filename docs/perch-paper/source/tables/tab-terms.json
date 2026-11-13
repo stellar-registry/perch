@@ -1,6 +1,6 @@
 {
  "title": "Eight words the two systems use differently.",
- "caption": "Grant, scope, policy, interpreter, `execute`, recovery, cap and expiry mean different things in the two systems. *Scope* is Perch's code name for a grant and its JSON name for a rule's target. The last column gives the meaning in OpenZeppelin's account or in oz-policy-builder.",
+ "caption": "Grant, scope, policy, interpreter, `execute`, recovery, cap and expiry mean different things in the two systems. *Scope* is Perch's JSON name for a rule's target. The last column gives the meaning in OpenZeppelin's account or in oz-policy-builder.",
  "columns": [
   "Term",
   "In Perch",
@@ -12,7 +12,7 @@
   [
    "Grant",
    "A bounded set of rules the owner installs so an app can act without a prompt for each call",
-   "scope",
+   "grant",
    "No single object: one context rule per contract, each with its policies"
   ],
   [

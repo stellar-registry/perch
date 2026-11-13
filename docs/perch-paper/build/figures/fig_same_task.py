@@ -197,8 +197,8 @@ STATE = {
 DOCUMENTED = {
     'oz': ('Documented, not run: a threshold policy for multi-signer rules (policy-synth README, "Threshold"); an '
            'execution adapter to bind calls across a batch (oz-policy-builder docs/stellar.md:191-195).'),
-    'perch': ('Documented, not run: the threshold is part of the rule, with no other contract. No binding of calls '
-              'across a batch at the pinned build (a draft adds entry roots).'),
+    'perch': ('Documented, not run: the threshold is part of the rule, with no other contract. A rule may '
+              'require its entry\'s root call (exact roots); this grant does not.'),
 }
 
 

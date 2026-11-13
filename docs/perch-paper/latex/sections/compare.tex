@@ -23,10 +23,12 @@ Perch window is part of the rule's decision (Theorem~\ref{stmt:cap-window-safety
 conjunct is needed, and verify it) and \emph{expressiveness and ecosystem}
 (reads of other contracts, quantifiers, clock windows, batches related through
 an execution adapter, threshold policies, a deny code per reason, and rules on
-existing OpenZeppelin accounts, where a grant needs a Perch account). Perch is
-ahead in \emph{limits over time}, \emph{one decision point}, which refuses
-before any verifier runs and installs one grant across contracts, and a
-\emph{proved core}; no formal model was found in oz-policy-builder's tree,
+existing OpenZeppelin accounts, where a grant needs a Perch account). Perch
+integrates the \emph{window cap} into \emph{one decision point}: evaluator
+refusals return before authentication. It installs one grant across contracts
+and supplies \emph{proofs about that core}. Both designs enforce the configured window in
+our task; removing OpenZeppelin's policy demonstrates the effect of that
+configuration change, not a failure of its cap. No formal model was found in oz-policy-builder's tree,
 which is tested, partly on the shipped Wasm.
 
 \paragraph{Lessons for Perch.} We propose five: a front end that records a

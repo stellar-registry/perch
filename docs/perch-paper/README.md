@@ -42,6 +42,12 @@ states as a fact comes from data all documents share:
 | `source/statements.json`, `source/definitions.json` | theorems and definitions, with LaTeX math | `{{statements:T2,T6}}`, `{{definitions}}` | `generated/statements/<label>.tex`, `generated/definitions.tex` |
 | `source/refs.bib` | references | `{{cite:key}}`, list generated | `\cite{key}` |
 
+The main HTML is a builder-oriented summary. Its `journey.html`, `journey.css` and
+`journey.js` provide the decision flow; signature outcomes are illustrative scenario
+inputs, while grant decisions use `PerchModel`. An outline section can set
+`"collapse_html": true` to keep reference material in a native disclosure, with
+fragment links opening it automatically. These options do not alter the PDF order.
+
 Prose is per edition: `source/html/sections/` or `source/papers/<id>/html/sections/`
 (general audience) and `<latex folder>/sections/` (academic). Links between
 documents use `{{doc:<id>}}` (LaTeX `\perchdoc{<id>}`) and `{{root}}`. Math is
@@ -59,6 +65,8 @@ python3 docs/perch-paper/build/paper.py            # write every page and latex/
 python3 docs/perch-paper/build/paper.py --check    # CI: fail if anything is stale or the figures drift
 python3 docs/perch-paper/build/figures/make.py     # redraw the figures from their data
 node docs/perch-paper/build/figures/test_model.mjs # the explorables' models against the definitions
+node docs/perch-paper/build/test_journey.mjs       # refusal ordering and tentative-record boundary
+node docs/perch-paper/build/test_disclosures.mjs   # fragment links reveal nested details
 docs/perch-paper/latex/build.sh                    # every PDF; needs Tectonic 0.17.0 on PATH or in $TECTONIC
 ```
 

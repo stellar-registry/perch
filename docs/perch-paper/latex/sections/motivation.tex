@@ -1,8 +1,10 @@
-An app that spends for a user today either asks the user to approve every call
-or holds a key that can do anything. A Soroban account on Stellar can be a
-contract that decides each authorization itself (\S\ref{sec:background}), so a
-middle ground exists: a \emph{grant} lets an app or agent act for the account
-within limits the account itself enforces. The bound has to hold across the
+An app that spends for a user needs authority beyond a single approval prompt.
+Session keys and capability systems already offer bounded delegation
+(\S\ref{sec:related}); the question here is how a Soroban account enforces that
+bound. A Soroban account on Stellar can be a contract that decides each
+authorization itself (\S\ref{sec:background}). A \emph{grant} lets an app or
+agent act for the account within limits the account itself enforces.
+The bound has to hold across the
 nested calls of one transaction, across repeated calls over time, and whichever
 installed rule the transaction's submitter selects.
 
@@ -17,24 +19,28 @@ no reads of other contracts, and it checks each call alone.
 
 We present Perch, a Soroban smart account that offers safe, bounded delegation
 for apps and agents: simple, proved, and testable end to end in soroban-sim.
-\emph{Safe} and \emph{bounded} mean three properties, not an audit: each call of
-an accepted request is allowed by an installed rule, no window of a capped rule holds more than its
-limit, and no grant allows a call to the account or its adopted recovery
-contracts (Theorems~\ref{stmt:acceptance-implies-permission},
+\emph{Safe} and \emph{bounded} refer to three core properties under their stated
+hypotheses: each accepted context is allowed by a supplied rule; from empty
+records, each fixed capped rule bounds its accepted charges; and scoped
+lowering excludes the account and the supplied recovery contracts
+(Theorems~\ref{stmt:acceptance-implies-permission},
 \ref{stmt:cap-window-safety} and~\ref{stmt:grant-target-containment}).
 \emph{Simple} means one document, one install call
-(\code{apply\_scope}) and one decision point, at the cost of fewer conditions.
+(\code{apply\_grant}) and one decision point, at the cost of fewer conditions.
 \emph{Proved} applies to the Lean translation of the Rust decision function,
 not the deployed Wasm or the tested account code around it, the \emph{shell}. \emph{End to end} covers both designs' contract Wasm and
 the token in one local host, not the wallet, RPC, passkeys or fees. A completed
 recovery moves one counter, and every earlier grant stops authorizing.
 
-\paragraph{Status.} The design is an unmerged pull-request stack ending at
-\fact{perch-pr-stack-head}, previewed on testnet through
+\paragraph{Status.} The design is merged into Perch's \code{\fact{perch-branch}} branch, not yet
+\code{main}; an earlier build is previewed on testnet through
 \fact{wallet-name}~\selfcite{nido-preview}, and not audited; we do not recommend it for real
 funds before an audit. An earlier design is on mainnet~\selfcite{perch-deployments}. \ifdefined\anonymous\else
 soroban-sim~\cite{soroban-sim} is published by The Aha Company, where the
 authors work.\fi
+
+\paragraph{Revision boundary.} The claims and recorded artifacts describe the
+pinned revisions in Appendix~\ref{sec:repro}.
 
 \paragraph{Contributions.} (1)~An account design with one decision point and
 account-held spending windows (\S\S\ref{sec:grants}--\ref{sec:authorization});

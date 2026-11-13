@@ -1,6 +1,6 @@
 {
  "title": "Status on {{fact:paper-date}}.",
- "caption": "*Deployed*: recorded in Perch's deployment manifests and present on the network. *Preview*: a separate testnet deployment outside those manifests. *Merged*: on a main branch, not deployed. *Open PR*: unmerged code. *Proposed*: not implemented. *Not done*: not started or not complete.",
+ "caption": "*Deployed*: recorded in Perch's deployment manifests and present on the network. *Preview*: a separate testnet deployment outside those manifests. *Merged*: on rule-core's main branch or Perch's `dev` integration branch, not deployed. *Open PR*: unmerged code. *Proposed*: not implemented. *Not done*: not started or not complete.",
  "columns": [
   "Component",
   "Status",
@@ -18,15 +18,15 @@
   ],
   [
    "This paper's account (deciding with `rule_eval`; installed grants; credential index; named verifiers; rebuilt recovery hooks)",
-   "{{badge:open:OPEN PR}}",
-   "Perch {{fact:perch-pin-short}}, head of the open stack ending at {{fact:perch-pr-stack-head}}",
-   "Unmerged"
+   "{{badge:merged:MERGED}}",
+   "Perch {{fact:perch-pin-short}} on `{{fact:perch-branch}}`",
+   "Merged into `{{fact:perch-branch}}`, not yet `main`; not deployed"
   ],
   [
-   "The same contract source on testnet",
+   "An earlier build of this account on testnet",
    "{{badge:preview:PREVIEW}}",
    "Separate deployment, {{fact:preview-deploy-date}}, ledger {{fact:preview-deploy-ledger}}; account Wasm {{fact:preview-account-wasm-short}} ({{fact:preview-account-bytes}} B)",
-   "Built from {{fact:perch-preview-source}}, whose contract sources equal the pin's"
+   "Built from {{fact:perch-preview-source}}, an earlier revision whose contracts predate the pin (earlier API names, no exact roots)"
   ],
   [
    "Wallet on that deployment ({{fact:wallet-name}})",
@@ -42,21 +42,15 @@
   ],
   [
    "Exact authorization-entry roots",
-   "{{badge:open:OPEN PR}}",
+   "{{badge:merged:MERGED}}",
    "{{fact:exact-roots-prs}}",
-   "No theorem at {{fact:rule-core-pin-short}}"
+   "rule-core claim `authorize.exact-root` proven at {{fact:rule-core-pin-short}}"
   ],
   [
    "External audit of the Perch contracts (account, compiler, recovery controller, verifiers, ZK pool and adapter, registry) and of rule-core's evaluator",
    "{{badge:notdone:NOT DONE}}",
    "—",
    "Only the vendored UltraHonk base verifier, from Nethermind, has one (by OpenZeppelin); Perch's zero-knowledge additions have none"
-  ],
-  [
-   "Contract exports under this paper's names",
-   "{{badge:proposed:PROPOSED}}",
-   "{{ref:tab:tab-api}}",
-   "Exports unchanged"
   ],
   [
    "Agent runtime; x402 payments; Cedar authoring; delegation-tree budget runtime; account entry point for attenuated grants; in-page proof check",

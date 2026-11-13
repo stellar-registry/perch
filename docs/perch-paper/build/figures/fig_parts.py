@@ -6,15 +6,15 @@ FID = 'fig-parts'
 ACTORS = [
     ('key', [('Owner, passkey wallet', 't'), ('Signs account documents and grant installs.', 'x')]),
     ('key', [('App (Guess the Number)', 't'), ('Signs its calls with its grant key.', 'x')]),
-    ('key', [('Soroban host', 't'), ('Calls `__check_auth` for each authorization entry.', 'x')]),
+    ('key', [('Soroban host', 't'), ('Calls `__check_auth` when an entry is used.', 'x')]),
 ]
 INNER = [
     ('tested', [('`__check_auth`', 't'), ('Account shell: guards, digest, signers', 'x'), ('TESTED', 'm tag', 14)]),
-    ('proved', [('`rule_eval`, a linked library', 't'), ('`check_auth`, `lower`, `lower_scoped`', 'x', 14), ('PROVED', 'g tag', 14)]),
+    ('proved', [('`rule_eval`, a linked library', 't'), ('`check_auth`, `lower`, `lower_scoped`', 'x', 14), ('TRANSLATION PROVED', 'g tag', 14)]),
     ('tested', [('Storage', 't'), ('Rules, grants, spending records, grant generation, credential index', 'x')]),
 ]
 TARGETS = [
-    (176, 'trusted', [('Every authorization', 'a', 14), ('Verifier contracts', 't', 14), ('Ed25519, WebAuthn', 'x', 14), ('TRUSTED', 'm tag', 14)]),
+    (176, 'trusted', [('External signers, after core accepts', 'a', 14), ('Verifier contracts', 't', 14), ('Ed25519, WebAuthn', 'x', 14), ('TRUSTED', 'm tag', 14)]),
     (176, 'tested', [('Every install', 'a', 14), ('Document compiler', 't', 14), ('Resolves names in `perch/verifiers`', 'x', 14), ('TESTED', 'm tag', 14)]),
     (202, 'tested', [('Account-document writes, upgrades, cancellations, completions', 'a', 14), ('Recovery controller', 't', 14), ('TESTED', 'm tag', 14)]),
     (92, 'tested', [('Enrollment', 'a', 14), ('ZK pool', 't', 14), ('TESTED', 'm tag', 14)]),

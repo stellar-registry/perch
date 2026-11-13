@@ -18,8 +18,9 @@ cover the executor binding, the adapter, a no-gate liquidation and the
 \fact{oz-v080-tag} migration (\srcpath{evidence/README.md:10, 18-24}); mutation
 testing of one path gives \fact{opb-mutants}, the survivor equivalent
 (\srcpath{evidence/README.md:23}); and a STRIDE register gives each threat a
-control and a status. Perch's grant design is an open pull-request stack ending at
-\fact{perch-pr-stack-head}, runs on testnet only as a preview, and is unaudited.
+control and a status. Perch's grant design is merged into its \code{\fact{perch-branch}} branch but not
+yet \code{main}, runs on testnet only as a preview of an earlier build, and is
+unaudited.
 
 \paragraph{Authoring.} oz-policy-builder starts from what an app did. Its
 synthesiser records a transaction, or takes a declared Intent, and writes a
@@ -53,7 +54,7 @@ The interpreter's language has
 (\code{each}, \code{some}, \code{total}) (\srcpath{intent.ts:18-49}). Multi-signer
 rules use OpenZeppelin's threshold policies. A refusal reports a specific code
 for each reason (\srcpath{policy-interpreter/src/storage.rs:27-86}), where Perch
-reports \code{StaleGrant} (\fact{auth-error-stale-scope}) or
+reports \code{StaleGrant} (\fact{auth-error-stale-grant}) or
 \code{RuleEvalRefused} (\fact{auth-error-rule-eval-refused}). And OpenZeppelin
 \fact{oz-v080-tag} binds the selected rule IDs for both signer kinds
 (\srcpath{storage.rs}, lines 157--175 and 396--412, in \code{stellar-contracts}), where Perch's

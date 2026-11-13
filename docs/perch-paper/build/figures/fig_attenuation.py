@@ -2,7 +2,7 @@
 
 Three attenuation steps from the parent grant, one move the table refuses, and seven
 probes run against parent and child. Every verdict comes from perchmodel.py, the
-transcription of rule-core's attenuate and authorize; the page's controller recomputes
+transcription of rule-core's attenuate and check_auth; the page's controller recomputes
 the same with figures.js. The <g data-probe> groups carry the verdicts for the model test.
 """
 import html
@@ -44,7 +44,7 @@ def replay(parent, child):
     for k, (ctx, auth) in enumerate(run):
         now = M.LEDGER + k
         for j in range(len(child)):
-            d = M.authorize(child, rec, [ctx], [j], auth, now, 0)
+            d = M.check_auth(child, rec, [ctx], [j], auth, now, 0)
             if d['ok']:
                 rec = d['records']
                 accepted.append((ctx, auth, now, j))
@@ -54,7 +54,7 @@ def replay(parent, child):
     prec = [M.empty_record() for _ in parent]
     ok = 0
     for ctx, auth, now, j in accepted:
-        d = M.authorize(parent, prec, [ctx], [j], auth, now, 0)   # no rule dropped: same index
+        d = M.check_auth(parent, prec, [ctx], [j], auth, now, 0)   # no rule dropped: same index
         if d['ok']:
             prec = d['records']
             ok += 1

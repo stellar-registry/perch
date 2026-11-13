@@ -21,8 +21,8 @@ lists them.
 | OpenZeppelin/stellar-contracts | `ddc327eb92d63709436da3a8455f641c2d5476c5` (v0.8.0) | multisig smart account and `spending_limit` (Wasm) | MIT (below) |
 | theahaco/soroban-sim | `d02938430f0ac41f34e5e3e4c8c48d85b871bd68` | the simulator, in the reactor | Apache-2.0 |
 | stellar/rs-soroban-env (soroban-env-host 29.0.2) | crates.io release | the Soroban host, in the reactor | Apache-2.0 |
-| bitswell-hq/stellar-registry__perch | `f0275f41c5ab47c903bbfe9986b4bf3239c01b11` | Perch account, document compiler, Ed25519 verifier (Wasm); the driver | Apache-2.0 |
-| bitswell/soroban-rule-core | `cbabe594ae2df408991e825e56ddd618ea29541b` | Perch's evaluator, linked into the account | MIT OR Apache-2.0, used under Apache-2.0 |
+| bitswell-hq/stellar-registry__perch | `0b3752d8a179a5952b05fbebd29131dbbf99fa80` | Perch account, document compiler, Ed25519 verifier (Wasm); the driver | Apache-2.0 |
+| bitswell/soroban-rule-core | `a3c92ba074dcac4052727b7599e5fd8674af6c0a` | Perch's evaluator, linked into the account | MIT OR Apache-2.0, used under Apache-2.0 |
 
 The Apache-2.0 text is in this repository's `LICENSE` and in the page.
 

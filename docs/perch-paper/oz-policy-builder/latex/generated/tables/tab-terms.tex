@@ -1,12 +1,12 @@
 % Generated from source/tables/tab-terms.json; edit that.
 \begin{table}[tbp]
 \centering
-\caption{\textbf{Eight words the two systems use differently.} Grant, scope, policy, interpreter, \code{execute}, recovery, cap and expiry mean different things in the two systems. \emph{Scope} is Perch's code name for a grant and its JSON name for a rule's target. The last column gives the meaning in OpenZeppelin's account or in oz-policy-builder.}\label{tab:tab-terms}
+\caption{\textbf{Eight words the two systems use differently.} Grant, scope, policy, interpreter, \code{execute}, recovery, cap and expiry mean different things in the two systems. \emph{Scope} is Perch's JSON name for a rule's target. The last column gives the meaning in OpenZeppelin's account or in oz-policy-builder.}\label{tab:tab-terms}
 \scriptsize\begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{0.13\linewidth}LLL@{}}
 \toprule
 \textbf{Term} & \textbf{In Perch} & \textbf{Name in the artifacts} & \textbf{In OpenZeppelin or oz-policy-builder} \\
 \midrule
-Grant & A bounded set of rules the owner installs so an app can act without a prompt for each call & scope & No single object: one context rule per contract, each with its policies \\
+Grant & A bounded set of rules the owner installs so an app can act without a prompt for each call & grant & No single object: one context rule per contract, each with its policies \\
 Rule target & The contract whose functions a rule lets be called & JSON \code{"scope"} & The context rule's \code{CallContract} address \\
 Policy & --- & --- & A contract attached to a context rule; the account calls its \code{enforce} after authenticating (hooks \code{install}, \code{uninstall}, \code{enforce}) \\
 Interpreter & The policy contract of Perch's earlier design (\fact{perch-deployed-account-version}); its address is still pinned and reported, never called & \code{perch\_\allowbreak{}interpreter} & oz-policy-builder's \code{policy-\allowbreak{}interpreter}, the shared predicate evaluator \\

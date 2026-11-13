@@ -49,7 +49,7 @@ POLICY_SYNTH_SRC=$PWD/.sources/oz-policy-builder/packages/policy-synth/src ./mak
 
 A plain `make.sh` records a fresh run, whose wall-clock timings differ. To
 rebuild this `index.html` byte for byte from its bundle, keep the recorded
-run: `KEEP_EVIDENCE=1 SOURCE_DATE_EPOCH=1794096000 ./make.sh index.html
+run: `KEEP_EVIDENCE=1 SOURCE_DATE_EPOCH=1794528000 ./make.sh index.html
 fig-sim.run.json`. It still runs the scenario natively and under WASI and
 checks both against the recorded run, minus timings.
 
@@ -58,8 +58,8 @@ checks both against the recorded run, minus timings.
 | Source | Revision |
 | --- | --- |
 | theahaco/soroban-sim | d02938430f0ac41f34e5e3e4c8c48d85b871bd68 (soroban-env-host 29.0.2) |
-| bitswell-hq/stellar-registry__perch | f0275f41c5ab47c903bbfe9986b4bf3239c01b11 |
-| bitswell/soroban-rule-core | cbabe594ae2df408991e825e56ddd618ea29541b |
+| bitswell-hq/stellar-registry__perch | 0b3752d8a179a5952b05fbebd29131dbbf99fa80 |
+| bitswell/soroban-rule-core | a3c92ba074dcac4052727b7599e5fd8674af6c0a |
 | OpenZeppelin/stellar-contracts | ddc327eb92d63709436da3a8455f641c2d5476c5 (v0.8.0) |
 | untangledfinance/oz-policy-builder | 43b13ed1d9c6662afd74f446006e69bfcf21259b |
 
@@ -70,8 +70,8 @@ stellar-cli 27.0.0, Docker for the interpreter's Linux build.
 
 | Artifact | SHA-256 |
 | --- | --- |
-| perch_account.wasm | 3038f5dc50ad803acfd7567f10deabc0b24cedb2b8d5b7ea83030418b4914527 |
-| perch_doc_compiler.wasm | 60f470704831852e67835379187a32058d9636b3783bf5ad9e625a29fc8da86f |
+| perch_account.wasm | cc56a2d36669dba65c9089ba9c133e284d4b2f9bff826e2d52876e66b5e14428 |
+| perch_doc_compiler.wasm | e89d977ac2bebaf935720a7a3408f6cd57b5940a02b0476e7b8e071e224b0fe3 |
 | perch_interpreter.wasm (pinned, never called) | 4191ce8271035711c7bf9822d7cb20fcd0f300bf772b8defcc2279992440da6f |
 | perch_spending_limit.wasm (pinned, never called) | ccaa8f0404279aab8005791bffcbc819d8325c7abc114366cb6ef3472643f59b |
 | perch_ed25519_verifier.wasm | 27a733ceb0bda62fc9f645f3a708de73afccfdde9d4b2ffb30f44a2b1b862e7c |
@@ -79,15 +79,15 @@ stellar-cli 27.0.0, Docker for the interpreter's Linux build.
 | oz_account_0_8_0.wasm | 8286422f205951f37f4249401b403471fc432340dde6925432d31bb8a90cce27 |
 | oz_spending_limit_0_8_0.wasm | 65e70aad310bcaf7025aedc97e70cde098e1dd6c22d5153879c9cc64ea7da8e2 |
 | policy_interpreter.wasm | 6704996f626904a4e33b95bda17b73963fc9cf502ffdfdbe9d85b4b10288e0d4 |
-| reactor (driver, wasm32-wasip1) | a2352156fda3b91648dba2c218f883e248f20eac2c5ee1bb59cce699c13bd0da |
-| reference replies minus timings (native = WASI = browser) | 88bf930eea70cb7344c912049c77e44b134b3806993c12cc7c4edabd52a38136 |
-| index.html (4,913,857 bytes) | ce8174dc3ac325deb511a3fecfa8127d72477ac7d47a1a4a5040680c906b982e |
-| recorded run `evidence/native-golden.jsonl` | 38da174d3bc6d7242f788ac2bf479545e3bce18aefbcd578966341c53cbe3dea |
+| reactor (driver, wasm32-wasip1) | a7f6f4220e9eb561d6452a9e071b0348e3387a457a4f481ed09511b76708269b |
+| reference replies minus timings (native = WASI = browser) | 925d02cbea59b1fb0fbd17d462463605ce2f82bc5a0a4e907bbcebc2ff4f8372 |
+| index.html (4,924,763 bytes) | 156f9875cdde076ddf728bc43e5caff9650179dcc296199362ed246c86c453e0 |
+| recorded run `evidence/native-golden.jsonl` | bde6a1e79f37e69f34ae3bafad63fa606c64680399e2739b5ac922f97d62ce97 |
 
 The nine contract hashes equal the walkthrough's (`docs/oz-walkthrough`).
 What else each matches:
 
-- **Perch (six).** Built from f0275f4 and listed in the Perch vision's
+- **Perch (six).** Built from 0b3752d and listed in the Perch vision's
   Appendix A (`../vision/index.html#repro`); the account, compiler and
   verifier are also in the Perch paper's Appendix A (`../index.html#repro`).
   The account is built with its committed infrastructure pins rewritten to

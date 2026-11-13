@@ -1,7 +1,7 @@
 {
  "_source": "Recorded native reference run of docs/oz-walkthrough/index.html (evidence/native-golden.jsonl in its embedded build sources); the page checks its browser run against this record.",
- "walkthrough_sha256": "45f4759b3271d261de60b7e782cd81688317118617e0bbfeaee944374ec78656",
- "golden_sha256": "b7e87793af28d099331aa6176092bbc4d0509bcd01fdfec4b199d603ec165e0b",
+ "walkthrough_sha256": "a329cc612472cce1ba9211de83a0b19adada64686326d1a48b6b954a01e99bce",
+ "golden_sha256": "62c79b4f614411dbcd60081f722afbccc58efe90219526695eae9bfbb226f1c0",
  "task": "An app key may send XLM from the account only to the shop, at most 10 XLM in any 100-ledger window (OpenZeppelin: per-call bound 10 XLM in the interpreter plus spending_limit 10 XLM per 100 ledgers; Perch: one grant with a 10 XLM per 100-ledger cap).",
  "steps": [
   {
@@ -42,13 +42,13 @@
     "perch": {
      "status": "applied",
      "code": null,
-     "insns": 9881592,
+     "insns": 10071769,
      "entries": 1,
      "hops": [
       {
        "depth": 0,
        "contract": "Perch account",
-       "fn": "apply_scope"
+       "fn": "apply_grant"
       },
       {
        "depth": 1,
@@ -114,7 +114,7 @@
     "perch": {
      "status": "applied",
      "code": null,
-     "insns": 2870646,
+     "insns": 2926205,
      "entries": 1,
      "hops": [
       {
@@ -486,7 +486,7 @@
     "perch": {
      "status": "applied",
      "code": null,
-     "insns": 2970928,
+     "insns": 3026487,
      "entries": 1,
      "hops": [
       {

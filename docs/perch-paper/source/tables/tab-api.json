@@ -1,50 +1,43 @@
 {
  "columns": [
-  "Proposed name",
-  "Pinned export",
+  "Export",
   "Inputs → result",
   "Authority and effect"
  ],
  "rows": [
   [
-   "`apply_account_doc`",
    "`apply_doc`",
    "Document bytes, approval-valid-until ledger, optional expected revision → document hash",
    "Owner authorization, or the recovery-completion path ({{ref:sec:recovery}}); installs account policy."
   ],
   [
    "`apply_grant`",
-   "`apply_scope`",
    "Grant ID (`u32`), document bytes → document hash",
    "Owner authorization; installs or replaces a grant stamped with the current generation."
   ],
   [
    "`remove_grant`",
-   "`remove_scope`",
    "Grant ID → unit",
    "Owner authorization; removes the grant's rules, tags and spending records."
   ],
   [
    "`gc_grant`",
-   "`gc_scope`",
    "Grant ID → unit",
-   "Anyone, only when the grant's generation is older than the account's; otherwise `ScopeLive`."
+   "Anyone, only when the grant's generation is not the account's current one; otherwise `GrantLive`."
   ],
   [
    "`grant` / `grants`",
-   "`scope` / `scopes`",
    "ID → optional grant view; start and count → IDs",
    "Read-only; the list includes stale grants not yet collected."
   ],
   [
    "`grant_generation`",
-   "`scope_generation`",
    "None → generation",
    "Read-only; only a recovery completion advances it."
   ]
  ],
  "title": "Account operations.",
- "caption": "The first column is the descriptive name we propose; the second is the symbol exported at the pin and by the testnet preview, which this paper's prose uses. Exporting the first column's names is proposed, not done. *Owner authorization* means an account-document rule that targets the account and whose function policy allows the entry point; a rule with no function list, like the constructor's, allows all of them. [`docs/account-interface.md`](https://github.com/bitswell-hq/stellar-registry__perch/blob/f0275f41c5ab47c903bbfe9986b4bf3239c01b11/docs/account-interface.md) lists the account's other entry points.",
+ "caption": "*Owner authorization* means an account-document rule that targets the account and whose function policy allows the entry point; a rule with no function list, like the constructor's, allows all of them. [`docs/account-interface.md`](https://github.com/bitswell-hq/stellar-registry__perch/blob/0b3752d8a179a5952b05fbebd29131dbbf99fa80/docs/account-interface.md) lists the account's other entry points.",
  "editions": [
   "html"
  ]

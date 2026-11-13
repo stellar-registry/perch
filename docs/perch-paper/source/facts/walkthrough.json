@@ -43,7 +43,7 @@
   "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
  },
  "wt-cpu-install-perch": {
-  "value": "9,881,592",
+  "value": "10,071,769",
   "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
  },
  "wt-cpu-pay-oz": {
@@ -51,7 +51,7 @@
   "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
  },
  "wt-cpu-pay-perch": {
-  "value": "2,870,646",
+  "value": "2,926,205",
   "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
  },
  "wt-cpu-pay2-oz": {
@@ -59,7 +59,7 @@
   "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
  },
  "wt-cpu-pay2-perch": {
-  "value": "2,970,928",
+  "value": "3,026,487",
   "source": "docs/oz-walkthrough/index.html: its recorded reference run and \"Sources and hashes\" section"
  },
  "oz-error-unauthorized-signer": {
@@ -86,6 +86,6 @@
  "verifier-trap-error": {
   "value": "Error(Crypto, InvalidInput)",
   "code": true,
-  "source": "P:crates/perch-ed25519-verifier/src/lib.rs:19-29 (V); walkthrough step 5"
+  "source": "`P:crates/perch-ed25519-verifier/src/lib.rs:19-29` (V); walkthrough step 5"
  }
 }

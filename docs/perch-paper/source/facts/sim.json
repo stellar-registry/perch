@@ -1,16 +1,16 @@
 {
  "sim-page-sha256": {
-  "value": "ce8174dc3ac325deb511a3fecfa8127d72477ac7d47a1a4a5040680c906b982e",
+  "value": "156f9875cdde076ddf728bc43e5caff9650179dcc296199362ed246c86c453e0",
   "anon": "[withheld]",
   "source": "`shasum -a 256 docs/perch-paper/sim/index.html`; equals `source/figures/fig-sim.run.json` `page_sha256`"
  },
  "sim-page-sha256-short": {
-  "value": "ce8174dc…",
+  "value": "156f9875…",
   "anon": "[withheld]",
   "source": "same"
  },
  "sim-page-bytes": {
-  "value": "4,913,857",
+  "value": "4,924,763",
   "source": "size of `docs/perch-paper/sim/index.html`"
  },
  "sim-page-mb": {
@@ -18,27 +18,27 @@
   "source": "size of `docs/perch-paper/sim/index.html` in MB (10^6 bytes), one decimal"
  },
  "sim-golden-sha256": {
-  "value": "38da174d3bc6d7242f788ac2bf479545e3bce18aefbcd578966341c53cbe3dea",
+  "value": "bde6a1e79f37e69f34ae3bafad63fa606c64680399e2739b5ac922f97d62ce97",
   "anon": "[withheld]",
   "source": "`source/figures/fig-sim.run.json` `golden_sha256`"
  },
  "sim-golden-sha256-short": {
-  "value": "38da174d…",
+  "value": "bde6a1e7…",
   "anon": "[withheld]",
   "source": "same"
  },
  "sim-replies-sha256": {
-  "value": "88bf930eea70cb7344c912049c77e44b134b3806993c12cc7c4edabd52a38136",
+  "value": "925d02cbea59b1fb0fbd17d462463605ce2f82bc5a0a4e907bbcebc2ff4f8372",
   "anon": "[withheld]",
   "source": "`source/figures/fig-sim.run.json` `replies_sha256` (SHA-256 of the fifteen replies minus every `ms` field, one JSON line each (replies.mjs); native, WASI and the browser agree on it)"
  },
  "sim-replies-sha256-short": {
-  "value": "88bf930e…",
+  "value": "925d02cb…",
   "anon": "[withheld]",
   "source": "same"
  },
  "sim-reactor-sha256": {
-  "value": "a2352156fda3b91648dba2c218f883e248f20eac2c5ee1bb59cce699c13bd0da",
+  "value": "a7f6f4220e9eb561d6452a9e071b0348e3387a457a4f481ed09511b76708269b",
   "anon": "[withheld]",
   "source": "`source/figures/fig-sim.run.json` `reactor_sha256`"
  },
@@ -75,12 +75,12 @@
   "source": "`source/figures/fig-sim.run.json` last step, Perch `balance_xlm`"
  },
  "sim-wasm-perch-account": {
-  "value": "3038f5dc50ad803acfd7567f10deabc0b24cedb2b8d5b7ea83030418b4914527",
+  "value": "cc56a2d36669dba65c9089ba9c133e284d4b2f9bff826e2d52876e66b5e14428",
   "anon": "[withheld]",
   "source": "`source/figures/fig-sim.run.json` `contracts[\"perch_account.wasm\"]`"
  },
  "sim-wasm-perch-doc-compiler": {
-  "value": "60f470704831852e67835379187a32058d9636b3783bf5ad9e625a29fc8da86f",
+  "value": "e89d977ac2bebaf935720a7a3408f6cd57b5940a02b0476e7b8e071e224b0fe3",
   "anon": "[withheld]",
   "source": "`source/figures/fig-sim.run.json` `contracts[\"perch_doc_compiler.wasm\"]`"
  },

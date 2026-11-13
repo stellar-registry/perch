@@ -1,5 +1,5 @@
-Perch is ahead in three respects, each with a caveat, and one recovery stops
-every earlier grant.
+Perch offers three architectural advantages, each with a caveat, and one
+recovery stops every earlier grant.
 
 \paragraph{A limit over time inside the decision.} A Perch rule's window cap is
 charged in the decision that checks the call. The cap theorem (Theorem~6 of
@@ -12,7 +12,9 @@ within the limit in every window:
 In oz-policy-builder the interpreter bounds each call, and the window comes from
 \code{spending\_limit}, an opt-in policy on \code{transfer} only; with it removed,
 the recorded dual run moved \fact{sim-oz-percall-moved-xlm}~XLM in one window
-while Perch held to its cap (\S\ref{sec:same-task}). \emph{Caveat:} the theorem
+while Perch held to its cap (\S\ref{sec:same-task}). Both enforce the window
+when configured with one: the difference here is where the cap is expressed
+and checked, not whether a window can be enforced. \emph{Caveat:} the theorem
 is about the evaluator's Lean translation; that the shell selects rules and
 persists records as it assumes is argued and tested, not proved (obligations O2
 and O6). On chain a record holds at most \fact{spends-per-window} spends per
@@ -20,8 +22,9 @@ window, and replacing a capped rule starts an empty window.
 
 \paragraph{One decision point.} All the state that decides a grant's call lives
 in the account: rules, grants, spending records and the grant generation
-(Perch \srcpath{lib.rs:597-636}). The decision comes before authentication, so a refused
-call costs no verifier call and writes nothing. One \code{apply\_scope} installs a
+(Perch \srcpath{lib.rs:597-636}). The decision comes before authentication, so a
+call refused by the evaluator invokes no verifier and writes nothing. A bad
+signature instead fails during authentication. One \code{apply\_grant} installs a
 grant whose rules span several contracts, and a grant rule may name a passkey or
 Ed25519 key as an external signer, which the interpreter refuses in the rules it
 polices. \emph{Caveat:} one point decides only what the evaluator can express
@@ -33,8 +36,10 @@ into Lean. Kernel-checked theorems state that the translation returns what a
 readable model returns on every input, without panicking or diverging
 (Theorem~1); that when the decision function accepts,
 each call is allowed by some rule it was given (Theorem~2); that attenuation never widens the calls a grant allows (Theorem~4); the window bound
-above (Theorem~6); and that no installed grant, nor one derived from it, allows a
-call to the account or its adopted recovery contracts (Theorem~8). We
+above (Theorem~6, for fixed rules and empty initial records); and that no grant
+produced by scoped lowering, nor one derived from it, allows a call to the
+account or the recovery contracts excluded at install (Theorem~8). The shell
+rechecks the current excluded set when recovery configuration changes. We
 found no formal model in oz-policy-builder's tree (a search, not a proof of
 absence); its evidence is testing, partly on the shipped Wasm.
 \emph{Caveat:} the theorems are about the translation, not the compiled Wasm; the

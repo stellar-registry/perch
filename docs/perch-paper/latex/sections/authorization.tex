@@ -5,16 +5,16 @@ verifier only after the decision accepts.
 \perchfigure{fig-auth-path}
 
 \paragraph{The decision function.} Stage~4 is rule-core's
-\code{rule\_eval::authorize}~\selfcite{rule-core}
-(\nolinkurl{rule-eval/src/authorize.rs:237}):
+\code{rule\_eval::check\_auth}~\selfcite{rule-core}
+(\nolinkurl{rule-eval/src/authorize.rs:239}):
 \begin{Verbatim}[fontsize=\scriptsize,xleftmargin=1em]
-pub fn authorize(rules: &[Rule], records: &[SpendRecord], contexts: &[Context],
+pub fn check_auth(rules: &[Rule], records: &[SpendRecord], contexts: &[Context],
     choices: &[u32], authenticated: &[Signer], now: u32, generation: u64)
     -> Result<Vec<SpendRecord>, Refusal>
 \end{Verbatim}
 It returns the next spending records or a \code{Refusal}, reads no storage and
-checks no signature (Definition~\ref{def:authorize-and-runs} is its model). The
-account reports its refusals as auth error \fact{auth-error-stale-scope} (a
+checks no signature (Definition~\ref{def:check-auth-and-runs} is its model). The
+account reports its refusals as auth error \fact{auth-error-stale-grant} (a
 stale grant) or \fact{auth-error-rule-eval-refused} (any other), inside
 \fact{host-auth-error}, beside the other stages' exits in
 Fig.~\ref{fig:fig-auth-path}; a wallet that needs the reason re-runs the

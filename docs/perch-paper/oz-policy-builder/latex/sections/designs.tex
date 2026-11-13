@@ -21,13 +21,16 @@ their address order (\srcpath{storage.rs:629-690} in \code{stellar-contracts}). 
 interpreter, \code{spending\_limit} and the threshold policies are such policies,
 each with its own state keyed by account and rule.
 
-\paragraph{Perch.} A Perch account's \code{\_\_check\_auth} calls rule-core's
-linked \code{rule\_eval::}\allowbreak\code{authorize} on the selected rules and their spending
+\paragraph{Perch.} For ordinary authorization, a Perch account's
+\code{\_\_check\_auth} calls rule-core's
+linked \code{rule\_eval::}\allowbreak\code{check\_auth} on the selected rules and their spending
 records, which decides the whole authorization, caps included, before any signer
-is authenticated (Perch \srcpath{gate.rs:93-113}); it then has the verifiers check the
-signatures, and writes the new spending records only when both succeed
-(\srcpath{gate.rs:114-121}). A refused authorization calls no verifier and writes
-nothing. Perch's deployed build \fact{perch-deployed-source-short} used the
+is authenticated (Perch \srcpath{gate.rs:93-113}); it then authenticates external
+signers through verifier contracts and delegated signers through the host, and
+writes the new spending records only when authentication also succeeds
+(\srcpath{gate.rs:114-121}). An evaluator refusal calls no verifier; a bad
+signature fails during authentication. Recovery completion uses the controller's
+separate path. Perch's deployed build \fact{perch-deployed-source-short} used the
 attached-policy shape on a fork of OpenZeppelin's library; the design compared
 here moves the decision into the account.
 

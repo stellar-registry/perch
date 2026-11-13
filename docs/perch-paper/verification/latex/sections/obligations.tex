@@ -1,7 +1,7 @@
 The account calls the Rust \code{lower} and \code{lower\_scoped} on install and
-\code{rule\_eval::}\allowbreak\code{authorize} in \code{\_\_check\_auth}.
+\code{rule\_eval::}\allowbreak\code{check\_auth} in \code{\_\_check\_auth}.
 Theorem~\ref{stmt:lowering-equivalence} does for lowering what
-Theorem~\ref{stmt:total-equivalence-of-the-evaluator} does for \code{authorize};
+Theorem~\ref{stmt:total-equivalence-of-the-evaluator} does for \code{check\_auth};
 Theorem~\ref{stmt:canonical-identity}, in Perch's own Lean package, is about a
 grant's \code{doc\_hash}, the SHA-256 of its CANON~v1 bytes (RFC~8785~\cite{rfc8785}
 restricted).
@@ -11,7 +11,7 @@ restricted).
 
 \noindent Perch's
 integration suite runs rule-core's \fact{lean-doc-traces} Lean-generated document
-traces through natively compiled \code{apply\_doc}, \code{apply\_scope} and
+traces through natively compiled \code{apply\_doc}, \code{apply\_grant} and
 \code{check\_auth}, with the real Ed25519 verifier, enforcing authorization and
 the generation set from each trace, and checks the stored rules, every verdict
 and every spending record against the model; Perch's CI also replays rule-core's

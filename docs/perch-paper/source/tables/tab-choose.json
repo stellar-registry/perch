@@ -11,7 +11,7 @@
   [
    "Status",
    "Release {{fact:opb-release}} and later commits; interpreter pinned on testnet, none on mainnet (`config.ts:57-80`); installs on existing OpenZeppelin accounts (0.7.2-line and {{fact:oz-v080-tag}} builds, `policy-synth/README.md:143`)",
-   "Unmerged; testnet preview; earlier design on mainnet; a grant needs a Perch account"
+   "On Perch's `dev` branch, not yet `main`; an earlier build as a testnet preview; earlier design on mainnet; a grant needs a Perch account"
   ],
   [
    "External review",
@@ -51,7 +51,7 @@
   [
    "What a refusal reports",
    "A deny code per reason (`policy-interpreter/src/storage.rs:27-86`)",
-   "Auth error {{fact:auth-error-stale-scope}} or {{fact:auth-error-rule-eval-refused}}"
+   "Auth error {{fact:auth-error-stale-grant}} or {{fact:auth-error-rule-eval-refused}}"
   ],
   [
    "Evidence about the decision",

@@ -1,7 +1,7 @@
 {
  "spend-record-base-bytes": {
   "value": "172",
-  "source": "`P:docs/recovery/budgets.md:606-607` (V)"
+  "source": "`P:docs/recovery/budgets.md:925-926` (V)"
  },
  "spend-record-per-spend-bytes": {
   "value": "72",
@@ -29,27 +29,27 @@
  },
  "doc-max-signers": {
   "value": "8",
-  "source": "`P:crates/perch-doc-compiler/src/lib.rs:68` (V)"
+  "source": "`P:crates/perch-doc-compiler/src/lib.rs:74` (V)"
  },
  "doc-max-rules": {
   "value": "10",
-  "source": "`…/lib.rs:70` (V)"
+  "source": "`…/lib.rs:76` (V)"
  },
  "doc-max-canonical-bytes": {
   "value": "8,192",
-  "source": "`…/lib.rs:72` (V)"
+  "source": "`…/lib.rs:78` (V)"
  },
  "doc-max-rule-name-bytes": {
   "value": "20",
-  "source": "`…/lib.rs:76` (V)"
+  "source": "`…/lib.rs:115` (V)"
  },
  "worst-case-completion-share": {
   "value": "40.7%",
-  "source": "`P:docs/recovery/budgets.md:730` (V): lost-key completion, `Combined`, ZK rotation, 8 signers, 10 rules, in process"
+  "source": "`P:docs/recovery/budgets.md:1095` (V): lost-key completion, `Combined`, ZK rotation, 8 signers, 10 rules, in process"
  },
  "upgrade-delay-ledgers": {
   "value": "120,960",
-  "source": "`P:crates/perch-recovery-interface/src/account.rs:15, 179` (V)"
+  "source": "`P:crates/perch-recovery-interface/src/account.rs:15, 204` (V)"
  },
  "upgrade-delay-days": {
   "value": "seven days at the nominal five-second ledger",
@@ -61,7 +61,7 @@
  },
  "reserved-hook-count": {
   "value": "10",
-  "source": "`P:crates/perch-smart-account/src/lib.rs:1113-1119`; spec §2 (R, r1-plan C16)"
+  "source": "`P:crates/perch-smart-account/src/lib.rs:1164-1170`; spec §2 (R, r1-plan C16)"
  },
  "reserved-hook-names": {
   "value": "`install`, `uninstall`, `enforce` and seven `rcv_*` names",
@@ -74,12 +74,12 @@
  },
  "auth-domain-tag": {
   "value": "perch/account/auth-addr-v1",
-  "source": "`P:crates/perch-smart-account/src/lib.rs:376-400` (R)"
+  "source": "`P:crates/perch-smart-account/src/lib.rs:397-421` (R)"
  },
  "auth-scheme-name": {
   "value": "addr_oz_v1",
   "code": true,
-  "source": "`P:…/lib.rs:350` (R)"
+  "source": "`P:…/lib.rs:371` (R)"
  },
  "contract-id-bytes": {
   "value": "32",
@@ -99,21 +99,21 @@
  },
  "zk-secret-entropy-bits": {
   "value": "128",
-  "source": "`P:docs/recovery/spec.md:198-201` (R)"
+  "source": "`P:docs/recovery/spec.md:202-205` (R)"
  },
  "auth-error-reserved-function": {
   "value": "1",
-  "source": "`P:crates/perch-smart-account/src/lib.rs:234-252`, `PerchAuthError` numbered from 1 (V)"
+  "source": "`P:crates/perch-smart-account/src/lib.rs:238-257`, `PerchAuthError` numbered from 1 (V)"
  },
  "auth-error-account-frozen": {
   "value": "2",
   "source": "same (V)"
  },
- "auth-error-stale-scope": {
+ "auth-error-stale-grant": {
   "value": "3",
   "source": "same (V)"
  },
- "auth-error-scope-escalation": {
+ "auth-error-grant-escalation": {
   "value": "4",
   "source": "same (V)"
  },
@@ -129,10 +129,10 @@
   "value": "3003",
   "source": "r2:285; r2-final (C)"
  },
- "account-error-scope-live": {
+ "account-error-grant-live": {
   "value": "#59",
   "note": "prints #59",
-  "source": "`P:…/lib.rs:161-216` (C)"
+  "source": "`P:…/lib.rs:164-220` (C)"
  },
  "account-error-wiped-credential": {
   "value": "#60",

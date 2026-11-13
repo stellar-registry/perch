@@ -89,7 +89,7 @@ def owner_text(st):
 
 
 def perch_reasons():
-    """The model's reason for each Perch refusal in the run: rule-core's authorize (perchmodel) on
+    """The model's reason for each Perch refusal in the run: rule-core's check_auth (perchmodel) on
     the grant's rule, replayed at the run's ledgers and checked against every recorded verdict. The
     account itself returns code 5 for any refusal, so the reason is the model's, and is labelled so."""
     rule = M.rule('shop', M.XLM, {'only': ['transfer']}, [M.PIN_SHOP], ('app',), cap={'limit': 10, 'period': 100, 'arg': 2})
@@ -99,7 +99,7 @@ def perch_reasons():
         if q['op'] == 'pay':
             auth = ['stranger'] if q.get('signer') == 'unlisted' else ['app']
             to = M.SHOP if q.get('to', 'shop') == 'shop' else M.ELSEWHERE
-            a = M.authorize([rule], [rec], [M.transfer(to, q['amount_xlm'])], [0], auth, ledger, 0)
+            a = M.check_auth([rule], [rec], [M.transfer(to, q['amount_xlm'])], [0], auth, ledger, 0)
             applied = a['ok'] and q.get('signer') != 'forged'
             assert applied == (d['status'] == 'applied'), (st['command'], a, d['status'])
             if applied:

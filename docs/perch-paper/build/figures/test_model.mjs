@@ -96,7 +96,7 @@ for (const f of readdirSync(join(SRC, 'facts')).filter((x) => x.endsWith('.json'
     if (q.op === 'pay') {
       const now = ledger;
       const auth = q.signer === 'unlisted' ? ['stranger'] : ['app'];
-      const a = M.authorize(rules, [rec], [M.transfer(q.to === 'shop' ? 'shop' : 'mallory', q.amount_xlm)], [0], auth, now, 0);
+      const a = M.checkAuth(rules, [rec], [M.transfer(q.to === 'shop' ? 'shop' : 'mallory', q.amount_xlm)], [0], auth, now, 0);
       // a forged signer passes the decision; the verifier, outside the model, refuses
       const applied = a.ok && q.signer !== 'forged';
       check(applied === (d.status === 'applied'), `run command ${st.command}: model ${applied ? 'applies' : 'refuses'}, recorded ${d.status}`);
@@ -144,3 +144,7 @@ if (fails.length) {
   process.exit(1);
 }
 console.log(`model test: ${n} checks passed`);
+
+// Keep browser-flow regressions under the existing paper CI entry point.
+await import("../test_journey.mjs");
+await import("../test_disclosures.mjs");

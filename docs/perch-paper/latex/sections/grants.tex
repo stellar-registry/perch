@@ -1,6 +1,6 @@
 \perchfigure{fig-cap-window}
 
-\paragraph{Installing a grant.} The owner calls \code{apply\_scope} with a grant
+\paragraph{Installing a grant.} The owner calls \code{apply\_grant} with a grant
 document (Fig.~\ref{fig:fig-shop-grant}a). A stateless document compiler
 validates the JSON; the account lowers it with rule-core's \code{lower\_scoped}
 under its own address, its \emph{excluded set} (its adopted recovery
@@ -33,7 +33,7 @@ neither bounds what parent and child spend together. Installing one is
 proposed.
 
 \paragraph{Ending a grant.} A grant stops at its expiry, by one owner call
-(\code{remove\_scope}, which deletes its storage), or, with every earlier grant,
+(\code{remove\_grant}, which deletes its storage), or, with every earlier grant,
 when a recovery completes; anyone may then remove a stale grant's storage with
-\code{gc\_scope}, which refuses a current-generation grant.
+\code{gc\_grant}, which refuses a current-generation grant.
 

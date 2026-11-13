@@ -2,12 +2,12 @@
 \begin{perchstatement}{9}{The containment chain.}\label{stmt:the-containment-chain}
 \[\begin{aligned}&\mathit{Valid}(d) \land \mathit{issue}(s, d) = R\\
 &\quad \land\ \mathit{attenuateAll}(R, \vec\sigma) = R'\\
-&\quad \land\ \mathit{authorize}(R', \rho, (\vec c, \vec j, S, \ell, g)) = \rho'\\
+&\quad \land\ \mathit{checkAuth}(R', \rho, (\vec c, \vec j, S, \ell, g)) = \rho'\\
 &\qquad \implies (\forall c \in \vec c.\ \mathit{Doc.allows}(d, A_s, c, S))\\
 &\qquad \land\ (\forall \mathsf{call}(C, f, \vec v) \in \vec c.\\
 &\qquad\qquad C \notin \mathit{excluded}(d_s, A_s))\\
 &\qquad \land\ (\vec c \neq [\,] \implies g = g_s)\end{aligned}\]
 Here $s = (A_s, d_s, g_s)$ is the account state the grant is issued in, $d_s$ its account document. A grant issued from a valid grant document~$d$, then attenuated and accepted, allows only $d$'s actions and no call to the account or the excluded set at issue, and a nonempty batch is evaluated at the grant's issuing generation. The account builds the excluded set from its storage (O4) and rechecks it in \code{\_\_check\_auth} (\code{\fact{claim-scoped-admin-change}}).
 \statementhypotheses{\code{Doc.Valid}; for the translation, \code{ArgsRoom}}
-\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/Scoped.lean\#L278}{Document.Account.chain}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/ExtractedLowering.lean\#L218}{Extracted.chain} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}}
+\statementevidence{\repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/Scoped.lean\#L278}{Document.Account.chain}; \repolink{https://github.com/bitswell/soroban-rule-core/blob/a3c92ba074dcac4052727b7599e5fd8674af6c0a/formal/RuleCore/Theorems/ExtractedLowering.lean\#L218}{Extracted.chain} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}}
 \end{perchstatement}

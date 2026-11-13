@@ -1,5 +1,5 @@
 {
- "nav_note": "A research paper with a side-by-side simulation.<br>November 2026",
+ "nav_note": "The builder story.<br>The details when you need them.",
  "glossary": "tab-glossary-main",
  "exhibit_editions": {
   "tab-sim": [
@@ -9,16 +9,14 @@
  "sections": [
   {
    "id": "motivation",
-   "title_html": "Apps and agents need authority with limits",
+   "title_html": "Choose the boundaries",
    "title_latex": "Introduction",
-   "nav": "The request",
+   "nav": "The grant",
    "figures": [
     "fig-overview",
     "fig-shop-grant"
    ],
-   "aliases": [
-    "status"
-   ]
+   "aliases": []
   },
   {
    "id": "background",
@@ -31,9 +29,9 @@
   },
   {
    "id": "grants",
-   "title_html": "The sign dialog shows the whole request and previews it",
+   "title_html": "A budget that holds over time",
    "title_latex": "Grants and Spending Windows",
-   "nav": "Review and preview",
+   "nav": "The budget",
    "figures": [
     "fig-cap-window"
    ],
@@ -45,9 +43,9 @@
   },
   {
    "id": "authorization",
-   "title_html": "The user signs or refuses, and the account decides",
+   "title_html": "Follow a decision",
    "title_latex": "The Authorization Path",
-   "nav": "Sign or refuse",
+   "nav": "The decision",
    "figures": [
     "fig-auth-path",
     "fig-nested"
@@ -85,9 +83,9 @@
   },
   {
    "id": "simulation",
-   "title_html": "The same request runs against an OpenZeppelin account",
+   "title_html": "Try the real contracts",
    "title_latex": "Both Designs in soroban-sim",
-   "nav": "Against OpenZeppelin",
+   "nav": "Try it",
    "figures": [
     "fig-sim"
    ],
@@ -101,15 +99,18 @@
   },
   {
    "id": "proofs",
-   "title_html": "The decision function's guarantees are proved in Lean",
+   "title_html": "Know what is proved",
    "title_latex": "Formal Results",
-   "nav": "What is proved"
+   "nav": "The evidence",
+   "aliases": [
+    "status"
+   ]
   },
   {
    "id": "evaluation",
-   "title_html": "A Nido wallet run used a grant end to end",
+   "title_html": "From grant to wallet",
    "title_latex": "Evaluation",
-   "nav": "In Nido"
+   "nav": "In a wallet"
   },
   {
    "id": "limits",
@@ -140,9 +141,9 @@
   },
   {
    "id": "conclusion",
-   "title_html": "What Perch shows and what comes next",
+   "title_html": "Build with bounded authority",
    "title_latex": "Conclusion",
-   "nav": "Conclusion",
+   "nav": "Build",
    "aliases": [
     "agents",
     "related"
@@ -150,35 +151,38 @@
   },
   {
    "id": "repro",
-   "title_html": "Provenance and reproducibility",
+   "title_html": "Sources and reproducibility",
    "title_latex": "Artifacts",
-   "nav": "Provenance",
+   "nav": null,
    "appendix": true,
    "aliases": [
     "api"
-   ]
+   ],
+   "collapse_html": true
   },
   {
    "id": "glossary",
    "title_html": "Glossary",
    "title_latex": "Glossary",
-   "nav": "Glossary",
+   "nav": null,
    "editions": [
     "html"
    ],
    "appendix": true,
-   "unnumbered": true
+   "unnumbered": true,
+   "collapse_html": true
   },
   {
    "id": "references",
    "title_html": "References",
    "title_latex": "References",
-   "nav": "References",
+   "nav": null,
    "editions": [
     "html"
    ],
    "appendix": true,
-   "unnumbered": true
+   "unnumbered": true,
+   "collapse_html": true
   }
  ]
 }

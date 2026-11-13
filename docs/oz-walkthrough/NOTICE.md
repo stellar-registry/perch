@@ -2,8 +2,8 @@
 
 `index.html` is a self-contained, offline walkthrough that runs one task
 under an OpenZeppelin smart account with oz-policy-builder's rule and under
-Perch, in soroban-sim in the browser. It is embedded here unchanged
-(SHA-256 `45f4759b3271d261de60b7e782cd81688317118617e0bbfeaee944374ec78656`)
+Perch, in soroban-sim in the browser. It is rebuilt here from Perch `0b3752d`
+(SHA-256 `a329cc612472cce1ba9211de83a0b19adada64686326d1a48b6b954a01e99bce`)
 and linked from the Perch paper's comparison section.
 
 The page lists every source revision and contract hash it runs in its
@@ -21,8 +21,8 @@ revisions the page lists.
 | OpenZeppelin/stellar-contracts (smart account, `spending_limit`) | `ddc327eb92d63709436da3a8455f641c2d5476c5` (v0.8.0) | MIT (below) |
 | theahaco/soroban-sim | `d02938430f0ac41f34e5e3e4c8c48d85b871bd68` | Apache-2.0 |
 | stellar/rs-soroban-env (soroban-env-host 29.0.2) | crates.io release | Apache-2.0 |
-| bitswell-hq/stellar-registry__perch | `f0275f41c5ab47c903bbfe9986b4bf3239c01b11` | Apache-2.0 |
-| bitswell/soroban-rule-core | `cbabe594ae2df408991e825e56ddd618ea29541b` | Apache-2.0 |
+| bitswell-hq/stellar-registry__perch | `0b3752d8a179a5952b05fbebd29131dbbf99fa80` | Apache-2.0 |
+| bitswell/soroban-rule-core | `a3c92ba074dcac4052727b7599e5fd8674af6c0a` | Apache-2.0 |
 
 The Apache-2.0 text is in this repository's `LICENSE`.
 

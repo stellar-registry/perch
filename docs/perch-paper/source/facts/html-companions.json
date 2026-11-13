@@ -1,10 +1,10 @@
 {
  "wt-page-sha256-short": {
-  "value": "45f4759b…",
-  "source": "`shasum -a 256 docs/oz-walkthrough/index.html` = 45f4759b3271d261de60b7e782cd81688317118617e0bbfeaee944374ec78656, as `docs/oz-walkthrough/NOTICE.md:6` records (V, E-comp r4)"
+  "value": "a329cc61…",
+  "source": "`shasum -a 256 docs/oz-walkthrough/index.html` = a329cc612472cce1ba9211de83a0b19adada64686326d1a48b6b954a01e99bce (V)"
  },
  "wt-golden-sha256-short": {
-  "value": "b7e87793…",
-  "source": "`goldenSha256` in docs/oz-walkthrough/index.html's embedded run record = b7e87793af28d099331aa6176092bbc4d0509bcd01fdfec4b199d603ec165e0b (V, E-comp r4)"
+  "value": "62c79b4f…",
+  "source": "SHA-256 of the walkthrough's embedded `evidence/native-golden.jsonl` = 62c79b4f614411dbcd60081f722afbccc58efe90219526695eae9bfbb226f1c0, as `source/figures/fig-same-task.run.json` `golden_sha256` records (V)"
  }
 }

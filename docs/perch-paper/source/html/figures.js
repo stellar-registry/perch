@@ -19,7 +19,7 @@
 // same controller.
 //
 // Explorables (E1-E3) and theorem instances compute from PerchModel, a plain transcription
-// of rule-core cbabe59 (definitions D2-D6), and say so with a MODEL chip; what comes from a
+// of rule-core a3c92ba (definitions D2-D6; rules without a root constraint), and say so with a MODEL chip; what comes from a
 // recorded run says RECORDED; the embedded simulation says EXECUTED. A model panel never
 // prints an account error code or describes OpenZeppelin behaviour. The static figure stays
 // the print form. build/figures/test_model.mjs checks PerchModel against the static figures
@@ -77,9 +77,9 @@
     return { ok: true, record: { history: [...h.slice(k).map((e) => ({ ...e })), { ledger: now, amount }], total }, remaining, amount, total, limit };
   }
 
-  // authorize.rs: three passes (D3). Returns the next records, or the first refusal; `trace`
+  // authorize.rs check_auth: three passes (D3). Returns the next records, or the first refusal; `trace`
   // lists every check made, in order.
-  function authorize(rules, records, contexts, choices, auth, now, gen) {
+  function checkAuth(rules, records, contexts, choices, auth, now, gen) {
     const trace = [];
     const no = (check, i, extra = {}) => ({ ok: false, check, i, trace, ...extra });
     if (choices.length !== contexts.length) return no('choices', null);
@@ -120,7 +120,7 @@
   }
   // Whether some rule, named for the context, accepts it alone from empty records.
   const acceptingRule = (rules, ctx, auth, now, gen = 0) =>
-    rules.findIndex((_, j) => authorize(rules, rules.map(emptyRecord), [ctx], [j], auth, now, gen).ok);
+    rules.findIndex((_, j) => checkAuth(rules, rules.map(emptyRecord), [ctx], [j], auth, now, gen).ok);
   const accepts = (...a) => acceptingRule(...a) >= 0;
 
   // attenuate.rs: the ten steps; a refusal names the table's reason.
@@ -227,19 +227,19 @@
       const now = E1.ledger + k;
       let done = null;
       for (let j = 0; j < child.length && !done; j++) {
-        const d = authorize(child, rec, [ctx], [j], auth, now, 0);
+        const d = checkAuth(child, rec, [ctx], [j], auth, now, 0);
         if (d.ok) { rec = d.records; done = { ctx, auth, now, j, ok: true }; }
       }
       if (!done) {
         const j = acceptingRule(child, ctx, auth, now);
-        const d = authorize(child, rec, [ctx], [j >= 0 ? j : 0], auth, now, 0);
+        const d = checkAuth(child, rec, [ctx], [j >= 0 ? j : 0], auth, now, 0);
         done = { ctx, auth, now, j, ok: false, d };
       }
       childRun.push(done);
     });
     let prec = parent.map(emptyRecord);
     const parentRun = childRun.filter((x) => x.ok).map((x) => {
-      const d = authorize(parent, prec, [x.ctx], [origin[x.j]], x.auth, x.now, 0);
+      const d = checkAuth(parent, prec, [x.ctx], [origin[x.j]], x.auth, x.now, 0);
       if (d.ok) prec = d.records;
       return { ...x, pj: origin[x.j], ok: d.ok };
     });
@@ -270,14 +270,14 @@
       const { rules, records, gen } = this.grant(grant);
       const { contexts, choices } = this.request(req, named);
       const auth = signer === 'unlisted' ? ['stranger'] : ['app'];
-      const d = authorize(rules, records, contexts, choices, auth, this.t + 1, gen);
+      const d = checkAuth(rules, records, contexts, choices, auth, this.t + 1, gen);
       const stage = !d.ok ? 'decide' : signer === 'forged' ? 'authenticate' : 'store';
       return { stage, decision: d, verifier: d.ok, rules, contexts, choices, auth, gen };
     },
   };
 
   globalThis.PerchModel = {
-    sat, allows, allowsChecks, charge, authorize, accepts, acceptingRule, attenuate, lowerScoped, inWindow, windowTotal,
+    sat, allows, allowsChecks, charge, checkAuth, accepts, acceptingRule, attenuate, lowerScoped, inWindow, windowTotal,
     emptyRecord, REFUSAL, STEPS, E1, E3, replay, transfer, consts: { ACCOUNT, GAME, XLM, SHOP, ELSEWHERE, PIN_SHOP, PIN_GAME },
   };
 })();
@@ -491,14 +491,16 @@
       h('label', { class: 'xp-check' }, percall, ' Check each call alone'),
       h('label', { class: 'xp-check' }, zero, ' Allow ledger 0 (no Stellar ledger has sequence 0; the theorem\u2019s bound over any P consecutive ledgers assumes ledger 1 or later)'),
       replace, reset, clear);
+    params.append(toggles);
     const plot = el('div', { class: 'xp-plot-wrap' });
     const inspect = el('input', { type: 'range', step: 1, name: `${fig.id}-inspect` });
     const inspectOut = el('output', { class: 'xp-out' });
     const fullest = el('p', { class: 'xp-result' });
     const history = el('ol', { class: 'xp-log', 'aria-label': 'Transfers, in order' });
-    panel.append(params, toggles, plot,
+    panel.append(params, plot,
       h('div', { class: 'xp-row' }, h('label', { class: 'xp-field xp-grow' }, h('span', {}, 'Inspect the window at ledger L'), inspect)),
-      inspectOut, fullest, h('p', { class: 'xp-sub' }, 'In the plot, as in the figure: a charge inside the inspected window is amber, one outside it is plain; a refused transfer is dashed red with a bar end and changes nothing.'), h('p', { class: 'xp-sub' }, 'Every transfer, in order:'), history);
+      inspectOut, fullest, h('p', { class: 'xp-sub' }, 'In the plot, as in the figure: a charge inside the inspected window is amber, one outside it is plain; a refused transfer is dashed red with a bar end and changes nothing.'),
+      h('details', {}, el('summary', {}, 'Every transfer, in order'), history));
 
     function run() {
       const base = st.zero ? 0 : BASE;
@@ -561,7 +563,7 @@
       const text = `Ledger ${lab(L)}; window (${lab(M.sat(L, st.period))}, ${lab(L)}]; ${W} of ${st.lambda} XLM`;
       inspect.setAttribute('aria-valuetext', text);
       inspectOut.textContent = `${text}.`;
-      params.querySelector('summary').textContent = `Cap: ${st.lambda} XLM per ${st.period} ledgers (change)`;
+      params.querySelector('summary').textContent = `Cap: ${st.lambda} XLM per ${st.period} ledgers · settings and edge cases`;
       advP.textContent = `+${st.period}`;
       advP.setAttribute('aria-label', `Advance ${st.period} ledgers`);
       adv10.setAttribute('aria-label', 'Advance 10 ledgers');
@@ -779,7 +781,7 @@
   function whyRefused(rules, ctx, auth) {
     let best = null;
     rules.forEach((r, j) => {
-      const d = M.authorize(rules, rules.map(M.emptyRecord), [ctx], [j], auth, M.E1.ledger, 0);
+      const d = M.checkAuth(rules, rules.map(M.emptyRecord), [ctx], [j], auth, M.E1.ledger, 0);
       if (!d.ok && (!best || d.trace.length > best.d.trace.length)) best = { d, r };
     });
     if (!best) return 'no rule';
@@ -1446,7 +1448,7 @@
     const draw = (say) => {
       out.replaceChildren(h('p', {}, `Account generation: ${gen}.`), h('ul', {}, grants.map(([name, g]) => {
         const rule = { name, contract: 'XLM', functions: { only: ['transfer'] }, conds: [], signers: ['app'], threshold: 1, cap: null, validUntil: null, generation: g };
-        const d = M.authorize([rule], [M.emptyRecord()], [M.transfer('shop', 1)], [0], ['app'], 1000, gen);
+        const d = M.checkAuth([rule], [M.emptyRecord()], [M.transfer('shop', 1)], [0], ['app'], 1000, gen);
         return h('li', {}, `${name}, issued at generation ${g}: `, d.ok ? yes('accepts a transfer') : no(`refuses every nonempty batch (issued at ${g}, current ${gen}); stored until collected`));
       })), ...(say ? [h('p', { class: 'xp-sub' }, say)] : []));
     };
@@ -1564,7 +1566,26 @@
   // anything left out keeps its heading and lede and gets an Expand button. A link or a URL hash
   // into a shortened section expands it and lands on the target. Print shows everything.
   const RP_KEY = 'perch-reading-path';
-  let rpReveal = () => {};
+  let revealReadingSection = () => false;
+  // Native disclosures are independent of the optional reading-path controls. A
+  // deep link must work on a page with <details> even when it has no reading paths.
+  function rpReveal(target) {
+    if (!target) return false;
+    let changed = revealReadingSection(target);
+    // Section headings and legacy aliases sit outside their disclosure body.
+    // Landing on either should reveal that section, just like a body deep link.
+    const section = target.closest('main section[id]');
+    const disclosure = section && section.querySelector(':scope > details.section-disclosure');
+    if (disclosure && !disclosure.open) {
+      disclosure.open = true;
+      changed = true;
+    }
+    for (let d = target.closest('details:not([open])'); d; d = d.parentElement && d.parentElement.closest('details:not([open])')) {
+      d.open = true;
+      changed = true;
+    }
+    return changed;
+  }
   function readingPaths(nav) {
     if (nav.dataset.ready || !document.querySelector('[data-path]')) return;
     nav.dataset.ready = '1';
@@ -1606,14 +1627,12 @@
       if (say) live.textContent = v === 'all' ? 'Whole paper: every section shown.' : `${v}-minute path: ${collapsed} sections shortened; each keeps its heading, its summary and an Expand button. Links into a shortened section expand it.`;
       try { sessionStorage.setItem(RP_KEY, v); } catch { /* storage unavailable */ }
     }
-    // Expand the shortened section (and any closed <details>) holding `target`.
-    rpReveal = (target) => {
-      if (!target) return false;
+    // Reading paths add section expansion to the generic disclosure reveal.
+    revealReadingSection = (target) => {
       const s = target.closest('main section[id]');
-      let changed = false;
-      if (s && target.closest('.rp-hide')) { expand(s, false); changed = true; }
-      for (let d = target.closest('details:not([open])'); d; d = d.parentElement && d.parentElement.closest('details:not([open])')) { d.open = true; changed = true; }
-      return changed;
+      if (!s || !target.closest('.rp-hide')) return false;
+      expand(s, false);
+      return true;
     };
     let start = 'all';
     try { start = sessionStorage.getItem(RP_KEY) || 'all'; } catch { /* storage unavailable */ }

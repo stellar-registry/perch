@@ -60,16 +60,6 @@
    ]
   },
   {
-   "id": "wallet-preview",
-   "title_html": "Aside: what a wallet can show before anyone signs",
-   "title_latex": "Wallet Preview",
-   "nav": "Wallet preview",
-   "editions": [
-    "html"
-   ],
-   "unnumbered": true
-  },
-  {
    "id": "threat-model",
    "title_html": "A stolen app key can do only what its grant allows",
    "title_latex": "Threat Model",
@@ -108,6 +98,16 @@
     "experiment",
     "compare"
    ]
+  },
+  {
+   "id": "wallet-preview",
+   "title_html": "Aside: what a wallet can show before anyone signs",
+   "title_latex": "Wallet Preview",
+   "nav": "Wallet preview",
+   "editions": [
+    "html"
+   ],
+   "unnumbered": true
   },
   {
    "id": "proofs",

@@ -30,7 +30,7 @@
   },
   {
    "anchor": "simulation",
-   "nav": "Against OpenZeppelin",
+   "nav": "Compare to OpenZeppelin",
    "text": "The same request runs against an OpenZeppelin account."
   }
  ],

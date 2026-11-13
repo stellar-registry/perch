@@ -2,16 +2,10 @@
 <p>On Stellar, a smart account is a contract that holds a user's funds and approves the calls made in its name; Soroban is the platform that runs such contracts. There are two options today to let an app spend for a user: it can ask the user to approve every call, which does not work for an agent that pays a service many times an hour. Or the user can give the app a key that can do anything the account can, which would leave the user vulnerable. If the app's key is stolen, the thief can empty their account. Perch adds a third option. The user, as the account's owner, installs a <dfn><a href="#glossary">grant</a></dfn> (a written permission with limits) and the account checks every call the app makes in its name against it. Perch accounts run on Stellar through the {{fact:wallet-name}} wallet. {{ref:fig:fig-overview}} shows who does what.</p>
 {{fig:fig-overview}}
 <p>This paper follows a payment from start to finish:</p>
-<ol class="steps">
-<li><a href="#step-grant">The owner installs a grant for an app.</a></li>
-<li><a href="#step-request">An app asks the user's Perch account to pay for an order.</a></li>
-<li><a href="#grants">The account checks each call against its rule and its spending window.</a></li>
-<li><a href="#authorization">The app signs, and the account decides if the request is valid.</a></li>
-<li><a href="#simulation">The same request runs against an OpenZeppelin account.</a></li>
-</ol>
+{{steps}}
 <p>An aside after step 5 shows what a wallet can show a person who reviews a request before signing it.</p>
 <h3 id="step-grant">The owner installs a grant for an app</h3>
-<p>Every request starts from a grant the owner installs for an app or an agent. The paper's running example is the shop grant ({{ref:fig:fig-shop-grant}}), which lets an app send XLM, Stellar's native currency, from the user's account to one shop and no one else. The grant allows at most {{fact:shop-cap-xlm}} XLM in any {{fact:shop-period-ledgers}} ledgers, {{fact:shop-period-minutes}} at about {{fact:nominal-ledger-seconds}} seconds a ledger.</p>
+<p>Every request starts from a grant the owner installs for an app or an agent. The paper's running example is the shop grant ({{ref:fig:fig-shop-grant}}), which lets an app send XLM, Stellar's native currency, from the user's account to one shop and no one else. The grant allows at most {{fact:shop-cap-xlm}} XLM in any {{fact:shop-period-ledgers}} ledgers ({{fact:shop-period-minutes}} at about {{fact:nominal-ledger-seconds}} seconds a ledger).</p>
 
 <p>The grant has one <dfn><a href="#glossary">rule</a></dfn>, which names the contract (the XLM token), the function (<code>transfer</code>), the recipient (the shop), the key that must sign (the app's) and a <dfn><a href="#glossary">cap</a></dfn>; a rule may also stop at an expiry ledger. The owner installs a <dfn><a href="#glossary">grant document</a></dfn> like the one below with one call to the account, <code>apply_grant</code>, after a <dfn><a href="#glossary">document compiler</a></dfn> contract validates it.
 </p>

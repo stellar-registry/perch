@@ -66,6 +66,14 @@ ol.marks>li::before{content:counter(mark);position:absolute;left:0;top:.15rem;wi
 details.fig-text{max-width:100%;overflow-x:auto}
 .refs li{overflow-wrap:anywhere}
 #glossary table td:first-child{font-weight:650;min-width:8rem}
+/* The walkthrough's steps: a label on each step's heading and one sidebar group. */
+.step-mark{display:block;font:600 .72rem var(--mono);color:var(--amber);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.45rem}
+h3 .step-mark{font-size:.66rem;margin-bottom:.3rem}
+nav .nav-group{margin:.9rem 0 .25rem;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+nav .nav-steps{margin-bottom:.6rem}
+nav .nav-steps a{padding-left:.75rem;border-left:1px solid var(--line)}
+nav .nav-steps .k{font-family:var(--mono);color:var(--faint);margin-right:.45rem}
+@media(max-width:760px){nav .nav-steps{display:contents}nav .nav-group{display:none}nav .nav-steps a{padding-left:0;border-left:0}}
 nav .nav-links a[href="#repro"]{color:var(--faint)}
 nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;letter-spacing:.05em;text-transform:uppercase}
 @media(max-width:760px){.glance{padding:1rem}.box{padding:.9rem 1rem}.header-actions a{font-size:.8rem}.provenance{grid-template-columns:minmax(0,1fr);gap:.15rem}.provenance dd{margin-bottom:.6rem}}

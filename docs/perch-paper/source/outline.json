@@ -6,12 +6,40 @@
    "latex"
   ]
  },
+ "steps_title": "The payment, step by step",
+ "steps": [
+  {
+   "anchor": "step-grant",
+   "nav": "Install a grant",
+   "text": "The owner installs a grant for an app."
+  },
+  {
+   "anchor": "step-request",
+   "nav": "Request a payment",
+   "text": "An app asks the user's Perch account to pay for an order."
+  },
+  {
+   "anchor": "grants",
+   "nav": "Checks and windows",
+   "text": "The account checks each call against its rule and its spending window."
+  },
+  {
+   "anchor": "authorization",
+   "nav": "Sign and decide",
+   "text": "The app signs, and the account decides if the request is valid."
+  },
+  {
+   "anchor": "simulation",
+   "nav": "Against OpenZeppelin",
+   "text": "The same request runs against an OpenZeppelin account."
+  }
+ ],
  "sections": [
   {
    "id": "motivation",
    "title_html": "Apps and agents need authority with limits",
    "title_latex": "Introduction",
-   "nav": "The request",
+   "nav": "Introduction",
    "figures": [
     "fig-overview",
     "fig-shop-grant",
@@ -34,7 +62,6 @@
    "id": "grants",
    "title_html": "The account checks each call against its rule and its spending window",
    "title_latex": "Grants and Spending Windows",
-   "nav": "Checks and windows",
    "figures": [
     "fig-cap-window"
    ],
@@ -48,7 +75,6 @@
    "id": "authorization",
    "title_html": "The app signs, and the account decides",
    "title_latex": "The Authorization Path",
-   "nav": "Sign and decide",
    "figures": [
     "fig-auth-path"
    ],
@@ -87,7 +113,6 @@
    "id": "simulation",
    "title_html": "The same request runs against an OpenZeppelin account",
    "title_latex": "Both Designs in soroban-sim",
-   "nav": "Against OpenZeppelin",
    "figures": [
     "fig-sim"
    ],
@@ -103,7 +128,7 @@
    "id": "wallet-preview",
    "title_html": "Aside: what a wallet can show before anyone signs",
    "title_latex": "Wallet Preview",
-   "nav": "Wallet preview",
+   "nav": "Aside: wallet preview",
    "editions": [
     "html"
    ],

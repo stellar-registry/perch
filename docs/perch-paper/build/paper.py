@@ -642,6 +642,45 @@ def card_heads(body):
     return re.sub(r'<h([2-6])\b|<p class="thm-head">', sub, body)
 
 
+def html_step_list(p, ctx):
+    """{{steps}}: the walkthrough's steps as a list, from the outline's "steps" (HTML only)."""
+    steps = p.outline.get('steps', [])
+    if not steps:
+        fail(f'{DOC["id"]}: {{{{steps}}}} in {ctx}, but the outline has no "steps"')
+    return '<ol class="steps">' + ''.join(
+        f'<li><a href="#{html.escape(s["anchor"])}">{render(p, s["text"], "html", ctx)}</a></li>' for s in steps) + '</ol>'
+
+
+def mark_steps(p, bodies):
+    """Give each walkthrough step a "Step n of N" label on its heading.
+
+    A step's anchor is either a section id (its <h2>) or the id of a heading inside a section. Returns
+    {anchor: home section id} and the extra head text for sections that are steps themselves."""
+    steps = p.outline.get('steps', [])
+    home, heads = {}, {}
+    for st in steps:
+        a = st['anchor']
+        if a in bodies:
+            home[a] = a
+        else:
+            owners = [sid for sid, b in bodies.items() if re.search(rf'<h[3-6] id="{re.escape(a)}">', b)]
+            if len(owners) != 1:
+                fail(f'{DOC["id"]}: step anchor {a!r} must be an HTML section or a heading id in exactly one section')
+                continue
+            home[a] = owners[0]
+    if len(home) != len(steps):
+        return home, heads
+    total = len(steps)
+    for i, st in enumerate(steps, 1):
+        a, sid = st['anchor'], home[st['anchor']]
+        mark = f'<span class="step-mark">Step {i} of {total}</span>'
+        if a == sid:
+            heads[sid] = mark
+        else:
+            bodies[sid] = re.sub(rf'(<h[3-6] id="{re.escape(a)}">)', rf'\1{mark}', bodies[sid], count=1)
+    return home, heads
+
+
 def expand_html(p, text, ctx, blocks, seen):
     # A reference that opens a sentence is marked, so an unnumbered exhibit's short name is capitalized there.
     text = re.sub(r'((?:^|<p>|<p [^>]*>|<li>|[.!?]\s)\s*)\{\{ref:((?:fig|tab):[\w-]+)\}\}', r'\1{{ref:\2|cap}}', text)
@@ -678,6 +717,8 @@ def expand_html(p, text, ctx, blocks, seen):
             return expand_html(p, read(html_file(arg)), arg, blocks, seen)
         if kind == 'references':
             return html_references(p)
+        if kind == 'steps':
+            return html_step_list(p, ctx)
         return render(p, m.group(0), 'html', ctx)
     text = MATH_DISPLAY.sub(lambda m: mathml(m.group(1), True, ctx), text)
     text = MATH_INLINE.sub(lambda m: mathml(m.group(1), False, ctx), text)
@@ -717,13 +758,6 @@ def build_html(p, blocks):
     p.cite_order = order
     p.cite_number = lambda k: order.index(k) + 1 if k in order else '?'
 
-    nav = ['<nav aria-label="Paper sections"><a class="brand" href="#top">PERCH</a><div class="nav-links">']
-    for s in p.sections:
-        if p.in_edition(s, 'html') and s.get('nav'):
-            n = p.numbers['html'].get('sec:' + s['id'])
-            label = f'{n} · {s["nav"]}' if n and n.isdigit() else s['nav']
-            nav.append(f'<a href="#{s["id"]}">{html.escape(label)}</a>')
-    nav.append(f'</div><small>{o["nav_note"]}</small></nav>')
     css = '\n'.join(read(SHARED_HTML / n).strip() for n in ('style.css', 'page.css', 'figures.css')
                     if (SHARED_HTML / n).exists())
     font = SHARED_HTML / 'fonts' / 'perch-math.woff2'
@@ -734,17 +768,46 @@ def build_html(p, blocks):
                + base64.b64encode(font.read_bytes()).decode() + ') format("woff2");font-display:swap}'
                '\nmath{font-family:PerchMath,math}\n' + css)
     head = read(html_file('head.html')).replace('{{style}}', css).replace('{{title}}', html.escape(DOC['title']))
-    parts = [expand_html(p, head, 'head', blocks, seen).strip(), ''.join(nav), '']
-    wt = f' data-walkthrough="{"../" * (DEPTH + 1)}oz-walkthrough/index.html"' if WALKTHROUGH.exists() else ''
-    parts.append(f'<main id="main"{wt}>' + read(SHARED_HTML / 'sprite.svg').strip()
-                 + expand_html(p, read(html_file('header.html')), 'header', blocks, seen).strip())
-    parts.append(expand_html(p, read(html_file('abstract.html')), 'abstract', blocks, seen).strip())
-    for s in p.sections:
-        if not p.in_edition(s, 'html'):
+    head_html = expand_html(p, head, 'head', blocks, seen).strip()
+    header_html = expand_html(p, read(html_file('header.html')), 'header', blocks, seen).strip()
+    abstract_html = expand_html(p, read(html_file('abstract.html')), 'abstract', blocks, seen).strip()
+    sections = [s for s in p.sections if p.in_edition(s, 'html')]
+    bodies = {s['id']: card_heads(expand_html(p, read(HTMLDIR / 'sections' / f'{s["id"]}.html'), s['id'], blocks, seen).strip())
+              for s in sections}
+    steps = o.get('steps', [])
+    step_home, step_heads = mark_steps(p, bodies)
+
+    # The walkthrough's steps are one group in the sidebar, placed where the first step starts; a section that
+    # is itself a step appears only in that group.
+    group = ''
+    if steps:
+        group = (f'<div class="nav-steps" role="group" aria-label="{html.escape(o.get("steps_title", "Steps"))}">'
+                 f'<p class="nav-group">{html.escape(o.get("steps_title", "Steps"))}</p>'
+                 + ''.join(f'<a href="#{html.escape(st["anchor"])}"><span class="k">{i}</span>{html.escape(st["nav"])}</a>'
+                           for i, st in enumerate(steps, 1)) + '</div>')
+    first_home = step_home.get(steps[0]['anchor']) if steps else None
+    nav = ['<nav aria-label="Paper sections"><a class="brand" href="#top">PERCH</a><div class="nav-links">']
+    for s in sections:
+        if s['id'] in step_home and step_home[s['id']] == s['id']:
+            if group and s['id'] == first_home:
+                nav.append(group)
             continue
+        if s.get('nav'):
+            n = p.numbers['html'].get('sec:' + s['id'])
+            label = f'{n} · {s["nav"]}' if n and n.isdigit() else s['nav']
+            nav.append(f'<a href="#{s["id"]}">{html.escape(label)}</a>')
+        if group and s['id'] == first_home:
+            nav.append(group)
+    nav.append(f'</div><small>{o["nav_note"]}</small></nav>')
+    parts = [head_html, ''.join(nav), '']
+    wt = f' data-walkthrough="{"../" * (DEPTH + 1)}oz-walkthrough/index.html"' if WALKTHROUGH.exists() else ''
+    parts.append(f'<main id="main"{wt}>' + read(SHARED_HTML / 'sprite.svg').strip() + header_html)
+    parts.append(abstract_html)
+    for s in sections:
         n = p.numbers['html'].get('sec:' + s['id'])
-        body = card_heads(expand_html(p, read(HTMLDIR / 'sections' / f'{s["id"]}.html'), s['id'], blocks, seen).strip())
-        head = f'<h2><span class="n">{n}</span>{html.escape(s["title_html"])}</h2>' if n else f'<h2>{html.escape(s["title_html"])}</h2>'
+        body = bodies[s['id']]
+        num = f'<span class="n">{n}</span>' if n else ''
+        head = f'<h2>{num}{step_heads.get(s["id"], "")}{html.escape(s["title_html"])}</h2>'
         alias = ''.join(f'<span class="alias" id="{a}"></span>' for a in s.get('aliases', []))
         parts.append(f'<section id="{s["id"]}">{alias}{head}{body}</section>')
     parts.append(expand_html(p, read(html_file('footer.html')), 'footer', blocks, seen).strip())

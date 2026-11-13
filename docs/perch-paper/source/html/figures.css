@@ -157,7 +157,6 @@
 .xp-caption{font-size:.8rem;line-height:1.6;color:var(--muted);margin-top:.8rem}
 /* Simulation embed: the rule, then Start and the presets above the frame; the recorded figure
    folds away on screen once the simulation runs (print keeps it). */
-.sim-rule{font-size:.92rem}
 .sim-open{font-size:.88rem}
 .sim-fold{min-height:44px;font:inherit;font-size:.85rem;padding:.4rem .8rem;border:1px solid var(--edge);border-radius:6px;background:var(--btn);color:var(--text);margin:.6rem 0}
 .sim-fold[hidden]{display:none}

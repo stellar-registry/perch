@@ -466,12 +466,16 @@
     const fig3 = () => FIG3.map(([op, v]) => (op === 'send' ? { op, amount: v } : { op, n: v }));
     const st = { lambda: 10, period: 100, percall: false, zero: false, actions: fig3(), inspect: BASE + 100, touched: false };
     const panel = mount(fig, 'xp-cap');
-    const { bar, live } = head(fig, panel);
+    const { head: hd, bar, live } = head(fig, panel);
+    // The controls in four labelled groups: act, change the rule, compare, start over.
+    const gtitle = (text) => h('p', { class: 'xp-group-title' }, text);
+    const group = (title, ...kids) => h('div', { class: 'xp-group', role: 'group', 'aria-label': title }, gtitle(title), ...kids);
+    hd.insertBefore(gtitle('Send and advance'), bar);
     const form = el('form', { class: 'xp-inline', 'aria-label': 'Send a transfer' });
     const amount = number(`${fig.id}-amount`, 5, 0, 100);
     amount.setAttribute('aria-label', 'Amount in XLM');
     const send = el('button', { type: 'submit', class: 'primary' }, 'Send');
-    form.append(labelled('Amount', amount), send);
+    form.append(labelled('XLM Amount', amount), send);
     const adv1 = button('+1 ledger');
     const adv10 = button('+10');
     const advP = button('+P');
@@ -487,16 +491,18 @@
     const replace = button('Replace the rule');
     const reset = button('Reset to the figure’s events');
     const clear = button('Clear');
-    const toggles = h('div', { class: 'xp-row' },
-      h('label', { class: 'xp-check' }, percall, ' Check each call alone'),
-      h('label', { class: 'xp-check' }, zero, ' Allow ledger 0 (no Stellar ledger has sequence 0; the theorem\u2019s bound over any P consecutive ledgers assumes ledger 1 or later)'),
-      replace, reset, clear);
+    const controls = h('div', { class: 'xp-groups' },
+      group('Change the rule', h('div', { class: 'xp-row' }, params, replace)),
+      group('Compare', h('div', { class: 'xp-row' },
+        h('label', { class: 'xp-check' }, percall, ' Check each call alone (no window)'),
+        h('label', { class: 'xp-check' }, zero, ' Start at ledger 0 (impossible on Stellar)'))),
+      group('Start over', h('div', { class: 'xp-row' }, reset, clear)));
     const plot = el('div', { class: 'xp-plot-wrap' });
     const inspect = el('input', { type: 'range', step: 1, name: `${fig.id}-inspect` });
     const inspectOut = el('output', { class: 'xp-out' });
     const fullest = el('p', { class: 'xp-result' });
     const history = el('ol', { class: 'xp-log', 'aria-label': 'Transfers, in order' });
-    panel.append(params, toggles, plot,
+    panel.append(controls, plot,
       h('div', { class: 'xp-row' }, h('label', { class: 'xp-field xp-grow' }, h('span', {}, 'Inspect the window at ledger L'), inspect)),
       inspectOut, fullest, h('p', { class: 'xp-sub' }, 'In the plot, as in the figure: a charge inside the inspected window is amber, one outside it is plain; a refused transfer is dashed red with a bar end and changes nothing.'), h('p', { class: 'xp-sub' }, 'Every transfer, in order:'), history);
 

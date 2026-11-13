@@ -4,6 +4,16 @@
 
 <h3 id="step-window">The cap holds over a sliding window</h3>
 <p>A rule's cap is a budget over time. At any ledger the <dfn><a href="#glossary">window</a></dfn> is the last {{fact:shop-period-ledgers}} ledgers, and a transfer is accepted only if the window's total plus the new amount stays within the limit. The account keeps the charges in a <dfn><a href="#glossary">spending record</a></dfn> in its own storage and charges a transfer in the same decision that checks it. {{ref:fig:fig-cap-window}} below lets you try the shop grant's cap of {{fact:shop-cap-xlm}} XLM per {{fact:shop-period-ledgers}} ledgers (it needs JavaScript).</p>
-<p>Send amounts and advance the ledger to see which transfers the window accepts and when earlier charges stop counting. Tick "Check each call alone" to see what a per-call check would let through instead. Press "Replace the rule" and then send 10 XLM to see that a replaced rule starts with an empty window.</p>
+<p>Try it out in the simulation below.</p>
+<ul>
+
+<li>Send different amounts to see which transfers the window accepts.</li>
+<li>Use the Advance buttons to move the ledger forward and see the window reset, so earlier charges stop counting.</li>
+<li>Tick "Check each call alone" to see what a per-call check would let through instead of taking into account the window limit.</li>
+<li>Press "Replace the rule" to see what happens when the owner changes a grant. Perch never edits a rule in place: it installs a new one, and the new rule starts with an empty spending record. Send 10 XLM after replacing it, and the transfer is accepted even if the old window was full.</li>
+<li>Press "Reset to the figure’s events" to go back to the transfers in the figure above, with the cap at 10 XLM per 100 ledgers and both boxes unticked. Press "Clear" to remove every transfer and start from an empty window.</li>
+<li>Tick "Start at ledger 0" to see the one case the proof leaves out. Starting at ledger 0, two transfers of the full cap are both accepted, because the window never counts a transfer made at ledger 0. Stellar's ledgers start at 1, so this cannot happen on the network.</li>
+</ul>
+
 {{fig:fig-cap-window}}
 <p>For the same cap and period, a sliding window is a tighter limit than one that resets on a schedule. MetaMask's delegation framework {{cite:metamask-delegation}} caps token transfers per fixed period that resets at each period's start (<a href="https://github.com/MetaMask/delegation-framework/blob/b4b8c41fc912455a1af2300bfcd1276676b92a2e/src/enforcers/ERC20PeriodTransferEnforcer.sol#L11-L16"><code>ERC20PeriodTransferEnforcer.sol:11-16</code></a>), so an app can spend the full cap just before a reset and again just after it. A Perch window stays within its limit wherever it is placed.</p>

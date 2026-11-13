@@ -5,6 +5,7 @@
 .fig.js g[data-cursor]:not([data-state=current]){display:none}
 .fig-head{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);margin:0 0 .6rem}
 .fig-bar{display:flex;flex-wrap:wrap;gap:.4rem .5rem;align-items:center;padding:.4rem 0}
+.fig-bar:has(>.xp-inline){align-items:flex-end}
 .fig-bar2{border-top:1px solid var(--line);margin-top:.6rem}
 .fig-bar button,.fig-bar select{min-height:44px;min-width:44px;font:inherit;font-size:.85rem;padding:.4rem .8rem;border-radius:6px;border:1px solid var(--edge);background:var(--btn);color:var(--text)}
 .fig-bar select{max-width:100%}
@@ -62,6 +63,10 @@
 .xp-field>span{line-height:1.3}
 .xp-grow{flex:1 1 16rem}
 .xp-row{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:end;margin:.5rem 0}
+.xp-group-title{font:650 .68rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:.9rem 0 .1rem}
+.xp-groups{border-bottom:1px solid var(--line);padding-bottom:.6rem;margin-bottom:.6rem}
+.xp-groups .xp-row{align-items:center;margin:.2rem 0}
+.xp-groups .xp-params{margin:0}
 .xp-check,.xp-radio{display:inline-flex;flex-direction:row;align-items:center;gap:.45rem;min-height:44px;font-size:.85rem;color:var(--text);cursor:pointer}
 .xp-chip{display:inline-block;font:650 .66rem var(--mono);letter-spacing:.08em;border:1.5px solid var(--fig-stroke);border-radius:3px;padding:.05rem .4rem;color:var(--text);vertical-align:.1em;white-space:nowrap}
 .xp-chip[data-kind=model]{border-style:dashed}

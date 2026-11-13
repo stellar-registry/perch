@@ -81,6 +81,14 @@ ol.marks>li::before{content:counter(mark);position:absolute;left:0;top:.15rem;wi
 details.fig-text{max-width:100%;overflow-x:auto}
 .refs li{overflow-wrap:anywhere}
 #glossary table td:first-child{font-weight:650;min-width:8rem}
+/* The walkthrough's steps: a label on each step's heading and one sidebar group. */
+.step-mark{display:block;font:600 .72rem var(--mono);color:var(--amber);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.45rem}
+h3 .step-mark{font-size:.66rem;margin-bottom:.3rem}
+nav .nav-group{margin:.9rem 0 .25rem;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+nav .nav-steps{margin-bottom:.6rem}
+nav .nav-steps a{padding-left:.75rem;border-left:1px solid var(--line)}
+nav .nav-steps .k{font-family:var(--mono);color:var(--faint);margin-right:.45rem}
+@media(max-width:760px){nav .nav-steps{display:contents}nav .nav-group{display:none}nav .nav-steps a{padding-left:0;border-left:0}}
 nav .nav-links a[href="#repro"]{color:var(--faint)}
 nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;letter-spacing:.05em;text-transform:uppercase}
 @media(max-width:760px){.glance{padding:1rem}.box{padding:.9rem 1rem}.header-actions a{font-size:.8rem}.provenance{grid-template-columns:minmax(0,1fr);gap:.15rem}.provenance dd{margin-bottom:.6rem}}
@@ -94,6 +102,7 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
 .fig.js g[data-cursor]:not([data-state=current]){display:none}
 .fig-head{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);margin:0 0 .6rem}
 .fig-bar{display:flex;flex-wrap:wrap;gap:.4rem .5rem;align-items:center;padding:.4rem 0}
+.fig-bar:has(>.xp-inline){align-items:flex-end}
 .fig-bar2{border-top:1px solid var(--line);margin-top:.6rem}
 .fig-bar button,.fig-bar select{min-height:44px;min-width:44px;font:inherit;font-size:.85rem;padding:.4rem .8rem;border-radius:6px;border:1px solid var(--edge);background:var(--btn);color:var(--text)}
 .fig-bar select{max-width:100%}
@@ -151,6 +160,10 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
 .xp-field>span{line-height:1.3}
 .xp-grow{flex:1 1 16rem}
 .xp-row{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:end;margin:.5rem 0}
+.xp-group-title{font:650 .68rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:.9rem 0 .1rem}
+.xp-groups{border-bottom:1px solid var(--line);padding-bottom:.6rem;margin-bottom:.6rem}
+.xp-groups .xp-row{align-items:center;margin:.2rem 0}
+.xp-groups .xp-params{margin:0}
 .xp-check,.xp-radio{display:inline-flex;flex-direction:row;align-items:center;gap:.45rem;min-height:44px;font-size:.85rem;color:var(--text);cursor:pointer}
 .xp-chip{display:inline-block;font:650 .66rem var(--mono);letter-spacing:.08em;border:1.5px solid var(--fig-stroke);border-radius:3px;padding:.05rem .4rem;color:var(--text);vertical-align:.1em;white-space:nowrap}
 .xp-chip[data-kind=model]{border-style:dashed}
@@ -942,12 +955,16 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
     const fig3 = () => FIG3.map(([op, v]) => (op === 'send' ? { op, amount: v } : { op, n: v }));
     const st = { lambda: 10, period: 100, percall: false, zero: false, actions: fig3(), inspect: BASE + 100, touched: false };
     const panel = mount(fig, 'xp-cap');
-    const { bar, live } = head(fig, panel);
+    const { head: hd, bar, live } = head(fig, panel);
+    // The controls in four labelled groups: act, change the rule, compare, start over.
+    const gtitle = (text) => h('p', { class: 'xp-group-title' }, text);
+    const group = (title, ...kids) => h('div', { class: 'xp-group', role: 'group', 'aria-label': title }, gtitle(title), ...kids);
+    hd.insertBefore(gtitle('Send and advance'), bar);
     const form = el('form', { class: 'xp-inline', 'aria-label': 'Send a transfer' });
     const amount = number(`${fig.id}-amount`, 5, 0, 100);
     amount.setAttribute('aria-label', 'Amount in XLM');
     const send = el('button', { type: 'submit', class: 'primary' }, 'Send');
-    form.append(labelled('Amount', amount), send);
+    form.append(labelled('XLM Amount', amount), send);
     const adv1 = button('+1 ledger');
     const adv10 = button('+10');
     const advP = button('+P');
@@ -963,16 +980,18 @@ nav .nav-links a[href="#repro"]::after{content:" · detail";font-size:.66rem;let
     const replace = button('Replace the rule');
     const reset = button('Reset to the figure’s events');
     const clear = button('Clear');
-    const toggles = h('div', { class: 'xp-row' },
-      h('label', { class: 'xp-check' }, percall, ' Check each call alone'),
-      h('label', { class: 'xp-check' }, zero, ' Allow ledger 0 (no Stellar ledger has sequence 0; the theorem\u2019s bound over any P consecutive ledgers assumes ledger 1 or later)'),
-      replace, reset, clear);
+    const controls = h('div', { class: 'xp-groups' },
+      group('Change the rule', h('div', { class: 'xp-row' }, params, replace)),
+      group('Compare', h('div', { class: 'xp-row' },
+        h('label', { class: 'xp-check' }, percall, ' Check each call alone (no window)'),
+        h('label', { class: 'xp-check' }, zero, ' Start at ledger 0 (impossible on Stellar)'))),
+      group('Start over', h('div', { class: 'xp-row' }, reset, clear)));
     const plot = el('div', { class: 'xp-plot-wrap' });
     const inspect = el('input', { type: 'range', step: 1, name: `${fig.id}-inspect` });
     const inspectOut = el('output', { class: 'xp-out' });
     const fullest = el('p', { class: 'xp-result' });
     const history = el('ol', { class: 'xp-log', 'aria-label': 'Transfers, in order' });
-    panel.append(params, toggles, plot,
+    panel.append(controls, plot,
       h('div', { class: 'xp-row' }, h('label', { class: 'xp-field xp-grow' }, h('span', {}, 'Inspect the window at ledger L'), inspect)),
       inspectOut, fullest, h('p', { class: 'xp-sub' }, 'In the plot, as in the figure: a charge inside the inspected window is amber, one outside it is plain; a refused transfer is dashed red with a bar end and changes nothing.'), h('p', { class: 'xp-sub' }, 'Every transfer, in order:'), history);
 

@@ -25,8 +25,8 @@ use soroban_sdk::Symbol;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FnSet {
     /// Any function on the scope — the rule carries no function restriction
-    /// (a policy-free / constraint-free rule; INV-2), so OZ's native
-    /// all-signers check gates it for every function in the context.
+    /// (a policy-free / constraint-free rule; INV-2), so only its all-signers
+    /// requirement gates it, for every function in the context.
     Any,
     /// Only these functions (the rule's `FnIn` allowlist).
     Only(Vec<Symbol>),

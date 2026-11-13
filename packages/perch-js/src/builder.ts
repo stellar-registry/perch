@@ -18,6 +18,9 @@ export type SignerSpec =
   | {
       kind: 'external';
       verifier: string;
+      /** `<name>@<version>` in `perch/verifiers`, when the verifier is
+       *  named: see {@link named}. */
+      verifierName?: string;
       /** hex-encoded key material. */
       keyHex: string;
     }
@@ -27,9 +30,20 @@ export type SignerSpec =
       address: string;
     };
 
-/** Build an external signer spec; `key` may be raw bytes or an existing hex string. */
+/** Build an external signer spec whose verifier is named by its contract id
+ *  alone: an unverified verifier, which an account document may not hold (see
+ *  verifiers.ts). `key` may be raw bytes or an existing hex string. */
 export function external(verifier: string, key: Uint8Array | string): SignerSpec {
   return { kind: 'external', verifier, keyHex: typeof key === 'string' ? key : bytesToHex(key) };
+}
+
+/** Build an external signer spec whose verifier is named from Perch's
+ *  `perch/verifiers` registry: `verifierName` is `<name>@<version>` and
+ *  `verifier` the address it resolves to on the document's network
+ *  (`resolveVerifierName`, or a known deployment). The compiler
+ *  resolves the name again and refuses the document unless it is `verifier`. */
+export function named(verifierName: string, verifier: string, key: Uint8Array | string): SignerSpec {
+  return { kind: 'external', verifier, verifierName, keyHex: typeof key === 'string' ? key : bytesToHex(key) };
 }
 
 /** Build a delegated signer spec (CAP-0071): the address authorizes the same
@@ -66,6 +80,7 @@ export class RuleBuilder {
   private _args?: Rule['args'];
   private _notAfterLedger?: number;
   private _cap?: Rule['cap'];
+  private _authRoot?: Rule['auth-root'];
 
   constructor(private readonly name: string) {}
 
@@ -117,6 +132,13 @@ export class RuleBuilder {
     return this;
   }
 
+  /** Require this account's authorization entry to start at exactly this
+   * contract/function. Other rule checks remain conjunctive. */
+  authRoot(contract: string, functionName: string): this {
+    this._authRoot = { contract, function: functionName };
+    return this;
+  }
+
   /** @internal */
   toWire(): Rule {
     if (!this._scope) throw new Error(`rule "${this.name}": scope not set (call selfAdmin/callContract)`);
@@ -130,6 +152,7 @@ export class RuleBuilder {
     if (this._args !== undefined) r.args = this._args;
     if (this._notAfterLedger !== undefined) r['not-after-ledger'] = this._notAfterLedger;
     if (this._cap !== undefined) r.cap = this._cap;
+    if (this._authRoot !== undefined) r['auth-root'] = this._authRoot;
     return r as Rule;
   }
 }
@@ -235,7 +258,12 @@ export class PolicyBuilder {
   signer(id: string, spec: SignerSpec): this {
     this._signers.push(
       spec.kind === 'external'
-        ? { id, verifier: spec.verifier, key: spec.keyHex }
+        ? {
+            id,
+            verifier: spec.verifier,
+            ...(spec.verifierName === undefined ? {} : { 'verifier-name': spec.verifierName }),
+            key: spec.keyHex,
+          }
         : { id, address: spec.address },
     );
     return this;

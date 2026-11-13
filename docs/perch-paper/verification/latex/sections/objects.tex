@@ -1,0 +1,41 @@
+Perch is a Soroban smart account in which the owner installs \emph{grants},
+bounded permissions that let an app or agent act without a signature prompt for
+each call. The account decides each authorization with one pure function,
+rule-core's \code{rule\_eval::}\allowbreak\code{authorize}~\cite{rule-core},
+linked into the account; the contract code around it, the account \emph{shell},
+stores state, selects rules and checks signatures. The Perch paper,
+\perchdoc{main}, states five theorems about the function; this companion gives
+the definitions and all thirteen statements, and says what carries them to the
+deployed account, what they trust and what they leave unproved. Theorem and
+definition numbers are shared by every Perch paper.
+
+\paragraph{Objects.} Each statement is about one or two of five objects, none of
+them the compiled contract: the \emph{model}, rule-core's hand-written Lean model
+of the evaluator; the \emph{translation}, the Lean program Aeneas generates from
+the Rust; the \emph{account model}, an abstract account with two events and no
+Rust counterpart; the \emph{host model} of Soroban authorization, whose fidelity
+to soroban-env-host is tested; and Perch's \emph{canonical-encoding package}.
+Aeneas gives every translated function three outcomes: success
+$\mathsf{ok}(v)$, failure (a Rust panic) and divergence. A theorem that a function
+returns $\mathsf{ok}$ on every input thus rules out panics and nontermination; a
+refusal is a success, Rust's \code{Result<\_, Refusal>} being the value inside
+$\mathsf{ok}$.
+
+\paragraph{What ``proved'' means.} We say \emph{proved} only of statements Lean's
+kernel has checked. rule-core's CI pins all \fact{exported-theorems} exported
+theorems to Lean's standard axioms, \fact{standard-axioms}, and checks a ledger of
+\fact{claims-total} claims: \fact{claims-proven} proven, \fact{claims-tested}
+tested, \fact{claims-assumed} assumed and \fact{claims-unproven} unproven
+(\S\ref{sec:trust}).
+
+\paragraph{Reading a statement.} Each statement gives its formula, its precise
+text, its hypotheses and its evidence: the Lean names, linked to their lines in
+rule-core at \fact{rule-core-pin-short} (in Perch at \fact{perch-pin-short} for
+Theorem~\ref{stmt:canonical-identity}), and a tag naming the object.
+\statusobj{Model + Translation} means proved for the model and, under the
+\lean{Extracted} namespace, for the translation. The HTML
+edition\footnote{\url{https://bitswell-hq.github.io/stellar-registry__perch/perch-paper/verification/}}
+adds a one-line reading and, where it helps, an instance to try.
+\S\S\ref{sec:pipeline}--\ref{sec:host} state the theorems by object,
+\S\ref{sec:obligations} carries them to the account, and the rest say what they
+trust and leave open.

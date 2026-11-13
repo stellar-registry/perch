@@ -15,7 +15,7 @@ on:
       - scripts/rehearse-bootstrap.sh
       - scripts/derive-id.py
       - crates/perch-smart-account/wasm/registry.path
-      - crates/perch-account-factory/wasm/registry.path
+      - crates/*/wasm/verifiers.path
       - .github/workflows/rehearse-bootstrap.yml
 
 permissions: {}

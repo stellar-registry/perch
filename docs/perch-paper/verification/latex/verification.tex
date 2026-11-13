@@ -1,0 +1,26 @@
+% What Perch Proves: the academic edition of the verification companion.
+% Build with ../../latex/build.sh (ONLY=verification). Section order, titles,
+% figures, tables, facts, definitions, statements and references come from
+% ../../source via ../../build/paper.py, which writes generated/; prose lives in
+% sections/. The shared preamble is ../../latex/perch-preamble.tex. This
+% companion has no anonymous edition.
+\documentclass[runningheads]{llncs}
+\input{../../latex/perch-preamble}
+
+\title{What Perch Proves: An Aeneas-Translated\\Authorization Evaluator and Its Models}
+\titlerunning{What Perch Proves}
+\author{Willem Wyndham \and Elizabeth Engelman}
+\authorrunning{W. Wyndham and E. Engelman}
+\institute{The Aha Company}
+% Repository links; their Lean names may break after a dot or an underscore.
+\newcommand\repolink[2]{\href{#1}{\perchbrk{#2}}}
+% Long code spans: let a line stretch rather than overflow the margin.
+\setlength\emergencystretch{2em}
+
+\begin{document}
+\maketitle
+\input{sections/abstract}
+\input{generated/body}
+\bibliographystyle{splncs04}
+\bibliography{generated/refs}
+\end{document}

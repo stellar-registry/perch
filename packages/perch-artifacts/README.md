@@ -41,7 +41,7 @@ file is stale:
 
 ```json
 {
-  "doc_compiler": { "MAX_DOC_SIGNERS": 8, "MAX_DOC_RULES": 11, "MAX_DOC_CANONICAL_BYTES": 8192, "MAX_RULE_NAME_BYTES": 20 },
+  "doc_compiler": { "MAX_DOC_SIGNERS": 8, "MAX_DOC_RULES": 10, "MAX_DOC_CANONICAL_BYTES": 8192, "MAX_RULE_NAME_BYTES": 20 },
   "program": { "PROGRAM_VERSION": 1, "MAX_PROGRAM_LEN": 256, "MAX_STACK_DEPTH": 128 }
 }
 ```

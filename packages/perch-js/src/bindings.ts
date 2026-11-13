@@ -5,7 +5,9 @@
 // view is a simulation; its `latestLedger` is the ledger the RPC answered at.
 
 import { decodeDocLimits, type FlatDocLimits } from './limits.js';
+import { rebuildGrantDoc, type RebuiltGrant, type StoredCond, type StoredRule, type StoredGrant, type StoredVal } from './grant.js';
 import type { AccountCapabilities, AccountConfiguration, AccountReader, InstalledRule, Read } from './snapshot.js';
+import type { AuthRoot } from './schema.js';
 import type { SignerKey } from './xdr.js';
 
 /** What a generated client method resolves to (`AssembledTransaction`). */
@@ -46,6 +48,20 @@ function signer(s: Enum): SignerKey {
   throw new Error(`unknown signer ${s.tag}`);
 }
 
+/** The host encoding is an optional singleton vector: SDK contracttype cannot
+ * encode Option<struct> directly. Malformed/multiple entries fail closed. */
+function authRoot(v: unknown): AuthRoot | null {
+  if (v === null || v === undefined) return null;
+  if (!Array.isArray(v) || v.length !== 1 || !v[0] || typeof v[0] !== 'object') throw new Error('malformed auth_root');
+  const root = v[0] as Record<string, unknown>;
+  if (Object.keys(root).sort().join(',') !== 'contract,function' ||
+      typeof root.contract !== 'string' || typeof root.function !== 'string' ||
+      !/^C[A-Z2-7]{55}$/.test(root.contract) || !/^[a-zA-Z0-9_]{1,32}$/.test(root.function)) {
+    throw new Error('malformed auth_root');
+  }
+  return { contract: root.contract, function: root.function };
+}
+
 function rule(r: Record<string, unknown>): InstalledRule {
   const ctx = r.context_type as Enum;
   if (ctx.tag !== 'CallContract') throw new Error(`rule ${String(r.id)}: unexpected context type ${ctx.tag}`);
@@ -55,6 +71,7 @@ function rule(r: Record<string, unknown>): InstalledRule {
     name: String(r.name),
     contract: String(ctx.values?.[0]),
     validUntil: opt(r.valid_until as number | undefined),
+    authRoot: Object.hasOwn(r, 'auth_root') ? authRoot(r.auth_root) : undefined,
     signers: (r.signers as Enum[]).map(signer),
     policies: (r.policies as { policy: string; params: unknown }[]).map((p) => ({
       policy: String(p.policy),
@@ -116,4 +133,136 @@ export function accountReader(account: string, client: AccountBindings, compiler
     capabilities: () => read(client.capabilities(), (v) => decodeCapabilities(v as Record<string, unknown>)),
     limits: () => read(compiler.limits(), (v): FlatDocLimits => decodeDocLimits(v)),
   };
+}
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/** The account's grant views, as the generated client names them. */
+export interface GrantBindings {
+  grant(args: { grant: number }): Promise<Simulated<any>>;
+  grant_rule_set(args: { grant: number }): Promise<Simulated<any>>;
+  grant_signer_ids(args: { grant: number }): Promise<Simulated<any>>;
+  grant_verifier_names(args: { grant: number }): Promise<Simulated<any>>;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+const text = (v: unknown): string => (typeof v === 'string' ? v : new TextDecoder().decode(bytes(v)));
+
+function storedVal(v: Enum): StoredVal {
+  const x = v.values?.[0];
+  switch (v.tag) {
+    case 'Address':
+      return { kind: 'address', address: String(x) };
+    case 'String':
+      return { kind: 'string', value: text(x) };
+    case 'Symbol':
+      return { kind: 'symbol', value: String(x) };
+    case 'Bytes':
+      return { kind: 'bytes', value: bytes(x) };
+    case 'Other':
+      return { kind: 'other', xdr: bytes(x) };
+    case 'I128':
+      return { kind: 'i128', value: BigInt(x as bigint) };
+    case 'U64':
+      return { kind: 'u64', value: BigInt(x as bigint) };
+    case 'Bool':
+      return { kind: 'bool', value: Boolean(x) };
+    default:
+      throw new Error(`unknown stored value ${v.tag}`);
+  }
+}
+
+function storedCond(c: Enum): StoredCond {
+  const index = Number(c.values?.[0]);
+  const x = c.values?.[1];
+  switch (c.tag) {
+    case 'ArgEq':
+      return { kind: 'argEq', index, value: storedVal(x as Enum) };
+    case 'ArgI128AtMost':
+      return { kind: 'argI128AtMost', index, bound: BigInt(x as bigint) };
+    case 'ArgIn':
+      return { kind: 'argIn', index, values: (x as Enum[]).map(storedVal) };
+    case 'ArgStrPrefix':
+      return { kind: 'argStrPrefix', index, prefix: text(x) };
+    default:
+      throw new Error(`unknown stored condition ${c.tag}`);
+  }
+}
+
+/** Decode one `StoredRule` as the bindings return it. */
+export function decodeStoredRule(r: Record<string, unknown>): StoredRule {
+  const keys = Object.keys(r).sort().join(',');
+  const legacy = 'cap,conds,contract,functions,generation,signers,threshold,valid_until';
+  if (keys !== legacy && keys !== `auth_root,${legacy}`) throw new Error('unknown stored rule layout');
+  const functions = r.functions as Enum;
+  if (functions.tag !== 'AnyExcept' && functions.tag !== 'Only') throw new Error(`unknown functions ${functions.tag}`);
+  const cap = (r.cap as { limit: bigint; period: number; amount_arg: number }[])[0];
+  const generation = opt(r.generation as bigint | undefined);
+  return {
+    contract: String(r.contract),
+    functions: {
+      kind: functions.tag === 'AnyExcept' ? 'anyExcept' : 'only',
+      names: (functions.values?.[0] as unknown[]).map(String),
+    },
+    conds: (r.conds as Enum[]).map(storedCond),
+    signers: (r.signers as Enum[]).map(signer),
+    threshold: Number(r.threshold),
+    cap: cap ? { limit: BigInt(cap.limit), period: Number(cap.period), amountArg: Number(cap.amount_arg) } : null,
+    validUntil: opt(r.valid_until as number | undefined),
+    authRoot: Object.hasOwn(r, 'auth_root') ? authRoot(r.auth_root) : undefined,
+    generation: generation === null ? null : BigInt(generation),
+  };
+}
+
+/** Decode what `grant(id)`, `grant_rule_set(id)`, `grant_signer_ids(id)`
+ *  and `grant_verifier_names(id)` return for the grant of `account` on the
+ *  network `network` (its passphrase); `null` when the account has no grant
+ *  document there. */
+export function decodeStoredGrant(
+  account: string,
+  network: string,
+  record: Record<string, unknown> | null | undefined,
+  ruleSet: Record<string, unknown>[],
+  signerIds: unknown[] | null | undefined,
+  verifierNames: unknown[] | null | undefined,
+): StoredGrant | null {
+  if (record === null || record === undefined) return null;
+  const rules = record.rules as Record<string, unknown>[];
+  if (rules.length !== ruleSet.length) throw new Error(`${rules.length} records and ${ruleSet.length} stored rules`);
+  return {
+    account,
+    network,
+    docHash: bytes(record.doc_hash),
+    signerIds: (signerIds ?? []).map(text),
+    verifierNames: (verifierNames ?? []).map(text),
+    rules: rules.map((r, i) => ({ name: String(r.name), rule: decodeStoredRule(ruleSet[i]!) })),
+  };
+}
+
+/**
+ * Read the grant document under `grant` from `account`'s views and rebuild
+ * it (`rebuildGrantDoc`); `null` when the account has none there. Throws
+ * `GrantNotRebuilt` when it does not rebuild to the stored `doc_hash`, which
+ * four reads straddling an `apply_grant` can also cause: read again.
+ */
+export async function readGrantDoc(
+  client: GrantBindings,
+  account: string,
+  network: string,
+  grant: number,
+): Promise<RebuiltGrant | null> {
+  const [record, ruleSet, signerIds, verifierNames] = await Promise.all([
+    client.grant({ grant }),
+    client.grant_rule_set({ grant }),
+    client.grant_signer_ids({ grant }),
+    client.grant_verifier_names({ grant }),
+  ]);
+  const stored = decodeStoredGrant(
+    account,
+    network,
+    record.result,
+    ruleSet.result,
+    signerIds.result,
+    verifierNames.result,
+  );
+  return stored === null ? null : rebuildGrantDoc(stored);
 }

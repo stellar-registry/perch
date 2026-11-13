@@ -1,0 +1,129 @@
+{
+ "perch-pin": {
+  "value": "f0275f41c5ab47c903bbfe9986b4bf3239c01b11",
+  "anon": "[withheld]",
+  "source": "this repo, `git cat-file` (V)"
+ },
+ "perch-pin-short": {
+  "value": "f0275f4",
+  "anon": "[withheld]",
+  "source": "same (V)"
+ },
+ "perch-repo": {
+  "value": "bitswell-hq/stellar-registry__perch",
+  "anon": "[withheld]",
+  "source": "r2:50 (C)"
+ },
+ "perch-pr-stack-head": {
+  "value": "#68",
+  "anon": "[withheld]",
+  "source": "r2:50 (C)"
+ },
+ "perch-preview-source": {
+  "value": "a410123",
+  "anon": "[withheld]",
+  "source": "r1 blockchain-accounts H3: `a410123..f0275f4` changes no contract source (C)"
+ },
+ "perch-deployed-source": {
+  "value": "c135aca277745434f2abf679edd9868c95204b51",
+  "anon": "[withheld]",
+  "source": "`P:deployments/testnet.json:10`, `mainnet.json:10` (V)"
+ },
+ "perch-deployed-source-short": {
+  "value": "c135aca",
+  "anon": "[withheld]",
+  "source": "same (V)"
+ },
+ "perch-deployed-account-version": {
+  "value": "0.5.1",
+  "source": "`P:deployments/mainnet.json:105` (V)"
+ },
+ "perch-deployed-testnet-date": {
+  "value": "2026-10-22",
+  "source": "`P:deployments/testnet.json:7` (V)"
+ },
+ "perch-deployed-testnet-ledger": {
+  "value": "5,330,546",
+  "source": "`P:deployments/testnet.json:8` (V)"
+ },
+ "perch-deployed-mainnet-date": {
+  "value": "2026-10-26",
+  "source": "`P:deployments/mainnet.json:7` (V)"
+ },
+ "oz-fork-pin": {
+  "value": "33726766",
+  "source": "r2:401 (C); local checkout `stellar-contracts-oz/3372676` (V present)"
+ },
+ "oz-fork-repo": {
+  "value": "theahaco/stellar-contracts-OZ",
+  "anon": "[withheld]",
+  "source": "r2:401 (C)"
+ },
+ "oz-fork-version": {
+  "value": "stellar-accounts 0.7.1",
+  "source": "r2:401 (C)"
+ },
+ "doc-allows-source": {
+  "value": "dff2a73",
+  "source": "r2:609 (C)"
+ },
+ "exact-roots-prs": {
+  "value": "Perch #69 and rule-core #17",
+  "anon": "[withheld]",
+  "note": "drafts",
+  "source": "r2:66, 86 (C)"
+ },
+ "completion-marker-issue": {
+  "value": "#15",
+  "anon": "[withheld]",
+  "source": "r2:619 (C)"
+ },
+ "rule-core-pin": {
+  "value": "cbabe594ae2df408991e825e56ddd618ea29541b",
+  "source": "local checkout `soroban-rule-core/cbabe59`, `git log` (V)"
+ },
+ "rule-core-pin-short": {
+  "value": "cbabe59",
+  "source": "same (V)"
+ },
+ "rule-core-repo": {
+  "value": "bitswell/soroban-rule-core",
+  "anon": "[withheld]",
+  "source": "panel brief (C)"
+ },
+ "soroban-sim-pin": {
+  "value": "d02938430f0ac41f34e5e3e4c8c48d85b871bd68",
+  "source": "r2:654, `MANIFEST` (C)"
+ },
+ "guess-the-number-pin": {
+  "value": "df80831ac6bc2a2110cab15654726456b53cc8f3",
+  "source": "r2:656 (C)"
+ },
+ "nido-preview-pr": {
+  "value": "nidohq/nido#356",
+  "anon": "[withheld]",
+  "source": "r2:60 (C)"
+ },
+ "nido-preview-host": {
+  "value": "356.test.nido.fyi",
+  "anon": "[withheld]",
+  "source": "r2:60 (C)"
+ },
+ "soroban-sim-repo": {
+  "value": "theahaco/soroban-sim",
+  "anon": "[withheld]",
+  "source": "`gh api repos/theahaco/soroban-sim` (V); `docs/perch-paper/sim/NOTICE.md:22`"
+ },
+ "soroban-sim-license": {
+  "value": "Apache-2.0",
+  "source": "`gh api repos/theahaco/soroban-sim` `.license.spdx_id` (V); `sim/NOTICE.md:22`"
+ },
+ "cedar-spec-pin-short": {
+  "value": "a4c5a89",
+  "source": "github.com/cedar-policy/cedar-spec a4c5a89cd15637afc1dab39ef0c89baf31c7ebdf, committed 2026-11-06; cedar-lean/lean-toolchain leanprover/lean4:v4.35.0 (V, editor r3, sparse clone)"
+ },
+ "soroban-sim-pin-short": {
+  "value": "d029384",
+  "source": "first seven hex digits of soroban-sim-pin (facts/pins.json, d02938430f0ac41f34e5e3e4c8c48d85b871bd68); r4 plan, Pins"
+ }
+}

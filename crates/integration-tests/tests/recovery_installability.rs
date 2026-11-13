@@ -21,13 +21,14 @@
 mod support;
 
 use perch_account::PerchAccountError;
-use perch_doc_compiler::{admin_survives, CompiledRule, RuleScope};
+use perch_doc_compiler::{admin_survives, CompiledDoc, CompiledModel, CompiledRule, RuleScope};
 use perch_recovery::EvidenceDomain::Initiate;
 use perch_recovery_interface::RecoveryAction;
+use perch_rule_eval::{ModelPrincipals, ModelRule, ModelScope};
 use perch_testkit::delta::{DeltaWorld, DocModel, KeyModel, RuleModel, SignerModel, Spelling};
 use perch_testkit::FIXTURE_NETWORK;
 use soroban_sdk::testutils::{Address as _, Ledger as _};
-use soroban_sdk::{Bytes, Env, String, Vec};
+use soroban_sdk::{Bytes, BytesN, Env, String, Symbol, Vec};
 use support::*;
 
 /// A baseline document of `owner` (admin) + `device`, an `admin` self-admin
@@ -157,32 +158,84 @@ fn an_expiring_admin_rule_is_refused_by_the_anti_brick_check() {
     );
 }
 
-/// Unit check of the anti-brick predicate itself: a bounded self-admin rule
-/// never counts as a surviving admin rule, an unbounded one does.
+/// Unit check of the anti-brick predicate itself: an unbounded
+/// constraint-free self-admin rule survives; a bounded one, a `threshold`
+/// one (even asking all of its signers), one with a function list, and a
+/// document whose model does not match its rules do not.
 #[test]
 fn admin_survives_requires_an_unbounded_admin_rule() {
     let env = Env::default();
-    let signer =
-        stellar_accounts::smart_account::Signer::Delegated(soroban_sdk::Address::generate(&env));
-    let make = |valid_until: Option<u32>| CompiledRule {
-        name: String::from_str(&env, "admin"),
-        scope: RuleScope::SelfAdmin,
-        signers: soroban_sdk::vec![&env, signer.clone()],
-        valid_until,
-        install: Vec::new(&env),
+    let signer = perch_account_types::Signer::Delegated(soroban_sdk::Address::generate(&env));
+    let ids = soroban_sdk::vec![&env, String::from_str(&env, "owner")];
+    let all = ModelRule {
+        scope: ModelScope::SelfAdmin,
+        principals: ModelPrincipals::All(ids.clone()),
+        functions: None,
+        args: None,
+        not_after_ledger: None,
+        auth_root: None,
         cap: Vec::new(&env),
     };
+    let doc = |valid_until: Option<u32>, rule: &ModelRule, models: u32| CompiledDoc {
+        doc_hash: BytesN::from_array(&env, &[0; 32]),
+        canonical: Bytes::new(&env),
+        fingerprints: Vec::new(&env),
+        rules: soroban_sdk::vec![
+            &env,
+            CompiledRule {
+                auth_root: None,
+                name: String::from_str(&env, "admin"),
+                scope: RuleScope::SelfAdmin,
+                signers: soroban_sdk::vec![&env, signer.clone()],
+                valid_until,
+            }
+        ],
+        recovery: Vec::new(&env),
+        model: (0..models)
+            .map(|_| CompiledModel {
+                signers: Vec::new(&env),
+                rules: soroban_sdk::vec![&env, rule.clone()],
+                recovery: Vec::new(&env),
+            })
+            .fold(Vec::new(&env), |mut v, m| {
+                v.push_back(m);
+                v
+            }),
+        normal_form: true,
+        unverified: Vec::new(&env),
+        verifier_names: Vec::new(&env),
+    };
     assert!(
-        admin_survives(&soroban_sdk::vec![&env, make(None)]),
-        "an unbounded policy-free self-admin rule survives"
+        admin_survives(&doc(None, &all, 1)),
+        "an unbounded constraint-free self-admin rule survives"
     );
     assert!(
-        !admin_survives(&soroban_sdk::vec![&env, make(Some(1_000_000))]),
+        !admin_survives(&doc(Some(1_000_000), &all, 1)),
         "a bounded self-admin rule — even far in the future — does not survive"
     );
     assert!(
-        !admin_survives(&soroban_sdk::vec![&env, make(Some(0))]),
+        !admin_survives(&doc(Some(0), &all, 1)),
         "a bounded self-admin rule does not survive"
+    );
+    let n_of_n = ModelRule {
+        principals: ModelPrincipals::Threshold(ids, 1),
+        ..all.clone()
+    };
+    assert!(
+        !admin_survives(&doc(None, &n_of_n, 1)),
+        "a threshold self-admin rule does not survive, even one asking every signer"
+    );
+    let listed = ModelRule {
+        functions: Some(soroban_sdk::vec![&env, Symbol::new(&env, "apply_doc")]),
+        ..all.clone()
+    };
+    assert!(
+        !admin_survives(&doc(None, &listed, 1)),
+        "a self-admin rule with a function list does not survive"
+    );
+    assert!(
+        !admin_survives(&doc(None, &all, 0)),
+        "a document with no model keeps no admin rule"
     );
 }
 
@@ -230,7 +283,7 @@ fn a_thief_cannot_block_compromise_recovery_with_an_expired_baseline_rule() {
         "compromise completion cannot install the baseline (the expired \
          session rule must be dropped, not re-added): {done:?}"
     );
-    // Recovery actually took effect: the new owner controls the account, the
+    // Recovery took effect: the new owner controls the account, the
     // thief is locked out.
     assert!(
         w.activity_as(&new_owner),
@@ -307,9 +360,8 @@ fn rule(
     }
 }
 
-/// The delta path keeps an installed rule that has since expired; the full
-/// replace re-adds it. Both must now drop it, so they accept and refuse the
-/// same documents (the `apply_doc_delta` fuzz target's equivalence property).
+/// Once an installed rule expires, the delta path and the full replace both
+/// drop it, so they accept and refuse the same documents (the `apply_doc_delta` fuzz target's equivalence property).
 #[test]
 fn delta_and_full_replace_agree_after_a_rule_expires() {
     let w = DeltaWorld::new();
@@ -342,11 +394,9 @@ fn delta_and_full_replace_agree_after_a_rule_expires() {
 }
 
 /// After a rule expires, an edit to it (a signer change) must be accepted the
-/// same way on the in-place path and the replacement path: both drop the dead
-/// rule, so the outcome no longer depends on which path the cost model prices
-/// lower.
+/// same way by the delta and the full replace: both drop the dead rule.
 #[test]
-fn an_expired_rule_edit_does_not_depend_on_the_reconcile_path() {
+fn an_expired_rule_edit_is_accepted_as_under_the_full_replace() {
     let a = DocModel {
         signers: std::vec![signer("owner", 0), signer("s1", 1), signer("s2", 2)],
         rules: std::vec![
@@ -358,16 +408,15 @@ fn an_expired_rule_edit_does_not_depend_on_the_reconcile_path() {
     };
     let mut b = a.clone();
     b.rules[1].signers = std::vec![1, 2];
-    let run = |in_place: bool| {
-        let w = DeltaWorld::new();
-        assert!(w.apply_forced(&a, in_place).is_ok());
-        w.env.ledger().with_mut(|l| l.sequence_number = 1_100);
-        w.apply_forced(&b, in_place)
-    };
-    let (edit, replace) = (run(true), run(false));
+    let w = DeltaWorld::new();
+    assert!(w.apply(&w.delta, &a).is_ok());
+    assert!(w.apply(&w.oracle, &a).is_ok());
+    w.env.ledger().with_mut(|l| l.sequence_number = 1_100);
+    let (delta, oracle) = (w.apply(&w.delta, &b), w.apply(&w.oracle, &b));
     assert_eq!(
-        edit.is_ok(),
-        replace.is_ok(),
-        "in-place edit {edit:?} vs replacement {replace:?} of an expired rule"
+        delta.is_ok(),
+        oracle.is_ok(),
+        "delta {delta:?} vs full replace {oracle:?} of an expired rule"
     );
+    assert!(delta.is_ok(), "both drop the dead r1: {delta:?}");
 }

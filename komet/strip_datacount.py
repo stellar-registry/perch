@@ -2,7 +2,7 @@
 """Delete the DataCount section (id 12) from a wasm module.
 
 Komet v0.1.88's `pykwasm` parser predates the DataCount section that modern
-`stellar contract build` (soroban-sdk 27, wasm32v1-none) emits, and rejects the
+`stellar contract build` (soroban-sdk 27 and later, wasm32v1-none) emits, and rejects the
 module with `Invalid section id: 0xc`. DataCount is only *required* when a
 module uses `memory.init` / `data.drop` (which reference data-segment indices);
 soroban contracts don't — Rust/LLVM emit `memory.copy`/`memory.fill`, which do

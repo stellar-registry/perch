@@ -1,0 +1,10 @@
+% Generated from source/statements.json.
+\begin{perchstatement}{8}{Grant target containment.}\label{stmt:grant-target-containment}
+\[\begin{aligned}&\mathit{lowerScoped}(d, A, X, g) = R\\
+&\quad \land\ \mathit{Derives}(R, R')\\
+&\quad \land\ \mathit{allows}(R', \mathsf{call}(C, f, \vec v), S)\\
+&\qquad \implies C \neq A \;\land\; C \notin X\end{aligned}\]
+\(\mathit{lowerScoped}(d, A, X, g)\) is the rule set the account installs for grant document \(d\) at address \(A\), with excluded set \(X\) and generation \(g\); it allows no call to \(A\) or to an element of \(X\), and attenuation preserves this. In the account, \(X\) is its adopted recovery controller and the zero-knowledge adapter and pool of its recovery configuration.
+\statementhypotheses{Lowering under address \emph{A}, excluded set \emph{X} and generation \emph{g}; for the translation, each rule's argument conditions fit the evaluator's bounded vectors (\code{ArgsRoom})}
+\statementevidence{Model: \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/Scoped.lean\#L123}{Document.Doc.lowerScoped\_allows\_excluded}, \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/Scoped.lean\#L135}{Doc.lowerScoped\_attenuateAll\_excluded}; translation: \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/ExtractedLowering.lean\#L154}{Extracted.lower\_scoped\_allows\_excluded}, \repolink{https://github.com/bitswell/soroban-rule-core/blob/cbabe594ae2df408991e825e56ddd618ea29541b/formal/RuleCore/Theorems/ExtractedLowering.lean\#L170}{Extracted.derives\_allows\_excluded} \ensuremath{\cdot} \statusobj{PROVED \ensuremath{\cdot} MODEL + TRANSLATION}}
+\end{perchstatement}

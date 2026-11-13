@@ -17,8 +17,9 @@
 #
 # "A deployable contract's source" is the union of release.yml's paths_for()
 # over every published contract, plus the build inputs no crate tree holds
-# (the workspace manifest, the lockfile, the cargo config, the toolchain) and
-# the circuits and vendored verifier the zk adapter compiles in. KEEP THIS LIST
+# (the workspace manifest, the lockfile, the cargo config, the toolchain), the
+# circuits the zk adapter compiles in, and the vendored crates (vendor/) the
+# contracts link. KEEP THIS LIST
 # IN STEP WITH release.yml's paths_for()/CONTRACTS — a deployable crate (or its
 # dependency) missing here would let a contract change read as `current` and
 # gate HEAD's expectations against older bytes.
@@ -42,11 +43,12 @@ manifest="${1:-$repo_root/deployments/${STELLAR_NETWORK:-testnet}.json}"
 
 # The union of paths_for() over CONTRACTS in release.yml, plus the global build
 # inputs (release-deps.py: locked deps, workspace pins, [profile], [patch],
-# toolchain) and the zk adapter's compiled-in circuits and vendored verifier.
+# toolchain), the zk adapter's compiled-in circuits, and the vendored crates
+# the contracts link.
 paths=(
     crates/perch-interpreter crates/perch-program
-    crates/perch-doc-compiler crates/perch-compile crates/perch-ir
-    crates/perch-recovery-interface
+    crates/perch-doc-compiler crates/perch-ir
+    crates/perch-recovery-interface crates/perch-account-types
     crates/perch-ed25519-verifier
     crates/perch-mldsa-verifier
     crates/perch-spending-limit
@@ -59,6 +61,8 @@ paths=(
     crates/perch-zk-adapter
     crates/perch-account-factory
     vendor/ultrahonk-soroban-verifier
+    vendor/soroban-sdk-tools vendor/soroban-flux vendor/soroban-poseidon
+    vendor/admin-sep vendor/registry-traits
     circuits
     Cargo.toml Cargo.lock rust-toolchain.toml .cargo
 )

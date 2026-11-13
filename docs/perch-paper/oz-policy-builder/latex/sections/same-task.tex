@@ -1,0 +1,55 @@
+The task is the Perch paper's running example: \fact{wt-task}. An executable
+walkthrough\footnote{\url{https://bitswell-hq.github.io/stellar-registry__perch/oz-walkthrough/}}
+that accompanies that paper ran it in one soroban-sim session per
+design (\fact{wt-host}), so each account's \code{\_\_check\_auth} ran on every
+request. The OpenZeppelin \fact{oz-v080-tag} account's rule carried the predicate
+oz-policy-builder's synthesiser writes from the task's declared Intent, a per-call
+bound and the recipient pin, with \code{spending\_limit} beside the interpreter for the window; the Perch
+account held one grant with a \fact{shop-cap-xlm}-XLM cap per
+\fact{shop-period-ledgers} ledgers (\fact{shop-period-minutes}). The signers
+differ by design: oz-policy-builder's rules accept only delegated signers, so the
+app signs on the OpenZeppelin side as a Stellar account, in a second
+authorization entry, and on the Perch side with an Ed25519 key that a verifier
+contract checks.
+
+Both designs gave the same verdict on each of the seven requests
+(Table~\ref{tab:tab-walkthrough}); they differ in which contracts took part and
+where each refused (Fig.~\ref{fig:fig-same-task}). For a payment, the
+OpenZeppelin account called \code{spending\_limit} and then the interpreter, and
+Perch called its verifier. Over the cap, \code{spending\_limit} refused before the
+interpreter ran, and Perch refused in its decision. To the wrong recipient,
+\code{spending\_limit} recorded the spend and the interpreter then refused, which
+rolled the record back with the call. A key signing in the app's name failed the
+host's signature check in both: on the OpenZeppelin side for the delegated
+account's entry, before any policy ran; on the Perch side when the verifier
+trapped, after the evaluator accepted.
+
+\perchtable{tab-walkthrough}
+
+\paragraph{A per-call bound alone.} The interpreter does not ``keep rolling
+totals'' (\srcpath{docs/stellar.md:404-407}). Outside the walkthrough, on
+\fact{opb-local-network}, an OpenZeppelin account whose rule carried only the
+interpreter, with a per-call bound of \fact{opb-per-call-bound-xlm}~XLM, applied
+\fact{opb-per-call-applied-sends} sends within the bound, moving
+\fact{opb-per-call-moved-xlm}~XLM, and refused the one above it
+(error \fact{opb-error-arg-mismatch}). This run was not archived; the
+lower panel of Fig.~\ref{fig:fig-same-task} repeats it.
+
+\perchfigure{fig-same-task}
+
+\paragraph{The recorded dual run.} The Perch paper's dual simulation runs the
+same task with the real contract bytes of both designs side by side, offline, and
+records a reference run of \fact{sim-commands}
+commands.\footnote{\url{https://bitswell-hq.github.io/stellar-registry__perch/perch-paper/sim/};
+the Perch paper's section ``Both Designs in soroban-sim'' describes it.} There
+the predicate bounds each transfer at \fact{shop-cap-xlm}~XLM. After
+\fact{sim-pay-xlm}~XLM applies in both and a further \fact{sim-second-pay-xlm}~XLM is
+refused in both, the owner removes \code{spending\_limit} from the OpenZeppelin
+rule; \fact{sim-oz-percall-sends} payments of \fact{sim-pay-xlm}~XLM then each
+pass the per-call bound, moving \fact{sim-oz-percall-moved-xlm}~XLM within one
+window, while Perch refuses all three because its window already holds
+\fact{sim-pay-xlm}~XLM. Restoring \code{spending\_limit}
+starts an empty history, as replacing a capped Perch rule starts an empty window.
+The difference is a configuration the owner chose: oz-policy-builder documents
+limits over time as coming from a token allowance and its expiry, or from
+\code{spending\_limit} beside the interpreter (\S\ref{sec:composition}).

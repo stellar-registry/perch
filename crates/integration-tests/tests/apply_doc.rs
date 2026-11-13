@@ -3,13 +3,16 @@
 //! binding, compile, anti-brick check, atomic swap, canonical `doc_hash`
 //! stored. Piecemeal mutation entry points do not exist on the contract.
 //!
-//! The whole `setup()` this suite used to hand-roll is now one
-//! `perch_testkit::Bootstrap::native()` call; the stand-in verifier, the
-//! fixture constants and `fixture()` live in the testkit.
+//! `setup()` is `perch_testkit::Bootstrap::native()`; the stand-in verifiers,
+//! the fixture constants and the fixture live in the testkit. An account document
+//! names its verifiers from `perch/verifiers`, so the suite applies the
+//! frozen fixture with its two verifiers named (`World::fixture`).
 
-use perch_testkit::{fixture, Bootstrap, World, FIXTURE_NETWORK};
+use perch_testkit::{
+    ci_publish_rule, Bootstrap, World, FIXTURE_NETWORK, FIXTURE_REGISTRY, FIXTURE_VERIFIER_NAMES,
+};
 use soroban_sdk::testutils::Ledger;
-use soroban_sdk::{vec, Bytes, BytesN, String as SString, Symbol, Val};
+use soroban_sdk::{vec, Address, Bytes, BytesN, String as SString, Symbol, Val};
 
 fn setup() -> World {
     Bootstrap::native()
@@ -19,7 +22,7 @@ fn setup() -> World {
 }
 
 fn apply_fixture(w: &World) -> BytesN<32> {
-    let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
+    let doc = Bytes::from_slice(&w.env, w.fixture().as_bytes());
     w.account_client().apply_doc(&doc, &0, &None)
 }
 
@@ -30,9 +33,9 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
 
     let hash = apply_fixture(&w);
 
-    // The stored identity is the CANONICAL doc_hash — the frozen golden
-    // vector — even though the submitted bytes are the pretty-printed file.
-    let expected = w.ci_publish_doc_hash();
+    // The stored identity is the CANONICAL doc_hash, even though the
+    // submitted bytes are the pretty-printed file.
+    let expected = w.fixture_doc_hash();
     assert_eq!(hash, expected);
     assert_eq!(client.applied_doc_hash(), Some(expected));
 
@@ -49,11 +52,27 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     assert_ne!(admin.signers, w.admin_signers);
     let ci = client.get_context_rule(&installed.get_unchecked(1).id);
     assert_eq!(ci.name, SString::from_str(&w.env, "ci-publish"));
-    assert_eq!(ci.policies.len(), 1); // the interpreter program is attached
-    assert_eq!(ci.policies.get_unchecked(0), w.interpreter);
+    // The record holds the rule's contract, signers and last ledger; its
+    // functions and argument conditions are the stored rule-eval rule's.
+    assert_eq!(ci.policies.len(), 0);
+    let stored = client.rule_set().get_unchecked(1);
+    assert!(!stored.conds.is_empty());
     // `not-after-ledger: 55000000` (exclusive) lowers to OZ's inclusive
     // last-valid ledger.
     assert_eq!(ci.valid_until, Some(54_999_999));
+    assert_eq!(stored.valid_until, Some(54_999_999));
+    // What the suites that install the rule directly
+    // (`perch_testkit::ci_publish_rule`) hold.
+    assert_eq!(
+        stored,
+        ci_publish_rule(
+            &w.env,
+            &w.account,
+            &Address::from_str(&w.env, FIXTURE_REGISTRY),
+            ci.signers.clone(),
+            Some(54_999_999),
+        )
+    );
 }
 
 #[test]
@@ -68,14 +87,16 @@ fn reapply_installs_exactly_the_new_rule_set() {
   "version": 1,
   "network": "{FIXTURE_NETWORK}",
   "signers": [
-    {{ "id": "admin", "verifier": "CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN", "key": "aa" }}
+    {{ "id": "admin", "verifier": "{}", "verifier-name": "{}", "key": "aa" }}
   ],
   "rules": [
     {{ "name": "admin",
       "scope": {{ "type": "self-admin" }},
       "principals": {{ "type": "all", "signers": ["admin"] }} }}
   ]
-}}"#
+}}"#,
+        perch_testkit::delta::strkey(&w.fixture_verifiers[0]),
+        FIXTURE_VERIFIER_NAMES[0]
     );
     let second = client.apply_doc(&Bytes::from_slice(&w.env, doc2.as_bytes()), &0, &None);
 
@@ -94,9 +115,8 @@ fn reapply_installs_exactly_the_new_rule_set() {
 #[test]
 fn piecemeal_mutation_entry_points_do_not_exist() {
     // Doc-only is structural: the account implements OZ's SmartAccount but
-    // never exports it, so the mutation functions aren't callable at all —
-    // there is nothing to authorize, misuse, or audit. apply_doc is the only
-    // write path.
+    // never exports it, so the mutation functions aren't callable at all.
+    // apply_doc is the only write path.
     let w = setup();
     for func in [
         "add_context_rule",
@@ -164,7 +184,7 @@ fn doc_for_another_network_is_rejected() {
     w.reregister_infra_for_current_network();
 
     let client = w.account_client();
-    let doc = Bytes::from_slice(&w.env, fixture().as_bytes());
+    let doc = Bytes::from_slice(&w.env, w.fixture().as_bytes());
     assert!(client.try_apply_doc(&doc, &0, &None).is_err());
     assert_eq!(client.applied_doc_hash(), None);
 }
@@ -178,7 +198,9 @@ fn garbage_and_unknown_fields_are_rejected() {
         .try_apply_doc(&Bytes::from_slice(&w.env, b"not json"), &0, &None)
         .is_err());
     // Unknown field: fail closed, never skipped.
-    let doc = fixture().replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
+    let doc = w
+        .fixture()
+        .replace("\"version\": 1,", "\"version\": 1, \"surprise\": true,");
     assert!(client
         .try_apply_doc(&Bytes::from_slice(&w.env, doc.as_bytes()), &0, &None)
         .is_err());

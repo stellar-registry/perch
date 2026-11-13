@@ -1,0 +1,172 @@
+/* Interactive figures (figures.js). Without the script, or in print, every step shows. */
+.fig [data-print=no]{display:none}
+.fig.js [data-print=no]{display:revert}
+.fig .off,.fig.js .off{display:none}
+.fig.js g[data-cursor]:not([data-state=current]){display:none}
+.fig-head{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);margin:0 0 .6rem}
+.fig-bar{display:flex;flex-wrap:wrap;gap:.4rem .5rem;align-items:center;padding:.4rem 0}
+.fig-bar:has(>.xp-inline){align-items:flex-end}
+.fig-bar2{border-top:1px solid var(--line);margin-top:.6rem}
+.fig-bar button,.fig-bar select{min-height:44px;min-width:44px;font:inherit;font-size:.85rem;padding:.4rem .8rem;border-radius:6px;border:1px solid var(--edge);background:var(--btn);color:var(--text)}
+.fig-bar select{max-width:100%}
+.fig-bar button[aria-disabled=true]{opacity:.5;cursor:default}
+.fig-bar button[aria-pressed=true]{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber);font-weight:650}
+.fig-bar button:focus-visible,.fig-bar select:focus-visible,.fig-bar input:focus-visible,.fig-bar a:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.fig-bar a{font-size:.85rem;min-height:44px;display:inline-flex;align-items:center}
+.fig-bar a[hidden]{display:none}
+.fig-count,.fig-key{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.fig-range{flex-direction:row;align-items:center;gap:.5rem;font-size:.85rem;color:var(--text);flex:1 1 14rem}
+.fig-range input{flex:1;min-height:44px;min-width:8rem;accent-color:var(--amber)}
+.fig-events{display:inline-flex;gap:.35rem;flex-wrap:wrap}
+.fig-live,.fig-detail{min-height:1.5em;margin:.4rem 0;font-size:.9rem;color:var(--em);border-left:3px solid var(--amber);padding-left:.6rem;overflow-wrap:anywhere}
+.fig-head .fig-live{max-height:7.5em;overflow:auto}
+.fig-detail{border-left-color:var(--key)}
+.fig-live:empty,.fig-detail:empty{border-left-color:transparent}
+.fig-live:empty{min-height:0;margin:0;padding-top:0;padding-bottom:0}
+.fig-text li li{margin:.25rem 0}
+.fig [data-detail]{cursor:pointer}
+@media(max-width:480px){.fig-bar button,.fig-bar select{padding:.35rem .6rem}.fig-head .fig-live{max-height:5.5em;font-size:.85rem}}
+/* Step, scenario and selection states are screen-only: print shows the static figure. A future
+   step is drawn faint, not dashed: dashed keeps its static meaning (no such step, or not reached). */
+@media screen{
+.fig [data-state=future] .bx,.fig [data-state=future] .pill{stroke:var(--line)}
+.fig [data-state=future] text{fill:var(--muted)}
+.fig .unreached .bx,.fig .unreached .pill{stroke-dasharray:5 4}
+.fig .unreached text{fill:var(--muted)}
+.fig [data-state=current] .bx,.fig [data-state=current] .pill:not(.pill-d){stroke:var(--amber);stroke-width:3.5}
+.fig .hot .bx,.fig .hot.bx{stroke:var(--key);stroke-width:3}
+.fig .sel-obj .bx{stroke:var(--amber);stroke-width:5}
+.fig .sel-tr .bx{stroke:var(--key);stroke-width:4}
+}
+@media screen and (prefers-reduced-motion:no-preference){.fig [data-step] .bx,.fig [data-step] .pill,.fig [data-node] .bx{transition:stroke .12s,stroke-width .12s}}
+@media screen and (forced-colors:active){.fig [data-state=current] .bx,.fig .sel-obj .bx{stroke-width:6}.fig .sel-tr .bx{stroke-width:4}.fig [data-state=future] .bx{stroke-width:1}}
+/* Print from either theme: figures use the light theme's figure tokens. */
+@media print{:root,:root[data-theme]{--fig-stroke:#7d8a91;--fig-fill:#f1f2ee;--fig-proved:#e6f1ea;--fig-deny:#f8e6e2;--tint:#ebede7;--line:#d9dcd6;--btn:#fff;--on-amber:#fff}
+.fig-head,.fig-bar,.fig-live,.fig-detail{display:none}.fig [data-print=no]{display:none!important}.fig .off:not([data-print=no]){display:revert!important}}
+/* Explorables (E1-E3), theorem instances and the simulation embed (figures.js). On screen an
+   explorable replaces its static form; print and no-JS readers get the static form only. */
+.xp{min-width:0;margin:.6rem 0 0;font-size:.9rem}
+.xp p{margin:.5rem 0;max-width:none}
+.xp button,.xp select,.xp input[type=number],.sim-actions button,.sim-actions a{min-height:44px;font:inherit;font-size:.85rem;border-radius:6px}
+.xp button{min-width:44px;padding:.4rem .8rem;border:1px solid var(--edge);background:var(--btn);color:var(--text)}
+.xp button.primary,.sim-actions button.primary{background:var(--amber);border-color:var(--amber);color:var(--on-amber);font-weight:700}
+.xp button[aria-disabled=true]{opacity:.5;cursor:default}
+.xp button[aria-pressed=true]{border-color:var(--amber);box-shadow:inset 0 0 0 1px var(--amber);font-weight:650}
+.xp select,.xp input[type=number]{padding:.35rem .5rem;border:1px solid var(--edge);background:var(--bg);color:var(--text);max-width:100%}
+.xp input[type=number]{width:5.5rem}
+.xp input[type=range]{min-height:44px;accent-color:var(--amber);width:100%;min-width:8rem;border:0;padding:0;background:transparent}
+.xp input[type=checkbox],.xp input[type=radio]{width:1.15rem;height:1.15rem;accent-color:var(--amber);margin:0}
+.xp :focus-visible,.sim-embed :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.xp .fig-head{margin:0 0 .5rem}
+.xp-inline{display:inline-flex;flex-wrap:wrap;gap:.4rem;align-items:end;margin:0}
+.xp-field{display:inline-flex;flex-direction:column;gap:.15rem;font-size:.75rem;color:var(--muted);min-width:0}
+.xp-field>span{line-height:1.3}
+.xp-grow{flex:1 1 16rem}
+.xp-row{display:flex;flex-wrap:wrap;gap:.5rem .8rem;align-items:end;margin:.5rem 0}
+.xp-group-title{font:650 .68rem var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin:.9rem 0 .1rem}
+.xp-groups{border-bottom:1px solid var(--line);padding-bottom:.6rem;margin-bottom:.6rem}
+.xp-groups .xp-row{align-items:center;margin:.2rem 0}
+.xp-groups .xp-params{margin:0}
+.xp-check,.xp-radio{display:inline-flex;flex-direction:row;align-items:center;gap:.45rem;min-height:44px;font-size:.85rem;color:var(--text);cursor:pointer}
+.xp-chip{display:inline-block;font:650 .66rem var(--mono);letter-spacing:.08em;border:1.5px solid var(--fig-stroke);border-radius:3px;padding:.05rem .4rem;color:var(--text);vertical-align:.1em;white-space:nowrap}
+.xp-chip[data-kind=model]{border-style:dashed}
+.xp-chip[data-kind=recorded]{border-style:solid}
+.xp-chip[data-kind=executed]{border-style:double;border-width:3px}
+.xp-banner{font-size:.82rem;color:var(--muted);border-left:3px solid var(--line);padding-left:.6rem}
+.xp-sub{font-size:.8rem;color:var(--muted)}
+.xp-result{font-weight:600;color:var(--text)}
+.xp-result.xp-over{border-left:3px solid var(--deny);padding-left:.6rem}
+.xp-out{display:block;font-size:.85rem;color:var(--em);font-variant-numeric:tabular-nums}
+.xp-params{border-top:0;margin:.3rem 0;padding-top:0}
+.xp-params summary{min-height:44px;display:flex;align-items:center}
+.xp-mark{display:inline-block;min-width:1.1em;white-space:nowrap;text-align:center;font-weight:700}
+.xp-yes .xp-mark,.xp-ok>.xp-mark{color:var(--text)}
+.xp-no,.xp-refused{color:var(--deny)}
+.xp-no .xp-mark::after,.xp-refused>.xp-mark::after{content:"|";font-weight:700;margin-left:.05em}
+.xp-log{list-style:none;padding:0;margin:.4rem 0;max-height:16rem;overflow:auto;font-size:.82rem;border-block:1px solid var(--line)}
+.xp-log li{margin:0;padding:.35rem 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.xp-log li:last-child{border-bottom:0}
+.xp-log .xp-event{color:var(--key)}
+.xp-plot-wrap{margin:.4rem 0}
+.xp-plot-wrap svg{display:block;width:100%;height:auto;max-width:760px;margin-inline:auto}
+.xp-cards{display:grid;grid-template-columns:minmax(0,1fr);gap:.8rem;margin:.6rem 0}
+@container fig (min-width:620px){.xp-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.xp-card{border:1px solid var(--edge);border-radius:6px;padding:.6rem .8rem;background:var(--bg2);min-width:0}
+.xp-card h4{margin:0 0 .3rem;font-size:.85rem}
+.xp-card ul,.xp-card ol{margin:.2rem 0;padding-left:1.1rem}
+.xp-card li{margin:.2rem 0}
+.xp-rule{margin:.4rem 0 0}
+.xp-narrowed{border-left:4px solid var(--key);padding-left:.4rem;margin-left:-.2rem}
+.xp-tag{font:600 .65rem var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--key);margin-left:.4rem}
+.xp-steps{margin:.2rem 0 .6rem;padding-left:1.3rem;font-size:.85rem}
+.xp-none{color:var(--muted)}
+.xp-grid{max-width:100%;overflow-x:auto}
+.xp-probes,.xp-rows{width:100%;font-size:.82rem;border-collapse:collapse}
+.xp-probes th,.xp-probes td,.xp-rows th,.xp-rows td{padding:.35rem .4rem;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+.xp-probes thead th,.xp-rows thead th{font-size:.72rem;color:var(--muted)}
+.xp-probes tbody th{font-weight:400}
+.xp-choices{display:grid;grid-template-columns:minmax(0,1fr);gap:.4rem;margin:.5rem 0}
+@container fig (min-width:620px){.xp-choices{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.xp-fs{border:1px solid var(--line);border-radius:6px;padding:.2rem .7rem .4rem;margin:0;min-width:0}
+.xp-fs legend{font-size:.75rem;color:var(--muted);padding:0 .3rem}
+.xp-fs .xp-radio{display:flex;min-height:36px}
+.xp-fs-select{display:none;width:100%}
+@container fig (max-width:480px){.xp-fs .xp-radio{display:none}.xp-fs-select{display:block}}
+.xp-auth-out{margin-top:.6rem}
+.xp-verdict{font-weight:650}
+.xp-witness{margin-top:.4rem}
+.xp-points{margin:.3rem 0;padding-left:1.1rem}
+.xp-replay .xp-log{max-height:none}
+.thm-instance{margin:.4rem 0}
+.thm-try{border-top:1px dashed var(--line);margin:.5rem 0;padding-top:.3rem}
+.thm-try>summary{min-height:44px;display:flex;align-items:center}
+.thm-try .xp{container:fig/inline-size}
+.sim-embed{margin:1.5rem 0;container:fig/inline-size}
+.sim-actions{display:flex;flex-wrap:wrap;gap:.6rem .9rem;align-items:center;margin:.4rem 0}
+.sim-actions button{padding:.45rem .9rem;border:1px solid var(--edge)}
+.sim-actions a{display:inline-flex;align-items:center}
+.sim-frame iframe{display:block;width:100%;height:min(900px,85vh);border:1px solid var(--line);border-radius:6px;background:var(--bg);margin:.6rem 0}
+.sim-try{margin:.8rem 0}
+.sim-try ul{display:flex;flex-wrap:wrap;gap:.5rem;list-style:none;padding:0;margin:.4rem 0}
+.sim-try li{margin:0}
+.sim-try a{display:inline-block;min-height:44px;line-height:1.6;padding:.55rem .8rem;border:1px solid var(--edge);border-radius:6px;background:var(--btn);color:var(--text);text-decoration:none;font-size:.85rem}
+.sim-try a:hover{border-color:var(--amber)}
+.sim-note{font-size:.82rem;color:var(--muted)}
+@media screen{
+.xp-on>svg.xp-static,.xp-on>.table-wrap.xp-static,.xp-on>table.xp-static{display:none!important}
+.fig [data-xstate=pass]>.bx{stroke:var(--text);stroke-width:2.5}
+.fig [data-xstate=stop]>.bx{stroke:var(--deny);stroke-width:3.5}
+.fig [data-xstate=unreached]>.bx{stroke-dasharray:5 4;stroke:var(--line)}
+.fig [data-xstate=unreached]>text{fill:var(--muted)}
+}
+@media screen and (forced-colors:active){.fig [data-xstate=stop]>.bx{stroke-width:6}.xp-chip{border-color:CanvasText}}
+@media print{.xp,.sim-actions,.sim-frame,.thm-try,.sim-try{display:none!important}}
+[data-explorable].xp-on{container:fig/inline-size}
+.thm-try:has(>.thm-instance:empty){display:none}
+@container fig (max-width:560px){.xp-att .fig-head{position:static}}
+/* Reading paths (figures.js): a radio group over the blocks tagged data-path; print shows everything. */
+.reading-paths .rp{display:flex;flex-wrap:wrap;gap:.2rem 1rem;align-items:center;border:1px solid var(--line);border-radius:6px;padding:.1rem .8rem .3rem;margin:1rem 0 0}
+.reading-paths .rp legend{font-size:.75rem;color:var(--muted);padding:0 .3rem}
+.reading-paths .xp-radio input{width:1.15rem;height:1.15rem;accent-color:var(--amber);margin:0}
+.rp-live{font-size:.8rem;color:var(--muted);margin:.3rem 0;min-height:1em}
+.rp-expand{min-height:44px;font:inherit;font-size:.85rem;padding:.4rem .8rem;border:1px solid var(--edge);border-radius:6px;background:var(--btn);color:var(--text)}
+@media screen{.rp-hide{display:none!important}}
+@media print{.rp-expand,.reading-paths{display:none!important}}
+/* r4 panel fixes. */
+.xp-why{font-size:.78rem;color:var(--muted);overflow-wrap:anywhere}
+.xp-caption{font-size:.8rem;line-height:1.6;color:var(--muted);margin-top:.8rem}
+/* Simulation embed: the rule, then Start and the presets above the frame; the recorded figure
+   folds away on screen once the simulation runs (print keeps it). */
+.sim-open{font-size:.88rem}
+.sim-fold{min-height:44px;font:inherit;font-size:.85rem;padding:.4rem .8rem;border:1px solid var(--edge);border-radius:6px;background:var(--btn);color:var(--text);margin:.6rem 0}
+.sim-fold[hidden]{display:none}
+@media screen{.sim-embed.sim-folded>figure.fig{display:none}}
+/* Theorem cards: double border for a theorem, single for a definition, dashed for an argued
+   proposition; a wide formula scrolls sideways with a shadow at the clipped edge. */
+.proof-list>li.thm{border-left:6px double var(--fig-stroke)}
+.proof-list>li.thm.argued{border-left:3px dashed var(--fig-stroke)}
+.def-list>li{border-left:2px solid var(--fig-stroke)}
+.thm-math{max-width:100%;background:linear-gradient(to right,var(--bg) 30%,transparent) left/1.5rem 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/1.5rem 100% no-repeat local,radial-gradient(farthest-side at 0 50%,color-mix(in srgb,var(--text) 35%,transparent),transparent) left/.5rem 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,color-mix(in srgb,var(--text) 35%,transparent),transparent) right/.5rem 100% no-repeat scroll}
+.thm-math[tabindex]:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+@media (max-width:480px){.thm-math{font-size:.86rem}}
+@media print{.thm-math{background:none}}

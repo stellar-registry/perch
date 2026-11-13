@@ -1,8 +1,6 @@
-//! Criterion 1 + the constraint source-of-truth: every limit the schema
-//! encodes is checked against its single declared source, in both directions.
-//! If a limit tightens or loosens without the schema moving with it, one of
-//! these assertions fails — "a test that fails when the validator constants and
-//! the schema disagree".
+//! Every limit the schema encodes is checked against its single declared
+//! source, in both directions. If a limit tightens or loosens without the
+//! schema moving with it, one of these assertions fails.
 //!
 //! Two source boundaries:
 //!
@@ -10,8 +8,7 @@
 //!   behaviourally via `agree`: perch-ir's `from_json` + `validate` and the
 //!   schema accept/reject the same documents. This covers `m <= N`, guardian
 //!   `quorum <= count`, the `limit` positivity/overflow shape, and the hex
-//!   shapes (the brief's motivating example: a string-length rule in
-//!   `validate.rs`).
+//!   shapes.
 //! - **the compiler's per-document caps** (`perch_doc_compiler`'s
 //!   `MAX_DOC_SIGNERS` / `MAX_DOC_RULES` / `MAX_RULE_NAME_BYTES`). These are the
 //!   compiler's, not perch-ir's, so they are checked by *constant equality*: the
@@ -113,6 +110,38 @@ fn contract_strkey_shape_matches_is_contract_address_shape() {
     ] {
         let expect = perch_ir::is_contract_address_shape(s);
         agree(&v, &doc(s), expect, &format!("contract-strkey:{s}"));
+    }
+}
+
+#[test]
+fn verifier_name_pattern_matches_the_validator() {
+    let v = validator();
+    let doc = |name: &str| {
+        json!({
+            "version": 1,
+            "signers": [{ "id": "a", "verifier": VALID_C, "verifier-name": name, "key": "ab" }],
+            "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }],
+        })
+    };
+    let longest = "a".repeat(perch_ir::MAX_VERIFIER_NAME_LEN);
+    for name in [
+        "perch-webauthn-verifier@0.1.2".to_string(),
+        "a@0.0.0".to_string(),
+        format!("{longest}@1.0.0"),
+        format!("{longest}a@1.0.0"),
+        "v@4294967295.0.0".to_string(),
+        "v@12345678901.0.0".to_string(),
+        "v@01.0.0".to_string(),
+        "v@1.0".to_string(),
+        "v@1.0.0-rc.1".to_string(),
+        "V@1.0.0".to_string(),
+        "v_x@1.0.0".to_string(),
+        "1v@1.0.0".to_string(),
+        "v".to_string(),
+        "@1.0.0".to_string(),
+    ] {
+        let expect = perch_ir::parse_verifier_name(&name).is_some();
+        agree(&v, &doc(&name), expect, &format!("verifier-name:{name}"));
     }
 }
 

@@ -137,14 +137,38 @@ pub fn auth_entry(
     signature_expiration_ledger: u32,
     invocation: soroban_sdk::xdr::SorobanAuthorizedInvocation,
 ) -> soroban_sdk::xdr::SorobanAuthorizationEntry {
+    auth_entry_for_rules(
+        env,
+        account,
+        verifier,
+        key,
+        &[rule_id],
+        nonce,
+        signature_expiration_ledger,
+        invocation,
+    )
+}
+
+/// Sign one authorization entry, committing every selected id in preorder.
+#[allow(clippy::too_many_arguments)]
+pub fn auth_entry_for_rules(
+    env: &soroban_sdk::Env,
+    account: &soroban_sdk::Address,
+    verifier: &soroban_sdk::Address,
+    key: &SoftPasskey,
+    rule_ids: &[u32],
+    nonce: i64,
+    signature_expiration_ledger: u32,
+    invocation: soroban_sdk::xdr::SorobanAuthorizedInvocation,
+) -> soroban_sdk::xdr::SorobanAuthorizationEntry {
     use soroban_sdk::xdr::{
         ScVal, SorobanAddressCredentials, SorobanAuthorizationEntry, SorobanCredentials,
     };
-    use soroban_sdk::{map, vec, Bytes, BytesN, IntoVal as _, TryFromVal as _, Val};
+    use soroban_sdk::{map, Bytes, BytesN, IntoVal as _, TryFromVal as _, Val};
     use stellar_accounts::smart_account::{AuthPayload, Signer};
 
     let payload = signature_payload(env, nonce, signature_expiration_ledger, &invocation);
-    let ids = vec![env, rule_id];
+    let ids = soroban_sdk::Vec::from_iter(env, rule_ids.iter().copied());
     let digest = crate::auth_digest(env, account, &BytesN::from_array(env, &payload), &ids);
     let signer = Signer::External(verifier.clone(), Bytes::from_slice(env, &key.key_data()));
     let auth = AuthPayload {

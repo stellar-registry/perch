@@ -1,0 +1,16 @@
+① The call: move 6 XLM (60,000,000 stroops)
+  from the user's account to the shop.
+② One authorization entry, for the account,
+  because the money leaves it.
+③ The app's signature. It covers this account
+  and the chosen rule, and the account checks
+  it through the Ed25519 verifier.
+④ The rule the app relies on: the shop
+  grant's one rule.
+⑤ root_invocation: the call tree the entry
+  authorizes. Here, this transfer alone, one
+  context for the account to check.
+
+Abbreviated: the real signer is a verifier
+address and public key, and the rule ID
+is a number.

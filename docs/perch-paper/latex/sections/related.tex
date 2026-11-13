@@ -1,0 +1,23 @@
+Hardy's confused deputy~\cite{confused-deputy} motivates designating
+authority explicitly, as capability systems do.
+SPKI/SDSI~\cite{spki}, macaroons~\cite{macaroons}, Biscuit~\cite{biscuit} and
+UCAN~\cite{ucan} attenuate tokens a holder carries; a windowed cap needs past
+spending, which a token cannot carry without an external store, and in
+Schneider's terms~\cite{schneider-enforceable} makes the decision a stateful
+execution monitor. On EVM chains, ERC-4337~\cite{erc4337} and ERC-7579~\cite{erc7579} validators
+and hooks play the role of OpenZeppelin policies, ERC-7710~\cite{erc7710} and
+ERC-7715~\cite{erc7715} carry delegations and permission requests, and Zodiac
+Roles~\cite{zodiac-roles} scopes a role to targets, functions and parameter
+conditions with refilling allowances. MetaMask's delegation
+framework~\cite{metamask-delegation} caps transfers per fixed period, resetting
+at each period's start, so spends either side of a reset can reach twice the
+cap within one period's length; a Perch window $(L-P, L]$ is bounded for every
+$L$ (Theorem~\ref{stmt:cap-window-safety}). In XACML's terms~\cite{xacml3}, Perch links its decision point into the
+account, where an OpenZeppelin account splits it across its own checks and
+policies. Cedar~\cite{cedar} links a Lean model to its Rust by
+differential testing~\cite{cedar-vgd}; Perch proves a translation of its Rust
+equivalent to a model.
+oz-policy-builder's synthesis relates to policy
+mining~\cite{xu-stoller-mining}. Sunbeam~\cite{sunbeam} and Komet~\cite{komet}
+reason about compiled Wasm, which complements a proof about a translation, and
+soroban-sim~\selfcite{soroban-sim} runs that Wasm in a local host.

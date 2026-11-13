@@ -1,0 +1,19 @@
+\input{generated/statements/T6}
+
+\noindent\emph{Ledger~0.} A charge at ledger~0 lies in no window
+$(\max(0, L-P), L]$, so the first form of Theorem~\ref{stmt:cap-window-safety}
+holds, but each such charge is checked alone: \lean{Cap.period\_ledger\_zero}
+records two charges of the whole limit at ledger~0, and the $P$ ledgers from~0
+then hold twice the limit. Stellar's ledgers start at~1.
+\emph{On chain,} a record is bounded by one ledger entry rather than the model's
+\fact{evaluator-history-bound} entries: at \fact{spend-record-base-bytes} bytes
+plus \fact{spend-record-per-spend-bytes} per spend, the
+\fact{ledger-entry-limit-bytes}-byte limit holds \fact{spends-per-window} spends
+per window. Further charges are refused, which cannot break the theorem but lets
+a grantee exhaust its own window with small transfers.
+
+\paragraph{Budgets.} rule-core's delegation-tree budget, a lifetime limit, is
+not used by the account; it underlies a proposed agent runtime
+(\perchdoc{vision}).
+
+\input{generated/statements/T7}

@@ -1,9 +1,13 @@
-//! End-to-end cap proof (#19 PR6): compile a document carrying a cumulative
+//! End-to-end cap proof: compile a document carrying a cumulative
 //! `cap`, attach BOTH the perch interpreter and OZ's `spending_limit` policy to
 //! one OZ context rule, and drive the real `do_check_auth` with real ed25519
 //! signatures. OZ enforces every attached policy (AND), so a transfer within the
 //! cap authorizes and a cumulative transfer over the cap is denied — the
 //! stateless interpreter and the stateful cap composing on one rule.
+//!
+//! The account is a bare contract with OZ's registry, as an OZ account that
+//! attaches these policies has; a Perch account attaches no policy and
+//! charges a cap with rule-eval (`gate.rs`).
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_compile::{compile, CompileConfig};
@@ -11,13 +15,14 @@ use perch_ed25519_verifier::PerchEd25519Verifier;
 use perch_spending_limit::{PerchSpendingLimit, SpendingLimitAccountParams};
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
     contract, crypto::Hash, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString,
     Symbol, Val,
 };
-use stellar_accounts::smart_account::{add_context_rule, AuthPayload, ContextRuleType, Signer};
-
-use perch_testkit::auth_digest;
+use stellar_accounts::smart_account::{
+    add_context_rule, do_check_auth, AuthPayload, ContextRuleType, Signer,
+};
 
 /// The token contract the cap is denominated in (also the rule's scope).
 const TOKEN: &str = "CCA7QAA6OD6LQJTU2MKN6EAS5I52QIFPAYMMQYSU7KHWTGT26AN6N2AL";
@@ -50,6 +55,7 @@ fn cap_doc(pubkey_hex: &str) -> perch_ir::PolicyDoc {
             method: SignerMethod::External {
                 verifier: ED25519_VERIFIER.into(),
                 key: pubkey_hex.into(),
+                verifier_name: None,
             },
         }],
         rules: std::vec![Rule {
@@ -61,6 +67,7 @@ fn cap_doc(pubkey_hex: &str) -> perch_ir::PolicyDoc {
             functions: Some(std::vec!["transfer".into()]),
             args: None,
             not_after_ledger: None,
+            auth_root: None,
             cap: Some(CapConstraint {
                 token: None, // denominate in the scope contract (TOKEN)
                 limit: LIMIT.to_string(),
@@ -113,7 +120,6 @@ fn setup() -> World {
         .expect("interpreter attached (INV-1)");
     let cap = lowered.cap.clone().expect("cap attached");
 
-    // Map the CapSpec onto OZ spending_limit params.
     let sl_params = SpendingLimitAccountParams {
         spending_limit: cap.limit,
         period_ledgers: cap.period_ledgers,
@@ -155,7 +161,10 @@ fn payload_hash(env: &Env) -> Hash<32> {
 
 fn signed_payload(w: &World) -> AuthPayload {
     let ids = vec![&w.env, w.rule_id];
-    let digest = auth_digest(&w.env, &w.account, &payload_hash(&w.env).to_bytes(), &ids);
+    // OZ's digest: `sha256(payload || rule_ids)`.
+    let mut preimage = payload_hash(&w.env).to_bytes().to_bytes();
+    preimage.append(&ids.clone().to_xdr(&w.env));
+    let digest = w.env.crypto().sha256(&preimage).to_array();
     let sig = w.signing_key.sign(&digest).to_bytes();
     let signer = Signer::External(w.verifier.clone(), w.pubkey.clone().into());
     let signers: Map<Signer, Bytes> = map![&w.env, (signer, Bytes::from_array(&w.env, &sig))];
@@ -188,9 +197,7 @@ fn run(w: &World, amount: i128) -> Result<(), ()> {
     let contexts = vec![&w.env, transfer_ctx(w, amount)];
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         w.env.as_contract(&w.account, || {
-            // Via the account's `check_auth` so the signer-signed digest is the
-            // address-bound one; `check_auth` wraps OZ's `do_check_auth`.
-            perch_smart_account::check_auth(&w.env, &hash, &payload, &contexts).unwrap();
+            do_check_auth(&w.env, &hash, &payload, &contexts).unwrap();
         });
     }));
     r.map_err(|_| ())

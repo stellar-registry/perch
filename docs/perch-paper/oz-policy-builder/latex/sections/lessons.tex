@@ -1,0 +1,26 @@
+We propose six changes; none is built.
+
+\begin{enumerate}[leftmargin=*,itemsep=2pt]
+\item \textbf{Recording as authoring.} A front end that, like oz-policy-builder's
+synthesiser, starts from a recorded transaction and emits a Perch grant document
+for the owner to review. A recording shows calls, not intent, so the owner would
+still choose the cap, its window and the expiry.
+\item \textbf{Simulating before install.} A wallet that installs a grant only
+after running the intended calls through the deployed account's own evaluator in
+enforcing simulation, as oz-policy-builder verifies a predicate with the deployed
+interpreter's \code{check}.
+\item \textbf{Minimality checks.} A check that flags a rule wider than the
+recorded calls need, as oz-policy-builder drops each conjunct in turn, and an
+overlap scan that refuses a capped rule a key it names could bypass through
+another rule, since a Perch key holds the union of every rule naming it.
+\item \textbf{Keeping a record across a limit change.} Keeping a rule's
+spending record when only its limit changes, as OpenZeppelin's
+\code{spending\_limit} does.
+\item \textbf{A corpus of real transactions.} Real Soroban transactions run
+through Perch's compiler, lowering and evaluator, beside the
+\fact{lean-doc-traces} Lean-generated traces its integration suite runs today.
+\item \textbf{An audit before claiming maturity.} An external audit of the
+Perch contracts (account, compiler, recovery controller, verifiers,
+zero-knowledge pool and adapter, registry) and of rule-core's evaluator. Until
+then the authors recommend that Perch not hold real funds.
+\end{enumerate}

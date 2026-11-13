@@ -4,10 +4,11 @@
 # network must be the manifest's registry id (scripts/manifest-registry.sh,
 # which also accepts a migration deployments/pending-registry.json declares,
 # and says so), and every crates/*/wasm/<name>.sha256 must be the manifest's
-# sha256 for <name>. These files are all the account and the factory read at
-# build time, so a plain checkout (a cargo git dependency included) builds
-# exactly the pins the manifest records. scripts/fetch-infra-wasm.sh rewrites
-# the hashes from the chain; the registry path is source, edited by hand.
+# sha256 for <name>. These files, with crates/*/wasm/verifiers.path, are all
+# the account, the compiler and the factory read at build time, so a plain
+# checkout (a cargo git dependency included) builds exactly the pins the
+# manifest records. scripts/fetch-infra-wasm.sh rewrites the hashes from the
+# chain; the registry paths are source, edited by hand.
 #
 # Usage: scripts/check-pins.sh [--manifest <path>]
 #   --manifest  default deployments/${STELLAR_NETWORK:-testnet}.json

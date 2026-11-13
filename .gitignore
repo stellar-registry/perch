@@ -10,3 +10,10 @@ fuzz/coverage/
 # soroban-sdk test-host ledger snapshots: written by every `cargo test`, never
 # compared, and full of contract ids derived from the pinned infra wasm.
 test_snapshots/
+
+# Python bytecode.
+__pycache__/
+# Written by scripts/bootstrap-testnet.sh; never committed.
+/testdata/deploy/perch-testnet.json
+/testdata/deploy/perch-testnet.rules.json
+/testdata/deploy/constructorless-testnet.json

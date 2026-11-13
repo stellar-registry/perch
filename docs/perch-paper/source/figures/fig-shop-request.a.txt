@@ -1,0 +1,12 @@
+invoke C...XLM.transfer(                      ①
+         from:   C...ACCOUNT,
+         to:     G...SHOP,
+         amount: 60000000 )
+auth: [                                       ②
+  { credentials: C...ACCOUNT,
+    nonce, expiration ledger,
+    signature: {
+      signers: { app: <Ed25519 signature> },  ③
+      context_rule_ids: [ pay-shop ] },       ④
+    root_invocation:                          ⑤
+      C...XLM.transfer(same arguments) } ]

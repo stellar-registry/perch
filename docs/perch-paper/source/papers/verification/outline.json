@@ -1,0 +1,117 @@
+{
+ "nav_note": "A companion to the Perch paper: the formal results.<br>Fourth iteration · November 2026",
+ "sections": [
+  {
+   "id": "objects",
+   "title_html": "What is proved, and about what",
+   "title_latex": "Introduction",
+   "nav": "Introduction"
+  },
+  {
+   "id": "pipeline",
+   "title_html": "From Rust to Lean",
+   "title_latex": "From Rust to Lean",
+   "nav": "Rust to Lean",
+   "figures": [
+    "fig-proof-paths"
+   ]
+  },
+  {
+   "id": "definitions",
+   "title_html": "Definitions",
+   "title_latex": "Definitions",
+   "nav": "Definitions"
+  },
+  {
+   "id": "evaluator",
+   "title_html": "The evaluator",
+   "title_latex": "The Evaluator",
+   "nav": "Evaluator"
+  },
+  {
+   "id": "attenuation",
+   "title_html": "Attenuation",
+   "title_latex": "Attenuation",
+   "nav": "Attenuation",
+   "tables": [
+    "tab-attenuation"
+   ]
+  },
+  {
+   "id": "spending",
+   "title_html": "Spending limits",
+   "title_latex": "Spending Limits",
+   "nav": "Spending limits"
+  },
+  {
+   "id": "documents",
+   "title_html": "Documents, lowering and containment",
+   "title_latex": "Documents, Lowering and Containment",
+   "nav": "Documents"
+  },
+  {
+   "id": "account",
+   "title_html": "The account model and recovery",
+   "title_latex": "The Account Model",
+   "nav": "Account model"
+  },
+  {
+   "id": "host",
+   "title_html": "The host model",
+   "title_latex": "The Host Model",
+   "nav": "Host model"
+  },
+  {
+   "id": "obligations",
+   "title_html": "From the evaluator to the account",
+   "title_latex": "From the Evaluator to the Account",
+   "nav": "Obligations",
+   "tables": [
+    "tab-obligations",
+    "tab-binding"
+   ]
+  },
+  {
+   "id": "trust",
+   "title_html": "What the proofs trust",
+   "title_latex": "Trusted Base",
+   "nav": "Trusted base"
+  },
+  {
+   "id": "unproved",
+   "title_html": "What is not proved",
+   "title_latex": "Limitations",
+   "nav": "Not proved"
+  },
+  {
+   "id": "related",
+   "title_html": "Related work",
+   "title_latex": "Related Work",
+   "nav": "Related work"
+  },
+  {
+   "id": "conclusion",
+   "title_html": "Conclusion",
+   "title_latex": "Conclusion",
+   "nav": "Conclusion"
+  },
+  {
+   "id": "reproduce",
+   "title_html": "Reproducing the proofs",
+   "title_latex": "Reproducing the Proofs",
+   "nav": "Reproducing",
+   "appendix": true
+  },
+  {
+   "id": "references",
+   "title_html": "References",
+   "title_latex": "References",
+   "nav": "References",
+   "editions": [
+    "html"
+   ],
+   "appendix": true,
+   "unnumbered": true
+  }
+ ]
+}

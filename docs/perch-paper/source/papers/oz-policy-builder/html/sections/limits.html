@@ -1,0 +1,29 @@
+<p class="lede"><strong>This comparison reads two designs and runs one task. It measures no costs, and some things must not be read into it.</strong></p>
+<h3 id="evidence-scope">What the evidence covers</h3>
+<ul>
+<li>Every design claim about oz-policy-builder is read from its public documentation and source at <code>{{fact:opb-pin-short}}</code>. Our runs cover its test suites, its install flow on a local network, one per-call run that was not archived, the walkthrough's task and the recorded dual simulation.</li>
+<li>Both runs of the shared task used one host version, soroban-env-host {{fact:soroban-env-host-sim}} in soroban-sim, in its recording-mode build rather than the exact-metering one, and different signer kinds on the two sides. They show verdicts and call structure, not cost.</li>
+<li>The OpenZeppelin 0.7.2-line account build that oz-policy-builder also signs for (<code>{{fact:oz-v072-line-account-build}}</code>) has no recorded source; claims about it come from oz-policy-builder's documentation.</li>
+<li>Only one task ran in both designs; no swap, lending or custody task, where oz-policy-builder's reads, quantifiers and adapter matter, was run.</li>
+</ul>
+<h3 id="method">A comparative measurement (proposed)</h3>
+<p>We propose, and have not run, five workloads in one harness, soroban-sim with one host version, exact metering and Ed25519 signers, reporting CPU instructions, memory, ledger I/O entries and bytes, fees, and cross-contract calls counted from diagnostic events:</p>
+<ol>
+<li>W1, one capped transfer;</li>
+<li>W2, a losing guess, a root call and its child;</li>
+<li>W3, one install;</li>
+<li>W4, ending authority over <em>k</em> grants: one recovery completion against <em>k</em> calls to <code>remove_context_rule</code>;</li>
+<li>W5, storage after <em>n</em> transfers.</li>
+</ol>
+<p>The walkthrough and the dual simulation are not W1: they ran without exact metering, with different signers.</p>
+<h3 id="not-claimed">What we do not claim</h3>
+<ul>
+<li>That Perch is cheaper, faster or smaller than oz-policy-builder, or makes fewer calls. No such measurement exists, and the call structures in {{ref:fig:fig-same-task}} reflect the signer kinds as well as the designs.</li>
+<li>Any comparison of code size; the two projects count lines differently.</li>
+<li>That oz-policy-builder is unproven. We found no formal model in its tree; its evidence is of another kind.</li>
+<li>That oz-policy-builder runs on mainnet. Its packages pin an interpreter on testnet only; OpenZeppelin's {{fact:oz-v072-tag}} policies are on mainnet.</li>
+<li>That Perch binds more in general. For delegated signers OpenZeppelin binds the rule IDs and Perch does not.</li>
+<li>That Perch's recovery is an advantage over oz-policy-builder. They address different things: Perch replaces an account's lost credentials, and Prime's "recovery" moves custody funds.</li>
+<li>That the absence in Perch of the items oz-policy-builder discloses about keyless and following rules is a Perch security property. Those items come from features Perch does not have.</li>
+<li>That <code>spending_limit</code> and Perch's cap behave alike beyond the eviction boundary they share.</li>
+</ul>

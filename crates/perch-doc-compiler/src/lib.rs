@@ -1,30 +1,44 @@
 //! The perch document compiler: a **stateless** deployable contract that turns
-//! a policy document's JSON bytes into compiled rules plus the canonical
-//! `doc_hash` — nothing else. It reads no storage and writes no storage;
-//! constructorless, deployed once per network, immutable, and shared by every
-//! perch account, exactly like the interpreter.
+//! a policy document's JSON bytes into compiled rules, the document's model,
+//! and the canonical `doc_hash` — nothing else. It reads no storage and
+//! writes no storage; constructorless, deployed once per network, immutable,
+//! and shared by every perch account.
 //!
 //! The split keeps state and computation apart: this contract owns *parsing
-//! and compiling* (the JSON parser and the lowering logic live here, in one
-//! audited place), while the smart account owns *the policy documents* — the
-//! stored rule set and the applied `doc_hash`. Accounts call [`compile_doc`]
-//! from `apply_doc` and apply the returned rules, so account wasm carries no
-//! parser or compiler at all.
+//! and validating* (the JSON parser and the checks live here, in one audited
+//! place), while the smart account owns *the policy documents* — the stored
+//! rule set and the applied `doc_hash`. Accounts call [`compile_doc`] from
+//! `apply_doc` and `apply_grant` and lower the returned model with
+//! rule-core's `rule_eval::lower` to the rules they enforce, so account wasm
+//! carries no parser at all, and this contract no rule lowering.
 //!
 //! Fail-closed at every step: non-UTF-8, unparseable, invalid, wrong-network,
 //! or unlowerable documents are typed errors, never partial output.
+//!
+//! **Verifiers.** A signer's `verifier-name` (`<name>@<version>`) names a
+//! verifier in Perch's managed `perch/verifiers` registry: the compiler
+//! resolves it on-chain, `deployer(perch/verifiers, fetch_hash(name,
+//! version))`, and refuses the document unless that is the signer's
+//! `verifier`. A verifier named by its contract id alone is *unverified*:
+//! refused in an account document (one with a self-admin rule or a recovery
+//! member, which covers every recovery target), and in a grant document
+//! allowed at most once per rule and listed in [`CompiledDoc::unverified`]
+//! (`perch_ir::verifier`). Each refusal is `DocInvalid`, which keeps every
+//! other code where it was.
 //!
 //! [`compile_doc`]: PerchDocCompiler::compile_doc
 #![no_std]
 
 extern crate alloc;
 
-use perch_program::InstallParams;
+use perch_account_types::Signer;
 use perch_recovery_interface::credential::{Credential, ReplacementSet};
 use perch_recovery_interface::RecoveryAction;
+pub use perch_rule_eval::CompiledModel;
+use perch_rule_eval::ModelPrincipals;
+use perch_rule_eval::StoredAuthRoot;
 use soroban_sdk::{contractclient, contracttype, Address, Bytes, BytesN, Env, String, Vec};
 use soroban_sdk_tools::scerr;
-use stellar_accounts::smart_account::Signer;
 
 /// The compiled recovery wire types, defined once in
 /// `perch-recovery-interface` and re-exported here for the compiler's
@@ -34,8 +48,6 @@ pub use perch_recovery_interface::config::{
     RecoveryProfile,
 };
 
-#[cfg(feature = "contract")]
-use perch_compile::{compile, CompileConfig, LoweredRule, ScopeSpec, SignerSpec};
 #[cfg(feature = "contract")]
 use perch_recovery_interface::config;
 #[cfg(feature = "contract")]
@@ -56,17 +68,21 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, TryFromVal, Val};
 /// next.
 pub const MAX_DOC_SIGNERS: u32 = 8;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_RULES: u32 = 11;
+pub const MAX_DOC_RULES: u32 = 10;
 /// See [`MAX_DOC_SIGNERS`].
 pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
 /// The longest rule name, in bytes: OZ's context-rule name limit. Checked
 /// here so that a document that compiles also installs: a compromise
 /// baseline is only published, never applied, until its recovery completes.
-pub const MAX_RULE_NAME_BYTES: u32 = stellar_accounts::smart_account::MAX_NAME_SIZE;
+pub const MAX_RULE_NAME_BYTES: u32 = 20;
 
-// A rule can name every declared signer; OZ installs at most `MAX_SIGNERS`
-// per rule.
-const _: () = assert!(MAX_DOC_SIGNERS <= stellar_accounts::smart_account::MAX_SIGNERS);
+/// The most constraints one rule may carry, counting each argument
+/// constraint, a `functions` list and an `auth-root` as one each. A rule with more is
+/// refused (`DocCompile`). It bounds the conditions one stored rule holds,
+/// and so the work of deciding it, at what an interpreter program holds: an
+/// interpreter-attached rule's program is a signer floor, one leaf per
+/// constraint and one `All`, within the interpreter's stack of 128 values.
+pub const MAX_RULE_CONSTRAINTS: u32 = 127;
 
 /// Everything `compile_doc` can refuse. (`#[scerr]` assigns sequential codes
 /// from 1, in variant order.)
@@ -78,38 +94,38 @@ pub enum DocCompilerError {
     /// unsupported version, duplicate key, …).
     DocParse,
     /// The document failed semantic validation (dangling signer ref,
-    /// malformed address or key, ambiguous empty list, …).
+    /// malformed address or key, ambiguous empty list, …) or names its
+    /// verifiers as the compiler does not take.
+    // An unverified verifier in an account document, two signers under one in
+    // a rule, or a `verifier-name` that does not resolve to its `verifier`:
+    // docs/account-interface.md, "Verifiers".
     DocInvalid,
     /// The document names no network, or a network that is not this chain.
     WrongNetwork,
-    /// The document cannot be lowered to rules (unsupported rule shape).
+    /// The document cannot be lowered to rules: a rule with
+    /// self-authenticating principals, or too many constraints.
+    // More than [`MAX_RULE_CONSTRAINTS`].
     DocCompile,
-    /// The document exceeds a document cap ([`MAX_DOC_SIGNERS`],
-    /// [`MAX_DOC_RULES`], [`MAX_DOC_CANONICAL_BYTES`],
-    /// [`MAX_RULE_NAME_BYTES`]).
+    /// The document exceeds a cap on signers, rules, bytes, or name length.
+    // [`MAX_DOC_SIGNERS`], [`MAX_DOC_RULES`], [`MAX_DOC_CANONICAL_BYTES`],
+    // [`MAX_RULE_NAME_BYTES`].
     DocTooLarge,
-    /// A signer's external `key` is not its verifier-canonical form: either the
-    /// verifier could not canonicalize it at all, or the declared bytes differ
-    /// from the canonical form the verifier returns (e.g. a WebAuthn key
-    /// carrying a credential-id suffix the verifier drops, or a non-canonical
-    /// point encoding). The compiler refuses it rather than silently
-    /// canonicalizing, so the bytes the document hash — and a recovery
-    /// attempt's `replacements_hash` — bind are exactly the bytes the installed
-    /// credential uses, and two signers cannot hide one physical key under two
-    /// spellings.
+    /// A signer's external `key` is not its verifier-canonical form.
+    // Why the compiler refuses rather than canonicalizing:
+    // docs/account-interface.md, "Errors".
     KeyNotCanonicalizable,
     /// `derive_target`: the current document enrolls no recovery.
     NotEnrolled,
-    /// `derive_target`: the replacement set breaks spec §7.3 rules 1-3 (not
-    /// canonical, empty for lost-key, a signer id that is not replaceable or
-    /// not declared in the source, or a change of credential kind or
-    /// verifier), or the action is not a recovery attempt.
+    /// `derive_target`: the replacement set breaks spec §7.3 rules 1-3, or
+    /// the action is not a recovery attempt.
+    // docs/account-interface.md, "Errors".
     ReplacementRefused,
-    /// `derive_target`: the ZK enrollment is missing for a ZK mode, present
-    /// for a guardian-only mode, or reuses the enrolled id.
+    /// `derive_target`: the ZK enrollment is missing, unexpected, or reuses
+    /// the enrolled id.
+    // Missing for a ZK mode, present for a guardian-only mode.
     ZkEnrollmentMismatch,
-    /// `derive_target`: the target has no policy-free self-admin rule with a
-    /// signer (the anti-brick check).
+    /// `derive_target`: the target has no constraint-free self-admin rule
+    /// with a signer (the anti-brick check).
     AdminLockout,
 }
 
@@ -124,9 +140,12 @@ pub enum RuleScope {
     Contract(Address),
 }
 
-/// One rule, compiled to the exact shapes OZ's `add_context_rule` takes:
-/// resolved addresses, OZ `Signer`s, and (for constrained rules) the
-/// interpreter program as `InstallParams`.
+/// One rule, compiled to the shapes OZ's `add_context_rule` takes: its
+/// name, resolved scope, its principals' OZ `Signer`s in the order the
+/// document names them, and its last ledger. OZ's context rule is the
+/// registry of the rule's id and signers; what the rule allows is its
+/// document rule in [`CompiledDoc::model`], at the same index, as rule-eval
+/// lowers it.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompiledRule {
@@ -134,36 +153,13 @@ pub struct CompiledRule {
     /// by name and scope.
     pub name: String,
     pub scope: RuleScope,
+    pub auth_root: Option<Vec<StoredAuthRoot>>,
     /// The rule's signers, with external keys as declared (already
     /// verifier-canonical).
     pub signers: Vec<Signer>,
     /// The last ledger the rule authorizes, if bounded: OZ's inclusive
     /// `valid_until`, one below the document's `not-after-ledger`.
     pub valid_until: Option<u32>,
-    /// The interpreter program to attach: zero or one entries. A `Vec`
-    /// because `#[contracttype]` has no conversion for `Option` of a custom
-    /// struct (`Option<u32>` on `valid_until` works because `u32` is a host
-    /// type). Empty ⇒ a policy-free rule.
-    pub install: Vec<InstallParams>,
-    /// Zero or one entries (a `Vec` for the same reason as `install`).
-    /// Present ⇒ also attach OZ `spending_limit` with these params — the
-    /// cumulative cap the stateless interpreter cannot express. The applier
-    /// resolves the policy's content-addressed address and keys it into the
-    /// rule's policy map beside the interpreter; the tracked token is the
-    /// rule's `Contract` scope (validation pins `token == scope`).
-    pub cap: Vec<CompiledCap>,
-}
-
-/// A cumulative spend cap lowered to OZ `spending_limit`'s install params
-/// (`SpendingLimitAccountParams`). The tracked token is the rule's scope
-/// contract, so it is not carried here.
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct CompiledCap {
-    /// Cumulative amount ceiling over the rolling window.
-    pub spending_limit: i128,
-    /// Rolling-window length in ledgers.
-    pub period_ledgers: u32,
 }
 
 /// A compiled document: its canonical identity and the rules it becomes.
@@ -185,11 +181,33 @@ pub struct CompiledDoc {
     pub fingerprints: Vec<BytesN<32>>,
     /// One compiled rule per document rule, in the submitted order.
     pub rules: Vec<CompiledRule>,
-    /// The compiled `recovery` member: zero or one entries (a `Vec` for the
-    /// same reason as [`CompiledRule::install`]). Present ⇒ the document
-    /// enrolls account recovery, and the applier syncs this configuration to
-    /// the controller instance it names (`docs/recovery/`).
+    /// The compiled `recovery` member: zero or one entries (a `Vec` because
+    /// `#[contracttype]` has no conversion for an `Option` of a custom struct;
+    /// `Option<u32>` on [`CompiledRule::valid_until`] works because `u32` is
+    /// a host type). Present ⇒ the document enrolls account recovery, and the
+    /// applier syncs this configuration to the controller instance it names
+    /// (`docs/recovery/`).
     pub recovery: Vec<CompiledRecoveryConfig>,
+    /// The document as rule-core's lowering reads it (`rule_eval::Doc`, in
+    /// host types): one entry. A `Vec` for the same reason as `recovery`.
+    /// The applying account lowers it with `rule_eval::lower` and stores the
+    /// result as its installed rules; `model.rules[i]` is `rules[i]`'s
+    /// document rule.
+    pub model: Vec<CompiledModel>,
+    /// Whether the document is in normal form as far as its text shows
+    /// (`perch_ir::normal_form`): then the rules an account stores for it,
+    /// with its signer ids and [`Self::verifier_names`], give back its
+    /// canonical text. An account refuses a scoped document that is not.
+    pub normal_form: bool,
+    /// Every verifier the document names by contract id alone, once each, in
+    /// declaration order: what a wallet warns about ("it can approve anything
+    /// this rule allows"). Always empty for an admin document, which may name
+    /// none.
+    pub unverified: Vec<Address>,
+    /// One entry per declared signer, in declaration order: the
+    /// `verifier-name` its verifier was resolved from, or empty for a
+    /// delegated signer and a verifier named by contract id alone.
+    pub verifier_names: Vec<String>,
 }
 
 /// What `derive_target` returns: the recovery target the controller binds
@@ -259,10 +277,14 @@ pub struct CompilerCapabilities {
     pub config_hash_tag: String,
 }
 
-/// Whether a compiled rule set keeps a policy-free, never-expiring self-admin
-/// rule with at least one signer — the anti-brick check every applied
-/// document and every recovery target must pass, so the admin path never
-/// depends on a policy and never lapses.
+/// Whether a compiled document keeps a constraint-free, never-expiring
+/// self-admin rule with at least one signer — the anti-brick check every
+/// applied document and every recovery target must pass, so the admin path
+/// never depends on a constraint and never lapses. A constraint-free rule
+/// has `all` principals and no `functions`, `args`, `auth-root` or `cap`: it allows every
+/// function of the account to all of its signers. A `threshold` rule never
+/// counts, even one asking all of its signers. A document whose model does
+/// not match its rules one for one keeps none.
 ///
 /// The surviving admin rule must have no `valid_until`: a self-admin rule
 /// bounded by `not-after-ledger` is a latent brick — once its bound passes,
@@ -275,17 +297,24 @@ pub struct CompilerCapabilities {
 /// (`perch-smart-account`'s `rules::desired`): that drop can never remove the
 /// account's only admin rule, because an admin rule that could ever be
 /// dropped fails this check first.
-pub fn admin_survives(rules: &Vec<CompiledRule>) -> bool {
-    // A bounded self-admin rule is excluded (`valid_until.is_none()`): once its
-    // bound passes it can no longer authorize `apply_doc`, so a document whose
-    // only admin rule is bounded is a latent brick and is refused up front.
+pub fn admin_survives(compiled: &CompiledDoc) -> bool {
+    let Some(model) = compiled.model.first() else {
+        return false;
+    };
+    if model.rules.len() != compiled.rules.len() {
+        return false;
+    }
     // Regression: integration-tests/tests/recovery_installability.rs.
-    rules.iter().any(|r| {
+    compiled.rules.iter().zip(model.rules.iter()).any(|(r, m)| {
         matches!(r.scope, RuleScope::SelfAdmin)
             && r.valid_until.is_none()
             && !r.signers.is_empty()
-            && r.install.is_empty()
-            && r.cap.is_empty()
+            && matches!(m.principals, ModelPrincipals::All(_))
+            && m.functions.is_none()
+            && m.args.is_none()
+            && m.cap.is_empty()
+            && m.auth_root.is_none()
+            && r.auth_root.is_none()
     })
 }
 
@@ -317,6 +346,26 @@ trait KeyCanonicalizerInterface {
     fn batch_canonicalize_key(e: &Env, key_data: Vec<Val>) -> Vec<Bytes>;
 }
 
+/// The `perch/verifiers` registry's `Publishable::fetch_hash`: the wasm hash
+/// published under a name and exact version.
+#[cfg(feature = "contract")]
+#[allow(unused)]
+#[contractclient(name = "VerifierRegistryClient")]
+trait VerifierRegistryInterface {
+    fn fetch_hash(e: &Env, wasm_name: String, version: Option<String>) -> BytesN<32>;
+}
+
+/// The registry a `verifier-name` resolves in, derived under the ledger's
+/// network from the committed `wasm/verifiers.path`.
+#[cfg(feature = "contract")]
+pub mod verifiers {
+    perch_registry_resolve::registry_contract! {
+        mod: registry,
+        path_file: "wasm/verifiers.path",
+    }
+    pub use registry::registry;
+}
+
 #[cfg(feature = "contract")]
 #[contract]
 pub struct PerchDocCompiler;
@@ -333,6 +382,12 @@ impl PerchDocCompiler {
     /// named verifier's `batch_canonicalize_key` to check.
     pub fn compile_doc(e: &Env, doc_json: Bytes) -> Result<CompiledDoc, DocCompilerError> {
         compile_parsed(e, &parse(&doc_json)?)
+    }
+
+    /// The `perch/verifiers` registry a `verifier-name` resolves in, on this
+    /// network.
+    pub fn verifier_registry(e: &Env) -> Address {
+        verifiers::registry(e)
     }
 
     /// The document caps every `compile_doc` and `derive_target` enforces.
@@ -404,7 +459,7 @@ impl PerchDocCompiler {
                 })?;
 
         let compiled = compile_parsed(e, &target)?;
-        if !admin_survives(&compiled.rules) {
+        if !admin_survives(&compiled) {
             return Err(DocCompilerError::AdminLockout);
         }
         let replaced_slots: alloc::vec::Vec<perch_ir::SignerDecl> = source
@@ -438,14 +493,13 @@ fn parse(doc_json: &Bytes) -> Result<perch_ir::PolicyDoc, DocCompilerError> {
     perch_ir::from_json(json).map_err(|_| DocCompilerError::DocParse)
 }
 
-/// Validate, network-bind, cap, lower, canonicalize, and fingerprint a parsed
-/// document. Shared by `compile_doc` and `derive_target`, so a derived target
+/// Validate, network-bind, cap, compile, canonicalize, and fingerprint a
+/// parsed document. Shared by `compile_doc` and `derive_target`, so a derived target
 /// passes exactly the checks an applied document does.
 #[cfg(feature = "contract")]
 fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, DocCompilerError> {
     perch_ir::validate(doc).map_err(|_| DocCompilerError::DocInvalid)?;
 
-    // Network binding.
     let net = doc.network.as_ref().ok_or(DocCompilerError::WrongNetwork)?;
     let named: BytesN<32> = e
         .crypto()
@@ -465,19 +519,21 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         return Err(DocCompilerError::DocTooLarge);
     }
 
-    // Compile. The config's wasm-hash pin is advisory metadata for
-    // off-chain plans; on-chain the account derives the interpreter's address
-    // itself from its build-time pins (registry path and wasm hash), so this
-    // hash is unused here.
-    let cfg = CompileConfig {
-        interpreter_wasm_hash: BytesN::from_array(e, &[0u8; 32]),
-    };
-    let plan = compile(e, doc, &cfg).map_err(|_| DocCompilerError::DocCompile)?;
+    // Verifiers: none unverified in an account document, one signer per
+    // unverified verifier in a rule, and every name resolved.
+    if perch_ir::is_account_document(doc) && !perch_ir::unverified_verifiers(doc).is_empty() {
+        return Err(DocCompilerError::DocInvalid);
+    }
+    if perch_ir::unverified_reuse(doc).is_some() {
+        return Err(DocCompilerError::DocInvalid);
+    }
+    let verifier_names = resolve_verifier_names(e, &doc.signers)?;
 
     let mut rules: Vec<CompiledRule> = Vec::new(e);
-    for rule in plan.rules.iter() {
-        rules.push_back(to_compiled(e, rule)?);
+    for rule in &doc.rules {
+        rules.push_back(to_compiled(e, doc, rule)?);
     }
+    let model = perch_rule_eval::model_of(e, doc).map_err(|_| DocCompilerError::DocCompile)?;
 
     let canonical_text = perch_ir::canonical_json(doc);
     if canonical_text.len() > MAX_DOC_CANONICAL_BYTES as usize {
@@ -497,7 +553,66 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         fingerprints: fingerprints(e, &canonical_credentials(e, &doc.signers)?)?,
         rules,
         recovery,
+        model: Vec::from_array(e, [model]),
+        normal_form: perch_ir::normal_form(doc).is_ok(),
+        unverified: {
+            let mut out = Vec::new(e);
+            for v in perch_ir::unverified_verifiers(doc) {
+                out.push_back(Address::from_str(e, v));
+            }
+            out
+        },
+        verifier_names,
     })
+}
+
+/// Resolve every signer's `verifier-name` in `perch/verifiers`: the wasm
+/// hash published under the name and exact version, whose content address
+/// there must be the signer's `verifier` (`DocInvalid` otherwise). One
+/// `fetch_hash` per distinct name. Returns each signer's name, empty where
+/// it has none.
+#[cfg(feature = "contract")]
+fn resolve_verifier_names(
+    e: &Env,
+    signers: &[perch_ir::SignerDecl],
+) -> Result<Vec<String>, DocCompilerError> {
+    let mut resolved: Map<String, Address> = Map::new(e);
+    let mut names = Vec::new(e);
+    for s in signers {
+        let perch_ir::SignerMethod::External {
+            verifier,
+            verifier_name: Some(full),
+            ..
+        } = &s.method
+        else {
+            names.push_back(String::from_str(e, ""));
+            continue;
+        };
+        let full_name = String::from_str(e, full);
+        let address = match resolved.get(full_name.clone()) {
+            Some(address) => address,
+            None => {
+                let (name, version) =
+                    perch_ir::parse_verifier_name(full).ok_or(DocCompilerError::DocInvalid)?;
+                let registry = verifiers::registry(e);
+                let hash = VerifierRegistryClient::new(e, &registry)
+                    .try_fetch_hash(
+                        &String::from_str(e, name),
+                        &Some(String::from_str(e, version)),
+                    )
+                    .map_err(|_| DocCompilerError::DocInvalid)?
+                    .map_err(|_| DocCompilerError::DocInvalid)?;
+                let address = e.deployer().with_address(registry, hash).deployed_address();
+                resolved.set(full_name.clone(), address.clone());
+                address
+            }
+        };
+        if address != Address::from_str(e, verifier) {
+            return Err(DocCompilerError::DocInvalid);
+        }
+        names.push_back(full_name);
+    }
+    Ok(names)
 }
 
 /// The credentials `signers` declare, with every external key canonicalized
@@ -517,7 +632,7 @@ fn canonical_credentials(
             perch_ir::SignerMethod::Delegated { address } => {
                 slots.push((Address::from_str(e, address), None));
             }
-            perch_ir::SignerMethod::External { verifier, key } => {
+            perch_ir::SignerMethod::External { verifier, key, .. } => {
                 let verifier = Address::from_str(e, verifier);
                 let mut batch = batches.get(verifier.clone()).unwrap_or(Vec::new(e));
                 slots.push((verifier.clone(), Some(batch.len())));
@@ -603,6 +718,7 @@ fn to_signer_method(c: &Credential) -> perch_ir::SignerMethod {
             perch_ir::SignerMethod::External {
                 verifier: to_std_string(&verifier.to_string()),
                 key: hex::encode(raw),
+                verifier_name: None,
             }
         }
     }
@@ -675,41 +791,66 @@ fn to_compiled_zk(e: &Env, z: &perch_ir::ZkFactor) -> Result<CompiledZkFactor, D
     })
 }
 
-/// Lowered rule (host-independent strings) → wire rule (resolved soroban
-/// types).
+/// A validated document rule → wire rule (resolved soroban types). Refuses
+/// self-authenticating principals and more than [`MAX_RULE_CONSTRAINTS`]
+/// constraints (`DocCompile`).
 #[cfg(feature = "contract")]
-fn to_compiled(e: &Env, rule: &LoweredRule) -> Result<CompiledRule, DocCompilerError> {
+fn to_compiled(
+    e: &Env,
+    doc: &perch_ir::PolicyDoc,
+    rule: &perch_ir::Rule,
+) -> Result<CompiledRule, DocCompilerError> {
+    let ids = match &rule.principals {
+        perch_ir::Principals::All(p) => &p.signers,
+        perch_ir::Principals::Threshold(p) => &p.signers,
+        perch_ir::Principals::SelfAuthenticating(_) => return Err(DocCompilerError::DocCompile),
+    };
+    let constraints = rule.args.as_ref().map_or(0, |a| a.len())
+        + usize::from(rule.functions.is_some())
+        + usize::from(rule.auth_root.is_some());
+    if constraints > MAX_RULE_CONSTRAINTS as usize {
+        return Err(DocCompilerError::DocCompile);
+    }
     let scope = match &rule.scope {
-        ScopeSpec::SelfAdmin => RuleScope::SelfAdmin,
-        ScopeSpec::Contract(addr) => RuleScope::Contract(Address::from_str(e, addr)),
+        perch_ir::Scope::SelfAdmin(_) => RuleScope::SelfAdmin,
+        perch_ir::Scope::Contract(c) => RuleScope::Contract(Address::from_str(e, &c.address)),
     };
     let mut signers: Vec<Signer> = Vec::new(e);
-    for s in rule.signers.iter() {
-        signers.push_back(match s {
-            SignerSpec::Delegated { address } => Signer::Delegated(Address::from_str(e, address)),
-            SignerSpec::External { verifier, key_hex } => {
-                Signer::External(Address::from_str(e, verifier), hex_bytes(e, key_hex)?)
+    for id in ids {
+        let decl = doc
+            .signers
+            .iter()
+            .find(|s| &s.id == id)
+            .ok_or(DocCompilerError::DocCompile)?;
+        signers.push_back(match &decl.method {
+            perch_ir::SignerMethod::Delegated { address } => {
+                Signer::Delegated(Address::from_str(e, address))
+            }
+            perch_ir::SignerMethod::External { verifier, key, .. } => {
+                Signer::External(Address::from_str(e, verifier), hex_bytes(e, key)?)
             }
         });
     }
-    let mut install: Vec<InstallParams> = Vec::new(e);
-    if let Some(params) = &rule.install {
-        install.push_back(params.clone());
-    }
-    let mut cap: Vec<CompiledCap> = Vec::new(e);
-    if let Some(c) = &rule.cap {
-        cap.push_back(CompiledCap {
-            spending_limit: c.limit,
-            period_ledgers: c.period_ledgers,
-        });
-    }
+    // `not-after-ledger` is the first ledger the rule no longer authorizes
+    // in; validation makes it at least 1.
+    let valid_until = match rule.not_after_ledger {
+        Some(x) => Some(x.checked_sub(1).ok_or(DocCompilerError::DocInvalid)?),
+        None => None,
+    };
     Ok(CompiledRule {
+        auth_root: rule.auth_root.as_ref().map(|root| {
+            Vec::from_array(
+                e,
+                [StoredAuthRoot {
+                    contract: Address::from_str(e, &root.contract),
+                    function: soroban_sdk::Symbol::new(e, &root.function),
+                }],
+            )
+        }),
         name: String::from_str(e, &rule.name),
         scope,
         signers,
-        valid_until: rule.valid_until,
-        install,
-        cap,
+        valid_until,
     })
 }
 

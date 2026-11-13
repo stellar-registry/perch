@@ -2,10 +2,13 @@
 //! one wasm, pinned at build time.
 //!
 //! - **Pinned.** The account wasm hash and the WebAuthn verifier's content
-//!   address are baked in from this crate's committed `wasm/` pins when it is built
-//!   (see [`pins`]). Publishing a newer account or verifier never changes what
-//!   an existing factory deploys: a new account build is a new factory, at a
-//!   new address.
+//!   address in `perch/verifiers` are baked in from this crate's committed
+//!   `wasm/` pins when it is built (see [`pins`]). Publishing a newer account
+//!   or verifier never changes what an existing factory deploys: a new
+//!   account build is a new factory, at a new address. The account's
+//!   constructor refuses an admin signer whose verifier `perch/verifiers`
+//!   did not deploy, so [`PerchAccountFactory::create`] creates only what
+//!   an account document could hold.
 //! - **Bound to the signers.** An account's address commits to the admin
 //!   signers it is created with, not only to the caller's salt: the deploy
 //!   salt is `sha256(salt || xdr(admin_signers))`. Nobody can create an
@@ -16,24 +19,31 @@
 //!   account's own `apply_doc`.
 #![no_std]
 
+use perch_account_types::Signer;
 use soroban_sdk::{
-    contract, contractevent, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN, Env, Vec,
+    contract, contractevent, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN,
+    ContractExecutable, Env, Vec,
 };
-use stellar_accounts::smart_account::Signer;
 
 /// Wire version of this factory's interface. Bumped on any change a client
 /// could observe; a new version is always a new wasm and a new address.
 pub const VERSION: u32 = 1;
 
 /// What the factory deploys and the passkey verifier it names, both pinned
-/// from the committed `wasm/` pins at build time.
+/// from the committed `wasm/` pins at build time: the verifier at its
+/// content address in `perch/verifiers` (`wasm/verifiers.path`).
 pub mod pins {
     perch_registry_resolve::registry_contract! {
         mod: account,
         wasm_name: "perch-account",
         hash_file: "wasm/perch-account.sha256",
     }
-    perch_registry_resolve::registry_contract!(perch_webauthn_verifier);
+    perch_registry_resolve::registry_contract! {
+        mod: perch_webauthn_verifier,
+        wasm_name: "perch-webauthn-verifier",
+        hash_file: "wasm/perch-webauthn-verifier.sha256",
+        path_file: "wasm/verifiers.path",
+    }
 }
 
 /// Emitted for every account the factory creates.
@@ -76,12 +86,16 @@ impl PerchAccountFactory {
 
     /// Deploy an account whose constructor installs `admin_signers` as its
     /// admin rule, at [`Self::address_of`], and emit `AccountCreated`.
-    /// Permissionless. Fails if that account already exists.
+    /// Permissionless. Fails if that account already exists, or if an
+    /// external signer's verifier is not one `perch/verifiers` deployed.
     pub fn create(e: &Env, salt: BytesN<32>, admin_signers: Vec<Signer>) -> Address {
         let account = e
             .deployer()
             .with_current_contract(deploy_salt(e, &salt, &admin_signers))
-            .deploy_v2(pins::account::hash(e), (admin_signers.clone(),));
+            .deploy_contract(
+                ContractExecutable::Wasm(pins::account::hash(e)),
+                (admin_signers.clone(),),
+            );
         AccountCreated {
             account: account.clone(),
             salt,

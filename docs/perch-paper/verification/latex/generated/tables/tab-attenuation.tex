@@ -1,0 +1,18 @@
+% Generated from source/tables/tab-attenuation.json; edit that.
+\begin{table}[tbp]
+\centering
+\caption{\textbf{The ten attenuation steps (\code{crates/\allowbreak{}rule-\allowbreak{}eval/\allowbreak{}src/\allowbreak{}attenuate.\allowbreak{}rs} in rule-core).} Nothing else is an attenuation step. Document conditions lower to these rule-core conditions: \code{is-self}, \code{address-eq} and \code{u32-eq} to \code{ArgEq}, \code{string-in} to \code{ArgIn}, \code{string-prefix} to \code{ArgStrPrefix}. \code{ArgI128AtMost} appears in a lowered document only as the type check on a capped transfer's amount, with the largest \code{i128} as its bound, so a document cannot bound one call's amount; only an attenuation step can set a smaller maximum (rule-core \code{lowering.rs}).}\label{tab:tab-attenuation}
+\scriptsize\begin{tabularx}{\linewidth}{@{}LLL@{}}
+\toprule
+\textbf{Rule part} & \textbf{Steps that may narrow it} & \textbf{Refused} \\
+\midrule
+Rule set & \code{drop\_rule} (later rule indices shift down) & none \\
+Functions & \code{remove\_functions}, \code{restrict\_\allowbreak{}functions} & none \\
+Arguments & \code{add\_cond} (\code{ArgEq}, \code{ArgIn}, \code{ArgStrPrefix}, \code{ArgI128AtMost}) & none \\
+Signers & \code{remove\_signers} (threshold kept), \code{raise\_threshold} & a lower threshold \\
+Cap & \code{add\_cap} to an uncapped rule, \code{lower\_cap\_limit}, \code{lengthen\_\allowbreak{}cap\_\allowbreak{}period} & a second cap, a non-positive limit, a zero period, a higher limit, a shorter period \\
+Expiry & \code{lower\_\allowbreak{}valid\_\allowbreak{}until} (add an expiry or move it earlier) & a later expiry \\
+Target, generation & no step & none \\
+\bottomrule
+\end{tabularx}
+\end{table}

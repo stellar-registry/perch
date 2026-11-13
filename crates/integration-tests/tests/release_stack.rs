@@ -18,6 +18,10 @@
 //! cargo test -p perch-integration-tests --test release_stack -- --ignored --nocapture
 //! ```
 //!
+//! A rehearsal's stack, built from dev registry paths, adds `--skip
+//! one_build_resolves_each_networks_own_registry`, which checks the canonical
+//! registries.
+//!
 //! Each transaction-shaped call prints one `{"case": ...}` JSON line with its
 //! metered resources (the in-process estimate of the on-chain cost), and is
 //! asserted to fit within the budget rule's 75% of the per-transaction limits
@@ -29,6 +33,7 @@ mod support;
 
 use perch_account::PerchAccountClient;
 use perch_account_factory::PerchAccountFactoryClient;
+use perch_account_types::{AuthPayload, Signer};
 use perch_doc_compiler::{
     PerchDocCompilerClient, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS,
 };
@@ -38,13 +43,14 @@ use perch_recovery_interface::zk::{ZkAdapterClient, ZkEvidence};
 use perch_recovery_interface::{
     ConfigChange, RecoveryAction, RecoveryStatement, StatementSubject, UpgradeSubject,
 };
+use perch_smart_account::{MAX_NAME_SIZE, MAX_SIGNERS};
 use perch_testkit::delta::raw_entries;
 use perch_testkit::passkey::{auth_entry, SoftPasskey};
 use perch_testkit::FIXTURE_NETWORK;
 use perch_zk_pool::{PerchZkPoolClient, PoolKey, TreeState};
 use perch_zk_primitives::{contract_id, ZERO_HASHES};
 use perch_zk_prover::{Inputs, Toolchain, Tree};
-use soroban_sdk::testutils::{EnvTestConfig, Ledger as _};
+use soroban_sdk::testutils::{Address as _, EnvTestConfig, Ledger as _};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::xdr::{
     AccountId, HostFunction, InvokeContractArgs, PublicKey, ScVal, SorobanAddressCredentials,
@@ -56,10 +62,6 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use stellar_accounts::policies::spending_limit::{SpendingLimitData, SpendingLimitStorageKey};
-use stellar_accounts::smart_account::{
-    AuthPayload, Signer, SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
-};
 use support::{strkey, Key, TargetClient};
 
 // ---------------------------------------------------------------------------
@@ -84,12 +86,21 @@ thread_local! {
     /// While set, [`World::shaped_json`] changes every interpreter program
     /// (`.0`) and every spending cap (`.1`): the keep-names thieves.
     static REPARAM: Cell<(bool, bool)> = const { Cell::new((false, false)) };
+    /// Include the maximum-size exact root on every ordinary sizing rule.
+    static ROOT_CONDITIONS: Cell<bool> = const { Cell::new(false) };
     /// While set, every `apply_doc` is first simulated the way RPC simulation
     /// runs it, and its metered footprint checked against the simulated one
     /// ([`World::check_footprint`]).
     static SIMULATE: Cell<bool> = const { Cell::new(false) };
     /// How many `apply_doc` calls were checked that way.
     static SIMULATED: Cell<u32> = const { Cell::new(0) };
+    /// How many grant documents, of how many capped grants each, a
+    /// [`worst_compromise`] thief installs before the attempt.
+    static THIEF_GRANTS: Cell<(u32, usize)> = const { Cell::new((3, 8)) };
+    /// Unrelated entries [`worst_compromise`] writes before its completion,
+    /// which the completion never touches: the control for the long-lived
+    /// host's storage growth (`budgets.md`, "Grant documents").
+    static FILLER: Cell<u32> = const { Cell::new(0) };
 }
 
 fn report(label: &str, e: &Env) {
@@ -167,6 +178,14 @@ fn report(label: &str, e: &Env) {
     );
 }
 
+/// [`report`] without the budget assertion, for a row measured on a host
+/// that is not a network transaction's.
+fn report_unbudgeted(label: &str, e: &Env) {
+    let was = UNBUDGETED.with(|u| u.replace(true));
+    report(label, e);
+    UNBUDGETED.with(|u| u.set(was));
+}
+
 // ---------------------------------------------------------------------------
 // The stack
 // ---------------------------------------------------------------------------
@@ -179,11 +198,12 @@ fn repo() -> PathBuf {
 struct Stack {
     registry: String,
     wasm: HashMap<String, std::vec::Vec<u8>>,
+    versions: HashMap<String, String>,
     pins: HashMap<String, HashMap<String, String>>,
 }
 
 fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    hex::encode(b)
 }
 
 fn sha256_hex(b: &[u8]) -> String {
@@ -207,9 +227,15 @@ fn load_stack() -> Stack {
         }))
         .expect("build.json");
     let mut wasm = HashMap::new();
+    let mut versions = HashMap::new();
     let mut pins = HashMap::new();
     for a in build["artifacts"].as_array().expect("artifacts") {
         let package = a["package"].as_str().unwrap().to_string();
+        // A fetched stack's registry code carries no version.
+        versions.insert(
+            package.clone(),
+            a["version"].as_str().unwrap_or_default().to_string(),
+        );
         let bytes = std::fs::read(dir.join(a["wasm"].as_str().unwrap())).expect("artifact wasm");
         assert_eq!(
             sha256_hex(&bytes),
@@ -228,6 +254,7 @@ fn load_stack() -> Stack {
     let stack = Stack {
         registry: build["registry"].as_str().unwrap().to_string(),
         wasm,
+        versions,
         pins,
     };
     // Every consumer was built against the exact bytes this stack carries.
@@ -254,13 +281,15 @@ struct World {
     env: Env,
     stack: Stack,
     factory: Address,
+    /// The WebAuthn verifier, which `perch/verifiers` deployed, and the
+    /// `verifier-name` a document names it by.
     webauthn: Address,
+    webauthn_name: String,
     compiler: Address,
     controller: Address,
     adapter: Address,
     pool: Address,
     target: Address,
-    spending_limit: Address,
     guardians: std::vec::Vec<Address>,
     circuit_id: BytesN<32>,
     nonce: Cell<i64>,
@@ -335,8 +364,36 @@ fn world() -> World {
     };
     let compiler = content("perch-doc-compiler");
     content("perch-interpreter");
-    let spending_limit = content("perch-spending-limit");
-    let webauthn = content("perch-webauthn-verifier");
+    content("perch-spending-limit");
+    // `perch/verifiers`: the stack's registry code at the address the
+    // account, the compiler and the factory derive, and the WebAuthn verifier
+    // published and `deploy_stateless`'d through it, as a deployment does. A
+    // document names the verifier, which the compiler resolves through the
+    // registry's own `fetch_hash`.
+    let verifiers = perch_smart_account::verifier_registry(&env);
+    let manager = Address::generate(&env);
+    env.register_at(
+        &verifiers,
+        stack.wasm["perch-constructorless-registry"].as_slice(),
+        (
+            Address::generate(&env),
+            manager.clone(),
+            Address::generate(&env),
+        ),
+    );
+    let webauthn_version = stack.versions["perch-webauthn-verifier"].clone();
+    let webauthn = {
+        let name = soroban_sdk::String::from_str(&env, "perch-webauthn-verifier");
+        let version = soroban_sdk::String::from_str(&env, &webauthn_version);
+        let hash = env
+            .deployer()
+            .upload_contract_wasm(stack.wasm["perch-webauthn-verifier"].as_slice());
+        env.mock_all_auths();
+        let reg =
+            perch_constructorless_registry::ConstructorlessRegistryClient::new(&env, &verifiers);
+        reg.publish_hash(&name, &manager, &hash, &version);
+        reg.deploy_stateless(&name, &Some(version), &None)
+    };
     let pool = content("perch-zk-pool");
     let adapter = content("perch-zk-adapter");
     let controller = content("perch-recovery");
@@ -353,12 +410,12 @@ fn world() -> World {
         stack,
         factory,
         webauthn,
+        webauthn_name: format!("perch-webauthn-verifier@{webauthn_version}"),
         compiler,
         controller,
         adapter,
         pool,
         target,
-        spending_limit,
         guardians,
         circuit_id,
         nonce: Cell::new(0),
@@ -442,18 +499,7 @@ impl World {
     }
 
     fn find_rule(&self, account: &Address, name: &str) -> Option<u32> {
-        let next: u32 = self.env.as_contract(account, || {
-            self.env
-                .storage()
-                .instance()
-                .get(&SmartAccountStorageKey::NextId)
-                .unwrap_or(0)
-        });
-        let client = PerchAccountClient::new(&self.env, account);
-        let wanted = soroban_sdk::String::from_str(&self.env, name);
-        (0..next)
-            .rev()
-            .find(|id| matches!(client.try_get_context_rule(id), Ok(Ok(r)) if r.name == wanted))
+        support::newest_rule(&self.env, account, name)
     }
 
     /// `key`'s passkey authorization of `root` through the rule `rule`.
@@ -588,8 +634,9 @@ impl World {
             .unwrap_or_default();
         let signer = |id: &str, key: &SoftPasskey| {
             format!(
-                r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
                 strkey(&self.webauthn),
+                self.webauthn_name,
                 hex(&key.key_data())
             )
         };
@@ -720,8 +767,8 @@ impl World {
 
     /// The footprint RPC simulation declares for `root` authorized by
     /// `entry`, on the current ledger: its read-only and read-write key
-    /// counts, or why the simulated call failed. Runs the call in recording mode on a fresh host over a
-    /// snapshot of this ledger (`e2e_invoke`, what simulation runs), so the
+    /// counts, or why the simulated call failed. Runs the call in recording
+    /// mode on a fresh host over a snapshot of this ledger (`e2e_invoke`, what simulation runs), so the
     /// test environment's own metering plays no part.
     fn simulated_footprint(
         &self,
@@ -940,10 +987,11 @@ impl World {
 // ---------------------------------------------------------------------------
 
 /// A document's shape: `signers` passkey signers (the owner first), then
-/// the rules: `admin`, `target` (the owner's activity rule, with the
-/// interpreter), `both` rules with both policies (the interpreter, from a
-/// 1-of-1 threshold and an argument constraint, and a spending cap),
-/// `interp` with the interpreter alone, and `plain` with none.
+/// the rules: `admin`, `target` (the owner's activity rule, with a program),
+/// `both` rules with both a program (from a 1-of-1 threshold and an argument
+/// constraint) and a spending cap, `interp` with a program alone, and
+/// `plain` with neither. A program and a cap are both parts of the rule's
+/// stored rule-eval rule.
 #[derive(Clone, Copy, Debug)]
 struct Shape {
     signers: usize,
@@ -989,10 +1037,10 @@ impl World {
     /// The document of `shape` over `keys`, recovery replacing every
     /// signer, with `values` strings in a second argument constraint of the
     /// first rule after `target`, and `pad` bytes spread over the names of
-    /// the rules after `target` (each at most OZ's `MAX_NAME_SIZE`). With `with_recovery`
-    /// false: the same document
-    /// without its recovery member (a compromise baseline, to which the
-    /// target adds the member back).
+    /// the rules after `target` (each at most the account's `MAX_NAME_SIZE`).
+    /// With `with_recovery` false: the same document without its recovery
+    /// member (a compromise baseline, to which the target adds the member
+    /// back).
     fn shaped_json(
         &self,
         keys: &[SoftPasskey],
@@ -1007,10 +1055,17 @@ impl World {
         let (reprogram, recap) = REPARAM.with(Cell::get);
         let function = if reprogram { "protectee" } else { "protected" };
         let limit = if recap { "11" } else { "10" };
-        let scope = format!(
+        let mut scope = format!(
             r#""scope":{{"type":"contract","address":"{}"}}"#,
             strkey(&self.target)
         );
+        if ROOT_CONDITIONS.with(Cell::get) {
+            scope.push_str(&format!(
+                r#","auth-root":{{"contract":"{}","function":"{}"}}"#,
+                strkey(&self.target),
+                "x".repeat(32)
+            ));
+        }
         // Rule `k` (0 is `target`) names `fan` signers starting at
         // `k * fan`, wrapping, so every signer is some rule's, and
         // `target` starts with the owner.
@@ -1032,8 +1087,9 @@ impl World {
             .zip(keys)
             .map(|(id, key)| {
                 format!(
-                    r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                    r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
                     strkey(&self.webauthn),
+                    self.webauthn_name,
                     hex(&key.key_data())
                 )
             })
@@ -1662,32 +1718,43 @@ fn the_stack_compiler_hashes_the_canonical_recovery_text() {
 }
 
 /// One built account and factory, unchanged, under several networks: each
-/// resolves `perch/constructorless` under that network's own Stellar Registry
-/// root, and the content addresses of the stack's own tier-0 bytes there. The
-/// registries are written out here, not derived (`registry_path.rs` derives
-/// them hop by hop).
+/// resolves `perch/constructorless` and `perch/verifiers` under that
+/// network's own Stellar Registry root, the stack's own infra bytes at their
+/// content addresses in the first, and its WebAuthn verifier's in the
+/// second. The registries are written out here, not derived
+/// (`registry_path.rs` derives them hop by hop), so a rehearsal's stack,
+/// built from dev registry paths, fails it by design: run the suite on one
+/// with `--skip one_build_resolves_each_networks_own_registry`.
 #[test]
 #[ignore = "needs the built stack"]
 fn one_build_resolves_each_networks_own_registry() {
     use perch_smart_account::InfraPins;
-    const NETWORKS: [(&str, &str); 3] = [
+    const NETWORKS: [(&str, &str, &str); 3] = [
         (
             "Test SDF Network ; September 2015",
             "CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM",
+            "CCHJ7RWPMO33JB5PS74B64N4LVTWCGLEMH5IAKYCV32X56MXGYLHN5HW",
         ),
         (
             "Public Global Stellar Network ; September 2015",
             "CC236AK2RX7MUO7BV7JYDDW5KHZ3X7YYJOJKCVDC543BQBNNSUCZB7NN",
+            "CCDCKRUV4W4DQYBWFWT4FNQ2QXQPGUQ7EXOZHIHSSLB6YJHMLHPMGDPH",
         ),
         (
             "Test SDF Future Network ; October 2022",
             "CBPWEPHLO2QDXWMWMHLOWCLRKQT24EFH7GYW6G3UOFY45RYOHS32A5JP",
+            "CCARW6UKQLFDEJZHML2QTHFJNL4RKSSY6JEUCAC4IX5RJ3GTZ75SOGXW",
         ),
     ];
     let stack = load_stack();
     // build-stack.sh builds for one network's registry; the bytes are the
     // same on every network.
-    assert!(NETWORKS.iter().any(|(_, r)| *r == stack.registry));
+    assert!(
+        NETWORKS.iter().any(|(_, r, _)| *r == stack.registry),
+        "the stack was built for {}, no canonical registry: a rehearsal's stack \
+         (--skip one_build_resolves_each_networks_own_registry)",
+        stack.registry
+    );
     let env = Env::new_with_config(EnvTestConfig {
         capture_snapshot_at_drop: false,
     });
@@ -1699,14 +1766,15 @@ fn one_build_resolves_each_networks_own_registry() {
     let account = factory.create(&BytesN::from_array(&env, &[7; 32]), &admin);
     let account = PerchAccountClient::new(&env, &account);
 
-    for (passphrase, registry) in NETWORKS {
+    for (passphrase, registry, verifiers) in NETWORKS {
         let id = env
             .crypto()
             .sha256(&Bytes::from_slice(&env, passphrase.as_bytes()))
             .to_array();
         env.ledger().with_mut(|l| l.network_id = id);
         let registry = Address::from_str(&env, registry);
-        let content = |pkg: &str| {
+        let verifiers = Address::from_str(&env, verifiers);
+        let content_in = |registry: &Address, pkg: &str| {
             let hash = env
                 .crypto()
                 .sha256(&Bytes::from_slice(&env, &stack.wasm[pkg]))
@@ -1715,6 +1783,7 @@ fn one_build_resolves_each_networks_own_registry() {
                 .with_address(registry.clone(), hash)
                 .deployed_address()
         };
+        let content = |pkg: &str| content_in(&registry, pkg);
         assert_eq!(
             account.infra(),
             InfraPins {
@@ -1726,7 +1795,7 @@ fn one_build_resolves_each_networks_own_registry() {
         );
         assert_eq!(
             factory.webauthn_verifier(),
-            content("perch-webauthn-verifier"),
+            content_in(&verifiers, "perch-webauthn-verifier"),
             "{passphrase}"
         );
     }
@@ -1915,16 +1984,17 @@ fn guardian_protected_compromise_restores_the_baseline_and_revokes_the_thief() {
 
 /// The costliest document the caps admit: every signer a passkey some rule
 /// names (as many per rule as OZ allows), and every rule but `admin` and
-/// `target` carrying both policies. Each named signer is an OZ registry
-/// entry and a registration event, each policy an install and an
-/// uninstall: what a completion's footprint, events, and memory grow with.
+/// `target` carrying a program and a cap. Each named signer is an OZ
+/// registry entry and a registration event, and each rule a stored
+/// rule-eval rule: what a completion's footprint, events, and memory grow
+/// with.
 fn worst_shape() -> Shape {
     Shape {
         signers: MAX_DOC_SIGNERS as usize,
         both: MAX_DOC_RULES - 2,
         interp: 0,
         plain: 0,
-        fan: (MAX_DOC_SIGNERS as usize).min(OZ_MAX_SIGNERS as usize),
+        fan: (MAX_DOC_SIGNERS as usize).min(MAX_SIGNERS as usize),
         tag: "",
     }
 }
@@ -2056,10 +2126,17 @@ impl Thief {
 /// every rule to be removed and added; keeping names while changing every
 /// program, cap, or both forces every policy to be reinstalled whichever
 /// path the reconcile takes. All are measured.
+///
+/// The thief also grants itself [`THIEF_GRANTS`] grant documents, and the
+/// owner had one of its own: the completion wipes them all, and its cost
+/// must not depend on them (spec §7.6). The completion is measured twice:
+/// on a host forked from the ledger, as one network transaction (the
+/// budgeted row), and on the long-lived host.
 fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Thief) {
     let thief_tag = variant.tag();
     let keys = passkeys(seed, shape.signers);
     let a = w.new_account(passkeys(seed, 1).swap_remove(0));
+    let token = w.funded_token(&a);
     let zk1 = Zk {
         secret: field(&format!("worst compromise {seed} 1")),
         id: field(&format!("worst compromise id {seed} 1")),
@@ -2080,6 +2157,8 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Th
         &w.shaped_doc(&keys, &rec, shape, bytes, true),
         0
     ));
+    // The owner's own grant, from before the theft.
+    assert!(w.try_apply_grant(&a, &keys[0], 500, &grant_doc(w, &token, &[(900, 100)])));
 
     let thief = passkeys(seed + 1, shape.signers);
     let stolen = Shape {
@@ -2099,6 +2178,25 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Th
         ),
         &w.env,
     );
+    let (docs, per) = THIEF_GRANTS.with(Cell::get);
+    let mut thief_grant = None;
+    for s in 0..docs {
+        let first = 2000 + s as usize * per;
+        let grants: std::vec::Vec<(usize, u32)> =
+            (first..first + per).map(|i| (i, 1_000)).collect();
+        assert!(w.try_apply_grant(&a, &thief[0], s, &grant_doc(w, &token, &grants)));
+        report(
+            &format!("thief apply_grant {s} ({per} grants, long-lived host)"),
+            &w.env,
+        );
+        thief_grant = Some((first, w.grant_rule_id(&a, s, &format!("g{first:03}"))));
+    }
+    if let Some((i, id)) = thief_grant {
+        assert!(
+            w.spend_id(&a, &gkey(i), &token, 1, id),
+            "a thief grant works before recovery"
+        );
+    }
     w.ctl().publish_baseline(&a.address, &baseline);
     report(&label(shape, "publish_baseline"), &w.env);
 
@@ -2124,19 +2222,65 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Th
     w.guardian(1, &a, attempt, EvidenceDomain::Initiate);
     assert!(!w.activity_via(&a, &thief[0], &thief_rule), "frozen");
     w.advance(DELAY);
-    assert!(w.try_complete(&a, &target));
-    report(
-        &label(
-            shape,
-            &format!("completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; {how})"),
-        ),
-        &w.env,
+    let filler = FILLER.with(Cell::get);
+    if filler > 0 {
+        w.env.as_contract(&w.target, || {
+            for i in 0..filler {
+                w.env
+                    .storage()
+                    .persistent()
+                    .set(&(Symbol::new(&w.env, "fill"), i), &i);
+            }
+        });
+    }
+    let what = format!(
+        "completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; {how}; {docs} thief grant documents of {per})"
     );
+    // Budgeted on a forked host, which holds only what the transaction
+    // touches. The long-lived host also holds every entry earlier calls
+    // wrote, the thief's grant documents included, which inflates its instructions
+    // and memory alone; its row is reported, unbudgeted, without the shape
+    // `cap-sweep.py` tabulates (`budgets.md`, "Grant documents").
+    assert!(w.fork_complete(&label(shape, &what), &a, &target));
+    assert!(w.try_complete(&a, &target));
+    report_unbudgeted(&format!("long-lived host: {what}"), &w.env);
     assert!(w.all_revoked(&a, &keys), "every replaced baseline key");
     assert!(w.all_revoked(&a, &thief), "every key the thief added");
     assert!(w.activity(&a, &new_keys[0]));
     assert!(!w.activity(&a, &keys[0]));
     assert!(!w.activity_via(&a, &thief[0], &thief_rule));
+
+    // Every grant document is wiped, the thief's and the owner's.
+    assert_eq!(w.account(&a).grant_generation(), 1);
+    if let Some((i, id)) = thief_grant {
+        assert!(
+            !w.spend_id(&a, &gkey(i), &token, 1, id),
+            "a wiped thief grant"
+        );
+    }
+    let owner_grant = w.grant_rule_id(&a, 500, "g900");
+    assert!(
+        !w.spend_id(&a, &gkey(900), &token, 1, owner_grant),
+        "the owner's too"
+    );
+    // Anyone collects a wiped grant document. The new owner re-grants over its own,
+    // to a fresh session key: the wiped grant document's key is never named again.
+    if docs > 0 {
+        w.account(&a).gc_grant(&0);
+        report(
+            &format!("gc_grant of a wiped grant document ({per} grants)"),
+            &w.env,
+        );
+    }
+    assert!(!w.try_apply_grant(&a, &new_keys[0], 500, &grant_doc(w, &token, &[(900, 100)])));
+    assert!(w.try_apply_grant(&a, &new_keys[0], 500, &grant_doc(w, &token, &[(901, 100)])));
+    report(
+        "apply_grant over a wiped grant document (one grant re-granted to a fresh key)",
+        &w.env,
+    );
+    let regrant = w.grant_rule_id(&a, 500, "g901");
+    assert!(w.spend_id(&a, &gkey(901), &token, 1, regrant));
+    assert!(!w.spend_id(&a, &gkey(900), &token, 1, owner_grant));
 }
 
 /// A `Protected` `Combined` reconfiguration of a `shape` document: the
@@ -2545,8 +2689,9 @@ impl World {
             .iter()
             .map(|(id, key)| {
                 format!(
-                    r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                    r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
                     strkey(&self.webauthn),
+                    self.webauthn_name,
                     hex(key)
                 )
             })
@@ -2622,16 +2767,10 @@ impl World {
         ok
     }
 
-    /// The spending-limit policy's window for rule `id`, if it has one.
-    fn window(&self, a: &Acct, id: u32) -> Option<SpendingLimitData> {
-        self.env.as_contract(&self.spending_limit, || {
-            self.env
-                .storage()
-                .persistent()
-                .get(&SpendingLimitStorageKey::AccountContext(
-                    a.address.clone(),
-                    id,
-                ))
+    /// The account's spending record for rule `id`, if it has one.
+    fn window(&self, a: &Acct, id: u32) -> Option<perch_rule_eval::StoredRecord> {
+        self.env.as_contract(&a.address, || {
+            perch_smart_account::testutils::spend_record(&self.env, id)
         })
     }
 
@@ -2903,4 +3042,1296 @@ fn cap_sweep() {
             flow(&w, shape, bytes, seed);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Grant documents: grant lifecycle, grant document size, many grant documents, and recovery
+// with thief grant documents, single document against split (`budgets.md`, "Grant
+// documents")
+// ---------------------------------------------------------------------------
+
+/// A grant: one session passkey on an `all` rule of it alone, scoped to
+/// `token`, allowed `transfer`, with a spending cap.
+fn grant_rule(name: &str, signer: &str, token: &Address, limit: u32) -> String {
+    format!(
+        r#"{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["{signer}"]}},"functions":["transfer"],"cap":{{"limit":"{limit}","period-ledgers":1000}}}}"#,
+        strkey(token)
+    )
+}
+
+fn passkey_decl(w: &World, id: &str, key: &SoftPasskey) -> String {
+    format!(
+        r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
+        strkey(&w.webauthn),
+        w.webauthn_name,
+        hex(&key.key_data())
+    )
+}
+
+/// The session key of grant `i`.
+fn gkey(i: usize) -> SoftPasskey {
+    let mut s = [0x47; 32];
+    s[1] = (i % 256) as u8;
+    s[2] = (i / 256) as u8;
+    canonical_passkey(s)
+}
+
+/// The single-document shape: `admin` for `owner`, then one grant per
+/// entry of `grants` (`(index, limit)`), each with its own session key.
+fn single_doc(w: &World, owner: &SoftPasskey, token: &Address, grants: &[(usize, u32)]) -> Bytes {
+    let mut signers = std::vec![passkey_decl(w, "owner", owner)];
+    let mut rules = std::vec![
+        r#"{"name":"admin","scope":{"type":"self-admin"},"principals":{"type":"all","signers":["owner"]}}"#.to_string(),
+    ];
+    for (i, limit) in grants {
+        signers.push(passkey_decl(w, &format!("k{i:03}"), &gkey(*i)));
+        rules.push(grant_rule(
+            &format!("g{i:03}"),
+            &format!("k{i:03}"),
+            token,
+            *limit,
+        ));
+    }
+    let json = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{}]}}"#,
+        signers.join(","),
+        rules.join(",")
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+/// A grant document: the grants alone, no admin rule, no recovery.
+fn grant_doc(w: &World, token: &Address, grants: &[(usize, u32)]) -> Bytes {
+    let mut signers = std::vec![];
+    let mut rules = std::vec![];
+    for (i, limit) in grants {
+        signers.push(passkey_decl(w, &format!("k{i:03}"), &gkey(*i)));
+        rules.push(grant_rule(
+            &format!("g{i:03}"),
+            &format!("k{i:03}"),
+            token,
+            *limit,
+        ));
+    }
+    let json = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{}]}}"#,
+        signers.join(","),
+        rules.join(",")
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+impl World {
+    fn passkey_entry_id(
+        &self,
+        account: &Address,
+        key: &SoftPasskey,
+        rule_id: u32,
+        root: SorobanAuthorizedInvocation,
+    ) -> SorobanAuthorizationEntry {
+        auth_entry(
+            &self.env,
+            account,
+            &self.webauthn,
+            key,
+            rule_id,
+            self.next_nonce(),
+            self.ledger() + 1_000_000,
+            root,
+        )
+    }
+
+    /// `apply_grant(grant, doc)` signed by `key` through `admin`.
+    fn try_apply_grant(&self, a: &Acct, key: &SoftPasskey, grant: u32, doc: &Bytes) -> bool {
+        let root = self.invocation(
+            &a.address,
+            "apply_grant",
+            std::vec![self.sc(grant), self.sc(doc.clone())],
+        );
+        self.env
+            .set_auths(&[self.passkey_entry(&a.address, key, "admin", root)]);
+        let ok = matches!(self.account(a).try_apply_grant(&grant, doc), Ok(Ok(_)));
+        self.env.set_auths(&[]);
+        ok
+    }
+
+    fn try_remove_grant(&self, a: &Acct, key: &SoftPasskey, grant: u32) -> bool {
+        let root = self.invocation(&a.address, "remove_grant", std::vec![self.sc(grant)]);
+        self.env
+            .set_auths(&[self.passkey_entry(&a.address, key, "admin", root)]);
+        let ok = matches!(self.account(a).try_remove_grant(&grant), Ok(Ok(_)));
+        self.env.set_auths(&[]);
+        ok
+    }
+
+    /// The id of the grant rule `name` in `grant`.
+    fn grant_rule_id(&self, a: &Acct, grant: u32, name: &str) -> u32 {
+        let wanted = soroban_sdk::String::from_str(&self.env, name);
+        self.account(a)
+            .grant(&grant)
+            .expect("grant exists")
+            .rules
+            .iter()
+            .find(|r| r.name == wanted)
+            .expect("rule exists")
+            .id
+    }
+
+    /// `key` transfers `amount` of `token` through rule `rule_id`.
+    fn spend_id(
+        &self,
+        a: &Acct,
+        key: &SoftPasskey,
+        token: &Address,
+        amount: i128,
+        rule_id: u32,
+    ) -> bool {
+        let to = self.guardians[1].clone();
+        let root = self.invocation(
+            token,
+            "transfer",
+            std::vec![
+                self.sc(a.address.clone()),
+                self.sc(to.clone()),
+                self.sc(amount)
+            ],
+        );
+        self.env
+            .set_auths(&[self.passkey_entry_id(&a.address, key, rule_id, root)]);
+        let ok = TokenClient::new(&self.env, token)
+            .try_transfer(&a.address, &to, &amount)
+            .is_ok();
+        self.env.set_auths(&[]);
+        ok
+    }
+
+    /// The account's ledger footprint at rest: every contract-data entry
+    /// the account owns, plus any policy state the interpreter and the
+    /// spending limit keep for it, as (entries, XDR bytes) per key kind.
+    fn at_rest(&self, a: &Acct, label: &str) {
+        use soroban_sdk::xdr::{LedgerEntryData, LedgerKey, Limits, WriteXdr};
+        let snapshot = self.env.to_ledger_snapshot();
+        let me: soroban_sdk::xdr::ScAddress = a.address.clone().into();
+        let mut by: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+        let mut total = 0usize;
+        for (key, (entry, _)) in snapshot.ledger_entries.iter() {
+            let LedgerKey::ContractData(k) = &**key else {
+                continue;
+            };
+            let LedgerEntryData::ContractData(_) = &entry.data else {
+                continue;
+            };
+            let size = entry.to_xdr(Limits::none()).unwrap().len();
+            let rendered = format!("{:?}", k.key);
+            let mine = k.contract == me;
+            let policy_state = !mine && rendered.contains(&format!("{:?}", me));
+            if !mine && !policy_state {
+                continue;
+            }
+            if let ScVal::LedgerKeyNonce(_) = &k.key {
+                continue;
+            }
+            let kind = match &k.key {
+                ScVal::LedgerKeyContractInstance => "instance".to_string(),
+                ScVal::Vec(Some(v)) => match v.first() {
+                    Some(ScVal::Symbol(s)) => s.to_string(),
+                    _ => "vec".to_string(),
+                },
+                ScVal::Symbol(s) => s.to_string(),
+                _ => "other".to_string(),
+            };
+            let kind = if policy_state {
+                format!("policy:{kind}")
+            } else {
+                kind
+            };
+            let slot = by.entry(kind).or_default();
+            slot.0 += 1;
+            slot.1 += size;
+            total += size;
+        }
+        // Mainnet rent at the floor (1 000 stroops per KB, denominator 1 215,
+        // 6 307 200 ledgers a year): `rent_fee_for_size_and_ledgers`.
+        let rent_xlm_yr = total as f64 * 1000.0 * 6_307_200.0 / (1024.0 * 1215.0) / 1e7;
+        let kinds: serde_json::Map<String, serde_json::Value> = by
+            .iter()
+            .map(|(k, (n, b))| (k.clone(), serde_json::json!([n, b])))
+            .collect();
+        println!(
+            "\n{}",
+            serde_json::json!({"at_rest": label, "bytes": total, "rent_xlm_per_year": rent_xlm_yr, "by_kind": kinds})
+        );
+    }
+}
+
+/// Whether this stack's account has the scoped tier.
+fn split_stack(w: &World, a: &Acct) -> bool {
+    w.account(a).try_grant_generation().is_ok()
+}
+
+/// Grant lifecycle and scoped authorization, single document vs split, as
+/// the account holds `k` grants. Each row is one transaction.
+#[test]
+#[ignore = "needs the built stack"]
+fn docsplit_grant_lifecycle() {
+    let ks: std::vec::Vec<usize> = std::env::var("PERCH_SPLIT_KS")
+        .ok()
+        .map(|s| s.split(',').map(|x| x.parse().unwrap()).collect())
+        .unwrap_or_else(|| std::vec![0, 2, 6]);
+    for k in ks {
+        // --- single document -------------------------------------------
+        if k < MAX_DOC_SIGNERS as usize && k + 2 <= MAX_DOC_RULES as usize {
+            let w = world();
+            let owner = canonical_passkey([0x51; 32]);
+            let a = w.new_account(canonical_passkey([0x51; 32]));
+            let token = w.funded_token(&a);
+            let base: std::vec::Vec<(usize, u32)> = (0..k).map(|i| (i, 100)).collect();
+            if k > 0 {
+                assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &base), 0));
+            }
+            let mut added = base.clone();
+            added.push((k, 100));
+            assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &added), 0));
+            report(
+                &format!("single: add a grant via apply_doc [{k} grants before]"),
+                &w.env,
+            );
+            let id = w.rule_id(&a.address, &format!("g{k:03}"));
+            assert!(w.spend_id(&a, &gkey(k), &token, 5, id));
+            report(
+                &format!("single: capped transfer through a grant [{} grants]", k + 1),
+                &w.env,
+            );
+            let mut updated = base.clone();
+            updated.push((k, 200));
+            assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &updated), 0));
+            report(
+                &format!(
+                    "single: change a grant's cap via apply_doc [{} grants]",
+                    k + 1
+                ),
+                &w.env,
+            );
+            let new_owner = canonical_passkey([0x52; 32]);
+            assert!(w.try_apply(&a, &owner, &single_doc(&w, &new_owner, &token, &updated), 0));
+            report(
+                &format!(
+                    "single: rotate the owner key via apply_doc [{} grants]",
+                    k + 1
+                ),
+                &w.env,
+            );
+            assert!(w.try_apply(
+                &a,
+                &new_owner,
+                &single_doc(&w, &new_owner, &token, &base),
+                0
+            ));
+            report(
+                &format!(
+                    "single: revoke a grant via apply_doc [{} grants before]",
+                    k + 1
+                ),
+                &w.env,
+            );
+            w.at_rest(&a, &format!("single, {k} grants"));
+            assert!(!w.spend_id(&a, &gkey(k), &token, 5, id), "revoked");
+        }
+
+        // --- split -------------------------------------------------------
+        let w = world();
+        let owner = canonical_passkey([0x51; 32]);
+        let a = w.new_account(canonical_passkey([0x51; 32]));
+        if !split_stack(&w, &a) {
+            println!("\n{{\"case\":\"skipped\",\"why\":\"no scoped tier in this stack\"}}");
+            continue;
+        }
+        let token = w.funded_token(&a);
+        assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
+        for i in 0..k {
+            assert!(w.try_apply_grant(&a, &owner, i as u32, &grant_doc(&w, &token, &[(i, 100)])));
+        }
+        let s = k as u32;
+        assert!(w.try_apply_grant(&a, &owner, s, &grant_doc(&w, &token, &[(k, 100)])));
+        report(
+            &format!("split: add a grant via apply_grant [{k} grant documents before]"),
+            &w.env,
+        );
+        let id = w.grant_rule_id(&a, s, &format!("g{k:03}"));
+        assert!(w.spend_id(&a, &gkey(k), &token, 5, id));
+        report(
+            &format!(
+                "split: capped transfer through a grant [{} grant documents]",
+                k + 1
+            ),
+            &w.env,
+        );
+        assert!(w.try_apply_grant(&a, &owner, s, &grant_doc(&w, &token, &[(k, 200)])));
+        report(
+            &format!(
+                "split: change a grant's cap via apply_grant [{} grant documents]",
+                k + 1
+            ),
+            &w.env,
+        );
+        let new_owner = canonical_passkey([0x52; 32]);
+        assert!(w.try_apply(&a, &owner, &single_doc(&w, &new_owner, &token, &[]), 0));
+        report(
+            &format!(
+                "split: rotate the owner key via apply_doc [{} grant documents]",
+                k + 1
+            ),
+            &w.env,
+        );
+        assert!(
+            w.spend_id(&a, &gkey(k), &token, 5, id),
+            "grant documents survive an admin change"
+        );
+        assert!(w.try_remove_grant(&a, &new_owner, s));
+        report(
+            &format!(
+                "split: revoke a grant via remove_grant [{} grant documents before]",
+                k + 1
+            ),
+            &w.env,
+        );
+        w.at_rest(&a, &format!("split, {k} grant documents"));
+        assert!(!w.spend_id(&a, &gkey(k), &token, 5, id), "revoked");
+        // An admin auth (`execute`) with grant documents installed.
+        assert!(w.execute(&a, &new_owner));
+        report(
+            &format!("split: execute through admin [{k} grant documents]"),
+            &w.env,
+        );
+    }
+}
+
+/// One grant document of `n` grants: added fresh, then every rule
+/// replaced (renamed), on a stack whose compiler caps admit `n`.
+#[test]
+#[ignore = "sizing tool: PERCH_SPLIT_NS=... (more than 8 grants needs a compiler with raised caps)"]
+fn docsplit_grant_size_sweep() {
+    let ns: std::vec::Vec<usize> = std::env::var("PERCH_SPLIT_NS")
+        .ok()
+        .map(|s| s.split(',').map(|x| x.parse().unwrap()).collect())
+        .unwrap_or_else(|| std::vec![1, 4, 8]);
+    UNBUDGETED.with(|u| u.set(true));
+    for n in ns {
+        let w = world();
+        w.env.cost_estimate().disable_resource_limits();
+        let owner = canonical_passkey([0x53; 32]);
+        let a = w.new_account(canonical_passkey([0x53; 32]));
+        assert!(split_stack(&w, &a), "needs a stack with grant documents");
+        let token = w.funded_token(&a);
+        assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
+        let grants: std::vec::Vec<(usize, u32)> = (0..n).map(|i| (i, 100)).collect();
+        let doc = grant_doc(&w, &token, &grants);
+        assert!(w.try_apply_grant(&a, &owner, 0, &doc), "apply_grant of {n}");
+        report(&format!("sweep: apply_grant, {n} grants added"), &w.env);
+        let id = w.grant_rule_id(&a, 0, "g000");
+        assert!(w.spend_id(&a, &gkey(0), &token, 5, id));
+        report(
+            &format!("sweep: capped transfer [{n} grants in the grant document]"),
+            &w.env,
+        );
+        // Every grant renamed and rekeyed: every rule replaced.
+        let renamed: std::vec::Vec<(usize, u32)> = (0..n).map(|i| (i + 1000, 100)).collect();
+        assert!(w.try_apply_grant(&a, &owner, 0, &grant_doc(&w, &token, &renamed)));
+        report(&format!("sweep: apply_grant, {n} grants replaced"), &w.env);
+        assert!(w.try_remove_grant(&a, &owner, 0));
+        report(&format!("sweep: remove_grant, {n} grants"), &w.env);
+    }
+}
+
+/// Many grant documents installed: authorization stays flat.
+#[test]
+#[ignore = "needs the built stack"]
+fn docsplit_many_grants() {
+    let total: usize = std::env::var("PERCH_SPLIT_GRANTS")
+        .ok()
+        .map(|s| s.parse().unwrap())
+        .unwrap_or(8);
+    let w = world();
+    let owner = canonical_passkey([0x54; 32]);
+    let a = w.new_account(canonical_passkey([0x54; 32]));
+    assert!(split_stack(&w, &a), "needs a stack with grant documents");
+    let token = w.funded_token(&a);
+    assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
+    let per = 8usize;
+    for s in 0..total {
+        let grants: std::vec::Vec<(usize, u32)> =
+            (s * per..(s + 1) * per).map(|i| (i, 100)).collect();
+        assert!(w.try_apply_grant(&a, &owner, s as u32, &grant_doc(&w, &token, &grants)));
+    }
+    report_unbudgeted(
+        &format!(
+            "many (long-lived host): apply_grant of the {total}th grant document of {per} grants"
+        ),
+        &w.env,
+    );
+    let last = (total * per - 1) as usize;
+    let id = w.grant_rule_id(&a, (total - 1) as u32, &format!("g{last:03}"));
+    assert!(w.fork_spend(
+        &format!(
+            "many: capped transfer, last grant document [{} rules installed]",
+            total * per + 1
+        ),
+        &a,
+        &gkey(last),
+        &token,
+        5,
+        id
+    ));
+    let id0 = w.grant_rule_id(&a, 0, "g000");
+    assert!(w.fork_spend(
+        &format!(
+            "many: capped transfer, first grant document [{} rules installed]",
+            total * per + 1
+        ),
+        &a,
+        &gkey(0),
+        &token,
+        5,
+        id0
+    ));
+    let new_owner = canonical_passkey([0x55; 32]);
+    assert!(w.fork_apply_doc(
+        &format!(
+            "many: rotate the owner key [{} rules installed]",
+            total * per + 1
+        ),
+        &a,
+        &owner,
+        &single_doc(&w, &new_owner, &token, &[])
+    ));
+    let grants: std::vec::Vec<(usize, u32)> =
+        (total * per..total * per + 1).map(|i| (i, 100)).collect();
+    assert!(w.fork_apply_grant(
+        &format!(
+            "many: add a one-grant document [{} rules installed]",
+            total * per + 1
+        ),
+        &a,
+        &owner,
+        total as u32,
+        &grant_doc(&w, &token, &grants)
+    ));
+    assert!(w.spend_id(&a, &gkey(last), &token, 5, id));
+    assert!(w.execute(&a, &owner));
+    report(
+        &format!(
+            "many: execute through admin [{} rules installed]",
+            total * per + 1
+        ),
+        &w.env,
+    );
+    w.at_rest(&a, &format!("split, {total} grant documents of {per}"));
+}
+
+/// The compromise completion against the grant documents a thief installs
+/// and the account document's shape: [`worst_compromise`] over each
+/// `signers,both,interp,plain,fan,bytes,thief,docs,per` of
+/// `PERCH_SPLIT_RECOVERY` (`;`-separated; thief 0 keeps every name, 1
+/// renames every rule, 2 reprograms every rule), with `PERCH_SPLIT_FILLER`
+/// unrelated entries written before the completion as the host-growth
+/// control. Unbudgeted: a sizing tool (`budgets.md`, "Grant documents").
+#[test]
+#[ignore = "sizing tool: PERCH_SPLIT_RECOVERY=..."]
+fn docsplit_compromise_completion() {
+    let spec = std::env::var("PERCH_SPLIT_RECOVERY")
+        .unwrap_or_else(|_| "8,0,1,0,8,4096,2,3,8".to_string());
+    let filler: u32 = std::env::var("PERCH_SPLIT_FILLER")
+        .ok()
+        .map(|s| s.parse().unwrap())
+        .unwrap_or(0);
+    UNBUDGETED.with(|u| u.set(true));
+    FILLER.with(|f| f.set(filler));
+    for (n, item) in spec.split(';').filter(|s| !s.is_empty()).enumerate() {
+        let v: std::vec::Vec<usize> = item.split(',').map(|x| x.trim().parse().unwrap()).collect();
+        let shape = Shape {
+            signers: v[0],
+            both: v[1] as u32,
+            interp: v[2] as u32,
+            plain: v[3] as u32,
+            fan: v[4],
+            tag: "",
+        };
+        let thief = match v[6] {
+            0 => Thief::KeepNames,
+            1 => Thief::Rename,
+            _ => Thief::Reprogram,
+        };
+        THIEF_GRANTS.with(|t| t.set((v[7] as u32, v[8])));
+        let w = world();
+        w.env.cost_estimate().disable_resource_limits();
+        worst_compromise(&w, shape, v[5], 140 + 7 * n as u8, thief);
+    }
+}
+
+impl World {
+    /// `fn_name(args)` on `contract`, authorized by the entry `entry` builds
+    /// on the fork, run on a fresh host forked from this ledger: its
+    /// storage holds only what the transaction touches, as a network
+    /// transaction's does, so entries earlier calls wrote on the long-lived
+    /// host do not inflate it. Changes nothing on this host. Reports `label`.
+    fn forked(
+        &self,
+        label: &str,
+        contract: &Address,
+        fn_name: &str,
+        args: std::vec::Vec<ScVal>,
+        entry: impl FnOnce(&Env, SorobanAuthorizedInvocation) -> SorobanAuthorizationEntry,
+    ) -> bool {
+        let mut e2 = Env::from_ledger_snapshot(self.env.to_ledger_snapshot());
+        e2.set_config(EnvTestConfig {
+            capture_snapshot_at_drop: false,
+        });
+        e2.cost_estimate().budget().reset_unlimited();
+        let target = Address::from_str(&e2, &strkey(contract));
+        let root = SorobanAuthorizedInvocation {
+            function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
+                contract_address: target.clone().into(),
+                function_name: StringM::try_from(fn_name).unwrap().into(),
+                args: args.clone().try_into().unwrap(),
+            }),
+            sub_invocations: VecM::default(),
+        };
+        let entry = entry(&e2, root);
+        e2.set_auths(&[entry]);
+        let mut vals: Vec<Val> = Vec::new(&e2);
+        for a in &args {
+            vals.push_back(Val::try_from_val(&e2, a).unwrap());
+        }
+        let ok = matches!(
+            e2.try_invoke_contract::<Val, soroban_sdk::Error>(
+                &target,
+                &Symbol::new(&e2, fn_name),
+                vals
+            ),
+            Ok(Ok(_))
+        );
+        if ok {
+            report(&format!("fork: {label}"), &e2);
+        } else {
+            println!("\n{{\"fork_failed\":\"{label}\"}}");
+        }
+        ok
+    }
+
+    /// [`World::forked`], authorized by `key` through `rule_id` of `account`.
+    #[allow(clippy::too_many_arguments)]
+    fn forked_call(
+        &self,
+        label: &str,
+        account: &Address,
+        key: &SoftPasskey,
+        rule_id: u32,
+        contract: &Address,
+        fn_name: &str,
+        args: std::vec::Vec<ScVal>,
+    ) -> bool {
+        self.forked(label, contract, fn_name, args, |e2, root| {
+            auth_entry(
+                e2,
+                &Address::from_str(e2, &strkey(account)),
+                &Address::from_str(e2, &strkey(&self.webauthn)),
+                key,
+                rule_id,
+                self.next_nonce(),
+                e2.ledger().sequence() + 1_000_000,
+                root,
+            )
+        })
+    }
+
+    /// [`World::try_complete`] on a forked host.
+    fn fork_complete(&self, label: &str, a: &Acct, target: &Bytes) -> bool {
+        let args = std::vec![self.sc(target.clone()), self.sc(0u32), self.sc(None::<u64>)];
+        let address = a.address.clone();
+        self.forked(label, &a.address, "apply_doc", args, |e2, root| {
+            let mut entry = self.recovery_rule_entry(&address, root);
+            if let SorobanCredentials::Address(c) = &mut entry.credentials {
+                c.signature_expiration_ledger = e2.ledger().sequence() + 1_000_000;
+            }
+            entry
+        })
+    }
+
+    fn fork_apply_doc(&self, label: &str, a: &Acct, key: &SoftPasskey, doc: &Bytes) -> bool {
+        let admin = self.rule_id(&a.address, "admin");
+        self.forked_call(
+            label,
+            &a.address,
+            key,
+            admin,
+            &a.address,
+            "apply_doc",
+            std::vec![self.sc(doc.clone()), self.sc(0u32), self.sc(None::<u64>)],
+        )
+    }
+
+    fn fork_apply_grant(
+        &self,
+        label: &str,
+        a: &Acct,
+        key: &SoftPasskey,
+        grant: u32,
+        doc: &Bytes,
+    ) -> bool {
+        let admin = self.rule_id(&a.address, "admin");
+        self.forked_call(
+            label,
+            &a.address,
+            key,
+            admin,
+            &a.address,
+            "apply_grant",
+            std::vec![self.sc(grant), self.sc(doc.clone())],
+        )
+    }
+
+    fn fork_remove_grant(&self, label: &str, a: &Acct, key: &SoftPasskey, grant: u32) -> bool {
+        let admin = self.rule_id(&a.address, "admin");
+        self.forked_call(
+            label,
+            &a.address,
+            key,
+            admin,
+            &a.address,
+            "remove_grant",
+            std::vec![self.sc(grant)],
+        )
+    }
+
+    fn fork_spend(
+        &self,
+        label: &str,
+        a: &Acct,
+        key: &SoftPasskey,
+        token: &Address,
+        amount: i128,
+        rule_id: u32,
+    ) -> bool {
+        self.forked_call(
+            label,
+            &a.address,
+            key,
+            rule_id,
+            token,
+            "transfer",
+            std::vec![
+                self.sc(a.address.clone()),
+                self.sc(self.guardians[1].clone()),
+                self.sc(amount)
+            ],
+        )
+    }
+}
+
+/// [`docsplit_grant_lifecycle`]'s rows, each measured on a forked host.
+#[test]
+#[ignore = "needs the built stack"]
+fn docsplit_grant_lifecycle_forked() {
+    let ks: std::vec::Vec<usize> = std::env::var("PERCH_SPLIT_KS")
+        .ok()
+        .map(|s| s.split(',').map(|x| x.parse().unwrap()).collect())
+        .unwrap_or_else(|| std::vec![0, 2, 6]);
+    for k in ks {
+        if k < MAX_DOC_SIGNERS as usize && k + 2 <= MAX_DOC_RULES as usize && k <= 9 {
+            let w = world();
+            let owner = canonical_passkey([0x51; 32]);
+            let a = w.new_account(canonical_passkey([0x51; 32]));
+            let token = w.funded_token(&a);
+            let base: std::vec::Vec<(usize, u32)> = (0..k).map(|i| (i, 100)).collect();
+            if k > 0 {
+                assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &base), 0));
+            }
+            let mut added = base.clone();
+            added.push((k, 100));
+            let doc = single_doc(&w, &owner, &token, &added);
+            assert!(w.fork_apply_doc(
+                &format!("single: add a grant [{k} grants before]"),
+                &a,
+                &owner,
+                &doc
+            ));
+            assert!(w.try_apply(&a, &owner, &doc, 0));
+            let id = w.rule_id(&a.address, &format!("g{k:03}"));
+            assert!(w.fork_spend(
+                &format!("single: capped transfer [{} grants]", k + 1),
+                &a,
+                &gkey(k),
+                &token,
+                5,
+                id
+            ));
+            assert!(w.execute(&a, &owner));
+            report(
+                &format!("main: single: execute through admin [{} grants]", k + 1),
+                &w.env,
+            );
+            let mut updated = base.clone();
+            updated.push((k, 200));
+            let doc = single_doc(&w, &owner, &token, &updated);
+            assert!(w.fork_apply_doc(
+                &format!("single: change a grant's cap [{} grants]", k + 1),
+                &a,
+                &owner,
+                &doc
+            ));
+            assert!(w.try_apply(&a, &owner, &doc, 0));
+            let new_owner = canonical_passkey([0x52; 32]);
+            let doc = single_doc(&w, &new_owner, &token, &updated);
+            assert!(w.fork_apply_doc(
+                &format!("single: rotate the owner key [{} grants]", k + 1),
+                &a,
+                &owner,
+                &doc
+            ));
+            assert!(w.try_apply(&a, &owner, &doc, 0));
+            let doc = single_doc(&w, &new_owner, &token, &base);
+            assert!(w.fork_apply_doc(
+                &format!("single: revoke a grant [{} grants before]", k + 1),
+                &a,
+                &new_owner,
+                &doc
+            ));
+        }
+
+        let w = world();
+        let owner = canonical_passkey([0x51; 32]);
+        let a = w.new_account(canonical_passkey([0x51; 32]));
+        if !split_stack(&w, &a) {
+            continue;
+        }
+        let token = w.funded_token(&a);
+        assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
+        for i in 0..k {
+            assert!(w.try_apply_grant(&a, &owner, i as u32, &grant_doc(&w, &token, &[(i, 100)])));
+        }
+        let s = k as u32;
+        let doc = grant_doc(&w, &token, &[(k, 100)]);
+        assert!(w.fork_apply_grant(
+            &format!("split: add a grant [{k} grant documents before]"),
+            &a,
+            &owner,
+            s,
+            &doc
+        ));
+        assert!(w.try_apply_grant(&a, &owner, s, &doc));
+        let id = w.grant_rule_id(&a, s, &format!("g{k:03}"));
+        assert!(w.fork_spend(
+            &format!("split: capped transfer [{} grant documents]", k + 1),
+            &a,
+            &gkey(k),
+            &token,
+            5,
+            id
+        ));
+        assert!(w.execute(&a, &owner));
+        report(
+            &format!(
+                "main: split: execute through admin [{} grant documents]",
+                k + 1
+            ),
+            &w.env,
+        );
+        let doc = grant_doc(&w, &token, &[(k, 200)]);
+        assert!(w.fork_apply_grant(
+            &format!("split: change a grant's cap [{} grant documents]", k + 1),
+            &a,
+            &owner,
+            s,
+            &doc
+        ));
+        assert!(w.try_apply_grant(&a, &owner, s, &doc));
+        let new_owner = canonical_passkey([0x52; 32]);
+        let doc = single_doc(&w, &new_owner, &token, &[]);
+        assert!(w.fork_apply_doc(
+            &format!("split: rotate the owner key [{} grant documents]", k + 1),
+            &a,
+            &owner,
+            &doc
+        ));
+        assert!(w.try_apply(&a, &owner, &doc, 0));
+        assert!(w.fork_remove_grant(
+            &format!("split: revoke a grant [{} grant documents before]", k + 1),
+            &a,
+            &new_owner,
+            s
+        ));
+    }
+}
+
+/// The grant tier's guards, and a key that manages one grant document only.
+#[test]
+#[ignore = "needs the built stack"]
+fn docsplit_guards_and_grant_manager() {
+    let w = world();
+    let owner = canonical_passkey([0x56; 32]);
+    let a = w.new_account(canonical_passkey([0x56; 32]));
+    assert!(split_stack(&w, &a), "needs a stack with grant documents");
+    let token = w.funded_token(&a);
+    let mgr = canonical_passkey([0x57; 32]);
+    // admin for the owner, plus `mgr`: a self-scoped rule limited to
+    // `apply_grant(7, ..)`.
+    let admin_doc = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{},{}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"mgr","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["mgr"]}},"functions":["apply_grant"],"args":[{{"index":0,"pred":{{"type":"u32-eq","value":7}}}}]}}]}}"#,
+        passkey_decl(&w, "owner", &owner),
+        passkey_decl(&w, "mgr", &mgr)
+    );
+    assert!(w.try_apply(
+        &a,
+        &owner,
+        &Bytes::from_slice(&w.env, admin_doc.as_bytes()),
+        0
+    ));
+
+    // Guards: no self-admin rule, no rule scoped to the account, no recovery.
+    let selfadmin = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{{"name":"x","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["k"]}}}}]}}"#,
+        passkey_decl(&w, "k", &gkey(1))
+    );
+    assert!(
+        !w.try_apply_grant(
+            &a,
+            &owner,
+            1,
+            &Bytes::from_slice(&w.env, selfadmin.as_bytes())
+        ),
+        "self-admin refused"
+    );
+    let selfcontract = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{{"name":"x","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["k"]}}}}]}}"#,
+        passkey_decl(&w, "k", &gkey(1)),
+        strkey(&a.address)
+    );
+    assert!(
+        !w.try_apply_grant(
+            &a,
+            &owner,
+            1,
+            &Bytes::from_slice(&w.env, selfcontract.as_bytes())
+        ),
+        "a rule scoped to the account refused"
+    );
+    println!("\n{{\"guard\":\"self-admin, self-contract refused\"}}");
+
+    // The manager key: grant 7 yes; grant 8, apply_doc, execute no.
+    let mgr_entry = |fn_name: &str, args: std::vec::Vec<ScVal>| {
+        let root = w.invocation(&a.address, fn_name, args);
+        w.passkey_entry(&a.address, &mgr, "mgr", root)
+    };
+    let doc7 = grant_doc(&w, &token, &[(7, 100)]);
+    w.env.set_auths(&[mgr_entry(
+        "apply_grant",
+        std::vec![w.sc(7u32), w.sc(doc7.clone())],
+    )]);
+    assert!(
+        matches!(w.account(&a).try_apply_grant(&7, &doc7), Ok(Ok(_))),
+        "mgr manages grant 7"
+    );
+    w.env.set_auths(&[mgr_entry(
+        "apply_grant",
+        std::vec![w.sc(8u32), w.sc(doc7.clone())],
+    )]);
+    assert!(
+        w.account(&a).try_apply_grant(&8, &doc7).is_err(),
+        "mgr cannot touch grant 8"
+    );
+    let takeover = single_doc(&w, &mgr, &token, &[]);
+    w.env.set_auths(&[mgr_entry(
+        "apply_doc",
+        std::vec![w.sc(takeover.clone()), w.sc(0u32), w.sc(None::<u64>)],
+    )]);
+    assert!(
+        w.account(&a).try_apply_doc(&takeover, &0, &None).is_err(),
+        "mgr cannot apply the account document"
+    );
+    w.env.set_auths(&[]);
+    println!("\n{{\"guard\":\"scope manager confined to its grant id\"}}");
+
+    // But within its grant id the manager is unconfined: it can grant itself
+    // an uncapped transfer and move the account's tokens.
+    let drain = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{{"name":"drain","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["m"]}}}}]}}"#,
+        passkey_decl(&w, "m", &mgr),
+        strkey(&token)
+    );
+    let drain = Bytes::from_slice(&w.env, drain.as_bytes());
+    w.env.set_auths(&[mgr_entry(
+        "apply_grant",
+        std::vec![w.sc(7u32), w.sc(drain.clone())],
+    )]);
+    assert!(matches!(
+        w.account(&a).try_apply_grant(&7, &drain),
+        Ok(Ok(_))
+    ));
+    w.env.set_auths(&[]);
+    let id = w.grant_rule_id(&a, 7, "drain");
+    assert!(
+        w.spend_id(&a, &mgr, &token, 900, id),
+        "the manager moves 900 of 1 000"
+    );
+    println!("\n{{\"guard\":\"a grant manager without an envelope can grant itself any non-account authority\"}}");
+}
+
+/// A capped transfer's cost against its spending record's history length.
+/// The record keeps every spend in the window, 72 bytes each in a ledger
+/// entry of 172 bytes more, so the network's 65 536-byte entry limit holds
+/// 907 of them (below rule-eval's own bound of 1 000): the transfer after
+/// 906 spends is the costliest the window admits, and the next one fails
+/// until spends leave the window.
+#[test]
+#[ignore = "needs the built stack"]
+fn docsplit_spending_history() {
+    let w = world();
+    let owner = canonical_passkey([0x58; 32]);
+    let a = w.new_account(canonical_passkey([0x58; 32]));
+    let token = w.funded_token(&a);
+    assert!(w.try_apply(
+        &a,
+        &owner,
+        &single_doc(&w, &owner, &token, &[(0, 100_000)]),
+        0
+    ));
+    let id = w.rule_id(&a.address, "g000");
+    let mut done = 0;
+    for n in [0usize, 10, 100, 400, 906] {
+        while done < n {
+            assert!(w.spend_id(&a, &gkey(0), &token, 1, id));
+            done += 1;
+        }
+        assert!(w.fork_spend(
+            &format!("capped transfer after {n} spends in the window"),
+            &a,
+            &gkey(0),
+            &token,
+            1,
+            id
+        ));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Storage census: the testnet preview account's grant, entry by entry
+// (`budgets.md`, "Account storage")
+// ---------------------------------------------------------------------------
+
+/// The preview documents' `not-after-ledger`s and signer ids. Every key is a
+/// 65-byte passkey, so sizes match testnet's.
+const CENSUS_NALS: [u32; 2] = [5_581_508, 5_581_591];
+const CENSUS_IDS: [&str; 2] = [
+    "http://localhost:5542#59ee8848",
+    "http://localhost:5543#abbe5266",
+];
+/// The preview's grant ids: candidate 0 of each app's origin.
+const CENSUS_GRANTS: [u32; 2] = [3_395_152_355, 3_943_074_923];
+
+fn census_key(i: u8) -> SoftPasskey {
+    canonical_passkey([0x60 + i; 32])
+}
+
+/// One app's two rules, as the preview's grant documents spell them.
+fn census_rules(game: &Address, token: &Address, sid: &str, nal: u32, sfx: &str) -> [String; 2] {
+    let (g, t) = (strkey(game), strkey(token));
+    [
+        format!(
+            r#"{{"functions":["guess"],"name":"guess{sfx}","not-after-ledger":{nal},"principals":{{"signers":["{sid}"],"type":"all"}},"scope":{{"address":"{g}","type":"contract"}}}}"#
+        ),
+        format!(
+            r#"{{"args":[{{"index":1,"pred":{{"address":"{g}","type":"address-eq"}}}}],"cap":{{"limit":"20000000","period-ledgers":17280}},"functions":["transfer"],"name":"guess-xlm{sfx}","not-after-ledger":{nal},"principals":{{"signers":["{sid}"],"type":"all"}},"scope":{{"address":"{t}","type":"contract"}}}}"#
+        ),
+    ]
+}
+
+fn census_doc(w: &World, signers: &[String], rules: &[String]) -> Bytes {
+    let json = format!(
+        r#"{{"network":"{FIXTURE_NETWORK}","rules":[{}],"signers":[{}],"version":1}}"#,
+        rules.join(","),
+        signers.join(",")
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+/// An account for `census_key(0)`, the game contract, and a funded token.
+fn census_world() -> (World, Acct, Address, Address) {
+    let w = world();
+    let a = w.new_account(census_key(0));
+    let game = w.env.register(support::Target, ());
+    let token = w
+        .env
+        .register_stellar_asset_contract_v2(w.guardians[0].clone())
+        .address();
+    w.env.mock_all_auths();
+    StellarAssetClient::new(&w.env, &token).mint(&a.address, &100_000_000);
+    w.env.set_auths(&[]);
+    (w, a, game, token)
+}
+
+/// `key` transfers 1 XLM to the game through rule `id`.
+fn census_spend(
+    w: &World,
+    a: &Acct,
+    key: &SoftPasskey,
+    token: &Address,
+    game: &Address,
+    id: u32,
+) -> bool {
+    let amount: i128 = 10_000_000;
+    let root = w.invocation(
+        token,
+        "transfer",
+        std::vec![w.sc(a.address.clone()), w.sc(game.clone()), w.sc(amount)],
+    );
+    let entry = auth_entry(
+        &w.env,
+        &a.address,
+        &w.webauthn,
+        key,
+        id,
+        w.next_nonce(),
+        w.ledger() + 720,
+        root,
+    );
+    w.env.set_auths(&[entry]);
+    let ok = TokenClient::new(&w.env, token)
+        .try_transfer(&a.address, game, &amount)
+        .is_ok();
+    w.env.set_auths(&[]);
+    ok
+}
+
+/// Print every contract-data entry the account owns, and any entry another
+/// contract keeps that names it, one `{"census": ...}` line each, then the
+/// account's own entries' total; returns that total (bytes, entries),
+/// host nonces left out.
+fn census_dump(w: &World, a: &Acct, label: &str) -> (usize, usize) {
+    use soroban_sdk::xdr::{ContractDataDurability, LedgerEntryData, LedgerKey, Limits, WriteXdr};
+    let snapshot = w.env.to_ledger_snapshot();
+    let me: soroban_sdk::xdr::ScAddress = a.address.clone().into();
+    let (mut bytes, mut entries) = (0, 0);
+    for (key, (entry, live_until)) in snapshot.ledger_entries.iter() {
+        let LedgerKey::ContractData(k) = &**key else {
+            continue;
+        };
+        let LedgerEntryData::ContractData(d) = &entry.data else {
+            continue;
+        };
+        let mine = k.contract == me;
+        if !mine && !format!("{:?}", k.key).contains(&format!("{me:?}")) {
+            continue;
+        }
+        let size = entry.to_xdr(Limits::none()).unwrap().len();
+        if mine && !matches!(k.key, ScVal::LedgerKeyNonce(_)) {
+            bytes += size;
+            entries += 1;
+        }
+        let owner = if mine {
+            "account".to_string()
+        } else {
+            strkey(&Address::try_from_val(&w.env, &k.contract).unwrap())
+        };
+        println!(
+            "\n{}",
+            serde_json::json!({
+                "census": label,
+                "owner": owner,
+                "durability": match k.durability {
+                    ContractDataDurability::Persistent => "persistent",
+                    ContractDataDurability::Temporary => "temporary",
+                },
+                "entry_bytes": size,
+                "key_xdr": hex(&k.key.to_xdr(Limits::none()).unwrap()),
+                "val_xdr": hex(&d.val.to_xdr(Limits::none()).unwrap()),
+                "live_until": live_until,
+            })
+        );
+    }
+    println!(
+        "\n{}",
+        serde_json::json!({"census_total": label, "bytes": bytes, "entries": entries})
+    );
+    (bytes, entries)
+}
+
+/// The preview account's grant: the constructor's admin rule, then one
+/// grant document per app (`guess` on the game contract, and `guess-xlm`, a
+/// capped XLM `transfer` to it), then a 1 XLM transfer through the second
+/// app's capped rule.
+#[test]
+#[ignore = "needs the built stack"]
+fn census_of_the_preview_grant() {
+    let (w, a, game, token) = census_world();
+    census_dump(&w, &a, "constructor");
+    for (i, sid) in CENSUS_IDS.iter().enumerate() {
+        let key = census_key(1 + i as u8);
+        let doc = census_doc(
+            &w,
+            &[format!(
+                r#"{{"id":"{sid}","key":"{}","verifier":"{}"}}"#,
+                hex(&key.key_data()),
+                strkey(&w.webauthn)
+            )],
+            &census_rules(&game, &token, sid, CENSUS_NALS[i], ""),
+        );
+        assert!(w.try_apply_grant(&a, &census_key(0), CENSUS_GRANTS[i], &doc));
+        report_unbudgeted(&format!("census: apply_grant app {}", i + 1), &w.env);
+        w.advance(80);
+    }
+    let id = w.grant_rule_id(&a, CENSUS_GRANTS[1], "guess-xlm");
+    assert!(census_spend(&w, &a, &census_key(2), &token, &game, id));
+    report_unbudgeted("census: 1 XLM transfer through app 2's guess-xlm", &w.env);
+    census_dump(&w, &a, "grant");
+}
+
+/// A deterministic native game; compiler/account/verifier run their built
+/// Wasm. Setup may mock registry/token admin, but every tested game entry is
+/// enforced and carries a real WebAuthn signature.
+#[soroban_sdk::contract]
+struct RootGame;
+#[soroban_sdk::contractimpl]
+impl RootGame {
+    pub fn guess(e: Env, account: Address, token: Address, win: bool) {
+        account.require_auth();
+        let me = e.current_contract_address();
+        if win {
+            TokenClient::new(&e, &token).transfer(&me, &account, &1);
+        } else {
+            TokenClient::new(&e, &token).transfer(&account, &me, &1);
+        }
+    }
+}
+
+#[test]
+#[ignore = "needs the built stack"]
+fn exact_root_wasm_game_and_cap_costs() {
+    use perch_testkit::passkey::auth_entry_for_rules;
+    let w = world();
+    let e = &w.env;
+    let a = w.new_account(canonical_passkey([61; 32]));
+    let token = w.funded_token(&a);
+    let game = e.register(RootGame, ());
+    let original = w.doc(&a.owner, None);
+    let mut text = std::vec![0; original.len() as usize];
+    original.copy_into_slice(&mut text);
+    let mut doc = perch_ir::from_json(&String::from_utf8(text).unwrap()).unwrap();
+    let mut game_rule = doc.rules[1].clone();
+    game_rule.name = "game".into();
+    game_rule.scope = perch_ir::Scope::contract(strkey(&game));
+    game_rule.functions = Some(std::vec!["guess".into()]);
+    let mut pay = game_rule.clone();
+    pay.name = "pay".into();
+    pay.scope = perch_ir::Scope::contract(strkey(&token));
+    pay.functions = Some(std::vec!["transfer".into()]);
+    pay.auth_root = Some(perch_ir::AuthRoot {
+        contract: strkey(&game),
+        function: "guess".into(),
+    });
+    pay.cap = Some(perch_ir::CapConstraint {
+        token: None,
+        limit: "2".into(),
+        period_ledgers: 100,
+    });
+    doc.rules = std::vec![doc.rules[0].clone(), game_rule, pay];
+    let bytes = Bytes::from_slice(e, perch_ir::canonical_json(&doc).as_bytes());
+    assert!(w.try_apply(&a, &a.owner, &bytes, 0));
+    report("exact root: apply game grant", e);
+    assert_eq!(w.account(&a).capabilities().interface_version, 3);
+    let ids = [w.rule_id(&a.address, "game"), w.rule_id(&a.address, "pay")];
+    for win in [false, true] {
+        let mut root = w.invocation(
+            &game,
+            "guess",
+            std::vec![w.sc(a.address.clone()), w.sc(token.clone()), w.sc(win)],
+        );
+        if !win {
+            root.sub_invocations = std::vec![w.invocation(
+                &token,
+                "transfer",
+                std::vec![w.sc(a.address.clone()), w.sc(game.clone()), w.sc(1i128)]
+            )]
+            .try_into()
+            .unwrap();
+        }
+        let selected = if win { &ids[..1] } else { &ids[..] };
+        e.set_auths(&[auth_entry_for_rules(
+            e,
+            &a.address,
+            &w.webauthn,
+            &a.owner,
+            selected,
+            w.next_nonce(),
+            w.ledger() + 1000,
+            root,
+        )]);
+        assert!(RootGameClient::new(e, &game)
+            .try_guess(&a.address, &token, &win)
+            .is_ok());
+        report(
+            if win {
+                "exact root: winning guess"
+            } else {
+                "exact root: losing guess"
+            },
+            e,
+        );
+        e.set_auths(&[]);
+        assert_eq!(w.window(&a, ids[1]).unwrap().total, 1);
+    }
+    assert!(!w.spend(&a, &a.owner, &token, 1));
+    report("exact root: direct transfer refused below cap", e);
+    assert_eq!(w.window(&a, ids[1]).unwrap().total, 1);
+}
+
+#[test]
+#[ignore = "needs the built stack"]
+fn exact_root_wasm_at_document_caps() {
+    let w = world();
+    let shape = worst_shape();
+    let keys = passkeys(65, shape.signers);
+    let a = w.new_account(canonical_passkey([65; 32]));
+    let rec = Rec {
+        profile: "loss",
+        mode: Mode::Guardian,
+        zk: None,
+        delay: DELAY,
+        baseline: None,
+    };
+    ROOT_CONDITIONS.with(|x| x.set(true));
+    let doc = w.shaped_doc(&keys, &rec, shape, MAX_DOC_CANONICAL_BYTES as usize, true);
+    ROOT_CONDITIONS.with(|x| x.set(false));
+    assert_eq!(doc.len(), MAX_DOC_CANONICAL_BYTES);
+    assert!(w.try_apply(&a, &a.owner, &doc, 0));
+    report("exact root: maximum-sized document apply", &w.env);
+    let stored = w.account(&a).rule_set();
+    assert_eq!(
+        stored.iter().filter(|r| r.auth_root.is_some()).count(),
+        MAX_DOC_RULES as usize - 1
+    );
+    let replacement_keys = passkeys(90, shape.signers);
+    let replacements = w.replacing_all(&replacement_keys, None);
+    let attempt = w.ctl().begin_lost_key(&a.address, &replacements);
+    let target = w.target_bytes(&a, &replacements);
+    report(
+        "exact root: maximum-sized recovery target derivation",
+        &w.env,
+    );
+    for guardian in [0, 1] {
+        w.guardian(guardian, &a, attempt, EvidenceDomain::Initiate);
+    }
+    w.advance(DELAY);
+    assert!(w.try_complete(&a, &target));
+    report(
+        "exact root: maximum-sized guardian recovery completion",
+        &w.env,
+    );
+    assert_eq!(
+        w.account(&a)
+            .rule_set()
+            .iter()
+            .filter(|r| r.auth_root.is_some())
+            .count(),
+        MAX_DOC_RULES as usize - 1
+    );
 }

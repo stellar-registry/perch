@@ -1,1 +1,1 @@
-//! Test-only crate. The end-to-end matrix lives in `tests/matrix.rs`.
+//! Test-only crate; the suites live in `tests/`.

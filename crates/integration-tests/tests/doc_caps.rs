@@ -1,27 +1,24 @@
 //! The document caps (`docs/recovery/spec.md` §7.5) at their boundaries:
 //! the compiler admits a document at every cap and refuses one past any of
-//! them, and every rule name it admits OZ installs. The release-stack suite
+//! them, and every rule name it admits OZ installs. The per-rule constraint
+//! cap has the interpreter's local limit, with each exact root consuming one
+//! additional constraint. The release-stack suite
 //! measures the costliest document the caps admit against the budget
 //! (`docs/recovery/budgets.md`, "Document caps").
 
 use perch_doc_compiler::{
-    DocCompilerError, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS, MAX_RULE_NAME_BYTES,
+    DocCompilerError, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS,
+    MAX_RULE_CONSTRAINTS, MAX_RULE_NAME_BYTES,
 };
-use perch_testkit::{Bootstrap, World, FIXTURE_NETWORK};
-use soroban_sdk::{Address, Bytes};
+use perch_testkit::delta::strkey;
+use perch_testkit::{Bootstrap, World, ED25519_VERIFIER_NAME, FIXTURE_NETWORK};
+use soroban_sdk::Bytes;
 
 fn setup() -> World {
     Bootstrap::native()
         .network(FIXTURE_NETWORK)
         .admin_ed25519([9u8; 32])
         .build()
-}
-
-fn strkey(a: &Address) -> String {
-    let s = a.to_string();
-    let mut buf = vec![0u8; s.len() as usize];
-    s.copy_into_slice(&mut buf);
-    String::from_utf8(buf).unwrap()
 }
 
 /// `signers` signers and `rules` rules (the admin rule first), the last
@@ -32,7 +29,7 @@ fn doc(w: &World, signers: u32, rules: u32, last_name: &str, padding: usize) -> 
     let signers: Vec<String> = (0..signers)
         .map(|i| {
             format!(
-                r#"{{"id":"s{i}","verifier":"{verifier}","key":"{}"}}"#,
+                r#"{{"id":"s{i}","verifier":"{verifier}","verifier-name":"{ED25519_VERIFIER_NAME}","key":"{}"}}"#,
                 format!("{:02x}", i + 1).repeat(32)
             )
         })
@@ -128,4 +125,80 @@ fn rule_names_are_capped_where_oz_caps_them() {
         &w,
         &doc(&w, 1, 2, &"n".repeat(MAX_RULE_NAME_BYTES as usize + 1), 0)
     ));
+}
+
+/// A rule with `args` `is-self` argument constraints, and a function list
+/// when `functions`.
+fn constrained(w: &World, args: u32, functions: bool) -> Bytes {
+    let verifier = strkey(&w.verifier);
+    let preds: Vec<String> = (0..args)
+        .map(|i| format!(r#"{{"index":{i},"pred":{{"type":"is-self"}}}}"#))
+        .collect();
+    let functions = if functions {
+        r#","functions":["f"]"#
+    } else {
+        ""
+    };
+    let json = format!(
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{{"id":"s0","verifier":"{verifier}","verifier-name":"{ED25519_VERIFIER_NAME}","key":"{key}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["s0"]}}}},{{"name":"r","scope":{{"type":"contract","address":"{verifier}"}},"principals":{{"type":"all","signers":["s0"]}}{functions},"args":[{}]}}]}}"#,
+        preds.join(","),
+        key = "01".repeat(32),
+    );
+    Bytes::from_slice(&w.env, json.as_bytes())
+}
+
+/// A rule at [`MAX_RULE_CONSTRAINTS`] compiles and one past it is refused,
+/// counting a function list as one constraint; and the compiler accepts a
+/// rule exactly when Perch's RPN lowering fits it in an interpreter program.
+#[test]
+fn the_constraint_cap_is_what_an_interpreter_program_holds() {
+    let w = setup();
+    let compiles = |args: u32, functions: bool| {
+        let doc = constrained(&w, args, functions);
+        let compiled = match w.compiler_client().try_compile_doc(&doc) {
+            Ok(Ok(_)) => true,
+            Err(Ok(DocCompilerError::DocCompile)) => false,
+            other => panic!("{args} args: {other:?}"),
+        };
+        let program = perch_testkit::rpn::policies(&w.env, &doc).is_ok();
+        assert_eq!(compiled, program, "{args} args, functions: {functions}");
+        compiled
+    };
+    let cap = MAX_RULE_CONSTRAINTS;
+    assert!(compiles(cap, false));
+    assert!(!compiles(cap + 1, false));
+    assert!(compiles(cap - 1, true));
+    assert!(!compiles(cap, true));
+}
+
+#[test]
+fn an_exact_root_consumes_one_constraint_at_the_boundary() {
+    let w = setup();
+    for functions in [false, true] {
+        let at = MAX_RULE_CONSTRAINTS - 1 - u32::from(functions);
+        for args in [at, at + 1] {
+            let bytes = constrained(&w, args, functions).to_alloc_vec();
+            let mut doc = perch_ir::from_json(std::str::from_utf8(&bytes).unwrap()).unwrap();
+            doc.rules[1].auth_root = Some(perch_ir::AuthRoot {
+                contract: strkey(&w.verifier),
+                function: "guess".into(),
+            });
+            let canonical = perch_ir::canonical_json(&doc);
+            assert!(canonical.len() <= MAX_DOC_CANONICAL_BYTES as usize);
+            let result = w
+                .compiler_client()
+                .try_compile_doc(&Bytes::from_slice(&w.env, canonical.as_bytes()));
+            if args == at {
+                assert!(result
+                    .unwrap()
+                    .unwrap()
+                    .rules
+                    .get_unchecked(1)
+                    .auth_root
+                    .is_some());
+            } else {
+                assert!(matches!(result, Err(Ok(DocCompilerError::DocCompile))));
+            }
+        }
+    }
 }

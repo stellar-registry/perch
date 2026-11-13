@@ -77,6 +77,11 @@ structure CCap where
   periodLedgers : Nat
 deriving DecidableEq, Repr
 
+structure CAuthRoot where
+  contract : Str
+  function : Str
+deriving DecidableEq, Repr
+
 structure CRule where
   name : Str
   scope : CScope
@@ -85,6 +90,7 @@ structure CRule where
   args : Option (List CArg)
   notAfterLedger : Option Nat
   cap : Option CCap
+  authRoot : Option CAuthRoot
 deriving DecidableEq, Repr
 
 /-! ## The recovery member (`perch_ir::RecoveryConfig`, canonical slice) -/
@@ -219,10 +225,17 @@ def emitCap (c : CCap) : List Char :=
         | none => [])
     ++ lit "}"
 
+def emitAuthRoot (r : CAuthRoot) : List Char :=
+  lit "{\"contract\":" ++ emitStr r.contract
+    ++ lit ",\"function\":" ++ emitStr r.function ++ lit "}"
+
 def emitRule (r : CRule) : List Char :=
   lit "{"
     ++ (match r.args with
         | some args => lit "\"args\":" ++ emitList emitArg args ++ lit ","
+        | none => [])
+    ++ (match r.authRoot with
+        | some root => lit "\"auth-root\":" ++ emitAuthRoot root ++ lit ","
         | none => [])
     ++ (match r.cap with
         | some c => lit "\"cap\":" ++ emitCap c ++ lit ","
@@ -531,48 +544,60 @@ def pCap : P CCap
         some (⟨none, limit, pl⟩, r5))
       r4
 
+def pAuthRoot : P CAuthRoot
+  | input => do
+    let ((), r1) ← pExact (lit "{\"contract\":") input
+    let (contract, r2) ← pStr r1
+    let ((), r3) ← pExact (lit ",\"function\":") r2
+    let (function, r4) ← pStr r3
+    let ((), r5) ← pExact (lit "}") r4
+    some (⟨contract, function⟩, r5)
+
 def pRule : P CRule
   | input => do
     let ((), r0) ← pExact (lit "{") input
-    let step := fun (args : Option (List CArg)) (i0 : List Char) =>
-      pOpt (lit "\"cap\":")
-        (fun i => do
-          let (c, r) ← pCap i
-          let ((), r') ← pExact (lit ",") r
-          some ((args, some c), r'))
-        (fun i => some ((args, (none : Option CCap)), i))
-        i0
-    let ((args, cap), r1) ←
+    let (args, r1) ←
       pOpt (lit "\"args\":")
         (fun i => do
           let (a, r) ← pList pArg i
           let ((), r') ← pExact (lit ",") r
-          step (some a) r')
-        (step none)
-        r0
-    let (functions, r2) ←
+          some (some a, r'))
+        (fun i => some ((none : Option (List CArg)), i)) r0
+    let (root, r2) ←
+      pOpt (lit "\"auth-root\":")
+        (fun i => do
+          let (root, r) ← pAuthRoot i
+          let ((), r') ← pExact (lit ",") r
+          some (some root, r'))
+        (fun i => some ((none : Option CAuthRoot), i)) r1
+    let (cap, r3) ←
+      pOpt (lit "\"cap\":")
+        (fun i => do
+          let (c, r) ← pCap i
+          let ((), r') ← pExact (lit ",") r
+          some (some c, r'))
+        (fun i => some ((none : Option CCap), i)) r2
+    let (functions, r4) ←
       pOpt (lit "\"functions\":")
         (fun i => do
           let (f, r) ← pList pStr i
           let ((), r') ← pExact (lit ",") r
           some (some f, r'))
-        (fun i => some ((none : Option (List Str)), i))
-        r1
-    let ((), r3) ← pExact (lit "\"name\":") r2
-    let (name, r4) ← pStr r3
-    let (nal, r5) ←
+        (fun i => some ((none : Option (List Str)), i)) r3
+    let ((), r5) ← pExact (lit "\"name\":") r4
+    let (name, r6) ← pStr r5
+    let (nal, r7) ←
       pOpt (lit ",\"not-after-ledger\":")
         (fun i => do
           let (n, r) ← pNat i
           some (some n, r))
-        (fun i => some ((none : Option Nat), i))
-        r4
-    let ((), r6) ← pExact (lit ",\"principals\":") r5
-    let (principals, r7) ← pPrincipals r6
-    let ((), r8) ← pExact (lit ",\"scope\":") r7
-    let (scope, r9) ← pScope r8
-    let ((), r10) ← pExact (lit "}") r9
-    some (⟨name, scope, principals, functions, args, nal, cap⟩, r10)
+        (fun i => some ((none : Option Nat), i)) r6
+    let ((), r8) ← pExact (lit ",\"principals\":") r7
+    let (principals, r9) ← pPrincipals r8
+    let ((), r10) ← pExact (lit ",\"scope\":") r9
+    let (scope, r11) ← pScope r10
+    let ((), r12) ← pExact (lit "}") r11
+    some (⟨name, scope, principals, functions, args, nal, cap, root⟩, r12)
 
 def pProfile : P CProfile :=
   pOpt (lit "\"loss\"")

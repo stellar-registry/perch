@@ -1,0 +1,127 @@
+{
+ "stroops-per-xlm": {
+  "value": "10,000,000",
+  "source": "Stellar unit (C)"
+ },
+ "grant1-cap-xlm": {
+  "value": "10",
+  "source": "r2:18, 131 (C)"
+ },
+ "grant1-cap-stroops": {
+  "value": "100000000",
+  "source": "r2:131 (C)"
+ },
+ "grant1-period-ledgers": {
+  "value": "100",
+  "source": "r2:18 (C)"
+ },
+ "grant1-period-minutes": {
+  "value": "about eight minutes",
+  "source": "100 × 5 s (C)"
+ },
+ "grant1-spend-applied-xlm": {
+  "value": "6",
+  "source": "r2:18 (C)"
+ },
+ "grant1-spend-refused-xlm": {
+  "value": "5",
+  "source": "r2:18 (C)"
+ },
+ "grant3-cap-xlm": {
+  "value": "2",
+  "source": "r2:18 (C)"
+ },
+ "grant3-period-ledgers": {
+  "value": "100",
+  "source": "r2:18 (C)"
+ },
+ "preview-game-cap-xlm": {
+  "value": "2",
+  "source": "`P:crates/integration-tests/tests/release_stack.rs:4019-4030` (V)"
+ },
+ "preview-game-cap-stroops": {
+  "value": "20000000",
+  "source": "same (V)"
+ },
+ "preview-game-period-ledgers": {
+  "value": "17,280",
+  "source": "same (V)"
+ },
+ "preview-game-period-label": {
+  "value": "one nominal day",
+  "source": "17,280 × 5 s (C)"
+ },
+ "passkey-key-bytes": {
+  "value": "65",
+  "source": "`P:release_stack.rs:4005-4006` (V)"
+ },
+ "game-wrong-guess-xlm": {
+  "value": "1",
+  "source": "r2:16 (C)"
+ },
+ "game-secret-range": {
+  "value": "1 to 10",
+  "source": "r2:503 (C)"
+ },
+ "game-losing-guess": {
+  "value": "0",
+  "source": "r2:503 (C)"
+ },
+ "cap-event-1": {
+  "value": "ledger t: +6 accepted; 6 in the window",
+  "source": "r2:199; `rc:crates/rule-eval/src/cap.rs` eviction rule (C, r2 changelog)"
+ },
+ "cap-event-2": {
+  "value": "ledger t: +5 refused; 6 + 5 = 11 > 10; record unchanged",
+  "source": "r2:201 (C)"
+ },
+ "cap-event-3": {
+  "value": "ledger t + 1: +4 accepted; 10 ≤ 10, the limit is inclusive",
+  "source": "r2:203 (C)"
+ },
+ "cap-event-4": {
+  "value": "ledger t + 99: +1 refused; the window (t − 1, t + 99] holds 10",
+  "source": "r2:205 (C)"
+ },
+ "cap-event-5": {
+  "value": "ledger t + 100: the 6 leaves the window, leaving 4; +5 accepted; 9",
+  "source": "r2:207 (C)"
+ },
+ "recovery-profile-demo": {
+  "value": "Loss",
+  "source": "r2:331 (C)"
+ },
+ "recovery-guardians-demo": {
+  "value": "2",
+  "source": "r2:331 (C)"
+ },
+ "recovery-delay-ledgers": {
+  "value": "10",
+  "source": "r2:331 (C)"
+ },
+ "recovery-window-ledgers": {
+  "value": "100",
+  "source": "r2:331 (C)"
+ },
+ "recovery-window": {
+  "value": "[A + 10, A + 110)",
+  "source": "r2:331 (C)"
+ },
+ "recovery-modes": {
+  "value": "`guardian-only`, `zk-only`, `combined`",
+  "markup": true,
+  "source": "`P:crates/perch-ir/src/doc.rs:403-413` (R)"
+ },
+ "shop-cap-xlm": {
+  "value": "10",
+  "source": "`source/figures/fig-sim.run.json` Perch `window.limit_xlm`; the shop grant, also `grant1-cap-xlm` (vision)"
+ },
+ "shop-period-ledgers": {
+  "value": "100",
+  "source": "`source/figures/fig-sim.run.json` Perch `window.period_ledgers`; also `grant1-period-ledgers`"
+ },
+ "shop-period-minutes": {
+  "value": "about eight minutes",
+  "source": "100 × 5 s nominal ledgers (C); as `grant1-period-minutes`"
+ }
+}

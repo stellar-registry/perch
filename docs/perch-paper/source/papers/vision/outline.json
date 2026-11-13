@@ -1,0 +1,110 @@
+{
+ "nav_note": "A companion to the Perch paper, with the earlier live experiment.<br>Fourth iteration · November 2026",
+ "glossary": "tab-glossary",
+ "sections": [
+  {
+   "id": "overview",
+   "title_html": "Perch beyond one grant",
+   "nav": "Overview",
+   "tables": [
+    "tab-status"
+   ]
+  },
+  {
+   "id": "stack",
+   "title_html": "The account at the pinned build",
+   "nav": "The account",
+   "figures": [
+    "fig-parts"
+   ]
+  },
+  {
+   "id": "install",
+   "title_html": "Installing and storing a grant",
+   "nav": "Installing",
+   "tables": [
+    "tab-api"
+   ]
+  },
+  {
+   "id": "gate",
+   "title_html": "Every check in __check_auth",
+   "nav": "The gate",
+   "figures": [
+    "fig-check-auth"
+   ]
+  },
+  {
+   "id": "recovery",
+   "title_html": "Recovery and the end of authority",
+   "nav": "Recovery",
+   "figures": [
+    "fig-recovery"
+   ],
+   "tables": [
+    "tab-ending",
+    "tab-counters"
+   ]
+  },
+  {
+   "id": "threats",
+   "title_html": "Who else might misuse an account",
+   "nav": "Threats",
+   "tables": [
+    "tab-adversaries"
+   ]
+  },
+  {
+   "id": "experiment",
+   "title_html": "Run the account, then change the inputs",
+   "nav": "Run it",
+   "tables": [
+    "tab-run"
+   ]
+  },
+  {
+   "id": "agents",
+   "title_html": "Agents, budgets and payments (proposed)",
+   "nav": "Agents"
+  },
+  {
+   "id": "cedar",
+   "title_html": "Cedar as an authoring language (proposed)",
+   "nav": "Cedar"
+  },
+  {
+   "id": "in-page",
+   "title_html": "Checking the proofs in the page (proposed)",
+   "nav": "In-page proofs"
+  },
+  {
+   "id": "repro",
+   "title_html": "Reproducibility and artifacts",
+   "nav": "Reproducibility",
+   "tables": [
+    "tab-artifacts"
+   ],
+   "appendix": true
+  },
+  {
+   "id": "glossary",
+   "title_html": "Glossary",
+   "nav": "Glossary",
+   "editions": [
+    "html"
+   ],
+   "appendix": true,
+   "unnumbered": true
+  },
+  {
+   "id": "references",
+   "title_html": "References",
+   "nav": "References",
+   "editions": [
+    "html"
+   ],
+   "appendix": true,
+   "unnumbered": true
+  }
+ ]
+}

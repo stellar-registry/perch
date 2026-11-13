@@ -1,0 +1,19 @@
+% Generated from source/tables/tab-obligations.json; edit that.
+\begin{table}[tbp]
+\centering
+\caption{\textbf{Shell obligations that carry the theorems to the account.} Each obligation is what the account shell must do for a statement about the evaluator to hold of the deployed account.}\label{tab:tab-obligations}
+\scriptsize\begin{tabularx}{\linewidth}{@{}lLp{0.22\linewidth}p{0.25\linewidth}@{}}
+\toprule
+\textbf{} & \textbf{Obligation} & \textbf{Status} & \textbf{Source} \\
+\midrule
+O1 & The shell authenticates every claimed signer & tested & \code{gate.rs:106-113} \\
+O2 & Selection and renumbering carry the evaluator's theorems to the account & argued and tested & \code{gate.rs:14-16} \\
+O3 & The generation is passed in, advances only on completion, and refuses on overflow & tested; rule-core lists it as unproven against Perch \code{\fact{doc-allows-source}} & rule-core \code{claims.yaml:2901} \\
+O4 & The excluded set matches the theorem's X, and the recheck runs & tested & \code{lib.rs:1225-1234} \\
+O5 & Compiler outputs satisfy \code{Doc.Valid} & unproven & rule-core \code{claims.yaml:2928} \\
+O6 & Spending records persist correctly & tested & \code{gate.rs:114-121} \\
+O7 & Context conversion is correct & tested & \code{crates/\allowbreak{}perch-\allowbreak{}rule-\allowbreak{}eval/\allowbreak{}src/\allowbreak{}convert.\allowbreak{}rs} \\
+O8 & The shell installs exactly the lowered rules, and ordinary authorization cannot select the recovery rule & tested; rule-core lists it as unproven & rule-core \code{claims.yaml:2940} \\
+\bottomrule
+\end{tabularx}
+\end{table}

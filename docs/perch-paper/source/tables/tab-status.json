@@ -1,0 +1,71 @@
+{
+ "title": "Status on {{fact:paper-date}}.",
+ "caption": "*Deployed*: recorded in Perch's deployment manifests and present on the network. *Preview*: a separate testnet deployment outside those manifests. *Merged*: on a main branch, not deployed. *Open PR*: unmerged code. *Proposed*: not implemented. *Not done*: not started or not complete.",
+ "columns": [
+  "Component",
+  "Status",
+  "Where",
+  "Evidence"
+ ],
+ "html_class": "status",
+ "latex_colspec": "@{}LlLL@{}",
+ "rows": [
+  [
+   "Perch 0.5.1 (earlier design: an OpenZeppelin account-library fork with two Perch policy contracts), document compiler, recovery controller, Ed25519 and WebAuthn verifiers, ZK pool and adapter",
+   "{{badge:deployed:DEPLOYED}}",
+   "Perch `{{fact:perch-deployed-source-short}}`: testnet {{fact:perch-deployed-testnet-date}}, mainnet {{fact:perch-deployed-mainnet-date}}",
+   "`deployments/testnet.json`, `mainnet.json`"
+  ],
+  [
+   "This paper's account (deciding with `rule_eval`; installed grants; credential index; named verifiers; rebuilt recovery hooks)",
+   "{{badge:open:OPEN PR}}",
+   "Perch {{fact:perch-pin-short}}, head of the open stack ending at {{fact:perch-pr-stack-head}}",
+   "Unmerged"
+  ],
+  [
+   "The same contract source on testnet",
+   "{{badge:preview:PREVIEW}}",
+   "Separate deployment, {{fact:preview-deploy-date}}, ledger {{fact:preview-deploy-ledger}}; account Wasm {{fact:preview-account-wasm-short}} ({{fact:preview-account-bytes}} B)",
+   "Built from {{fact:perch-preview-source}}, whose contract sources equal the pin's"
+  ],
+  [
+   "Wallet on that deployment ({{fact:wallet-name}})",
+   "{{badge:preview:PREVIEW}}",
+   "{{fact:nido-preview-pr}} (draft)",
+   "{{fact:nido-run-transactions}} testnet transactions ({{ref:sec:experiment}})"
+  ],
+  [
+   "rule-core evaluator, model and proofs",
+   "{{badge:merged:MERGED}}",
+   "rule-core {{fact:rule-core-pin-short}}",
+   "CI regenerates the translation, builds the proofs and checks the claims ledger"
+  ],
+  [
+   "Exact authorization-entry roots",
+   "{{badge:open:OPEN PR}}",
+   "{{fact:exact-roots-prs}}",
+   "No theorem at {{fact:rule-core-pin-short}}"
+  ],
+  [
+   "External audit of the Perch contracts (account, compiler, recovery controller, verifiers, ZK pool and adapter, registry) and of rule-core's evaluator",
+   "{{badge:notdone:NOT DONE}}",
+   "—",
+   "Only the vendored UltraHonk base verifier, from Nethermind, has one (by OpenZeppelin); Perch's zero-knowledge additions have none"
+  ],
+  [
+   "Contract exports under this paper's names",
+   "{{badge:proposed:PROPOSED}}",
+   "{{ref:tab:tab-api}}",
+   "Exports unchanged"
+  ],
+  [
+   "Agent runtime; x402 payments; Cedar authoring; delegation-tree budget runtime; account entry point for attenuated grants; in-page proof check",
+   "{{badge:proposed:PROPOSED}}",
+   "{{ref:sec:agents}}",
+   "Not implemented"
+  ]
+ ],
+ "editions": [
+  "html"
+ ]
+}

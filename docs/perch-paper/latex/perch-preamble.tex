@@ -1,0 +1,131 @@
+% Shared preamble of the Perch papers (main, oz-policy-builder, verification).
+% Each paper's main file sets \documentclass[runningheads]{llncs}, inputs this
+% file (path relative to its own latex folder) and sets its title and authors.
+% generated/ is each paper's own folder, written by build/paper.py.
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[scaled=0.92]{inconsolata}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,stmaryrd}
+\usepackage{booktabs,array,tabularx,xltabular}
+\usepackage{xcolor,graphicx,adjustbox}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,patterns}
+\usepackage{newunicodechar}
+\usepackage{enumitem}
+\usepackage{fancyvrb}
+\usepackage[hidelinks,hypertexnames=false]{hyperref}
+\usepackage{xurl}
+\usepackage{caption}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\captionsetup{font=small,labelfont=bf}
+
+\input{generated/colors}
+
+% Unicode the shared sources use.
+\newunicodechar{→}{\ensuremath{\rightarrow}}
+\newunicodechar{←}{\ensuremath{\leftarrow}}
+\newunicodechar{↔}{\ensuremath{\leftrightarrow}}
+\newunicodechar{≤}{\ensuremath{\le}}
+\newunicodechar{≥}{\ensuremath{\ge}}
+\newunicodechar{−}{\ensuremath{-}}
+\newunicodechar{×}{\ensuremath{\times}}
+\newunicodechar{·}{\ensuremath{\cdot}}
+\newunicodechar{…}{\ldots}
+\newunicodechar{‖}{\ensuremath{\|}}
+\newunicodechar{∪}{\ensuremath{\cup}}
+\newunicodechar{≠}{\ensuremath{\neq}}
+\newunicodechar{∈}{\ensuremath{\in}}
+\newunicodechar{✓}{\checkmark}
+\newunicodechar{¹}{\textsuperscript{1}}
+\newunicodechar{①}{\textcircled{\scriptsize 1}}
+\newunicodechar{②}{\textcircled{\scriptsize 2}}
+\newunicodechar{③}{\textcircled{\scriptsize 3}}
+\newunicodechar{④}{\textcircled{\scriptsize 4}}
+\newunicodechar{⑤}{\textcircled{\scriptsize 5}}
+\newunicodechar{⑥}{\textcircled{\scriptsize 6}}
+
+% Shared-source hooks used by generated/ and sections/.
+\makeatletter
+\newcommand\fact[1]{\@ifundefined{perchfact@#1}%
+  {\PackageError{perch}{Undefined fact `#1'}{Add it to source/facts.json}}%
+  {\csname perchfact@#1\endcsname}}
+\makeatother
+% Code may break after an underscore.
+\DeclareRobustCommand\code[1]{\begingroup\def\_{\textunderscore\allowbreak}\texttt{#1}\endgroup}
+\newcommand\lean[1]{\texttt{#1}}
+\newcommand\statusobj[1]{\textsc{\MakeLowercase{#1}}}
+\newcommand\badge[1]{\textsc{\MakeLowercase{#1}}}
+\newcommand\perchfigure[1]{\input{generated/figures/#1}}
+\newcommand\perchtable[1]{\input{generated/tables/#1}}
+% A formal statement: \begin{perchstatement}{T1}{Title} ... \end{perchstatement};
+% \ref to its \label prints the T-label.
+\makeatletter
+% The shared titles end with a period; the head adds its own.
+\def\perch@title#1{\perch@title@#1\@empty.\@empty\@nil}
+\def\perch@title@#1.\@empty#2\@nil{#1}
+\newenvironment{perchstatement}[2]{\par\medskip\noindent
+  \def\@currentlabel{#1}\phantomsection\textbf{Theorem #1 (\perch@title{#2}).}\itshape\ }{\par\medskip}
+\newenvironment{perchproposition}[2]{\par\medskip\noindent
+  \def\@currentlabel{#1}\phantomsection\textbf{Proposition #1 (\perch@title{#2}; argued).}\itshape\ }{\par\medskip}
+\newcommand\perchdoc[1]{\csname perchdoc@#1\endcsname}
+\makeatother
+\newcommand\statementhypotheses[1]{\par\smallskip\noindent{\upshape\footnotesize Hypotheses: #1}}
+% Ragged right: an evidence line is a list of long Lean names that break only
+% after a dot or an underscore.
+\newcommand\statementevidence[1]{\par\smallskip\noindent{\upshape\footnotesize\raggedright Evidence: #1\par}}
+% A companion paper: its title and address, both withheld in the anonymous build
+% (a title search finds the published companion).
+\newcommand\companion[2]{\ifdefined\anonymous[withheld for review]\else\emph{#2}\footnote{\url{#1}}\fi}
+\input{generated/facts}
+
+% LaTeX-edition helpers.
+% Definitions D1-D9: \begin{perchdefinition}{D1}{Title} ... \end{perchdefinition};
+% \ref to its \label prints the D-label.
+\makeatletter
+\newenvironment{perchdefinition}[2]{\par\smallskip\noindent
+  \def\@currentlabel{#1}\phantomsection\textbf{Definition #1} (#2)\textbf{.}\ }{\par\smallskip}
+% The Lean names of a definition, at its end.
+\newcommand\leannames[1]{\unskip\nobreak\hfill\penalty50\hskip1em\null\nobreak\hfill
+  {\footnotesize Lean: #1}\parfillskip=0pt\par}
+% A long hash or identifier fact, breakable anywhere.
+\newcommand\facthash[1]{\@ifundefined{perchfact@#1}{\fact{#1}}%
+  {\begingroup\edef\x{\noexpand\nolinkurl{\csname perchfact@#1\endcsname}}\x\endgroup}}
+% Link text that may break after a dot or an underscore: Lean declaration names
+% in \repolink (they contain no spaces or braces).
+\newcommand\perchbrk[1]{\perch@brk#1\@nil}
+\def\perch@brk#1{%
+  \ifx#1\@nil
+  \else
+    \ifx#1.%
+      .\allowbreak
+    \else\ifx#1\_%
+      \textunderscore\allowbreak
+    \else
+      #1%
+    \fi\fi
+    \expandafter\perch@brk
+  \fi}
+% A source path, breakable at line ends.
+\newcommand\srcpath[1]{\nolinkurl{#1}}
+\makeatother
+% Callout numbers matching the two-spellings figure.
+\newcommand\callout[1]{\textcircled{\scriptsize #1}}
+% Citations of the authors' own repositories and deployments: withheld in the
+% anonymous build, like \repolink.
+\ifdefined\anonymous\newcommand\selfcite[1]{\unskip}\else\newcommand\selfcite[1]{\cite{#1}}\fi
+% The trust-base box of the formal results.
+\newenvironment{perchbox}{\par\medskip\noindent\begin{lrbox}{\perchboxbin}%
+  \begin{minipage}{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}\small}%
+  {\end{minipage}\end{lrbox}\fbox{\usebox{\perchboxbin}}\par\medskip}
+\newsavebox{\perchboxbin}
+% Float placement: let figures and tables share pages with text.
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}
+\renewcommand{\dblfloatpagefraction}{0.85}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{4}
+\raggedbottom

@@ -1,0 +1,19 @@
+<p class="lede"><strong>Perch lets an account give an app or agent authority whose limits the account itself enforces.</strong></p>
+<p>On Stellar, a smart account is a contract that holds a user's funds and approves the calls made in its name; Soroban is the platform that runs such contracts. There are two options today to let an app spend for a user: it can ask the user to approve every call, which does not work for an agent that pays a service many times an hour. Or the user can give the app a key that can do anything the account can, which would leave the user vulnerable. If the app's key is stolen, the thief can empty their account. Perch adds a third option. The user, as the account's owner, installs a <dfn><a href="#glossary">grant</a></dfn> (a written permission with limits) and the account checks every call the app makes in its name against it. Perch accounts run on Stellar through the {{fact:wallet-name}} wallet. {{ref:fig:fig-overview}} shows who does what.</p>
+{{fig:fig-overview}}
+<p>This paper follows a payment from start to finish:</p>
+{{steps}}
+<p>An aside after step 5 shows what a wallet can show a person who reviews a request before signing it.</p>
+<h3 id="step-grant">The owner installs a grant for an app</h3>
+<p>Every request starts from a grant the owner installs for an app or an agent. The paper's running example is the shop grant ({{ref:fig:fig-shop-grant}}), which lets an app send XLM, Stellar's native currency, from the user's account to one shop and no one else. The grant allows at most {{fact:shop-cap-xlm}} XLM in any {{fact:shop-period-ledgers}} ledgers ({{fact:shop-period-minutes}} at about {{fact:nominal-ledger-seconds}} seconds a ledger).</p>
+
+<p>The grant has one <dfn><a href="#glossary">rule</a></dfn>, which names the contract (the XLM token), the function (<code>transfer</code>), the recipient (the shop), the key that must sign (the app's) and a <dfn><a href="#glossary">cap</a></dfn>; a rule may also stop at an expiry ledger. The owner installs a <dfn><a href="#glossary">grant document</a></dfn> like the one below with one call to the account, <code>apply_grant</code>, after a <dfn><a href="#glossary">document compiler</a></dfn> contract validates it.
+</p>
+
+<p>A wallet builds the document with Perch's TypeScript library, published on npm as <code>{{fact:perch-js-package}}</code>, rather than writing it by hand.</p>
+{{fig:fig-shop-grant}}
+<p>An app can also pass a narrower grant to a helper, such as a sub-agent. <dfn><a href="#glossary">Attenuation</a></dfn> derives such a grant from the app's original grant with rule-core's {{fact:attenuation-steps}} narrowing steps, among them dropping a rule, removing functions, adding an argument condition, raising a signer threshold, lowering a cap, lengthening its period and moving the expiry earlier. From the shop grant, for example, a helper can receive a grant that pays the same shop at most 2 XLM per {{fact:shop-period-ledgers}} ledgers.</p>
+
+<h3 id="step-request">An app asks the account to pay for an order</h3>
+<p>To pay for an order, the app builds a transaction that calls the XLM token's <code>transfer</code> function to move XLM from the user's account to the shop. The funds leave the user's account, so the payment goes through only if the account approves it, and the account approves it only if it fits a grant the app holds (steps <a href="#grants">3</a> and <a href="#authorization">4</a>). The transaction names the rule it relies on, here the shop grant's one rule. A helper holding a narrower grant makes the same kind of request under its own grant.</p>
+{{fig:fig-shop-request}}

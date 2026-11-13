@@ -1,15 +1,15 @@
 # @stellar-registry/perch
 
-TypeScript surface for [perch](https://github.com/stellar-registry/perch) policy
+TypeScript library for [perch](https://github.com/stellar-registry/perch) policy
 documents and accounts: the fail-closed PolicyDoc schema, canonical JSON +
 `doc_hash` (byte-identical to the Rust model, parity-tested against shared
 golden fixtures), a fluent builder producing validated documents, and the
 consumer interface: revision-consistent account reads, rule selection,
 authorization construction, limits, and the apply lifecycle.
 
-Perch is a composable policy layer for Soroban smart accounts built on
-OpenZeppelin stellar-accounts: policies are declarative canonical-JSON
-documents, compiled onto the account's context rules.
+Perch is a composable policy layer for Soroban smart accounts,
+wire-compatible with OpenZeppelin stellar-accounts: policies are declarative
+canonical-JSON documents, compiled onto the account's context rules.
 
 ## Install
 
@@ -29,16 +29,16 @@ version must check they are the same code
 ## Usage
 
 ```ts
-import { policy, external, canonicalJson, docHash, ruleHash, configHash } from '@stellar-registry/perch';
+import { policy, named, canonicalJson, docHash, ruleHash, configHash } from '@stellar-registry/perch';
 
 const doc = policy()
   .network('Test SDF Network ; September 2015')
-  .signer('admin', external(VERIFIER_ADDRESS, ADMIN_PUBKEY_HEX))
+  .signer('admin', named('perch-webauthn-verifier@0.1.2', VERIFIER_ADDRESS, ADMIN_PUBKEY_HEX))
   .rule('admin', (r) => r.selfAdmin().signedBy('admin'))
   .build();
 
 canonicalJson(doc); // the canonical wire form (what gets applied on-chain)
-docHash(doc);       // sha256 of the canonical form, hex — the document identity
+docHash(doc);       // hex sha256 of the canonical form: the document identity
 ruleHash(doc.rules[0]); // sha256("perch/rule" || rule bytes): a program's provenance
 configHash(docWithRecovery); // sha256("perch/recovery/config" || recovery bytes)
 ```
@@ -48,21 +48,66 @@ own domain tag (`CANONICAL.md`, "Fragment hashes"), so callers never need to
 spell the tags themselves; the tags are exported as `RULE_HASH_DOMAIN` and
 `CONFIG_HASH_DOMAIN`.
 
+### Verifiers
+
+An external signer names its verifier one of two ways. `named(name@version,
+address, key)` names one from Perch's managed `perch/verifiers` registry:
+the document carries `"verifier-name"` beside `"verifier"`, `doc_hash` binds
+both, and the doc compiler resolves the name and exact version on-chain and
+refuses the document unless it is that address. `external(address, key)`
+names it by contract id alone: an *unverified* verifier, whose `verify`
+decides whatever the rules holding its signers allow.
+
+- An account document (one with a self-admin rule or a `recovery` member) may
+  name no unverified verifier, and neither may a recovery target.
+- A grant document may, at most one signer per unverified verifier in a
+  rule, and the compile result lists them. Show `unverifiedWarnings(doc)`
+  before the owner approves it: one `"Unverified verifier C…: it can
+  approve anything this rule allows"` per rule and verifier.
+
+The compiler refuses either case, and a name that does not resolve to its
+address, with `DocInvalid`. `checkVerifiers(doc)` applies both refusals
+before submission and says which (`UnverifiedVerifier`,
+`UnverifiedVerifierReused`).
+`resolveVerifierName(name, passphrase, fetchHash)` finds the address a name
+resolves to, as the compiler does: `perch/verifiers` (`verifierRegistryId`)
+publishes a wasm hash under the name and version, deployed at its content
+address there (`verifierAddress`). perch-js depends on no Stellar SDK, so
+`fetchHash` is the caller's simulated call of the registry's `fetch_hash`.
+Verifier resolution and the names retained for grant-document reconstruction
+are described in [the account interface](../../docs/account-interface.md#verifiers).
+
 Parsing/validating an existing document:
 
 ```ts
 import { parsePolicyDocJson } from '@stellar-registry/perch';
 
-const doc = parsePolicyDocJson(jsonText); // throws on any deviation — fail closed
+const doc = parsePolicyDocJson(jsonText); // throws on any deviation (fails closed)
 ```
+
+### Pinning a grant to the account
+
+A grant's rule matches every call its target, functions and argument
+predicates allow. For the token functions `transfer`, `transfer_from`,
+`approve`, `burn` and `burn_from` (`OWNER_FNS`) the account requires
+argument 0 to be itself. For any other function, a grant author pins the
+argument that names the account with `is-self` (`isSelf()` in the builder).
+Show `selfPinWarnings(doc)` before the owner approves a grant: one `"Rule
+… pins no argument to the account (is-self): …"` per rule that pins none,
+other than a rule listing only those token functions. It is a warning, not
+a refusal. A grant never calls a token's admin functions (`mint`,
+`clawback`, `set_admin`, `set_authorized`): the account refuses them.
 
 ## Guarantees
 
 - `canonicalJson`, `docHash`, `ruleHash`, and `configHash` are byte-identical
   to the Rust implementation; all are pinned against committed golden vectors
   in CI.
-- The schema rejects unknown fields, out-of-range values, and non-canonical
-  encodings rather than normalizing them.
+- The schema rejects unknown fields and out-of-range values rather than
+  normalizing them. It does not yet enforce one spelling per value: a cap
+  `limit` with a leading `+` or leading zeros, and signer-key hex in either
+  case, are accepted as written
+  ([`docs/DEFERRED.md`](../../docs/DEFERRED.md#canonical-value-spellings)).
 
 ## Using a Perch account
 
@@ -79,13 +124,26 @@ included) and every executed upgrade, and never anything else. Unlike
 
 ```ts
 import { accountReader, readSnapshot } from '@stellar-registry/perch';
-import { account, docCompiler } from '@stellar-registry/perch-contracts';
+import { account, docCompiler, legacyAccount, legacyDocCompiler } from '@stellar-registry/perch-contracts';
 
-const reader = accountReader(accountId, new account.Client(opts(accountId)),
-  new docCompiler.Client(opts(compilerId)));
+// capabilities() has the same ABI in both builds; choose before decoding rules.
+const probe = new account.Client(opts(accountId));
+const { result: capabilities } = await probe.capabilities();
+const bindings = capabilities.snapshot_version === 1
+  ? { account: legacyAccount, compiler: legacyDocCompiler }
+  : capabilities.snapshot_version === 2
+    ? { account, compiler: docCompiler }
+    : undefined;
+if (!bindings) throw new Error('Unsupported snapshot version');
+const reader = accountReader(accountId, new bindings.account.Client(opts(accountId)),
+  new bindings.compiler.Client(opts(compilerId)));
 const snapshot = await readSnapshot(reader); // configuration, limits, capabilities
 snapshot.configuration.revision;             // what every value in it belongs to
 ```
+
+See [ABI compatibility](../../docs/auth-root.md#client-and-deployment-compatibility)
+for the supported bindings and upgrade boundary. `compilerId` must identify
+the compiler this account pins.
 
 `readSnapshot` reads `configuration()` (rules with their ids, the applied
 `doc_hash`, recovery wiring, the freeze, the pinned infra), the compiler's
@@ -108,18 +166,17 @@ import { selectRules, assertRevision, signingDigest, buildAuthPayload } from '@s
 
 const selection = selectRules(snapshot, { name: 'pay', scope: { type: 'contract', address: token } });
 await assertRevision(reader, selection.revision);       // StaleRevision if it moved
-const digest = signingDigest(signaturePayload, selection.ruleIds);
+const digest = signingDigest(accountId, signaturePayload, selection.ruleIds);
 const signature = buildAuthPayload(selection, [{ signer, signature: await sign(digest) }]);
 ```
 
-Rule ids are OZ context-rule ids. They survive an in-place edit and change
-when a rule is replaced (a new scope, a rename, a removal and re-addition,
-or `apply_doc`'s delta pricing a replacement below an edit), and OZ never
-reuses one, so select by name and scope at a revision and never
-keep ids across revisions. `signingDigest` is what every signer signs: OZ's
-`sha256(signature_payload || xdr(rule ids))`, where `signature_payload` is
-the account auth entry's Soroban payload. `buildAuthPayload` is the `ScVal`
-XDR of OZ's `AuthPayload` for that entry's `signature`.
+Select by name and scope at a revision and never keep ids across revisions;
+the account's [rule views](../../docs/account-interface.md#views) define id
+lifetime. `signingDigest` binds the account address, the host payload and the
+selected rule ids using the account's
+[`auth_digest` scheme](../../docs/account-interface.md#types).
+`buildAuthPayload` is the `ScVal` XDR of the wire-compatible `AuthPayload`
+for that entry's `signature`.
 
 **Only `apply_doc` is bound to a revision.** The pre-sign check guarantees
 the selection was current when it was signed, not when it executes. An
@@ -156,7 +213,10 @@ host render errors, so transports should attach the events.
 compiler would refuse. `readSnapshot` refuses with `UnsupportedCapability`
 an account whose document identity, authorization digest, or snapshot
 format this version does not implement, and a limits format it does not
-know.
+know. `grantMode(snapshot.capabilities)` returns `'grant_v1'` for an account
+that `readGrantDoc` and `apply_grant` serve, `'scoped_v1'` for one built
+before the rename (only its `apply_scope` family applies grants), and
+`null` for one that applies no grant documents.
 
 ### Applying a document
 
@@ -200,6 +260,33 @@ same caller code runs
 against a backend that takes several transactions: a step that already
 landed is skipped when an operation is retried or started again.
 
+### Reading a grant document
+
+An account keeps no grant document's text. It keeps each rule's name and
+stored rule (`grant(id)`, `grant_rule_set(id)`), the document's signer ids
+(`grant_signer_ids(id)`) and each signer's `verifier-name`
+(`grant_verifier_names(id)`), and applies a grant document only in normal
+form, so those give the text back:
+
+```ts
+import { readGrantDoc } from '@stellar-registry/perch';
+
+const grant = await readGrantDoc(new account.Client(opts(accountId)), accountId, networkPassphrase, grantId);
+// null when the account has no grant there; else { doc, canonical, docHash }
+```
+
+`rebuildGrantDoc` rebuilds the document from those four views
+(`decodeStoredGrant` decodes them as the generated bindings return them),
+and throws `GrantNotRebuilt` unless its canonical text hashes to the
+grant's stored `doc_hash`, so a rebuild is never trusted on its own. Write
+grant documents in normal form: external keys in lowercase hex, cap
+limits as plain decimals, no cap `token`, `all` where a `threshold` asks
+every signer it names, a capped rule's `functions` exactly `["transfer"]`,
+`is-self` rather than `address-eq` naming the account, no `string-in`
+value over 256 bytes, no rule already expired, and every declared signer
+named by a rule, declared in the order the rules first name them. The
+account refuses any other with `NotNormalForm`.
+
 ### Errors
 
 | Error | When |
@@ -210,17 +297,47 @@ landed is skipped when an operation is retried or started again.
 | `AccountFrozen` | A `Protected` recovery attempt is authorized: before signing (with the attempt and its expiry), or the account refusing a submission |
 | `InconsistentRead` | Reads kept disagreeing on the revision, or an RPC went backwards |
 | `CompilerMismatch` | The reader's compiler is not the account's pinned one |
+| `GrantNotRebuilt` | A grant's stored rules, signer ids and verifier names do not rebuild to its `doc_hash` |
+| `UnverifiedVerifier`, `UnverifiedVerifierReused` | `checkVerifiers`: an account document naming a verifier by contract id alone, or a rule holding two signers under one such verifier |
 | `RuleNotFound`, `UnsupportedCapability`, `Aborted` | As named |
 
 ### Hashes and encodings
 
 `docHash`, `ruleHash`, `configHash`, `statementDigest`, `replacementsHash`,
-`credentialFingerprint`, `zkStatementFields`, `signingDigest`, and
-`buildAuthPayload` are pinned against vectors the Rust suite writes from the
-contracts' own code (`testdata/`).
+`credentialFingerprint`, `zkStatementFields`, `signingDigest`,
+`buildAuthPayload`, and `rebuildGrantDoc` are pinned against vectors the
+Rust suite writes from the contracts' own code (`testdata/`).
 
 perch-js does not compile documents. The account's pinned on-chain doc
 compiler is authoritative; `checkLimits` checks only its caps.
+
+### Exact authorization-entry roots
+
+`.authRoot(gameAddress, 'guess')` on a rule adds an exact entry-root
+constraint. For a capped token transfer, put it on the transfer rule; the
+companion game rule authorizes the guess itself. `request` also accepts
+`authRoot: { contract: gameAddress, function: 'guess' }` per permission.
+
+Pass the actual authorization-entry preorder to rule selection:
+
+```ts
+const selection = selectRules(snapshot, [gameRef, transferRef], [
+  { contract: gameAddress, function: 'guess' },
+  { contract: tokenAddress, function: 'transfer' },
+]);
+```
+
+This screens the root, but the caller must derive it from the XDR being
+signed. The account's host-authenticated entry is authoritative. A root-only
+winning guess selects just the game rule; a direct transfer fails the transfer
+rule's root condition. An outer router with no account authorization is not
+that entry root. General ancestry and root arguments are outside this feature.
+
+`readSnapshot` accepts legacy snapshot 1 and root-aware snapshot 2; every
+snapshot-2 rule must include root metadata. Applying root-bearing documents
+requires interface >=3 and snapshot >=2. Canonical bytes/hashes of documents
+without `auth-root` are unchanged. An existing deployment accepts
+root-bearing documents only after a new build and upgrade. See [root semantics and compatibility](../../docs/auth-root.md).
 
 ## License
 

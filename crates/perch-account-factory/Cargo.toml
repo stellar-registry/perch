@@ -5,9 +5,6 @@ version = "0.3.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-# No cargo-manifest `publish = false`: release-plz's `release` command skips
-# manifest-unpublishable packages (no tag ever). crates.io publish is blocked
-# workspace-wide in release-plz.toml instead.
 
 [package.metadata.stellar]
 cargo_inherit = true
@@ -18,7 +15,8 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-stellar-accounts = { workspace = true }
+# The account's `Signer`, which `create` takes.
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
 # Build-time pins: the account wasm hash and the WebAuthn verifier's
 # content address, both from this crate's committed `wasm/` pins.
 perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }

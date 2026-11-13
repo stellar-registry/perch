@@ -1,0 +1,14 @@
+<div class="sim-embed" id="sim-embed" data-src="{{root}}sim/index.html?embed=1" data-full="{{root}}sim/index.html" data-mb="{{fact:sim-page-mb}}">
+<p class="sim-open"><a href="{{root}}sim/index.html">Open the simulation page</a> ({{fact:sim-page-mb}} MB; it runs offline in your browser).</p>
+<div class="sim-try" role="group" aria-labelledby="sim-try-title"><p class="box-title" id="sim-try-title">Try these</p>
+<ul>
+<li><a href="{{root}}sim/index.html?scenario=W3sib3AiOiJwYXkiLCJhbW91bnRfeGxtIjo2LCJ0byI6InNob3AiLCJzaWduZXIiOiJhcHAifSx7Im9wIjoicGF5IiwiYW1vdW50X3hsbSI6NSwidG8iOiJzaG9wIiwic2lnbmVyIjoiYXBwIn1d" data-commands='[{"op":"pay","amount_xlm":6,"to":"shop","signer":"app"},{"op":"pay","amount_xlm":5,"to":"shop","signer":"app"}]'>Pay 6, then 5</a></li>
+<li><a href="{{root}}sim/index.html?scenario=W3sib3AiOiJwYXkiLCJhbW91bnRfeGxtIjo2LCJ0byI6InNob3AiLCJzaWduZXIiOiJhcHAifSx7Im9wIjoib3pfcG9saWN5Iiwic3BlbmRpbmdfbGltaXQiOiJvZmYifSx7Im9wIjoicGF5IiwiYW1vdW50X3hsbSI6NiwidG8iOiJzaG9wIiwic2lnbmVyIjoiYXBwIn0seyJvcCI6InBheSIsImFtb3VudF94bG0iOjYsInRvIjoic2hvcCIsInNpZ25lciI6ImFwcCJ9LHsib3AiOiJwYXkiLCJhbW91bnRfeGxtIjo2LCJ0byI6InNob3AiLCJzaWduZXIiOiJhcHAifV0" data-commands='[{"op":"pay","amount_xlm":6,"to":"shop","signer":"app"},{"op":"oz_policy","spending_limit":"off"},{"op":"pay","amount_xlm":6,"to":"shop","signer":"app"},{"op":"pay","amount_xlm":6,"to":"shop","signer":"app"},{"op":"pay","amount_xlm":6,"to":"shop","signer":"app"}]'>Pay 6, remove <code>spending_limit</code>, pay 6 three times</a></li>
+<li><a href="{{root}}sim/index.html?scenario=W3sib3AiOiJwYXkiLCJhbW91bnRfeGxtIjoxLCJ0byI6Im1hbGxvcnkiLCJzaWduZXIiOiJhcHAifV0" data-commands='[{"op":"pay","amount_xlm":1,"to":"mallory","signer":"app"}]'>Pay 1 elsewhere</a></li>
+<li><a href="{{root}}sim/index.html?scenario=W3sib3AiOiJwYXkiLCJhbW91bnRfeGxtIjoxLCJ0byI6InNob3AiLCJzaWduZXIiOiJmb3JnZWQifSx7Im9wIjoicGF5IiwiYW1vdW50X3hsbSI6MSwidG8iOiJzaG9wIiwic2lnbmVyIjoidW5saXN0ZWQifV0" data-commands='[{"op":"pay","amount_xlm":1,"to":"shop","signer":"forged"},{"op":"pay","amount_xlm":1,"to":"shop","signer":"unlisted"}]'>Another key signs as the app, then a key not on the rule</a></li>
+<li><a href="{{root}}sim/index.html?scenario=W3sib3AiOiJwYXkiLCJhbW91bnRfeGxtIjo2LCJ0byI6InNob3AiLCJzaWduZXIiOiJhcHAifSx7Im9wIjoicGF5IiwiYW1vdW50X3hsbSI6NSwidG8iOiJzaG9wIiwic2lnbmVyIjoiYXBwIn0seyJvcCI6ImFkdmFuY2UiLCJsZWRnZXJzIjoxMDB9LHsib3AiOiJwYXkiLCJhbW91bnRfeGxtIjo1LCJ0byI6InNob3AiLCJzaWduZXIiOiJhcHAifV0" data-commands='[{"op":"pay","amount_xlm":6,"to":"shop","signer":"app"},{"op":"pay","amount_xlm":5,"to":"shop","signer":"app"},{"op":"advance","ledgers":100},{"op":"pay","amount_xlm":5,"to":"shop","signer":"app"}]'>Pay 6 and 5, advance 100 ledgers, pay 5</a></li>
+</ul>
+<p class="sim-note">Each link opens the simulation page with that scenario. Both accounts run every request, from a fresh ledger with the rule installed.</p>
+</div>
+{{fig:fig-sim}}
+</div>

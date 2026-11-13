@@ -1,0 +1,104 @@
+{
+ "columns": [
+  "Step",
+  "Request",
+  "OpenZeppelin account",
+  "Perch account"
+ ],
+ "rows": [
+  [
+   "0",
+   "set up",
+   "set up; 100 XLM",
+   "set up; 100 XLM"
+  ],
+  [
+   "1",
+   "install the rule",
+   "applied",
+   "applied"
+  ],
+  [
+   "2",
+   "pay 6 XLM",
+   "applied · window 6 of 10",
+   "applied · window 6 of 10"
+  ],
+  [
+   "3",
+   "pay 5 XLM",
+   "refused, 3221 in `spending_limit` · window 6 of 10",
+   "refused, 5 in the account · window 6 of 10"
+  ],
+  [
+   "4",
+   "`spending_limit` off",
+   "removed",
+   "—"
+  ],
+  [
+   "5",
+   "pay 6 XLM",
+   "applied · no window",
+   "refused, 5 in the account · window 6 of 10"
+  ],
+  [
+   "6",
+   "pay 6 XLM",
+   "applied · no window",
+   "refused, 5 in the account · window 6 of 10"
+  ],
+  [
+   "7",
+   "pay 6 XLM",
+   "applied · no window",
+   "refused, 5 in the account · window 6 of 10"
+  ],
+  [
+   "8",
+   "`spending_limit` on",
+   "re-attached",
+   "—"
+  ],
+  [
+   "9",
+   "pay 1 XLM",
+   "applied · window 1 of 10",
+   "applied · window 7 of 10"
+  ],
+  [
+   "10",
+   "pay 1 XLM elsewhere",
+   "refused, 100 in the interpreter · window 1 of 10",
+   "refused, 5 in the account · window 7 of 10"
+  ],
+  [
+   "11",
+   "pay 1 XLM, another key as the app",
+   "refused, Error(Crypto, InvalidInput) in the account · window 1 of 10",
+   "refused, Error(Crypto, InvalidInput) in the verifier · window 7 of 10"
+  ],
+  [
+   "12",
+   "pay 1 XLM, key not on the rule",
+   "refused, 3016 in the account · window 1 of 10",
+   "refused, 5 in the account · window 7 of 10"
+  ],
+  [
+   "13",
+   "close 100 ledgers",
+   "100 ledgers closed · window 0 of 10 (record lists 1 XLM)",
+   "100 ledgers closed · window 0 of 10 (record lists 7 XLM)"
+  ],
+  [
+   "14",
+   "pay 5 XLM",
+   "applied · window 5 of 10",
+   "applied · window 5 of 10"
+  ]
+ ],
+ "title": "The recorded run, one command a row.",
+ "caption": "Recorded by soroban-sim’s native run of the simulation page. OpenZeppelin requests carried 2 authorization entries, Perch requests 1. The window is the Perch grant’s record, or `spending_limit`’s history (none while it is removed). Every refusal was an enforcing simulation that left the ledger unchanged. Payments go to the shop unless noted. The window column is the stored record; spends 100 or more ledgers old leave it at the next charge.",
+ "latex_size": "scriptsize",
+ "latex_colspec": "@{}r>{\\raggedright\\arraybackslash}p{0.17\\linewidth}LL@{}"
+}

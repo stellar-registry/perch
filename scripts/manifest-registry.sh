@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Whether a deployment manifest's registry is the one this source derives on
-# its network. The account and the factory derive their registry from the
-# committed crates/*/wasm/registry.path (a root deployer and salt, then named
-# deploys) under the ledger's network id; scripts/derive-id.py runs that same
+# its network. The account derives its infra registry from the committed
+# crates/*/wasm/registry.path (a root deployer and salt, then named deploys)
+# under the ledger's network id; scripts/derive-id.py runs that same
 # derivation.
 #
 # Prints one line and exits 0 when the manifest is usable:

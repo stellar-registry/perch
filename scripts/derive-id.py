@@ -15,8 +15,9 @@ compiled-in derivation (perch-registry-resolve-macro):
       the parent may be a G account (a root's deployer)
   derive-id.py registry <passphrase> [<registry.path>]
       the registry a registry.path derives on that network (default:
-      crates/perch-smart-account/wasm/registry.path, what the account and
-      the factory compile in)
+      crates/perch-smart-account/wasm/registry.path, what the account
+      compiles in; crates/*/wasm/verifiers.path gives perch/verifiers, where
+      a document's verifier-name resolves)
   derive-id.py root <passphrase> [<registry.path>]
       that path's first hop, the Stellar Registry root
   derive-id.py chain <passphrase> [<registry.path>]

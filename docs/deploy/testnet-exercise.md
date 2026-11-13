@@ -1,6 +1,6 @@
 # Testnet exercise of the stack
 
-**Scope.** This is an evidence report for the previous testnet deployment:
+**Scope.** This is an evidence report for an earlier testnet deployment:
 the stack built from commit `7ae915dc1ac6` and deployed 2026-10-09, whose
 manifest is
 [`deployments/testnet.json` at `bb746f9`](https://github.com/stellar-registry/perch/blob/bb746f9d03c593f0d5a2518c6900e00c938f95ec/deployments/testnet.json).

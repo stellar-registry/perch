@@ -227,11 +227,21 @@ fn push_zk_fields<'a>(o: &mut Vec<(&'static str, Cv<'a>)>, z: &'a ZkFactor) {
 
 fn signer_to_cv(s: &SignerDecl) -> Cv<'_> {
     match &s.method {
-        SignerMethod::External { verifier, key } => Cv::Obj(vec![
-            ("id", Cv::Str(&s.id)),
-            ("verifier", Cv::Str(verifier)),
-            ("key", Cv::Str(key)),
-        ]),
+        SignerMethod::External {
+            verifier,
+            key,
+            verifier_name,
+        } => {
+            let mut o = vec![
+                ("id", Cv::Str(&s.id)),
+                ("verifier", Cv::Str(verifier)),
+                ("key", Cv::Str(key)),
+            ];
+            if let Some(name) = verifier_name {
+                o.push(("verifier-name", Cv::Str(name)));
+            }
+            Cv::Obj(o)
+        }
         SignerMethod::Delegated { address } => {
             Cv::Obj(vec![("id", Cv::Str(&s.id)), ("address", Cv::Str(address))])
         }
@@ -260,6 +270,15 @@ fn rule_to_cv(r: &Rule) -> Cv<'_> {
     }
     if let Some(cap) = &r.cap {
         o.push(("cap", cap_to_cv(cap)));
+    }
+    if let Some(root) = &r.auth_root {
+        o.push((
+            "auth-root",
+            Cv::Obj(vec![
+                ("contract", Cv::Str(&root.contract)),
+                ("function", Cv::Str(&root.function)),
+            ]),
+        ));
     }
     Cv::Obj(o)
 }

@@ -1,0 +1,22 @@
+A grant has to hold against the app that holds it and against whoever submits
+its transactions: A1, the grantee's key, honest or stolen, and A2, a submitter
+or relayer. Table~\ref{tab:tab-grantee} gives what each can do, what holds and
+what remains. In Saltzer and Schroeder's terms~\cite{saltzer-schroeder},
+\code{\_\_check\_auth} mediates every \code{require\_auth} on the account that
+an authorization entry satisfies; one satisfied by invoker authority, as in the
+owner's \code{execute}, never reaches it.
+
+\perchtable{tab-grantee}
+
+\paragraph{Goals and trust.} Containment (G1), permission soundness (G2) and
+window safety (G3) are proved for lowering and the decision function, the code
+around them tested; fail-closed refusal (G6) is tested; recovery invalidation
+(G4) is proved in an account model (Theorem~10 of the verification companion),
+tested and run on testnet. Other goals and adversaries are in the vision
+companion. We trust the Soroban host and validators, the verifiers documents
+name, the adopted recovery controller, the document compiler, rustc
+and the wallet's display, and assume unforgeable signature schemes (Ed25519;
+ECDSA P-256 for passkeys) and a collision-resistant SHA-256, under which the
+verification companion proves on paper that an external signature binds the
+account, the entry and the rule IDs. Budgets across grants, effects outside authorization,
+confidentiality and verifier correctness are non-goals.

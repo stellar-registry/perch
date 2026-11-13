@@ -792,9 +792,9 @@ pub fn relayed_delegated_guardian(w: &World<'_>) -> Result<()> {
     );
     let genuine = c.delegated_entry(template, &approver, approve_rule)?;
 
-    // An attacker posts first, more forgeries than the old per-guardian cap
-    // of eight: another delegate, the approver under a rule it is not in,
-    // and the genuine entry with its delegate signature tampered with.
+    // An attacker posts nine forgeries first, three rounds of: another
+    // delegate, the approver under a rule it is not in, and the genuine entry
+    // with its delegate signature tampered with.
     let tampered = {
         let mut e = genuine.clone();
         let SorobanCredentials::AddressWithDelegates(d) = &mut e.credentials else {

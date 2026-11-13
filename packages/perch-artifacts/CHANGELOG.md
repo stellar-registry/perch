@@ -48,5 +48,3 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 - Constructorless membership pool, real ZK circuit/adapter, reproducible artifacts (epic #99 WS2) (#101)
 - New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
 - *(testnet)* Fresh deployment record of the merged #99 stack, from main's 7ae915d (#112)
-
-

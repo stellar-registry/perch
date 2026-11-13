@@ -1,0 +1,10 @@
+<p class="lede"><strong>A Perch grant makes an app's spending limit part of the account's own authorization decision, so the limit cannot be detached on its own.</strong> Lean proofs show that this decision accepts only what the rules allow and keeps every window within its cap. Before the user signs, the sign dialog may show the whole request and its effects.</p>
+<p>In the recorded run, the two designs disagreed only after the owner detached <code>spending_limit</code> from the OpenZeppelin rule. The OpenZeppelin account then sent {{fact:sim-oz-percall-sends}} payments totalling {{fact:sim-oz-percall-moved-xlm}} XLM, and Perch refused all {{fact:sim-oz-percall-sends}}. On every other request, the two gave the same verdict.</p>
+<p><code>oz-policy-builder</code> is ahead of Perch in maturity, authoring and expressiveness, and several of the next steps below come from it. <a href="{{doc:vision}}#agents">The vision paper</a> describes each one.</p>
+<ul>
+<li><strong>An agent policy engine.</strong> A root agent holds a Perch grant and hands child agents budgets.</li>
+<li><strong>Ideas from <code>oz-policy-builder</code>.</strong> Writing a grant document from a recorded transaction; simulating a grant before install; refusing a capped rule that another rule naming the same key could bypass; and testing on a corpus of real mainnet transactions.</li>
+<li><strong>A Cedar bridge.</strong> Translating policies in the Cedar policy language into grant documents.</li>
+<li><strong>Exact metering.</strong> Measuring the costs of both designs exactly.</li>
+</ul>
+<p>The <a href="{{root}}latex/perch-paper.pdf">PDF edition</a> and the companion papers give the evidence behind each claim, the trust assumptions and the limits of the design. The PDF also covers related work.</p>

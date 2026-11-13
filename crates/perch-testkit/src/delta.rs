@@ -8,35 +8,45 @@
 //!   code, so the oracle checks the reconcile only.
 //! - [`DocModel::expected_rules`] is the independent check: the rules a
 //!   document grants at the current ledger, computed from the model alone,
-//!   compared with [`live_rules`], the grant read back from OZ's context
-//!   rules and the parameters each attached policy holds. It shares no code
-//!   with the compiler or the account, so it catches what the oracle cannot.
+//!   compared with [`live_rules`], the grant read back from the account's
+//!   context-rule views and the stored rule-eval rule each one's id selects.
+//!   It shares no code with the compiler or the account, so it catches what
+//!   the oracle cannot.
 //! - [`DocModel`] is a generated policy document. [`DocModel::generate`]
 //!   draws one from bytes, so proptest (shrinking over bytes) and cargo-fuzz
 //!   share one generator. It reaches the document caps, draws signer lists
 //!   in any order, spells keys in either hex case and cap limits with
 //!   leading zeros or a sign, and [`DocModel::sequence`] advances the ledger
 //!   between documents past the rule expiries it draws.
+//! - After every accepted step of a [`GrantOp`] sequence, the stored
+//!   rule-eval rule set of the document it applied equals the lowering of
+//!   that document's model and the denotation of what it installed
+//!   ([`crate::rule_set`]); a removed grant keeps none.
 //! - [`DeltaWorld`] holds a delta account and an oracle account side by side
 //!   in one `Env`, with the shared infra, controller, verifier, and address
 //!   pools every generated document draws from.
+//! - [`GrantOp::sequence`] interleaves admin `apply_doc` with `apply_grant`
+//!   and `remove_grant` over a few grant ids (spec §7.6), and
+//!   [`GrantModel::step`] checks each step against the documents the model
+//!   says are applied: every grant grants exactly its own document's rules,
+//!   grant operations leave the account document and the other grants alone,
+//!   and a refused operation changes nothing.
 //! - [`storage_state`] reads an account's complete storage from the ledger
 //!   snapshot (its own entries, and every entry the interpreter, spending
 //!   limit, controller, and pool keep for it), renaming the ids that differ
-//!   by history: rule ids become rule names, signer and policy ids become the
-//!   signer or policy. Two accounts whose rules grant the same authorization
-//!   produce equal states.
+//!   by history: rule ids become rule names, and the policy ids of the OZ
+//!   registry entries kept for the recovery rule become the policy. Two
+//!   accounts whose rules grant the same authorization produce equal
+//!   states.
 
 use crate::fixture::AnyKeyVerifier;
 use arbitrary::Unstructured;
 use perch_account::{PerchAccount, PerchAccountClient};
+use perch_account_types::{ContextRule, ContextRuleType, Signer};
 use perch_doc_compiler::{PerchDocCompiler, MAX_DOC_RULES, MAX_DOC_SIGNERS};
 use perch_interpreter::PerchInterpreter;
-use perch_interpreter::PerchInterpreterClient;
-use perch_program::Op;
 use perch_recovery::PerchRecovery;
-use perch_smart_account::testutils::{plan_doc, Mode, PlannedRule};
-use perch_smart_account::{infra, InstalledRule};
+use perch_smart_account::{infra, InstalledRule, StoredRule};
 use perch_spending_limit::PerchSpendingLimit;
 use soroban_sdk::testutils::EnvTestConfig;
 use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _};
@@ -46,24 +56,24 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::string::{String, ToString};
 use std::vec::Vec;
-use stellar_accounts::policies::spending_limit::get_spending_limit_data;
-use stellar_accounts::smart_account::{ContextRuleType, Signer};
 
 pub use oracle::{OracleAccount, OracleAccountClient};
 
 /// The oracle contract lives in its own module: soroban's macros name the
 /// trait impls after the bare trait paths, which must be in scope.
 mod oracle {
-    #![allow(unused_imports)]
-    use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
+    use perch_account_types::{AuthPayload, ContextRule, Signer};
+    use perch_smart_account::testutils::apply_doc_full_replace;
     use perch_smart_account::{
-        check_auth, install_admin, AccountCapabilities, AccountConfiguration, FreezeGate,
-        InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, UpgradeRequest,
+        check_auth, install_account_rules, AccountCapabilities, AccountConfiguration, FreezeGate,
+        GrantRecord, InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, StoredRule,
+        UpgradeRequest,
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;
-    use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
-    use stellar_accounts::smart_account::{AuthPayload, ContextRule, Signer, SmartAccount};
+    use soroban_sdk::{
+        contract, contractimpl, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec,
+    };
 
     /// The perch account with `apply_doc` swapped for the full replace.
     #[contract]
@@ -72,24 +82,7 @@ mod oracle {
     #[contractimpl]
     impl OracleAccount {
         pub fn __constructor(e: &Env, admin_signers: Vec<Signer>) {
-            install_admin(e, &admin_signers);
-        }
-
-        /// `apply_doc` reconciling every changed rule in place where it can
-        /// (`in_place`) or replacing every changed rule whole: each path on
-        /// its own, so the cost model's price of each can be checked.
-        pub fn apply_doc_forced(
-            e: &Env,
-            doc_json: Bytes,
-            approval_valid_until: u32,
-            in_place: bool,
-        ) -> Result<BytesN<32>, PerchAccountError> {
-            let mode = if in_place {
-                Mode::InPlace
-            } else {
-                Mode::Replace
-            };
-            apply_doc_with(e, doc_json, approval_valid_until, mode)
+            install_account_rules(e, &admin_signers);
         }
     }
 
@@ -107,8 +100,6 @@ mod oracle {
             check_auth(&e, &signature_payload, &signatures, &auth_contexts)
         }
     }
-
-    impl SmartAccount for OracleAccount {}
 
     #[contractimpl(contracttrait)]
     impl PerchSmartAccount for OracleAccount {
@@ -138,8 +129,9 @@ pub const SIGNER_IDS: [&str; 16] = [
 pub const RULE_NAMES: [&str; 15] = [
     "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
 ];
-/// Function names a constrained rule may allow.
-pub const FUNCTIONS: [&str; 3] = ["transfer", "approve", "mint"];
+/// Function names a constrained rule may allow: none a grant document may
+/// not list (a guardian approval or a token-admin function, spec §7.6).
+pub const FUNCTIONS: [&str; 3] = ["transfer", "approve", "swap"];
 /// Size of the key pool (delegated addresses and external keys).
 pub const KEY_POOL: usize = 20;
 /// Size of the scope pool (contracts rules are scoped to).
@@ -199,7 +191,8 @@ pub struct Spelling {
 }
 
 /// A generated policy document. `rules[0]` is always the policy-free
-/// self-admin rule `admin` (the anti-brick check needs one).
+/// self-admin rule `admin` (the anti-brick check needs one), except in a
+/// grant document ([`DocModel::generate_grant`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DocModel {
     pub signers: Vec<SignerModel>,
@@ -323,14 +316,95 @@ impl DocModel {
             .collect()
     }
 
+    /// Draw a grant document (`apply_grant`, spec §7.6): a generated
+    /// document without its self-admin rules and recovery member, three
+    /// draws in four in normal form ([`Self::normalize`]). One draw in six
+    /// keeps the self-admin rules and recovery member, and one in four keeps
+    /// its spellings, documents `apply_grant` must refuse.
+    pub fn generate_grant(u: &mut Unstructured) -> arbitrary::Result<DocModel> {
+        let mut d = DocModel::generate(u)?;
+        if !u.ratio(1, 6)? {
+            d.rules.retain(|r| r.scope.is_some());
+            d.recovery = None;
+        }
+        if !u.ratio(1, 4)? {
+            d.normalize();
+        }
+        Ok(d)
+    }
+
+    /// Rewrite this document into normal form (`perch_ir::normal_form`):
+    /// keys in lowercase hex and limits without a prefix, `all` for a
+    /// threshold asking every signer it names, `["transfer"]` for a capped
+    /// rule's functions, and the signers the rules name declared in the
+    /// order the rules first name them, the others dropped. Its rules'
+    /// expiries are kept.
+    pub fn normalize(&mut self) {
+        self.spelling = Spelling::default();
+        let mut order: Vec<usize> = Vec::new();
+        for r in &mut self.rules {
+            if r.threshold == Some(r.signers.len() as u32) {
+                r.threshold = None;
+            }
+            if r.cap.is_some() {
+                r.functions = Some(std::vec!["transfer"]);
+            }
+            for i in &r.signers {
+                if !order.contains(i) {
+                    order.push(*i);
+                }
+            }
+        }
+        for r in &mut self.rules {
+            for i in &mut r.signers {
+                *i = order.iter().position(|j| j == i).unwrap();
+            }
+        }
+        self.signers = order.iter().map(|i| self.signers[*i].clone()).collect();
+    }
+
+    /// Whether `apply_grant` takes this document's form at ledger `ledger`,
+    /// computed from the model alone: no rule's `not-after-ledger` reached,
+    /// and in normal form (no uppercase hex digit in a key, no limit prefix,
+    /// no threshold asking every signer it names, every capped rule's
+    /// functions `["transfer"]`, and every signer declared in the order the
+    /// rules first name it).
+    pub fn normal_form(&self, ledger: u32) -> bool {
+        let upper = self.signers.iter().any(|s| match s.key {
+            KeyModel::External(k) => external_key(k) != external_key(k).to_uppercase(),
+            KeyModel::Delegated(_) => false,
+        });
+        let capped = self.rules.iter().any(|r| r.cap.is_some());
+        if (self.spelling.upper_hex && upper) || (capped && !self.spelling.limit_prefix.is_empty())
+        {
+            return false;
+        }
+        let mut order: Vec<usize> = Vec::new();
+        for r in &self.rules {
+            if r.not_after.is_some_and(|n| n <= ledger)
+                || r.threshold == Some(r.signers.len() as u32)
+                || (r.cap.is_some() && r.functions.as_deref() != Some(&["transfer"][..]))
+            {
+                return false;
+            }
+            for i in &r.signers {
+                if !order.contains(i) {
+                    order.push(*i);
+                }
+            }
+        }
+        order.iter().copied().eq(0..self.signers.len())
+    }
+
     /// The rules this document grants `account` at the current ledger,
     /// rendered like [`live_rules`] and computed from the model alone (no
     /// compiler or account code): a rule whose `not-after-ledger` has been
-    /// reached grants nothing; a rule's signers are a set; a threshold,
-    /// function list, or cap attaches the interpreter with an m-of-n floor
-    /// (n for `all`); a cap attaches the spending limit at the limit's
-    /// numeric value however it is spelled; recovery adds a zero-signer
-    /// self-scoped rule held by the controller.
+    /// reached grants nothing; a rule's signers are a set, of which `m` must
+    /// sign (n for `all`); a function list allows those functions and no
+    /// list every one; a cap, at the limit's numeric value however it is
+    /// spelled, allows only a `transfer` (when the functions cover it) whose
+    /// argument 2 is an `i128`, and charges that argument; recovery adds a
+    /// zero-signer self-scoped rule held by the controller.
     pub fn expected_rules(&self, w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
         let seq = w.env.ledger().sequence();
         let mut out = BTreeSet::new();
@@ -353,22 +427,25 @@ impl DocModel {
                 })
                 .collect();
             let mut policies = BTreeSet::new();
-            if r.threshold.is_some() || r.functions.is_some() || r.cap.is_some() {
-                let m = r.threshold.unwrap_or(r.signers.len() as u32);
-                let mut ops = soroban_sdk::Vec::new(&w.env);
-                ops.push_back(Op::MinSigners(m));
-                if let Some(f) = &r.functions {
-                    let mut syms = soroban_sdk::Vec::new(&w.env);
-                    for f in f {
-                        syms.push_back(soroban_sdk::Symbol::new(&w.env, f));
-                    }
-                    ops.push_back(Op::FnIn(syms));
+            let m = r.threshold.unwrap_or(r.signers.len() as u32);
+            policies.insert(format!("threshold:{m}"));
+            let functions: BTreeSet<String> = match (&r.functions, r.cap) {
+                (Some(f), None) => f.iter().map(|f| f.to_string()).collect(),
+                (f, Some(_)) if f.as_ref().is_none_or(|f| f.contains(&"transfer")) => {
+                    BTreeSet::from(["transfer".to_string()])
                 }
-                ops.push_back(Op::All(1 + r.functions.is_some() as u32));
-                policies.insert(format!("interpreter:{ops:?}"));
-            }
+                (_, Some(_)) => BTreeSet::new(),
+                (None, None) => BTreeSet::new(),
+            };
+            let kind = if r.functions.is_none() && r.cap.is_none() {
+                "any-except"
+            } else {
+                "only"
+            };
+            policies.insert(format!("functions:{kind}{functions:?}"));
             if let Some((limit, period)) = r.cap {
-                policies.insert(format!("cap:{limit}/{period}"));
+                policies.insert(format!("cond:arg2<={}", i128::MAX));
+                policies.insert(format!("cap:{limit}/{period}@2"));
             }
             out.insert(rule_line(
                 r.name,
@@ -400,7 +477,7 @@ impl DocModel {
                     format!(r#"{{"id":"{}","address":"{}"}}"#, s.id, strkey(&w.keys[k]))
                 }
                 KeyModel::External(k) => format!(
-                    r#"{{"id":"{}","verifier":"{}","key":"{}"}}"#,
+                    r#"{{"id":"{}","verifier":"{}","verifier-name":"{VERIFIER_NAME}","key":"{}"}}"#,
                     s.id,
                     strkey(&w.verifier),
                     if self.spelling.upper_hex {
@@ -520,14 +597,13 @@ fn rule_line(
 }
 
 /// The rules `account` grants at the current ledger, read from where they
-/// are enforced rather than from the account's own records: every OZ context
-/// rule not yet expired, its signers, and what each attached policy holds
-/// for it (the interpreter's program, the spending limit's cap).
+/// are enforced: every OZ context rule not yet expired, its signers and
+/// policies, and the stored rule-eval rule its id selects, from the account
+/// document's set or its grant's.
 pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
     let client = PerchAccountClient::new(&w.env, account);
-    let interpreter = PerchInterpreterClient::new(&w.env, &w.interpreter);
-    let seq = w.env.ledger().sequence();
     let count = client.get_context_rules_count();
+    let stored = stored_rules(w, account);
     let mut out = BTreeSet::new();
     let (mut found, mut id) = (0, 0u32);
     while found < count {
@@ -538,58 +614,139 @@ pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
             continue;
         };
         found += 1;
-        if rule.valid_until.is_some_and(|v| v < seq) {
-            continue;
+        out.extend(granted(w, &rule, stored.get(&rule.id)));
+    }
+    out
+}
+
+/// Every stored rule-eval rule of `account`, by the OZ id of the installed
+/// rule it stands beside.
+fn stored_rules(w: &DeltaWorld, account: &Address) -> BTreeMap<u32, StoredRule> {
+    let client = PerchAccountClient::new(&w.env, account);
+    let mut out: BTreeMap<u32, StoredRule> = client
+        .installed_rules()
+        .iter()
+        .map(|r| r.id)
+        .zip(client.rule_set().iter())
+        .collect();
+    for grant in client.grants(&0, &u32::MAX).iter() {
+        if let Some(record) = client.grant(&grant) {
+            out.extend(
+                record
+                    .rules
+                    .iter()
+                    .map(|r| r.id)
+                    .zip(client.grant_rule_set(&grant).iter()),
+            );
         }
-        let ctx = match &rule.context_type {
-            ContextRuleType::CallContract(a) => a.clone(),
-            other => panic!("unexpected context type {other:?}"),
-        };
-        let signers: BTreeSet<String> = rule
-            .signers
-            .iter()
-            .map(|s| match s {
-                Signer::Delegated(a) => strkey(&a),
-                Signer::External(v, key) => {
-                    let mut buf = std::vec![0u8; key.len() as usize];
-                    key.copy_into_slice(&mut buf);
-                    format!("{}:{}", strkey(&v), hex::encode(buf))
-                }
-            })
-            .collect();
-        let policies: BTreeSet<String> = rule
-            .policies
-            .iter()
-            .map(|p| {
-                if p == w.interpreter {
-                    match interpreter.get_program(account, &rule.id) {
-                        Some(i) => format!("interpreter:{:?}", i.program.ops),
-                        None => "interpreter:none".to_string(),
-                    }
-                } else if p == w.spending_limit {
-                    let data = w.env.as_contract(&w.spending_limit, || {
-                        get_spending_limit_data(&w.env, rule.id, account)
-                    });
-                    format!("cap:{}/{}", data.spending_limit, data.period_ledgers)
-                } else if p == w.controller {
-                    "recovery".to_string()
-                } else {
-                    strkey(&p)
-                }
-            })
-            .collect();
-        let mut name = std::vec![0u8; rule.name.len() as usize];
-        rule.name.copy_into_slice(&mut name);
-        out.insert(rule_line(
-            &String::from_utf8(name).unwrap(),
-            &ctx,
-            rule.valid_until,
-            &signers,
-            &policies,
+    }
+    out
+}
+
+/// [`live_rules`] restricted to the OZ rules `ids`: what one document's
+/// records grant, the account document's (`installed_rules`) or a grant's.
+pub fn rules_by_id(
+    w: &DeltaWorld,
+    account: &Address,
+    ids: impl IntoIterator<Item = u32>,
+) -> BTreeSet<String> {
+    let client = PerchAccountClient::new(&w.env, account);
+    let stored = stored_rules(w, account);
+    ids.into_iter()
+        .filter_map(|id| granted(w, &client.get_context_rule(&id), stored.get(&id)))
+        .collect()
+}
+
+/// What `stored` allows beyond its contract, signers and last ledger,
+/// rendered like [`DocModel::expected_rules`]: its threshold, functions,
+/// conditions, and cap.
+fn enforced(e: &Env, stored: &StoredRule) -> BTreeSet<String> {
+    let rule = stored.to_rule(e).expect("a stored rule reads back");
+    let names = |fs: &[std::vec::Vec<u8>]| -> BTreeSet<String> {
+        fs.iter()
+            .map(|f| String::from_utf8(f.clone()).unwrap())
+            .collect()
+    };
+    let mut out = BTreeSet::from([
+        format!("threshold:{}", rule.threshold),
+        match &rule.functions {
+            rule_eval::Functions::AnyExcept(fs) => format!("functions:any-except{:?}", names(fs)),
+            rule_eval::Functions::Only(fs) => format!("functions:only{:?}", names(fs)),
+        },
+    ]);
+    for c in &rule.conds {
+        out.insert(match c {
+            rule_eval::Cond::ArgI128AtMost(i, b) => format!("cond:arg{i}<={b}"),
+            _ => "cond:other".to_string(),
+        });
+    }
+    if let Some(cap) = &rule.cap {
+        out.insert(format!(
+            "cap:{}/{}@{}",
+            cap.limit, cap.period, cap.amount_arg
         ));
     }
     out
 }
+
+/// `rule` rendered like [`DocModel::expected_rules`], or `None` once expired.
+/// `stored` is the stored rule its id selects, which the recovery rule's
+/// controller stands in for.
+fn granted(w: &DeltaWorld, rule: &ContextRule, stored: Option<&StoredRule>) -> Option<String> {
+    if rule
+        .valid_until
+        .is_some_and(|v| v < w.env.ledger().sequence())
+    {
+        return None;
+    }
+    let ctx = match &rule.context_type {
+        ContextRuleType::CallContract(a) => a.clone(),
+        other => panic!("unexpected context type {other:?}"),
+    };
+    let signers: BTreeSet<String> = rule
+        .signers
+        .iter()
+        .map(|s| match s {
+            Signer::Delegated(a) => strkey(&a),
+            Signer::External(v, key) => {
+                let mut buf = std::vec![0u8; key.len() as usize];
+                key.copy_into_slice(&mut buf);
+                format!("{}:{}", strkey(&v), hex::encode(buf))
+            }
+        })
+        .collect();
+    let mut policies: BTreeSet<String> = rule
+        .policies
+        .iter()
+        .map(|p| {
+            if p == w.controller {
+                "recovery".to_string()
+            } else {
+                strkey(&p)
+            }
+        })
+        .collect();
+    if !policies.contains("recovery") {
+        match stored {
+            Some(s) => policies.extend(enforced(&w.env, s)),
+            None => {
+                policies.insert("unstored".to_string());
+            }
+        }
+    }
+    let mut name = std::vec![0u8; rule.name.len() as usize];
+    rule.name.copy_into_slice(&mut name);
+    Some(rule_line(
+        &String::from_utf8(name).unwrap(),
+        &ctx,
+        rule.valid_until,
+        &signers,
+        &policies,
+    ))
+}
+
+/// The `verifier-name` generated documents give [`DeltaWorld::verifier`].
+pub const VERIFIER_NAME: &str = "delta-verifier@1.0.0";
 
 /// External key `n`: 32 bytes, distinct per `n`.
 pub fn external_key(n: usize) -> String {
@@ -638,6 +795,13 @@ impl Default for DeltaWorld {
 
 impl DeltaWorld {
     pub fn new() -> Self {
+        Self::with_controller(None)
+    }
+
+    /// A world whose recovery controller runs `controller` (a wasm) instead
+    /// of this source's, at the address `new` gives it: for an account build
+    /// that calls an earlier controller's hooks (`oz_differential.rs`).
+    pub fn with_controller(controller: Option<&[u8]>) -> Self {
         // Property tests build many worlds; none writes a test snapshot.
         let env = Env::new_with_config(EnvTestConfig {
             capture_snapshot_at_drop: false,
@@ -664,8 +828,14 @@ impl DeltaWorld {
         env.register_at(&interpreter, PerchInterpreter, ());
         let spending_limit = infra::perch_spending_limit::address(&env);
         env.register_at(&spending_limit, PerchSpendingLimit, ());
-        let verifier = env.register(AnyKeyVerifier, ());
-        let controller = env.register(PerchRecovery, ());
+        let verifier = crate::verifiers::deploy(&env, AnyKeyVerifier);
+        crate::verifiers::name(&env, VERIFIER_NAME, &verifier);
+        // A native contract registers at the next generated address; a wasm
+        // is put there too, so both worlds name the same controller.
+        let controller = match controller {
+            Some(wasm) => env.register_at(&Address::generate(&env), wasm, ()),
+            None => env.register(PerchRecovery, ()),
+        };
         let keys: Vec<Address> = (0..KEY_POOL).map(|_| Address::generate(&env)).collect();
         let scopes: Vec<Address> = (0..SCOPE_POOL).map(|_| Address::generate(&env)).collect();
         let guardians: Vec<Address> = (0..2).map(|_| Address::generate(&env)).collect();
@@ -711,29 +881,28 @@ impl DeltaWorld {
         out
     }
 
-    /// Apply `doc` to the oracle account with every changed rule forced down
-    /// one path (in place where possible, or replaced whole).
-    pub fn apply_forced(&self, doc: &DocModel, in_place: bool) -> Result<BytesN<32>, String> {
+    /// `apply_grant(grant, doc)` on `account`, rendered like [`Self::apply`].
+    pub fn apply_grant(
+        &self,
+        account: &Address,
+        grant: u32,
+        doc: &DocModel,
+    ) -> Result<BytesN<32>, String> {
         let bytes = doc.bytes(self);
         self.env.cost_estimate().budget().reset_unlimited();
-        OracleAccountClient::new(&self.env, &self.oracle)
-            .try_apply_doc_forced(&bytes, &0, &in_place)
+        PerchAccountClient::new(&self.env, account)
+            .try_apply_grant(&grant, &bytes)
             .map(|r| r.unwrap())
             .map_err(|e| format!("{e:?}"))
     }
 
-    /// What applying `doc` to `account` in `mode` would do to each rule slot,
-    /// priced by the cost model, without applying it.
-    pub fn plan(
-        &self,
-        account: &Address,
-        doc: &DocModel,
-        mode: Mode,
-    ) -> soroban_sdk::Vec<PlannedRule> {
-        let bytes = doc.bytes(self);
+    /// `remove_grant(grant)` on `account`.
+    pub fn remove_grant(&self, account: &Address, grant: u32) -> Result<(), String> {
         self.env.cost_estimate().budget().reset_unlimited();
-        self.env
-            .as_contract(account, || plan_doc(&self.env, bytes, mode))
+        PerchAccountClient::new(&self.env, account)
+            .try_remove_grant(&grant)
+            .map(|r| r.unwrap())
+            .map_err(|e| format!("{e:?}"))
     }
 
     /// The account's rule records.
@@ -748,45 +917,9 @@ impl DeltaWorld {
     }
 }
 
-/// The events the cost model prices: OZ's rule, signer, and policy events,
-/// their registry events, and the spending limit's install and uninstall.
-pub const PRICED_EVENTS: [&str; 15] = [
-    "context_rule_added",
-    "context_rule_removed",
-    "context_rule_meta_updated",
-    "signer_added",
-    "signer_removed",
-    "signer_registered",
-    "signer_deregistered",
-    "policy_added",
-    "policy_removed",
-    "policy_registered",
-    "policy_deregistered",
-    "spending_limit_installed",
-    "spending_limit_uninstalled",
-    // Never emitted by a reconciliation; listed so a stray one is priced
-    // (and so caught) rather than ignored.
-    "spending_limit_changed",
-    "spending_limit_enforced",
-];
-
-/// XDR bytes of the last invocation's events the cost model prices, and of
-/// all its contract events (the host's own figure).
-pub fn event_bytes(env: &Env) -> (u32, u32) {
-    use soroban_sdk::xdr::{Limits, WriteXdr};
-    let mut priced = 0;
-    for e in env.events().all().events().iter() {
-        let ContractEventBody::V0(body) = &e.body;
-        let name = match body.topics.first() {
-            Some(ScVal::Symbol(s)) => s.to_utf8_string_lossy(),
-            _ => String::new(),
-        };
-        if PRICED_EVENTS.contains(&name.as_str()) {
-            priced += e.to_xdr(Limits::none()).unwrap().len() as u32;
-        }
-    }
-    let total = env.cost_estimate().resources().contract_events_size_bytes;
-    (priced, total)
+/// XDR bytes of the last invocation's contract events (the host's figure).
+pub fn event_bytes(env: &Env) -> u32 {
+    env.cost_estimate().resources().contract_events_size_bytes
 }
 
 /// One contract event, rendered.
@@ -819,6 +952,216 @@ pub fn events(env: &Env) -> Vec<Event> {
             }
         })
         .collect()
+}
+
+// ---------------------------------------------------------------------------
+// Grant documents
+// ---------------------------------------------------------------------------
+
+/// The grant ids a [`GrantOp`] sequence draws from: three, so each grant
+/// has more than one neighbour to leave untouched and removals move entries
+/// around the grant index, yet few enough that grants are re-applied,
+/// removed, and created again over one another.
+pub const GRANT_IDS: [u32; 3] = [0, 7, 1];
+
+/// One step of a grant-document sequence on [`DeltaWorld::delta`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum GrantOp {
+    /// `apply_doc` of an account document.
+    Admin(DocModel),
+    /// `apply_grant(grant, doc)`.
+    Apply(u32, DocModel),
+    /// `remove_grant(grant)`.
+    Remove(u32),
+}
+
+impl GrantOp {
+    /// `1..=max` steps drawn from `u`, each with the ledgers to advance
+    /// ([`DeltaWorld::advance`]) before it: half grant applications, a
+    /// quarter removals (of live or unknown grants), and a quarter account
+    /// documents, about one in ten of them without an admin rule (refused).
+    pub fn sequence(u: &mut Unstructured, max: usize) -> arbitrary::Result<Vec<(u32, GrantOp)>> {
+        let n = u.int_in_range(1..=max)?;
+        (0..n)
+            .map(|_| {
+                let advance = *u.choose(&ADVANCE)?;
+                let op = match u.int_in_range(0..=7u32)? {
+                    0 | 1 if u.ratio(1, 8)? => GrantOp::Admin(DocModel::generate_grant(u)?),
+                    0 | 1 => GrantOp::Admin(DocModel::generate(u)?),
+                    6 | 7 => GrantOp::Remove(*u.choose(&GRANT_IDS)?),
+                    _ => GrantOp::Apply(*u.choose(&GRANT_IDS)?, DocModel::generate_grant(u)?),
+                };
+                Ok((advance, op))
+            })
+            .collect()
+    }
+
+    /// The grant the step names, if any.
+    fn grant(&self) -> Option<u32> {
+        match self {
+            GrantOp::Apply(s, _) | GrantOp::Remove(s) => Some(*s),
+            GrantOp::Admin(_) => None,
+        }
+    }
+}
+
+/// The documents a [`GrantOp`] sequence has left applied to
+/// [`DeltaWorld::delta`]: the account document (`None` while the
+/// constructor's admin rule stands) and each live grant's.
+#[derive(Clone, Debug, Default)]
+pub struct GrantModel {
+    pub admin: Option<DocModel>,
+    pub grants: BTreeMap<u32, DocModel>,
+}
+
+impl GrantModel {
+    /// Run `op` on the delta account and check, accepted or refused:
+    ///
+    /// - (a) every live grant grants exactly the rules the model computes
+    ///   for its own document ([`DocModel::expected_rules`] against the OZ
+    ///   rules its record names), and the grant index lists exactly the
+    ///   model's grants;
+    /// - (b) a grant operation leaves the account document as it was: its
+    ///   records, the rules, signers, and policies they grant, the applied
+    ///   document, the revision, and the recovery wiring;
+    /// - (c) every operation leaves each grant it does not name as it was;
+    /// - (d) a refused operation changes no ledger entry of any contract;
+    ///
+    /// and that the account grants nothing outside its documents. It also
+    /// predicts the outcome before running `op`: an account document is
+    /// accepted iff it keeps the `admin` rule, a grant document iff it has
+    /// no self-admin rule and no recovery member and is in normal form at
+    /// the current ledger ([`DocModel::normal_form`]), and a removal iff the
+    /// grant is live. Nothing else can refuse in this world: generated
+    /// documents always compile, recovery is a guardian-only `Loss` member
+    /// with no ZK factor, and the scope pool never names the account. Panics
+    /// on a violation; returns the operation's outcome.
+    pub fn step(&mut self, w: &DeltaWorld, op: &GrantOp) -> Result<(), String> {
+        let a = &w.delta;
+        let named = op.grant();
+        let expected = match op {
+            GrantOp::Admin(d) => d.rules.iter().any(|r| r.name == "admin"),
+            GrantOp::Apply(_, d) => {
+                d.recovery.is_none()
+                    && d.rules.iter().all(|r| r.scope.is_some())
+                    && d.normal_form(w.env.ledger().sequence())
+            }
+            GrantOp::Remove(s) => self.grants.contains_key(s),
+        };
+        let entries = raw_entries(&w.env);
+        let admin = admin_view(w, a);
+        let grants: BTreeMap<u32, String> = GRANT_IDS
+            .iter()
+            .map(|s| (*s, grant_view(w, a, *s)))
+            .collect();
+        let out = match op {
+            GrantOp::Admin(d) => w.apply(a, d).map(|_| ()),
+            GrantOp::Apply(s, d) => w.apply_grant(a, *s, d).map(|_| ()),
+            GrantOp::Remove(s) => w.remove_grant(a, *s),
+        };
+        assert_eq!(out.is_ok(), expected, "{op:?} returned {out:?}");
+        match (&out, op) {
+            (Err(e), _) => assert!(
+                raw_entries(&w.env) == entries,
+                "(d) the refused {op:?} changed the ledger ({e})"
+            ),
+            (Ok(()), GrantOp::Admin(d)) => {
+                self.admin = Some(d.clone());
+                if let Err(x) = crate::rule_set::check(&w.env, a) {
+                    panic!("the admin rule set after {op:?}: {x}");
+                }
+            }
+            (Ok(()), GrantOp::Apply(s, d)) => {
+                self.grants.insert(*s, d.clone());
+                if let Err(x) = crate::rule_set::check_grant(&w.env, a, *s) {
+                    panic!("grant {s}'s rule set after {op:?}: {x}");
+                }
+            }
+            (Ok(()), GrantOp::Remove(s)) => {
+                self.grants.remove(s);
+                assert!(
+                    PerchAccountClient::new(&w.env, a)
+                        .grant_rule_set(s)
+                        .is_empty(),
+                    "{op:?} left grant {s}'s rule set"
+                );
+            }
+        }
+        if named.is_some() {
+            assert_eq!(
+                admin_view(w, a),
+                admin,
+                "(b) {op:?} changed the account document"
+            );
+        }
+        for s in GRANT_IDS {
+            if Some(s) != named {
+                assert_eq!(
+                    grant_view(w, a, s),
+                    grants[&s],
+                    "(c) {op:?} changed grant {s}"
+                );
+            }
+        }
+        self.check(w);
+        out
+    }
+
+    /// (a), the account document's grant, and that every live OZ rule belongs
+    /// to the account document or a grant.
+    pub fn check(&self, w: &DeltaWorld) {
+        let a = &w.delta;
+        let client = PerchAccountClient::new(&w.env, a);
+        let admin = rules_by_id(w, a, client.installed_rules().iter().map(|r| r.id));
+        if let Some(d) = &self.admin {
+            assert_eq!(
+                admin,
+                d.expected_rules(w, a),
+                "the account document's grant"
+            );
+        }
+        let listed: BTreeSet<u32> = client.grants(&0, &u32::MAX).iter().collect();
+        assert_eq!(
+            listed,
+            self.grants.keys().copied().collect(),
+            "(a) the grant index"
+        );
+        let mut all = admin;
+        for (s, d) in &self.grants {
+            let record = client.grant(s).expect("a live grant has a record");
+            let granted = rules_by_id(w, a, record.rules.iter().map(|r| r.id));
+            assert_eq!(granted, d.expected_rules(w, a), "(a) grant {s}'s grant");
+            all.extend(granted);
+        }
+        assert_eq!(
+            live_rules(w, a),
+            all,
+            "a live context rule outside every document"
+        );
+    }
+}
+
+/// The account document as an account holds it: its configuration (records,
+/// `doc_hash`, revision, recovery wiring), applied bytes, and what its
+/// records grant.
+fn admin_view(w: &DeltaWorld, account: &Address) -> String {
+    let client = PerchAccountClient::new(&w.env, account);
+    let configuration = client.configuration();
+    let granted = rules_by_id(w, account, configuration.rules.iter().map(|r| r.id));
+    format!("{configuration:?} {:?} {granted:?}", client.applied_doc())
+}
+
+/// Grant `grant` as an account holds it: its record, signer ids, and grant.
+fn grant_view(w: &DeltaWorld, account: &Address, grant: u32) -> String {
+    let client = PerchAccountClient::new(&w.env, account);
+    let record = client.grant(&grant);
+    let granted = record
+        .as_ref()
+        .map(|r| rules_by_id(w, account, r.rules.iter().map(|x| x.id)));
+    format!(
+        "{record:?} {:?} {granted:?}",
+        client.grant_signer_ids(&grant)
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -856,7 +1199,8 @@ pub fn storage_state(env: &Env, account: &Address, history: History) -> BTreeMap
                 if let ScVal::ContractInstance(instance) = &d.val {
                     for e in instance.storage.iter().flat_map(|m| m.0.iter()) {
                         let name = render(&e.key, Some(&me));
-                        if ["[NextId]", "[NextSignerId]", "[NextPolicyId]"].contains(&name.as_str())
+                        // The id counter differs by history; ids are renamed.
+                        if name == "NextRuleId"
                             || (history == History::Ignore
                                 && ["RecoveryGeneration", "Revision"].contains(&name.as_str()))
                         {
@@ -946,7 +1290,8 @@ type SnapshotEntry = (
     (Box<soroban_sdk::xdr::LedgerEntry>, Option<u32>),
 );
 
-/// Rule, signer, and policy ids of one account, read from its own entries.
+/// Rule, signer, and policy ids of one account, read from its own entries:
+/// its admin records (`RuleSet`), and any entry of OZ's registry.
 struct Ids {
     rules: BTreeMap<u32, String>,
     signers: BTreeMap<u32, String>,
@@ -970,6 +1315,30 @@ impl Ids {
             let LedgerEntryData::ContractData(d) = &entry.data else {
                 continue;
             };
+            // The account's records name its admin rules (the recovery
+            // rule among them), each by its name and its stored rule's
+            // contract.
+            if let (ScVal::Symbol(s), ScVal::Vec(Some(records))) = (&k.key, &d.val) {
+                if s.0.to_utf8_string_lossy() == "RuleSet" {
+                    for r in records.iter() {
+                        if let Some(ScVal::U32(id)) = field(r, "id") {
+                            let name = field(r, "name").map(|v| render(v, Some(me)));
+                            let contract = field(r, "rule")
+                                .and_then(|rule| field(rule, "contract"))
+                                .map(|v| render(v, Some(me)));
+                            ids.rules.insert(
+                                *id,
+                                format!(
+                                    "{}@{}",
+                                    name.unwrap_or_default(),
+                                    contract.unwrap_or_default()
+                                ),
+                            );
+                        }
+                    }
+                }
+                continue;
+            }
             let Some((kind, id)) = oz_key(&k.key) else {
                 continue;
             };
@@ -1068,8 +1437,8 @@ impl Ids {
             (n, ScVal::U32(id)) if n.starts_with("[PolicyLookup") => {
                 self.policies.get(id).cloned().unwrap_or_default()
             }
-            // The rule records carry OZ ids.
-            ("InstalledRules", ScVal::Vec(Some(rules))) => {
+            // The rule records carry ids.
+            ("RuleSet", ScVal::Vec(Some(rules))) => {
                 let rendered: Vec<String> = rules
                     .iter()
                     .map(|r| match r {

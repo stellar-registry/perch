@@ -1,0 +1,36 @@
+\paragraph{Shared ground, two arrangements.} We cite oz-policy-builder at
+\fact{opb-pin-short} from its public documentation and source. Both designs build on OpenZeppelin's
+context rules, judge each call alone (\nolinkurl{docs/architecture.md:307-309}) and
+deny by default. OpenZeppelin with oz-policy-builder composes a decision from
+contracts attached to a rule (interpreter, \code{spending\_limit}, a threshold
+policy), each swappable and auditable on its own. Perch puts one document behind one decision
+point that holds every check and its state.
+Composition buys flexibility, such as a check that reads a live price, which a
+Perch rule cannot express; one decision point gives one place to check and to
+keep a limit's state.
+
+\paragraph{A limit over time.} The interpreter ``does not see what a transaction
+moved, keep rolling totals or count calls'' (\nolinkurl{docs/stellar.md:404-407});
+totals come from \code{spending\_limit}, an opt-in policy that accepts
+\code{transfer} alone (\nolinkurl{policy-synth/src/install.ts:957-967}). A
+Perch window is part of the rule's decision (Theorem~\ref{stmt:cap-window-safety}).
+
+\perchtable{tab-choose}
+
+\paragraph{Where each is stronger.} oz-policy-builder is ahead in
+\emph{maturity} (Table~\ref{tab:tab-choose}, first three rows),
+\emph{authoring} (record or declare, synthesise a predicate, test that each
+conjunct is needed, and verify it) and \emph{expressiveness and ecosystem}
+(reads of other contracts, quantifiers, clock windows, batches related through
+an execution adapter, threshold policies, a deny code per reason, and rules on
+existing OpenZeppelin accounts, where a grant needs a Perch account). Perch is
+ahead in \emph{limits over time}, \emph{one decision point}, which refuses
+before any verifier runs and installs one grant across contracts, and a
+\emph{proved core}; no formal model was found in oz-policy-builder's tree,
+which is tested, partly on the shipped Wasm.
+
+\paragraph{Lessons for Perch.} We propose five: a front end that records a
+transaction and emits a grant document for review; simulating a grant against
+the account's own decision function before install; minimality checks, and
+overlap checks that refuse a cap another rule naming the same key bypasses; a
+corpus of real transactions; and an audit before any claim of maturity.

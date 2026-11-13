@@ -1,0 +1,224 @@
+{
+ "opb-repo": {
+  "value": "untangledfinance/oz-policy-builder",
+  "source": "panel brief (V clone)"
+ },
+ "opb-pin": {
+  "value": "43b13ed1d9c6662afd74f446006e69bfcf21259b",
+  "source": "`git log -1` in the clone (V)"
+ },
+ "opb-pin-short": {
+  "value": "43b13ed",
+  "source": "same (V)"
+ },
+ "opb-pin-date": {
+  "value": "2026-10-30",
+  "source": "same (V)"
+ },
+ "opb-release": {
+  "value": "v5.2.0",
+  "source": "`opb:README.md:57-59` (V)"
+ },
+ "opb-synth-package": {
+  "value": "@crediolabs/policy-synth",
+  "code": true,
+  "source": "`opb:README.md:15` (V)"
+ },
+ "opb-tools-count": {
+  "value": "nine",
+  "source": "`opb:README.md:20`; `packages/policy-synth/README.md` tools table (V)"
+ },
+ "opb-interpreter-wasm": {
+  "value": "6704996f626904a4e33b95bda17b73963fc9cf502ffdfdbe9d85b4b10288e0d4",
+  "source": "`opb:README.md:47`; `packages/policy-synth/src/config.ts:67` (V)"
+ },
+ "opb-interpreter-wasm-short": {
+  "value": "6704996f…",
+  "source": "same (V)"
+ },
+ "opb-interpreter-testnet": {
+  "value": "CDER6P73JWMIVD3X6TGGOQIDAH3DLU7OKRTLT4ULPTZ3QJJ3QUGTK7CM",
+  "source": "`opb:…/config.ts:66` (V)"
+ },
+ "opb-interpreter-max-reads": {
+  "value": "8",
+  "source": "`opb:…/config.ts:69`; `README.md:48` (V)"
+ },
+ "opb-interpreter-limits": {
+  "value": "reads 8, leaves 400, bytes 24,576, elems 32, in 32, depth 5",
+  "source": "`opb:README.md:48` (V)"
+ },
+ "opb-interpreter-mainnet": {
+  "value": "none pinned",
+  "source": "`opb:…/config.ts:57-80` (V)"
+ },
+ "opb-adapter-wasm-short": {
+  "value": "bf85432c…",
+  "source": "`opb:README.md:58` (V)"
+ },
+ "opb-audit-start": {
+  "value": "26 October 2026",
+  "source": "`opb:README.md:57-59` (V)"
+ },
+ "opb-audit-status": {
+  "value": "in progress",
+  "source": "same (V)"
+ },
+ "opb-audit-scope": {
+  "value": "the interpreter, custody gate, execution adapter, Prime seat and three TypeScript packages at v5.2.0, with the OpenZeppelin account and its policies out of scope",
+  "source": "`opb:README.md:166-171`; `docs/audit-overview.md:76-85` (V)"
+ },
+ "opb-interpreter-tests": {
+  "value": "440",
+  "source": "`opb:docs/audit-overview.md:15-20` (V)"
+ },
+ "opb-tests-against-oz08": {
+  "value": "26",
+  "source": "same (V)"
+ },
+ "opb-mutants": {
+  "value": "31 of 32 killed",
+  "source": "`opb:evidence/README.md:23` (V)"
+ },
+ "opb-error-arg-mismatch": {
+  "value": "100",
+  "source": "`opb:contracts/stellar/policy-interpreter/src/storage.rs:27` (V)"
+ },
+ "opb-error-nonce-replay": {
+  "value": "202",
+  "source": "`…/storage.rs:40` (V)"
+ },
+ "opb-error-signers-changed": {
+  "value": "204",
+  "source": "`…/storage.rs:42` (V)"
+ },
+ "opb-error-predicate-hash": {
+  "value": "208",
+  "source": "`…/storage.rs:45` (V)"
+ },
+ "opb-error-no-authenticated-signers": {
+  "value": "210",
+  "source": "`…/storage.rs:47` (V)"
+ },
+ "opb-error-external-signer": {
+  "value": "212",
+  "source": "`…/storage.rs:48` (V)"
+ },
+ "opb-error-default-context": {
+  "value": "218",
+  "source": "`…/storage.rs:69` (V)"
+ },
+ "opb-open-high": {
+  "value": "E-25, T-05, T-19, E-36",
+  "source": "`opb:evidence/stride-threat-model.md:392-405` (V)"
+ },
+ "opb-e38-severity": {
+  "value": "Medium, accepted",
+  "source": "same (V)"
+ },
+ "opb-install-auth-window": {
+  "value": "300 ledgers by default, at most 17,280",
+  "source": "`opb:docs/stellar.md:820` (R); `config.ts:26` (R)"
+ },
+ "oz-v080-tag": {
+  "value": "v0.8.0",
+  "source": "`opb:evidence/README.md:154-156` (V)"
+ },
+ "oz-v080-commit": {
+  "value": "ddc327e",
+  "source": "same (V)"
+ },
+ "oz-v080-account-build": {
+  "value": "8286422f…",
+  "source": "`opb:docs/audit-overview.md:80` (V)"
+ },
+ "oz-v072-tag": {
+  "value": "v0.7.2",
+  "source": "`opb:evidence/README.md:156` (V)"
+ },
+ "oz-v072-commit": {
+  "value": "a9c4216",
+  "source": "same (V)"
+ },
+ "oz-v072-line-account-build": {
+  "value": "91a2cd56…",
+  "note": "no recorded source",
+  "source": "`opb:docs/audit-overview.md:80`; T-26 at `stride-threat-model.md:401` (V)"
+ },
+ "oz-spending-history-max": {
+  "value": "815",
+  "source": "`oz8:policies/spending_limit.rs:169` (V); `opb:evidence/README.md:162-165` (V)"
+ },
+ "oz-spending-history-max-v072": {
+  "value": "1,000",
+  "source": "`opb:evidence/README.md:162-165` (V)"
+ },
+ "oz-spending-limit-exceeded": {
+  "value": "3221",
+  "source": "`oz8:policies/spending_limit.rs:128` (V)"
+ },
+ "oz-policies-testnet": {
+  "value": "v0.8.0, deployed 26 October 2026",
+  "source": "`opb:evidence/README.md:154-156` (V)"
+ },
+ "oz-policies-mainnet": {
+  "value": "v0.7.2, deployed 9 June 2026",
+  "source": "same (V)"
+ },
+ "oz-spending-window": {
+  "value": "entries at or before C − P are evicted, so the window is (C − P, C]",
+  "source": "`oz8:policies/spending_limit.rs:9-12, 491-498` (V)"
+ },
+ "oz-valid-until-semantics": {
+  "value": "refused only when `valid_until` < ledger, so the rule authorizes through `valid_until`",
+  "markup": true,
+  "source": "`oz8:smart_account/storage.rs:321-322` (V)"
+ },
+ "perch-expiry-semantics": {
+  "value": "`not-after-ledger` N authorizes through N − 1",
+  "markup": true,
+  "source": "r2:371; `rc:crates/rule-eval/src/lowering.rs:12-14` (V)"
+ },
+ "opb-corpus-calls": {
+  "value": "33",
+  "source": "`opb:packages/policy-synth/src/corpus.test.ts:1, 30-31`; `fixtures/corpus/mainnet.json` has 33 entries (V)"
+ },
+ "opb-corpus-shapes": {
+  "value": "26",
+  "source": "`opb:packages/policy-synth/src/corpus.test.ts:1`; 26 distinct `category` values in `fixtures/corpus/mainnet.json` (V)"
+ },
+ "opb-packages-version": {
+  "value": "5.2.0",
+  "source": "`opb:packages/{policy-synth,policy-builder-cli,policy-builder-mcp}/package.json:3` (V)"
+ },
+ "opb-per-call-bound-xlm": {
+  "value": "5",
+  "source": "source/figures/fig-same-task.run.json per_call_only.cap_per_call_xlm (examination of oz-policy-builder 43b13ed, local quickstart network)"
+ },
+ "opb-per-call-moved-xlm": {
+  "value": "9",
+  "source": "source/figures/fig-same-task.run.json per_call_only.moved_xlm"
+ },
+ "opb-per-call-applied-sends": {
+  "value": "three",
+  "source": "source/figures/fig-same-task.run.json per_call_only.sends (3, 5 and 1 XLM applied; 5 XLM + 1 stroop refused, code 100)"
+ },
+ "opb-pentest-pr": {
+  "value": "#78",
+  "source": "oz-policy-builder 43b13ed merge commit message: \"Merge pull request #78 from untangledfinance/fix/hacken-pt-findings\" (V, editor r3); changes under packages/ only"
+ },
+ "opb-pentest-branch": {
+  "value": "fix/hacken-pt-findings",
+  "code": true,
+  "source": "same (V, editor r3)"
+ },
+ "opb-commits-after-release": {
+  "value": "17",
+  "source": "`git describe` at 43b13ed: v5.2.0-17-g43b13ed; `git diff v5.2.0 43b13ed -- contracts` is empty (V, editor r3)"
+ },
+ "opb-domain-tags": {
+  "value": "`prime-seat-grant` (session grants) and `prime.execution.adapter.v5` (the execution adapter's address salt)",
+  "markup": true,
+  "source": "`opb:contracts/stellar/prime-seat/src/lib.rs:78`; `opb:docs/stellar.md:157-160` (V, LaTeX author)"
+ }
+}

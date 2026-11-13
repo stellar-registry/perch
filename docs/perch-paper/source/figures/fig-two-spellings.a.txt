@@ -1,0 +1,25 @@
+{ "version": 1,
+  "network": "Test SDF Network ; September 2015",
+  "signers": [
+    { "id": "app", "verifier": "C...WEBAUTHN", ④
+      "key": "...65-byte passkey key, hex..." } ],
+  "rules": [                                   ③
+    { "name": "guess",
+      "scope": { "type": "contract",
+                 "address": "C...GAME" },
+      "principals": { "type": "all",
+                      "signers": ["app"] },
+      "functions": ["guess"],
+      "not-after-ledger": N },                 ⑤
+    { "name": "guess-xlm",                     ①
+      "scope": { "type": "contract",
+                 "address": "C...XLM" },
+      "principals": { "type": "all",
+                      "signers": ["app"] },
+      "functions": ["transfer"],
+      "args": [ { "index": 1,
+                  "pred": { "type": "address-eq",
+                            "address": "C...GAME" } } ],
+      "cap": { "limit": "20000000",            ②
+               "period-ledgers": 17280 },
+      "not-after-ledger": N } ] }              ⑤

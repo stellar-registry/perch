@@ -1,0 +1,49 @@
+{
+ "columns": [
+  "Probe",
+  "Parent",
+  "Child"
+ ],
+ "rows": [
+  [
+   "the game’s `guess`",
+   "accepts",
+   "accepts"
+  ],
+  [
+   "transfer 1 to the shop",
+   "accepts",
+   "accepts"
+  ],
+  [
+   "transfer 5 to the shop",
+   "accepts",
+   "refuses"
+  ],
+  [
+   "transfer 1 elsewhere",
+   "refuses",
+   "refuses"
+  ],
+  [
+   "`approve` on XLM",
+   "refuses",
+   "refuses"
+  ],
+  [
+   "a call to the account",
+   "refuses",
+   "refuses"
+  ],
+  [
+   "a transfer signed by `helper` alone",
+   "accepts",
+   "refuses"
+  ]
+ ],
+ "title": "Attenuation, modelled: three steps narrow a grant, and one widening move is refused.",
+ "caption": "MODEL; the account cannot install an attenuated grant at the pinned build (proposed). Parent: rule `play`: the game, any function, `app` or `helper`, threshold 1, last ledger 5000; rule `shop`: XLM, `transfer`, recipient is the shop, `app` or `helper`, threshold 1, cap 10 per 100 ledgers. Steps: 1. restrict `play` to `guess`; 2. lower the cap limit to 4; 3. remove the signer `helper` from `shop`. Refused: raise the cap limit to 20 (a higher limit); nothing changes. Each probe runs alone from empty records. The child accepts 2 of 7, and the parent accepts each of them.",
+ "editions": [
+  "html"
+ ]
+}

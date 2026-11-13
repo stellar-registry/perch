@@ -176,6 +176,7 @@ fn threshold_program_enforces_the_quorum() {
             verifier: "CCYWLNWRYDCAEM2A2EMTWAMIGWESQGUJNDTRRFIOS5CBPRO54EZ27ABG".into(),
             // Distinct key material from `ci` (else DuplicateSignerKey).
             key: "1ce6040b0d03232ac6c911b0c375f1a52ebdefff56fd361d13680e23ca578a18".into(),
+            verifier_name: None,
         },
     });
     // Bare 2-of-3 self-admin rule so the program is purely the signer floor.
@@ -257,7 +258,7 @@ fn expiry_lowers_to_the_inclusive_boundary_minus_one() {
     assert_eq!(plan.rules[0].valid_until, None, "no expiry stays no expiry");
 }
 
-// --- static analysis (#19 PR4) ---------------------------------------------
+// --- static analysis ---------------------------------------------
 
 fn syms(env: &Env, names: &[&str]) -> Vec<Symbol> {
     names.iter().map(|n| Symbol::new(env, n)).collect()
@@ -329,7 +330,7 @@ fn can_ever_authorize_flags_live_and_dead_programs() {
     assert!(can_ever_authorize(&live2));
 }
 
-// --- fail-closed activation (#19 PR5) --------------------------------------
+// --- fail-closed activation --------------------------------------
 
 #[test]
 fn verify_plan_accepts_a_freshly_compiled_plan() {
@@ -402,7 +403,7 @@ fn verify_plan_rejects_a_plan_from_a_different_doc() {
     ));
 }
 
-// --- cumulative-cap lowering (#19 PR6) -------------------------------------
+// --- cumulative-cap lowering -------------------------------------
 
 #[test]
 fn cap_lowers_to_a_spending_limit_spec_beside_the_interpreter() {
@@ -464,7 +465,7 @@ fn a_document_without_a_cap_lowers_cap_free() {
     assert!(plan.rules.iter().all(|r| r.cap.is_none()));
 }
 
-// --- monotone attenuation (#19 PR8) ----------------------------------------
+// --- monotone attenuation ----------------------------------------
 
 /// The ci-publish functions on rule 1, mutated in place.
 fn set_ci_functions(doc: &mut perch_ir::PolicyDoc, functions: Option<&[&str]>) {

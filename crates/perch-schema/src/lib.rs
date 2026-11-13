@@ -20,8 +20,7 @@
 //! - the **limits-parity** test feeds real inputs through perch-ir's own
 //!   `from_json` + `validate` and asserts the schema accepts/rejects exactly at
 //!   the boundary where each limit sits (so the schema and the validator cannot
-//!   silently disagree — the brief's sanctioned alternative to generating the
-//!   numbers straight from the constants).
+//!   silently disagree).
 //!
 //! # What this generator is *not* in the build graph of
 //!
@@ -76,6 +75,20 @@ pub const SHA256_HEX_PATTERN: &str = "^[0-9a-f]{64}$";
 #[must_use]
 pub fn signer_key_pattern() -> String {
     format!("^([0-9a-fA-F]{{2}}){{1,{}}}$", perch_ir::MAX_SIGNER_KEY_LEN)
+}
+
+/// The `verifier-name` pattern: `<name>@<MAJOR>.<MINOR>.<PATCH>`, a registry
+/// name of 1..=[`perch_ir::MAX_VERIFIER_NAME_LEN`] bytes of `[a-z0-9-]`
+/// starting with a letter, and three decimal numbers of at most ten digits
+/// with no leading zero. Mirrors `perch_ir::parse_verifier_name`, which
+/// validation applies; whether the name resolves is the compiler's check.
+#[must_use]
+pub fn verifier_name_pattern() -> String {
+    let number = "(0|[1-9][0-9]{0,9})";
+    format!(
+        "^[a-z][a-z0-9-]{{0,{}}}@{number}\\.{number}\\.{number}$",
+        perch_ir::MAX_VERIFIER_NAME_LEN - 1
+    )
 }
 
 /// Rule names are capped at [`perch_doc_compiler::MAX_RULE_NAME_BYTES`] **bytes**
@@ -258,6 +271,17 @@ fn policy_defs() -> Value {
                     "properties": {
                         "id": { "type": "string", "description": "Document-local id rules reference. Uniqueness is a semantic check (outside this schema)." },
                         "verifier": contract_address("Verifier contract (C-address) that checks this signer's signatures."),
+                        "verifier-name": {
+                            "type": "string",
+                            "pattern": verifier_name_pattern(),
+                            "description":
+                                "The verifier's name and exact version in Perch's managed \
+                                 `perch/verifiers` registry. The compiler resolves it and \
+                                 refuses the document unless it names `verifier`. Absent, \
+                                 the verifier is unverified: an admin document may not name \
+                                 one, and a scoped document may hold one signer per \
+                                 unverified verifier in a rule.",
+                        },
                         "key": {
                             "type": "string",
                             "pattern": signer_key_pattern(),
@@ -289,6 +313,10 @@ fn policy_defs() -> Value {
             "type": "object",
             "additionalProperties": false,
             "required": ["name", "scope", "principals"],
+            "allOf": [{
+                "if": { "properties": { "scope": { "properties": { "type": { "const": "self-admin" } } } } },
+                "then": { "not": { "required": ["auth-root"] } },
+            }],
             "properties": {
                 "name": {
                     "type": "string",
@@ -328,6 +356,15 @@ fn policy_defs() -> Value {
                     1,
                 ),
                 "cap": { "$ref": "#/$defs/capConstraint" },
+                "auth-root": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["contract", "function"],
+                    "properties": {
+                        "contract": contract_address("Exact contract at the root of this account's authorization entry, not the outer transaction call."),
+                        "function": { "type": "string", "pattern": "^[a-zA-Z0-9_]{1,32}$" },
+                    },
+                },
             },
         },
 

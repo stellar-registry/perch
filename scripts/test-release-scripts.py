@@ -60,6 +60,8 @@ DEPLOY_RECORD_BUMP = os.path.join(REPO, "scripts", "deploy-record-bump.sh")
 DERIVE_ID = os.path.join(REPO, "scripts", "derive-id.py")
 REGISTRY_TARGET = os.path.join(REPO, "scripts", "registry-target.sh")
 DEPLOY_STACK = os.path.join(REPO, "scripts", "deploy-stack.sh")
+VERIFY_DEPLOYMENT = os.path.join(REPO, "scripts", "verify-deployment.sh")
+VERIFIERS_PATH = os.path.join(REPO, "crates", "perch-smart-account", "wasm", "verifiers.path")
 PASSPHRASES = {
     "testnet": "Test SDF Network ; September 2015",
     "mainnet": "Public Global Stellar Network ; September 2015",
@@ -1676,7 +1678,9 @@ class MainnetSettings(unittest.TestCase):
 # A `stellar` that keeps a registry and a ledger in a JSON file and logs every
 # call, for scripts/publish-wasm.sh, scripts/deploy-stack.sh and
 # scripts/fetch-infra-wasm.sh. Any call that would send a transaction changes
-# the state; --build-only, --send=no, and `tx` calls never do.
+# the state; --build-only, --send=no, and `tx` calls never do. fetch_hash
+# answers from state["registries"][<id>] for a registry listed there (only
+# read), else from state["published"].
 # deploy_stateless answers ADDR, or with FAKE_DERIVE (scripts/derive-id.py)
 # the real content address. A fetch writes FAKE_CODE/<hash>.wasm when there
 # is one, else an empty file.
@@ -1735,9 +1739,10 @@ elif args[:2] == ["contract", "invoke"]:
     elif "--build-only" in args:
         print("UNSIGNED")
     elif fn == "fetch_hash":
-        if key not in state["published"]:
+        published = state.get("registries", {}).get(opt("--id"), state["published"])
+        if key not in published:
             sys.exit("HostError: Error(Contract, #2)")
-        print('"' + state["published"][key] + '"')
+        print('"' + published[key] + '"')
     elif fn == "deploy_stateless":
         addr = address(state["published"][key])
         if "--send=no" not in args:
@@ -2020,6 +2025,8 @@ class DeriveId(unittest.TestCase):
         for network, passphrase in PASSPHRASES.items():
             with self.subTest(network=network):
                 self.assertEqual(self.py("registry", passphrase), rust("registry", passphrase))
+                verifiers_path = os.path.join(REPO, "crates", "perch-smart-account", "wasm", "verifiers.path")
+                self.assertEqual(self.py("registry", passphrase, verifiers_path), rust("verifiers", passphrase))
                 root = rust("name", deployer, salt, passphrase)
                 self.assertEqual(self.py("root", passphrase), root)
                 for name in ("perch", "constructorless", "unverified"):
@@ -2137,7 +2144,8 @@ class ComputedRegistries(unittest.TestCase):
 class DeployStack(unittest.TestCase):
     """scripts/deploy-stack.sh against a fake `stellar`: what it publishes,
     in what order, under which addresses, what its manifest records, and
-    that a plan sends nothing."""
+    that a plan sends nothing. perch/verifiers serves the stack's WebAuthn
+    verifier unless a test says otherwise."""
 
     AUTHOR = "C" + "U" * 55
     ADMIN = "G" + "M" * 55
@@ -2174,13 +2182,18 @@ class DeployStack(unittest.TestCase):
         self.root = run(["python3", DERIVE_ID, "root", t], REPO).stdout.strip()
         self.content = {p: run(["python3", DERIVE_ID, "content", self.registry, h, t], REPO).stdout.strip()
                         for p, h in self.hash.items()}
+        self.verifiers = run(["python3", DERIVE_ID, "registry", t, VERIFIERS_PATH], REPO).stdout.strip()
+        self.verifiers_root = run(["python3", DERIVE_ID, "root", t, VERIFIERS_PATH], REPO).stdout.strip()
+        self.in_verifiers = run(["python3", DERIVE_ID, "content", self.verifiers, self.hash["perch-webauthn-verifier"], t],
+                                REPO).stdout.strip()
         self.state_file = os.path.join(self.dir, "state.json")
         self.log_file = os.path.join(self.dir, "log")
         self.manifest = os.path.join(self.dir, "testnet.json")
         # The registry exists and already serves the reused compiler.
         compiler = self.hash["perch-doc-compiler"]
-        self.set_state({"perch-doc-compiler@0.1.0": compiler}, [compiler],
-                       {self.registry: "e" * 64, self.content["perch-doc-compiler"]: compiler})
+        self.initial = ({"perch-doc-compiler@0.1.0": compiler}, [compiler],
+                        {self.registry: "e" * 64, self.content["perch-doc-compiler"]: compiler})
+        self.set_state(*self.initial)
         self.env = {**os.environ, "PATH": bin_dir + os.pathsep + os.environ["PATH"],
                     "FAKE_STATE": self.state_file, "FAKE_LOG": self.log_file, "FAKE_DERIVE": DERIVE_ID,
                     "STELLAR_ACCOUNT": "S-delegate", "STELLAR_NETWORK": "testnet",
@@ -2188,9 +2201,19 @@ class DeployStack(unittest.TestCase):
         self.env.pop("STELLAR_SIGN_WITH_KEY", None)
 
     def set_state(self, published, installed, deployed):
+        # perch/verifiers, created and seeded with the stack's WebAuthn verifier.
+        webauthn = self.hash["perch-webauthn-verifier"]
         with open(self.state_file, "w") as f:
-            json.dump({"published": published, "installed": list(installed), "deployed": deployed,
+            json.dump({"published": published, "installed": list(installed),
+                       "deployed": {**deployed, self.verifiers: "f" * 64, self.in_verifiers: webauthn},
+                       "registries": {self.verifiers: {"perch-webauthn-verifier@0.1.0": webauthn}},
                        "admin": self.ADMIN, "manager": self.ADMIN}, f)
+
+    def edit_state(self, change):
+        state = self.state()
+        change(state)
+        with open(self.state_file, "w") as f:
+            json.dump(state, f)
 
     def state(self):
         with open(self.state_file) as f:
@@ -2247,6 +2270,74 @@ class DeployStack(unittest.TestCase):
         self.deploy()
         self.assertEqual(len(self.sent()), before)
 
+    def test_the_manifest_records_the_verifiers_perch_verifiers_serves(self):
+        self.deploy()
+        with open(self.manifest) as f:
+            m = json.load(f)
+        webauthn = m["contracts"]["perch-webauthn-verifier"]
+        self.assertEqual(m["verifiers"], {
+            "id": self.verifiers, "wasm_hash": "f" * 64, "admin": self.ADMIN, "manager": self.ADMIN,
+            "root": self.verifiers_root,
+            "contracts": {"perch-webauthn-verifier": {
+                "version": "0.1.0", "sha256": webauthn["sha256"], "bytes": webauthn["bytes"],
+                "name": "perch-webauthn-verifier@0.1.0", "address": self.in_verifiers}}})
+        # The stack registry's copy is another contract, which no account
+        # admits as an admin verifier.
+        self.assertEqual(webauthn["address"], self.content["perch-webauthn-verifier"])
+        self.assertNotEqual(webauthn["address"], self.in_verifiers)
+
+    def test_an_ed25519_verifier_is_recorded_only_where_perch_verifiers_serves_it(self):
+        data = b"\0asm\1\0\0\0perch-ed25519-verifier"
+        ed25519 = hashlib.sha256(data).hexdigest()
+        with open(os.path.join(self.stack, "perch_ed25519_verifier.wasm"), "wb") as f:
+            f.write(data)
+        with open(os.path.join(self.stack, "build.json")) as f:
+            build = json.load(f)
+        build["artifacts"].insert(0, {"package": "perch-ed25519-verifier", "version": "10.0.2",
+                                      "sha256": ed25519, "bytes": len(data), "tier": 0, "pins": {}})
+        with open(os.path.join(self.stack, "build.json"), "w") as f:
+            json.dump(build, f)
+        self.assertIn("perch/verifiers does not serve perch-ed25519-verifier 10.0.2: no document can name",
+                      self.deploy())
+        with open(self.manifest) as f:
+            self.assertEqual(list(json.load(f)["verifiers"]["contracts"]), ["perch-webauthn-verifier"])
+        at = run(["python3", DERIVE_ID, "content", self.verifiers, ed25519, PASSPHRASES["testnet"]], REPO).stdout.strip()
+
+        def seed(state):
+            state["registries"][self.verifiers]["perch-ed25519-verifier@10.0.2"] = ed25519
+            state["deployed"][at] = ed25519
+        self.edit_state(seed)
+        self.deploy()
+        with open(self.manifest) as f:
+            self.assertEqual(json.load(f)["verifiers"]["contracts"]["perch-ed25519-verifier"],
+                             {"version": "10.0.2", "sha256": ed25519, "bytes": len(data),
+                              "name": "perch-ed25519-verifier@10.0.2", "address": at})
+
+    def test_a_webauthn_verifier_perch_verifiers_does_not_serve_is_refused_before_anything_is_sent(self):
+        # The factory pins it there: every account it creates would refuse
+        # its passkey admin.
+        cases = {
+            "is not deployed on testnet": lambda s: s["deployed"].pop(self.verifiers),
+            "perch/verifiers does not serve perch-webauthn-verifier 0.1.0":
+                lambda s: s["registries"][self.verifiers].clear(),
+            "perch/verifiers serves perch-webauthn-verifier 0.1.0 as " + "ab" * 32:
+                lambda s: s["registries"][self.verifiers].update({"perch-webauthn-verifier@0.1.0": "ab" * 32}),
+            "not deployed at its content address " + self.in_verifiers:
+                lambda s: s["deployed"].pop(self.in_verifiers),
+        }
+        for why, change in cases.items():
+            with self.subTest(why=why):
+                self.set_state(*self.initial)
+                self.edit_state(change)
+                err = self.deploy(check=False)
+                self.assertIn(why, err)
+                self.assertIn("the factory pins its WebAuthn verifier there", err)
+                self.assertEqual(self.sent(), [])
+                self.assertFalse(os.path.exists(self.manifest))
+        # A plan reports it and goes on.
+        self.assertIn("a real run needs it first", self.deploy("--plan"))
+        self.assertEqual([r["status"] for r in self.receipts()], ["reused", "would publish", "would install", "would publish"])
+
     def test_a_plan_sends_nothing_and_writes_no_manifest(self):
         before = self.state()
         self.deploy("--plan")
@@ -2290,7 +2381,8 @@ class DeployStack(unittest.TestCase):
         checkout = os.path.join(self.dir, "checkout")
         for f in ("scripts/fetch-infra-wasm.sh", "scripts/deploy-stack.sh", "scripts/publish-wasm.sh",
                   "scripts/derive-id.py", "scripts/manifest-registry.sh",
-                  "crates/perch-smart-account/wasm/registry.path", "crates/perch-account-factory/wasm/registry.path"):
+                  "crates/perch-smart-account/wasm/registry.path", "crates/perch-smart-account/wasm/verifiers.path",
+                  "crates/perch-account-factory/wasm/verifiers.path"):
             os.makedirs(os.path.dirname(os.path.join(checkout, f)), exist_ok=True)
             shutil.copy2(os.path.join(REPO, f), os.path.join(checkout, f))
         open(os.path.join(checkout, "Cargo.toml"), "w").close()
@@ -2314,17 +2406,23 @@ class DeployStack(unittest.TestCase):
         for a in artifacts:
             os.rename(os.path.join(code, a["package"].replace("-", "_") + ".wasm"),
                       os.path.join(code, a["sha256"] + ".wasm"))
+        # The registry code the deployment's registry runs, fetched by hash.
+        registry_code = b"\0asm\1\0\0\0perch-constructorless-registry"
+        registry_hash = hashlib.sha256(registry_code).hexdigest()
+        with open(os.path.join(code, registry_hash + ".wasm"), "wb") as f:
+            f.write(registry_code)
         testnet = os.path.join(self.dir, "deployed-testnet.json")
         with open(testnet, "w") as f:
             json.dump({"schema": 1, "network": "testnet", "network_passphrase": PASSPHRASES["testnet"],
                        "rpc_url": "http://127.0.0.1:9", "source": {"commit": "ab" * 20, "dirty": False},
-                       "toolchain": {"builder": "scaffold"}, "registry": {"id": self.registry}, "zk": circuit,
+                       "toolchain": {"builder": "scaffold"}, "registry": {"id": self.registry, "wasm_hash": registry_hash},
+                       "zk": circuit,
                        "contracts": {a["package"]: {
                            "version": a["version"], "sha256": a["sha256"], "bytes": a["bytes"], "tier": a["tier"],
                            "pins": a.get("pins", {}),
                            **({} if a["package"] == "perch-account" else {"address": self.content[a["package"]]})}
                            for a in artifacts}}, f)
-        self.set_state({p + "@0.1.0": h for p, h in self.hash.items()}, self.hash.values(),
+        self.set_state({p + "@0.1.0": h for p, h in self.hash.items()}, [*self.hash.values(), registry_hash],
                        {self.registry: "e" * 64,
                         **{self.content[p]: h for p, h in self.hash.items() if p != "perch-account"}})
         env = {**self.env, "FAKE_CODE": code, "STELLAR_FETCH_ATTEMPTS": "1"}
@@ -2338,6 +2436,168 @@ class DeployStack(unittest.TestCase):
         self.assertEqual(m["zk"], circuit)
         self.assertEqual({p: c["sha256"] for p, c in m["contracts"].items()}, self.hash)
         self.assertEqual(self.sent(), [])
+        # The fetched stack carries the registry code, which is never published.
+        with open(os.path.join(self.stack, "build.json")) as f:
+            fetched = {a["package"]: a for a in json.load(f)["artifacts"]}
+        self.assertEqual((fetched["perch-constructorless-registry"]["sha256"],
+                          fetched["perch-constructorless-registry"]["tier"]), (registry_hash, -1))
+
+
+# A read-only `stellar` for scripts/verify-deployment.sh. FAKE_CHAIN names a
+# JSON file of each contract's code hash ("code"), the bytes installed under
+# each hash, as hex ("installed"), and each view's answer ("views", keyed by
+# "<id> <function> <args...>").
+FAKE_CHAIN = r"""#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+with open(os.environ["FAKE_CHAIN"]) as f:
+    chain = json.load(f)
+def opt(name):
+    return args[args.index(name) + 1]
+if args[:2] == ["keys", "address"]:
+    print("G" + "R" * 55)
+elif args[:3] == ["contract", "info", "hash"]:
+    if opt("--id") not in chain["code"]:
+        sys.exit("no contract")
+    print(chain["code"][opt("--id")])
+elif args[:2] == ["contract", "fetch"]:
+    if opt("--wasm-hash") not in chain["installed"]:
+        sys.exit("Contract Code not found")
+    with open(opt("-o"), "wb") as f:
+        f.write(bytes.fromhex(chain["installed"][opt("--wasm-hash")]))
+elif args[:2] == ["contract", "invoke"] and "--send=no" in args:
+    call = " ".join([opt("--id")] + args[args.index("--") + 1:])
+    if call not in chain["views"]:
+        sys.exit("HostError: no answer for " + call)
+    print(json.dumps(chain["views"][call]))
+else:
+    sys.exit("unexpected call " + " ".join(args))
+"""
+
+
+@unittest.skipUnless(shutil.which("jq"), "jq not on PATH")
+class VerifyDeployment(unittest.TestCase):
+    """scripts/verify-deployment.sh against a fake chain. A manifest that
+    records perch/verifiers is checked against it, and the factory's WebAuthn
+    verifier is the stack's hash at its content address there; a manifest
+    from before perch/verifiers checks the stack registry's copy."""
+
+    T = PASSPHRASES["testnet"]
+    VERSION = '"0.1.0"'
+
+    def derive(self, *args):
+        return run(["python3", DERIVE_ID, *args], REPO).stdout.strip()
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+        self.bin = os.path.join(self.dir, "bin")
+        os.makedirs(self.bin)
+        with open(os.path.join(self.bin, "stellar"), "w") as f:
+            f.write(FAKE_CHAIN)
+        os.chmod(os.path.join(self.bin, "stellar"), 0o755)
+        self.registry = self.derive("registry", self.T)
+        self.verifiers = self.derive("registry", self.T, VERIFIERS_PATH)
+        account = b"\0asm\1\0\0\0perch-account"
+        hashes = {p: hashlib.sha256(p.encode()).hexdigest() for p in (
+            "perch-webauthn-verifier", "perch-account-factory", "perch-zk-adapter", "perch-zk-pool")}
+        hashes["perch-account"] = hashlib.sha256(account).hexdigest()
+        contracts = {p: {"version": "0.1.0", "sha256": h,
+                         **({} if p == "perch-account" else {"address": self.derive("content", self.registry, h, self.T)})}
+                     for p, h in hashes.items()}
+        webauthn = hashes["perch-webauthn-verifier"]
+        self.stack_copy = contracts["perch-webauthn-verifier"]["address"]
+        self.in_verifiers = self.derive("content", self.verifiers, webauthn, self.T)
+        self.factory = contracts["perch-account-factory"]["address"]
+        adapter, pool = contracts["perch-zk-adapter"]["address"], contracts["perch-zk-pool"]["address"]
+        self.manifest = {
+            "network_passphrase": self.T, "rpc_url": "http://127.0.0.1:9", "source": {"commit": "ab" * 20},
+            "registry": {"id": self.registry, "wasm_hash": "e" * 64},
+            "verifiers": {"id": self.verifiers, "wasm_hash": "e" * 64, "contracts": {"perch-webauthn-verifier": {
+                "version": "0.1.0", "sha256": webauthn, "bytes": 1, "name": "perch-webauthn-verifier@0.1.0",
+                "address": self.in_verifiers}}},
+            "zk": {"circuit_id": "cc" * 32, "tree_depth": 20},
+            "contracts": contracts,
+        }
+        self.chain = {
+            "code": {self.registry: "e" * 64, self.verifiers: "e" * 64, self.in_verifiers: webauthn,
+                     **{c["address"]: c["sha256"] for c in contracts.values() if "address" in c}},
+            "installed": {hashes["perch-account"]: account.hex()},
+            "views": {
+                **{f"{self.registry} fetch_hash --wasm_name {p} --version {self.VERSION}": h for p, h in hashes.items()},
+                f"{self.verifiers} fetch_hash --wasm_name perch-webauthn-verifier --version {self.VERSION}": webauthn,
+                f"{self.factory} account_wasm_hash": hashes["perch-account"],
+                f"{self.factory} webauthn_verifier": self.in_verifiers,
+                f"{adapter} circuit_id": "cc" * 32,
+                f"{adapter} tree_depth": 20,
+                f"{pool} depth": 20,
+            },
+        }
+
+    def verify(self, manifest=None, chain=None):
+        paths = {}
+        for name, doc in (("testnet.json", manifest or self.manifest), ("chain.json", chain or self.chain)):
+            paths[name] = os.path.join(self.dir, name)
+            with open(paths[name], "w") as f:
+                json.dump(doc, f)
+        env = {**os.environ, "PATH": self.bin + os.pathsep + os.environ["PATH"], "FAKE_CHAIN": paths["chain.json"]}
+        return subprocess.run([VERIFY_DEPLOYMENT, "--manifest", paths["testnet.json"]],
+                              capture_output=True, text=True, env=env)
+
+    def failed(self, out):
+        """The label of every failed check."""
+        return [l.strip()[len("FAIL  "):].rsplit(": want ", 1)[0]
+                for l in out.stdout.splitlines() if l.strip().startswith("FAIL")]
+
+    def copy(self, doc, change):
+        doc = json.loads(json.dumps(doc))
+        change(doc)
+        return doc
+
+    def test_a_deployment_with_perch_verifiers_passes(self):
+        out = self.verify()
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        for label in ("perch/verifiers wasm", "perch-webauthn-verifier content address in perch/verifiers",
+                      "perch-webauthn-verifier perch/verifiers 0.1.0", "factory webauthn verifier"):
+            self.assertIn("ok    " + label, out.stdout)
+
+    def test_the_factory_verifier_is_the_one_in_perch_verifiers(self):
+        # A factory pinning the stack registry's copy creates accounts that
+        # refuse their passkey admin (UnverifiedVerifier).
+        chain = self.copy(self.chain, lambda c: c["views"].update({f"{self.factory} webauthn_verifier": self.stack_copy}))
+        out = self.verify(chain=chain)
+        self.assertNotEqual(out.returncode, 0)
+        self.assertEqual(self.failed(out), ["factory webauthn verifier"])
+        self.assertIn(f"want {self.in_verifiers}, got {self.stack_copy}", out.stdout)
+
+    def test_a_manifest_from_before_perch_verifiers_checks_the_stack_registry_copy(self):
+        manifest = self.copy(self.manifest, lambda m: m.pop("verifiers"))
+        chain = self.copy(self.chain, lambda c: c["views"].update({f"{self.factory} webauthn_verifier": self.stack_copy}))
+        out = self.verify(manifest, chain)
+        self.assertEqual(out.returncode, 0, out.stdout + out.stderr)
+        self.assertNotIn("perch/verifiers", out.stdout)
+        self.assertEqual(self.failed(self.verify(manifest)), ["factory webauthn verifier"])
+
+    def test_the_verifiers_block_is_checked_against_the_chain(self):
+        entry = "perch-webauthn-verifier"
+        cases = {
+            "perch/verifiers wasm": (None, lambda c: c["code"].update({self.verifiers: "ab" * 32})),
+            f"{entry} code in perch/verifiers": (None, lambda c: c["code"].update({self.in_verifiers: "ab" * 32})),
+            f"{entry} perch/verifiers 0.1.0": (None, lambda c: c["views"].update(
+                {f"{self.verifiers} fetch_hash --wasm_name {entry} --version {self.VERSION}": "ab" * 32})),
+            f"{entry} content address in perch/verifiers": (
+                lambda m: m["verifiers"]["contracts"][entry].update({"address": self.stack_copy}), None),
+            f"manifest: perch/verifiers serves the stack's {entry}": (
+                lambda m: m["verifiers"]["contracts"][entry].update({"sha256": "ab" * 32}), None),
+            f"manifest: {entry} verifier-name": (
+                lambda m: m["verifiers"]["contracts"][entry].update({"name": entry + "@0.1.1"}), None),
+        }
+        for label, (in_manifest, on_chain) in cases.items():
+            with self.subTest(check=label):
+                out = self.verify(self.copy(self.manifest, in_manifest or (lambda _: None)),
+                                  self.copy(self.chain, on_chain or (lambda _: None)))
+                self.assertNotEqual(out.returncode, 0)
+                self.assertIn(label, self.failed(out))
 
 
 CONTRACT_RELEASE = "stellar-registry/actions/.github/workflows/contract-release.yml"
@@ -2353,6 +2613,7 @@ class BootstrapRegistry(unittest.TestCase):
     FAKE_SIGNER, and a fake `curl` serves release assets from a directory."""
 
     TIER0 = ("perch-doc-compiler", "perch-interpreter", "perch-spending-limit", "perch-ed25519-verifier")
+    VERIFIERS = ("perch-ed25519-verifier", "perch-webauthn-verifier")
 
     FAKE = r"""#!/usr/bin/env python3
 import json, os, shutil, sys
@@ -2414,6 +2675,14 @@ elif args[:2] == ["contract", "invoke"]:
         print('"' + h + '"')
     elif fn == "publish_hash":
         print("null")
+    elif fn == "deploy":
+        # A named deploy lands at deployer(perch, sha256(name)).
+        print('"' + state["deploy_at"][a["--contract_name"]] + '"')
+    elif fn == "verifier_registry":
+        # Only a compiler that resolves verifier names has the view.
+        if "verifier_registry" not in state:
+            sys.exit("HostError: Error(WasmVm, MissingValue)")
+        print('"' + state["verifier_registry"] + '"')
     elif fn == "infra":
         print(json.dumps(state["infra"]))
     elif fn == "get_context_rules_count":
@@ -2479,11 +2748,11 @@ shutil.copy(src, args[args.index("-o") + 1])
         self.checkout = os.path.join(self.dir, "checkout")
         for rel in ("scripts/bootstrap-registry.sh", "scripts/derive-id.py", "deployments/testnet.json",
                     "deployments/pending-registry.json", "crates/perch-smart-account/wasm/registry.path",
-                    "crates/perch-account-factory/wasm/registry.path", "crates/perch-constructorless-registry/Cargo.toml"):
+                    "crates/perch-smart-account/wasm/verifiers.path", "crates/perch-constructorless-registry/Cargo.toml"):
             os.makedirs(os.path.dirname(os.path.join(self.checkout, rel)), exist_ok=True)
             shutil.copy2(os.path.join(REPO, rel), os.path.join(self.checkout, rel))
         self.hash = {n: hashlib.sha256(self.wasm(n)).hexdigest()
-                     for n in (*self.TIER0, "perch-constructorless-registry", "perch-account")}
+                     for n in (*self.TIER0, *self.VERIFIERS, "perch-constructorless-registry", "perch-account")}
         with open(os.path.join(self.checkout, "crates", "perch-constructorless-registry", "Cargo.toml")) as f:
             self.registry_version = re.search(r'(?m)^version = "(.*)"$', f.read()).group(1)
         manifest_file = os.path.join(self.checkout, "deployments", "testnet.json")
@@ -2491,6 +2760,8 @@ shutil.copy(src, args[args.index("-o") + 1])
             manifest = json.load(f)
         manifest["contracts"]["perch-account"]["sha256"] = self.hash["perch-account"]
         manifest["registry"]["wasm_hash"] = self.hash["perch-constructorless-registry"]
+        for n in self.VERIFIERS:
+            manifest["contracts"][n]["sha256"] = self.hash[n]
         for n in self.TIER0:
             manifest["contracts"][n]["sha256"] = self.hash[n]
             pin = os.path.join(self.checkout, "crates", "perch-smart-account", "wasm", n + ".sha256")
@@ -2499,12 +2770,13 @@ shutil.copy(src, args[args.index("-o") + 1])
                     f.write(self.hash[n] + "\n")
         with open(manifest_file, "w") as f:
             json.dump(manifest, f)
-        self.versions = {n: manifest["contracts"][n]["version"] for n in self.TIER0}
+        self.versions = {n: manifest["contracts"][n]["version"] for n in (*self.TIER0, *self.VERIFIERS)}
 
         # Release assets, and the account and registry files a run is given.
         self.releases = os.path.join(self.dir, "releases")
         for n, v in [*self.versions.items(), ("perch-account", "9.9.9"), ("perch-constructorless-registry", "9.9.9")]:
             self.release(n, v, self.wasm(n))
+        self.author = None
         self.account = os.path.join(self.dir, "perch_account.wasm")
         self.registry = os.path.join(self.dir, "perch_constructorless_registry.wasm")
         for path, n in ((self.account, "perch-account"), (self.registry, "perch-constructorless-registry")):
@@ -2521,17 +2793,24 @@ shutil.copy(src, args[args.index("-o") + 1])
         derive = lambda *a: run(["python3", DERIVE_ID, *a], REPO).stdout.strip()
         self.source = "GAAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQCAIBAEAQDZ7H"  # ed25519 key 0x01 * 32, no secret anywhere
         root, perch, constructorless = derive("chain", t).split()
-        self.perch, self.constructorless = perch, constructorless
+        _, _, verifiers = derive("chain", t, os.path.join(REPO, "crates", "perch-smart-account", "wasm", "verifiers.path")).split()
+        self.perch, self.constructorless, self.verifiers = perch, constructorless, verifiers
         self.at = {n: derive("content", constructorless, self.hash[n], t) for n in self.TIER0}
+        self.vat = {n: derive("content", verifiers, self.hash[n], t) for n in self.VERIFIERS}
         author = derive("name", self.source, "perch-author", t)
+        self.author_id = author
         self.names = [n for n, c in manifest["contracts"].items() if c.get("address") and n not in self.TIER0]
         self.state = {
             "role": self.source,
             "contracts": {root: "e" * 64, perch: "e" * 64, constructorless: self.hash["perch-constructorless-registry"],
-                          author: self.hash["perch-account"], **{self.at[n]: self.hash[n] for n in self.TIER0}},
-            "names": {root: {"perch": perch}, perch: {"constructorless": constructorless}},
+                          verifiers: self.hash["perch-constructorless-registry"],
+                          author: self.hash["perch-account"], **{self.at[n]: self.hash[n] for n in self.TIER0},
+                          **{self.vat[n]: self.hash[n] for n in self.VERIFIERS}},
+            "names": {root: {"perch": perch}, perch: {"constructorless": constructorless, "verifiers": verifiers}},
+            "deploy_at": {"constructorless": constructorless, "verifiers": verifiers},
             "published": {perch: {f"perch-constructorless-registry@{self.registry_version}": self.hash["perch-constructorless-registry"]},
-                          constructorless: {n + "@" + self.versions[n]: self.hash[n] for n in self.TIER0}},
+                          constructorless: {n + "@" + self.versions[n]: self.hash[n] for n in self.TIER0},
+                          verifiers: {n + "@" + self.versions[n]: self.hash[n] for n in self.VERIFIERS}},
             "infra": {"doc_compiler": self.at["perch-doc-compiler"], "interpreter": self.at["perch-interpreter"],
                       "spending_limit": self.at["perch-spending-limit"]},
             "rules": {author: [{"name": "ci-publish", "context_type": {"CallContract": constructorless}}]},
@@ -2596,6 +2875,51 @@ shutil.copy(src, args[args.index("-o") + 1])
         self.assertEqual(self.submissions(), [])
         for n in self.names:
             self.assertIn(n + " -> ", out.stderr)
+
+    def test_a_missing_verifiers_registry_is_planned_and_stops_the_run(self):
+        del self.state["names"][self.perch]["verifiers"]
+        del self.state["contracts"][self.verifiers]
+        self.save()
+        out = self.bootstrap()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("simulated: verifiers -> " + self.verifiers, out.stderr)
+        self.assertIn("remaining, in order:", out.stderr)
+        self.assertEqual(self.submissions(), [])
+
+    def test_seed_verifiers_plans_each_verifiers_first_publish_and_deploy(self):
+        self.state["published"][self.verifiers] = {}
+        for n in self.VERIFIERS:
+            del self.state["contracts"][self.vat[n]]
+        self.save()
+        out = self.bootstrap()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        for n in self.VERIFIERS:
+            self.assertIn(f"{n} {self.versions[n]} in verifiers: first publish of its released hash {self.hash[n]}", out.stderr)
+            self.assertIn(f'deploy_stateless("{n}", "{self.versions[n]}") -> {self.vat[n]}', out.stderr)
+        self.assertEqual(self.submissions(), [])
+
+    def author_doc(self):
+        """A fresh perch author's planned document, its first signer."""
+        del self.state["contracts"][self.author_id]
+        del self.state["rules"][self.author_id]
+        self.save()
+        out = self.bootstrap()
+        self.assertEqual(out.returncode, 0, out.stderr)
+        with open(os.path.join(self.checkout, "target", "bootstrap-registry", "testnet", "perch-author.json")) as f:
+            return json.load(f)["signers"][0], out.stderr
+
+    def test_an_author_names_its_verifier_where_the_compiler_resolves_names(self):
+        self.state["verifier_registry"] = self.verifiers
+        signer, err = self.author_doc()
+        self.assertEqual(signer["verifier"], self.vat["perch-ed25519-verifier"])
+        self.assertEqual(signer["verifier-name"], "perch-ed25519-verifier@" + self.versions["perch-ed25519-verifier"])
+        self.assertIn("admin signer External(ed25519 verifier " + self.vat["perch-ed25519-verifier"], err)
+
+    def test_with_an_earlier_compiler_an_author_names_its_verifier_by_contract_id(self):
+        signer, err = self.author_doc()
+        self.assertEqual(signer["verifier"], self.at["perch-ed25519-verifier"])
+        self.assertNotIn("verifier-name", signer)
+        self.assertIn("admin signer External(ed25519 verifier " + self.at["perch-ed25519-verifier"], err)
 
     def test_a_refused_submission_fails_the_run(self):
         self.assertTrue(self.names)
@@ -2753,6 +3077,7 @@ shutil.copy(src, args[args.index("-o") + 1])
         self.assertNotIn("building perch-constructorless-registry", out.stderr)
         built = b"\0asm\1\0\0\0built perch-constructorless-registry"
         self.state["contracts"][self.constructorless] = hashlib.sha256(built).hexdigest()
+        self.state["contracts"][self.verifiers] = hashlib.sha256(built).hexdigest()
         self.state["published"][self.perch] = {}
         self.state["binver"][hashlib.sha256(built).hexdigest()] = self.registry_version
         self.save()

@@ -11,22 +11,24 @@
 //! selected rule ids into the signed digest
 //! (`sha256(signature_payload || rule_ids.to_xdr())`), still with no account
 //! address. Two accounts with the same `External` key and matching rule ids
-//! therefore demand a byte-identical digest — a legacy signature is replayable.
+//! therefore demand a byte-identical digest, so a signature over it is replayable.
 //!
 //! The `Signer::Delegated` (CAP-0071 / `AddressWithDelegates`) path is
 //! unaffected: it never consumes this digest (the host validates it under
 //! `SorobanAuthorizationWithAddress`, which is already address-bound).
 
 use ed25519_dalek::{Signer as _, SigningKey};
+use perch_account_types::{AuthPayload, Signer};
 use perch_ed25519_verifier::PerchEd25519Verifier;
+use perch_rule_eval::StoredFunctions;
+use perch_smart_account::StoredRule;
 use perch_testkit::auth_digest;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{
     contract, contractimpl, crypto::Hash, map, symbol_short, vec, Address, Bytes, BytesN, Env,
-    IntoVal, Map, String as SString, Symbol, Vec,
+    IntoVal, Map, Symbol, Vec,
 };
-use stellar_accounts::smart_account::{add_context_rule, AuthPayload, ContextRuleType, Signer};
 use stellar_accounts::verifiers::Verifier;
 
 /// A verifier that records the last `signature_payload` (the account's
@@ -59,24 +61,36 @@ impl Verifier for RecordingVerifier {
 #[contract]
 struct Account;
 
-/// Install one `CallContract(target)` rule whose only signer is
-/// `External(verifier, key)`, then drive the account's real `check_auth`
-/// once and return the digest the verifier recorded.
-fn digest_for_account(env: &Env, verifier: &Address, key: &Bytes, target: &Address) -> BytesN<32> {
+/// A fresh account whose one rule, 0, lets `signer` alone call any function
+/// of `target`, stored as an applied document stores a rule.
+fn account_with_rule(env: &Env, signer: &Signer, target: &Address) -> Address {
     let account = env.register(Account, ());
-    let signer = Signer::External(verifier.clone(), key.clone());
-    let rule = env.as_contract(&account, || {
-        add_context_rule(
-            env,
-            &ContextRuleType::CallContract(target.clone()),
-            &SString::from_str(env, "r"),
-            None,
-            &vec![env, signer.clone()],
-            &Map::new(env),
-        )
+    let rule = StoredRule {
+        contract: target.clone(),
+        functions: StoredFunctions::AnyExcept(Vec::new(env)),
+        conds: Vec::new(env),
+        signers: vec![env, signer.clone()],
+        threshold: 1,
+        cap: Vec::new(env),
+        valid_until: None,
+        auth_root: None,
+        generation: None,
+    };
+    let id = env.as_contract(&account, || {
+        perch_smart_account::testutils::install_rule(env, "r", &rule)
     });
+    assert_eq!(id, 0);
+    account
+}
 
-    let ids = vec![env, rule.id];
+/// Install rule 0 on `target` whose only signer is `External(verifier, key)`,
+/// then drive the account's real `check_auth` once and return the digest the
+/// verifier recorded.
+fn digest_for_account(env: &Env, verifier: &Address, key: &Bytes, target: &Address) -> BytesN<32> {
+    let signer = Signer::External(verifier.clone(), key.clone());
+    let account = account_with_rule(env, &signer, target);
+
+    let ids = vec![env, 0u32];
     let payload: Map<Signer, Bytes> = map![env, (signer, Bytes::from_array(env, &[9u8; 64]))];
     let signatures = AuthPayload {
         signers: payload,
@@ -131,24 +145,6 @@ fn external_digest_binds_the_account_address() {
     );
 }
 
-/// Install rule 0 as `CallContract(target)` with one `External(verifier, key)`
-/// signer and return the account.
-fn account_with_rule(env: &Env, verifier: &Address, key: &BytesN<32>, target: &Address) -> Address {
-    let account = env.register(Account, ());
-    let signer = Signer::External(verifier.clone(), key.clone().into());
-    env.as_contract(&account, || {
-        add_context_rule(
-            env,
-            &ContextRuleType::CallContract(target.clone()),
-            &SString::from_str(env, "r"),
-            None,
-            &vec![env, signer],
-            &Map::new(env),
-        );
-    });
-    account
-}
-
 /// A real end-to-end replay: an ed25519 `External` signature collected for one
 /// account, with a matching rule id, must not authorize a second account that
 /// shares the same key. The legitimate use (same account) must still succeed.
@@ -161,8 +157,9 @@ fn ed25519_external_signature_is_not_replayable_across_accounts() {
     let signing_key = SigningKey::from_bytes(&[7u8; 32]);
     let pubkey = BytesN::from_array(&env, &signing_key.verifying_key().to_bytes());
 
-    let account_a = account_with_rule(&env, &verifier, &pubkey, &target);
-    let account_b = account_with_rule(&env, &verifier, &pubkey, &target);
+    let signer = Signer::External(verifier.clone(), pubkey.clone().into());
+    let account_a = account_with_rule(&env, &signer, &target);
+    let account_b = account_with_rule(&env, &signer, &target);
 
     // Both accounts installed rule 0, so the selected rule ids match too.
     let ids = vec![&env, 0u32];
@@ -172,7 +169,6 @@ fn ed25519_external_signature_is_not_replayable_across_accounts() {
     // The signature a wallet produces for account A.
     let digest_a = auth_digest(&env, &account_a, &host_payload, &ids);
     let sig = signing_key.sign(&digest_a).to_bytes();
-    let signer = Signer::External(verifier.clone(), pubkey.clone().into());
     let payload = AuthPayload {
         signers: map![&env, (signer, Bytes::from_array(&env, &sig))],
         context_rule_ids: ids,
@@ -199,7 +195,7 @@ fn ed25519_external_signature_is_not_replayable_across_accounts() {
         })
     }));
     let rejected = match replay {
-        Err(_) => true,     // OZ panics with ExternalVerificationFailed
+        Err(_) => true,     // the verifier refuses: ExternalVerificationFailed
         Ok(Err(_)) => true, // or check_auth returns an error
         Ok(Ok(())) => false,
     };

@@ -1,0 +1,76 @@
+{
+ "title": "Perch and oz-policy-builder, side by side.",
+ "caption": "Twelve of the twenty dimensions; every cell is read from source at Perch {{fact:perch-pin-short}}, oz-policy-builder {{fact:opb-pin-short}} and OpenZeppelin `stellar-contracts` {{fact:oz-v080-tag}}. The full comparison table in {{ref:sec:sources}} gives a source for each cell.",
+ "columns": [
+  "Dimension",
+  "Perch {{fact:perch-pin-short}}",
+  "oz-policy-builder {{fact:opb-pin-short}} on an OpenZeppelin account"
+ ],
+ "latex_colspec": "@{}p{0.2\\linewidth}LL@{}",
+ "rows": [
+  [
+   "Where the decision runs",
+   "Inside the account: the linked evaluator decides",
+   "In attached policy contracts, called by the account after authentication"
+  ],
+  [
+   "Order of checks",
+   "Decide (caps included), then authenticate",
+   "Select rules (existence, scope, expiry) and refuse unlisted signers, authenticate, then run each policy in the rule's stored order"
+  ],
+  [
+   "Where decision state lives",
+   "The account only",
+   "The account, the interpreter and `spending_limit`, each keyed by (account, rule)"
+  ],
+  [
+   "Conditions on one call",
+   "Target, functions, {{fact:doc-conditions-count}} conjunctive argument conditions, threshold, expiry",
+   "A predicate language with and/or, comparisons, quantifiers, arithmetic, time and reads"
+  ],
+  [
+   "Relating calls in one transaction",
+   "Each context alone",
+   "One predicate can relate the calls of an adapter batch"
+  ],
+  [
+   "External state in the decision",
+   "None",
+   "Up to {{fact:opb-interpreter-max-reads}} cross-contract reads per `enforce`"
+  ],
+  [
+   "Rolling spending cap",
+   "In the evaluator, window (L − P, L]; proved for the evaluator from empty records",
+   "Not in the interpreter; OpenZeppelin's optional `spending_limit` beside it, on `transfer` only, same window boundary"
+  ],
+  [
+   "Threshold and signer kinds",
+   "Threshold in the rule; external (passkey, Ed25519) and delegated signers",
+   "Threshold through an attached policy; delegated signers only on policed rules"
+  ],
+  [
+   "What a signature binds",
+   "External: account and rule IDs; delegated: account only",
+   "v0.8.0: account and rule IDs for both kinds"
+  ],
+  [
+   "Ending authority in bulk",
+   "One counter makes every earlier grant refuse at recovery",
+   "Rules removed one at a time; a policed rule is pinned to its exact signer set"
+  ],
+  [
+   "Assurance",
+   "Kernel-checked proofs about the evaluator's Lean translation, not its Wasm; shell tested, partly on Wasm; no audit completed",
+   "Tests, partly on the shipped Wasm; STRIDE register; external audit {{fact:opb-audit-status}}; OpenZeppelin's v0.8.0 diff audit lists its account storage and `spending_limit` in scope"
+  ],
+  [
+   "Deployment",
+   "Testnet preview (earlier design on mainnet)",
+   "Interpreter on testnet; no mainnet pin"
+  ]
+ ],
+ "editions": [
+  "html"
+ ],
+ "short": "the side-by-side table"
+}

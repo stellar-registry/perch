@@ -1,0 +1,41 @@
+[
+ {
+  "id": "main",
+  "title": "Perch: Bounded Grants for Apps and Agents on Stellar",
+  "title_latex": "Perch: Bounded Grants for Apps and Agents on Soroban Smart Accounts",
+  "outline": "outline.json",
+  "html_dir": "html",
+  "html_out": "index.html",
+  "latex": "latex",
+  "carried": false,
+  "html_numbers": false
+ },
+ {
+  "id": "oz-policy-builder",
+  "title": "Perch and oz-policy-builder: Two Ways to Bound an App's Authority",
+  "title_latex": "Bounding an App's Authority on Soroban: Perch and oz-policy-builder Compared",
+  "outline": "papers/oz-policy-builder/outline.json",
+  "html_dir": "papers/oz-policy-builder/html",
+  "html_out": "oz-policy-builder/index.html",
+  "latex": "oz-policy-builder/latex",
+  "carried": false
+ },
+ {
+  "id": "vision",
+  "title": "The Perch Vision: Recovery, Agents and the Full Account",
+  "outline": "papers/vision/outline.json",
+  "html_dir": "papers/vision/html",
+  "html_out": "vision/index.html",
+  "carried": true
+ },
+ {
+  "id": "verification",
+  "title": "What Perch Proves: The Evaluator, Its Translation and Its Models",
+  "title_latex": "What Perch Proves: An Aeneas-Translated Authorization Evaluator and Its Models",
+  "outline": "papers/verification/outline.json",
+  "html_dir": "papers/verification/html",
+  "html_out": "verification/index.html",
+  "latex": "verification/latex",
+  "carried": false
+ }
+]

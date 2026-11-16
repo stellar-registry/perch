@@ -1,0 +1,43 @@
+
+
+# type(scope)!: imperative summary, lower-case, no full stop (<= 72 chars)
+#
+# The same structure as the PR description, in miniature. Wrap at 72.
+# Every commit, whatever its type, has a body with a Why: paragraph; add
+# What changes: and Evidence: where they say something the subject does
+# not. A one-line Why: is enough for a small, obvious change.
+#
+# Why: the problem with the current code, and why this way rather than
+# the obvious alternative. Numbers for any performance, size or cost claim.
+#
+# What changes: what a user or caller sees differently, and what
+# deliberately does not change.
+#
+# Evidence: the command that proves it and its result (`cargo test -p x`,
+# 41 passed); a test that fails without this commit.
+#
+# Trailers, in one final paragraph, one per line, each only when it applies:
+#   Refs: #123            (or Closes: #123)
+#   Security: the trust-boundary change: who can now do what they could not
+#   BREAKING-CHANGE: what breaks and how to migrate (with "!" in the subject).
+#                    Upper case: tools ignore "Breaking-Change:".
+#   Fixes: <12-char sha> ("subject")   (git show -s --pretty=reference)
+#   Co-authored-by: Name <email>
+#
+# One logical change per commit, and each commit builds. Order a series
+# move -> refactor -> test -> behaviour -> regenerate -> docs.
+# Fixups: git commit --fixup=<sha>, then git rebase -i --autosquash.
+# Review notes, prompts and "addressed comments" belong in the PR, not here.
+# Use it: git config commit.template .gitmessage
+#
+# ------------------------------------------------------------- perch ------
+# Types add `deploy`; scopes are crate/package directory names or the list
+# in CONTRIBUTING.md. In the changelog (cliff.toml):
+#   Wasm: perch-account, perch-account-factory
+#        The contracts whose bytes this commit changes. A build/ci/chore/
+#        style commit is left out of the changelog unless it has this
+#        trailer. Omit it when no bytes change (never "Wasm: none").
+#   Security: lands the commit under Security, whatever its type (so does
+#        a breaking fix, `fix!:`). Omit it when there is none.
+# A pin or dependency move that changes contract bytes can also be
+# fix(deps) / feat(deps)!.

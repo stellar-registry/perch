@@ -392,6 +392,57 @@ def contract_lists():
     return re.findall(r'^ *CONTRACTS="([^"]*)"', release_yml(), re.M)
 
 
+@unittest.skipUnless(GIT_CLIFF or os.environ.get("PERCH_REQUIRE_GIT_CLIFF"), "git-cliff not on PATH")
+class ChangelogGroups(unittest.TestCase):
+    """Where cliff.toml files a commit: a Security: trailer or a breaking fix
+    under Security, a chore/build commit with a Wasm: trailer kept (and
+    bumping) under Build inputs, other chores skipped."""
+
+    def setUp(self):
+        self.repo = Repo()
+        shutil.copy(os.path.join(REPO, "cliff.toml"), os.path.join(self.repo.dir, ".git", "cliff.toml"))
+        self.repo.commit("feat(c): first")
+        run(["git", "tag", "c-v0.1.0"], self.repo.dir)
+
+    def tearDown(self):
+        self.repo.cleanup()
+
+    def cliff(self, *args):
+        return run([GIT_CLIFF or "git-cliff", "--config", ".git/cliff.toml", "--tag-pattern", "c-v.*", *args],
+                   self.repo.dir).stdout
+
+    def groups(self):
+        ctx = json.loads(self.cliff("--unreleased", "--context"))
+        return {c["message"].splitlines()[0]: re.sub(r"<!--.*?-->", "", c["group"] or "").strip()
+                for r in ctx for c in r["commits"]}
+
+    def test_a_security_trailer_files_under_security(self):
+        self.repo.commit("fix(c): refuse a stale grant\n\nWhy: a revoked grant still authorized.\n\n"
+                         "Security: a revoked grant no longer authorizes\nRefs: #1")
+        self.repo.commit("feat(c): add a check\n\nSecurity: callers can now be refused")
+        self.assertEqual(self.groups(), {"refuse a stale grant": "🛡️ Security", "add a check": "🛡️ Security"})
+
+    def test_a_breaking_fix_files_under_security(self):
+        self.repo.commit("fix(c)!: reject unsigned hooks\n\nBREAKING-CHANGE: unsigned hooks are refused")
+        self.repo.commit("fix!: reject unscoped hooks")
+        self.assertEqual(set(self.groups().values()), {"🛡️ Security"})
+
+    def test_a_plain_fix_mentioning_security_stays_a_bug_fix(self):
+        self.repo.commit("fix(c): tighten a bound\n\nImproves the security margin on the cap.")
+        self.assertEqual(self.groups(), {"tighten a bound": "🐛 Bug Fixes"})
+
+    def test_a_wasm_trailer_keeps_a_chore_and_bumps(self):
+        self.repo.commit("chore(deps): re-pin the fork\n\nWhy: upstream patch.\n\nWasm: c")
+        self.repo.commit("build(pins): refresh a pin\n\nWasm: c, c-factory")
+        self.repo.commit("chore(ci): tidy a script")
+        self.assertEqual(self.groups(), {"re-pin the fork": "📦 Build inputs", "refresh a pin": "📦 Build inputs"})
+        self.assertEqual(self.cliff("--bumped-version").strip(), "c-v0.1.1")
+
+    def test_a_chore_without_a_wasm_trailer_is_no_release(self):
+        self.repo.commit("chore(deps): bump a dev tool")
+        self.assertEqual(self.cliff("--bumped-version").strip(), "c-v0.1.0")
+
+
 class BuildInputs(unittest.TestCase):
     """release-deps.py inputs: what changed between two commits in what one
     package builds from."""

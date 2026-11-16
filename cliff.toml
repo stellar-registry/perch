@@ -44,19 +44,32 @@ protect_breaking_commits = false
 filter_commits = false
 topo_order = false
 sort_commits = "oldest"
-# Chores/CI/build/style are noise in a contract changelog — skip them.
+# First match wins, so the order matters:
+# - Security comes first, keyed on a `Security:` trailer, or on a breaking fix
+#   (`fix!:`, `fix(scope)!:`), whatever the type: a security fix must not
+#   land under Bug Fixes.
+# - Chores/CI/build/style are noise in a contract changelog and are skipped,
+#   unless the commit carries a `Wasm:` trailer naming the contracts whose
+#   bytes it changes (a re-pin, a build setting). Such a commit lands under
+#   Build inputs and bumps the version like a fix instead of vanishing. (A
+#   locked dependency that moves already gets its own `fix(deps)` line from
+#   scripts/release-deps.py.)
+# A footer matches as `Token: value`; the trailers are described in
+# .gitmessage and CONTRIBUTING.md.
 commit_parsers = [
+  { footer = "^Security:", group = "<!-- 6 -->🛡️ Security" },
+  { message = "^fix(\\([^)]*\\))?!:", group = "<!-- 6 -->🛡️ Security" },
   { message = "^feat", group = "<!-- 0 -->🚀 Features" },
   { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
   { message = "^perf", group = "<!-- 2 -->⚡ Performance" },
   { message = "^refactor", group = "<!-- 3 -->🚜 Refactor" },
   { message = "^doc", group = "<!-- 4 -->📚 Documentation" },
   { message = "^test", group = "<!-- 5 -->🧪 Testing" },
+  { footer = "^Wasm:", group = "<!-- 9 -->📦 Build inputs" },
   { message = "^ci", skip = true },
   { message = "^build", skip = true },
   { message = "^chore", skip = true },
   { message = "^style", skip = true },
-  { body = ".*security", group = "<!-- 6 -->🛡️ Security" },
   { message = "^revert", group = "<!-- 7 -->◀️ Revert" },
   { message = ".*", group = "<!-- 8 -->💼 Other" },
 ]

@@ -1,0 +1,33 @@
+name: Review conventions
+
+# The shared PR title, description and commit checks
+# (bitswell-hq/review-conventions), with perch's config and rule module
+# (.github/review-conventions.json, .github/review-conventions.mjs) and
+# templates (.github/pull_request_template.md, PULL_REQUEST_TEMPLATE/).
+# CONTRIBUTING.md describes them for authors.
+#
+# `mode` is the one switch: `warn` reports findings and never fails the PR;
+# `block` fails the job on any finding (make it a required check to stop
+# merges). Its own lightweight workflow so it re-runs on `edited` without
+# re-running the build.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: review-conventions-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review-conventions:
+    # Pinned by commit like every other action here (zizmor unpinned-uses).
+    # Bump to the commit the v1 tag points at to take fixes and new optional
+    # checks; a new required section or default finding would be v2
+    # (review-conventions README, "Versioning").
+    uses: bitswell-hq/review-conventions/.github/workflows/review-conventions.yml@c0c38f023b2da6a3b6339e79130727d3bc4e4233 # v1.0.0
+    with:
+      mode: warn

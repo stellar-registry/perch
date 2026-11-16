@@ -349,6 +349,8 @@ jobs:
       - run: python3 scripts/test-release-scripts.py
         env:
           PERCH_REQUIRE_GIT_CLIFF: "1"
+      # perch's rule module and config for the review-conventions checks.
+      - run: node --test scripts/test-review-conventions.mjs
 
   # Every npm package as `npm publish` would ship it: packed, installed from
   # the tarball into an empty project, every entry point imported, every

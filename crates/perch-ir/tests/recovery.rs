@@ -463,6 +463,7 @@ fn external(verifier: &str, key: &str) -> SignerMethod {
     SignerMethod::External {
         verifier: verifier.into(),
         key: key.into(),
+        verifier_name: None,
     }
 }
 

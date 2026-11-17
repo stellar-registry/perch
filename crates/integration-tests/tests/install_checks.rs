@@ -32,7 +32,7 @@ struct Bare;
 /// env and a WebAuthn verifier), in a fresh `Env`. `Err` carries the panic.
 fn construct(signers: impl FnOnce(&Env, &Address) -> Vec<Signer>) -> Result<(), String> {
     let env = Env::default();
-    let verifier = env.register(PerchWebAuthnVerifier, ());
+    let verifier = perch_testkit::verifiers::deploy(&env, PerchWebAuthnVerifier);
     let account = env.register(Bare, ());
     let signers = signers(&env, &verifier);
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -161,6 +161,9 @@ fn the_constructor_installs_up_to_the_limit_and_announces_the_rule() {
     assert!(rule.policies.is_empty() && rule.policy_ids.is_empty());
 }
 
+/// The name [`compile_signers`] publishes its WebAuthn verifier under.
+const WEBAUTHN_NAME: &str = "perch-webauthn-verifier@1.0.0";
+
 fn compile_signers(signers: &[(&str, std::string::String)]) -> Result<(), DocCompilerError> {
     let env = Env::default();
     let net_id = env
@@ -168,12 +171,17 @@ fn compile_signers(signers: &[(&str, std::string::String)]) -> Result<(), DocCom
         .sha256(&Bytes::from_slice(&env, FIXTURE_NETWORK.as_bytes()))
         .to_array();
     env.ledger().with_mut(|l| l.network_id = net_id);
-    let verifier = env.register(PerchWebAuthnVerifier, ());
+    let verifier =
+        perch_testkit::verifiers::deploy_named(&env, PerchWebAuthnVerifier, WEBAUTHN_NAME);
     let compiler = env.register(PerchDocCompiler, ());
     let verifier = perch_testkit::delta::strkey(&verifier);
     let decls: std::vec::Vec<std::string::String> = signers
         .iter()
-        .map(|(id, key)| format!(r#"{{"id":"{id}","verifier":"{verifier}","key":"{key}"}}"#))
+        .map(|(id, key)| {
+            format!(
+                r#"{{"id":"{id}","verifier":"{verifier}","verifier-name":"{WEBAUTHN_NAME}","key":"{key}"}}"#
+            )
+        })
         .collect();
     let ids: std::vec::Vec<std::string::String> =
         signers.iter().map(|(id, _)| format!(r#""{id}""#)).collect();

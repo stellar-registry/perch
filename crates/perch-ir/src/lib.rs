@@ -69,6 +69,7 @@ pub mod normal;
 pub mod parse;
 pub mod recovery;
 pub mod validate;
+pub mod verifier;
 
 pub use canon::{
     canonical_json, recovery_canonical_json, rule_canonical_json, CANON_VERSION, RULE_HASH_DOMAIN,
@@ -86,4 +87,8 @@ pub use parse::{from_json, JsonError, ParseError};
 pub use validate::{
     is_address_shape, is_contract_address_shape, validate, ValidationError, ACK_SENTINEL,
     MAX_SIGNER_KEY_LEN, MAX_STRING_PRED_LEN,
+};
+pub use verifier::{
+    is_admin_document, parse_verifier_name, unverified_reuse, unverified_verifiers,
+    MAX_VERIFIER_NAME_LEN,
 };

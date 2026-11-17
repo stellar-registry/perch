@@ -18,6 +18,9 @@ use soroban_sdk::xdr::{
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Event as _, IntoVal, String, TryFromVal, Val};
 use std::format;
 
+/// The name the WebAuthn verifier is published under in `perch/verifiers`.
+const WEBAUTHN_NAME: &str = "perch-webauthn-verifier@0.1.2";
+
 /// The account wasm the factory pinned, uploaded where `deploy_v2` finds it.
 const ACCOUNT_WASM: &[u8] = include_bytes!("../wasm/perch-account.wasm");
 
@@ -58,8 +61,16 @@ fn world() -> World {
         PerchSpendingLimit,
         (),
     );
-    let verifier = pins::perch_webauthn_verifier::address(&env);
-    env.register_at(&verifier, PerchWebAuthnVerifier, ());
+    // The WebAuthn verifier where `perch/verifiers` deploys the pinned hash,
+    // and published there under its name: what the factory pins, and what
+    // an admin document names.
+    let verifier = perch_testkit::verifiers::deploy_at_hash(
+        &env,
+        &pins::perch_webauthn_verifier::hash(&env),
+        PerchWebAuthnVerifier,
+    );
+    assert_eq!(verifier, pins::perch_webauthn_verifier::address(&env));
+    perch_testkit::verifiers::name(&env, WEBAUTHN_NAME, &verifier);
     env.deployer().upload_contract_wasm(ACCOUNT_WASM);
     let factory = env.register(PerchAccountFactory, ());
     World {
@@ -196,7 +207,7 @@ fn a_new_passkey_account_applies_a_document_signed_by_its_passkey() {
     // a credential-id suffix). The genesis admin signer the passkey authorizes
     // with still carries the suffix; this first apply re-keys it to canonical.
     let doc = format!(
-        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{{"id":"owner","verifier":"{}","key":"{}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}}]}}"#,
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{{"id":"owner","verifier":"{}","verifier-name":"{WEBAUTHN_NAME}","key":"{}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}}]}}"#,
         strkey(&w.verifier),
         hex(&key.public_key()),
     );

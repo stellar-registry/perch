@@ -1,0 +1,7 @@
+# The registry a document's `verifier-name` resolves in: Perch's managed
+# `perch/verifiers`, below the Stellar Registry root, derived under the
+# ledger's network id (crates/perch-smart-account/wasm/README.md). The
+# account and the factory hold identical copies.
+root-deployer GAMPJROHOAW662FINQ4XQOY2ULX5IEGYXCI4SMZYE75EHQBR6PSTJG3M
+root-salt 2026-04-24T13:41:00
+path perch/verifiers

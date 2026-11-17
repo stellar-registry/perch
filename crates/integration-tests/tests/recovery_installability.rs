@@ -200,6 +200,8 @@ fn admin_survives_requires_an_unbounded_admin_rule() {
                 v
             }),
         normal_form: true,
+        unverified: Vec::new(&env),
+        verifier_names: Vec::new(&env),
     };
     assert!(
         admin_survives(&doc(None, &all, 1)),

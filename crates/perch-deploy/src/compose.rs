@@ -103,7 +103,7 @@ fn rule_entry(
             .find(|s| &s.id == id)
             .ok_or_else(|| anyhow!("rule '{}' names no declared signer '{id}'", rule.name))?;
         signers.push(match &decl.method {
-            SignerMethod::External { verifier, key } => SignerJson::External {
+            SignerMethod::External { verifier, key, .. } => SignerJson::External {
                 verifier: verifier.clone(),
                 key_hex: key.clone(),
             },

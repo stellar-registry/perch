@@ -80,7 +80,7 @@ fn setup() -> World {
     let env = Env::default();
     env.ledger().with_mut(|l| l.sequence_number = 10);
 
-    let verifier = env.register(PerchEd25519Verifier, ());
+    let verifier = perch_testkit::verifiers::deploy(&env, PerchEd25519Verifier);
     let delegate = env.register(ApproveAllAccount, ());
     let registry = env.register(MockRegistry, ());
 

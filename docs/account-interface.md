@@ -22,11 +22,53 @@ error codes: at least one (3004), at most 15 (3010), external keys of at
 most 256 bytes (3013), and no two that are one key (3007): two delegated
 signers with one address, or external signers their verifier's
 `batch_canonicalize_key` maps to the same bytes, each verifier asked once.
+An external signer's verifier must also be one `perch/verifiers` deployed
+(`UnverifiedVerifier`, "Verifiers"), as an admin document's must: the
+constructor reads the verifier's code hash (`Address::executable`) and
+requires the verifier to sit at that hash's content address in
+`perch/verifiers`, where only the registry's `deploy_stateless` of a
+published hash puts a contract. It makes no call for this. Every creation
+path runs the constructor, the factory's `create` and `create_passkey`
+included, so no account starts with an admin an admin document could not
+name.
 A rule a document installs gets the same limits; the compiler has already
 refused a non-canonical key and a key declared twice, so applies ask no
 verifier. The constructor emits `context_rule_added` for rule 0, as OZ's
 registry announces a rule: its id, name, contract, no last ledger, its
 signers' positions as their ids, and no policy.
+
+## Verifiers
+
+An external signer names its verifier contract by name or by contract id
+alone (`perch_ir::verifier`):
+
+- **By name.** `"verifier-name": "<name>@<version>"` beside `"verifier"`: a
+  verifier published in Perch's managed `perch/verifiers` registry, a
+  sibling of `perch/constructorless` under the same `perch`, derived from
+  the committed `crates/*/wasm/verifiers.path` (the compiler's, the
+  account's and the factory's copies are one file). Its manager approves
+  each new name. The compiler resolves the name and exact version,
+  `deployer(perch/verifiers, fetch_hash(name, version))`, and refuses the
+  document (`Compiler_DocInvalid`) unless that is the signer's
+  `verifier`. The canonical form, so `doc_hash`, binds the name, the version
+  and the address. The account stores the address: a name the registry
+  later answers otherwise changes no applied account, which moves to another
+  verifier only by applying a document.
+- **By contract id alone.** An *unverified* verifier, whose `verify`
+  decides whatever the rules holding its signers allow. The compiler refuses
+  one in an admin document, a document with a `self-admin` rule or a
+  `recovery` member (`Compiler_DocInvalid`): every document
+  `apply_doc` applies has one, and every recovery target, so no admin rule
+  and no recovery credential rests on one. A scoped document may hold one,
+  at most one signer per unverified verifier in a rule
+  (`Compiler_DocInvalid` otherwise): a verifier that calls every key
+  canonical and accepts one signature for several would otherwise count each
+  toward a threshold. `CompiledDoc::unverified` lists them, for the wallet's
+  warning (perch-js `unverifiedWarnings`). The raw id of a named verifier's
+  address is unverified too: the name is what the document is reviewed by.
+
+`CompiledDoc::verifier_names` carries each declared signer's name (empty
+where it has none), which `apply_scope` keeps for the rebuild.
 
 ## Applying documents
 
@@ -85,9 +127,11 @@ the owner chooses (one per app grant, say), and returns its `doc_hash`
   against this scope's records only. Every rule it installs is tagged with
   the scope, and its stored rule carries the current scope generation, so
   applying over a wiped scope revives it with the new rules.
-- It keeps the document's signer ids, not its text. Each normal-form
-  document is the one document its stored rules lower from, so its records
-  and signer ids give the text back ("Views", `scope_signer_ids`).
+- It keeps the document's signer ids and each signer's `verifier-name`, not
+  its text (no names when no signer has one). Each normal-form document is
+  the one document its stored rules lower from, so its records, signer ids
+  and verifier names give the text back ("Views", `scope_signer_ids`,
+  `scope_verifier_names`).
 - It calls no controller, and leaves the applied `doc_hash` and the revision
   alone.
 
@@ -148,13 +192,15 @@ as the account (spec §15).
 - **`credential_generation`.** The last scope generation a scoped document
   named this credential fingerprint under. Once `scope_generation` is past
   it, no document may name the credential (spec §7.6).
-- **`scope`, `scope_rule_set`, `scope_signer_ids`.** A scoped document's
-  record, its rule-eval rules (aligned with the record's rules, each
-  carrying the scope generation it was applied under; empty for an unknown
-  id), and its signer ids in declaration order. The account does not store
-  the document's text: the three give it back, since the account applies a
-  scoped document only in normal form. perch-js's `rebuildScopeDoc` (and
-  `readScopeDoc`, which reads the three) rebuilds it and trusts it only once
+- **`scope`, `scope_rule_set`, `scope_signer_ids`, `scope_verifier_names`.**
+  A scoped document's record, its rule-eval rules (aligned with the record's
+  rules, each carrying the scope generation it was applied under; empty for
+  an unknown id), its signer ids in declaration order, and each signer's
+  `verifier-name` aligned with them (empty where a signer has none, and no
+  entries when no signer has one). The account does not store the
+  document's text: the four give it back, since the account applies a scoped
+  document only in normal form. perch-js's `rebuildScopeDoc` (and
+  `readScopeDoc`, which reads the four) rebuilds it and trusts it only once
   its `sha256` is the record's `doc_hash`. Rule names repeat across scopes,
   so a wallet selects a scoped rule by `(scope, name)`.
 - **`scopes(start, count)`.** The scope ids at positions
@@ -290,6 +336,17 @@ their docs land in the account's spec too.
   or is a rule that would authorize nothing: a capped rule on functions
   other than `transfer`, a `string-in` value no argument can match, a rule
   already expired.
+- **`UnverifiedVerifier`.** A constructor admin signer's verifier is not a
+  contract `perch/verifiers` deployed ("Constructor", "Verifiers").
+- **`Compiler_DocInvalid`.** Beside a document perch-ir's validation
+  refuses, the compiler refuses with it an admin document (or a recovery
+  target) naming a verifier by contract id alone, a rule holding two
+  signers under one such verifier, and a `verifier-name` not published in
+  `perch/verifiers` or resolving to another contract than the signer's
+  `verifier` ("Verifiers"). One code keeps every other code where it was:
+  the account flattens the compiler's errors in by position. perch-js's
+  `checkVerifiers` and `resolveVerifierName` tell the cases apart before a
+  submission.
 - **`Compiler_KeyNotCanonicalizable`.** Either the verifier could not
   canonicalize the key at all, or the declared bytes differ from the
   canonical form it returns (for example a WebAuthn key carrying a

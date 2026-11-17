@@ -9,7 +9,7 @@ use perch_doc_compiler::{
     DocCompilerError, MAX_DOC_CANONICAL_BYTES, MAX_DOC_RULES, MAX_DOC_SIGNERS,
     MAX_RULE_CONSTRAINTS, MAX_RULE_NAME_BYTES,
 };
-use perch_testkit::{Bootstrap, World, FIXTURE_NETWORK};
+use perch_testkit::{Bootstrap, World, ED25519_VERIFIER_NAME, FIXTURE_NETWORK};
 use soroban_sdk::{Address, Bytes};
 
 fn setup() -> World {
@@ -34,7 +34,7 @@ fn doc(w: &World, signers: u32, rules: u32, last_name: &str, padding: usize) -> 
     let signers: Vec<String> = (0..signers)
         .map(|i| {
             format!(
-                r#"{{"id":"s{i}","verifier":"{verifier}","key":"{}"}}"#,
+                r#"{{"id":"s{i}","verifier":"{verifier}","verifier-name":"{ED25519_VERIFIER_NAME}","key":"{}"}}"#,
                 format!("{:02x}", i + 1).repeat(32)
             )
         })
@@ -145,7 +145,7 @@ fn constrained(w: &World, args: u32, functions: bool) -> Bytes {
         ""
     };
     let json = format!(
-        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{{"id":"s0","verifier":"{verifier}","key":"{key}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["s0"]}}}},{{"name":"r","scope":{{"type":"contract","address":"{verifier}"}},"principals":{{"type":"all","signers":["s0"]}}{functions},"args":[{}]}}]}}"#,
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{{"id":"s0","verifier":"{verifier}","verifier-name":"{ED25519_VERIFIER_NAME}","key":"{key}"}}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["s0"]}}}},{{"name":"r","scope":{{"type":"contract","address":"{verifier}"}},"principals":{{"type":"all","signers":["s0"]}}{functions},"args":[{}]}}]}}"#,
         preds.join(","),
         key = "01".repeat(32),
     );

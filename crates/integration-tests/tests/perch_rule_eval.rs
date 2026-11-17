@@ -44,7 +44,7 @@ use perch_smart_account::infra;
 use perch_testkit::delta::{strkey, DeltaWorld, DocModel};
 use perch_testkit::denote::{denote, Installed};
 use perch_testkit::rpn::{self, Policies};
-use perch_testkit::{AnyKeyVerifier, FIXTURE_NETWORK};
+use perch_testkit::{verifiers, AnyKeyVerifier, FIXTURE_NETWORK};
 use rule_eval::{Cond, Rule as ERule, Signer as ESigner, Val as EVal};
 use rule_eval_conformance::documents::{
     self, JsonDoc, JsonPred, JsonPrincipals, JsonScope, Lowered, Trace,
@@ -189,13 +189,15 @@ struct Names<'w> {
 
 impl<'w> Names<'w> {
     /// The renaming for `d` on a trace whose account is `account`: each
-    /// verifier `d` declares is a registered `AnyKeyVerifier`.
+    /// verifier `d` declares is an `AnyKeyVerifier` where `perch/verifiers`
+    /// deploys one, named ([`verifiers::auto_name`]), as an admin document's
+    /// must be.
     fn new(w: &'w DeltaWorld, account: &str, d: &JsonDoc) -> Names<'w> {
         let mut addr = BTreeMap::from([(unhex(account), w.delta.clone())]);
         for s in &d.signers {
             if let JsonSigner::External { verifier, .. } = &s.signer {
                 addr.entry(unhex(verifier))
-                    .or_insert_with(|| w.env.register(AnyKeyVerifier, ()));
+                    .or_insert_with(|| verifiers::deploy_auto(&w.env, AnyKeyVerifier));
             }
         }
         Names { w, addr }
@@ -231,10 +233,14 @@ impl<'w> Names<'w> {
                 JsonSigner::Delegated { address } => SignerMethod::Delegated {
                     address: self.strkey(address),
                 },
-                JsonSigner::External { verifier, key } => SignerMethod::External {
-                    verifier: self.strkey(verifier),
-                    key: key.clone(),
-                },
+                JsonSigner::External { verifier, key } => {
+                    let v = self.address(&unhex(verifier));
+                    SignerMethod::External {
+                        verifier: strkey(&v),
+                        key: key.clone(),
+                        verifier_name: Some(verifiers::auto_name(&v)),
+                    }
+                }
             };
             signers.push(SignerDecl { id, method });
         }

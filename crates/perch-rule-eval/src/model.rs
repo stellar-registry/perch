@@ -281,7 +281,7 @@ mod from_ir {
                 SignerMethod::Delegated { address } => {
                     Signer::Delegated(Address::from_str(e, address))
                 }
-                SignerMethod::External { verifier, key } => Signer::External(
+                SignerMethod::External { verifier, key, .. } => Signer::External(
                     Address::from_str(e, verifier),
                     Bytes::from_slice(e, &hex::decode(key).map_err(|_| ModelError::KeyHex)?),
                 ),

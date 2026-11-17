@@ -2,10 +2,13 @@
 //! one wasm, pinned at build time.
 //!
 //! - **Pinned.** The account wasm hash and the WebAuthn verifier's content
-//!   address are baked in from this crate's committed `wasm/` pins when it is built
-//!   (see [`pins`]). Publishing a newer account or verifier never changes what
-//!   an existing factory deploys: a new account build is a new factory, at a
-//!   new address.
+//!   address in `perch/verifiers` are baked in from this crate's committed
+//!   `wasm/` pins when it is built (see [`pins`]). Publishing a newer account
+//!   or verifier never changes what an existing factory deploys: a new
+//!   account build is a new factory, at a new address. The account's
+//!   constructor refuses an admin signer whose verifier `perch/verifiers`
+//!   did not deploy, so [`PerchAccountFactory::create`] creates only what
+//!   an admin document could hold.
 //! - **Bound to the signers.** An account's address commits to the admin
 //!   signers it is created with, not only to the caller's salt: the deploy
 //!   salt is `sha256(salt || xdr(admin_signers))`. Nobody can create an
@@ -27,14 +30,20 @@ use soroban_sdk::{
 pub const VERSION: u32 = 1;
 
 /// What the factory deploys and the passkey verifier it names, both pinned
-/// from the committed `wasm/` pins at build time.
+/// from the committed `wasm/` pins at build time: the verifier at its
+/// content address in `perch/verifiers` (`wasm/verifiers.path`).
 pub mod pins {
     perch_registry_resolve::registry_contract! {
         mod: account,
         wasm_name: "perch-account",
         hash_file: "wasm/perch-account.sha256",
     }
-    perch_registry_resolve::registry_contract!(perch_webauthn_verifier);
+    perch_registry_resolve::registry_contract! {
+        mod: perch_webauthn_verifier,
+        wasm_name: "perch-webauthn-verifier",
+        hash_file: "wasm/perch-webauthn-verifier.sha256",
+        path_file: "wasm/verifiers.path",
+    }
 }
 
 /// Emitted for every account the factory creates.
@@ -77,7 +86,8 @@ impl PerchAccountFactory {
 
     /// Deploy an account whose constructor installs `admin_signers` as its
     /// admin rule, at [`Self::address_of`], and emit `AccountCreated`.
-    /// Permissionless. Fails if that account already exists.
+    /// Permissionless. Fails if that account already exists, or if an
+    /// external signer's verifier is not one `perch/verifiers` deployed.
     pub fn create(e: &Env, salt: BytesN<32>, admin_signers: Vec<Signer>) -> Address {
         let account = e
             .deployer()

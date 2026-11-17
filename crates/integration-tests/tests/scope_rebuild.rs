@@ -1,13 +1,14 @@
 //! A scoped document's canonical text rebuilds from what the account keeps
-//! for it (`perch_testkit::rebuild`: each rule's name and stored rule, and the
-//! document's signer ids), and `apply_scope` takes no document it would not
-//! rebuild:
+//! for it (`perch_testkit::rebuild`: each rule's name and stored rule, the
+//! document's signer ids, and each signer's `verifier-name`), and
+//! `apply_scope` takes no document it would not rebuild:
 //!
 //! - every scoped document `apply_scope` accepts rebuilds byte for byte to
 //!   its canonical text, whose sha256 is the `doc_hash` it returned:
 //!   generated ones (`DocModel::generate_scoped` in normal form,
 //!   `PERCH_REBUILD_DOCS` of them, default 400), targeted ones covering each
-//!   predicate, signer kind, principals form, function list, cap and expiry,
+//!   predicate, signer kind, named and unnamed verifier, principals form,
+//!   function list, cap and expiry,
 //!   ones shaped like Nido's app grants (`<origin>#<first 8 hex of
 //!   sha256(key)>` ids), and the testnet preview account's two scopes,
 //!   verbatim;
@@ -29,7 +30,7 @@ use perch_account::{PerchAccountClient, PerchAccountError};
 use perch_account_types::Signer;
 use perch_rule_eval::convert::string_bytes;
 use perch_rule_eval::{StoredCond, StoredFunctions, StoredRule, StoredVal};
-use perch_testkit::delta::{raw_entries, strkey, DeltaWorld, DocModel};
+use perch_testkit::delta::{raw_entries, strkey, DeltaWorld, DocModel, VERIFIER_NAME};
 use perch_testkit::fixture::AnyKeyVerifier;
 use perch_testkit::rebuild::{self, StoredDoc};
 use serde_json::{json, Value as J};
@@ -176,6 +177,7 @@ fn vector(name: &str, st: &StoredDoc, canonical: &str) -> J {
         "network": st.network,
         "docHash": hex::encode(st.doc_hash),
         "signerIds": st.signer_ids,
+        "verifierNames": st.verifier_names,
         "rules": st.rules.iter().map(|(n, r)| json!({"name": n, "rule": stored_rule(r)})).collect::<Vec<_>>(),
         "canonical": canonical,
     })
@@ -219,10 +221,20 @@ fn delegated(id: &str, a: &str) -> String {
     format!(r#"{{"id":"{id}","address":"{a}"}}"#)
 }
 
+/// A signer under the world's verifier, which is named.
 fn external(w: &DeltaWorld, id: &str, key: &[u8]) -> String {
     format!(
-        r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+        r#"{{"id":"{id}","verifier":"{}","verifier-name":"{VERIFIER_NAME}","key":"{}"}}"#,
         strkey(&w.verifier),
+        hex::encode(key)
+    )
+}
+
+/// A signer under `verifier`, named by contract id alone.
+fn unnamed(verifier: &Address, id: &str, key: &[u8]) -> String {
+    format!(
+        r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+        strkey(verifier),
         hex::encode(key)
     )
 }
@@ -267,6 +279,7 @@ fn every_scoped_document_the_account_takes_rebuilds() {
     let w = DeltaWorld::new();
     let (c0, c1) = (strkey(&w.scopes[0]), strkey(&w.scopes[1]));
     let (k0, k1, k2) = (strkey(&w.keys[1]), strkey(&w.keys[2]), strkey(&w.keys[3]));
+    let raw = w.env.register(AnyKeyVerifier, ());
 
     // Targeted: each form a stored rule gives back.
     let targeted: Vec<(&str, String)> = vec![
@@ -293,6 +306,28 @@ fn every_scoped_document_the_account_takes_rebuilds() {
                 &[
                     rule("x", &c0, &threshold(&["b", "a"], 1), ""),
                     rule("y", &c1, &threshold(&["a", "c", "b"], 2), ""),
+                ],
+            ),
+        ),
+        (
+            "a verifier named by contract id alone",
+            doc(
+                &[unnamed(&raw, "u", &passkey(2))],
+                &[rule("r", &c0, &all(&["u"]), "")],
+            ),
+        ),
+        (
+            "named and unnamed verifiers side by side",
+            doc(
+                &[
+                    external(&w, "n", &passkey(3)),
+                    unnamed(&raw, "u", &passkey(4)),
+                    delegated("d", &k0),
+                    external(&w, "m", &passkey(5)),
+                ],
+                &[
+                    rule("x", &c0, &threshold(&["n", "u", "d"], 2), ""),
+                    rule("y", &c1, &all(&["m", "u"]), ""),
                 ],
             ),
         ),

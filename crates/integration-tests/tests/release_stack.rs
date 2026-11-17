@@ -18,6 +18,10 @@
 //! cargo test -p perch-integration-tests --test release_stack -- --ignored --nocapture
 //! ```
 //!
+//! A rehearsal's stack, built from dev registry paths, adds `--skip
+//! one_build_resolves_each_networks_own_registry`, which checks the canonical
+//! registries.
+//!
 //! Each transaction-shaped call prints one `{"case": ...}` JSON line with its
 //! metered resources (the in-process estimate of the on-chain cost), and is
 //! asserted to fit within the budget rule's 75% of the per-transaction limits
@@ -46,7 +50,7 @@ use perch_testkit::FIXTURE_NETWORK;
 use perch_zk_pool::{PerchZkPoolClient, PoolKey, TreeState};
 use perch_zk_primitives::{contract_id, ZERO_HASHES};
 use perch_zk_prover::{Inputs, Toolchain, Tree};
-use soroban_sdk::testutils::{EnvTestConfig, Ledger as _};
+use soroban_sdk::testutils::{Address as _, EnvTestConfig, Ledger as _};
 use soroban_sdk::token::{StellarAssetClient, TokenClient};
 use soroban_sdk::xdr::{
     AccountId, HostFunction, InvokeContractArgs, PublicKey, ScVal, SorobanAddressCredentials,
@@ -192,6 +196,7 @@ fn repo() -> PathBuf {
 struct Stack {
     registry: String,
     wasm: HashMap<String, std::vec::Vec<u8>>,
+    versions: HashMap<String, String>,
     pins: HashMap<String, HashMap<String, String>>,
 }
 
@@ -220,9 +225,15 @@ fn load_stack() -> Stack {
         }))
         .expect("build.json");
     let mut wasm = HashMap::new();
+    let mut versions = HashMap::new();
     let mut pins = HashMap::new();
     for a in build["artifacts"].as_array().expect("artifacts") {
         let package = a["package"].as_str().unwrap().to_string();
+        // A fetched stack's registry code carries no version.
+        versions.insert(
+            package.clone(),
+            a["version"].as_str().unwrap_or_default().to_string(),
+        );
         let bytes = std::fs::read(dir.join(a["wasm"].as_str().unwrap())).expect("artifact wasm");
         assert_eq!(
             sha256_hex(&bytes),
@@ -241,6 +252,7 @@ fn load_stack() -> Stack {
     let stack = Stack {
         registry: build["registry"].as_str().unwrap().to_string(),
         wasm,
+        versions,
         pins,
     };
     // Every consumer was built against the exact bytes this stack carries.
@@ -267,7 +279,10 @@ struct World {
     env: Env,
     stack: Stack,
     factory: Address,
+    /// The WebAuthn verifier, which `perch/verifiers` deployed, and the
+    /// `verifier-name` a document names it by.
     webauthn: Address,
+    webauthn_name: String,
     compiler: Address,
     controller: Address,
     adapter: Address,
@@ -348,7 +363,35 @@ fn world() -> World {
     let compiler = content("perch-doc-compiler");
     content("perch-interpreter");
     content("perch-spending-limit");
-    let webauthn = content("perch-webauthn-verifier");
+    // `perch/verifiers`: the stack's registry code at the address the
+    // account, the compiler and the factory derive, and the WebAuthn verifier
+    // published and `deploy_stateless`'d through it, as a deployment does. A
+    // document names the verifier, which the compiler resolves through the
+    // registry's own `fetch_hash`.
+    let verifiers = perch_smart_account::verifier_registry(&env);
+    let manager = Address::generate(&env);
+    env.register_at(
+        &verifiers,
+        stack.wasm["perch-constructorless-registry"].as_slice(),
+        (
+            Address::generate(&env),
+            manager.clone(),
+            Address::generate(&env),
+        ),
+    );
+    let webauthn_version = stack.versions["perch-webauthn-verifier"].clone();
+    let webauthn = {
+        let name = soroban_sdk::String::from_str(&env, "perch-webauthn-verifier");
+        let version = soroban_sdk::String::from_str(&env, &webauthn_version);
+        let hash = env
+            .deployer()
+            .upload_contract_wasm(stack.wasm["perch-webauthn-verifier"].as_slice());
+        env.mock_all_auths();
+        let reg =
+            perch_constructorless_registry::ConstructorlessRegistryClient::new(&env, &verifiers);
+        reg.publish_hash(&name, &manager, &hash, &version);
+        reg.deploy_stateless(&name, &Some(version), &None)
+    };
     let pool = content("perch-zk-pool");
     let adapter = content("perch-zk-adapter");
     let controller = content("perch-recovery");
@@ -365,6 +408,7 @@ fn world() -> World {
         stack,
         factory,
         webauthn,
+        webauthn_name: format!("perch-webauthn-verifier@{webauthn_version}"),
         compiler,
         controller,
         adapter,
@@ -588,8 +632,9 @@ impl World {
             .unwrap_or_default();
         let signer = |id: &str, key: &SoftPasskey| {
             format!(
-                r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
                 strkey(&self.webauthn),
+                self.webauthn_name,
                 hex(&key.key_data())
             )
         };
@@ -1034,8 +1079,9 @@ impl World {
             .zip(keys)
             .map(|(id, key)| {
                 format!(
-                    r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                    r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
                     strkey(&self.webauthn),
+                    self.webauthn_name,
                     hex(&key.key_data())
                 )
             })
@@ -1664,32 +1710,43 @@ fn the_stack_compiler_hashes_the_canonical_recovery_text() {
 }
 
 /// One built account and factory, unchanged, under several networks: each
-/// resolves `perch/constructorless` under that network's own Stellar Registry
-/// root, and the content addresses of the stack's own tier-0 bytes there. The
-/// registries are written out here, not derived (`registry_path.rs` derives
-/// them hop by hop).
+/// resolves `perch/constructorless` and `perch/verifiers` under that
+/// network's own Stellar Registry root, the stack's own infra bytes at their
+/// content addresses in the first, and its WebAuthn verifier's in the
+/// second. The registries are written out here, not derived
+/// (`registry_path.rs` derives them hop by hop), so a rehearsal's stack,
+/// built from dev registry paths, fails it by design: run the suite on one
+/// with `--skip one_build_resolves_each_networks_own_registry`.
 #[test]
 #[ignore = "needs the built stack"]
 fn one_build_resolves_each_networks_own_registry() {
     use perch_smart_account::InfraPins;
-    const NETWORKS: [(&str, &str); 3] = [
+    const NETWORKS: [(&str, &str, &str); 3] = [
         (
             "Test SDF Network ; September 2015",
             "CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM",
+            "CCHJ7RWPMO33JB5PS74B64N4LVTWCGLEMH5IAKYCV32X56MXGYLHN5HW",
         ),
         (
             "Public Global Stellar Network ; September 2015",
             "CC236AK2RX7MUO7BV7JYDDW5KHZ3X7YYJOJKCVDC543BQBNNSUCZB7NN",
+            "CCDCKRUV4W4DQYBWFWT4FNQ2QXQPGUQ7EXOZHIHSSLB6YJHMLHPMGDPH",
         ),
         (
             "Test SDF Future Network ; October 2022",
             "CBPWEPHLO2QDXWMWMHLOWCLRKQT24EFH7GYW6G3UOFY45RYOHS32A5JP",
+            "CCARW6UKQLFDEJZHML2QTHFJNL4RKSSY6JEUCAC4IX5RJ3GTZ75SOGXW",
         ),
     ];
     let stack = load_stack();
     // build-stack.sh builds for one network's registry; the bytes are the
     // same on every network.
-    assert!(NETWORKS.iter().any(|(_, r)| *r == stack.registry));
+    assert!(
+        NETWORKS.iter().any(|(_, r, _)| *r == stack.registry),
+        "the stack was built for {}, no canonical registry: a rehearsal's stack \
+         (--skip one_build_resolves_each_networks_own_registry)",
+        stack.registry
+    );
     let env = Env::new_with_config(EnvTestConfig {
         capture_snapshot_at_drop: false,
     });
@@ -1701,14 +1758,15 @@ fn one_build_resolves_each_networks_own_registry() {
     let account = factory.create(&BytesN::from_array(&env, &[7; 32]), &admin);
     let account = PerchAccountClient::new(&env, &account);
 
-    for (passphrase, registry) in NETWORKS {
+    for (passphrase, registry, verifiers) in NETWORKS {
         let id = env
             .crypto()
             .sha256(&Bytes::from_slice(&env, passphrase.as_bytes()))
             .to_array();
         env.ledger().with_mut(|l| l.network_id = id);
         let registry = Address::from_str(&env, registry);
-        let content = |pkg: &str| {
+        let verifiers = Address::from_str(&env, verifiers);
+        let content_in = |registry: &Address, pkg: &str| {
             let hash = env
                 .crypto()
                 .sha256(&Bytes::from_slice(&env, &stack.wasm[pkg]))
@@ -1717,6 +1775,7 @@ fn one_build_resolves_each_networks_own_registry() {
                 .with_address(registry.clone(), hash)
                 .deployed_address()
         };
+        let content = |pkg: &str| content_in(&registry, pkg);
         assert_eq!(
             account.infra(),
             InfraPins {
@@ -1728,7 +1787,7 @@ fn one_build_resolves_each_networks_own_registry() {
         );
         assert_eq!(
             factory.webauthn_verifier(),
-            content("perch-webauthn-verifier"),
+            content_in(&verifiers, "perch-webauthn-verifier"),
             "{passphrase}"
         );
     }
@@ -2619,8 +2678,9 @@ impl World {
             .iter()
             .map(|(id, key)| {
                 format!(
-                    r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+                    r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
                     strkey(&self.webauthn),
+                    self.webauthn_name,
                     hex(key)
                 )
             })
@@ -2990,8 +3050,9 @@ fn grant_rule(name: &str, signer: &str, token: &Address, limit: u32) -> String {
 
 fn passkey_decl(w: &World, id: &str, key: &SoftPasskey) -> String {
     format!(
-        r#"{{"id":"{id}","verifier":"{}","key":"{}"}}"#,
+        r#"{{"id":"{id}","verifier":"{}","verifier-name":"{}","key":"{}"}}"#,
         strkey(&w.webauthn),
+        w.webauthn_name,
         hex(&key.key_data())
     )
 }

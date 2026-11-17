@@ -36,7 +36,7 @@ fn setup(ci: bool) -> World {
     let env = Env::default();
     env.mock_all_auths();
 
-    let verifier = env.register(PerchEd25519Verifier, ());
+    let verifier = perch_testkit::verifiers::deploy(&env, PerchEd25519Verifier);
 
     let admin_key = SigningKey::from_bytes(&[9u8; 32]);
     let admin_pub = BytesN::from_array(&env, &admin_key.verifying_key().to_bytes());

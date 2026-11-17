@@ -21,6 +21,10 @@ use perch_webauthn_verifier::PerchWebAuthnVerifier;
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{vec, Address, Bytes, Env, String as SString, Vec};
 
+/// The name the fixture publishes its WebAuthn verifier under: an admin
+/// document names its verifiers from `perch/verifiers`.
+const WEBAUTHN_NAME: &str = "perch-webauthn-verifier@1.0.0";
+
 /// A minimal admin-only document whose sole signer is a WebAuthn `External`
 /// signer on `verifier`, carrying `key` (hex).
 fn admin_doc(verifier: &str, key_hex: &str) -> String {
@@ -29,7 +33,7 @@ fn admin_doc(verifier: &str, key_hex: &str) -> String {
   "version": 1,
   "network": "{FIXTURE_NETWORK}",
   "signers": [
-    {{ "id": "admin", "verifier": "{verifier}", "key": "{key_hex}" }}
+    {{ "id": "admin", "verifier": "{verifier}", "verifier-name": "{WEBAUTHN_NAME}", "key": "{key_hex}" }}
   ],
   "rules": [
     {{ "name": "admin",
@@ -56,7 +60,8 @@ fn setup() -> Fixture {
         .to_array();
     env.ledger().with_mut(|l| l.network_id = net_id);
 
-    let verifier = env.register(PerchWebAuthnVerifier, ());
+    let verifier =
+        perch_testkit::verifiers::deploy_named(&env, PerchWebAuthnVerifier, WEBAUTHN_NAME);
     let compiler = env.register(PerchDocCompiler, ());
 
     let verifier_strkey = {
@@ -116,7 +121,7 @@ fn recovery_doc(verifier: &str, key_hex: &str, controller: &str, guardian: &str)
   "version": 1,
   "network": "{FIXTURE_NETWORK}",
   "signers": [
-    {{ "id": "owner", "verifier": "{verifier}", "key": "{key_hex}" }}
+    {{ "id": "owner", "verifier": "{verifier}", "verifier-name": "{WEBAUTHN_NAME}", "key": "{key_hex}" }}
   ],
   "rules": [
     {{ "name": "admin",

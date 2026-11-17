@@ -117,6 +117,38 @@ fn contract_strkey_shape_matches_is_contract_address_shape() {
 }
 
 #[test]
+fn verifier_name_pattern_matches_the_validator() {
+    let v = validator();
+    let doc = |name: &str| {
+        json!({
+            "version": 1,
+            "signers": [{ "id": "a", "verifier": VALID_C, "verifier-name": name, "key": "ab" }],
+            "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }],
+        })
+    };
+    let longest = "a".repeat(perch_ir::MAX_VERIFIER_NAME_LEN);
+    for name in [
+        "perch-webauthn-verifier@0.1.2".to_string(),
+        "a@0.0.0".to_string(),
+        format!("{longest}@1.0.0"),
+        format!("{longest}a@1.0.0"),
+        "v@4294967295.0.0".to_string(),
+        "v@12345678901.0.0".to_string(),
+        "v@01.0.0".to_string(),
+        "v@1.0".to_string(),
+        "v@1.0.0-rc.1".to_string(),
+        "V@1.0.0".to_string(),
+        "v_x@1.0.0".to_string(),
+        "1v@1.0.0".to_string(),
+        "v".to_string(),
+        "@1.0.0".to_string(),
+    ] {
+        let expect = perch_ir::parse_verifier_name(&name).is_some();
+        agree(&v, &doc(&name), expect, &format!("verifier-name:{name}"));
+    }
+}
+
+#[test]
 fn address_strkey_shape_matches_is_address_shape() {
     let v = validator();
     let doc = |address: &str| {

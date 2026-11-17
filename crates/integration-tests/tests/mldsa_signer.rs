@@ -127,7 +127,7 @@ struct World {
 /// A `PerchAccount` whose constructor admin is the ML-DSA key.
 fn setup() -> World {
     let env = Env::default();
-    let verifier = env.register(PerchMlDsaVerifier, ());
+    let verifier = perch_testkit::verifiers::deploy(&env, PerchMlDsaVerifier);
     let key = MlDsaKey::from_seed(7);
     let signer = Signer::External(verifier.clone(), key.key_data(&env));
     let account = account_with_admin(&env, vec![&env, signer]);
@@ -265,7 +265,7 @@ fn the_raw_public_key_is_refused_as_a_signer_key() {
     // itself is over the account's key limit, refused before any verifier
     // is asked.
     let env = Env::default();
-    let verifier = env.register(PerchMlDsaVerifier, ());
+    let verifier = perch_testkit::verifiers::deploy(&env, PerchMlDsaVerifier);
     let key = MlDsaKey::from_seed(7);
     let raw = Signer::External(verifier, Bytes::from_slice(&env, &key.public_key));
     let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -338,7 +338,7 @@ struct Hybrid {
 fn hybrid() -> Hybrid {
     let mut w = setup();
     let ed25519 = SigningKey::from_bytes(&[2; 32]);
-    let verifier = w.env.register(PerchEd25519Verifier, ());
+    let verifier = perch_testkit::verifiers::deploy(&w.env, PerchEd25519Verifier);
     let ed25519_signer = Signer::External(
         verifier,
         Bytes::from_array(&w.env, &ed25519.verifying_key().to_bytes()),
@@ -407,18 +407,29 @@ fn compile_with_ci(key_hex: &str) -> Result<(), DocCompilerError> {
         .sha256(&Bytes::from_slice(&env, FIXTURE_NETWORK.as_bytes()))
         .to_array();
     env.ledger().with_mut(|l| l.network_id = net_id);
-    env.register_at(
-        &Address::from_str(&env, FIXTURE_VERIFIERS[0]),
+    // An admin document names its verifiers: the fixture's admin verifier
+    // and the ML-DSA verifier, from `perch/verifiers`.
+    let admin = perch_testkit::verifiers::deploy_named(
+        &env,
         AnyKeyVerifier,
-        (),
+        "fixture-admin-verifier@1.0.0",
     );
-    let verifier = env.register(PerchMlDsaVerifier, ());
+    let verifier = perch_testkit::verifiers::deploy_named(
+        &env,
+        PerchMlDsaVerifier,
+        "perch-mldsa-verifier@1.0.0",
+    );
     let compiler = env.register(PerchDocCompiler, ());
 
     let mut doc: serde_json::Value = serde_json::from_str(&fixture()).unwrap();
-    let ci = &mut doc["signers"][1];
+    let signers = doc["signers"].as_array_mut().unwrap();
+    assert_eq!(signers[0]["verifier"], FIXTURE_VERIFIERS[0]);
+    signers[0]["verifier"] = perch_testkit::delta::strkey(&admin).into();
+    signers[0]["verifier-name"] = "fixture-admin-verifier@1.0.0".into();
+    let ci = &mut signers[1];
     assert_eq!(ci["id"], "ci");
-    ci["verifier"] = verifier.to_string().to_string().into(); // the C... strkey
+    ci["verifier"] = perch_testkit::delta::strkey(&verifier).into();
+    ci["verifier-name"] = "perch-mldsa-verifier@1.0.0".into();
     ci["key"] = key_hex.into();
     let json = serde_json::to_string(&doc).unwrap();
     match PerchDocCompilerClient::new(&env, &compiler)

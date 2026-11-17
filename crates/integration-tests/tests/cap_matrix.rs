@@ -55,6 +55,7 @@ fn cap_doc(pubkey_hex: &str) -> perch_ir::PolicyDoc {
             method: SignerMethod::External {
                 verifier: ED25519_VERIFIER.into(),
                 key: pubkey_hex.into(),
+                verifier_name: None,
             },
         }],
         rules: std::vec![Rule {

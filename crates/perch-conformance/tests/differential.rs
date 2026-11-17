@@ -99,6 +99,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
             method: SignerMethod::External {
                 verifier: VERIFIER_A.into(),
                 key: "0102".into(),
+                verifier_name: None,
             },
         },
         SignerDecl {
@@ -112,6 +113,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
             method: SignerMethod::External {
                 verifier: VERIFIER_B.into(),
                 key: "aabbcc".into(),
+                verifier_name: None,
             },
         },
     ];

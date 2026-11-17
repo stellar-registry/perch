@@ -78,6 +78,20 @@ pub fn signer_key_pattern() -> String {
     format!("^([0-9a-fA-F]{{2}}){{1,{}}}$", perch_ir::MAX_SIGNER_KEY_LEN)
 }
 
+/// The `verifier-name` pattern: `<name>@<MAJOR>.<MINOR>.<PATCH>`, a registry
+/// name of 1..=[`perch_ir::MAX_VERIFIER_NAME_LEN`] bytes of `[a-z0-9-]`
+/// starting with a letter, and three decimal numbers of at most ten digits
+/// with no leading zero. Mirrors `perch_ir::parse_verifier_name`, which
+/// validation applies; whether the name resolves is the compiler's check.
+#[must_use]
+pub fn verifier_name_pattern() -> String {
+    let number = "(0|[1-9][0-9]{0,9})";
+    format!(
+        "^[a-z][a-z0-9-]{{0,{}}}@{number}\\.{number}\\.{number}$",
+        perch_ir::MAX_VERIFIER_NAME_LEN - 1
+    )
+}
+
 /// Rule names are capped at [`perch_doc_compiler::MAX_RULE_NAME_BYTES`] **bytes**
 /// by the compiler (OZ's context-rule name limit). JSON Schema's `maxLength`
 /// counts Unicode code points, not bytes, so a multi-byte character would let a
@@ -258,6 +272,17 @@ fn policy_defs() -> Value {
                     "properties": {
                         "id": { "type": "string", "description": "Document-local id rules reference. Uniqueness is a semantic check (outside this schema)." },
                         "verifier": contract_address("Verifier contract (C-address) that checks this signer's signatures."),
+                        "verifier-name": {
+                            "type": "string",
+                            "pattern": verifier_name_pattern(),
+                            "description":
+                                "The verifier's name and exact version in Perch's managed \
+                                 `perch/verifiers` registry. The compiler resolves it and \
+                                 refuses the document unless it names `verifier`. Absent, \
+                                 the verifier is unverified: an admin document may not name \
+                                 one, and a scoped document may hold one signer per \
+                                 unverified verifier in a rule.",
+                        },
                         "key": {
                             "type": "string",
                             "pattern": signer_key_pattern(),

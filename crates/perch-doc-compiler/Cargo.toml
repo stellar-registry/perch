@@ -37,13 +37,16 @@ perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval" }
 # Spells a recovery replacement's key and ZK enrollment as the lowercase hex
 # the document schema uses (see `derive_target`).
 hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
+# Derives the `perch/verifiers` registry a `verifier-name` resolves in, from
+# `wasm/verifiers.path` at build time.
+perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve", optional = true }
 
 [features]
 # The deployable contract + its parser deps. Consumers that only
 # need the wire types and DocCompilerClient (i.e. smart accounts) disable
 # this so their wasm links no compiler code.
 default = ["contract"]
-contract = ["dep:perch-ir", "dep:hex", "perch-rule-eval/ir"]
+contract = ["dep:perch-ir", "dep:hex", "dep:perch-registry-resolve", "perch-rule-eval/ir"]
 # Test-only compilers with other document identities (`testutils` module).
 # Never enabled by a deployable.
 testutils = ["contract"]

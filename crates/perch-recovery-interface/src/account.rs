@@ -138,6 +138,31 @@ pub fn is_reserved_invoker_only(e: &Env, fn_name: &Symbol) -> bool {
         .any(|name| Symbol::new(e, name) == *fn_name)
 }
 
+/// The recovery controller's guardian-approval entry points (spec §15, I2).
+/// Each collects a guardian's `require_auth_for_args((digest,))` for a
+/// statement about another account, so an account that is a guardian
+/// authorizes a context naming one of these on that account's controller.
+///
+/// A guardian approval is owner-level authority over the accounts that list
+/// this one as a guardian, which only the admin document may hold (spec §2,
+/// §7.6). The account's `__check_auth` therefore refuses a context naming
+/// one of these for any rule a scoped document installed, on any contract,
+/// and `apply_scope` refuses a scoped rule whose `functions` names one.
+/// Matching by name covers every controller deployment, not only the one
+/// the account adopted.
+///
+/// - `submit_guardian`: guardian evidence for a recovery attempt (T2).
+/// - `approve_change`: a guardian's approval of a reconfiguration or an
+///   upgrade.
+pub const GUARDIAN_APPROVAL_FNS: [&str; 2] = ["submit_guardian", "approve_change"];
+
+/// Whether `fn_name` is in [`GUARDIAN_APPROVAL_FNS`].
+pub fn is_guardian_approval(e: &Env, fn_name: &Symbol) -> bool {
+    GUARDIAN_APPROVAL_FNS
+        .iter()
+        .any(|name| Symbol::new(e, name) == *fn_name)
+}
+
 /// Whether the account is frozen at ledger `now` under a freeze mirror set
 /// to `frozen_until` (spec §9). `0` means no freeze; the freeze ends on its
 /// own at `frozen_until`, the authorized attempt's `expires_at`.
@@ -274,6 +299,23 @@ mod test {
             "enforce_",
         ] {
             assert!(!is_reserved_invoker_only(&e, &Symbol::new(&e, name)));
+        }
+    }
+
+    #[test]
+    fn guardian_approval_names_match_exactly_and_are_not_reserved() {
+        let e = Env::default();
+        for name in GUARDIAN_APPROVAL_FNS {
+            assert!(is_guardian_approval(&e, &Symbol::new(&e, name)));
+            assert!(!is_reserved_invoker_only(&e, &Symbol::new(&e, name)));
+        }
+        for name in RESERVED_INVOKER_ONLY_FNS.into_iter().chain([
+            "submit_zk",
+            "begin_lost_key",
+            "submit_guardian_",
+            "approve",
+        ]) {
+            assert!(!is_guardian_approval(&e, &Symbol::new(&e, name)));
         }
     }
 

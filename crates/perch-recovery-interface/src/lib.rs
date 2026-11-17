@@ -27,8 +27,8 @@
 //!   controller (`rcv_sync`, `rcv_cancel`, `rcv_upgrade`), their outcomes,
 //!   and `RecoveryError`.
 //! - [`account`]: account-side constants the spec fixes (the upgrade delay,
-//!   the invoker-only function names) and the account surface the
-//!   controller calls (views and the `rcv_gate` freeze mirror).
+//!   the invoker-only and guardian-approval function names) and the account
+//!   surface the controller calls (views and the `rcv_gate` freeze mirror).
 #![no_std]
 
 mod encode;

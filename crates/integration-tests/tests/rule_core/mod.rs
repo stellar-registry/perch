@@ -28,7 +28,16 @@
 //!
 //! Before each authorization, `soroban-facade` reads the contexts the
 //! harness built and they must equal the trace's batch under the renaming,
-//! so the account is shown exactly the trace's authorization.
+//! so the account is shown exactly the trace's authorization, and the
+//! account's scope generation is set to the authorization's.
+//!
+//! A scoped trace's document goes through `apply_scope` instead: the harness
+//! applies the trace's admin document with `apply_doc`, sets the scope
+//! generation to the one the trace issues the document in, and applies the
+//! document under one scope id, authorized through the admin document's
+//! self-admin rule. Choices name the scope's rules, by their OZ ids in its
+//! record. Perch refuses every scoped document rule-core's lowering refuses
+//! with one error, `ScopeEscalation`.
 #![allow(dead_code)]
 
 use std::collections::BTreeMap;
@@ -71,6 +80,7 @@ use stellar_accounts::policies::spending_limit::get_spending_limit_data;
 use stellar_accounts::smart_account::{AuthPayload, Signer};
 
 use crate::support::{self, Key, Opts, World};
+use perch_account::PerchAccountError;
 
 // ---------------------------------------------------------------------------
 // Where the vectors are
@@ -127,6 +137,7 @@ stand_ins!(
     execute,
     f,
     g,
+    mint,
     publish,
     send,
     transfer
@@ -177,12 +188,17 @@ pub struct Run {
     /// Perch's lowering of the document's rules, as rule-eval rules over the
     /// trace's abstract identifiers.
     pub lowered: Vec<ERule>,
+    /// `apply_scope` refused the scoped document with `ScopeEscalation`.
+    pub scope_refused: bool,
     /// Whether the account installed a recovery rule.
     pub recovery_rule: bool,
     pub verdicts: Vec<Got>,
     /// Authorizations with a `Delegated` / an `External` authenticated signer.
     pub delegated: usize,
     pub external: usize,
+    /// Authorizations of an empty batch. No transaction makes the host call
+    /// `__check_auth` with no context, so these call it directly.
+    pub empty: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -230,17 +246,21 @@ impl<'w> Lab<'w> {
                 _ => Ok(()),
             }
         };
-        if let Some(r) = &t.document.recovery {
-            note(unhex(&r.controller), "controller")?;
-            if let Some(z) = &r.zk {
-                note(unhex(&z.adapter), "adapter")?;
-                note(unhex(&z.pool), "pool")?;
+        let admin = t.scoped.as_ref().map(|s| &s.admin);
+        for d in std::iter::once(&t.document).chain(admin) {
+            if let Some(r) = &d.recovery {
+                note(unhex(&r.controller), "controller")?;
+                if let Some(z) = &r.zk {
+                    note(unhex(&z.adapter), "adapter")?;
+                    note(unhex(&z.pool), "pool")?;
+                }
             }
         }
         let signers = t
             .document
             .signers
             .iter()
+            .chain(admin.into_iter().flat_map(|a| a.signers.iter()))
             .map(|d| &d.signer)
             .chain(t.authorizations.iter().flat_map(|a| a.authenticated.iter()));
         for s in signers {
@@ -574,6 +594,57 @@ impl<'w> Lab<'w> {
         }
     }
 
+    /// The scoped document applied under the trace's scope id before the
+    /// trace's under [`Start::AfterPredecessor`]: [`Self::predecessor`]
+    /// without its self-admin rule, on a contract the trace calls that no
+    /// scoped document is refused for.
+    fn scoped_predecessor(&mut self, t: &Trace) -> PolicyDoc {
+        let w = self.w;
+        let excluded = [&w.account, &w.controller, &w.adapter, &w.pool];
+        let mut p = self.predecessor(t);
+        p.rules.retain(|r| r.name != "admin");
+        for r in &mut p.rules {
+            let reachable = match &r.scope {
+                Scope::Contract(c) => !excluded.contains(&&Address::from_str(&w.env, &c.address)),
+                Scope::SelfAdmin(_) => false,
+            };
+            if !reachable {
+                r.scope = Scope::contract(support::strkey(&w.target));
+            }
+        }
+        p
+    }
+
+    /// What authorizes `apply_scope` on a scoped trace's account: the admin
+    /// document's first self-admin rule (`r<i>`), signed by its one
+    /// delegated signer.
+    fn scope_authority(&mut self, admin: &JsonDoc) -> Result<(String, Address), String> {
+        let (i, rule) = admin
+            .rules
+            .iter()
+            .enumerate()
+            .find(|(_, r)| matches!(r.scope, JsonScope::SelfAdmin))
+            .ok_or("an admin document without a self-admin rule")?;
+        let ids = match &rule.principals {
+            JsonPrincipals::All(ids) => ids,
+            JsonPrincipals::Threshold { ids, .. } => ids,
+        };
+        let [id] = ids.as_slice() else {
+            return Err("a self-admin rule without exactly one signer".into());
+        };
+        let signer = admin
+            .signers
+            .iter()
+            .find(|d| &d.id == id)
+            .ok_or("an undeclared admin signer")?;
+        match &signer.signer {
+            JsonSigner::Delegated { address } => {
+                Ok((format!("r{i}"), self.address(&unhex(address))))
+            }
+            JsonSigner::External { .. } => Err("an external admin signer".into()),
+        }
+    }
+
     /// The `rule_eval::Rule` a Perch lowered rule denotes once installed: OZ
     /// `CallContract` + expiry + signers, the interpreter program's leaves,
     /// and OZ's spending-limit policy (`transfer` only, the amount at
@@ -777,9 +848,43 @@ fn account_refused(w: &World) -> bool {
     })
 }
 
+/// The scope id a scoped trace's document is applied under.
+pub const SCOPE: u32 = 7;
+
+/// Set the account's scope generation (`perch_smart_account::testutils`).
+fn set_generation(w: &World, generation: &str) -> Result<(), String> {
+    let g: u64 = generation
+        .parse()
+        .map_err(|x| format!("generation {generation:?}: {x}"))?;
+    w.env.as_contract(&w.account, || {
+        perch_smart_account::testutils::set_scope_generation(&w.env, g)
+    });
+    Ok(())
+}
+
+/// `apply_scope(SCOPE, bytes)`, authorized by `key` through the rule `rule`.
+fn apply_scope(
+    w: &World,
+    rule: u32,
+    key: &Address,
+    bytes: &Bytes,
+) -> Result<BytesN<32>, Result<PerchAccountError, soroban_sdk::InvokeError>> {
+    let root = w.invocation(
+        &w.account,
+        "apply_scope",
+        std::vec![w.sc(SCOPE), w.sc(bytes.clone())],
+    );
+    w.env
+        .set_auths(&[w.delegated_entry(&w.account, key, rule, root)]);
+    let out = w.client().try_apply_scope(&SCOPE, bytes);
+    w.env.set_auths(&[]);
+    out.map(|r| r.unwrap())
+}
+
 /// Apply `t`'s document to an account and run every authorization through
 /// it. An `Err` is a step that did not complete: the harness could not set
-/// the trace up, or Perch refused the document.
+/// the trace up, or Perch refused the document other than as a scoped
+/// document rule-core refuses.
 pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
     let w = support::world_with(Opts {
         skip_snapshot: true,
@@ -798,31 +903,73 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         },
     )
     .map_err(|x| format!("perch_compile::compile refuses: {x:?}"))?;
-    let lowered: Vec<ERule> = plan.rules.iter().map(|l| lab.denote(l)).collect();
+    let mut lowered: Vec<ERule> = plan.rules.iter().map(|l| lab.denote(l)).collect();
+    let canonical = |d: &PolicyDoc| Bytes::from_slice(&e, perch_ir::canonical_json(d).as_bytes());
 
     // Every rule is installed at ledger 0, before any authorization's ledger.
+    // Rule index (the document's, then the recovery rule) to OZ id, read
+    // while the account still serves its views.
     e.ledger().with_mut(|l| l.sequence_number = 0);
-    if start == Start::AfterPredecessor {
-        let p = lab.predecessor(t);
-        let bytes = Bytes::from_slice(&e, perch_ir::canonical_json(&p).as_bytes());
-        w.apply_bytes(&bytes, 0)
-            .map_err(|x| format!("apply_doc refuses the predecessor: {x:?}"))?;
-    }
-    let bytes = Bytes::from_slice(&e, perch_ir::canonical_json(&doc).as_bytes());
-    w.apply_bytes(&bytes, 0)
-        .map_err(|x| format!("apply_doc refuses the document: {x:?}"))?;
-
-    // Rule index (the document's, then the recovery rule) to OZ id, while the
-    // account still serves its views.
     let missing = u32::MAX;
-    let mut ids: Vec<u32> = (0..doc.rules.len())
-        .map(|i| w.rule_id(&w.account, &format!("r{i}")))
-        .collect();
-    let recovery_id = w.rule_id(&w.account, "recovery");
-    let recovery_rule = recovery_id != missing;
-    if t.document.recovery.is_some() {
-        ids.push(recovery_id);
-    }
+    let (ids, recovery_rule) = match &t.scoped {
+        None => {
+            if start == Start::AfterPredecessor {
+                w.apply_bytes(&canonical(&lab.predecessor(t)), 0)
+                    .map_err(|x| format!("apply_doc refuses the predecessor: {x:?}"))?;
+            }
+            w.apply_bytes(&canonical(&doc), 0)
+                .map_err(|x| format!("apply_doc refuses the document: {x:?}"))?;
+            let mut ids: Vec<u32> = (0..doc.rules.len())
+                .map(|i| w.rule_id(&w.account, &format!("r{i}")))
+                .collect();
+            let recovery_id = w.rule_id(&w.account, "recovery");
+            if t.document.recovery.is_some() {
+                ids.push(recovery_id);
+            }
+            (ids, recovery_id != missing)
+        }
+        Some(scoped) => {
+            w.apply_bytes(&canonical(&lab.doc(&scoped.admin)?), 0)
+                .map_err(|x| format!("apply_doc refuses the admin document: {x:?}"))?;
+            let (rule, key) = lab.scope_authority(&scoped.admin)?;
+            let rule = w.rule_id(&w.account, &rule);
+            set_generation(&w, &scoped.generation)?;
+            if start == Start::AfterPredecessor {
+                apply_scope(&w, rule, &key, &canonical(&lab.scoped_predecessor(t)))
+                    .map_err(|x| format!("apply_scope refuses the predecessor: {x:?}"))?;
+            }
+            match apply_scope(&w, rule, &key, &canonical(&doc)) {
+                Ok(_) => {}
+                Err(Ok(PerchAccountError::ScopeEscalation)) => {
+                    return Ok(Run {
+                        lowered,
+                        scope_refused: true,
+                        recovery_rule: false,
+                        verdicts: vec![],
+                        delegated: 0,
+                        external: 0,
+                        empty: 0,
+                    })
+                }
+                Err(x) => return Err(format!("apply_scope refuses the document: {x:?}")),
+            }
+            let record = w.client().scope(&SCOPE).ok_or("no record for the scope")?;
+            for r in &mut lowered {
+                r.generation = Some(record.gen);
+            }
+            let ids = (0..doc.rules.len())
+                .map(|i| {
+                    let name = SString::from_str(&e, &format!("r{i}"));
+                    record
+                        .rules
+                        .iter()
+                        .find(|r| r.name == name)
+                        .map_or(missing, |r| r.id)
+                })
+                .collect();
+            (ids, record.rules.iter().any(|r| r.recovery))
+        }
+    };
     let capped: Vec<bool> = plan.rules.iter().map(|l| l.cap.is_some()).collect();
 
     let code = e.upload(TraceAccount);
@@ -834,21 +981,52 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
     let host = SdkHost::new(&e);
     let mut run = Run {
         lowered,
+        scope_refused: false,
         recovery_rule,
         verdicts: vec![],
         delegated: 0,
         external: 0,
+        empty: 0,
     };
     for (i, a) in t.authorizations.iter().enumerate() {
         e.ledger().with_mut(|l| l.sequence_number = a.now);
+        set_generation(&w, &a.generation).map_err(|x| format!("authorization {i}: {x}"))?;
         let contexts: std::vec::Vec<ContractContext> = a
             .batch
             .iter()
             .map(|c| lab.context(c))
             .collect::<Result<_, _>>()
             .map_err(|x| format!("authorization {i}: {x}"))?;
+        let records = |w: &World| {
+            (0..ids.len())
+                .map(|j| match (capped.get(j), ids[j]) {
+                    (Some(true), id) if id != missing => spending_record(w, id),
+                    _ => (vec![], 0),
+                })
+                .collect()
+        };
         let Some(first) = contexts.first() else {
-            return Err(format!("authorization {i}: an empty batch"));
+            if !a.choices.is_empty() || !a.authenticated.is_empty() {
+                return Err(format!(
+                    "authorization {i}: an empty batch with choices or signers"
+                ));
+            }
+            run.empty += 1;
+            let payload = AuthPayload {
+                signers: Map::new(&e),
+                context_rule_ids: SVec::new(&e),
+            };
+            let outcome = e.try_invoke_contract_check_auth::<soroban_sdk::Error>(
+                &w.account,
+                &BytesN::from_array(&e, &[0; 32]),
+                payload.into_val(&e),
+                &SVec::new(&e),
+            );
+            run.verdicts.push(match outcome {
+                Ok(()) => Got::Accepted(records(&w)),
+                Err(_) => Got::Refused,
+            });
+            continue;
         };
 
         // The account is shown exactly the trace's batch.
@@ -957,15 +1135,7 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         );
         e.set_auths(&[]);
         let got = match outcome {
-            Ok(Ok(())) => {
-                let records = (0..ids.len())
-                    .map(|j| match (capped.get(j), ids[j]) {
-                        (Some(true), id) if id != missing => spending_record(&w, id),
-                        _ => (vec![], 0),
-                    })
-                    .collect();
-                Got::Accepted(records)
-            }
+            Ok(Ok(())) => Got::Accepted(records(&w)),
             Err(_) if account_refused(&w) => Got::Refused,
             other => {
                 return Err(format!(
@@ -1003,15 +1173,23 @@ pub fn expected(v: &Verdict) -> Got {
     }
 }
 
-/// Every way `run` differs from what `t` states: the lowering of the
-/// document's own rules (the recovery rule, which Perch installs from its
-/// recovery member rather than lowers, only by presence), each verdict, and
-/// each accepted authorization's records.
+/// Every way `run` differs from what `t` states: whether the document is
+/// refused, the lowering of the document's own rules (the recovery rule,
+/// which Perch installs from its recovery member rather than lowers, only
+/// by presence), each verdict, and each accepted authorization's records.
 pub fn differences(t: &Trace, run: &Run) -> Vec<String> {
     let mut out = vec![];
-    let want = match &t.lowered {
-        Lowered::Ok(rules) => decode_rules(rules).expect("trace rules"),
-        Lowered::Error(e) => return vec![format!("the trace's lowering refuses ({e:?})")],
+    let want = match (&t.lowered, run.scope_refused) {
+        (Lowered::Error(_), true) => return out,
+        (Lowered::Error(e), false) => {
+            return vec![format!(
+                "lowering: Perch applies the document, the trace refuses it ({e:?})"
+            )]
+        }
+        (Lowered::Ok(_), true) => {
+            return vec!["lowering: Perch refuses the document, the trace lowers it".into()]
+        }
+        (Lowered::Ok(rules), false) => decode_rules(rules).expect("trace rules"),
     };
     let documented = t.document.rules.len();
     if !rules_eq(&run.lowered, &want[..documented.min(want.len())]) {

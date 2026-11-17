@@ -1783,6 +1783,7 @@ dependencies = [
  "perch-recovery",
  "perch-recovery-interface",
  "perch-registry-resolve",
+ "perch-rule-eval",
  "perch-smart-account",
  "perch-spending-limit",
  "perch-testkit",
@@ -1883,7 +1884,14 @@ dependencies = [
 name = "perch-rule-eval"
 version = "0.1.0"
 dependencies = [
+ "hex",
+ "perch-ir",
+ "perch-program",
+ "rule-eval",
  "rule-eval-conformance",
+ "soroban-facade",
+ "soroban-sdk",
+ "stellar-accounts",
 ]
 
 [[package]]

@@ -72,9 +72,9 @@ stellar-accounts = { version = "0.7.1", git = "https://github.com/bitswell-hq/th
 # only). All three at one rev, so that rev is the only place the vectors are
 # pinned. soroban-facade pins soroban-sdk exactly (=29.0.1), so moving
 # Perch's SDK first needs a rule-core rev that moves it.
-rule-eval = { git = "https://github.com/bitswell/soroban-rule-core", rev = "cbabe594ae2df408991e825e56ddd618ea29541b" }
-soroban-facade = { git = "https://github.com/bitswell/soroban-rule-core", rev = "cbabe594ae2df408991e825e56ddd618ea29541b" }
-rule-eval-conformance = { git = "https://github.com/bitswell/soroban-rule-core", rev = "cbabe594ae2df408991e825e56ddd618ea29541b" }
+rule-eval = { git = "https://github.com/bitswell/soroban-rule-core", rev = "5a689a5760d9a94ef92e5182b15653bed21f7670" }
+soroban-facade = { git = "https://github.com/bitswell/soroban-rule-core", rev = "5a689a5760d9a94ef92e5182b15653bed21f7670" }
+rule-eval-conformance = { git = "https://github.com/bitswell/soroban-rule-core", rev = "5a689a5760d9a94ef92e5182b15653bed21f7670" }
 
 perch-ir = { version = "0.1.1", path = "crates/perch-ir" }
 perch-program = { version = "0.1.1", path = "crates/perch-program" }

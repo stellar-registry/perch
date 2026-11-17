@@ -314,6 +314,10 @@ fn policy_defs() -> Value {
             "type": "object",
             "additionalProperties": false,
             "required": ["name", "scope", "principals"],
+            "allOf": [{
+                "if": { "properties": { "scope": { "properties": { "type": { "const": "self-admin" } } } } },
+                "then": { "not": { "required": ["auth-root"] } },
+            }],
             "properties": {
                 "name": {
                     "type": "string",
@@ -353,6 +357,15 @@ fn policy_defs() -> Value {
                     1,
                 ),
                 "cap": { "$ref": "#/$defs/capConstraint" },
+                "auth-root": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["contract", "function"],
+                    "properties": {
+                        "contract": contract_address("Exact contract at the root of this account's authorization entry, not the outer transaction call."),
+                        "function": { "type": "string", "pattern": "^[a-zA-Z0-9_]{1,32}$" },
+                    },
+                },
             },
         },
 

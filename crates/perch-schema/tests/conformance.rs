@@ -344,3 +344,36 @@ fn schema_valid_is_not_canonically_encoded() {
         "the pretty fixture bytes are not the canonical form — schema-valid does not mean canonically encoded",
     );
 }
+
+#[test]
+fn exact_root_shape_and_admin_exclusion_match_ir() {
+    let v = validator();
+    let base: Value =
+        serde_json::from_str(include_str!("../../../testdata/auth-root.json")).unwrap();
+    assert!(schema_accepts(&v, &base));
+    assert!(ir_outcome_of(&base).accepted);
+    let i = base["rules"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .position(|r| r.get("auth-root").is_some())
+        .unwrap();
+    let good = base["rules"][i]["auth-root"].clone();
+    for root in [
+        Value::Null,
+        json!({}),
+        json!({"contract":good["contract"]}),
+        json!({"contract":good["contract"],"function":""}),
+        json!({"contract":good["contract"],"function":"*"}),
+        json!({"contract":good["contract"],"function":"guess","depth":0}),
+    ] {
+        let mut doc = base.clone();
+        doc["rules"][i]["auth-root"] = root;
+        assert!(!schema_accepts(&v, &doc));
+        assert!(!ir_outcome_of(&doc).accepted);
+    }
+    let mut admin = base;
+    admin["rules"][i]["scope"] = json!({"type":"self-admin"});
+    assert!(!schema_accepts(&v, &admin));
+    assert!(!ir_outcome_of(&admin).accepted);
+}

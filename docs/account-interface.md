@@ -143,6 +143,14 @@ scoped document a recovery completion wiped. It is permissionless, because
 the wiped rules already authorize nothing, and it refuses a scope of the
 current generation (`ScopeLive`).
 
+## Authorization-entry root conditions
+
+Ordinary rules may constrain the exact contract and function at the root of
+this account's current host-authenticated authorization entry. The condition
+is additional to every target, signer, argument, expiry, cap and generation
+check. See [Exact authorization-entry roots](auth-root.md) for semantics,
+wire layouts, client screening and the deployment boundary.
+
 ## Calls as the account
 
 `execute(target, target_fn, target_args)` calls `target_fn` on `target` as
@@ -272,7 +280,7 @@ recorded when a controller is adopted, and passed back as
   checks before it builds anything for the account.
   - `interface_version` is `INTERFACE_VERSION`. Version 2 adds scoped
     documents; since then `configuration` and `installed_rules` cover the
-    admin document only.
+    admin document only. Version 3 adds exact `auth-root` conditions.
   - `doc_identity` is `canon_v1`: the applied `doc_hash` is `sha256` of the
     CANON v1 canonical bytes.
   - `auth_digest` is `addr_oz_v1`: a signer signs OZ's
@@ -286,7 +294,8 @@ recorded when a controller is adopted, and passed back as
     transaction) and `scoped_v1` (scoped documents through `apply_scope`,
     `remove_scope`, and `gc_scope`, spec §7.6).
   - `snapshot_version` is `SNAPSHOT_VERSION`, the layout of
-    `AccountConfiguration`.
+    `AccountConfiguration`. Version 2 adds explicit optional root metadata
+    to every installed rule; a missing field is only valid in snapshot 1.
 - **`InstalledRule.recovery`** marks the zero-signer recovery rule. Document
   rules are matched by name and the recovery rule by this flag, so a document
   rule that happens to be named `recovery` is never confused with it.

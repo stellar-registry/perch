@@ -57,10 +57,22 @@ pub struct StoredCap {
     pub amount_arg: u32,
 }
 
+/// Exact authorization-entry root in host form.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StoredAuthRoot {
+    pub contract: Address,
+    pub function: Symbol,
+}
+
 /// `rule_eval::Rule`.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredRule {
+    /// An optional singleton containing the root. The optional field lets
+    /// the SDK read legacy rules; `mirror::rule` checks the exact old/new
+    /// layouts before a stored value can authorize anything.
+    pub auth_root: Option<Vec<StoredAuthRoot>>,
     pub contract: Address,
     pub functions: StoredFunctions,
     pub conds: Vec<StoredCond>,
@@ -180,6 +192,11 @@ impl StoredRule {
         r: &rule_eval::Rule,
         forms: &impl HostForms,
     ) -> Option<StoredRule> {
+        if r.auth_root.as_ref().is_some_and(|root| {
+            root.contract.get(..4) != Some(&[0, 0, 0, 1]) || root.function.is_empty()
+        }) {
+            return None;
+        }
         let mut cap = Vec::new(e);
         if let Some(c) = &r.cap {
             cap.push_back(StoredCap {
@@ -189,6 +206,16 @@ impl StoredRule {
             });
         }
         Some(StoredRule {
+            auth_root: match &r.auth_root {
+                Some(root) => Some(Vec::from_array(
+                    e,
+                    [StoredAuthRoot {
+                        contract: forms.address(e, &root.contract)?,
+                        function: host_symbol(e, &root.function)?,
+                    }],
+                )),
+                None => None,
+            },
             contract: forms.address(e, &r.contract)?,
             functions: StoredFunctions::from_functions(e, &r.functions)?,
             conds: host_vec(e, &r.conds, |c| StoredCond::from_cond_in(e, c, forms))?,

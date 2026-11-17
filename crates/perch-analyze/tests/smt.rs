@@ -319,3 +319,42 @@ fn narrows_catches_a_changed_signer() {
         .iter()
         .any(|f| matches!(f, WideningFinding::SemanticWidening { .. })));
 }
+
+#[test]
+fn exact_roots_are_conjunctive_and_cannot_be_erased_by_narrowing() {
+    if skip() {
+        return;
+    }
+    let exact = fixture("auth-root.json");
+    let i = exact
+        .rules
+        .iter()
+        .position(|r| r.auth_root.is_some())
+        .unwrap();
+    let mut unrestricted = exact.clone();
+    unrestricted.rules[i].auth_root = None;
+    assert!(narrows(&unrestricted, &exact).is_empty());
+    assert!(narrows(&exact, &exact).is_empty());
+    for change in [0, 1, 2] {
+        let mut child = exact.clone();
+        match change {
+            0 => child.rules[i].auth_root = None,
+            1 => child.rules[i].auth_root.as_mut().unwrap().function = "other".into(),
+            _ => child.rules[i].auth_root.as_mut().unwrap().contract = REGISTRY.into(),
+        }
+        assert!(narrows(&exact, &child)
+            .iter()
+            .any(|f| matches!(f, WideningFinding::AuthRootChanged { .. })));
+    }
+    let rule = &lowered(&exact)[i].rule;
+    for (root_call, function, accepted) in [
+        (true, "guess", true),
+        (true, "transfer", false),
+        (false, "guess", false),
+    ] {
+        let mut enc = Encoder::new();
+        let predicate = enc.rule_allows_in(rule);
+        let script = format!("{}(assert {predicate})\n(assert (= root_call {root_call}))\n(assert (= root_fn \"{function}\"))\n(check-sat)\n", enc.declarations());
+        assert_eq!(matches!(run_z3(&script), Z3Verdict::Sat(_)), accepted);
+    }
+}

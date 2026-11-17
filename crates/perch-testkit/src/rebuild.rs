@@ -269,6 +269,19 @@ fn rule(
         Some(conds.iter().map(|c| arg(st, c)).collect::<Result<_, _>>()?)
     };
     Ok(Rule {
+        auth_root: match &rule.auth_root {
+            Some(roots) => {
+                if roots.len() != 1 {
+                    return Err("malformed auth-root".into());
+                }
+                let root = roots.get_unchecked(0);
+                Some(perch_ir::AuthRoot {
+                    contract: strkey(&root.contract),
+                    function: utf8(symbol_bytes(e, &root.function).ok_or("invalid root symbol")?)?,
+                })
+            }
+            None => None,
+        },
         name: name.to_string(),
         scope: Scope::contract(strkey(&rule.contract)),
         principals,

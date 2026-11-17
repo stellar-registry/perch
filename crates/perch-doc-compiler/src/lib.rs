@@ -36,6 +36,7 @@ use perch_recovery_interface::credential::{Credential, ReplacementSet};
 use perch_recovery_interface::RecoveryAction;
 pub use perch_rule_eval::CompiledModel;
 use perch_rule_eval::ModelPrincipals;
+use perch_rule_eval::StoredAuthRoot;
 use soroban_sdk::{contractclient, contracttype, Address, Bytes, BytesN, Env, String, Vec};
 use soroban_sdk_tools::scerr;
 
@@ -76,7 +77,7 @@ pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
 pub const MAX_RULE_NAME_BYTES: u32 = 20;
 
 /// The most constraints one rule may carry, counting each argument
-/// constraint and a `functions` list as one each. A rule with more is
+/// constraint, a `functions` list and an `auth-root` as one each. A rule with more is
 /// refused (`DocCompile`). It bounds the conditions one stored rule holds,
 /// and so the work of deciding it, at what an interpreter program holds: an
 /// interpreter-attached rule's program is a signer floor, one leaf per
@@ -152,6 +153,7 @@ pub struct CompiledRule {
     /// by name and scope.
     pub name: String,
     pub scope: RuleScope,
+    pub auth_root: Option<Vec<StoredAuthRoot>>,
     /// The rule's signers, with external keys as declared (already
     /// verifier-canonical).
     pub signers: Vec<Signer>,
@@ -279,7 +281,7 @@ pub struct CompilerCapabilities {
 /// self-admin rule with at least one signer — the anti-brick check every
 /// applied document and every recovery target must pass, so the admin path
 /// never depends on a constraint and never lapses. A constraint-free rule
-/// has `all` principals and no `functions`, `args` or `cap`: it allows every
+/// has `all` principals and no `functions`, `args`, `auth-root` or `cap`: it allows every
 /// function of the account to all of its signers. A `threshold` rule never
 /// counts, even one asking all of its signers. A document whose model does
 /// not match its rules one for one keeps none.
@@ -314,6 +316,8 @@ pub fn admin_survives(compiled: &CompiledDoc) -> bool {
             && m.functions.is_none()
             && m.args.is_none()
             && m.cap.is_empty()
+            && m.auth_root.is_none()
+            && r.auth_root.is_none()
     })
 }
 
@@ -805,8 +809,9 @@ fn to_compiled(
         perch_ir::Principals::Threshold(p) => &p.signers,
         perch_ir::Principals::SelfAuthenticating(_) => return Err(DocCompilerError::DocCompile),
     };
-    let constraints =
-        rule.args.as_ref().map_or(0, |a| a.len()) + usize::from(rule.functions.is_some());
+    let constraints = rule.args.as_ref().map_or(0, |a| a.len())
+        + usize::from(rule.functions.is_some())
+        + usize::from(rule.auth_root.is_some());
     if constraints > MAX_RULE_CONSTRAINTS as usize {
         return Err(DocCompilerError::DocCompile);
     }
@@ -837,6 +842,15 @@ fn to_compiled(
         None => None,
     };
     Ok(CompiledRule {
+        auth_root: rule.auth_root.as_ref().map(|root| {
+            Vec::from_array(
+                e,
+                [StoredAuthRoot {
+                    contract: Address::from_str(e, &root.contract),
+                    function: soroban_sdk::Symbol::new(e, &root.function),
+                }],
+            )
+        }),
         name: String::from_str(e, &rule.name),
         scope,
         signers,

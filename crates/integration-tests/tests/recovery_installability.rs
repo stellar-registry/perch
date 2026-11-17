@@ -173,6 +173,7 @@ fn admin_survives_requires_an_unbounded_admin_rule() {
         functions: None,
         args: None,
         not_after_ledger: None,
+        auth_root: None,
         cap: Vec::new(&env),
     };
     let doc = |valid_until: Option<u32>, rule: &ModelRule, models: u32| CompiledDoc {
@@ -182,6 +183,7 @@ fn admin_survives_requires_an_unbounded_admin_rule() {
         rules: soroban_sdk::vec![
             &env,
             CompiledRule {
+                auth_root: None,
                 name: String::from_str(&env, "admin"),
                 scope: RuleScope::SelfAdmin,
                 signers: soroban_sdk::vec![&env, signer.clone()],

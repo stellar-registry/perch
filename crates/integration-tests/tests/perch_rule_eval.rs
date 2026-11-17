@@ -113,11 +113,13 @@ fn check(
     let lowered = rule_eval::lower(&doc_of(e, &model).ok_or("doc_of refuses")?, &me_x);
 
     rpn::check_compiled(e, d, &compiled)?;
-    let attached = rpn::policies_of(e, d)?;
+    let attached = rpn::batch_policies_of(e, d)?;
     let mut denoted = vec![];
     for (i, (r, p)) in compiled.rules.iter().zip(&attached).enumerate() {
-        denoted
-            .push(denote(e, me, &installed(me, &r, p)).ok_or(format!("denote refuses rule {i}"))?);
+        let mut rule =
+            denote(e, me, &installed(me, &r, p)).ok_or(format!("denote refuses rule {i}"))?;
+        rule.auth_root = rpn::root_of(e, &p.auth_root);
+        denoted.push(rule);
     }
     let n = denoted.len();
     let recovery = !compiled.recovery.is_empty();
@@ -301,6 +303,16 @@ impl<'w> Names<'w> {
                     Some(fs) => Some(fs.iter().map(|f| utf8(f)).collect::<Result<_, _>>()?),
                 },
                 args,
+                auth_root: r
+                    .auth_root
+                    .as_ref()
+                    .map(|root| {
+                        Ok::<_, String>(perch_ir::AuthRoot {
+                            contract: self.strkey(&root.contract),
+                            function: utf8(&root.function)?,
+                        })
+                    })
+                    .transpose()?,
                 not_after_ledger: r.not_after_ledger,
                 cap: r.cap.as_ref().map(|c| CapConstraint {
                     token: None,
@@ -374,6 +386,10 @@ impl<'w> Names<'w> {
             .collect();
         ERule {
             contract: self.xdr(&r.contract),
+            auth_root: r.auth_root.map(|root| rule_eval::AuthRoot {
+                contract: self.xdr(&root.contract),
+                function: root.function,
+            }),
             conds,
             signers,
             ..r

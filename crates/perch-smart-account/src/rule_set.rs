@@ -33,6 +33,14 @@ fn model(compiled: &CompiledDoc) -> Result<CompiledModel, PerchAccountError> {
     {
         return Err(PerchAccountError::ModelInvalid);
     }
+    if model
+        .rules
+        .iter()
+        .zip(compiled.rules.iter())
+        .any(|(m, r)| m.auth_root != r.auth_root)
+    {
+        return Err(PerchAccountError::ModelInvalid);
+    }
     Ok(model)
 }
 
@@ -99,6 +107,12 @@ pub(crate) fn lowered(
         .ok_or(PerchAccountError::ModelInvalid)?;
     let doc = doc_of_in(e, &model, &mut known).ok_or(PerchAccountError::ModelInvalid)?;
     let kept = kept(e, compiled, rule_eval::lower(&doc, &me))?;
+    if kept
+        .iter()
+        .any(|r| r.contract == me && r.auth_root.is_some())
+    {
+        return Err(PerchAccountError::ModelInvalid);
+    }
     if !admin_survives(&kept, &me) || !admin_declared(&doc) {
         return Err(PerchAccountError::AdminLockout);
     }
@@ -158,6 +172,7 @@ fn names_guardian_approval(d: &rule_eval::Doc) -> bool {
 /// no condition, no cap, no last ledger, and every signer required.
 pub(crate) fn admin(e: &Env, signers: &Vec<Signer>) -> StoredRule {
     StoredRule {
+        auth_root: None,
         contract: e.current_contract_address(),
         functions: StoredFunctions::AnyExcept(Vec::new(e)),
         conds: Vec::new(e),

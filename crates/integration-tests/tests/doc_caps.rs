@@ -1,7 +1,8 @@
 //! The document caps (`docs/recovery/spec.md` §7.5) at their boundaries:
 //! the compiler admits a document at every cap and refuses one past any of
 //! them, and every rule name it admits OZ installs. The per-rule constraint
-//! cap admits exactly the rules an interpreter program holds. The release-stack suite
+//! cap has the interpreter's local limit, with each exact root consuming one
+//! additional constraint. The release-stack suite
 //! measures the costliest document the caps admit against the budget
 //! (`docs/recovery/budgets.md`, "Document caps").
 
@@ -174,4 +175,36 @@ fn the_constraint_cap_is_what_an_interpreter_program_holds() {
     assert!(!compiles(cap + 1, false));
     assert!(compiles(cap - 1, true));
     assert!(!compiles(cap, true));
+}
+
+#[test]
+fn an_exact_root_consumes_one_constraint_at_the_boundary() {
+    let w = setup();
+    for functions in [false, true] {
+        let at = MAX_RULE_CONSTRAINTS - 1 - u32::from(functions);
+        for args in [at, at + 1] {
+            let bytes = constrained(&w, args, functions).to_alloc_vec();
+            let mut doc = perch_ir::from_json(std::str::from_utf8(&bytes).unwrap()).unwrap();
+            doc.rules[1].auth_root = Some(perch_ir::AuthRoot {
+                contract: strkey(&w.verifier),
+                function: "guess".into(),
+            });
+            let canonical = perch_ir::canonical_json(&doc);
+            assert!(canonical.len() <= MAX_DOC_CANONICAL_BYTES as usize);
+            let result = w
+                .compiler_client()
+                .try_compile_doc(&Bytes::from_slice(&w.env, canonical.as_bytes()));
+            if args == at {
+                assert!(result
+                    .unwrap()
+                    .unwrap()
+                    .rules
+                    .get_unchecked(1)
+                    .auth_root
+                    .is_some());
+            } else {
+                assert!(matches!(result, Err(Ok(DocCompilerError::DocCompile))));
+            }
+        }
+    }
 }

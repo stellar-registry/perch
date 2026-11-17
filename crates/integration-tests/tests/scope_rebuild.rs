@@ -156,7 +156,7 @@ fn stored_rule(r: &StoredRule) -> J {
         StoredFunctions::AnyExcept(fs) => ("anyExcept", fs),
         StoredFunctions::Only(fs) => ("only", fs),
     };
-    json!({
+    let mut out = json!({
         "contract": strkey(&r.contract),
         "functions": {"kind": kind, "names": names.iter().map(|f| f.to_string()).collect::<Vec<_>>()},
         "conds": r.conds.iter().map(|c| cond(&c)).collect::<Vec<_>>(),
@@ -165,7 +165,14 @@ fn stored_rule(r: &StoredRule) -> J {
         "cap": r.cap.first().map(|c| json!({"limit": c.limit.to_string(), "period": c.period, "amountArg": c.amount_arg})),
         "validUntil": r.valid_until,
         "generation": r.generation.map(|g| g.to_string()),
-    })
+    });
+    if let Some(roots) = &r.auth_root {
+        assert_eq!(roots.len(), 1);
+        let root = roots.get_unchecked(0);
+        out["authRoot"] =
+            json!({ "contract": strkey(&root.contract), "function": root.function.to_string() });
+    }
+    out
 }
 
 /// One vector: what the account keeps for a scope, as perch-js's
@@ -486,6 +493,27 @@ fn every_scoped_document_the_account_takes_rebuilds() {
             );
         }
     }
+
+    let exact = doc(
+        &[delegated("session", &k0)],
+        &[
+            rule(
+                "guess",
+                &game,
+                &all(&["session"]),
+                r#","functions":["guess"]"#,
+            ),
+            rule(
+                "pay",
+                &token,
+                &all(&["session"]),
+                &format!(
+                    r#","functions":["transfer"],"auth-root":{{"contract":"{game}","function":"guess"}},"cap":{{"limit":"20000000","period-ledgers":100}}"#
+                ),
+            ),
+        ],
+    );
+    vectors.keep("exact game root on a capped transfer", &w, 900, &exact);
 
     // Generated, in normal form.
     let n: usize = std::env::var("PERCH_REBUILD_DOCS")

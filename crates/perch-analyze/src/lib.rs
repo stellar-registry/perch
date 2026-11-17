@@ -1,31 +1,16 @@
 //! Per-policy SMT prover (PLAN.md phase 4, the `cedar-policy-symcc` shape).
 //!
-//! Encodes what each rule of a document allows **as the account decides
-//! it**: the `rule_eval::Rule` the rule lowers to on the account
-//! (`rule_eval::lower` of the document's model, read through soroban-facade,
-//! as the account stores it), whose `rule_allows` `__check_auth` evaluates.
-//! The rule becomes a quantifier-free SMT formula over one symbolic
-//! invocation, and z3 is asked:
+//! Encodes a rule's stateless eligibility as `rule_eval::rule_allows_in`:
+//! target, functions, arguments, authenticated signers, and an exact entry
+//! root when required. The symbolic root and invocation describe one entry;
+//! a satisfying assignment is a screening witness, not a complete authorized
+//! transaction. Only `authorize` checks the whole selection and charges caps.
 //!
-//! - [`dead_rules`] — can this rule *ever* authorize an invocation? `unsat`
-//!   is a proof of deadness; `sat` comes with a witness invocation to
-//!   eyeball.
-//! - [`only_calls`] — intent conformance: on a given contract scope, can the
-//!   document authorize any function outside an allowlist? `unsat` per rule
-//!   proves "this policy can only ever call these functions here" — the
-//!   flagship CI-key question.
-//! - [`narrows`] — semantic attenuation: does the child document authorize
-//!   any invocation the parent would refuse, rule by rule? Catches
-//!   argument-level widening and signer changes, plus expiry extensions and
-//!   cap loosening (checked structurally).
-//!
-//! The encoding is decidable (booleans, bounded integers, and z3's string
-//! theory restricted to equality and prefix over literals). It is exact for
-//! `rule_allows` under one soundness assumption: the account's own address
-//! is distinct from every address a document names (interning gives the
-//! account id 0 and every other address its own id). A rule's last ledger,
-//! generation and cap are not part of `rule_allows`; [`narrows`] compares the
-//! last ledger and cap structurally.
+//! `dead_rules`, `only_calls` and `can_call` query that predicate. `narrows`
+//! additionally compares expiry, caps and root implication structurally.
+//! No query proves that all selected contexts execute, nor models ancestors.
+//! The encoding assumes the account is distinct from every named address.
+//! Account id 0 and the other address ids are interned without collisions.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
@@ -238,6 +223,22 @@ impl Encoder {
         conj_term(&conj)
     }
 
+    /// `rule_allows_in` for a symbolic entry root and invocation. This is
+    /// stateless eligibility, not the complete `authorize` decision.
+    pub fn rule_allows_in(&mut self, rule: &Rule) -> String {
+        let local = self.rule_allows(rule);
+        match &rule.auth_root {
+            None => local,
+            Some(root) => {
+                let contract = self.addr_id(&root.contract);
+                format!(
+                    "(and {local} root_call (= root_contract {contract}) (= root_fn {}))",
+                    smt_string(&root.function)
+                )
+            }
+        }
+    }
+
     fn signers_met(&mut self, rule: &Rule) -> String {
         if rule.threshold == 0 {
             return "true".into();
@@ -318,6 +319,7 @@ impl Encoder {
     pub fn declarations(&self) -> String {
         let mut out = String::new();
         out.push_str("(declare-const ctx_call Bool)\n");
+        out.push_str("(declare-const root_call Bool)\n(declare-const root_contract Int)\n(declare-const root_fn String)\n");
         out.push_str("(declare-const contract Int)\n");
         out.push_str("(declare-const fn_name String)\n");
         out.push_str("(declare-const arg_count Int)\n(assert (>= arg_count 0))\n");
@@ -347,6 +349,9 @@ impl Encoder {
     pub fn witness_query(&self) -> String {
         let mut vars = vec![
             "ctx_call".to_string(),
+            "root_call".to_string(),
+            "root_contract".to_string(),
+            "root_fn".to_string(),
             "contract".to_string(),
             "fn_name".to_string(),
             "arg_count".to_string(),
@@ -414,7 +419,7 @@ pub fn dead_rules(doc: &PolicyDoc) -> Vec<RuleLiveness> {
         .into_iter()
         .map(|l| {
             let mut enc = Encoder::new();
-            let allow = enc.rule_allows(&l.rule);
+            let allow = enc.rule_allows_in(&l.rule);
             let script = format!(
                 "{}(assert {allow})\n(check-sat)\n{}",
                 enc.declarations(),
@@ -448,7 +453,7 @@ pub fn only_calls(doc: &PolicyDoc, contract: &str, allowed: &[String]) -> Vec<On
             continue;
         }
         let mut enc = Encoder::new();
-        let allow = enc.rule_allows(&l.rule);
+        let allow = enc.rule_allows_in(&l.rule);
         let outside: Vec<String> = allowed
             .iter()
             .map(|f| format!("(not (= fn_name {}))", smt_string(f.as_bytes())))
@@ -480,7 +485,7 @@ pub fn can_call(doc: &PolicyDoc, function: &str) -> Vec<RuleLiveness> {
             continue;
         }
         let mut enc = Encoder::new();
-        let allow = enc.rule_allows(&l.rule);
+        let allow = enc.rule_allows_in(&l.rule);
         let script = format!(
             "{}(assert {allow})\n(assert (= fn_name {}))\n(check-sat)\n{}",
             enc.declarations(),
@@ -505,6 +510,8 @@ pub enum WideningFinding {
     /// The child's rule allows an invocation the parent's refuses; carries
     /// the witness.
     SemanticWidening { rule: String, verdict: Z3Verdict },
+    /// An exact root was erased or changed; root implication failed.
+    AuthRootChanged { rule: String },
     /// The child expires later than the parent (or dropped the expiry).
     ExpiryExtended { rule: String },
     /// The child loosened or dropped the parent's cumulative cap.
@@ -531,6 +538,13 @@ pub fn narrows(parent: &PolicyDoc, child: &PolicyDoc) -> Vec<WideningFinding> {
             continue;
         }
 
+        if !rule_eval::auth_root_narrows(&c.rule.auth_root, &p.rule.auth_root) {
+            findings.push(WideningFinding::AuthRootChanged {
+                rule: c.name.clone(),
+            });
+        }
+
+        // The local predicate must also narrow independently of the root.
         // child-allows ∧ ¬parent-allows must be unsat.
         let mut enc = Encoder::new();
         let child_allow = enc.rule_allows(&c.rule);

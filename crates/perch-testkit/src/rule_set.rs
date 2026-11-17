@@ -9,8 +9,9 @@
 //!   denotation (`denote`) of its context rule (`get_context_rule`:
 //!   contract, signers in the record's order, last ledger) with the
 //!   interpreter program and spending cap Perch's RPN lowering gives the
-//!   same document rule (`rpn::policies` of the applied canonical document):
-//!   what the interpreter and the spending limit enforce when attached. A
+//!   same document rule's local projection, composed with its original
+//!   exact-root condition (`rpn::batch_policies_of`). Only the local part is
+//!   what the interpreter and spending limit enforce when attached. A
 //!   document rule must carry no policy. The recovery rule's record must be
 //!   a zero-signer rule whose one policy is the adopted controller, and its
 //!   stored rule rule-eval's recovery rule.
@@ -18,7 +19,8 @@
 //!   its record.
 //!
 //! The doc compiler's rules for the applied document are checked against the
-//! same RPN lowering first (`rpn::check_compiled`).
+//! same local RPN lowering and original root metadata first
+//! (`rpn::check_compiled`).
 //!
 //! Rules are compared as `StoredRule`s, whose conversion from a
 //! `rule_eval::Rule` is one-to-one, so equal mirrors are equal rules.
@@ -90,6 +92,7 @@ fn lowering(e: &Env, account: &Address, me: &[u8]) -> Result<Vec<StoredRule>, St
             threshold: admin.signers.len(),
             cap: None,
             valid_until: None,
+            auth_root: None,
             generation: None,
         };
         return Ok(std::vec![mirror(e, &rule, "the admin rule")?]);
@@ -171,7 +174,7 @@ fn compile(e: &Env, canonical: &Bytes) -> CompiledDoc {
 fn attached(e: &Env, canonical: &Bytes) -> Result<Vec<Policies>, String> {
     let doc = rpn::doc(canonical)?;
     rpn::check_compiled(e, &doc, &compile(e, canonical))?;
-    rpn::policies_of(e, &doc)
+    rpn::batch_policies_of(e, &doc)
 }
 
 /// The stored rule set of the scoped document under `scope` equals both
@@ -311,9 +314,15 @@ fn compare(
             checked.capped += usize::from(rule.cap.is_some());
             let mut rule = denote(e, account, &rule).ok_or(format!("rule {i}: denote refuses"))?;
             rule.generation = generation;
+            rule.auth_root = installed.get(i).and_then(|p| rpn::root_of(e, &p.auth_root));
             rule
         };
         let denoted = mirror(e, &denoted, &format!("installed rule {i}"))?;
+        if record.auth_root != stored[i].auth_root {
+            return Err(format!(
+                "rule {i}: installed record lost its root constraint"
+            ));
+        }
         if stored[i] != lowered[i] {
             return Err(format!(
                 "rule {i} ({}): stored {:?}, the lowering {:?}",

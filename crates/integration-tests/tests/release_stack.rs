@@ -86,6 +86,8 @@ thread_local! {
     /// While set, [`World::shaped_json`] changes every interpreter program
     /// (`.0`) and every spending cap (`.1`): the keep-names thieves.
     static REPARAM: Cell<(bool, bool)> = const { Cell::new((false, false)) };
+    /// Include the maximum-size exact root on every ordinary sizing rule.
+    static ROOT_CONDITIONS: Cell<bool> = const { Cell::new(false) };
     /// While set, every `apply_doc` is first simulated the way RPC simulation
     /// runs it, and its metered footprint checked against the simulated one
     /// ([`World::check_footprint`]).
@@ -1054,10 +1056,17 @@ impl World {
         let (reprogram, recap) = REPARAM.with(Cell::get);
         let function = if reprogram { "protectee" } else { "protected" };
         let limit = if recap { "11" } else { "10" };
-        let scope = format!(
+        let mut scope = format!(
             r#""scope":{{"type":"contract","address":"{}"}}"#,
             strkey(&self.target)
         );
+        if ROOT_CONDITIONS.with(Cell::get) {
+            scope.push_str(&format!(
+                r#","auth-root":{{"contract":"{}","function":"{}"}}"#,
+                strkey(&self.target),
+                "x".repeat(32)
+            ));
+        }
         // Rule `k` (0 is `target`) names `fan` signers starting at
         // `k * fan`, wrapping, so every signer is some rule's, and
         // `target` starts with the owner.
@@ -4167,4 +4176,155 @@ fn census_of_the_preview_grant() {
     assert!(census_spend(&w, &a, &census_key(2), &token, &game, id));
     report_unbudgeted("census: 1 XLM transfer through app 2's guess-xlm", &w.env);
     census_dump(&w, &a, "grant");
+}
+
+/// A deterministic native game; compiler/account/verifier run their built
+/// Wasm. Setup may mock registry/token admin, but every tested game entry is
+/// enforced and carries a real WebAuthn signature.
+#[soroban_sdk::contract]
+struct RootGame;
+#[soroban_sdk::contractimpl]
+impl RootGame {
+    pub fn guess(e: Env, account: Address, token: Address, win: bool) {
+        account.require_auth();
+        let me = e.current_contract_address();
+        if win {
+            TokenClient::new(&e, &token).transfer(&me, &account, &1);
+        } else {
+            TokenClient::new(&e, &token).transfer(&account, &me, &1);
+        }
+    }
+}
+
+#[test]
+#[ignore = "needs the built stack"]
+fn exact_root_wasm_game_and_cap_costs() {
+    use perch_testkit::passkey::auth_entry_for_rules;
+    let w = world();
+    let e = &w.env;
+    let a = w.new_account(canonical_passkey([61; 32]));
+    let token = w.funded_token(&a);
+    let game = e.register(RootGame, ());
+    let original = w.doc(&a.owner, None);
+    let mut text = std::vec![0; original.len() as usize];
+    original.copy_into_slice(&mut text);
+    let mut doc = perch_ir::from_json(&String::from_utf8(text).unwrap()).unwrap();
+    let mut game_rule = doc.rules[1].clone();
+    game_rule.name = "game".into();
+    game_rule.scope = perch_ir::Scope::contract(strkey(&game));
+    game_rule.functions = Some(std::vec!["guess".into()]);
+    let mut pay = game_rule.clone();
+    pay.name = "pay".into();
+    pay.scope = perch_ir::Scope::contract(strkey(&token));
+    pay.functions = Some(std::vec!["transfer".into()]);
+    pay.auth_root = Some(perch_ir::AuthRoot {
+        contract: strkey(&game),
+        function: "guess".into(),
+    });
+    pay.cap = Some(perch_ir::CapConstraint {
+        token: None,
+        limit: "2".into(),
+        period_ledgers: 100,
+    });
+    doc.rules = std::vec![doc.rules[0].clone(), game_rule, pay];
+    let bytes = Bytes::from_slice(e, perch_ir::canonical_json(&doc).as_bytes());
+    assert!(w.try_apply(&a, &a.owner, &bytes, 0));
+    report("exact root: apply game grant", e);
+    assert_eq!(w.account(&a).capabilities().interface_version, 3);
+    let ids = [w.rule_id(&a.address, "game"), w.rule_id(&a.address, "pay")];
+    for win in [false, true] {
+        let mut root = w.invocation(
+            &game,
+            "guess",
+            std::vec![w.sc(a.address.clone()), w.sc(token.clone()), w.sc(win)],
+        );
+        if !win {
+            root.sub_invocations = std::vec![w.invocation(
+                &token,
+                "transfer",
+                std::vec![w.sc(a.address.clone()), w.sc(game.clone()), w.sc(1i128)]
+            )]
+            .try_into()
+            .unwrap();
+        }
+        let selected = if win { &ids[..1] } else { &ids[..] };
+        e.set_auths(&[auth_entry_for_rules(
+            e,
+            &a.address,
+            &w.webauthn,
+            &a.owner,
+            selected,
+            w.next_nonce(),
+            w.ledger() + 1000,
+            root,
+        )]);
+        assert!(RootGameClient::new(e, &game)
+            .try_guess(&a.address, &token, &win)
+            .is_ok());
+        report(
+            if win {
+                "exact root: winning guess"
+            } else {
+                "exact root: losing guess"
+            },
+            e,
+        );
+        e.set_auths(&[]);
+        assert_eq!(w.window(&a, ids[1]).unwrap().total, 1);
+    }
+    assert!(!w.spend(&a, &a.owner, &token, 1));
+    report("exact root: direct transfer refused below cap", e);
+    assert_eq!(w.window(&a, ids[1]).unwrap().total, 1);
+}
+
+#[test]
+#[ignore = "needs the built stack"]
+fn exact_root_wasm_at_document_caps() {
+    let w = world();
+    let shape = worst_shape();
+    let keys = passkeys(65, shape.signers);
+    let a = w.new_account(canonical_passkey([65; 32]));
+    let rec = Rec {
+        profile: "loss",
+        mode: Mode::Guardian,
+        zk: None,
+        delay: DELAY,
+        baseline: None,
+    };
+    ROOT_CONDITIONS.with(|x| x.set(true));
+    let doc = w.shaped_doc(&keys, &rec, shape, MAX_DOC_CANONICAL_BYTES as usize, true);
+    ROOT_CONDITIONS.with(|x| x.set(false));
+    assert_eq!(doc.len(), MAX_DOC_CANONICAL_BYTES);
+    assert!(w.try_apply(&a, &a.owner, &doc, 0));
+    report("exact root: maximum-sized document apply", &w.env);
+    let stored = w.account(&a).rule_set();
+    assert_eq!(
+        stored.iter().filter(|r| r.auth_root.is_some()).count(),
+        MAX_DOC_RULES as usize - 1
+    );
+    let replacement_keys = passkeys(90, shape.signers);
+    let replacements = w.replacing_all(&replacement_keys, None);
+    let attempt = w.ctl().begin_lost_key(&a.address, &replacements);
+    let target = w.target_bytes(&a, &replacements);
+    report(
+        "exact root: maximum-sized recovery target derivation",
+        &w.env,
+    );
+    for guardian in [0, 1] {
+        w.guardian(guardian, &a, attempt, EvidenceDomain::Initiate);
+    }
+    w.advance(DELAY);
+    assert!(w.try_complete(&a, &target));
+    report(
+        "exact root: maximum-sized guardian recovery completion",
+        &w.env,
+    );
+    assert_eq!(
+        w.account(&a)
+            .rule_set()
+            .iter()
+            .filter(|r| r.auth_root.is_some())
+            .count(),
+        MAX_DOC_RULES as usize - 1
+    );
 }

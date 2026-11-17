@@ -10,6 +10,7 @@ use perch_account_types::Signer;
 use soroban_sdk::{contracttype, Address, Env, String, Symbol, Vec};
 
 use crate::convert::{signer_in, string_bytes, symbol_bytes, Addresses};
+use crate::StoredAuthRoot;
 
 /// `rule_eval::Scope`.
 #[contracttype]
@@ -66,6 +67,8 @@ pub struct ModelRule {
     /// Zero or one entries: `#[contracttype]` has no `Option` of a
     /// `#[contracttype]` struct.
     pub cap: Vec<ModelCap>,
+    /// Exact authorization-entry root (contract, function), or unrestricted.
+    pub auth_root: Option<Vec<StoredAuthRoot>>,
 }
 
 /// `rule_eval::SignerDecl`.
@@ -118,7 +121,7 @@ fn pred(e: &Env, p: &ModelPred, known: &mut Addresses) -> Option<rule_eval::Pred
 }
 
 fn rule(e: &Env, r: &ModelRule, known: &mut Addresses) -> Option<rule_eval::DocRule> {
-    if r.cap.len() > 1 {
+    if r.cap.len() > 1 || (r.auth_root.is_some() && matches!(r.scope, ModelScope::SelfAdmin)) {
         return None;
     }
     let functions = match &r.functions {
@@ -157,6 +160,21 @@ fn rule(e: &Env, r: &ModelRule, known: &mut Addresses) -> Option<rule_eval::DocR
         },
         functions,
         args,
+        auth_root: match &r.auth_root {
+            Some(roots) => {
+                if roots.len() != 1 {
+                    return None;
+                }
+                let root = roots.get_unchecked(0);
+                let contract = known.read(e, &root.contract)?;
+                let function = symbol_bytes(e, &root.function)?;
+                if contract.get(..4)? != [0, 0, 0, 1] || function.is_empty() {
+                    return None;
+                }
+                Some(rule_eval::AuthRoot { contract, function })
+            }
+            None => None,
+        },
         not_after_ledger: r.not_after_ledger,
         cap: r.cap.first().map(|c| rule_eval::DocCap {
             limit: c.limit,
@@ -224,6 +242,7 @@ pub use from_ir::{model_of, ModelError};
 
 #[cfg(feature = "ir")]
 mod from_ir {
+    use crate::StoredAuthRoot;
     use perch_account_types::Signer;
     use perch_ir::{ArgPred, PolicyDoc, Principals, RecoveryMode, Scope, SignerMethod};
     use soroban_sdk::{Address, Bytes, Env, String, Symbol, Vec};
@@ -243,6 +262,8 @@ mod from_ir {
         KeyHex,
         /// A cap's `limit` does not parse as an `i128`.
         CapLimit,
+        /// Self-admin rules cannot carry an authorization-root restriction.
+        AuthRootOnSelfAdmin,
     }
 
     fn strings(e: &Env, list: &[alloc::string::String]) -> Vec<String> {
@@ -293,6 +314,9 @@ mod from_ir {
         }
         let mut rules = Vec::new(e);
         for r in &d.rules {
+            if r.auth_root.is_some() && matches!(r.scope, Scope::SelfAdmin(_)) {
+                return Err(ModelError::AuthRootOnSelfAdmin);
+            }
             let principals = match &r.principals {
                 Principals::All(p) => ModelPrincipals::All(strings(e, &p.signers)),
                 Principals::Threshold(p) => ModelPrincipals::Threshold(strings(e, &p.signers), p.m),
@@ -327,6 +351,15 @@ mod from_ir {
                         });
                     }
                     out
+                }),
+                auth_root: r.auth_root.as_ref().map(|root| {
+                    Vec::from_array(
+                        e,
+                        [StoredAuthRoot {
+                            contract: Address::from_str(e, &root.contract),
+                            function: Symbol::new(e, &root.function),
+                        }],
+                    )
                 }),
                 not_after_ledger: r.not_after_ledger,
                 cap,

@@ -41,7 +41,7 @@ use crate::PerchStorage;
 use perch_account_types::{ContextRule, ContextRuleType, Signer};
 use perch_doc_compiler::{CompiledDoc, CompiledRule, RuleScope};
 use perch_recovery_interface::controller::{RecoveryHooksClient, RecoveryRule};
-use perch_rule_eval::StoredRule;
+use perch_rule_eval::{StoredAuthRoot, StoredRule};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, String, Val, Vec};
 
@@ -130,6 +130,7 @@ impl RuleRecord {
             name: self.name.clone(),
             context_type: ContextRuleType::CallContract(self.rule.contract.clone()),
             valid_until: self.rule.valid_until,
+            auth_root: self.rule.auth_root.clone(),
             signers: self.rule.signers.clone(),
             policies: self.policies.clone(),
         }
@@ -195,6 +196,8 @@ pub struct InstalledRule {
     pub context_type: ContextRuleType,
     /// The inclusive last valid ledger, if bounded.
     pub valid_until: Option<u32>,
+    /// Exact root of this account's authorization entry, if constrained.
+    pub auth_root: Option<Vec<StoredAuthRoot>>,
     /// The rule's signers.
     pub signers: Vec<Signer>,
     /// The policies attached to the rule.
@@ -300,6 +303,7 @@ pub(crate) fn admin_rule(e: &Env, id: u32, signers: &Vec<Signer>) -> InstalledRu
         name: String::from_str(e, "admin"),
         context_type: ContextRuleType::CallContract(e.current_contract_address()),
         valid_until: None,
+        auth_root: None,
         signers: signers.clone(),
         policies: Vec::new(e),
     }
@@ -339,6 +343,7 @@ pub(crate) fn desired(e: &Env, compiled: &CompiledDoc) -> (RuleList, alloc::vec:
             name: String::from_str(e, "recovery"),
             context_type: ContextRuleType::CallContract(e.current_contract_address()),
             valid_until: None,
+            auth_root: None,
             signers: Vec::new(e),
             policies: Vec::from_array(
                 e,
@@ -367,6 +372,7 @@ fn document_rule(e: &Env, rule: &CompiledRule) -> InstalledRule {
         name: rule.name.clone(),
         context_type,
         valid_until: rule.valid_until,
+        auth_root: rule.auth_root.clone(),
         signers: rule.signers.clone(),
         policies: Vec::new(e),
     }
@@ -429,6 +435,7 @@ pub(crate) fn reconcile(
 /// reorders a rule's signers is a change, as a full replace would make it.
 fn unchanged(c: &InstalledRule, d: &InstalledRule) -> bool {
     c.signers == d.signers
+        && c.auth_root == d.auth_root
         && c.policies.iter().all(|p| d.policies.contains(&p))
         && d.policies.iter().all(|p| c.policies.contains(&p))
         && c.valid_until == d.valid_until
@@ -515,6 +522,7 @@ mod test {
             name: String::from_str(e, "r1"),
             context_type: ContextRuleType::CallContract(Address::generate(e)),
             valid_until: None,
+            auth_root: None,
             signers: Vec::new(e),
             policies: Vec::from_array(
                 e,

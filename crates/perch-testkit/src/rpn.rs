@@ -6,8 +6,10 @@
 //! [`policies`] reads them off a canonical document. The rule-set check
 //! (`rule_set`) compares the account's stored rule-eval rules with their
 //! denotation (`denote`), and tests build such an upgraded
-//! account from them. [`check_compiled`] checks the doc compiler's rules
-//! against the same lowering.
+//! account from them. Root-bearing documents are refused by that compiler;
+//! [`batch_policies_of`] compares their local projection and composes the
+//! original root separately. [`check_compiled`] checks local metadata against
+//! that lowering and root metadata against the original document.
 
 use perch_account_types::Signer;
 use perch_compile::{CompileConfig, LoweredRule, ScopeSpec, SignerSpec};
@@ -23,6 +25,8 @@ use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 #[derive(Clone, Debug)]
 pub struct Policies {
     pub name: String,
+    /// Independently composed batch condition; never an interpreter policy.
+    pub auth_root: Option<perch_ir::AuthRoot>,
     pub valid_until: Option<u32>,
     /// The interpreter's program, `None` for a constraint-free rule.
     pub install: Option<InstallParams>,
@@ -55,6 +59,7 @@ pub fn policies_of(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<Vec<Policies>, 
         .into_iter()
         .map(|r| Policies {
             name: r.name,
+            auth_root: None,
             valid_until: r.valid_until,
             install: r.install,
             cap: r.cap.map(|c| SpendingLimitAccountParams {
@@ -63,6 +68,35 @@ pub fn policies_of(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<Vec<Policies>, 
             }),
         })
         .collect())
+}
+
+/// Test-only local-context projection. The legacy compiler refuses roots;
+/// this projection checks only its local predicates, never authorization.
+pub fn local_projection(doc: &perch_ir::PolicyDoc) -> perch_ir::PolicyDoc {
+    let mut local = doc.clone();
+    for rule in &mut local.rules {
+        rule.auth_root = None;
+    }
+    local
+}
+
+/// Local interpreter predicates composed with the original batch condition.
+/// This is comparison evidence, not a legacy installable policy.
+pub fn batch_policies_of(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<Vec<Policies>, String> {
+    let mut policies = policies_of(e, &local_projection(doc))?;
+    for (p, r) in policies.iter_mut().zip(&doc.rules) {
+        p.auth_root = r.auth_root.clone();
+    }
+    Ok(policies)
+}
+
+/// Independently encode the document's exact root as a pure batch condition.
+pub fn root_of(e: &Env, root: &Option<perch_ir::AuthRoot>) -> Option<rule_eval::AuthRoot> {
+    root.as_ref().map(|r| rule_eval::AuthRoot {
+        contract: perch_rule_eval::convert::address(e, &Address::from_str(e, &r.contract))
+            .expect("validated root contract"),
+        function: r.function.as_bytes().to_vec(),
+    })
 }
 
 /// [`policies_of`] the document `canonical` holds.
@@ -77,7 +111,7 @@ pub fn check_compiled(
     doc: &perch_ir::PolicyDoc,
     compiled: &CompiledDoc,
 ) -> Result<(), String> {
-    let lowered = lowered(e, doc)?;
+    let lowered = lowered(e, &local_projection(doc))?;
     if lowered.len() != compiled.rules.len() as usize {
         return Err(format!(
             "the compiler emits {} rules, the RPN lowering {}",
@@ -106,6 +140,16 @@ pub fn check_compiled(
             || c.scope != scope
             || c.signers != signers
             || c.valid_until != l.valid_until
+            || c.auth_root
+                != doc.rules[i].auth_root.as_ref().map(|r| {
+                    soroban_sdk::Vec::from_array(
+                        e,
+                        [perch_rule_eval::StoredAuthRoot {
+                            contract: Address::from_str(e, &r.contract),
+                            function: soroban_sdk::Symbol::new(e, &r.function),
+                        }],
+                    )
+                })
         {
             return Err(format!(
                 "rule {i}: the compiler emits {c:?}, the RPN lowering {l:?}"

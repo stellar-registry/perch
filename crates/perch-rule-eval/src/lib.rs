@@ -40,5 +40,6 @@ pub use model::{
 #[cfg(feature = "ir")]
 pub use model::{model_of, ModelError};
 pub use stored::{
-    StoredCap, StoredCond, StoredEntry, StoredFunctions, StoredRecord, StoredRule, StoredVal,
+    StoredAuthRoot, StoredCap, StoredCond, StoredEntry, StoredFunctions, StoredRecord, StoredRule,
+    StoredVal,
 };

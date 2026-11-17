@@ -18,7 +18,7 @@
 
 use alloc::vec::Vec;
 
-use rule_eval::{Cap, Cond, Functions, Rule, Signer, SpendEntry, SpendRecord};
+use rule_eval::{AuthRoot, Cap, Cond, Functions, Rule, Signer, SpendEntry, SpendRecord};
 use soroban_sdk::{Env, Val};
 
 use crate::convert::host_xdr;
@@ -190,9 +190,39 @@ impl<'a> Xdr<'a> {
 
     /// A `StoredRule`.
     fn rule(&mut self) -> Option<Rule> {
-        if self.len(SCV_MAP)? != 8 {
-            return None;
-        }
+        // Only the exact legacy eight-key layout is unrestricted by omission.
+        // New layouts must name auth_root explicitly; unknown/missing keys,
+        // malformed tuples and trailing bytes are never ignored.
+        let fields = self.len(SCV_MAP)?;
+        let auth_root = match fields {
+            8 => None,
+            9 => {
+                self.key(b"auth_root")?;
+                let tag =
+                    u32::from_be_bytes(self.bytes.get(self.pos..self.pos + 4)?.try_into().ok()?);
+                if tag == SCV_VOID {
+                    self.tag(SCV_VOID)?;
+                    None
+                } else {
+                    if self.len(SCV_VEC)? != 1 || self.len(SCV_MAP)? != 2 {
+                        return None;
+                    }
+                    self.key(b"contract")?;
+                    let contract = self.address()?;
+                    // Only contract addresses can be an invocation root.
+                    if contract.get(..4)? != SC_ADDRESS_CONTRACT.to_be_bytes() {
+                        return None;
+                    }
+                    self.key(b"function")?;
+                    let function = self.opaque(SCV_SYMBOL)?.to_vec();
+                    if function.is_empty() || function.len() > 32 {
+                        return None;
+                    }
+                    Some(AuthRoot { contract, function })
+                }
+            }
+            _ => return None,
+        };
         self.key(b"cap")?;
         let cap = match self.len(SCV_VEC)? {
             0 => None,
@@ -220,6 +250,7 @@ impl<'a> Xdr<'a> {
         self.key(b"valid_until")?;
         let valid_until = self.opt_u32()?;
         Some(Rule {
+            auth_root,
             contract,
             functions,
             conds,

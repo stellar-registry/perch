@@ -437,9 +437,9 @@ fn bind_payload(e: &Env, signature_payload: &Hash<32>) -> Hash<32> {
 /// `apply_doc`'s `expected_revision`. Version 2 adds scoped documents
 /// ([`PerchSmartAccount::apply_scope`] and the scope views); since then
 /// `configuration` and `installed_rules` cover the admin document only.
-pub const INTERFACE_VERSION: u32 = 2;
+pub const INTERFACE_VERSION: u32 = 3;
 /// The layout of [`AccountConfiguration`].
-pub const SNAPSHOT_VERSION: u32 = 1;
+pub const SNAPSHOT_VERSION: u32 = 2;
 
 /// A scheduled account upgrade (spec §12), bound to the account's recovery
 /// generation.

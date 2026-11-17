@@ -157,7 +157,7 @@ fuzz_target!(|case: ACase| {
         self_addr: &self_addr,
     };
 
-    // eval is total and deterministic — a panic or divergence is a finding.
+    // eval is total and deterministic — a panic or divergence is a bug.
     let a = rpn::eval(&env, &program, &inputs);
     let b = rpn::eval(&env, &program, &inputs);
     assert_eq!(a, b, "eval must be deterministic");

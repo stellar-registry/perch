@@ -2,8 +2,9 @@
 //! and through the full replace it replaced (`perch_testkit::delta`), with
 //! the ledger advancing between documents past rule expiries: both must
 //! accept and refuse the same documents and end every step with identical
-//! normalized storage — rules, signers, policies and their parameters,
-//! registries, the canonical applied document, and the recovery wiring.
+//! normalized storage — the rule records with their signers and policies,
+//! the stored rule sets, the OZ registry entries kept for the recovery rule,
+//! the canonical applied document, and the recovery wiring.
 //! The full replace shares compile and the desired rule set with the delta,
 //! so each accepted step is also checked against the grant the model
 //! computes on its own (`DocModel::expected_rules` vs `live_rules`). The

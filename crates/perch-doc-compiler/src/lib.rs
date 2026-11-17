@@ -92,32 +92,26 @@ pub enum DocCompilerError {
     /// The document names no network, or a network that is not this chain.
     WrongNetwork,
     /// The document cannot be lowered to rules: a rule with
-    /// self-authenticating principals, or with more than
-    /// [`MAX_RULE_CONSTRAINTS`] constraints.
+    /// self-authenticating principals, or too many constraints.
+    // More than [`MAX_RULE_CONSTRAINTS`].
     DocCompile,
-    /// The document exceeds a document cap ([`MAX_DOC_SIGNERS`],
-    /// [`MAX_DOC_RULES`], [`MAX_DOC_CANONICAL_BYTES`],
-    /// [`MAX_RULE_NAME_BYTES`]).
+    /// The document exceeds a cap on signers, rules, bytes, or name length.
+    // [`MAX_DOC_SIGNERS`], [`MAX_DOC_RULES`], [`MAX_DOC_CANONICAL_BYTES`],
+    // [`MAX_RULE_NAME_BYTES`].
     DocTooLarge,
-    /// A signer's external `key` is not its verifier-canonical form: either the
-    /// verifier could not canonicalize it at all, or the declared bytes differ
-    /// from the canonical form the verifier returns (e.g. a WebAuthn key
-    /// carrying a credential-id suffix the verifier drops, or a non-canonical
-    /// point encoding). The compiler refuses it rather than silently
-    /// canonicalizing, so the bytes the document hash — and a recovery
-    /// attempt's `replacements_hash` — bind are exactly the bytes the installed
-    /// credential uses, and two signers cannot hide one physical key under two
-    /// spellings.
+    /// A signer's external `key` is not its verifier-canonical form.
+    // Why the compiler refuses rather than canonicalizing:
+    // docs/account-interface.md, "Errors".
     KeyNotCanonicalizable,
     /// `derive_target`: the current document enrolls no recovery.
     NotEnrolled,
-    /// `derive_target`: the replacement set breaks spec §7.3 rules 1-3 (not
-    /// canonical, empty for lost-key, a signer id that is not replaceable or
-    /// not declared in the source, or a change of credential kind or
-    /// verifier), or the action is not a recovery attempt.
+    /// `derive_target`: the replacement set breaks spec §7.3 rules 1-3, or
+    /// the action is not a recovery attempt.
+    // docs/account-interface.md, "Errors".
     ReplacementRefused,
-    /// `derive_target`: the ZK enrollment is missing for a ZK mode, present
-    /// for a guardian-only mode, or reuses the enrolled id.
+    /// `derive_target`: the ZK enrollment is missing, unexpected, or reuses
+    /// the enrolled id.
+    // Missing for a ZK mode, present for a guardian-only mode.
     ZkEnrollmentMismatch,
     /// `derive_target`: the target has no constraint-free self-admin rule
     /// with a signer (the anti-brick check).

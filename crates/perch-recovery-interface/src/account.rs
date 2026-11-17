@@ -14,19 +14,10 @@ pub const LEDGERS_PER_DAY_NOMINAL: u32 = 17_280;
 /// and the delay is enforced in ledgers regardless.
 pub const ACCOUNT_UPGRADE_DELAY_LEDGERS: u32 = 7 * LEDGERS_PER_DAY_NOMINAL;
 
-/// One pending account upgrade (spec §12).
-///
-/// Staleness is judged against the account's own **recovery generation**, a
-/// `u64` the account keeps in its own storage. It starts at 0 and is never
-/// reset. It advances on every `rcv_sync` outcome other than `Unchanged`
-/// (`controller::SyncOutcome::bumps_generation`) and on every executed
-/// upgrade.
-///
-/// The controller's epoch cannot play this role. It belongs to one
-/// controller and does not exist while the account is unenrolled, so a
-/// request scheduled unenrolled would survive enrolling recovery and
-/// removing it again: the final state has no controller, just as at
-/// scheduling.
+/// A pending account upgrade.
+// Spec §12. Why staleness is judged against the account's recovery
+// generation rather than the controller's epoch: docs/account-interface.md,
+// "UpgradeRequest and the recovery generation".
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UpgradeRequest {
@@ -36,9 +27,9 @@ pub struct UpgradeRequest {
     pub wasm_hash: BytesN<32>,
     /// The account's recovery generation when the request was scheduled.
     pub generation: u64,
-    /// The adopted controller's epoch when scheduled, if a controller was
-    /// adopted. Passed back as `UpgradeStep::Execute` so the controller can
-    /// check it too.
+    /// The adopted controller's epoch when scheduled, if any.
+    // Passed back as `UpgradeStep::Execute` so the controller can check it
+    // too.
     pub controller_epoch: Option<u64>,
     /// The first ledger at which the request may execute.
     pub executable_at: u32,

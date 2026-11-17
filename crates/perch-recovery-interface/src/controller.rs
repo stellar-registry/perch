@@ -23,8 +23,9 @@ use soroban_sdk_tools::scerr;
 pub enum RecoveryError {
     /// No configuration is enrolled for this account at this controller.
     NotEnrolled,
-    /// An attempt is authorized and live: begin, policy changes, and
-    /// upgrades are refused until it completes, is cancelled, or expires.
+    /// An attempt is authorized and live, which blocks begin, policy
+    /// changes, and upgrades.
+    // Until it completes, is cancelled, or expires.
     AttemptAuthorized,
     /// No attempt with this id exists for the account.
     NoSuchAttempt,
@@ -66,9 +67,8 @@ pub enum RecoveryError {
     InvalidReplacements,
     /// The target or a replacement contains a revoked credential.
     CredentialRevoked,
-    /// The ZK enrollment id was enrolled for this account before (the
-    /// controller checks the account's `is_enrolled_id` at T1; the pure
-    /// `derive_target` cannot see the account's history).
+    /// The ZK enrollment id was enrolled for this account before.
+    // docs/account-interface.md, "Errors".
     EnrollmentIdReused,
     /// Compromise recovery with no baseline enrolled.
     NoBaseline,
@@ -81,8 +81,9 @@ pub enum RecoveryError {
     ZkWiringMismatch,
     /// The ZK factor changed without a new enrollment id.
     ZkFactorChangedInPlace,
-    /// The configuration is malformed (for example, the account is one of
-    /// its own guardians, or the quorum is out of range).
+    /// The configuration is malformed.
+    // For example, the account is one of its own guardians, or the quorum is
+    // out of range.
     InvalidConfiguration,
     /// An upgrade request recorded under an older epoch.
     StaleUpgrade,
@@ -90,8 +91,8 @@ pub enum RecoveryError {
     LedgerOverflow,
     /// The policy was attached to a context rule of the wrong shape.
     MalformedContextRule,
-    /// A credential the replacement set replaces still appears in the
-    /// target (a swap or a no-op replacement, spec §7.3 rule 8).
+    /// The target keeps a credential the replacement set replaces.
+    // A swap or a no-op replacement, spec §7.3 rule 8.
     ReplacedCredentialRetained,
 }
 

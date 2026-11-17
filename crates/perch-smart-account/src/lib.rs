@@ -36,7 +36,7 @@ use soroban_sdk::{
     auth::{Context, ContractContext, CustomAccountInterface},
     contractevent, contracttrait, contracttype,
     crypto::Hash,
-    Address, Bytes, BytesN, Env, Map, String, Symbol, Val, Vec,
+    Address, Bytes, BytesN, ContractExecutable, Env, Map, String, Symbol, Val, Vec,
 };
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
 use stellar_accounts::smart_account::{
@@ -129,11 +129,6 @@ pub enum PerchAccountError {
     /// that has since changed. Last, so every earlier code is unchanged.
     StaleRevision,
 }
-
-// scerr's composed (root) mode predates sdk 27's spec-shaking marker; the
-// no-op impl is the trait's documented default, and root mode emits its own
-// flattened error spec. (Upstream candidate for soroban-sdk-tools.)
-impl soroban_sdk::SpecShakingMarker for PerchAccountError {}
 
 /// Why `__check_auth` refused before evaluating any rule.
 #[scerr]
@@ -659,7 +654,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
             wasm_hash: request.wasm_hash.clone(),
         }
         .publish(e);
-        e.deployer().update_current_contract_wasm(request.wasm_hash);
+        e.deployer()
+            .update_current_contract(ContractExecutable::Wasm(request.wasm_hash));
         Ok(())
     }
 

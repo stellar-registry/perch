@@ -45,34 +45,33 @@ license = "Apache-2.0"
 repository = "https://github.com/stellar-registry/perch"
 
 [workspace.dependencies]
-soroban-sdk = "27.0.2"
+soroban-sdk = "29.0.1"
 # scerr (sequentially-coded contract errors) + typed storage handles.
-soroban-sdk-tools = "0.1.3"
+# Vendored at 0.1.4, moved to soroban-sdk 29 (vendor/soroban-sdk-tools/NOTICE).
+soroban-sdk-tools = { version = "0.1.4", path = "vendor/soroban-sdk-tools" }
 # TEMPORARY dogfood pin: theahaco's OZ fork at the CAP-0071 patch
 # (theahaco/stellar-contracts-OZ PR #3, branch cap-71-delegate-auth) —
 # Signer::Delegated authenticates via delegate_account_auth (protocol 27,
 # single AddressWithDelegates auth entry) instead of a separate
-# require_auth_for_args entry per delegate. Fork main == upstream fbfde38.
-# Re-pin to upstream OpenZeppelin/stellar-contracts once the patch lands there.
-# Pinned to theahaco/stellar-contracts-OZ PR #5 (head 3372676, stacked on
-# PR #4, both on cap-71-delegate-auth): PR #4 adds `*_no_events` variants of
-# every rule, signer, and policy mutation (apply_doc emits one DocApplied
-# instead), and PR #5 adds `reconcile_signers[_no_events]` (one call per
-# in-place signer change). Re-pin when they merge into the fork.
-stellar-accounts = { version = "0.7.1", git = "https://github.com/theahaco/stellar-contracts-OZ.git", rev = "33726766a1fd5e7e3d2977d79f64ee29e1ea3ca9", package = "stellar-accounts" }
+# require_auth_for_args entry per delegate — plus its PR #4 (`*_no_events`
+# variants of every rule, signer, and policy mutation: apply_doc emits one
+# DocApplied instead) and PR #5 (`reconcile_signers[_no_events]`, one call
+# per in-place signer change), stacked on cap-71-delegate-auth at 3372676.
+# Pinned to bitswell-hq/theahaco__stellar-contracts-OZ, a fork of that fork
+# whose fm/oz-quiet-events-x1-reconcile branch adds the move to soroban-sdk
+# 29.0.1 on top of 3372676 (its PR #1). Re-pin to upstream
+# OpenZeppelin/stellar-contracts once these patches land there.
+stellar-accounts = { version = "0.7.1", git = "https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ.git", rev = "42089fc90684fdab33a85eac3e8311259b69a61b", package = "stellar-accounts" }
 
 perch-ir = { version = "0.1.1", path = "crates/perch-ir" }
 perch-program = { version = "0.1.1", path = "crates/perch-program" }
 
 # Flux refinement-type bridge (attrs erase to no-ops on stable; verification
-# runs via `just flux` under flux's pinned nightly). Published to crates.io
-# from nidohq/soroban-flux (its COMPATIBILITY.md pins the matching flux
-# toolchain rev). A crates.io release — NOT a git dep — because release-plz
-# runs `cargo package` across the whole workspace to compute version bumps,
-# and cargo package can only resolve deps that exist on the index; a git-only
-# soroban-flux blocked the entire release pipeline. 0.1.0 was cut from the
-# same source the git rev pinned, so builds stay byte-identical.
-soroban-flux = "0.1.0"
+# runs via `just flux` under flux's pinned nightly). Vendored from the
+# crates.io release of nidohq/soroban-flux 0.1.0 (its COMPATIBILITY.md pins
+# the matching flux toolchain rev), moved to soroban-sdk 29
+# (vendor/soroban-flux/NOTICE).
+soroban-flux = { version = "0.1.0", path = "vendor/soroban-flux" }
 
 # ML-DSA (FIPS 204) verification in guest wasm, for perch-mldsa-verifier: pure
 # Rust, no_std, no allocation. Unaudited. Verification needs no randomness, so
@@ -81,8 +80,9 @@ fips204 = { version = "0.4.6", default-features = false, features = ["ml-dsa-65"
 
 # Poseidon2 on the Soroban host (`poseidon2_permutation` host function). Must
 # stay byte-identical to noir-lang/poseidon v0.2.0, which the recovery circuit
-# uses: crates/perch-zk-primitives pins both sides to shared vectors.
-soroban-poseidon = "27.0.0"
+# uses: crates/perch-zk-primitives pins both sides to shared vectors. Vendored
+# at 28.0.0, moved to soroban-sdk 29 (vendor/soroban-poseidon/NOTICE).
+soroban-poseidon = { version = "28.0.0", path = "vendor/soroban-poseidon" }
 
 [profile.release]
 opt-level = "z"

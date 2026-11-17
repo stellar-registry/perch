@@ -33,9 +33,10 @@ is unmetered. So:
 1. The encoding is wrapped in a bench-only contract, `crates/perch-bench-rpn`,
    exposing `validate(program)` and
    `eval(program, context, signer_count, self_addr)`.
-2. It is built with `cargo build --target wasm32v1-none --release` (the
-   workspace release profile: `opt-level = "z"`, LTO, `panic = "abort"`; no
-   `wasm-opt` pass).
+2. It is built with `stellar contract build --package perch-bench-rpn
+   --optimize=false` (cargo with the workspace release profile: `opt-level =
+   "z"`, LTO, `panic = "abort"`; then the contract spec shaken; no `wasm-opt`
+   pass).
 3. The harness (`crates/perch-bench/tests/metered.rs`) registers the
    contract from its Wasm bytes, so every call runs through the metered Wasm
    VM, and invokes `validate` and `eval` once per program, reading
@@ -63,27 +64,26 @@ to `False`.
 
 ## Numbers
 
-Recorded 2026-08-07 with soroban-sdk 26.0.1 / soroban-env-host 26.1.3, rustc
-stable, on Apple Silicon. Instruction counts come from the host's cost model
-(protocol-version dependent), not from hardware. The workspace locks
-soroban-sdk 27.0.6, and these rows were not re-recorded with it; `just
-bench` prints the current values.
+Recorded 2026-11-03 with soroban-sdk 29.0.1 / soroban-env-host 29.0.1, rustc
+1.97.1, on Apple Silicon. Instruction counts come from the host's cost model
+(protocol-version dependent), not from hardware; `just bench` prints the
+current values.
 
 | program | eval cpu insns | eval mem bytes | validate cpu insns | program XDR bytes |
 |---|---:|---:|---:|---:|
-| ci-publish (4 ops) | 434,303 | 1,204,816 | 375,027 | 240 |
-| mixed-8  | 526,495   | 1,204,912 | 460,233   | 352   |
-| mixed-32 | 1,325,278 | 1,206,064 | 1,003,527 | 1,540 |
-| mixed-64 | 2,390,322 | 1,207,600 | 1,727,919 | 3,124 |
+| ci-publish (4 ops) | 485,984 | 1,211,747 | 396,366 | 240 |
+| mixed-8  | 608,543   | 1,211,843 | 472,091   | 352   |
+| mixed-32 | 1,507,412 | 1,212,995 | 958,427   | 1,540 |
+| mixed-64 | 2,705,904 | 1,214,531 | 1,606,875 | 3,124 |
 
-`perch_bench_rpn.wasm` was 15,457 bytes.
+`perch_bench_rpn.wasm` was 14,117 bytes.
 
-- **Marginal cost.** About 33.3k instructions per op (mixed-8 to mixed-64),
+- **Marginal cost.** About 37.5k instructions per op (mixed-8 to mixed-64),
   linear in program length.
-- **Floor.** The ~375k-instruction `validate` of the 4-op program
+- **Floor.** The ~396k-instruction `validate` of the 4-op program
   approximates the fixed per-invocation cost (VM instantiation, argument
   decoding); deltas between rows are the meaningful signal.
 - **Memory.** The ~1.2 MB VM-instantiation baseline dominates; the 128-slot
   verdict stack adds nothing measurable.
-- **Scale.** A 64-op program evaluates in about 2.4M instructions, under
-  0.6% of a transaction's 400M-instruction limit.
+- **Scale.** A 64-op program evaluates in about 2.7M instructions, under
+  0.7% of a transaction's 400M-instruction limit.

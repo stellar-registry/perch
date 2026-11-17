@@ -1791,9 +1791,12 @@ dependencies = [
  "perch-zk-primitives",
  "perch-zk-prover",
  "proptest",
+ "rule-eval",
+ "rule-eval-conformance",
  "serde_json",
  "sha2",
  "soroban-env-host",
+ "soroban-facade",
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -1874,6 +1877,13 @@ dependencies = [
  "sha2",
  "stellar-strkey 0.0.16",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "perch-rule-eval"
+version = "0.1.0"
+dependencies = [
+ "rule-eval-conformance",
 ]
 
 [[package]]
@@ -2275,6 +2285,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rule-eval"
+version = "0.1.0"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=cbabe594ae2df408991e825e56ddd618ea29541b#cbabe594ae2df408991e825e56ddd618ea29541b"
+
+[[package]]
+name = "rule-eval-conformance"
+version = "0.1.0"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=cbabe594ae2df408991e825e56ddd618ea29541b#cbabe594ae2df408991e825e56ddd618ea29541b"
+dependencies = [
+ "rule-eval",
+ "serde",
+ "serde_json",
+ "soroban-facade",
+]
+
+[[package]]
 name = "rustc_version"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2642,6 +2668,15 @@ dependencies = [
  "serde_json",
  "stellar-xdr",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "soroban-facade"
+version = "0.1.0"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=cbabe594ae2df408991e825e56ddd618ea29541b#cbabe594ae2df408991e825e56ddd618ea29541b"
+dependencies = [
+ "rule-eval",
+ "soroban-sdk",
 ]
 
 [[package]]

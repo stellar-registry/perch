@@ -1,0 +1,59 @@
+use soroban_sdk::contracterror;
+
+/// Registry error codes.
+///
+/// Hand-written (rather than derived by `soroban-sdk-tools::scerr`) so this
+/// crate carries no soroban-sdk-tools dependency. The discriminants are frozen
+/// to the values the previous `scerr` derivation produced, and the enum is
+/// exported into the contract spec just as `scerr` did, keeping the wire ABI
+/// and client-facing error names identical to the already-deployed registry.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    NoSuchWasmPublished = 1,
+    /// No such version of the contact has been published
+    NoSuchVersion = 2,
+    /// Wasm name already claimed
+    WasmNameAlreadyTaken = 3,
+    /// No such contract deployed
+    NoSuchContractDeployed = 4,
+    /// Contract already deployed
+    AlreadyDeployed = 5,
+    /// Failed to upgrade a contract
+    UpgradeInvokeFailed = 6,
+    /// Only Admin is allowed
+    AdminOnly = 7,
+    /// New version must be greater than the most recent version
+    VersionMustBeGreaterThanCurrent = 8,
+    /// Invalid name.
+    /// Must be at most 64 characters and non-empty;
+    /// ascii alphanumeric, '-', or '_';
+    /// start with a ascii alphabetic character;
+    /// and not be a Rust keyword
+    InvalidName = 9,
+    /// Must be valid cargo version
+    InvalidVersion = 10,
+    /// Hash has aleady been published
+    HashAlreadyPublished = 11,
+    /// Root registry requires manager when deploying
+    ManagerRequired = 12,
+    /// No pending batch entries to process
+    NoPendingBatch = 13,
+    /// Caller is not the contract owner
+    NotContractOwner = 14,
+    /// Batch entry missing from temporary storage (likely expired)
+    BatchEntryExpired = 15,
+    /// Given "contract ID" appears to be a G-address, not a contract ID
+    AccountAddressNotValid = 16,
+    /// Given contract ID does not exist on this network
+    ContractIdAddressDoesNotExist = 17,
+    /// Invoking contract's function has failed
+    ProxyInvocationFailed = 18,
+    /// Contract to be invoked is compromised
+    ProxyContractCompromised = 19,
+    /// Subregistry contract call failed
+    SubRegistryCrossContractCallFailed = 20,
+    /// Subregistry must be a different contract than the current registry
+    SubRegistryIsSelf = 21,
+}

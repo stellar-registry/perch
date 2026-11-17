@@ -1,0 +1,58 @@
+Vendored third-party dependency, moved to soroban-sdk 29
+========================================================
+
+  Library:  registry-traits 0.1.0 (Rust, no_std)
+  Upstream: https://github.com/stellar-registry/contracts
+  Commit:   884c1f94cbfcce249a5b8fa6325fb9052a90bd61
+            ("fix(registry-traits): raise soroban-sdk ceiling <27 -> <28
+            (perch is on 27.0.2)"), on the unmerged branch
+            feat/registry-importable-stateless-deploy (PR #33)
+  Path:     contracts/registry-traits
+  License:  Apache-2.0 (see LICENSE)
+  Used by:  perch-stateless-registry (the registry `#[contracttrait]`s)
+
+Why vendored
+------------
+registry-traits is unpublished and exists only on that unmerged branch,
+whose soroban-sdk range is >=25.3.1, <28; the repository's main branch
+(soroban-sdk 28) does not contain it (checked 2026-11-03). Perch builds with
+soroban-sdk 29.0.1 / soroban-env-host 29.0.1, and a crate that requires
+another soroban-sdk major cannot share its types, so this copy is built as a
+path dependency with the soroban-sdk pin moved. No change was proposed
+upstream.
+
+Upstream files
+--------------
+Every file is upstream's bytes at the commit above except the three named
+under the delta. UPSTREAM.sha256 lists the sha256 of every vendored file at
+that commit, with LICENSE taken from the repository root. Not vendored: the
+rest of the repository.
+
+SDK 29 delta
+------------
+Cargo.toml:
+
+  - the soroban-sdk dependency `{ version = ">=25.3.1, <28", features =
+    ["alloc"] }` became `{ version = "29.0.1", features = ["alloc"] }`, and
+    the comment above it, which explained the range, became one line naming
+    this NOTICE;
+  - the `[dev-dependencies]` table was dropped (the tests are not vendored).
+
+src/registry/wasm.rs: `#[contracttype(export = false)]` became
+`#[contracttype]`. soroban-sdk 28 removed the `export` argument (a compile
+error) and always strips spec entries a contract's interface does not reach.
+
+src/registry/contract.rs: the two `deployer.deploy_v2(wasm_hash, ..)` calls
+became
+`deployer.deploy_contract(soroban_sdk::ContractExecutable::Wasm(wasm_hash),
+..)`. soroban-sdk 28 deprecates `deploy_v2`; both invoke the host's
+`create_contract_with_constructor` with the same arguments.
+
+Updating
+--------
+Replace the directory with the new upstream files, re-apply the delta above,
+regenerate UPSTREAM.sha256 from the unmodified upstream files, and update
+this NOTICE. crates/integration-tests/tests/vendor.rs requires every
+vendored file other than Cargo.toml to hash to UPSTREAM.sha256 (after
+reversing any source delta above) and the directory to hold nothing else but
+NOTICE and UPSTREAM.sha256, so no other upstream byte can change unnoticed.

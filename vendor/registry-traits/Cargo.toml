@@ -1,0 +1,20 @@
+[package]
+name = "registry-traits"
+description = "Importable soroban-sdk #[contracttrait]s for the stellar registry (deploy/publish/manage/stateless-deploy)."
+version = "0.1.0"
+authors = ["The Aha Company <hello@theaha.co>"]
+license = "Apache-2.0"
+edition = "2021"
+publish = false
+repository = "https://github.com/stellar-registry/contracts/tree/main/contracts/registry-traits"
+
+[lib]
+# rlib: consumed as a library by the registry contract and by downstream
+# contracts (e.g. perch). No cdylib target — this crate deploys nothing itself.
+crate-type = ["rlib"]
+doctest = false
+
+[dependencies]
+# Pinned to the soroban-sdk perch builds with; see NOTICE.
+soroban-sdk = { version = "29.0.1", features = ["alloc"] }
+semver = { version = "1.0.28", default-features = false }

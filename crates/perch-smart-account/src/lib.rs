@@ -37,8 +37,9 @@
 //! (`auth`) checks the signers. The signer, payload, and context-rule types
 //! are `perch-account-types`', the XDR and contract-spec twins of OZ's. A
 //! recovery completion is decided by the recovery controller alone: the
-//! account calls its `enforce` as OZ's `do_check_auth` called a policy, over
-//! its own record of the recovery rule ([`authorize_completion`]).
+//! account checks the payload as OZ's `do_check_auth` did, over its own
+//! record of the recovery rule, and asks the controller's `rcv_complete`
+//! about each context ([`authorize_completion`]).
 //!
 //! Doc comments on the account's entry points, contract types, events, and
 //! errors are compiled into its wasm's contract spec, which counts against
@@ -1015,11 +1016,11 @@ pub trait PerchSmartAccount: CustomAccountInterface {
 ///   so no signature can satisfy a hook's `account.require_auth()`.
 /// - While the freeze is in force the only authorizable thing is one
 ///   `apply_doc` context on this account that selects the recovery rule,
-///   which the controller's `enforce` then checks. This covers every path
-///   that reaches `__check_auth`: direct authorization, `execute` and every
-///   other entry point (each requires the account's own authorization), and
-///   CAP-0071 delegation, where the host hands this account the delegating
-///   account's contexts.
+///   which the controller's `rcv_complete` then checks. This covers every
+///   path that reaches `__check_auth`: direct authorization, `execute` and
+///   every other entry point (each requires the account's own
+///   authorization), and CAP-0071 delegation, where the host hands this
+///   account the delegating account's contexts.
 /// - A selected rule a scoped document installed under another scope
 ///   generation is refused (`StaleScope`), and so is one selected for a
 ///   call on the current recovery controller, ZK adapter or pool, or for a
@@ -1030,7 +1031,7 @@ pub trait PerchSmartAccount: CustomAccountInterface {
 ///   with `ContextRuleNotFound`); once every signer has authenticated,
 ///   the spending records it charged are stored. A recovery completion (one
 ///   `apply_doc` context on this account selecting the recovery rule) is
-///   left to the controller's `enforce` alone ([`authorize_completion`]), so
+///   left to the controller's `rcv_complete` ([`authorize_completion`]), so
 ///   recovery never depends on the evaluator; any other authorization
 ///   choosing the recovery rule is refused. The constructor stores the admin
 ///   rule set and every `apply_doc` replaces it; without one, nothing but a

@@ -8,7 +8,7 @@ mod support;
 
 use perch_account::{PerchAccount, PerchAccountClient, PerchAccountError, PerchAuthError};
 use perch_recovery::{AttemptState, EvidenceDomain, RecoveryError};
-use perch_recovery_interface::controller::SyncOutcome;
+use perch_recovery_interface::controller::{RecoveryRule, SyncOutcome};
 use perch_recovery_interface::credential::{Credential, ZkEnrollment};
 use perch_recovery_interface::zk::ZkEvidence;
 use perch_recovery_interface::{ConfigChange, RecoveryAction, StatementSubject};
@@ -679,12 +679,10 @@ fn a_controller_scoped_rule_reaches_no_reserved_controller_entry_point() {
     let config = w.ctl().config(&w.account).unwrap();
     let epoch = w.ctl().epoch(&w.account);
     let hash = w.client().applied_doc_hash().unwrap();
-    // The controller's client names OZ's twin of the account's `ContextRule`.
-    let recovery_rule: stellar_accounts::smart_account::ContextRule = perch_testkit::twin(
-        &w.env,
-        w.client()
-            .get_context_rule(&w.rule_id(&w.account, "recovery")),
-    );
+    let recovery_rule = RecoveryRule {
+        signers: 0,
+        contract: Some(w.account.clone()),
+    };
     let signed = |fn_name: &str, args: std::vec::Vec<soroban_sdk::xdr::ScVal>| {
         let root = w.invocation(&w.controller, fn_name, args);
         w.env.set_auths(&[w.owner_entry("ctl", root)]);
@@ -715,38 +713,31 @@ fn a_controller_scoped_rule_reaches_no_reserved_controller_entry_point() {
     );
     assert!(ctl.try_rcv_upgrade(&w.account, &execute).is_err());
     signed(
-        "install",
+        "rcv_install",
         std::vec![
+            w.sc(w.account.clone()),
             w.sc(config.config_hash.clone()),
-            w.sc(recovery_rule.clone()),
-            w.sc(w.account.clone())
+            w.sc(recovery_rule.clone())
         ],
     );
     assert!(ctl
-        .try_install(&config.config_hash, &recovery_rule, &w.account)
+        .try_rcv_install(&w.account, &config.config_hash, &recovery_rule)
         .is_err());
-    signed(
-        "uninstall",
-        std::vec![w.sc(recovery_rule.clone()), w.sc(w.account.clone())],
-    );
-    assert!(ctl.try_uninstall(&recovery_rule, &w.account).is_err());
     let forged = Context::Contract(ContractContext {
         contract: w.account.clone(),
         fn_name: Symbol::new(&w.env, "apply_doc"),
         args: vec![&w.env, w.client().applied_doc().unwrap().into_val(&w.env)],
     });
-    let no_signers: soroban_sdk::Vec<Signer> = soroban_sdk::Vec::new(&w.env);
     signed(
-        "enforce",
+        "rcv_complete",
         std::vec![
+            w.sc(w.account.clone()),
             w.sc(forged.clone()),
-            w.sc(no_signers.clone()),
-            w.sc(recovery_rule.clone()),
-            w.sc(w.account.clone())
+            w.sc(recovery_rule.clone())
         ],
     );
     assert!(ctl
-        .try_enforce(&forged, &no_signers, &recovery_rule, &w.account)
+        .try_rcv_complete(&w.account, &forged, &recovery_rule)
         .is_err());
     w.env.set_auths(&[]);
 

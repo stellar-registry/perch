@@ -1,0 +1,32 @@
+[package]
+name = "perch-review-core"
+description = "A Perch account's verdict on an authorization entry, computed off-chain from a ledger snapshot: the account's own gate checks and rule-core's check_auth, the budgets its capped rules have left, and attenuation-witness replay; no host imports, so it builds to a small browser wasm"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# The browser build is a cdylib made with `cargo rustc --crate-type cdylib`
+# (npm/scripts/build-wasm.mjs), so the workspace builds this crate as a plain
+# rlib and links no allocator or panic handler into any other target.
+[lib]
+doctest = false
+
+[features]
+# The browser builds (src/abi.rs): the arena allocator and the panic
+# handler, with the signing path's exports (`review`, `budget`) or the
+# derived-grant view's (`witness`). Never enabled in the workspace.
+abi = []
+abi-review = ["abi"]
+abi-witness = ["abi"]
+
+[dependencies]
+rule-eval = { workspace = true }
+soroban-facade = { workspace = true }
+
+[dev-dependencies]
+rule-eval-conformance = { workspace = true }
+# The npm wrapper's committed fixtures (tests/fixtures.rs).
+base64 = "0.22"
+serde_json = "1"

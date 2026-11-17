@@ -94,9 +94,10 @@ use soroban_sdk::crypto::Hash;
 use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::xdr::{
     ContractEventBody, FromXdr, Hash as XdrHash, HashIdPreimage,
-    HashIdPreimageSorobanAuthorizationWithAddress, Limits, ScAddress, ScVal,
-    SorobanAddressCredentials, SorobanAddressCredentialsWithDelegates, SorobanAuthorizationEntry,
-    SorobanAuthorizedInvocation, SorobanCredentials, SorobanDelegateSignature, VecM, WriteXdr as _,
+    HashIdPreimageSorobanAuthorizationWithAddress, LedgerEntryData, Limits, ScAddress, ScError,
+    ScVal, SorobanAddressCredentials, SorobanAddressCredentialsWithDelegates,
+    SorobanAuthorizationEntry, SorobanAuthorizedInvocation, SorobanCredentials,
+    SorobanDelegateSignature, VecM, WriteXdr as _,
 };
 use soroban_sdk::{
     contract, contractimpl, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString, Symbol,
@@ -891,22 +892,67 @@ fn signature_payload(
     Sha256::digest(preimage.to_xdr(Limits::none()).expect("preimage xdr")).into()
 }
 
-/// Whether the last invocation failed because the account's `__check_auth`
-/// refused: the host's "failed account authentication" diagnostic names it.
-fn account_refused(w: &World) -> bool {
+/// The error the account's `__check_auth` failed with in the last
+/// invocation, from the host's "failed account authentication" diagnostic,
+/// if it refused.
+pub fn account_refusal(w: &World) -> Option<ScError> {
     let account: ScAddress = w.account.clone().into();
-    w.env.host().get_events().unwrap().0.iter().any(|ev| {
+    w.env.host().get_events().unwrap().0.iter().find_map(|ev| {
         let ContractEventBody::V0(body) = &ev.event.body;
         let ScVal::Vec(Some(data)) = &body.data else {
-            return false;
+            return None;
         };
-        matches!(
-            data.as_slice(),
-            [ScVal::String(msg), ScVal::Address(a), ScVal::Error(_)]
+        match data.as_slice() {
+            [ScVal::String(msg), ScVal::Address(a), ScVal::Error(err)]
                 if msg.to_utf8_string_lossy() == "failed account authentication with error"
-                    && *a == account
-        )
+                    && *a == account =>
+            {
+                Some(err.clone())
+            }
+            _ => None,
+        }
     })
+}
+
+/// Whether the last invocation failed because the account's `__check_auth`
+/// refused.
+fn account_refused(w: &World) -> bool {
+    account_refusal(w).is_some()
+}
+
+/// Every contract-data entry of `account` the host holds, as
+/// `LedgerEntryData` XDR: what `getLedgerEntries` would return for it.
+pub fn account_entries(e: &Env, account: &Address) -> std::vec::Vec<std::vec::Vec<u8>> {
+    let id: ScAddress = account.clone().into();
+    e.host()
+        .get_stored_entries()
+        .unwrap()
+        .iter()
+        .filter_map(|(_, v)| {
+            let (entry, _) = v.as_ref()?;
+            match &entry.data {
+                LedgerEntryData::ContractData(d) if d.contract == id => {
+                    Some(entry.data.to_xdr(Limits::none()).expect("entry xdr"))
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+/// One authorization as the account's `__check_auth` was shown it, for an
+/// observer of [`run_with`] (`review_core_differential.rs`).
+pub struct Seen<'a> {
+    pub world: &'a World,
+    /// The account's authorization entry; `None` for an empty batch, which
+    /// the harness hands `__check_auth` directly.
+    pub entry: Option<&'a SorobanAuthorizationEntry>,
+    /// The account's ledger entries just before the authorization
+    /// ([`account_entries`]).
+    pub before: std::vec::Vec<std::vec::Vec<u8>>,
+    pub ledger: u32,
+    /// `Ok` when `__check_auth` accepted, else the error it failed with.
+    pub outcome: Result<(), Option<ScError>>,
 }
 
 /// The grant id a scoped trace's document is applied under.
@@ -947,6 +993,12 @@ fn apply_grant(
 /// the trace up, or Perch refused the document other than as a grant
 /// document rule-core refuses.
 pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
+    run_with(t, start, &mut |_| {})
+}
+
+/// [`run`], showing `observe` every authorization with the account's state
+/// before it and its outcome.
+pub fn run_with(t: &Trace, start: Start, observe: &mut dyn FnMut(Seen<'_>)) -> Result<Run, String> {
     let w = support::world_with(Opts {
         skip_snapshot: true,
         ..Opts::default()
@@ -1146,12 +1198,24 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                 signers: Map::new(&e),
                 context_rule_ids: SVec::new(&e),
             };
+            let before = account_entries(&e, &w.account);
             let outcome = e.try_invoke_contract_check_auth::<soroban_sdk::Error>(
                 &w.account,
                 &BytesN::from_array(&e, &[0; 32]),
                 payload.into_val(&e),
                 &SVec::new(&e),
             );
+            observe(Seen {
+                world: &w,
+                entry: None,
+                before,
+                ledger: a.now,
+                outcome: match &outcome {
+                    Ok(()) => Ok(()),
+                    Err(Ok(err)) => Err((*err).try_into().ok()),
+                    Err(Err(_)) => Err(None),
+                },
+            });
             if outcome.is_ok() {
                 hygiene(&w, i, &mut run);
             }
@@ -1259,21 +1323,33 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                     .unwrap(),
             })
         };
-        e.set_auths(&[SorobanAuthorizationEntry {
+        let entry = SorobanAuthorizationEntry {
             credentials,
             root_invocation: root,
-        }]);
+        };
+        e.set_auths(std::slice::from_ref(&entry));
         let mut call_args: SVec<Val> = SVec::new(&e);
         if first.contract != w.account {
             call_args.push_back(w.account.to_val());
         }
         call_args.push_back(first.args.to_val());
+        let before = account_entries(&e, &w.account);
         let outcome = e.try_invoke_contract::<(), soroban_sdk::Error>(
             &first.contract,
             &first.fn_name,
             call_args,
         );
         e.set_auths(&[]);
+        observe(Seen {
+            world: &w,
+            entry: Some(&entry),
+            before,
+            ledger: a.now,
+            outcome: match &outcome {
+                Ok(Ok(())) => Ok(()),
+                _ => Err(account_refusal(&w)),
+            },
+        });
         let got = match outcome {
             Ok(Ok(())) => {
                 hygiene(&w, i, &mut run);

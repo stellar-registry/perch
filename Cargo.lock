@@ -1776,6 +1776,7 @@ name = "perch-integration-tests"
 version = "0.1.1"
 dependencies = [
  "arbitrary",
+ "base64",
  "ed25519-dalek",
  "fips204",
  "hex",
@@ -1794,6 +1795,7 @@ dependencies = [
  "perch-recovery",
  "perch-recovery-interface",
  "perch-registry-resolve",
+ "perch-review-core",
  "perch-rule-eval",
  "perch-smart-account",
  "perch-spending-limit",
@@ -1888,6 +1890,17 @@ dependencies = [
  "sha2",
  "stellar-strkey 0.0.16",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "perch-review-core"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "rule-eval",
+ "rule-eval-conformance",
+ "serde_json",
+ "soroban-facade",
 ]
 
 [[package]]

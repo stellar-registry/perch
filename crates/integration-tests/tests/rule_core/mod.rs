@@ -46,15 +46,15 @@
 //!
 //! After every `apply_doc` and `apply_scope`, the account's stored
 //! rule-eval rule set for that document must equal both the lowering of the
-//! document's model and the denotation of OZ's rules with the programs and
-//! caps the compiler emits for them (`perch_testkit::rule_set`); a
+//! document's model and the denotation of its context rules with the
+//! programs and caps the compiler emits for them (`perch_testkit::rule_set`); a
 //! difference fails the run.
 //!
 //! A scoped trace's document goes through `apply_scope` instead: the harness
 //! applies the trace's admin document with `apply_doc`, sets the scope
 //! generation to the one the trace issues the document in, and applies the
 //! document under one scope id, authorized through the admin document's
-//! self-admin rule. Choices name the scope's rules, by their OZ ids in its
+//! self-admin rule. Choices name the scope's rules, by their ids in its
 //! record. Perch refuses every scoped document rule-core's lowering refuses
 //! with one error, `ScopeEscalation`.
 #![allow(dead_code)]
@@ -934,7 +934,7 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
     let canonical = |d: &PolicyDoc| Bytes::from_slice(&e, perch_ir::canonical_json(d).as_bytes());
 
     // Every rule is installed at ledger 0, before any authorization's ledger.
-    // Rule index (the document's, then the recovery rule) to OZ id, read
+    // Rule index (the document's, then the recovery rule) to rule id, read
     // while the account still serves its views.
     e.ledger().with_mut(|l| l.sequence_number = 0);
     let missing = u32::MAX;

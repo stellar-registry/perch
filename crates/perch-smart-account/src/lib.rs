@@ -3,15 +3,14 @@
 //! [`PerchSmartAccount::apply_doc`], scoped documents through
 //! [`PerchSmartAccount::apply_scope`] and its removal entry points.
 //!
-//! [`PerchSmartAccount`] extends OZ's `CustomAccountInterface` + `SmartAccount`
-//! (the evaluation machinery) and exports a document-shaped surface instead of
-//! OZ's piecemeal mutation API. A deployable implements `SmartAccount`
-//! *without* exporting it — so `add_context_rule`, `add_signer`, `add_policy`,
-//! … never exist as entry points — and exports this trait: doc-only is
-//! structural, not conventional. [`impl_perch_smart_account!`] expands to all
-//! of that, so a deployable is a struct, a constructor, and one macro call.
-//! (Rust cannot default supertrait items from a subtrait — the macro is how
-//! the supertrait boilerplate lives here instead of in every contract.)
+//! [`PerchSmartAccount`] extends soroban's `CustomAccountInterface` and
+//! exports a document-shaped surface: there is no piecemeal mutation API
+//! (`add_context_rule`, `add_signer`, `add_policy`, …) at all, so doc-only is
+//! structural, not conventional. [`impl_perch_smart_account!`] expands to the
+//! `__check_auth` impl and this trait, so a deployable is a struct, a
+//! constructor, and one macro call. (Rust cannot default supertrait items
+//! from a subtrait — the macro is how the supertrait boilerplate lives here
+//! instead of in every contract.)
 //!
 //! State and computation are split: parsing + compiling live in the
 //! **stateless** shared `perch-doc-compiler` contract; this trait holds the
@@ -30,16 +29,17 @@
 //! completion wipes every scope at once by advancing a generation that
 //! `__check_auth` checks (`docs/recovery/spec.md` §7.6).
 //!
+//! The account's own records are its rule registry (`rules`): rule ids from
+//! its counter, and each rule's name, scope, signers, policies, and expiry.
 //! `__check_auth` decides every authorization with rule-core's
 //! `rule_eval::authorize` over the rule-eval rules the account stores beside
-//! the installed context rules (`rule_set`, `gate`), and the account's
-//! `authenticate` (`auth`) checks the signers. The signer, payload, and
-//! context-rule types are `perch-account-types`', the XDR and contract-spec
-//! twins of OZ's. OZ's context rules are the registry of rule ids and
-//! signers and carry no policy but the recovery rule's controller. A
+//! those records (`rule_set`, `gate`), and the account's `authenticate`
+//! (`auth`) checks the signers. The signer, payload, and context-rule types
+//! are `perch-account-types`', the XDR and contract-spec twins of OZ's. A
 //! recovery completion is decided by OZ's `do_check_auth` and the recovery
-//! controller alone, and so is every authorization of an account upgraded
-//! from code that kept no stored rule set, until its first `apply_doc`.
+//! controller alone, over the two entries of OZ's registry the account keeps
+//! for the recovery rule (`auth::oz`); an account storing no admin rule set,
+//! which the constructor never leaves, is checked the same way.
 //!
 //! Doc comments on the account's entry points, contract types, events, and
 //! errors are compiled into its wasm's contract spec, which counts against
@@ -71,10 +71,10 @@ use soroban_sdk::{
     auth::{Context, ContractContext, CustomAccountInterface},
     contractevent, contracttrait, contracttype,
     crypto::Hash,
-    Address, Bytes, BytesN, ContractExecutable, Env, Map, String, Symbol, Val, Vec,
+    Address, Bytes, BytesN, ContractExecutable, Env, String, Symbol, Val, Vec,
 };
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
-use stellar_accounts::smart_account::{self, SmartAccount};
+use stellar_accounts::smart_account;
 
 mod auth;
 mod gate;
@@ -84,12 +84,13 @@ pub use auth::{SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD};
 pub use perch_account_types::{
     AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError,
 };
-pub use rules::{InstalledPolicy, InstalledRule};
+pub use rules::{
+    InstalledPolicy, InstalledRule, MAX_EXTERNAL_KEY_SIZE, MAX_NAME_SIZE, MAX_POLICIES, MAX_SIGNERS,
+};
 
-// Re-exported so `impl_perch_smart_account!` can name them via `$crate::…`
+// Re-exported so `impl_perch_smart_account!` can name it via `$crate::…`
 // regardless of the caller's dependency graph.
 pub use soroban_sdk;
-pub use stellar_accounts;
 
 /// The registry the infra was `deploy_stateless`'d from — the content-addressed
 /// deployer the infra derive their address from: the deployment manifest's
@@ -215,7 +216,7 @@ pub enum PerchAuthError {
 }
 
 /// What every context rule a scoped document installs is tagged with, by
-/// OZ rule id: the scope that installed it and the scope generation it was
+/// rule id: the scope that installed it and the scope generation it was
 /// installed under. The admin document's rules carry no tag.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -234,7 +235,7 @@ pub struct ScopeRecord {
     pub gen: u64,
     /// Its canonical `doc_hash`.
     pub doc_hash: BytesN<32>,
-    /// Every context rule it installed, with its OZ id.
+    /// Every context rule it installed, with its id.
     pub rules: Vec<InstalledRule>,
 }
 
@@ -268,11 +269,11 @@ pub struct AccountConfiguration {
     pub revision: u64,
     /// The applied document's `doc_hash`, if any.
     pub doc_hash: Option<BytesN<32>>,
-    /// Every installed admin context rule, with its OZ id.
+    /// Every installed admin context rule, with its id.
     pub rules: Vec<InstalledRule>,
     /// The adopted recovery controller, if any.
     pub recovery_controller: Option<Address>,
-    /// The recovery rule's OZ id, if installed.
+    /// The recovery rule's id, if installed.
     pub recovery_rule: Option<u32>,
     /// The `Protected` freeze: zero or one entries.
     // docs/account-interface.md, "Types".
@@ -467,6 +468,21 @@ pub struct UpgradeScheduled {
     pub executable_at: u32,
 }
 
+/// Event emitted when a context rule is added.
+// The constructor's, for its admin rule: OZ's registry event, so indexers
+// that find accounts by it still do.
+#[contractevent]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContextRuleAdded {
+    #[topic]
+    pub context_rule_id: u32,
+    pub name: String,
+    pub context_type: ContextRuleType,
+    pub valid_until: Option<u32>,
+    pub signer_ids: Vec<u32>,
+    pub policy_ids: Vec<u32>,
+}
+
 /// Emitted when a scheduled upgrade is dropped.
 // docs/account-interface.md, "Events".
 #[contractevent]
@@ -526,11 +542,14 @@ struct PerchStorage {
     /// by how many rules the account ever had, and an unchanged rule is not
     /// touched at all (`rules`).
     installed_rules: PersistentItem<Vec<InstalledRule>>,
+    /// The id the next installed context rule gets. Absent reads as 0.
+    /// Never reused: a removed rule's id is never given to another
+    /// (`rules::allocate`).
+    next_rule_id: InstanceItem<u32>,
     /// The rule-eval rule set the installed rules enforce, aligned with
     /// `installed_rules` (`rule_set`): written with it by the constructor and
-    /// `apply_doc`, absent on an account neither wrote since it was upgraded
-    /// to code that keeps it, whose `__check_auth` then runs OZ's
-    /// `do_check_auth` over the policies its rules were installed with.
+    /// `apply_doc`. `__check_auth` hands an account storing none to OZ's
+    /// `do_check_auth` (`check_auth`).
     rule_set: PersistentItem<Vec<StoredRule>>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
@@ -546,15 +565,15 @@ struct PerchStorage {
     /// Each scoped document's rule-eval rule set, by scope id, aligned with
     /// its record's rules (`rule_set`).
     scope_rule_sets: PersistentMap<u32, Vec<StoredRule>>,
-    /// What each capped rule has spent in its window, by OZ rule id, as
+    /// What each capped rule has spent in its window, by rule id, as
     /// rule-eval charges it in `__check_auth` (`gate`). Absent reads as
     /// nothing spent. Dropped when an apply removes or replaces its rule or
     /// changes its cap (`gate::drop_records`), and with its scope
     /// (`drop_scope`).
     spend_records: PersistentMap<u32, StoredRecord>,
-    /// The tag of every context rule a scoped document installed, by OZ
-    /// rule id; none for the admin document's rules. OZ never reuses a rule
-    /// id, so a tag never outlives its rule into another.
+    /// The tag of every context rule a scoped document installed, by rule
+    /// id; none for the admin document's rules. No rule id is reused
+    /// (`next_rule_id`), so a tag never outlives its rule into another.
     scope_tags: PersistentMap<u32, ScopeTag>,
     /// How many scope ids have a record: the length of `scope_index`.
     scope_count: InstanceItem<u32>,
@@ -571,14 +590,13 @@ struct PerchStorage {
     scope_credentials: PersistentMap<BytesN<32>, u64>,
 }
 
-/// The doc-only smart account surface. Implementers get OZ evaluation from
-/// the supertraits and documents as the only write path for authorization
-/// data from here: the admin document ([`Self::apply_doc`]) and scoped
-/// documents ([`Self::apply_scope`]). Plus the controlled capabilities a
-/// wallet needs: execution through the account, full document reads,
-/// recovery cancellation, and delayed upgrades.
+/// The doc-only smart account surface: documents are the only write path
+/// for authorization data, the admin document ([`Self::apply_doc`]) and
+/// scoped documents ([`Self::apply_scope`]). Plus the controlled
+/// capabilities a wallet needs: execution through the account, full
+/// document reads, recovery cancellation, and delayed upgrades.
 #[contracttrait]
-pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
+pub trait PerchSmartAccount: CustomAccountInterface {
     /// Apply the admin document and return its `doc_hash`. Owner
     /// authorization, or the recovery rule for a completion. Refuses
     /// `StaleRevision` unless the account is at `expected_revision`, if given.
@@ -595,7 +613,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
             doc_json,
             approval_valid_until,
             expected_revision,
-            rules::Mode::Cheapest,
+            rules::Mode::Delta,
         )
     }
 
@@ -894,7 +912,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         });
     }
 
-    /// Every context rule the admin document installed, with its OZ id.
+    /// Every context rule the admin document installed, with its id.
     fn installed_rules(e: &Env) -> Vec<InstalledRule> {
         PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e))
     }
@@ -906,15 +924,30 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e))
     }
 
-    /// OZ's count of context rules, scoped and expired ones included.
+    /// The count of context rules, scoped and expired ones included.
     // docs/account-interface.md, "Views".
     fn get_context_rules_count(e: &Env) -> u32 {
-        smart_account::get_context_rules_count(e)
+        let mut count = PerchStorage::get_installed_rules(e).map_or(0, |r| r.len());
+        for scope in Self::scopes(e, 0, u32::MAX).iter() {
+            count += PerchStorage::get_scopes(e, &scope).map_or(0, |r| r.rules.len());
+        }
+        count
     }
 
-    /// The OZ context rule with this id; panics if there is none.
+    /// The context rule with this id; panics if there is none.
+    // docs/account-interface.md, "Views".
     fn get_context_rule(e: &Env, context_rule_id: u32) -> ContextRule {
-        auth::oz::context_rule(e, smart_account::get_context_rule(e, context_rule_id))
+        let rules = match PerchStorage::get_scope_tags(e, &context_rule_id) {
+            Some(tag) => PerchStorage::get_scopes(e, &tag.scope).map(|r| r.rules),
+            None => PerchStorage::get_installed_rules(e),
+        };
+        match rules.and_then(|r| r.iter().find(|r| r.id == context_rule_id)) {
+            Some(rule) => rule.context_rule(e),
+            None => soroban_sdk::panic_with_error!(
+                e,
+                soroban_sdk::Error::from(SmartAccountError::ContextRuleNotFound)
+            ),
+        }
     }
 
     /// Apply a scoped document under `scope` and return its `doc_hash`. Owner
@@ -1005,11 +1038,13 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 ///   `apply_doc` context on this account selecting the recovery rule) is
 ///   left to OZ's `do_check_auth` and the controller's `enforce` alone, so
 ///   recovery never depends on the evaluator; any other authorization
-///   choosing the recovery rule is refused.
-/// - An account that stores no admin rule set (upgraded from code that kept
-///   none, and not re-applied since) is checked by OZ's `do_check_auth`
-///   over the policies its rules were installed with, until its first
-///   `apply_doc`.
+///   choosing the recovery rule is refused. `do_check_auth` reads the
+///   recovery rule from the two entries of OZ's registry the account keeps
+///   for it (`auth::oz`).
+/// - An account that stores no admin rule set is checked by OZ's
+///   `do_check_auth` over OZ's registry. The constructor stores one and
+///   every `apply_doc` replaces it, so only a test leaves an account
+///   without one.
 pub fn check_auth(
     e: &Env,
     signature_payload: &Hash<32>,
@@ -1185,7 +1220,7 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
         .map(|r| r.rules.clone())
         .unwrap_or(Vec::new(e));
     let (desired, params) = rules::desired(e, &compiled);
-    let (next, sum) = rules::reconcile(e, &current, &desired, &params, rules::Mode::Cheapest);
+    let (next, sum) = rules::reconcile(e, &current, &desired, &params, rules::Mode::Delta);
     let stored = PerchStorage::get_scope_rule_sets(e, &scope);
     gate::drop_records(e, &current, stored.as_ref(), &next, &rule_set);
 
@@ -1303,11 +1338,10 @@ fn check_unwiped(
     Ok(())
 }
 
-/// Remove `scope`'s rules (their policies uninstall as OZ removes them),
-/// tags, spending records, record, document, and index position.
+/// Remove `scope`'s rules (their tags and spending records with the
+/// record), its document, and its index position.
 fn drop_scope(e: &Env, scope: u32, record: &ScopeRecord) {
     for r in record.rules.iter() {
-        smart_account::remove_context_rule_no_events(e, r.id);
         PerchStorage::remove_scope_tags(e, &r.id);
         gate::drop_record(e, r.id);
     }
@@ -1388,8 +1422,8 @@ fn extend_persistent(e: &Env, f: impl FnOnce(u32)) {
     f(e.storage().max_ttl());
 }
 
-/// `apply_doc`'s body. `mode` is [`rules::Mode::Cheapest`] except in tests
-/// ([`testutils`]), which force one reconciliation path or the full replace.
+/// `apply_doc`'s body. `mode` is [`rules::Mode::Delta`] except in tests
+/// ([`testutils`]), which force the full replace.
 fn apply(
     e: &Env,
     doc_json: Bytes,
@@ -1425,9 +1459,9 @@ fn apply(
         }
     }
 
-    // The recovery gate runs before any context rule is touched: OZ's
-    // `remove_context_rule` swallows a policy's `uninstall` failure, so
-    // only this call can refuse a change.
+    // The recovery gate runs before any context rule is touched, and only
+    // this call can refuse a change: removing the recovery rule calls no
+    // controller hook.
     // Every outcome other than `Unchanged`, on either side of a
     // controller switch, advances the recovery generation (spec §12).
     let old_controller = PerchStorage::get_recovery_controller(e);
@@ -1516,12 +1550,12 @@ fn apply(
 #[cfg(feature = "testutils")]
 pub mod testutils {
     use super::*;
-    pub use crate::rules::{Cost, Mode, PlannedRule, Step};
+    use crate::rules::Mode;
 
-    /// `apply_doc` with every rule removed and re-added, as before the delta
-    /// apply: the oracle the delta is checked against. Everything else
-    /// (compile, revocation, recovery sync, completion effects) is shared
-    /// with `apply_doc`.
+    /// `apply_doc` with every rule removed and added again under a new id:
+    /// the oracle the delta is checked against. Everything else (compile,
+    /// revocation, recovery sync, completion effects) is shared with
+    /// `apply_doc`.
     pub fn apply_doc_full_replace(
         e: &Env,
         doc_json: Bytes,
@@ -1535,17 +1569,6 @@ pub mod testutils {
             expected_revision,
             Mode::FullReplace,
         )
-    }
-
-    /// `apply_doc` with every changed rule reconciled by `mode` rather than
-    /// by the cheaper path: prices each path on its own.
-    pub fn apply_doc_with(
-        e: &Env,
-        doc_json: Bytes,
-        approval_valid_until: u32,
-        mode: Mode,
-    ) -> Result<BytesN<32>, PerchAccountError> {
-        apply(e, doc_json, approval_valid_until, None, mode)
     }
 
     /// Set the scope generation. Run as the account (`env.as_contract`).
@@ -1571,31 +1594,24 @@ pub mod testutils {
         PerchStorage::set_installed_rules(e, rules);
     }
 
-    /// Remove the stored rule set, leaving the account as one upgraded to
-    /// code that keeps it and not re-applied since: `__check_auth` runs OZ's
-    /// `do_check_auth` until the next `apply_doc`. Run as the account
-    /// (`env.as_contract`).
+    /// Remove the stored rule set: `__check_auth` then runs OZ's
+    /// `do_check_auth` over OZ's registry until the next `apply_doc`. Run as
+    /// the account (`env.as_contract`).
     pub fn remove_rule_set(e: &Env) {
         PerchStorage::remove_rule_set(e);
     }
 
-    /// The spending record the account keeps for OZ rule `rule_id`, if
+    /// The id the next installed rule gets: every id below it was given
+    /// once. Run as the account (`env.as_contract`).
+    pub fn next_rule_id(e: &Env) -> u32 {
+        PerchStorage::get_next_rule_id(e).unwrap_or(0)
+    }
+
+    /// The spending record the account keeps for rule `rule_id`, if
     /// rule-eval has charged it since its rule took its cap. Run as the
     /// account (`env.as_contract`).
     pub fn spend_record(e: &Env, rule_id: u32) -> Option<StoredRecord> {
         PerchStorage::get_spend_records(e, &rule_id)
-    }
-
-    /// What applying `doc_json` would do to each rule slot, and what the cost
-    /// model prices it at, without applying it. Run as the account
-    /// (`env.as_contract`).
-    pub fn plan_doc(e: &Env, doc_json: Bytes, mode: Mode) -> Vec<PlannedRule> {
-        let compiled: CompiledDoc =
-            DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
-                .compile_doc(&doc_json);
-        let current = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
-        let (desired, params) = rules::desired(e, &compiled);
-        rules::plan(e, &current, &desired, &params, mode)
     }
 }
 
@@ -1652,32 +1668,36 @@ fn apply_rules(
 /// points, `execute`, the upgrade and recovery-cancel entry points), so the
 /// admin signers hold full owner authority. Every other rule arrives via an
 /// applied, doc-reviewed document.
+///
+/// The signers are held to the install-time limits (`rules::check`) and
+/// refused if two are one key (`auth::check_distinct`), and the rule is
+/// announced as OZ's registry announces one (`ContextRuleAdded`).
 pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
-    let rule = smart_account::add_context_rule(
-        e,
-        &smart_account::ContextRuleType::CallContract(e.current_contract_address()),
-        &String::from_str(e, "admin"),
-        None,
-        &auth::oz::signers(e, admin_signers),
-        &Map::new(e),
-    );
-    PerchStorage::set_installed_rules(
-        e,
-        &Vec::from_array(e, [rules::admin_rule(e, rule.id, admin_signers)]),
-    );
+    let rule = rules::admin_rule(e, rules::allocate(e), admin_signers);
+    rules::check(e, &rule);
+    auth::check_distinct(e, admin_signers);
+    PerchStorage::set_installed_rules(e, &Vec::from_array(e, [rule.clone()]));
     PerchStorage::set_rule_set(e, &Vec::from_array(e, [rule_set::admin(e, admin_signers)]));
     extend_persistent(e, |ttl| {
         PerchStorage::extend_installed_rules_ttl(e, ttl, ttl);
         PerchStorage::extend_rule_set_ttl(e, ttl, ttl);
     });
+    ContextRuleAdded {
+        context_rule_id: rule.id,
+        name: rule.name,
+        context_type: rule.context_type,
+        valid_until: None,
+        signer_ids: rules::positions(e, admin_signers.len()),
+        policy_ids: Vec::new(e),
+    }
+    .publish(e);
 }
 
 /// Expand the full deployable surface for `$ty`: the `CustomAccountInterface`
-/// impl (`__check_auth` → [`check_auth`] → OZ `do_check_auth`), a **non-exported**
-/// `SmartAccount` impl (the mutation entry points don't exist on-chain), and
-/// the exported [`PerchSmartAccount`] trait. Rust cannot put supertrait
-/// items' defaults on a subtrait, so this macro is where that boilerplate
-/// lives — a deployable is a struct, a constructor, and this call.
+/// impl (`__check_auth` → [`check_auth`]) and the exported
+/// [`PerchSmartAccount`] trait. Rust cannot put supertrait items' defaults on
+/// a subtrait, so this macro is where that boilerplate lives — a deployable
+/// is a struct, a constructor, and this call.
 #[macro_export]
 macro_rules! impl_perch_smart_account {
     ($ty:ident) => {
@@ -1686,7 +1706,6 @@ macro_rules! impl_perch_smart_account {
         // identifiers. (These land in the invoking module's namespace —
         // don't import the same names yourself.)
         use $crate::soroban_sdk::auth::CustomAccountInterface;
-        use $crate::stellar_accounts::smart_account::SmartAccount;
         use $crate::PerchSmartAccount;
 
         #[$crate::soroban_sdk::contractimpl]
@@ -1709,10 +1728,6 @@ macro_rules! impl_perch_smart_account {
                 $crate::check_auth(&e, &signature_payload, &signatures, &auth_contexts)
             }
         }
-
-        /// Satisfies the supertrait WITHOUT exporting entry points: OZ's
-        /// mutation surface does not exist on this contract.
-        impl SmartAccount for $ty {}
 
         #[$crate::soroban_sdk::contractimpl(contracttrait)]
         impl PerchSmartAccount for $ty {}

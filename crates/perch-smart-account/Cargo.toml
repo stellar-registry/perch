@@ -13,8 +13,8 @@ doctest = false
 [dependencies]
 soroban-sdk = { workspace = true }
 soroban-sdk-tools = { workspace = true }
-# OZ's context-rule registry (rule ids and signers) and the recovery
-# completion's `do_check_auth`.
+# OZ's `do_check_auth`, which decides a recovery completion over the two
+# registry entries the account keeps for its recovery rule.
 stellar-accounts = { workspace = true }
 # The signer, the `__check_auth` payload, the context rule, and the error
 # codes: the XDR and contract-spec twins of OZ's.

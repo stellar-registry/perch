@@ -39,6 +39,7 @@ use perch_recovery_interface::zk::{ZkAdapterClient, ZkEvidence};
 use perch_recovery_interface::{
     ConfigChange, RecoveryAction, RecoveryStatement, StatementSubject, UpgradeSubject,
 };
+use perch_smart_account::{MAX_NAME_SIZE, MAX_SIGNERS};
 use perch_testkit::delta::raw_entries;
 use perch_testkit::passkey::{auth_entry, SoftPasskey};
 use perch_testkit::FIXTURE_NETWORK;
@@ -57,9 +58,6 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use stellar_accounts::smart_account::{
-    SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
-};
 use support::{strkey, Key, TargetClient};
 
 // ---------------------------------------------------------------------------
@@ -455,18 +453,7 @@ impl World {
     }
 
     fn find_rule(&self, account: &Address, name: &str) -> Option<u32> {
-        let next: u32 = self.env.as_contract(account, || {
-            self.env
-                .storage()
-                .instance()
-                .get(&SmartAccountStorageKey::NextId)
-                .unwrap_or(0)
-        });
-        let client = PerchAccountClient::new(&self.env, account);
-        let wanted = soroban_sdk::String::from_str(&self.env, name);
-        (0..next)
-            .rev()
-            .find(|id| matches!(client.try_get_context_rule(id), Ok(Ok(r)) if r.name == wanted))
+        support::newest_rule(&self.env, account, name)
     }
 
     /// `key`'s passkey authorization of `root` through the rule `rule`.
@@ -1004,7 +991,7 @@ impl World {
     /// The document of `shape` over `keys`, recovery replacing every
     /// signer, with `values` strings in a second argument constraint of the
     /// first rule after `target`, and `pad` bytes spread over the names of
-    /// the rules after `target` (each at most OZ's `MAX_NAME_SIZE`). With `with_recovery`
+    /// the rules after `target` (each at most the account's `MAX_NAME_SIZE`). With `with_recovery`
     /// false: the same document
     /// without its recovery member (a compromise baseline, to which the
     /// target adds the member back).
@@ -1940,7 +1927,7 @@ fn worst_shape() -> Shape {
         both: MAX_DOC_RULES - 2,
         interp: 0,
         plain: 0,
-        fan: (MAX_DOC_SIGNERS as usize).min(OZ_MAX_SIGNERS as usize),
+        fan: (MAX_DOC_SIGNERS as usize).min(MAX_SIGNERS as usize),
         tag: "",
     }
 }

@@ -2,13 +2,12 @@
 //! deploys, and the account type of the perch author that publishes perch's
 //! wasm releases.
 //!
-//! All behavior comes from libraries — OZ evaluation plus
-//! [`perch_smart_account::PerchSmartAccount`], whose `apply_doc` is **the only
-//! way authorization data changes** (parse/compile happens in the shared
-//! stateless `perch-doc-compiler` contract). `SmartAccount` is implemented
-//! but deliberately NOT exported: the piecemeal mutation entry points
-//! (`add_context_rule`, `add_signer`, `add_policy`, …) do not exist on this
-//! contract. Doc-only is structural, not conventional.
+//! All behavior comes from [`perch_smart_account::PerchSmartAccount`], whose
+//! `apply_doc` is **the only way authorization data changes** (parse/compile
+//! happens in the shared stateless `perch-doc-compiler` contract). There is
+//! no piecemeal mutation API: `add_context_rule`, `add_signer`,
+//! `add_policy`, … do not exist on this contract. Doc-only is structural,
+//! not conventional.
 //!
 //! It executes calls as itself (`execute`), serves its full applied document
 //! (`applied_doc`), and upgrades only through the seven-day

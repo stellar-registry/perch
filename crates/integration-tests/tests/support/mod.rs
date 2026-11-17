@@ -13,7 +13,7 @@
 //! - the owner's key and the guardians are [`Key`] stand-ins: custom
 //!   accounts whose `__check_auth` approves until [`Key::deny`] is called.
 //!   The owner signs as `Signer::Delegated(owner)`, so the account's own
-//!   `__check_auth` and OZ rule selection run exactly as on-chain;
+//!   `__check_auth` and its rule selection run exactly as on-chain;
 //! - the ZK adapter is [`MockAdapter`], which accepts a proof only if it is
 //!   [`mock_proof`] of the exact statement digest, enrollment id, and
 //!   nullifier, against a root the enrolled pool knows. Real proofs are the
@@ -52,7 +52,7 @@ use soroban_sdk::{
 use std::cell::Cell;
 use std::format;
 use std::string::String;
-use stellar_accounts::smart_account::{AuthPayload, Signer, SmartAccountStorageKey};
+use stellar_accounts::smart_account::{AuthPayload, Signer};
 
 // ---------------------------------------------------------------------------
 // Stand-in contracts
@@ -419,6 +419,8 @@ pub struct World {
 pub struct Opts {
     /// The account is the full-replace oracle (`perch_testkit::delta`).
     pub oracle: bool,
+    /// The account runs this wasm instead (`oz_differential.rs`).
+    pub account_wasm: Option<&'static [u8]>,
     /// Which compiler sits at the compiler's address.
     pub compiler: TestCompiler,
     /// Every contract the world registers, and every [`World::new_key`],
@@ -538,10 +540,10 @@ pub fn world_with(opts: Opts) -> World {
     let pool = register!(PerchZkPool, ());
     let target = register!(Target, ());
     let admin = vec![&env, Signer::Delegated(owner.clone())];
-    let account = if opts.oracle {
-        register!(perch_testkit::delta::OracleAccount, (admin,))
-    } else {
-        register!(PerchAccount, (admin,))
+    let account = match (opts.oracle, opts.account_wasm) {
+        (true, _) => register!(perch_testkit::delta::OracleAccount, (admin,)),
+        (false, Some(wasm)) => register!(wasm, (admin,)),
+        (false, None) => register!(PerchAccount, (admin,)),
     };
 
     // Enforcing authorization from here on: only explicit entries pass.
@@ -763,19 +765,7 @@ impl World {
     /// it edits in place under its id, but a rule it replaces whole gets a
     /// new one, so ids can move; the newest match wins.
     pub fn rule_id(&self, account: &Address, name: &str) -> u32 {
-        let next: u32 = self.env.as_contract(account, || {
-            self.env
-                .storage()
-                .instance()
-                .get(&SmartAccountStorageKey::NextId)
-                .unwrap_or(0)
-        });
-        let client = PerchAccountClient::new(&self.env, account);
-        let wanted = soroban_sdk::String::from_str(&self.env, name);
-        (0..next)
-            .rev()
-            .find(|id| matches!(client.try_get_context_rule(id), Ok(Ok(r)) if r.name == wanted))
-            .unwrap_or(u32::MAX)
+        newest_rule(&self.env, account, name).unwrap_or(u32::MAX)
     }
 
     // --- account calls -----------------------------------------------------
@@ -1059,4 +1049,23 @@ pub fn err<T: core::fmt::Debug, E: core::fmt::Debug + Clone>(
         Err(Ok(e)) => e,
         other => panic!("expected a contract error, got {other:?}"),
     }
+}
+
+/// The id of `account`'s newest live rule named `name`, from its records:
+/// the admin document's and every scope's.
+pub fn newest_rule(env: &Env, account: &Address, name: &str) -> Option<u32> {
+    let client = PerchAccountClient::new(env, account);
+    let wanted = soroban_sdk::String::from_str(env, name);
+    let mut rules: std::vec::Vec<perch_smart_account::InstalledRule> =
+        client.installed_rules().iter().collect();
+    for scope in client.scopes(&0, &u32::MAX).iter() {
+        if let Some(record) = client.scope(&scope) {
+            rules.extend(record.rules.iter());
+        }
+    }
+    rules
+        .iter()
+        .filter(|r| r.name == wanted)
+        .map(|r| r.id)
+        .max()
 }

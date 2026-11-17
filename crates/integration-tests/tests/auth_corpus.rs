@@ -31,8 +31,8 @@
 //!
 //! After every accepted `apply_doc` step, once the step is recorded, the
 //! applying account's stored rule-eval rule set must equal the lowering of
-//! the applied document's model and the denotation of OZ's rules with the
-//! programs and caps the compiler emits (`perch_testkit::rule_set`). After
+//! the applied document's model and the denotation of its context rules with
+//! the programs and caps the compiler emits (`perch_testkit::rule_set`). After
 //! every accepted step, the account must keep a spending record only for a
 //! rule stored with a cap, and none for a removed rule
 //! (`rule_set::check_records`); what the records hold is in the recorded

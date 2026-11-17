@@ -8,10 +8,10 @@
 //!   code, so the oracle checks the reconcile only.
 //! - [`DocModel::expected_rules`] is the independent check: the rules a
 //!   document grants at the current ledger, computed from the model alone,
-//!   compared with [`live_rules`], the grant read back from OZ's context
-//!   rules and the stored rule-eval rule each one's id selects. It shares no
-//!   code with the compiler or the account, so it catches what the oracle
-//!   cannot.
+//!   compared with [`live_rules`], the grant read back from the account's
+//!   context-rule views and the stored rule-eval rule each one's id selects.
+//!   It shares no code with the compiler or the account, so it catches what
+//!   the oracle cannot.
 //! - [`DocModel`] is a generated policy document. [`DocModel::generate`]
 //!   draws one from bytes, so proptest (shrinking over bytes) and cargo-fuzz
 //!   share one generator. It reaches the document caps, draws signer lists
@@ -34,9 +34,10 @@
 //! - [`storage_state`] reads an account's complete storage from the ledger
 //!   snapshot (its own entries, and every entry the interpreter, spending
 //!   limit, controller, and pool keep for it), renaming the ids that differ
-//!   by history: rule ids become rule names, signer and policy ids become the
-//!   signer or policy. Two accounts whose rules grant the same authorization
-//!   produce equal states.
+//!   by history: rule ids become rule names, and the policy ids of the OZ
+//!   registry entries kept for the recovery rule become the policy. Two
+//!   accounts whose rules grant the same authorization produce equal
+//!   states.
 
 use crate::fixture::AnyKeyVerifier;
 use arbitrary::Unstructured;
@@ -45,7 +46,6 @@ use perch_account_types::{ContextRule, ContextRuleType, Signer};
 use perch_doc_compiler::{PerchDocCompiler, MAX_DOC_RULES, MAX_DOC_SIGNERS};
 use perch_interpreter::PerchInterpreter;
 use perch_recovery::PerchRecovery;
-use perch_smart_account::testutils::{plan_doc, Mode, PlannedRule};
 use perch_smart_account::{infra, InstalledRule, StoredRule};
 use perch_spending_limit::PerchSpendingLimit;
 use soroban_sdk::testutils::EnvTestConfig;
@@ -64,7 +64,7 @@ pub use oracle::{OracleAccount, OracleAccountClient};
 mod oracle {
     #![allow(unused_imports)]
     use perch_account_types::{AuthPayload, ContextRule, Signer};
-    use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
+    use perch_smart_account::testutils::apply_doc_full_replace;
     use perch_smart_account::{
         check_auth, install_admin, AccountCapabilities, AccountConfiguration, FreezeGate,
         InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, ScopeRecord, StoredRule,
@@ -73,7 +73,6 @@ mod oracle {
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;
     use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
-    use stellar_accounts::smart_account::SmartAccount;
 
     /// The perch account with `apply_doc` swapped for the full replace.
     #[contract]
@@ -83,23 +82,6 @@ mod oracle {
     impl OracleAccount {
         pub fn __constructor(e: &Env, admin_signers: Vec<Signer>) {
             install_admin(e, &admin_signers);
-        }
-
-        /// `apply_doc` reconciling every changed rule in place where it can
-        /// (`in_place`) or replacing every changed rule whole: each path on
-        /// its own, so the cost model's price of each can be checked.
-        pub fn apply_doc_forced(
-            e: &Env,
-            doc_json: Bytes,
-            approval_valid_until: u32,
-            in_place: bool,
-        ) -> Result<BytesN<32>, PerchAccountError> {
-            let mode = if in_place {
-                Mode::InPlace
-            } else {
-                Mode::Replace
-            };
-            apply_doc_with(e, doc_json, approval_valid_until, mode)
         }
     }
 
@@ -117,8 +99,6 @@ mod oracle {
             check_auth(&e, &signature_payload, &signatures, &auth_contexts)
         }
     }
-
-    impl SmartAccount for OracleAccount {}
 
     #[contractimpl(contracttrait)]
     impl PerchSmartAccount for OracleAccount {
@@ -839,31 +819,6 @@ impl DeltaWorld {
             .map_err(|e| format!("{e:?}"))
     }
 
-    /// Apply `doc` to the oracle account with every changed rule forced down
-    /// one path (in place where possible, or replaced whole).
-    pub fn apply_forced(&self, doc: &DocModel, in_place: bool) -> Result<BytesN<32>, String> {
-        let bytes = doc.bytes(self);
-        self.env.cost_estimate().budget().reset_unlimited();
-        OracleAccountClient::new(&self.env, &self.oracle)
-            .try_apply_doc_forced(&bytes, &0, &in_place)
-            .map(|r| r.unwrap())
-            .map_err(|e| format!("{e:?}"))
-    }
-
-    /// What applying `doc` to `account` in `mode` would do to each rule slot,
-    /// priced by the cost model, without applying it.
-    pub fn plan(
-        &self,
-        account: &Address,
-        doc: &DocModel,
-        mode: Mode,
-    ) -> soroban_sdk::Vec<PlannedRule> {
-        let bytes = doc.bytes(self);
-        self.env.cost_estimate().budget().reset_unlimited();
-        self.env
-            .as_contract(account, || plan_doc(&self.env, bytes, mode))
-    }
-
     /// The account's rule records.
     pub fn installed(&self, account: &Address) -> soroban_sdk::Vec<InstalledRule> {
         PerchAccountClient::new(&self.env, account).installed_rules()
@@ -876,45 +831,9 @@ impl DeltaWorld {
     }
 }
 
-/// The events the cost model prices: OZ's rule, signer, and policy events,
-/// their registry events, and the spending limit's install and uninstall.
-pub const PRICED_EVENTS: [&str; 15] = [
-    "context_rule_added",
-    "context_rule_removed",
-    "context_rule_meta_updated",
-    "signer_added",
-    "signer_removed",
-    "signer_registered",
-    "signer_deregistered",
-    "policy_added",
-    "policy_removed",
-    "policy_registered",
-    "policy_deregistered",
-    "spending_limit_installed",
-    "spending_limit_uninstalled",
-    // Never emitted by a reconciliation; listed so a stray one is priced
-    // (and so caught) rather than ignored.
-    "spending_limit_changed",
-    "spending_limit_enforced",
-];
-
-/// XDR bytes of the last invocation's events the cost model prices, and of
-/// all its contract events (the host's own figure).
-pub fn event_bytes(env: &Env) -> (u32, u32) {
-    use soroban_sdk::xdr::{Limits, WriteXdr};
-    let mut priced = 0;
-    for e in env.events().all().events().iter() {
-        let ContractEventBody::V0(body) = &e.body;
-        let name = match body.topics.first() {
-            Some(ScVal::Symbol(s)) => s.to_utf8_string_lossy(),
-            _ => String::new(),
-        };
-        if PRICED_EVENTS.contains(&name.as_str()) {
-            priced += e.to_xdr(Limits::none()).unwrap().len() as u32;
-        }
-    }
-    let total = env.cost_estimate().resources().contract_events_size_bytes;
-    (priced, total)
+/// XDR bytes of the last invocation's contract events (the host's figure).
+pub fn event_bytes(env: &Env) -> u32 {
+    env.cost_estimate().resources().contract_events_size_bytes
 }
 
 /// One contract event, rendered.
@@ -1184,7 +1103,8 @@ pub fn storage_state(env: &Env, account: &Address, history: History) -> BTreeMap
                 if let ScVal::ContractInstance(instance) = &d.val {
                     for e in instance.storage.iter().flat_map(|m| m.0.iter()) {
                         let name = render(&e.key, Some(&me));
-                        if ["[NextId]", "[NextSignerId]", "[NextPolicyId]"].contains(&name.as_str())
+                        // The id counter differs by history; ids are renamed.
+                        if name == "NextRuleId"
                             || (history == History::Ignore
                                 && ["RecoveryGeneration", "Revision"].contains(&name.as_str()))
                         {

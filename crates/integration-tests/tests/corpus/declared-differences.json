@@ -69,111 +69,6 @@
     },
     {
       "step": "recovery: completion with the derived target",
-      "cause": "The account keeps a scope generation (instance key ScopeGeneration, absent reads as 0) that advances by one on a completed recovery and on nothing else. The corpus's one completed recovery therefore writes ScopeGeneration = 1 into the account's instance storage. Its outcome, events, authorization failures and every other storage entry are unchanged, and no other step writes the key: the refused completions before and after it, enrollment and removal leave it absent.",
-      "fields": [
-        {
-          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"instance\".val.instance-storage",
-          "recorded": [
-            [
-              "sym:AppliedDoc",
-              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
-            ],
-            [
-              "sym:RecoveryController",
-              "addr:controller"
-            ],
-            [
-              "sym:RecoveryGeneration",
-              "u64:2"
-            ],
-            [
-              "sym:RecoveryRule",
-              "u32:2"
-            ],
-            [
-              "sym:Revision",
-              "u64:2"
-            ],
-            [
-              [
-                "sym:Count"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextId"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextPolicyId"
-              ],
-              "u32:1"
-            ],
-            [
-              [
-                "sym:NextSignerId"
-              ],
-              "u32:2"
-            ]
-          ],
-          "now": [
-            [
-              "sym:AppliedDoc",
-              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
-            ],
-            [
-              "sym:RecoveryController",
-              "addr:controller"
-            ],
-            [
-              "sym:RecoveryGeneration",
-              "u64:2"
-            ],
-            [
-              "sym:RecoveryRule",
-              "u32:2"
-            ],
-            [
-              "sym:Revision",
-              "u64:2"
-            ],
-            [
-              "sym:ScopeGeneration",
-              "u64:1"
-            ],
-            [
-              [
-                "sym:Count"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextId"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextPolicyId"
-              ],
-              "u32:1"
-            ],
-            [
-              [
-                "sym:NextSignerId"
-              ],
-              "u32:2"
-            ]
-          ]
-        }
-      ]
-    },
-    {
-      "step": "recovery: completion with the derived target",
       "cause": "A completed recovery advances the scope generation, which ends every scoped document (apply_scope, docs/recovery/spec.md §7.6), and the account publishes ScopesWiped { gen } as it does: the event's topic is scopes_wiped and its data the new generation, here 1. It comes after the controller's epoch_advanced and recovery_completed and before the account's credential_revoked and doc_applied; every other event of the step is unchanged and in the same order. No other step completes a recovery, so no other step publishes it, and the corpus applies no scoped document.",
       "fields": [
         {
@@ -1893,73 +1788,8 @@
     },
     {
       "step": "policies: owner applies; spending-limit: owner applies a capped rule",
-      "cause": "apply_doc installs a document rule as an OZ context rule with its contract, signers and last ledger and no policy: what it allows, its interpreter program and its cap included, is the stored rule-eval rule beside it (rule_set). So applying a document with constrained or capped rules writes no policy registry entry (PolicyData, PolicyLookup, the instance's NextPolicyId), no interpreter program and no spending-limit window, and the installed-rule records and OZ context rules carry no policy ids. The same document's stored rule set, which records the programs and caps, is checked after every accepted apply_doc step against the lowering of its model and the compiler's programs and caps (perch_testkit::rule_set). Every other entry and every event of these steps is unchanged.",
+      "cause": "apply_doc installs a document rule with its contract, signers and last ledger and no policy: what it allows, its interpreter program and its cap included, is the stored rule-eval rule beside it (rule_set). So applying a document with constrained or capped rules writes no policy registry entry (PolicyData, PolicyLookup), no interpreter program and no spending-limit window, and the installed-rule records carry no policies. The same document's stored rule set, which records the programs and caps, is checked after every accepted apply_doc step against the lowering of its model and the compiler's programs and caps (perch_testkit::rule_set). Every event of these steps is unchanged.",
       "fields": [
-        {
-          "now": [
-            [
-              "sym:AppliedDoc",
-              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
-            ],
-            [
-              "sym:Revision",
-              "u64:1"
-            ],
-            [
-              [
-                "sym:Count"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextId"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextSignerId"
-              ],
-              "u32:2"
-            ]
-          ],
-          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"instance\".val.instance-storage",
-          "recorded": [
-            [
-              "sym:AppliedDoc",
-              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
-            ],
-            [
-              "sym:Revision",
-              "u64:1"
-            ],
-            [
-              [
-                "sym:Count"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextId"
-              ],
-              "u32:3"
-            ],
-            [
-              [
-                "sym:NextPolicyId"
-              ],
-              "u32:1"
-            ],
-            [
-              [
-                "sym:NextSignerId"
-              ],
-              "u32:2"
-            ]
-          ]
-        },
         {
           "now": [],
           "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\".val[1][3][1]",
@@ -1990,20 +1820,6 @@
                 "addr:interpreter"
               ]
             ]
-          ]
-        },
-        {
-          "now": [],
-          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"].val[2][1]",
-          "recorded": [
-            "u32:0"
-          ]
-        },
-        {
-          "now": [],
-          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"].val[2][1]",
-          "recorded": [
-            "u32:0"
           ]
         },
         {
@@ -2119,71 +1935,6 @@
           }
         },
         {
-          "now": [
-            [
-              "sym:AppliedDoc",
-              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
-            ],
-            [
-              "sym:Revision",
-              "u64:1"
-            ],
-            [
-              [
-                "sym:Count"
-              ],
-              "u32:2"
-            ],
-            [
-              [
-                "sym:NextId"
-              ],
-              "u32:2"
-            ],
-            [
-              [
-                "sym:NextSignerId"
-              ],
-              "u32:1"
-            ]
-          ],
-          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"instance\".val.instance-storage",
-          "recorded": [
-            [
-              "sym:AppliedDoc",
-              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
-            ],
-            [
-              "sym:Revision",
-              "u64:1"
-            ],
-            [
-              [
-                "sym:Count"
-              ],
-              "u32:2"
-            ],
-            [
-              [
-                "sym:NextId"
-              ],
-              "u32:2"
-            ],
-            [
-              [
-                "sym:NextPolicyId"
-              ],
-              "u32:2"
-            ],
-            [
-              [
-                "sym:NextSignerId"
-              ],
-              "u32:1"
-            ]
-          ]
-        },
-        {
           "now": [],
           "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"sym:InstalledRules\".val[1][3][1]",
           "recorded": [
@@ -2207,14 +1958,6 @@
                 "addr:spending_limit"
               ]
             ]
-          ]
-        },
-        {
-          "now": [],
-          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"].val[2][1]",
-          "recorded": [
-            "u32:0",
-            "u32:1"
           ]
         },
         {
@@ -2597,6 +2340,1816 @@
               [
                 "sym:spending_limit",
                 "i128:10"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": "every step that writes the account's instance: its rule-id counter",
+      "cause": "The account allocates rule ids from its own counter (perch-smart-account's rules::allocate), kept in its instance under NextRuleId, and gives the ids OZ's registry gave from NextId: one per rule added, none reused. Its instance storage therefore holds NextRuleId where the recorded build held OZ's Count, NextId and NextSignerId, and NextPolicyId where a step registered a policy; it keeps no rule count (get_context_rules_count counts its records). In the completion with the derived target the instance also holds ScopeGeneration = 1: a completed recovery advances the scope generation (absent reads as 0), and no other step writes the key. Every other instance key and value is as recorded.",
+      "fields": [
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.documents[3 \"owner re-applies the same document\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:15f72aaa1d77664ff82ac28e54924851994fed6cf8740414a696cbf1752f5919"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:15f72aaa1d77664ff82ac28e54924851994fed6cf8740414a696cbf1752f5919"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              "sym:ScopeGeneration",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:3"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:4"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:4"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:3"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "step": "every scenario's setup and every step that adds, edits or removes a rule: OZ's rule and signer registry",
+      "cause": "The account's own records are its rule registry (perch-smart-account's rules.rs): an installed rule is its InstalledRule record, beside the stored rule-eval rule that decides what it allows. The account writes no OZ registry entry for its admin and document rules (ContextRuleData) and no signer or policy registry or lookup entry (SignerData, SignerLookup, PolicyLookup), so the constructor, every apply_doc that adds or edits a rule, and the completion that replaces the owner write none of these, and removing a rule or a signer removes none. Rule ids, every outcome, event and authorization failure, and every entry of the account's own are as recorded.",
+      "fields": [
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.removed",
+          "recorded": [
+            "account Persistent [\"sym:ContextRuleData\",\"u32:1\"]"
+          ],
+          "now": []
+        },
+        {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target2"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:token"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:pay"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                "u32:1049"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:joint"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0",
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:3"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:device"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:7acc72887babc1884ff6978549b27eae679bc9f00e017799275748a53470921e\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.removed",
+          "recorded": [
+            "account Persistent [\"sym:SignerData\",\"u32:0\"]",
+            "account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+            "controller Persistent [\"sym:Authorized\",\"addr:account\"]"
+          ],
+          "now": [
+            "controller Persistent [\"sym:Authorized\",\"addr:account\"]"
+          ]
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1001009,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:new_owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:b086a35dfd3a21a420785ca0a42f4b11939aa9bffd2f39e91fe750aaa005a3c8\"]",
+          "recorded": {
+            "live_until": 1001009,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.removed",
+          "recorded": [
+            "account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+            "account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+            "account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+            "controller Persistent [\"sym:Config\",\"addr:account\"]"
+          ],
+          "now": [
+            "account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+            "account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+            "controller Persistent [\"sym:Config\",\"addr:account\"]"
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:token"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:spend"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0",
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": "recovery and recovery-removal: OZ's entries kept for the recovery rule",
+      "cause": "For the recovery rule the account still writes OZ's ContextRuleData and PolicyData entries, the two OZ's do_check_auth reads to decide a completion (perch-smart-account's auth::oz). It extends them to the network maximum as it extends its own records, where OZ's registry left a new entry at the minimum (live_until 10000999, not 1000999), and it always names the controller under policy id 0, where OZ's registry gave a controller enrolled again after a removal the next id, 1. A completion reads the same rule and controller either way.",
+      "fields": [
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"].live_until",
+          "recorded": 1000999,
+          "now": 10000999
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"].live_until",
+          "recorded": 1000999,
+          "now": 10000999
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"].live_until",
+          "recorded": 1000999,
+          "now": 10000999
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"].live_until",
+          "recorded": 1000999,
+          "now": 10000999
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:3\"].live_until",
+          "recorded": 1000999,
+          "now": 10000999
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:3\"].val[2][1][0]",
+          "recorded": "u32:1",
+          "now": "u32:0"
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:controller"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:controller"
               ]
             ]
           }

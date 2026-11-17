@@ -128,17 +128,13 @@ fn ci_publish_verifiers_is_ci_publish_on_perch_verifiers_with_publish_hash_alone
         // threshold, the is-self author, expiry) but the contract and the
         // functions.
         let ci_rule = stored(&env, ci);
-        let expected = StoredRule {
-            contract: Address::from_str(&env, author.verifiers),
-            functions: StoredFunctions::Only(soroban_sdk::vec![
-                &env,
-                Symbol::new(&env, "publish_hash")
-            ]),
-            ..ci_rule.clone()
-        };
+        let mut expected = ci_rule.clone();
+        expected.0 = Address::from_str(&env, author.verifiers);
+        expected.1 =
+            StoredFunctions::Only(soroban_sdk::vec![&env, Symbol::new(&env, "publish_hash")]);
         assert_eq!(stored(&env, rule), expected, "{}", author.file);
         assert_eq!(
-            ci_rule.functions,
+            ci_rule.1,
             StoredFunctions::Only(soroban_sdk::vec![
                 &env,
                 Symbol::new(&env, "publish"),

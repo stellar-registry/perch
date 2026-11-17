@@ -22,8 +22,12 @@
 //! same local RPN lowering and original root metadata first
 //! (`rpn::check_compiled`).
 //!
-//! Rules are compared as `StoredRule`s, whose conversion from a
-//! `rule_eval::Rule` is one-to-one, so equal mirrors are equal rules.
+//! Rules are compared as `StoredRule`s, each with a signer table of its own
+//! signers alone ([`Mirror`]), whose conversion from a `rule_eval::Rule` is
+//! one-to-one, so equal mirrors are equal rules; the account's stored rules
+//! are read back with its signer table first. The account's table itself
+//! must be the lowering's signers, each once, in the order its rules first
+//! name them.
 //!
 //! [`check_grant`] checks a grant document's stored set the same way: the
 //! lowering is `rule_eval::lower_scoped` of the grant's model under the
@@ -47,6 +51,7 @@ use crate::denote::{denote, Installed};
 use crate::rpn::{self, Policies};
 use perch_account::PerchAccountClient;
 use perch_account_types::ContextRuleType;
+use perch_account_types::Signer;
 use perch_doc_compiler::{CompiledDoc, PerchDocCompilerClient};
 use perch_rule_eval::convert::{address, signers};
 use perch_rule_eval::{doc_of, model_of, StoredRule};
@@ -69,13 +74,46 @@ pub struct Checked {
     pub recovery: bool,
 }
 
-fn mirror(e: &Env, r: &rule_eval::Rule, what: &str) -> Result<StoredRule, String> {
-    StoredRule::from_rule(e, r).ok_or(format!("{what} has no host form"))
+/// A rule as stored on its own: its mirror, with the signer table of its
+/// signers alone.
+type Mirror = (StoredRule, soroban_sdk::Vec<Signer>);
+
+fn mirror(e: &Env, r: &rule_eval::Rule, what: &str) -> Result<Mirror, String> {
+    let mut table = soroban_sdk::Vec::new(e);
+    let rule = StoredRule::from_rule(e, r, &mut table).ok_or(format!("{what} has no host form"))?;
+    Ok((rule, table))
+}
+
+/// `rules`, read back with their signer table `table`, each as stored on its
+/// own.
+fn mirrors(
+    e: &Env,
+    rules: &soroban_sdk::Vec<StoredRule>,
+    table: &soroban_sdk::Vec<Signer>,
+) -> Result<Vec<Mirror>, String> {
+    let mut out = Vec::new();
+    for (i, r) in rules.iter().enumerate() {
+        let rule = r
+            .to_rule(e, table)
+            .ok_or(format!("stored rule {i} does not read back"))?;
+        out.push(mirror(e, &rule, &format!("stored rule {i}"))?);
+    }
+    Ok(out)
+}
+
+/// The signer table the account keeps for `rules`: each signer once, in the
+/// order they first name it.
+fn table_of(e: &Env, rules: &[rule_eval::Rule]) -> Result<soroban_sdk::Vec<Signer>, String> {
+    let mut table = soroban_sdk::Vec::new(e);
+    for (i, r) in rules.iter().enumerate() {
+        StoredRule::from_rule(e, r, &mut table).ok_or(format!("rule {i} has no host form"))?;
+    }
+    Ok(table)
 }
 
 /// The rules the lowering of `account`'s applied document gives, less those
 /// `apply_doc` drops as expired at the current ledger.
-fn lowering(e: &Env, account: &Address, me: &[u8]) -> Result<Vec<StoredRule>, String> {
+fn lowering(e: &Env, account: &Address, me: &[u8]) -> Result<Vec<rule_eval::Rule>, String> {
     let client = PerchAccountClient::new(e, account);
     let Some(canonical) = client.applied_doc() else {
         // The constructor's admin rule.
@@ -95,10 +133,10 @@ fn lowering(e: &Env, account: &Address, me: &[u8]) -> Result<Vec<StoredRule>, St
             auth_root: None,
             generation: None,
         };
-        return Ok(std::vec![mirror(e, &rule, "the admin rule")?]);
+        return Ok(std::vec![rule]);
     };
     let (doc, model) = read_doc(e, &canonical)?;
-    unexpired(e, &rule_eval::lower(&model, me), doc.rules.len())
+    Ok(unexpired(e, rule_eval::lower(&model, me), doc.rules.len()))
 }
 
 /// The canonical document `canonical`, and its model as rule-eval reads it.
@@ -115,22 +153,34 @@ fn read_doc(
     Ok((doc, model))
 }
 
-/// `lowered` less the first `documented` rules whose last ledger has passed,
-/// as stored.
-fn unexpired(
+/// `lowered` less the first `documented` rules whose last ledger has passed.
+fn unexpired(e: &Env, lowered: Vec<rule_eval::Rule>, documented: usize) -> Vec<rule_eval::Rule> {
+    let now = e.ledger().sequence();
+    lowered
+        .into_iter()
+        .enumerate()
+        .filter(|(i, r)| !(*i < documented && r.valid_until.is_some_and(|v| v < now)))
+        .map(|(_, r)| r)
+        .collect()
+}
+
+/// `lowered`, each rule as stored on its own, once the account's signer
+/// table `table` is checked to be theirs.
+fn lowered_mirrors(
     e: &Env,
     lowered: &[rule_eval::Rule],
-    documented: usize,
-) -> Result<Vec<StoredRule>, String> {
-    let now = e.ledger().sequence();
-    let mut out = Vec::new();
-    for (i, r) in lowered.iter().enumerate() {
-        if i < documented && r.valid_until.is_some_and(|v| v < now) {
-            continue;
-        }
-        out.push(mirror(e, r, &format!("lowered rule {i}"))?);
+    table: &soroban_sdk::Vec<Signer>,
+) -> Result<Vec<Mirror>, String> {
+    if table_of(e, lowered)? != *table {
+        return Err(format!(
+            "the signer table {table:?} is not the lowering's signers, each once"
+        ));
     }
-    Ok(out)
+    lowered
+        .iter()
+        .enumerate()
+        .map(|(i, r)| mirror(e, r, &format!("lowered rule {i}")))
+        .collect()
 }
 
 /// The stored rule set of `account` equals both the lowering of its applied
@@ -138,14 +188,15 @@ fn unexpired(
 pub fn check(e: &Env, account: &Address) -> Result<Checked, String> {
     let client = PerchAccountClient::new(e, account);
     let me = address(e, account).ok_or("the account's address")?;
-    let stored: Vec<StoredRule> = client.rule_set().iter().collect();
+    let table = client.rule_signers();
+    let stored = mirrors(e, &client.rule_set(), &table)?;
     let records = client.installed_rules();
     let mut checked = Checked {
         rules: stored.len(),
         ..Checked::default()
     };
 
-    let lowered = lowering(e, account, &me)?;
+    let lowered = lowered_mirrors(e, &lowering(e, account, &me)?, &table)?;
     let attached = match client.applied_doc() {
         Some(d) => Some(attached(e, &d)?),
         None => None,
@@ -184,7 +235,10 @@ pub fn check_grant(e: &Env, account: &Address, grant: u32) -> Result<Checked, St
     let client = PerchAccountClient::new(e, account);
     let me = address(e, account).ok_or("the account's address")?;
     let record = client.grant(&grant).ok_or(format!("no grant {grant}"))?;
-    let stored: Vec<StoredRule> = client.grant_rule_set(&grant).iter().collect();
+    let table = client
+        .grant_signers(&grant)
+        .ok_or(format!("no grant {grant}"))?;
+    let stored = mirrors(e, &client.grant_rule_set(&grant), &table)?;
     let canonical = crate::rebuild::grant_text(e, account, grant)
         .map_err(|x| format!("grant {grant}'s text: {x}"))?;
     let canonical = Bytes::from_slice(e, canonical.as_bytes());
@@ -195,7 +249,7 @@ pub fn check_grant(e: &Env, account: &Address, grant: u32) -> Result<Checked, St
     }
     let lowered = rule_eval::lower_scoped(&model, &me, &excluded, record.gen)
         .map_err(|_| format!("grant {grant}: rule-eval's scoped lowering refuses it"))?;
-    let lowered = unexpired(e, &lowered, doc.rules.len())?;
+    let lowered = lowered_mirrors(e, &unexpired(e, lowered, doc.rules.len()), &table)?;
     let mut checked = Checked {
         rules: stored.len(),
         ..Checked::default()
@@ -221,9 +275,9 @@ pub fn check_grant(e: &Env, account: &Address, grant: u32) -> Result<Checked, St
 fn compare(
     e: &Env,
     account: &Address,
-    stored: &[StoredRule],
+    stored: &[Mirror],
     records: &soroban_sdk::Vec<InstalledRule>,
-    lowered: &[StoredRule],
+    lowered: &[Mirror],
     attached: Option<&[Policies]>,
     generation: Option<u64>,
     checked: &mut Checked,
@@ -318,7 +372,7 @@ fn compare(
             rule
         };
         let denoted = mirror(e, &denoted, &format!("installed rule {i}"))?;
-        if record.auth_root != stored[i].auth_root {
+        if record.auth_root != stored[i].0.auth_root() {
             return Err(format!(
                 "rule {i}: installed record lost its root constraint"
             ));
@@ -382,7 +436,7 @@ pub fn check_records(e: &Env, account: &Address) -> Result<Records, String> {
         let kept = e.as_contract(account, || {
             perch_smart_account::testutils::spend_record(e, r.id)
         });
-        if stored.cap.is_empty() {
+        if stored.cap().is_empty() {
             if kept.is_some() {
                 return Err(format!(
                     "rule {} ({}): no cap, and a spending record",

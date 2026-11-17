@@ -10,7 +10,9 @@
 //!   `quorum <= count`, the `limit` positivity/overflow shape, and the hex
 //!   shapes.
 //! - **the compiler's per-document caps** (`perch_doc_compiler`'s
-//!   `MAX_DOC_SIGNERS` / `MAX_DOC_RULES` / `MAX_RULE_NAME_BYTES`). These are the
+//!   `MAX_DOC_SIGNERS` / `MAX_DOC_RULES` for an account document,
+//!   `MAX_GRANT_SIGNERS` / `MAX_GRANT_RULES` for a grant document, and
+//!   `MAX_RULE_NAME_BYTES`). These are the
 //!   compiler's, not perch-ir's, so they are checked by *constant equality*: the
 //!   generator reads the constant and the committed schema's keyword must equal
 //!   it. Over/under-cap behaviour (where perch-ir's validator still accepts) is
@@ -236,17 +238,39 @@ fn aggregate_caps_track_the_compiler_constants() {
     // either direction (the constant moves, or someone hand-edits the schema)
     // fails here. This is the "constant" half of the source-of-truth guarantee
     // for caps perch-ir's validator does not itself enforce.
+    use perch_doc_compiler::{MAX_DOC_RULES, MAX_DOC_SIGNERS, MAX_GRANT_RULES, MAX_GRANT_SIGNERS};
     let schema = perch_schema::policy_schema();
 
     assert_eq!(
         schema["properties"]["signers"]["maxItems"],
-        json!(perch_doc_compiler::MAX_DOC_SIGNERS),
-        "signers maxItems tracks MAX_DOC_SIGNERS",
+        json!(MAX_DOC_SIGNERS.max(MAX_GRANT_SIGNERS)),
+        "signers maxItems tracks the larger signer cap",
     );
     assert_eq!(
         schema["properties"]["rules"]["maxItems"],
-        json!(perch_doc_compiler::MAX_DOC_RULES),
-        "rules maxItems tracks MAX_DOC_RULES",
+        json!(MAX_DOC_RULES.max(MAX_GRANT_RULES)),
+        "rules maxItems tracks the larger rule cap",
+    );
+    // An account document's caps (`then`) and a grant document's (`else`).
+    assert_eq!(
+        schema["then"]["properties"]["signers"]["maxItems"],
+        json!(MAX_DOC_SIGNERS),
+        "an account document's signers track MAX_DOC_SIGNERS",
+    );
+    assert_eq!(
+        schema["then"]["properties"]["rules"]["maxItems"],
+        json!(MAX_DOC_RULES),
+        "an account document's rules track MAX_DOC_RULES",
+    );
+    assert_eq!(
+        schema["else"]["properties"]["signers"]["maxItems"],
+        json!(MAX_GRANT_SIGNERS),
+        "a grant document's signers track MAX_GRANT_SIGNERS",
+    );
+    assert_eq!(
+        schema["else"]["properties"]["rules"]["maxItems"],
+        json!(MAX_GRANT_RULES),
+        "a grant document's rules track MAX_GRANT_RULES",
     );
     assert_eq!(
         schema["$defs"]["rule"]["properties"]["name"]["maxLength"],

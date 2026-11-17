@@ -97,9 +97,9 @@ order. Line numbers refer to `fork/dev` `fc0fb2b`.
 
 The core reads stored values in `stored.rs`, which is
 `perch_rule_eval::mirror` applied to facade values. It accepts the same
-two layouts (the eight-key legacy rule and the nine-key rule with
-`auth_root`), requires keys in the same order, and refuses the same
-values. The checks' name lists are copies; `perch-integration-tests`
+layout (a rule the tuple of its nine fields, its signers positions in its
+document's signer table, which it reads beside the rules), and refuses the
+same values, the maps earlier builds stored among them. The checks' name lists are copies; `perch-integration-tests`
 checks each copy against its source.
 
 ## What is left to spend

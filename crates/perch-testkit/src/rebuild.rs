@@ -64,6 +64,9 @@ pub struct StoredDoc {
     /// Each signer's `verifier-name`, aligned with `signer_ids` (empty where
     /// it has none), or no entries when no signer has one.
     pub verifier_names: Vec<String>,
+    /// The record's signer table: the signers the stored rules name by
+    /// position.
+    pub signers: Vec<Signer>,
     /// Each rule's name and stored rule, in the record's order.
     pub rules: Vec<(String, StoredRule)>,
 }
@@ -102,6 +105,9 @@ pub fn read(e: &Env, account: &Address, grant: u32) -> Result<Option<StoredDoc>,
     let verifier_names = c
         .grant_verifier_names(&grant)
         .ok_or(format!("grant {grant}: a record and no verifier names"))?;
+    let table = c
+        .grant_signers(&grant)
+        .ok_or(format!("grant {grant}: a record and no signer table"))?;
     Ok(Some(StoredDoc {
         account: account.clone(),
         network: network(e).ok_or("a network no known passphrase hashes to")?,
@@ -114,6 +120,7 @@ pub fn read(e: &Env, account: &Address, grant: u32) -> Result<Option<StoredDoc>,
             .iter()
             .map(|s| utf8(string_bytes(&s)))
             .collect::<Result<_, _>>()?,
+        signers: table.iter().collect(),
         rules: record
             .rules
             .iter()
@@ -129,17 +136,26 @@ fn bytes_vec(b: &Bytes) -> Vec<u8> {
     out
 }
 
+/// The signer at position `at` of the record's table.
+fn signer_at(st: &StoredDoc, at: u32) -> Result<Signer, String> {
+    st.signers
+        .get(at as usize)
+        .cloned()
+        .ok_or(format!("a position {at} past the signer table"))
+}
+
 /// The stored signers in the order the rules first name them.
-fn first_appearance(st: &StoredDoc) -> Vec<Signer> {
+fn first_appearance(st: &StoredDoc) -> Result<Vec<Signer>, String> {
     let mut out: Vec<Signer> = Vec::new();
     for (_, r) in &st.rules {
-        for s in r.signers.iter() {
+        for at in r.signers().iter() {
+            let s = signer_at(st, at)?;
             if !out.contains(&s) {
                 out.push(s);
             }
         }
     }
-    out
+    Ok(out)
 }
 
 fn declaration(id: &str, s: &Signer, verifier_name: Option<&String>) -> SignerDecl {
@@ -184,10 +200,7 @@ fn arg(st: &StoredDoc, c: &StoredCond) -> Result<ArgConstraint, String> {
         StoredCond::ArgIn(i, vs) => {
             let mut values = Vec::new();
             for v in vs.iter() {
-                let StoredVal::String(s) = v else {
-                    return Err(format!("a set holding a non-string {v:?}"));
-                };
-                values.push(utf8(string_bytes(&s))?);
+                values.push(utf8(string_bytes(&v))?);
             }
             (*i, ArgPred::StringIn(StringInPred { values }))
         }
@@ -212,22 +225,25 @@ fn rule(
     decls: &[(SignerDecl, Signer)],
 ) -> Result<Rule, String> {
     let mut ids = Vec::new();
-    for s in rule.signers.iter() {
+    for at in rule.signers().iter() {
+        let s = signer_at(st, at)?;
         let (d, _) = decls
             .iter()
             .find(|(_, x)| *x == s)
             .ok_or("a stored signer with no id")?;
         ids.push(d.id.clone());
     }
-    let principals = if rule.threshold as usize == ids.len() {
+    let threshold = rule.4;
+    let principals = if threshold as usize == ids.len() {
         Principals::all(ids)
     } else {
-        Principals::threshold(ids, rule.threshold)
+        Principals::threshold(ids, threshold)
     };
-    let mut conds: Vec<StoredCond> = rule.conds.iter().collect();
-    let (functions, cap) = match rule.cap.len() {
+    let mut conds: Vec<StoredCond> = rule.2.iter().collect();
+    let caps = rule.cap();
+    let (functions, cap) = match caps.len() {
         0 => (
-            match &rule.functions {
+            match &rule.1 {
                 StoredFunctions::AnyExcept(fs) if fs.is_empty() => None,
                 StoredFunctions::Only(fs) => {
                     Some(fs.iter().map(|f| symbol(e, &f)).collect::<Result<_, _>>()?)
@@ -237,17 +253,12 @@ fn rule(
             None,
         ),
         1 => {
-            let c = rule.cap.get_unchecked(0);
+            let c = caps.get_unchecked(0);
             match conds.pop() {
-                Some(StoredCond::ArgI128AtMost(2, i128::MAX)) if c.amount_arg == 2 => {}
-                other => {
-                    return Err(format!(
-                        "a cap on argument {}, last {other:?}",
-                        c.amount_arg
-                    ))
-                }
+                Some(StoredCond::ArgI128AtMost(2, i128::MAX)) if c.2 == 2 => {}
+                other => return Err(format!("a cap on argument {}, last {other:?}", c.2)),
             }
-            match &rule.functions {
+            match &rule.1 {
                 StoredFunctions::Only(fs)
                     if fs.len() == 1 && symbol(e, &fs.get_unchecked(0))? == "transfer" => {}
                 other => return Err(format!("a capped rule allowing {other:?}")),
@@ -256,8 +267,8 @@ fn rule(
                 Some(std::vec!["transfer".to_string()]),
                 Some(CapConstraint {
                     token: None,
-                    limit: c.limit.to_string(),
-                    period_ledgers: c.period,
+                    limit: c.0.to_string(),
+                    period_ledgers: c.1,
                 }),
             )
         }
@@ -269,7 +280,7 @@ fn rule(
         Some(conds.iter().map(|c| arg(st, c)).collect::<Result<_, _>>()?)
     };
     Ok(Rule {
-        auth_root: match &rule.auth_root {
+        auth_root: match &rule.auth_root() {
             Some(roots) => {
                 if roots.len() != 1 {
                     return Err("malformed auth-root".into());
@@ -283,11 +294,11 @@ fn rule(
             None => None,
         },
         name: name.to_string(),
-        scope: Scope::contract(strkey(&rule.contract)),
+        scope: Scope::contract(strkey(&rule.contract())),
         principals,
         functions,
         args,
-        not_after_ledger: match rule.valid_until {
+        not_after_ledger: match rule.valid_until() {
             Some(v) => Some(v.checked_add(1).ok_or("a last ledger of u32::MAX")?),
             None => None,
         },
@@ -297,7 +308,7 @@ fn rule(
 
 /// The normal-form document `st` is the lowering of.
 pub fn rebuild(e: &Env, st: &StoredDoc) -> Result<PolicyDoc, String> {
-    let signers = first_appearance(st);
+    let signers = first_appearance(st)?;
     if signers.len() != st.signer_ids.len() {
         return Err(format!(
             "{} signer ids for {} stored signers",

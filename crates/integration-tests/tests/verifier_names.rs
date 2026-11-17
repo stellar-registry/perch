@@ -280,7 +280,11 @@ fn a_named_verifier_resolves_and_its_name_is_bound() {
     // The account stores the address the name resolved to.
     assert_eq!(w.apply(&doc), Ok(c.doc_hash.clone()));
     assert_eq!(
-        w.client().rule_set().get_unchecked(0).signers,
+        w.client()
+            .rule_set()
+            .get_unchecked(0)
+            .signers_in(&w.env, &w.client().rule_signers())
+            .unwrap(),
         vec![
             &w.env,
             Signer::External(w.verifier.clone(), pubkey(&w.env, &w.admin_key).into())
@@ -663,11 +667,13 @@ fn the_factory_creates_only_what_an_admin_document_could_hold() {
 
     let passkey = Bytes::from_slice(&env, &SoftPasskey::from_seed([5u8; 32]).key_data());
     let account = factory.create_passkey(&BytesN::from_array(&env, &[1; 32]), &passkey);
+    let client = PerchAccountClient::new(&env, &account);
     assert_eq!(
-        PerchAccountClient::new(&env, &account)
+        client
             .rule_set()
             .get_unchecked(0)
-            .signers,
+            .signers_in(&env, &client.rule_signers())
+            .unwrap(),
         vec![&env, factory.passkey_signer(&passkey)]
     );
 

@@ -170,15 +170,16 @@ impl World {
     /// Install the fixture's ci-publish rule with the ML-DSA key as its ci
     /// signer, last valid at `valid_until`; returns its id.
     fn ci_publish(&self, valid_until: Option<u32>) -> u32 {
+        let signers = vec![&self.env, self.signer()];
         let rule = ci_publish_rule(
             &self.env,
             &self.account,
             &self.registry,
-            vec![&self.env, self.signer()],
+            &signers,
             valid_until,
         );
         self.env.as_contract(&self.account, || {
-            install_rule(&self.env, "ci-publish", &rule)
+            install_rule(&self.env, "ci-publish", &rule, &signers)
         })
     }
 

@@ -260,7 +260,7 @@
     },
     {
       "step": "every scenario's setup and every apply_doc that changes the rule set: the admin rules' records",
-      "cause": "The account keeps the account document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. The views give the shapes they did (installed_rules, rule_set, configuration, get_context_rule). Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included. Exact-root support writes auth_root: void for these unrestricted stored rules; legacy canonical bytes and authorization outcomes are unchanged. The strict decoder still accepts their exact old eight-field layout.",
+      "cause": "The account keeps the account document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. installed_rules, configuration and get_context_rule give the shapes they did; rule_set gives the stored rules as stored, their signers positions in rule_signers. Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included. The entry is the tuple of a signer table (each signer the rules name, once, in the order they first name it) and the records; each record and its stored rule is a tuple (snapshot 3), the stored rule naming its signers by position in the table and holding a void root for these unrestricted rules. Legacy canonical bytes and authorization outcomes are unchanged. The account reads only this layout.",
       "fields": [
         {
           "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
@@ -314,64 +314,30 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
                 [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -469,127 +435,51 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:target"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:contract",
-                      "addr:target"
+                      "u32:0"
                     ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -687,127 +577,51 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:2"
-                ],
-                [
-                  "sym:name",
-                  "str:target2"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:2",
+                  "str:target2",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:contract",
-                      "addr:target"
+                      "u32:0"
                     ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -867,64 +681,30 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
                 [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -1086,215 +866,98 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
+                  "sym:Delegated",
+                  "addr:owner"
                 ],
                 [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:device"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:pay"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:pay",
+                  [],
+                  [
+                    "addr:token",
+                    [
+                      "sym:Only",
                       [
+                        "sym:transfer"
+                      ]
+                    ],
+                    [
+                      [
+                        "sym:ArgEq",
+                        "u32:0",
                         [
-                          "sym:ArgEq",
-                          "u32:0",
-                          [
-                            "sym:Address",
-                            "addr:account"
-                          ]
-                        ],
+                          "sym:Address",
+                          "addr:account"
+                        ]
+                      ],
+                      [
+                        "sym:ArgEq",
+                        "u32:1",
                         [
-                          "sym:ArgEq",
-                          "u32:1",
-                          [
-                            "sym:Address",
-                            "addr:payee"
-                          ]
+                          "sym:Address",
+                          "addr:payee"
                         ]
                       ]
                     ],
                     [
-                      "sym:contract",
-                      "addr:token"
+                      "u32:0"
                     ],
+                    "u32:1",
+                    [],
+                    "u32:1049",
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:2",
+                  "str:joint",
+                  [],
+                  [
+                    "addr:target",
                     [
-                      "sym:functions",
+                      "sym:Only",
                       [
-                        "sym:Only",
-                        [
-                          "sym:transfer"
-                        ]
+                        "sym:protected"
                       ]
                     ],
+                    [],
                     [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
+                      "u32:0",
                       "u32:1"
                     ],
-                    [
-                      "sym:valid_until",
-                      "u32:1049"
-                    ]
-                  ]
-                ]
-              ],
-              [
-                [
-                  "sym:id",
-                  "u32:2"
-                ],
-                [
-                  "sym:name",
-                  "str:joint"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:target"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:Only",
-                        [
-                          "sym:protected"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ],
-                        [
-                          "sym:Delegated",
-                          "addr:device"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:2"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:2",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -1354,64 +1017,30 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
                 [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -1553,141 +1182,56 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:target"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:target"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
-                ]
-              ],
-              [
-                [
-                  "sym:id",
-                  "u32:2"
                 ],
                 [
-                  "sym:name",
-                  "str:recovery"
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
                 ],
                 [
-                  "sym:policies",
+                  "u32:2",
+                  "str:recovery",
                   [
                     [
                       [
@@ -1699,52 +1243,22 @@
                         "addr:controller"
                       ]
                     ]
-                  ]
-                ],
-                [
-                  "sym:rule",
+                  ],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
+                      "sym:Only",
                       [
-                        "sym:Only",
-                        [
-                          "sym:apply_doc"
-                        ]
+                        "sym:apply_doc"
                       ]
                     ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      []
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:0"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -1886,141 +1400,56 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:new_owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:new_owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:target"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:target"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:new_owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
-                ]
-              ],
-              [
-                [
-                  "sym:id",
-                  "u32:2"
                 ],
                 [
-                  "sym:name",
-                  "str:recovery"
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
                 ],
                 [
-                  "sym:policies",
+                  "u32:2",
+                  "str:recovery",
                   [
                     [
                       [
@@ -2032,52 +1461,22 @@
                         "addr:controller"
                       ]
                     ]
-                  ]
-                ],
-                [
-                  "sym:rule",
+                  ],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
+                      "sym:Only",
                       [
-                        "sym:Only",
-                        [
-                          "sym:apply_doc"
-                        ]
+                        "sym:apply_doc"
                       ]
                     ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      []
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:0"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -2137,64 +1536,30 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
                 [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -2336,141 +1701,56 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:target"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:target"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
-                ]
-              ],
-              [
-                [
-                  "sym:id",
-                  "u32:2"
                 ],
                 [
-                  "sym:name",
-                  "str:recovery"
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
                 ],
                 [
-                  "sym:policies",
+                  "u32:2",
+                  "str:recovery",
                   [
                     [
                       [
@@ -2482,52 +1762,22 @@
                         "addr:controller"
                       ]
                     ]
-                  ]
-                ],
-                [
-                  "sym:rule",
+                  ],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
+                      "sym:Only",
                       [
-                        "sym:Only",
-                        [
-                          "sym:apply_doc"
-                        ]
+                        "sym:apply_doc"
                       ]
                     ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      []
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:0"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -2625,127 +1875,51 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:target"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:contract",
-                      "addr:target"
+                      "u32:0"
                     ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -2887,141 +2061,56 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:target"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:target"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
-                ]
-              ],
-              [
-                [
-                  "sym:id",
-                  "u32:3"
                 ],
                 [
-                  "sym:name",
-                  "str:recovery"
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
                 ],
                 [
-                  "sym:policies",
+                  "u32:3",
+                  "str:recovery",
                   [
                     [
                       [
@@ -3033,52 +2122,22 @@
                         "addr:controller"
                       ]
                     ]
-                  ]
-                ],
-                [
-                  "sym:rule",
+                  ],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
+                      "sym:Only",
                       [
-                        "sym:Only",
-                        [
-                          "sym:apply_doc"
-                        ]
+                        "sym:apply_doc"
                       ]
                     ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      []
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:0"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -3138,64 +2197,30 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
                 [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -3293,127 +2318,51 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:target"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:contract",
-                      "addr:target"
+                      "u32:0"
                     ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -3473,64 +2422,30 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
                 [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
+                      "sym:AnyExcept",
                       []
                     ],
+                    [],
                     [
-                      "sym:conds",
-                      []
+                      "u32:0"
                     ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]
@@ -3649,150 +2564,65 @@
             "val": [
               [
                 [
-                  "sym:id",
-                  "u32:0"
-                ],
-                [
-                  "sym:name",
-                  "str:admin"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
-                  [
-                    [
-                      "sym:auth_root",
-                      null
-                    ],
-                    [
-                      "sym:cap",
-                      []
-                    ],
-                    [
-                      "sym:conds",
-                      []
-                    ],
-                    [
-                      "sym:contract",
-                      "addr:account"
-                    ],
-                    [
-                      "sym:functions",
-                      [
-                        "sym:AnyExcept",
-                        []
-                      ]
-                    ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
-                  ]
+                  "sym:Delegated",
+                  "addr:owner"
                 ]
               ],
               [
                 [
-                  "sym:id",
-                  "u32:1"
-                ],
-                [
-                  "sym:name",
-                  "str:spend"
-                ],
-                [
-                  "sym:policies",
-                  []
-                ],
-                [
-                  "sym:rule",
+                  "u32:0",
+                  "str:admin",
+                  [],
                   [
+                    "addr:account",
                     [
-                      "sym:auth_root",
-                      null
+                      "sym:AnyExcept",
+                      []
                     ],
+                    [],
                     [
-                      "sym:cap",
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:spend",
+                  [],
+                  [
+                    "addr:token",
+                    [
+                      "sym:Only",
                       [
-                        [
-                          [
-                            "sym:amount_arg",
-                            "u32:2"
-                          ],
-                          [
-                            "sym:limit",
-                            "i128:10"
-                          ],
-                          [
-                            "sym:period",
-                            "u32:100"
-                          ]
-                        ]
+                        "sym:transfer"
                       ]
                     ],
                     [
-                      "sym:conds",
                       [
-                        [
-                          "sym:ArgI128AtMost",
-                          "u32:2",
-                          "i128:170141183460469231731687303715884105727"
-                        ]
+                        "sym:ArgI128AtMost",
+                        "u32:2",
+                        "i128:170141183460469231731687303715884105727"
                       ]
                     ],
                     [
-                      "sym:contract",
-                      "addr:token"
+                      "u32:0"
                     ],
+                    "u32:1",
                     [
-                      "sym:functions",
                       [
-                        "sym:Only",
-                        [
-                          "sym:transfer"
-                        ]
+                        "i128:10",
+                        "u32:100",
+                        "u32:2"
                       ]
                     ],
-                    [
-                      "sym:generation",
-                      null
-                    ],
-                    [
-                      "sym:signers",
-                      [
-                        [
-                          "sym:Delegated",
-                          "addr:owner"
-                        ]
-                      ]
-                    ],
-                    [
-                      "sym:threshold",
-                      "u32:1"
-                    ],
-                    [
-                      "sym:valid_until",
-                      null
-                    ]
+                    null,
+                    null,
+                    null
                   ]
                 ]
               ]

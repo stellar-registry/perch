@@ -1,7 +1,9 @@
 //! Every mirror round-trips: a rule-eval value converted to its
 //! `#[contracttype]` mirror and back is the same value, the mirror survives
 //! the host's XDR, and a conversion refuses exactly the values with no host
-//! form.
+//! form, and an `ArgIn` of anything but strings (the one form a document's
+//! `string-in` lowers to). A stored rule's signers are positions in a signer
+//! table, which a round trip rebuilds.
 //!
 //! The values are hand-written to hold every constructor, then drawn by a
 //! seeded generator over the same pools.
@@ -131,7 +133,7 @@ fn gen_cond(r: &mut Rng, p: &Pools) -> Cond {
     match r.below(4) {
         0 => Cond::ArgEq(i, gen_val(r, p)),
         1 => Cond::ArgI128AtMost(i, r.pick(&[i128::MIN, 0, i128::MAX])),
-        2 => Cond::ArgIn(i, r.list(3, |r| gen_val(r, p))),
+        2 => Cond::ArgIn(i, r.list(3, |r| Val::String(r.pick(&p.strings)))),
         _ => Cond::ArgStrPrefix(i, r.pick(&p.strings)),
     }
 }
@@ -162,7 +164,8 @@ fn gen_rule(r: &mut Rng, p: &Pools) -> Rule {
     }
 }
 
-/// A rule holding every value constructor, both signer kinds and a cap.
+/// A rule holding every value constructor (one equality each), both signer
+/// kinds and a cap.
 fn sample(p: &Pools) -> Rule {
     Rule {
         contract: p.addresses[4].clone(),
@@ -171,19 +174,20 @@ fn sample(p: &Pools) -> Rule {
             Cond::ArgIn(
                 0,
                 vec![
-                    Val::I128(-1),
-                    Val::U64(1),
-                    Val::Bool(true),
-                    Val::Bytes(p.keys[3].clone()),
-                    Val::Address(p.addresses[5].clone()),
-                    Val::Symbol(p.names[4].clone()),
                     Val::String(p.strings[2].clone()),
-                    Val::Other(p.others[3].clone()),
+                    Val::String(p.strings[1].clone()),
                 ],
             ),
             Cond::ArgStrPrefix(1, vec![]),
             Cond::ArgI128AtMost(2, i128::MAX),
             Cond::ArgEq(3, Val::Other(p.others[4].clone())),
+            Cond::ArgEq(4, Val::I128(-1)),
+            Cond::ArgEq(5, Val::U64(1)),
+            Cond::ArgEq(6, Val::Bool(true)),
+            Cond::ArgEq(7, Val::Bytes(p.keys[3].clone())),
+            Cond::ArgEq(8, Val::Address(p.addresses[5].clone())),
+            Cond::ArgEq(9, Val::Symbol(p.names[4].clone())),
+            Cond::ArgEq(10, Val::String(p.strings[2].clone())),
         ],
         signers: vec![
             Signer::Delegated(p.addresses[0].clone()),
@@ -227,18 +231,22 @@ fn every_rule_round_trips_through_its_mirror_and_the_host() {
     // budget of one `Env`.
     e.cost_estimate().budget().reset_unlimited();
     for (i, r) in rules(&e, 400).iter().enumerate() {
-        let s = StoredRule::from_rule(&e, r).unwrap_or_else(|| panic!("rule {i}: no mirror"));
+        let mut table = SVec::new(&e);
+        let s = StoredRule::from_rule(&e, r, &mut table)
+            .unwrap_or_else(|| panic!("rule {i}: no mirror"));
         assert!(
-            rules_eq(&[s.to_rule(&e).unwrap()], std::slice::from_ref(r)),
+            rules_eq(&[s.to_rule(&e, &table).unwrap()], std::slice::from_ref(r)),
             "rule {i}: rule -> mirror -> rule changed it"
         );
         let back = xdr_round_trip(&e, &s);
         assert_eq!(back, s, "rule {i}: the mirror's XDR round trip changed it");
+        let mut again = SVec::new(&e);
         assert_eq!(
-            StoredRule::from_rule(&e, &back.to_rule(&e).unwrap()),
+            StoredRule::from_rule(&e, &back.to_rule(&e, &table).unwrap(), &mut again),
             Some(s),
             "rule {i}: mirror -> rule -> mirror changed it"
         );
+        assert_eq!(again, table, "rule {i}: the signer table changed");
     }
 }
 
@@ -253,10 +261,11 @@ fn a_mirror_is_the_contracttype_of_its_fields() {
     let p = pools(&e);
     let a = |x: &[u8]| host_address(&e, x).expect("an address");
     let b = |x: &[u8]| Bytes::from_slice(&e, x);
-    let expected = StoredRule {
-        contract: a(&p.addresses[4]),
-        functions: StoredFunctions::AnyExcept(SVec::new(&e)),
-        conds: SVec::from_array(
+    let val_eq = |i: u32, v: StoredVal| StoredCond::ArgEq(i, v);
+    let expected = StoredRule(
+        a(&p.addresses[4]),
+        StoredFunctions::AnyExcept(SVec::new(&e)),
+        SVec::from_array(
             &e,
             [
                 StoredCond::ArgIn(
@@ -264,48 +273,53 @@ fn a_mirror_is_the_contracttype_of_its_fields() {
                     SVec::from_array(
                         &e,
                         [
-                            StoredVal::I128(-1),
-                            StoredVal::U64(1),
-                            StoredVal::Bool(true),
-                            StoredVal::Bytes(b(&p.keys[3])),
-                            StoredVal::Address(a(&p.addresses[5])),
-                            StoredVal::Symbol(Symbol::new(&e, "a_name_of_exactly_32_bytes_here_")),
-                            StoredVal::String(SString::from_bytes(&e, &p.strings[2])),
-                            StoredVal::Other(b(&p.others[3])),
+                            SString::from_bytes(&e, &p.strings[2]),
+                            SString::from_bytes(&e, &p.strings[1]),
                         ],
                     ),
                 ),
                 StoredCond::ArgStrPrefix(1, SString::from_bytes(&e, b"")),
                 StoredCond::ArgI128AtMost(2, i128::MAX),
-                StoredCond::ArgEq(3, StoredVal::Other(b(&p.others[4]))),
+                val_eq(3, StoredVal::Other(b(&p.others[4]))),
+                val_eq(4, StoredVal::I128(-1)),
+                val_eq(5, StoredVal::U64(1)),
+                val_eq(6, StoredVal::Bool(true)),
+                val_eq(7, StoredVal::Bytes(b(&p.keys[3]))),
+                val_eq(8, StoredVal::Address(a(&p.addresses[5]))),
+                val_eq(
+                    9,
+                    StoredVal::Symbol(Symbol::new(&e, "a_name_of_exactly_32_bytes_here_")),
+                ),
+                val_eq(
+                    10,
+                    StoredVal::String(SString::from_bytes(&e, &p.strings[2])),
+                ),
             ],
         ),
-        signers: SVec::from_array(
-            &e,
-            [
-                HostSigner::Delegated(a(&p.addresses[0])),
-                HostSigner::External(a(&p.addresses[5]), Bytes::new(&e)),
-            ],
-        ),
-        threshold: 2,
-        cap: SVec::from_array(
-            &e,
-            [StoredCap {
-                limit: 5,
-                period: 10,
-                amount_arg: 2,
-            }],
-        ),
-        valid_until: Some(9),
-        auth_root: None,
-        generation: Some(3),
-    };
+        SVec::from_array(&e, [0u32, 1]),
+        2,
+        SVec::from_array(&e, [StoredCap(5, 10, 2)]),
+        Some(9),
+        Some(3),
+        None,
+    );
+    let expected_table = SVec::from_array(
+        &e,
+        [
+            HostSigner::Delegated(a(&p.addresses[0])),
+            HostSigner::External(a(&p.addresses[5]), Bytes::new(&e)),
+        ],
+    );
+    let mut table = SVec::new(&e);
     assert_eq!(
-        StoredRule::from_rule(&e, &sample(&p)),
+        StoredRule::from_rule(&e, &sample(&p), &mut table),
         Some(expected.clone())
     );
+    assert_eq!(table, expected_table);
     assert!(rules_eq(
-        &[expected.to_rule(&e).expect("the mirror reads back")],
+        &[expected
+            .to_rule(&e, &expected_table)
+            .expect("the mirror reads back")],
         &[sample(&p)]
     ));
 
@@ -345,7 +359,13 @@ fn a_mirror_is_the_contracttype_of_its_fields() {
 fn a_rule_with_no_host_form_has_no_mirror() {
     let e = Env::default();
     let p = pools(&e);
-    assert!(StoredRule::from_rule(&e, &sample(&p)).is_some());
+    let mirror = |r: &Rule| StoredRule::from_rule(&e, r, &mut SVec::new(&e));
+    assert!(mirror(&sample(&p)).is_some());
+    let r = Rule {
+        conds: vec![Cond::ArgIn(0, vec![Val::String(vec![]), Val::U64(1)])],
+        ..sample(&p)
+    };
+    assert!(mirror(&r).is_none(), "an ArgIn of a non-string");
 
     let contract = p.addresses[0].clone();
     let mut muxed = vec![0, 0, 0, 2];
@@ -365,42 +385,36 @@ fn a_rule_with_no_host_form_has_no_mirror() {
             contract: bad.clone(),
             ..sample(&p)
         };
-        assert!(
-            StoredRule::from_rule(&e, &r).is_none(),
-            "{what}: a contract"
-        );
+        assert!(mirror(&r).is_none(), "{what}: a contract");
         let r = Rule {
             signers: vec![Signer::Delegated(bad.clone())],
             ..sample(&p)
         };
-        assert!(StoredRule::from_rule(&e, &r).is_none(), "{what}: a signer");
+        assert!(mirror(&r).is_none(), "{what}: a signer");
         let r = Rule {
             conds: vec![Cond::ArgEq(0, Val::Address(bad))],
             ..sample(&p)
         };
-        assert!(StoredRule::from_rule(&e, &r).is_none(), "{what}: a value");
+        assert!(mirror(&r).is_none(), "{what}: a value");
     }
     for name in ["a-b", "a_name_of_exactly_33_bytes_here__", "\u{e9}", " "] {
         let r = Rule {
             functions: Functions::Only(vec![name.as_bytes().to_vec()]),
             ..sample(&p)
         };
-        assert!(StoredRule::from_rule(&e, &r).is_none(), "function {name:?}");
+        assert!(mirror(&r).is_none(), "function {name:?}");
         let r = Rule {
             conds: vec![Cond::ArgEq(0, Val::Symbol(name.as_bytes().to_vec()))],
             ..sample(&p)
         };
-        assert!(StoredRule::from_rule(&e, &r).is_none(), "symbol {name:?}");
+        assert!(mirror(&r).is_none(), "symbol {name:?}");
     }
 
-    let mut two_caps = StoredRule::from_rule(&e, &sample(&p)).unwrap();
-    let cap = StoredCap {
-        limit: 1,
-        period: 1,
-        amount_arg: 2,
-    };
-    two_caps.cap = SVec::from_array(&e, [cap.clone(), cap]);
-    assert!(two_caps.to_rule(&e).is_none(), "two caps");
+    let mut table = SVec::new(&e);
+    let mut two_caps = StoredRule::from_rule(&e, &sample(&p), &mut table).unwrap();
+    let cap = StoredCap(1, 1, 2);
+    two_caps.5 = SVec::from_array(&e, [cap.clone(), cap]);
+    assert!(two_caps.to_rule(&e, &table).is_none(), "two caps");
 }
 
 #[test]

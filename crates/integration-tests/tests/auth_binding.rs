@@ -65,19 +65,19 @@ struct Account;
 /// of `target`, stored as an applied document stores a rule.
 fn account_with_rule(env: &Env, signer: &Signer, target: &Address) -> Address {
     let account = env.register(Account, ());
-    let rule = StoredRule {
-        contract: target.clone(),
-        functions: StoredFunctions::AnyExcept(Vec::new(env)),
-        conds: Vec::new(env),
-        signers: vec![env, signer.clone()],
-        threshold: 1,
-        cap: Vec::new(env),
-        valid_until: None,
-        auth_root: None,
-        generation: None,
-    };
+    let rule = StoredRule(
+        target.clone(),
+        StoredFunctions::AnyExcept(Vec::new(env)),
+        Vec::new(env),
+        vec![env, 0u32],
+        1,
+        Vec::new(env),
+        None,
+        None,
+        None,
+    );
     let id = env.as_contract(&account, || {
-        perch_smart_account::testutils::install_rule(env, "r", &rule)
+        perch_smart_account::testutils::install_rule(env, "r", &rule, &vec![env, signer.clone()])
     });
     assert_eq!(id, 0);
     account

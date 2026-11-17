@@ -68,19 +68,26 @@ fn kept(
     Ok(kept)
 }
 
+/// A document's rules as stored: the signer table, each signer once in the
+/// order the rules first name it, and the rules naming their signers by
+/// position in it.
+pub(crate) type Stored = (Vec<Signer>, Vec<StoredRule>);
+
 /// `rules` as stored, every address converted back from `known`.
 fn stored(
     e: &Env,
     rules: &[rule_eval::Rule],
     known: &Addresses,
-) -> Result<Vec<StoredRule>, PerchAccountError> {
+) -> Result<Stored, PerchAccountError> {
+    let mut signers = Vec::new(e);
     let mut out = Vec::new(e);
     for rule in rules {
         out.push_back(
-            StoredRule::from_rule_in(e, rule, known).ok_or(PerchAccountError::ModelInvalid)?,
+            StoredRule::from_rule_in(e, rule, known, &mut signers)
+                .ok_or(PerchAccountError::ModelInvalid)?,
         );
     }
-    Ok(out)
+    Ok((signers, out))
 }
 
 /// The rule set the account document `compiled` asks for on this account, as
@@ -94,10 +101,7 @@ fn stored(
 /// manage the account unconditionally and for good, or the document
 /// declares no such rule as a constraint-free `all` rule (the compiled
 /// document's anti-brick check, `perch_doc_compiler::admin_survives`).
-pub(crate) fn lowered(
-    e: &Env,
-    compiled: &CompiledDoc,
-) -> Result<Vec<StoredRule>, PerchAccountError> {
+pub(crate) fn lowered(e: &Env, compiled: &CompiledDoc) -> Result<Stored, PerchAccountError> {
     let model = model(compiled)?;
     // Every address a lowered rule holds is the account's or one the model
     // names, so the rules convert back to host values by lookup.
@@ -135,7 +139,7 @@ pub(crate) fn lowered_grant(
     compiled: &CompiledDoc,
     excluded: &[Address],
     gen: u64,
-) -> Result<Vec<StoredRule>, PerchAccountError> {
+) -> Result<Stored, PerchAccountError> {
     let model = model(compiled)?;
     let mut known = Addresses::default();
     let me = known
@@ -170,18 +174,19 @@ fn names_refused(d: &rule_eval::Doc) -> bool {
     })
 }
 
-/// The constructor's admin rule, as stored: every function of the account,
-/// no condition, no cap, no last ledger, and every signer required.
+/// The constructor's admin rule, as stored with `signers` as its table:
+/// every function of the account, no condition, no cap, no last ledger, and
+/// every signer required.
 pub(crate) fn admin(e: &Env, signers: &Vec<Signer>) -> StoredRule {
-    StoredRule {
-        auth_root: None,
-        contract: e.current_contract_address(),
-        functions: StoredFunctions::AnyExcept(Vec::new(e)),
-        conds: Vec::new(e),
-        signers: signers.clone(),
-        threshold: signers.len(),
-        cap: Vec::new(e),
-        valid_until: None,
-        generation: None,
-    }
+    StoredRule(
+        e.current_contract_address(),
+        StoredFunctions::AnyExcept(Vec::new(e)),
+        Vec::new(e),
+        crate::rules::positions(e, signers.len()),
+        signers.len(),
+        Vec::new(e),
+        None,
+        None,
+        None,
+    )
 }

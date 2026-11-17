@@ -11,10 +11,12 @@
 //!   the number of verified flags and one byte each (`0` does not verify,
 //!   `1` verifies, `2` assumed; none assumes every signature verifies).
 //! - [`witness`]: `1`, then three `ScVal` XDRs: the parent rules and the
-//!   child rules (each a vector of `StoredRule`) around the steps (a vector
-//!   of [`crate::witness::step`] values): parent, steps, child.
-//! - [`budget`]: `1`, a `StoredRecord` `ScVal`, a `StoredCap` `ScVal`, the
-//!   ledger sequence.
+//!   child rules (each the tuple of a signer table and a vector of
+//!   `StoredRule` naming signers by position in it, as `grant_signers` and
+//!   `grant_rule_set` give them) around the steps (a vector of
+//!   [`crate::witness::step`] values): parent, steps, child.
+//! - [`budget`]: `1`, a `StoredRecord` `ScVal`, a `StoredCap` `ScVal` (the
+//!   tuple of its limit, period and amount argument), the ledger sequence.
 //! - [`chosen`]: `1` and a `SorobanAuthorizationEntry` XDR: the account and
 //!   the rule ids its payload chooses, which name the ledger entries to
 //!   fetch (`Snapshot::keys`).
@@ -24,7 +26,7 @@ use alloc::vec::Vec;
 use soroban_facade::xdr::decode;
 
 use crate::snapshot::Unreadable;
-use crate::stored::{each, fields, i128_of, u32_of};
+use crate::stored::each;
 use crate::xdr::R;
 use crate::{json, Verified};
 
@@ -90,7 +92,7 @@ pub fn witness(input: &[u8]) -> Vec<u8> {
     let parse = || {
         let mut r = R::new(input);
         version(&mut r)?;
-        let rules = |b: &[u8]| each(&decode(b)?, crate::stored::rule);
+        let rules = |b: &[u8]| crate::stored::rules(&decode(b)?);
         let parent = rules(bytes(&mut r)?)?;
         let steps = each(&decode(bytes(&mut r)?)?, crate::witness::step)?;
         let child = rules(bytes(&mut r)?)?;
@@ -111,9 +113,8 @@ pub fn budget(input: &[u8]) -> Vec<u8> {
         let mut r = R::new(input);
         version(&mut r)?;
         let record = crate::stored::record(&decode(bytes(&mut r)?)?)?;
-        let cap = decode(bytes(&mut r)?)?;
-        let [_amount_arg, limit, period] = fields(&cap, [b"amount_arg", b"limit", b"period"])?;
-        let (limit, period) = (i128_of(limit)?, u32_of(period)?);
+        let cap = crate::stored::cap(&decode(bytes(&mut r)?)?)?;
+        let (limit, period) = (cap.limit, cap.period);
         let now = r.u32()?;
         r.done().then_some((record, limit, period, now))
     };

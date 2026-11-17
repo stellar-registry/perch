@@ -73,8 +73,13 @@ fn rule_eval_refused() -> Option<ScError> {
     Some(e.try_into().unwrap())
 }
 
-/// Replace the stored rule of the rule installed as `name` with `f` of it.
-fn restore(w: &World, name: &str, f: impl FnOnce(&mut perch_smart_account::StoredRule)) {
+/// Replace the stored rule of the rule installed as `name` with `f` of it
+/// and the signer table it names its signers in.
+fn restore(
+    w: &World,
+    name: &str,
+    f: impl FnOnce(&mut perch_smart_account::StoredRule, &mut soroban_sdk::Vec<Signer>),
+) {
     let wanted = soroban_sdk::String::from_str(&w.env, name);
     let at = w
         .client()
@@ -83,16 +88,18 @@ fn restore(w: &World, name: &str, f: impl FnOnce(&mut perch_smart_account::Store
         .position(|r| r.name == wanted)
         .expect("the rule is installed") as u32;
     let mut set = w.client().rule_set();
+    let mut table = w.client().rule_signers();
     let mut rule = set.get(at).unwrap();
-    f(&mut rule);
+    f(&mut rule, &mut table);
     set.set(at, rule);
-    w.env.as_contract(&w.account, || set_rule_set(&w.env, &set));
+    w.env
+        .as_contract(&w.account, || set_rule_set(&w.env, &table, &set));
 }
 
 /// The stored rule of `name` asking for one more signer than it has, so
 /// rule-eval allows nothing through it.
 fn tamper(w: &World, name: &str) {
-    restore(w, name, |r| r.threshold = r.signers.len() + 1);
+    restore(w, name, |r, _| r.4 = r.signers().len() + 1);
 }
 
 /// A document: the owner's admin rule, the default `target` rule, and the
@@ -209,9 +216,10 @@ fn the_stored_rule_alone_decides_what_its_oz_rule_allows() {
     // A stored rule that names another signer: the rule's record reads its
     // signers from it, and the signer authorizes.
     let device = Signer::Delegated(w.device.clone());
-    restore(&w, "target", |r| {
-        r.signers.push_back(device);
-        r.threshold = 1;
+    restore(&w, "target", |r, table| {
+        table.push_back(device);
+        r.3.push_back(table.len() - 1);
+        r.4 = 1;
     });
     let rule = w
         .client()
@@ -268,10 +276,12 @@ fn a_recovery_completion_is_left_to_the_controller() {
     let mut set = w.client().rule_set();
     for i in 0..set.len() {
         let mut rule = set.get(i).unwrap();
-        rule.threshold = rule.signers.len() + 1;
+        rule.4 = rule.signers().len() + 1;
         set.set(i, rule);
     }
-    w.env.as_contract(&w.account, || set_rule_set(&w.env, &set));
+    let table = w.client().rule_signers();
+    w.env
+        .as_contract(&w.account, || set_rule_set(&w.env, &table, &set));
     assert!(!w.activity());
 
     let new_owner = w.new_key();
@@ -382,11 +392,12 @@ fn a_capped_grant_is_charged_by_rule_eval_and_its_record_leaves_with_its_grant()
 
     // A grant rule whose stored rule allows less is refused by rule-eval.
     let mut set = w.client().grant_rule_set(&3);
+    let table = w.client().grant_signers(&3).unwrap();
     let mut rule = set.get(0).unwrap();
-    rule.threshold = 2;
+    rule.4 = 2;
     set.set(0, rule);
     w.env
-        .as_contract(&w.account, || set_grant_rule_set(&w.env, 3, &set));
+        .as_contract(&w.account, || set_grant_rule_set(&w.env, 3, &table, &set));
     assert!(!spend(&w, &token, &app, id, 1));
     assert_eq!(refusal(&w), rule_eval_refused());
 

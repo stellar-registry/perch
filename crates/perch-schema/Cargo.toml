@@ -26,7 +26,8 @@ path = "src/bin/perch-schema-gen.rs"
 # shape checks, so the schema and the validator cannot silently diverge.
 perch-ir = { workspace = true }
 # The compiler's per-document caps (MAX_DOC_SIGNERS, MAX_DOC_RULES,
-# MAX_RULE_NAME_BYTES) are plain `pub const u32`s; the generator reads them so
+# MAX_GRANT_SIGNERS, MAX_GRANT_RULES, MAX_RULE_NAME_BYTES) are plain
+# `pub const u32`s; the generator reads them so
 # the schema's maxItems/maxLength track the one place the compiler declares
 # them. `default-features = false` drops the on-chain parser/compiler
 # (perch-ir/perch-compile/hex, all gated behind the crate's `contract`

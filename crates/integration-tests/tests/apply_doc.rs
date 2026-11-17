@@ -56,23 +56,25 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     // functions and argument conditions are the stored rule-eval rule's.
     assert_eq!(ci.policies.len(), 0);
     let stored = client.rule_set().get_unchecked(1);
-    assert!(!stored.conds.is_empty());
+    assert!(!stored.2.is_empty());
     // `not-after-ledger: 55000000` (exclusive) lowers to OZ's inclusive
     // last-valid ledger.
     assert_eq!(ci.valid_until, Some(54_999_999));
-    assert_eq!(stored.valid_until, Some(54_999_999));
+    assert_eq!(stored.valid_until(), Some(54_999_999));
     // What the suites that install the rule directly
-    // (`perch_testkit::ci_publish_rule`) hold.
-    assert_eq!(
-        stored,
-        ci_publish_rule(
-            &w.env,
-            &w.account,
-            &Address::from_str(&w.env, FIXTURE_REGISTRY),
-            ci.signers.clone(),
-            Some(54_999_999),
-        )
+    // (`perch_testkit::ci_publish_rule`) hold, its signers at their
+    // positions in the account's table.
+    let table = client.rule_signers();
+    assert_eq!(stored.signers_in(&w.env, &table).unwrap(), ci.signers);
+    let mut expected = ci_publish_rule(
+        &w.env,
+        &w.account,
+        &Address::from_str(&w.env, FIXTURE_REGISTRY),
+        &ci.signers,
+        Some(54_999_999),
     );
+    expected.3 = stored.signers();
+    assert_eq!(stored, expected);
 }
 
 #[test]

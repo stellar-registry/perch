@@ -22,7 +22,7 @@
 use perch_account_types::{AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError};
 use perch_recovery_interface::controller::RecoveryRule;
 use perch_rule_eval::StoredFunctions;
-use perch_smart_account::{InstalledPolicy, RuleRecord, StoredRule};
+use perch_smart_account::{InstalledPolicy, RuleRecord, RuleSet, StoredRule};
 use soroban_sdk::auth::{Context, ContractContext, CreateContractHostFnContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::xdr::ToXdr;
@@ -139,40 +139,45 @@ fn world(valid_until: Option<u32>) -> World {
     env.ledger().with_mut(|l| l.sequence_number = 100);
     let account = env.register(Account, ());
     let controller = env.register(Controller, ());
-    // A rule on the account, with `signers` all required, last valid at
-    // `valid_until`.
-    let rule = |signers: Vec<Signer>, valid_until: Option<u32>| StoredRule {
-        contract: account.clone(),
-        functions: StoredFunctions::AnyExcept(Vec::new(&env)),
-        conds: Vec::new(&env),
-        threshold: signers.len(),
-        signers,
-        cap: Vec::new(&env),
-        valid_until,
-        auth_root: None,
-        generation: None,
+    // A rule on the account, with the signers at `positions` of the
+    // table all required, last valid at `valid_until`.
+    let rule = |positions: Vec<u32>, valid_until: Option<u32>| {
+        StoredRule(
+            account.clone(),
+            StoredFunctions::AnyExcept(Vec::new(&env)),
+            Vec::new(&env),
+            positions.clone(),
+            positions.len(),
+            Vec::new(&env),
+            valid_until,
+            None,
+            None,
+        )
     };
-    let records = vec![
-        &env,
-        RuleRecord {
-            id: ADMIN,
-            name: String::from_str(&env, "admin"),
-            policies: Vec::new(&env),
-            rule: rule(vec![&env, Signer::Delegated(Address::generate(&env))], None),
-        },
-        RuleRecord {
-            id: RECOVERY,
-            name: String::from_str(&env, "recovery"),
-            policies: vec![
-                &env,
-                InstalledPolicy {
-                    policy: controller.clone(),
-                    params: BytesN::from_array(&env, &[3; 32]),
-                },
-            ],
-            rule: rule(Vec::new(&env), valid_until),
-        },
-    ];
+    let records = RuleSet(
+        vec![&env, Signer::Delegated(Address::generate(&env))],
+        vec![
+            &env,
+            RuleRecord(
+                ADMIN,
+                String::from_str(&env, "admin"),
+                Vec::new(&env),
+                rule(vec![&env, 0u32], None),
+            ),
+            RuleRecord(
+                RECOVERY,
+                String::from_str(&env, "recovery"),
+                vec![
+                    &env,
+                    InstalledPolicy {
+                        policy: controller.clone(),
+                        params: BytesN::from_array(&env, &[3; 32]),
+                    },
+                ],
+                rule(Vec::new(&env), valid_until),
+            ),
+        ],
+    );
     env.as_contract(&account, || {
         perch_smart_account::testutils::set_rule_records(&env, &records);
         env.storage()

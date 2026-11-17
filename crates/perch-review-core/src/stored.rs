@@ -3,9 +3,9 @@
 //!
 //! [`rule`] and [`record`] are `perch_rule_eval::mirror::rule` and
 //! `mirror::record` (`crates/perch-rule-eval/src/mirror.rs`) over a value
-//! the facade decoded instead of over the host's XDR: the same layouts (the
-//! eight-key legacy rule and the nine-key rule with `auth_root`), keys in the
-//! same order, the same refusals. A stored value's constructor is told by its
+//! the facade decoded instead of over the host's XDR: the same layouts (a
+//! rule the tuple of its nine fields, its signers positions in its record's
+//! signer table), the same refusals. A stored value's constructor is told by its
 //! field's type, and by its name only between the two that hold bytes, as
 //! `mirror` reads it. The account never reads its stored values any other
 //! way, so a stored value both readings accept means the same rule to both;
@@ -37,15 +37,6 @@ pub(crate) fn fields<'a, const N: usize>(v: &'a Val, keys: [&[u8]; N]) -> Option
         out[i] = x;
     }
     Some(out)
-}
-
-/// The value of the symbol key `name` in a map, if any.
-pub(crate) fn field<'a>(v: &'a Val, name: &[u8]) -> Option<&'a Val> {
-    let Val::Map(entries) = v else { return None };
-    entries
-        .iter()
-        .find(|(k, _)| is_sym(k, name))
-        .map(|(_, x)| x)
 }
 
 /// An enum constructor's name and fields: a vector whose first item is a
@@ -128,60 +119,42 @@ pub(crate) fn each<T>(v: &Val, f: impl Fn(&Val) -> Option<T>) -> Option<Vec<T>> 
     Some(out)
 }
 
-/// A `StoredRule` (`mirror::rule`): `None` for any other value, or one
-/// holding more than one cap.
+/// A `StoredRule` (`mirror::rule`), its signers read from `table`, the
+/// signer table of the record holding it: `None` for any other value, one
+/// holding more than one cap, or one naming a position past the table.
 #[must_use]
-pub fn rule(v: &Val) -> Option<Rule> {
-    let Val::Map(entries) = v else { return None };
-    // Only the exact eight-key layout (no `auth_root` key) has no root.
-    let (auth_root, rest) = match entries.len() {
-        8 => (None, entries.as_slice()),
-        9 => {
-            let (k, root) = &entries[0];
-            if !is_sym(k, b"auth_root") {
-                return None;
-            }
-            (stored_root(root)?, &entries[1..])
-        }
-        _ => return None,
+pub fn rule(v: &Val, table: &[Signer]) -> Option<Rule> {
+    let [contract, functions_v, conds, signers, threshold, caps, valid_until, generation, root] =
+        vec_of(v)?
+    else {
+        return None;
     };
-    let keys: [&[u8]; 8] = [
-        b"cap",
-        b"conds",
-        b"contract",
-        b"functions",
-        b"generation",
-        b"signers",
-        b"threshold",
-        b"valid_until",
-    ];
-    for (i, key) in keys.iter().enumerate() {
-        if !is_sym(&rest[i].0, key) {
-            return None;
-        }
-    }
-    let at = |i: usize| &rest[i].1;
-    let cap = match vec_of(at(0))? {
+    let cap = match vec_of(caps)? {
         [] => None,
         [c] => Some(cap(c)?),
         _ => return None,
     };
     Some(Rule {
+        contract: address(contract)?,
+        functions: functions(functions_v)?,
+        conds: each(conds, cond)?,
+        signers: each(signers, |p| {
+            let at = usize::try_from(u32_of(p)?).ok()?;
+            Some(match table.get(at)? {
+                Signer::Delegated(a) => Signer::Delegated(a.clone()),
+                Signer::External(v, k) => Signer::External(v.clone(), k.clone()),
+            })
+        })?,
+        threshold: u32_of(threshold)?,
         cap,
-        conds: each(at(1), cond)?,
-        contract: address(at(2))?,
-        functions: functions(at(3))?,
-        generation: opt_u64(at(4))?,
-        signers: each(at(5), signer)?,
-        threshold: u32_of(at(6))?,
-        valid_until: opt_u32(at(7))?,
-        auth_root,
+        valid_until: opt_u32(valid_until)?,
+        generation: opt_u64(generation)?,
+        auth_root: stored_root(root)?,
     })
 }
 
-/// The nine-key layout's `auth_root`: `Void`, or a vector of one map of the
-/// root's contract (a contract address) and function (a symbol of 1 to 32
-/// bytes).
+/// A rule's `auth_root`: `Void`, or a vector of one map of the root's
+/// contract (a contract address) and function (a symbol of 1 to 32 bytes).
 fn stored_root(v: &Val) -> Option<Option<AuthRoot>> {
     if matches!(v, Val::Void) {
         return Some(None);
@@ -200,9 +173,11 @@ fn stored_root(v: &Val) -> Option<Option<AuthRoot>> {
     Some(Some(AuthRoot { contract, function }))
 }
 
-/// A `StoredCap`.
-fn cap(v: &Val) -> Option<Cap> {
-    let [amount_arg, limit, period] = fields(v, [b"amount_arg", b"limit", b"period"])?;
+/// A `StoredCap`: the tuple of its limit, period and amount argument.
+pub(crate) fn cap(v: &Val) -> Option<Cap> {
+    let [limit, period, amount_arg] = vec_of(v)? else {
+        return None;
+    };
     Some(Cap {
         limit: i128_of(limit)?,
         period: u32_of(period)?,
@@ -232,7 +207,13 @@ pub(crate) fn cond(v: &Val) -> Option<Cond> {
     Some(match name {
         b"ArgEq" => Cond::ArgEq(i, val(x)?),
         b"ArgI128AtMost" => Cond::ArgI128AtMost(i, i128_of(x)?),
-        b"ArgIn" => Cond::ArgIn(i, each(x, val)?),
+        b"ArgIn" => Cond::ArgIn(
+            i,
+            each(x, |s| match s {
+                Val::String(s) => Some(rule_eval::Val::String(s.clone())),
+                _ => None,
+            })?,
+        ),
         b"ArgStrPrefix" => match x {
             Val::String(p) => Cond::ArgStrPrefix(i, p.clone()),
             _ => return None,
@@ -259,6 +240,24 @@ fn val(v: &Val) -> Option<rule_eval::Val> {
         Val::String(s) => rule_eval::Val::String(s.clone()),
         _ => return None,
     })
+}
+
+/// Stored rules with their signer table: the tuple of the table and a
+/// vector of `StoredRule`, each read with the table.
+pub(crate) fn rules(v: &Val) -> Option<Vec<Rule>> {
+    let [table_v, rules] = vec_of(v)? else {
+        return None;
+    };
+    let table = table(table_v)?;
+    each(rules, |r| rule(r, &table))
+}
+
+/// A signer table: every `perch_account_types::Signer` of a vector, in
+/// order (`None` when one has no rule-eval form, as `convert::signers`
+/// refuses it).
+#[must_use]
+pub fn table(v: &Val) -> Option<Vec<Signer>> {
+    each(v, signer)
 }
 
 /// A `perch_account_types::Signer`.

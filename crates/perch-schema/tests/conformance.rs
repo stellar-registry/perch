@@ -194,6 +194,19 @@ fn doc_with_n_rules(m: u32) -> Value {
     })
 }
 
+/// A grant document (no self-admin rule, no recovery member) with `n`
+/// signers and `m` contract-scoped rules, each rule naming one signer and
+/// every signer named.
+fn grant_doc(n: u32, m: u32) -> Value {
+    let signers: Vec<Value> = (0..n)
+        .map(|i| json!({ "id": format!("s{i}"), "verifier": VALID_C, "key": format!("{i:02x}") }))
+        .collect();
+    let rules: Vec<Value> = (0..m)
+        .map(|i| json!({ "name": format!("r{i}"), "scope": { "type": "contract", "address": VALID_C }, "principals": { "type": "all", "signers": [format!("s{}", i % n)] } }))
+        .collect();
+    json!({ "version": 1, "signers": signers, "rules": rules })
+}
+
 /// A document with one signer and one rule whose name is `len` ASCII bytes.
 fn doc_with_rule_name(len: usize) -> Value {
     json!({
@@ -271,6 +284,70 @@ fn aggregate_caps_are_a_schema_then_compiler_boundary() {
     assert!(
         ir_outcome_of(&over).accepted,
         "perch-ir's validator still accepts an over-cap rule name",
+    );
+}
+
+/// A grant document has its own caps: the schema admits one at
+/// `MAX_GRANT_SIGNERS` and `MAX_GRANT_RULES` and rejects one past either,
+/// while an account document past `MAX_DOC_RULES` or `MAX_DOC_SIGNERS` stays
+/// rejected even within the grant caps.
+#[test]
+fn a_grant_document_has_its_own_caps() {
+    use perch_doc_compiler::{MAX_DOC_RULES, MAX_DOC_SIGNERS, MAX_GRANT_RULES, MAX_GRANT_SIGNERS};
+    let v = validator();
+    let (signers, rules) = (MAX_GRANT_SIGNERS, MAX_GRANT_RULES);
+    for (doc, accepted, what) in [
+        (
+            grant_doc(signers, rules),
+            true,
+            "a grant document at the grant caps",
+        ),
+        (
+            grant_doc(signers + 1, rules),
+            false,
+            "a grant document past the signer cap",
+        ),
+        (
+            grant_doc(signers, rules + 1),
+            false,
+            "a grant document past the rule cap",
+        ),
+    ] {
+        assert_eq!(schema_accepts(&v, &doc), accepted, "{what}");
+        assert!(ir_outcome_of(&doc).accepted, "perch-ir accepts {what}");
+    }
+    const { assert!(MAX_DOC_RULES < MAX_GRANT_RULES && MAX_DOC_SIGNERS < MAX_GRANT_SIGNERS) };
+    for (doc, what) in [
+        (
+            doc_with_n_rules(MAX_DOC_RULES + 1),
+            "an account document past MAX_DOC_RULES",
+        ),
+        (
+            doc_with_n_signers(MAX_DOC_SIGNERS + 1),
+            "an account document past MAX_DOC_SIGNERS",
+        ),
+    ] {
+        assert!(!schema_accepts(&v, &doc), "schema rejects {what}");
+        assert!(ir_outcome_of(&doc).accepted, "perch-ir accepts {what}");
+    }
+    // A recovery member alone makes a document an account document.
+    let mut recovering = grant_doc(MAX_DOC_SIGNERS + 1, 1);
+    let rules: Vec<Value> = (0..=MAX_DOC_SIGNERS)
+        .map(|i| json!({ "name": format!("r{i}"), "scope": { "type": "contract", "address": VALID_C }, "principals": { "type": "all", "signers": [format!("s{i}")] } }))
+        .collect();
+    recovering["rules"] = json!(rules);
+    assert!(
+        schema_accepts(&v, &recovering),
+        "a grant document past MAX_DOC_SIGNERS"
+    );
+    recovering["recovery"] = json!({ "unknown": true });
+    let errors: Vec<String> = v
+        .iter_errors(&recovering)
+        .map(|e| e.instance_path.to_string())
+        .collect();
+    assert!(
+        errors.iter().any(|p| p == "/signers"),
+        "with a recovery member, the account caps apply: {errors:?}"
     );
 }
 

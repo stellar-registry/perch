@@ -1,6 +1,7 @@
 //! A grant document's canonical text rebuilds from what the account keeps
-//! for it (`perch_testkit::rebuild`: each rule's name and stored rule, the
-//! document's signer ids, and each signer's `verifier-name`), and
+//! for it (`perch_testkit::rebuild`: each rule's name and stored rule, its
+//! signer table, the document's signer ids, and each signer's
+//! `verifier-name`), and
 //! `apply_grant` takes no document it would not rebuild:
 //!
 //! - every grant document `apply_grant` accepts rebuilds byte for byte to
@@ -17,7 +18,8 @@
 //!   and writes nothing, and the same document in normal form is accepted;
 //! - `testdata/grant-rebuild/vectors.json` holds what the account keeps for
 //!   the targeted, Nido-shaped and preview grants and the first generated
-//!   ones, with each one's text, as perch-js's `StoredGrant`:
+//!   ones (its signer table, and each rule naming signers by position in
+//!   it), with each one's text, as perch-js's `StoredGrant`:
 //!   `packages/perch-js/test/grant.test.ts` rebuilds each with
 //!   `rebuildGrantDoc`. `PERCH_BLESS=1 cargo test --test grant_rebuild`
 //!   rewrites it; otherwise it must equal what this test computes.
@@ -134,7 +136,7 @@ fn cond(c: &StoredCond) -> J {
             json!({"kind": "argI128AtMost", "index": i, "bound": b.to_string()})
         }
         StoredCond::ArgIn(i, vs) => {
-            json!({"kind": "argIn", "index": i, "values": vs.iter().map(|v| val(&v)).collect::<Vec<_>>()})
+            json!({"kind": "argIn", "index": i, "values": vs.iter().map(|v| text(&v)).collect::<Vec<_>>()})
         }
         StoredCond::ArgStrPrefix(i, p) => {
             json!({"kind": "argStrPrefix", "index": i, "prefix": text(p)})
@@ -152,27 +154,37 @@ fn signer(s: &Signer) -> J {
 }
 
 fn stored_rule(r: &StoredRule) -> J {
-    let (kind, names) = match &r.functions {
+    let StoredRule(
+        contract,
+        functions,
+        conds,
+        signers,
+        threshold,
+        cap,
+        valid_until,
+        generation,
+        root,
+    ) = r;
+    let (kind, names) = match functions {
         StoredFunctions::AnyExcept(fs) => ("anyExcept", fs),
         StoredFunctions::Only(fs) => ("only", fs),
     };
-    let mut out = json!({
-        "contract": strkey(&r.contract),
-        "functions": {"kind": kind, "names": names.iter().map(|f| f.to_string()).collect::<Vec<_>>()},
-        "conds": r.conds.iter().map(|c| cond(&c)).collect::<Vec<_>>(),
-        "signers": r.signers.iter().map(|s| signer(&s)).collect::<Vec<_>>(),
-        "threshold": r.threshold,
-        "cap": r.cap.first().map(|c| json!({"limit": c.limit.to_string(), "period": c.period, "amountArg": c.amount_arg})),
-        "validUntil": r.valid_until,
-        "generation": r.generation.map(|g| g.to_string()),
-    });
-    if let Some(roots) = &r.auth_root {
+    let root = root.as_ref().map(|roots| {
         assert_eq!(roots.len(), 1);
         let root = roots.get_unchecked(0);
-        out["authRoot"] =
-            json!({ "contract": strkey(&root.contract), "function": root.function.to_string() });
-    }
-    out
+        json!({ "contract": strkey(&root.contract), "function": root.function.to_string() })
+    });
+    json!({
+        "contract": strkey(contract),
+        "functions": {"kind": kind, "names": names.iter().map(|f| f.to_string()).collect::<Vec<_>>()},
+        "conds": conds.iter().map(|c| cond(&c)).collect::<Vec<_>>(),
+        "signers": signers.iter().collect::<Vec<u32>>(),
+        "threshold": threshold,
+        "cap": cap.first().map(|c| json!({"limit": c.0.to_string(), "period": c.1, "amountArg": c.2})),
+        "validUntil": valid_until,
+        "generation": generation.map(|g| g.to_string()),
+        "authRoot": root,
+    })
 }
 
 /// One vector: what the account keeps for a grant, as perch-js's
@@ -183,6 +195,7 @@ fn vector(name: &str, st: &StoredDoc, canonical: &str) -> J {
         "account": strkey(&st.account),
         "network": st.network,
         "docHash": hex::encode(st.doc_hash),
+        "signers": st.signers.iter().map(signer).collect::<Vec<_>>(),
         "signerIds": st.signer_ids,
         "verifierNames": st.verifier_names,
         "rules": st.rules.iter().map(|(n, r)| json!({"name": n, "rule": stored_rule(r)})).collect::<Vec<_>>(),

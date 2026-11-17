@@ -31,8 +31,8 @@ use rule_eval::{CapError, Refusal as EvalRefusal, Signer, SpendRecord};
 use soroban_facade::{val_to_rule_eval, Val};
 
 use crate::budget::{remaining, Remaining};
-use crate::snapshot::{Snapshot, Unreadable};
-use crate::stored::{self, field, fields, u32_of, vec_of};
+use crate::snapshot::{Rules, Snapshot, Unreadable};
+use crate::stored::{self, fields, u32_of, vec_of};
 use crate::xdr::Ctx;
 
 /// `perch_recovery_interface::account::RESERVED_INVOKER_ONLY_FNS`
@@ -387,47 +387,47 @@ fn is_completion(recovery: Option<u32>, r: &Request) -> bool {
         if *contract == r.account && function.as_slice() == b"apply_doc")
 }
 
-/// `rule_of` (`gate.rs:185-195`): the `rule` field of the first record whose
-/// `id` is `id`. A record that is not a map of symbol keys, or has no `u32`
-/// id, ends the search with nothing, as the account's read does.
+/// `rule_of` (`gate.rs`): the stored rule (fourth field) of the first
+/// record (the tuple of its id, name, policies and stored rule) whose id is
+/// `id`. A record that is not a vector, or has no `u32` id first, ends the
+/// search with nothing, as the account's read does.
 fn rule_of(records: &[Val], id: u32) -> Option<(&Val, &Val)> {
     for v in records {
-        let Val::Map(entries) = v else { return None };
-        if !entries.iter().all(|(k, _)| matches!(k, Val::Symbol(_))) {
-            return None;
-        }
-        if u32_of(field(v, b"id")?)? == id {
-            return field(v, b"rule").map(|rule| (rule, v));
+        let items = vec_of(v)?;
+        if u32_of(items.first()?)? == id {
+            return items.get(3).map(|rule| (rule, v));
         }
     }
     None
 }
 
-/// A stored rule as `stored_rule` finds it: its grant, its stored value and
-/// its record.
+/// A stored rule as `stored_rule` finds it: its grant, its stored value, its
+/// record, and the signer table its records keep.
 struct Found<'a> {
     grant: Option<u32>,
     rule: &'a Val,
     record: &'a Val,
+    table: &'a Val,
 }
 
 /// The stored rule `id` names and its grant (`stored_rule`, `gate.rs:173-182`).
 fn stored_rule<'a>(
     s: &'a Snapshot,
-    admin: &'a [Val],
+    admin: Rules<'a>,
     id: u32,
 ) -> Result<Option<Found<'a>>, Unreadable> {
-    let (grant, records) = match s.grant_tag(id)? {
+    let (grant, rules) = match s.grant_tag(id)? {
         Some(grant) => match s.grant_rules(grant)? {
             Some(rules) => (Some(grant), rules),
             None => return Ok(None),
         },
         None => (None, admin),
     };
-    Ok(rule_of(records, id).map(|(rule, record)| Found {
+    Ok(rule_of(rules.records, id).map(|(rule, record)| Found {
         grant,
         rule,
         record,
+        table: rules.table,
     }))
 }
 
@@ -537,17 +537,20 @@ fn completion_review(
     // `record` (`auth.rs:151-158`): the rule set's record of the recovery
     // rule, read with its type.
     let mut rule = None;
-    if let Some(records) = s.rule_set()? {
-        for v in records {
-            let [id, _name, policies, stored] =
-                fields(v, [b"id", b"name", b"policies", b"rule"]).ok_or(Unreadable::StoredValue)?;
+    if let Some(rules) = s.rule_set()? {
+        for v in rules.records {
+            let [id, _name, policies, stored] = vec_of(v).ok_or(Unreadable::StoredValue)? else {
+                return Err(Unreadable::StoredValue);
+            };
             if u32_of(id).ok_or(Unreadable::StoredValue)? != recovery {
                 continue;
             }
-            let contract = field(stored, b"contract")
+            let stored = vec_of(stored).ok_or(Unreadable::StoredValue)?;
+            let contract = stored
+                .first()
                 .and_then(stored::address)
                 .ok_or(Unreadable::StoredValue)?;
-            let valid_until = match field(stored, b"valid_until") {
+            let valid_until = match stored.get(6) {
                 Some(Val::Void) => None,
                 Some(Val::U32(v)) => Some(*v),
                 _ => return Err(Unreadable::StoredValue),
@@ -596,7 +599,7 @@ fn completion_review(
 fn review_rules(
     s: &Snapshot,
     r: &Request,
-    admin: &[Val],
+    admin: Rules,
     recovery: Option<u32>,
     mut out: Review,
 ) -> Result<Review, Unreadable> {
@@ -617,7 +620,8 @@ fn review_rules(
                     return Ok(out.refused(Check::RuleNotFound, None, Some(*id)));
                 };
                 // gate.rs:92.
-                let Some(rule) = stored::rule(found.rule) else {
+                let rule = stored::table(found.table).and_then(|t| stored::rule(found.rule, &t));
+                let Some(rule) = rule else {
                     return Ok(out.refused(Check::UnreadableRule, None, Some(*id)));
                 };
                 // gate.rs:93-97, `record` (gate.rs:198-207): absent is empty.
@@ -633,7 +637,7 @@ fn review_rules(
                     grant: found.grant,
                     capped: rule.cap.is_some(),
                     contract: rule.contract.clone(),
-                    name: match field(found.record, b"name") {
+                    name: match vec_of(found.record).and_then(|r| r.get(1)) {
                         Some(Val::String(n)) => Some(n.clone()),
                         _ => None,
                     },

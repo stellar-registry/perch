@@ -134,12 +134,13 @@ impl HostForms for Addresses {
 }
 
 /// Every signer of `list`, in order, or `None` when one has no rule-eval
-/// form.
+/// form or is not a `Signer` at all (a vector converts without reading its
+/// items, so a stored signer table is read here item by item).
 #[must_use]
 pub fn signers(e: &Env, list: &SVec<Signer>) -> Option<Vec<rule_eval::Signer>> {
     let mut out = Vec::new();
-    for s in list.iter() {
-        out.push(signer(e, &s)?);
+    for s in list.try_iter() {
+        out.push(signer(e, &s.ok()?)?);
     }
     Some(out)
 }

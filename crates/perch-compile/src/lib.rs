@@ -11,10 +11,14 @@
 //!   zero-signature authorization. Mechanism: a policy-free rule relies on OZ's
 //!   native all-signers-must-match; an interpreter-attached rule folds
 //!   `MinSigners(n>=1)` into its program.
-//! - **INV-2 (liveness).** A constraint-free rule (no function/arg limits)
-//!   lowers *policy-free*, so it rides OZ's independently audited signer check
-//!   instead of the shared interpreter — a deny-bug in the interpreter can
-//!   never brick an account's admin path.
+//! - **INV-2 (liveness).** The admin rule is the proven exact lowering of a
+//!   constraint-free rule, and completions never depend on the evaluator. A
+//!   constraint-free rule (no function/arg limits) lowers *policy-free*, so
+//!   OZ checks it with its independently audited signer check instead of the
+//!   shared interpreter, and the account's second check runs rule-core's
+//!   lowering of the same rule (`perch-smart-account`'s `gate`). A recovery
+//!   completion is left to OZ and the recovery controller, so no deny-bug in
+//!   the interpreter or the evaluator can keep an account from recovering.
 //!
 //! Rule expiry lowers to OZ's native `valid_until` (a ledger sequence),
 //! enforced before any policy runs; in-program ledger ops are reserved for

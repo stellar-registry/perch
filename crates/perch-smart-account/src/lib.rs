@@ -29,6 +29,12 @@
 //! its recovery, or its guardian approvals at any controller. A recovery
 //! completion wipes every scope at once by advancing a generation that
 //! `__check_auth` checks (`docs/recovery/spec.md` §7.6).
+//!
+//! `__check_auth` evaluates every authorization twice: OZ's `do_check_auth`
+//! over the installed context rules and their policies, then rule-core's
+//! `rule_eval::authorize` over the rule-eval rules the account stores beside
+//! them (`rule_set`, `gate`). Both must accept, except for a recovery
+//! completion, which OZ and the recovery controller decide alone.
 #![no_std]
 
 extern crate alloc;
@@ -47,6 +53,7 @@ use perch_recovery_interface::controller::{
 use perch_recovery_interface::credential::{revocations, Credential};
 use perch_recovery_interface::zk::MembershipPoolClient;
 use perch_recovery_interface::{address_payload, UpgradeSubject};
+use perch_rule_eval::StoredRecord;
 /// The stored rule-eval rule ([`PerchSmartAccount::rule_set`]),
 /// re-exported so a deployable can name it for `impl_perch_smart_account!`.
 pub use perch_rule_eval::StoredRule;
@@ -62,6 +69,7 @@ use stellar_accounts::smart_account::{
     SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD,
 };
 
+mod gate;
 mod rule_set;
 mod rules;
 pub use rules::{InstalledPolicy, InstalledRule};
@@ -191,6 +199,8 @@ pub enum PerchAuthError {
     /// may have been adopted after the scope was applied, or casts a
     /// guardian approval on any contract (spec §7.6).
     ScopeEscalation,
+    /// rule-eval refuses an authorization OZ accepted (`gate`).
+    RuleEvalRefused,
 }
 
 /// What every context rule a scoped document installs is tagged with, by
@@ -532,7 +542,8 @@ struct PerchStorage {
     /// The rule-eval rule set the installed rules enforce, aligned with
     /// `installed_rules` (`rule_set`): written with it by the constructor and
     /// `apply_doc`, absent on an account neither wrote since it was upgraded
-    /// to code that keeps it.
+    /// to code that keeps it, whose `__check_auth` then skips rule-eval
+    /// (`gate`).
     rule_set: PersistentItem<Vec<StoredRule>>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
@@ -548,6 +559,11 @@ struct PerchStorage {
     /// Each scoped document's rule-eval rule set, by scope id, aligned with
     /// its record's rules (`rule_set`).
     scope_rule_sets: PersistentMap<u32, Vec<StoredRule>>,
+    /// What each capped rule has spent in its window, by OZ rule id, as
+    /// rule-eval charges it in `__check_auth` (`gate`). Absent reads as
+    /// nothing spent. Dropped wherever the rule's spending limit is
+    /// uninstalled (`rules`, `drop_scope`), which ends OZ's window too.
+    spend_records: PersistentMap<u32, StoredRecord>,
     /// The tag of every context rule a scoped document installed, by OZ
     /// rule id; none for the admin document's rules. OZ never reuses a rule
     /// id, so a tag never outlives its rule into another.
@@ -955,7 +971,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// The rule-eval rules the installed rules enforce, aligned with
     /// [`Self::installed_rules`]: entry `i` is what installed rule `i`
     /// enforces. Empty on an account that has not applied a document since
-    /// it was upgraded to code that keeps them. Nothing evaluates them yet.
+    /// it was upgraded to code that keeps them.
     fn rule_set(e: &Env) -> Vec<StoredRule> {
         PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e))
     }
@@ -1024,7 +1040,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// The rule-eval rules the scoped document under `scope` installs,
     /// aligned with its record's rules (entry `i` is what rule `i`
     /// enforces), each carrying the scope generation it was applied under.
-    /// Empty when no scoped document has the id. Nothing evaluates them yet.
+    /// Empty when no scoped document has the id.
     fn scope_rule_set(e: &Env, scope: u32) -> Vec<StoredRule> {
         PerchStorage::get_scope_rule_sets(e, &scope).unwrap_or(Vec::new(e))
     }
@@ -1057,7 +1073,8 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 
 /// The account's `__check_auth`: the reserved-name guard, the `Protected`
 /// freeze, and the scope generation gate run before OZ evaluates any rule
-/// (spec §7.6, §9, §15).
+/// (spec §7.6, §9, §15); OZ's `do_check_auth` then evaluates the chosen
+/// rules, and rule-eval's `authorize` must accept what OZ accepted (`gate`).
 ///
 /// - Any context naming an invoker-only hook is refused, on any contract,
 ///   so no signature can satisfy a hook's `account.require_auth()`.
@@ -1073,6 +1090,12 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 ///   call on the current recovery controller, ZK adapter or pool, or for a
 ///   guardian approval on any contract (`ScopeEscalation`), on every path
 ///   the same way.
+/// - After OZ, rule-eval's `authorize` over the stored rule sets refuses
+///   what it does not accept (`RuleEvalRefused`) and stores the spending
+///   records it charged. A recovery completion (one `apply_doc` context on
+///   this account selecting the recovery rule) is left to OZ and the
+///   controller's `enforce` alone, so recovery never depends on the
+///   evaluator.
 pub fn check_auth(
     e: &Env,
     signature_payload: &Hash<32>,
@@ -1086,10 +1109,9 @@ pub fn check_auth(
             }
         }
     }
+    let completion = is_completion(e, signatures, auth_contexts);
     if let Some(gate) = PerchStorage::get_gate(e) {
-        if is_frozen(e.ledger().sequence(), gate.until)
-            && !is_completion(e, signatures, auth_contexts)
-        {
+        if is_frozen(e.ledger().sequence(), gate.until) && !completion {
             return Err(PerchAuthError::AccountFrozen.into());
         }
     }
@@ -1124,7 +1146,11 @@ pub fn check_auth(
     // rule ids on top, so an `External` signature cannot be replayed on another
     // account that shares the key and rule ids (`AUTH_ADDR_DOMAIN`).
     let bound = bind_payload(e, signature_payload);
-    smart_account::do_check_auth(e, &bound, signatures, auth_contexts).map_err(Into::into)
+    smart_account::do_check_auth(e, &bound, signatures, auth_contexts)?;
+    if !completion && !gate::authorize(e, signatures, auth_contexts) {
+        return Err(PerchAuthError::RuleEvalRefused.into());
+    }
+    Ok(())
 }
 
 /// One `apply_doc` context on this account, selecting the recovery rule.
@@ -1364,11 +1390,12 @@ fn check_unwiped(
 }
 
 /// Remove `scope`'s rules (their policies uninstall as OZ removes them),
-/// tags, record, document, and index position.
+/// tags, spending records, record, document, and index position.
 fn drop_scope(e: &Env, scope: u32, record: &ScopeRecord) {
     for r in record.rules.iter() {
         smart_account::remove_context_rule_no_events(e, r.id);
         PerchStorage::remove_scope_tags(e, &r.id);
+        gate::drop_record(e, r.id);
     }
     PerchStorage::remove_scopes(e, &scope);
     PerchStorage::remove_scope_docs(e, &scope);
@@ -1619,6 +1646,27 @@ pub mod testutils {
     /// (`env.as_contract`).
     pub fn set_rule_set(e: &Env, rule_set: &Vec<StoredRule>) {
         PerchStorage::set_rule_set(e, rule_set);
+    }
+
+    /// Overwrite the stored rule set of the scoped document under `scope`.
+    /// Run as the account (`env.as_contract`).
+    pub fn set_scope_rule_set(e: &Env, scope: u32, rule_set: &Vec<StoredRule>) {
+        PerchStorage::set_scope_rule_sets(e, &scope, rule_set);
+    }
+
+    /// Remove the stored rule set, leaving the account as one upgraded to
+    /// code that keeps it and not re-applied since: `__check_auth` skips
+    /// rule-eval until the next `apply_doc`. Run as the account
+    /// (`env.as_contract`).
+    pub fn remove_rule_set(e: &Env) {
+        PerchStorage::remove_rule_set(e);
+    }
+
+    /// The spending record the account keeps for OZ rule `rule_id`, if
+    /// rule-eval has charged it since its spending limit was installed. Run
+    /// as the account (`env.as_contract`).
+    pub fn spend_record(e: &Env, rule_id: u32) -> Option<StoredRecord> {
+        PerchStorage::get_spend_records(e, &rule_id)
     }
 
     /// What applying `doc_json` would do to each rule slot, and what the cost

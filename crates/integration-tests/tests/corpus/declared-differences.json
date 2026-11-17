@@ -1742,6 +1742,103 @@
           "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"sym:RuleSet\""
         }
       ]
+    },
+    {
+      "step": "spending-limit: every accepted spend through the capped rule",
+      "cause": "__check_auth runs rule-eval's authorize after OZ's do_check_auth, over the account's stored rule-eval rules, and keeps a spending record for each capped rule it charges in one new persistent entry per rule, key SpendRecords(rule id), written only when a charge changes it. Each accepted capped transfer (spend 6 of 10, spend 4 more, spend 5 in the next window) therefore writes the capped rule's SpendRecords entry beside OZ's spending-limit record, with the same history and total: the spends in the window, oldest first, the one before the window evicted. The refused spends write nothing, as before. No outcome, event, authorization failure or other storage entry differs in any step.",
+      "fields": [
+        {
+          "path": "corpus.spending-limit[2 \"spend 6 of 10\"].storage.set.account Persistent [\"sym:SpendRecords\",\"u32:1\"]",
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                "sym:history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:total",
+                "i128:6"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[3 \"spend 4 more, reaching the cap\"].storage.set.account Persistent [\"sym:SpendRecords\",\"u32:1\"]",
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                "sym:history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1000"
+                    ]
+                  ],
+                  [
+                    [
+                      "sym:amount",
+                      "i128:4"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:total",
+                "i128:10"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[6 \"spend 5 in the next window\"].storage.set.account Persistent [\"sym:SpendRecords\",\"u32:1\"]",
+          "now": {
+            "live_until": 10001099,
+            "val": [
+              [
+                "sym:history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:5"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1100"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:total",
+                "i128:5"
+              ]
+            ]
+          }
+        }
+      ]
     }
   ]
 }

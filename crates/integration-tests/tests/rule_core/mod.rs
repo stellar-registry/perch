@@ -29,7 +29,16 @@
 //! Before each authorization, `soroban-facade` reads the contexts the
 //! harness built and they must equal the trace's batch under the renaming,
 //! so the account is shown exactly the trace's authorization, and the
-//! account's scope generation is set to the authorization's.
+//! account's scope generation is set to the authorization's. The account's
+//! own reading of the batch (`perch_rule_eval::convert::calls`, what its
+//! rule-eval check reads) must equal the facade's.
+//!
+//! `__check_auth` runs OZ and then rule-eval's `authorize` over the stored
+//! rule sets (`perch_smart_account::check_auth`), so a refusal by either is
+//! a refused verdict. After every accepted authorization, each capped rule's
+//! spending record as the account keeps it for rule-eval must equal OZ's
+//! spending-limit record for the same rule, history and total (records
+//! parity); a difference is reported with the authorization.
 //!
 //! After every `apply_doc` and `apply_scope`, the account's stored
 //! rule-eval rule set for that document must equal both the lowering of the
@@ -209,6 +218,12 @@ pub struct Run {
     /// `apply_scope`), and the rules in them.
     pub rule_sets: usize,
     pub stored_rules: usize,
+    /// The capped rules' records compared after accepted authorizations
+    /// (those holding a spend), and every one where the account's rule-eval
+    /// record differs from OZ's spending-limit record.
+    pub records_compared: usize,
+    pub records_charged: usize,
+    pub record_differences: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -801,6 +816,20 @@ fn invocation(w: &World, c: &ContractContext) -> SorobanAuthorizedInvocation {
     w.invocation(&c.contract, &c.fn_name.to_string(), args)
 }
 
+/// The spending record the account keeps for rule `id` for rule-eval
+/// (`perch_smart_account::testutils::spend_record`); absent is empty.
+fn rule_eval_record(w: &World, id: u32) -> Record {
+    match w.env.as_contract(&w.account, || {
+        perch_smart_account::testutils::spend_record(&w.env, id)
+    }) {
+        Some(r) => (
+            r.history.iter().map(|x| (x.ledger, x.amount)).collect(),
+            r.total,
+        ),
+        None => (vec![], 0),
+    }
+}
+
 fn spending_record(w: &World, id: u32) -> Record {
     let spending = infra::perch_spending_limit::address(&w.env);
     let d = w.env.as_contract(&spending, || {
@@ -976,6 +1005,9 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                         empty: 0,
                         rule_sets,
                         stored_rules,
+                        records_compared: 0,
+                        records_charged: 0,
+                        record_differences: vec![],
                     })
                 }
                 Err(x) => return Err(format!("apply_scope refuses the document: {x:?}")),
@@ -1016,6 +1048,25 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         empty: 0,
         rule_sets,
         stored_rules,
+        records_compared: 0,
+        records_charged: 0,
+        record_differences: vec![],
+    };
+    // Records parity: every capped rule's rule-eval record equals OZ's.
+    let parity = |w: &World, i: usize, run: &mut Run| {
+        for (j, id) in ids.iter().enumerate() {
+            if capped.get(j) != Some(&true) || *id == missing {
+                continue;
+            }
+            run.records_compared += 1;
+            let (mine, oz) = (rule_eval_record(w, *id), spending_record(w, *id));
+            run.records_charged += usize::from(!oz.0.is_empty());
+            if mine != oz {
+                run.record_differences.push(format!(
+                    "authorization {i}: rule {j}'s rule-eval record {mine:?}, OZ's {oz:?}"
+                ));
+            }
+        }
     };
     for (i, a) in t.authorizations.iter().enumerate() {
         e.ledger().with_mut(|l| l.sequence_number = a.now);
@@ -1051,6 +1102,9 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                 payload.into_val(&e),
                 &SVec::new(&e),
             );
+            if outcome.is_ok() {
+                parity(&w, i, &mut run);
+            }
             run.verdicts.push(match outcome {
                 Ok(()) => Got::Accepted(records(&w)),
                 Err(_) => Got::Refused,
@@ -1073,6 +1127,13 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         if !soroban::contexts_eq(&read, &want) {
             return Err(format!(
                 "authorization {i}: the harness built another batch than the trace's"
+            ));
+        }
+        let account_read = perch_rule_eval::convert::calls(&e, &sdk_contexts)
+            .ok_or_else(|| format!("authorization {i}: the account cannot read the batch"))?;
+        if !soroban::contexts_eq(&account_read, &read) {
+            return Err(format!(
+                "authorization {i}: the account reads the batch other than the facade"
             ));
         }
 
@@ -1164,7 +1225,10 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         );
         e.set_auths(&[]);
         let got = match outcome {
-            Ok(Ok(())) => Got::Accepted(records(&w)),
+            Ok(Ok(())) => {
+                parity(&w, i, &mut run);
+                Got::Accepted(records(&w))
+            }
             Err(_) if account_refused(&w) => Got::Refused,
             other => {
                 return Err(format!(
@@ -1205,9 +1269,10 @@ pub fn expected(v: &Verdict) -> Got {
 /// Every way `run` differs from what `t` states: whether the document is
 /// refused, the lowering of the document's own rules (the recovery rule,
 /// which Perch installs from its recovery member rather than lowers, only
-/// by presence), each verdict, and each accepted authorization's records.
+/// by presence), each verdict, and each accepted authorization's records;
+/// and every records-parity difference the run found.
 pub fn differences(t: &Trace, run: &Run) -> Vec<String> {
-    let mut out = vec![];
+    let mut out = run.record_differences.clone();
     let want = match (&t.lowered, run.scope_refused) {
         (Lowered::Error(_), true) => return out,
         (Lowered::Error(e), false) => {

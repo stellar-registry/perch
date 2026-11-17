@@ -218,6 +218,9 @@ where
 #[test]
 fn every_rule_round_trips_through_its_mirror_and_the_host() {
     let e = Env::default();
+    // 400 rules, each read back through its host XDR, outrun the default
+    // budget of one `Env`.
+    e.cost_estimate().budget().reset_unlimited();
     for (i, r) in rules(&e, 400).iter().enumerate() {
         let s = StoredRule::from_rule(&e, r).unwrap_or_else(|| panic!("rule {i}: no mirror"));
         assert!(
@@ -232,6 +235,104 @@ fn every_rule_round_trips_through_its_mirror_and_the_host() {
             "rule {i}: mirror -> rule -> mirror changed it"
         );
     }
+}
+
+/// A mirror is laid out as the `#[contracttype]` of its fields: the sample
+/// rule's mirror, and a record's, equal ones built field by field from host
+/// values, and the sample's reads back as the sample.
+#[test]
+fn a_mirror_is_the_contracttype_of_its_fields() {
+    use perch_rule_eval::{StoredCond, StoredEntry, StoredFunctions, StoredVal};
+    use stellar_accounts::smart_account::Signer as OzSigner;
+    let e = Env::default();
+    let p = pools(&e);
+    let a = |x: &[u8]| host_address(&e, x).expect("an address");
+    let b = |x: &[u8]| Bytes::from_slice(&e, x);
+    let expected = StoredRule {
+        contract: a(&p.addresses[4]),
+        functions: StoredFunctions::AnyExcept(SVec::new(&e)),
+        conds: SVec::from_array(
+            &e,
+            [
+                StoredCond::ArgIn(
+                    0,
+                    SVec::from_array(
+                        &e,
+                        [
+                            StoredVal::I128(-1),
+                            StoredVal::U64(1),
+                            StoredVal::Bool(true),
+                            StoredVal::Bytes(b(&p.keys[3])),
+                            StoredVal::Address(a(&p.addresses[5])),
+                            StoredVal::Symbol(Symbol::new(&e, "a_name_of_exactly_32_bytes_here_")),
+                            StoredVal::String(SString::from_bytes(&e, &p.strings[2])),
+                            StoredVal::Other(b(&p.others[3])),
+                        ],
+                    ),
+                ),
+                StoredCond::ArgStrPrefix(1, SString::from_bytes(&e, b"")),
+                StoredCond::ArgI128AtMost(2, i128::MAX),
+                StoredCond::ArgEq(3, StoredVal::Other(b(&p.others[4]))),
+            ],
+        ),
+        signers: SVec::from_array(
+            &e,
+            [
+                OzSigner::Delegated(a(&p.addresses[0])),
+                OzSigner::External(a(&p.addresses[5]), Bytes::new(&e)),
+            ],
+        ),
+        threshold: 2,
+        cap: SVec::from_array(
+            &e,
+            [StoredCap {
+                limit: 5,
+                period: 10,
+                amount_arg: 2,
+            }],
+        ),
+        valid_until: Some(9),
+        generation: Some(3),
+    };
+    assert_eq!(
+        StoredRule::from_rule(&e, &sample(&p)),
+        Some(expected.clone())
+    );
+    assert!(rules_eq(
+        &[expected.to_rule(&e).expect("the mirror reads back")],
+        &[sample(&p)]
+    ));
+
+    let record = SpendRecord {
+        history: vec![
+            SpendEntry {
+                ledger: 3,
+                amount: 4,
+            },
+            SpendEntry {
+                ledger: u32::MAX,
+                amount: i128::MIN,
+            },
+        ],
+        total: i128::MAX,
+    };
+    let expected = StoredRecord {
+        history: SVec::from_array(
+            &e,
+            [
+                StoredEntry {
+                    ledger: 3,
+                    amount: 4,
+                },
+                StoredEntry {
+                    ledger: u32::MAX,
+                    amount: i128::MIN,
+                },
+            ],
+        ),
+        total: i128::MAX,
+    };
+    assert_eq!(StoredRecord::from_record(&e, &record), expected);
 }
 
 #[test]
@@ -309,11 +410,14 @@ fn every_record_round_trips_through_its_mirror_and_the_host() {
             total: r.pick(&[0, -5, i128::MAX]),
         };
         let s = StoredRecord::from_record(&e, &record);
-        let back = s.to_record();
-        assert_eq!(back.total, record.total, "record {i}");
-        assert_eq!(back.history.len(), record.history.len(), "record {i}");
-        for (x, y) in back.history.iter().zip(&record.history) {
-            assert_eq!((x.ledger, x.amount), (y.ledger, y.amount), "record {i}");
+        let read = perch_rule_eval::mirror::record(&e, s.clone().into_val(&e))
+            .unwrap_or_else(|| panic!("record {i}: the mirror does not read back"));
+        for back in [s.to_record(), read] {
+            assert_eq!(back.total, record.total, "record {i}");
+            assert_eq!(back.history.len(), record.history.len(), "record {i}");
+            for (x, y) in back.history.iter().zip(&record.history) {
+                assert_eq!((x.ledger, x.amount), (y.ledger, y.amount), "record {i}");
+            }
         }
         assert_eq!(xdr_round_trip(&e, &s), s, "record {i}");
     }
@@ -597,5 +701,208 @@ fn host_address_inverts_address() {
     assert_eq!(
         address(&e, &host_address(&e, &account_xdr(3)).unwrap()),
         Some(account_xdr(3))
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Authorizing on the chosen rules
+// ---------------------------------------------------------------------------
+
+fn val_copy(v: &Val) -> Val {
+    match v {
+        Val::I128(x) => Val::I128(*x),
+        Val::U64(x) => Val::U64(*x),
+        Val::Bool(x) => Val::Bool(*x),
+        Val::Bytes(x) => Val::Bytes(x.clone()),
+        Val::Address(x) => Val::Address(x.clone()),
+        Val::Symbol(x) => Val::Symbol(x.clone()),
+        Val::String(x) => Val::String(x.clone()),
+        Val::Other(x) => Val::Other(x.clone()),
+    }
+}
+
+fn signer_copy(s: &Signer) -> Signer {
+    match s {
+        Signer::Delegated(a) => Signer::Delegated(a.clone()),
+        Signer::External(v, k) => Signer::External(v.clone(), k.clone()),
+    }
+}
+
+/// A call `rule` may allow: its contract, a function it may name, and
+/// arguments that meet its conditions where one names a value, the amount
+/// at argument 2 small. Some of the drawn calls miss the rule.
+fn call_for(r: &mut Rng, p: &Pools, rule: &Rule) -> rule_eval::Context {
+    let function = match &rule.functions {
+        Functions::Only(xs) if !xs.is_empty() && r.below(4) > 0 => xs[r.below(xs.len())].clone(),
+        _ => r.pick(&p.names),
+    };
+    let mut args: Vec<Val> = (0..5).map(|_| gen_val(r, p)).collect();
+    args[2] = Val::I128(r.pick(&[0, 1, 4]));
+    for c in &rule.conds {
+        if r.below(5) == 0 {
+            continue;
+        }
+        match c {
+            Cond::ArgEq(i, v) => args[*i as usize] = val_copy(v),
+            Cond::ArgIn(i, vs) if !vs.is_empty() => args[*i as usize] = val_copy(&vs[0]),
+            Cond::ArgStrPrefix(i, pre) => args[*i as usize] = Val::String(pre.clone()),
+            Cond::ArgI128AtMost(i, bound) => args[*i as usize] = Val::I128((*bound).min(3)),
+            Cond::ArgIn(..) => {}
+        }
+    }
+    rule_eval::Context::Call {
+        contract: if r.below(8) == 0 {
+            r.pick(&p.addresses)
+        } else {
+            rule.contract.clone()
+        },
+        function,
+        args,
+    }
+}
+
+fn refusal(x: &rule_eval::Refusal) -> u8 {
+    use rule_eval::{CapError, Refusal};
+    match x {
+        Refusal::ChoicesMismatch => 0,
+        Refusal::RecordsMismatch => 1,
+        Refusal::NoSuchRule => 2,
+        Refusal::Expired => 3,
+        Refusal::StaleGeneration => 4,
+        Refusal::NotAllowed => 5,
+        Refusal::UnauthorizedSigner => 6,
+        Refusal::NoAmount => 7,
+        Refusal::Cap(CapError::NegativeAmount) => 8,
+        Refusal::Cap(CapError::LedgerBeforeNewest) => 9,
+        Refusal::Cap(CapError::Overflow) => 10,
+        Refusal::Cap(CapError::LimitExceeded) => 11,
+        Refusal::Cap(CapError::HistoryFull) => 12,
+    }
+}
+
+fn record_eq(a: &SpendRecord, b: &SpendRecord) -> bool {
+    a.total == b.total
+        && a.history.len() == b.history.len()
+        && a.history
+            .iter()
+            .zip(&b.history)
+            .all(|(x, y)| (x.ledger, x.amount) == (y.ledger, y.amount))
+}
+
+/// rule-eval's `authorize` reads only the rules its choices name and their
+/// records: run on the chosen rules alone, the choices renumbered to them,
+/// it accepts and refuses as on the whole set, charges the same records,
+/// and the whole set's other records come back unchanged. The account's
+/// check runs it that way (`perch_smart_account`'s `gate`).
+#[test]
+fn authorize_on_the_chosen_rules_is_authorize_on_the_set() {
+    let e = Env::default();
+    let p = pools(&e);
+    let mut r = Rng(20_261_104);
+    let record = |r: &mut Rng| match r.below(3) {
+        0 => SpendRecord {
+            history: vec![],
+            total: 0,
+        },
+        _ => SpendRecord {
+            history: vec![SpendEntry {
+                ledger: r.pick(&[0, 2]),
+                amount: 3,
+            }],
+            total: 3,
+        },
+    };
+    let (mut accepted, mut refused) = (0, 0);
+    for case in 0..10_000 {
+        let seeds: Vec<u64> = (0..1 + r.below(5)).map(|_| r.next()).collect();
+        let rule = |i: usize| gen_rule(&mut Rng(seeds[i]), &p);
+        let rules: Vec<Rule> = (0..seeds.len()).map(rule).collect();
+        let records: Vec<SpendRecord> = (0..seeds.len()).map(|_| record(&mut r)).collect();
+        let choices: Vec<u32> = (0..1 + r.below(3))
+            .map(|_| r.below(seeds.len()) as u32)
+            .collect();
+        let contexts: Vec<rule_eval::Context> = choices
+            .iter()
+            .map(|&c| call_for(&mut r, &p, &rules[c as usize]))
+            .collect();
+        let mut signers: Vec<Signer> = vec![];
+        for &c in &choices {
+            for s in &rules[c as usize].signers {
+                if r.below(4) > 0 {
+                    signers.push(signer_copy(s));
+                }
+            }
+        }
+        if r.below(10) == 0 {
+            signers.push(gen_signer(&mut r, &p));
+        }
+        let now = r.pick(&[0, 5, 10]);
+        let generation = r.pick(&[0, 3]);
+        let full = rule_eval::authorize(
+            &rules, &records, &contexts, &choices, &signers, now, generation,
+        );
+
+        let mut ids: Vec<u32> = vec![];
+        let mut sub_choices = vec![];
+        for &c in &choices {
+            let j = ids.iter().position(|x| *x == c).unwrap_or_else(|| {
+                ids.push(c);
+                ids.len() - 1
+            });
+            sub_choices.push(j as u32);
+        }
+        let sub_rules: Vec<Rule> = ids.iter().map(|&c| rule(c as usize)).collect();
+        let sub_records: Vec<SpendRecord> = ids
+            .iter()
+            .map(|&c| {
+                let x = &records[c as usize];
+                SpendRecord {
+                    history: x
+                        .history
+                        .iter()
+                        .map(|h| SpendEntry {
+                            ledger: h.ledger,
+                            amount: h.amount,
+                        })
+                        .collect(),
+                    total: x.total,
+                }
+            })
+            .collect();
+        let sub = rule_eval::authorize(
+            &sub_rules,
+            &sub_records,
+            &contexts,
+            &sub_choices,
+            &signers,
+            now,
+            generation,
+        );
+        match (full, sub) {
+            (Ok(f), Ok(s)) => {
+                accepted += 1;
+                for (j, x) in f.iter().enumerate() {
+                    let want = match ids.iter().position(|c| *c as usize == j) {
+                        Some(k) => &s[k],
+                        None => &records[j],
+                    };
+                    assert!(record_eq(x, want), "case {case}: record {j}");
+                }
+            }
+            (Err(a), Err(b)) => {
+                refused += 1;
+                assert_eq!(refusal(&a), refusal(&b), "case {case}: the refusals differ");
+            }
+            (a, b) => panic!(
+                "case {case}: on the set {}, on the chosen rules {}",
+                a.is_ok(),
+                b.is_ok()
+            ),
+        }
+    }
+    println!("cases: 10000, accepted: {accepted}, refused: {refused}, differences: 0");
+    assert!(
+        accepted > 100 && refused > 100,
+        "{accepted} accepted, {refused} refused"
     );
 }

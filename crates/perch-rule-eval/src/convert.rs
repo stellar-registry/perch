@@ -6,12 +6,18 @@
 //! `soroban_facade::val_to_rule_eval` makes of it. The account's own address
 //! goes through [`address`] like every other, so rules and contexts share one
 //! encoding.
+//!
+//! [`contexts`] reads `__check_auth`'s batch the way soroban-facade reads it
+//! (`SdkHost::auth_contexts`); [`calls`] reads a batch of calls one host
+//! value at a time to the same contexts, without the facade's context
+//! decoding or value encoding, which is what an account links.
 
 use alloc::vec;
 use alloc::vec::Vec;
 
 use soroban_facade::{xdr, SdkHost, Val as FVal};
 use soroban_sdk::auth::Context;
+use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{Address, Bytes, Env, String, Symbol, Val, Vec as SVec};
 use stellar_accounts::smart_account::Signer;
 
@@ -24,6 +30,11 @@ const MAX_SYMBOL_LEN: usize = 32;
 /// `v` as soroban-facade reads it, or `None` for a value it has no form for.
 pub(crate) fn facade(e: &Env, v: Val) -> Option<FVal> {
     SdkHost::new(e).from_sdk(v)
+}
+
+/// The host's `ScVal` XDR of `v`, which `SdkHost::from_sdk` reads.
+pub(crate) fn host_xdr(e: &Env, v: Val) -> Vec<u8> {
+    bytes(&v.to_xdr(e))
 }
 
 /// `a`'s `ScAddress` XDR, or `None` for an address the facade refuses (a
@@ -126,7 +137,11 @@ impl HostForms for Addresses {
 /// form.
 #[must_use]
 pub fn signers(e: &Env, list: &SVec<Signer>) -> Option<Vec<rule_eval::Signer>> {
-    list.iter().map(|s| signer(e, &s)).collect()
+    let mut out = Vec::new();
+    for s in list.iter() {
+        out.push(signer(e, &s)?);
+    }
+    Some(out)
 }
 
 /// `__check_auth`'s contexts as rule-eval reads them, in order, or `None`
@@ -135,6 +150,48 @@ pub fn signers(e: &Env, list: &SVec<Signer>) -> Option<Vec<rule_eval::Signer>> {
 pub fn contexts(e: &Env, list: &SVec<Context>) -> Option<Vec<rule_eval::Context>> {
     let cs = SdkHost::new(e).auth_contexts(list.to_val())?;
     Some(soroban_facade::contexts_to_rule_eval(&cs))
+}
+
+/// A batch of calls as rule-eval reads it: what [`contexts`] gives, each
+/// call's contract, function name and arguments read as host values of
+/// their own. `None` when the batch holds a creation, which no rule allows,
+/// or a value the facade cannot read, so the whole batch is refused.
+#[must_use]
+pub fn calls(e: &Env, list: &SVec<Context>) -> Option<Vec<rule_eval::Context>> {
+    let mut out = Vec::new();
+    for c in list.iter() {
+        let Context::Contract(c) = c else {
+            return None;
+        };
+        let mut args = Vec::new();
+        for v in c.args.iter() {
+            args.push(arg(e, v)?);
+        }
+        out.push(rule_eval::Context::Call {
+            contract: address(e, &c.contract)?,
+            function: symbol_bytes(e, &c.fn_name)?,
+            args,
+        });
+    }
+    Some(out)
+}
+
+/// The argument `v` as rule-eval reads it, as [`val`] reads it: a value
+/// rule-eval holds as `Other` is the host's `ScVal` XDR of it, which is what
+/// `soroban_facade::val_to_rule_eval` encodes of the value the facade read
+/// from that XDR.
+fn arg(e: &Env, v: Val) -> Option<rule_eval::Val> {
+    let x = host_xdr(e, v);
+    Some(match xdr::decode(&x)? {
+        FVal::I128(n) => rule_eval::Val::I128(n),
+        FVal::U64(n) => rule_eval::Val::U64(n),
+        FVal::Bool(b) => rule_eval::Val::Bool(b),
+        FVal::Bytes(b) => rule_eval::Val::Bytes(b),
+        FVal::String(b) => rule_eval::Val::String(b),
+        FVal::Symbol(b) => rule_eval::Val::Symbol(b),
+        FVal::Address(a) => rule_eval::Val::Address(xdr::address_xdr(&a)),
+        _ => rule_eval::Val::Other(x),
+    })
 }
 
 /// The host address whose `ScAddress` XDR is exactly `x`, or `None` when `x`

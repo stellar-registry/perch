@@ -29,7 +29,9 @@
 //! After every accepted `apply_doc` step, once the step is recorded, the
 //! applying account's stored rule-eval rule set must equal the lowering of
 //! the applied document's model and the denotation of what is installed
-//! (`perch_testkit::rule_set`).
+//! (`perch_testkit::rule_set`). After every accepted step, each capped
+//! rule's spending record as the account keeps it for rule-eval must equal
+//! OZ's spending-limit record for the rule (`rule_set::check_records`).
 //!
 //! `PERCH_RECORD_CORPUS=1 cargo test -p perch-integration-tests --test
 //! auth_corpus` rewrites the corpus from the current build.
@@ -62,6 +64,9 @@ const DECLARED: &str = "tests/corpus/declared-differences.json";
 thread_local! {
     /// The stored rule sets this thread's corpus run checked.
     static RULE_SETS: Cell<usize> = const { Cell::new(0) };
+    /// The capped rules' records this thread's corpus run compared, and
+    /// those holding a spend.
+    static RECORDS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +334,12 @@ impl<'a> Recorder<'a> {
             perch_testkit::rule_set::check(env, contract)
                 .unwrap_or_else(|x| panic!("{step}: the stored rule set: {x}"));
             RULE_SETS.set(RULE_SETS.get() + 1);
+        }
+        if val.is_some() {
+            let r = perch_testkit::rule_set::check_records(env, &self.w.account)
+                .unwrap_or_else(|x| panic!("{step}: records parity: {x}"));
+            let (n, charged) = RECORDS.get();
+            RECORDS.set((n + r.capped, charged + r.charged));
         }
         val
     }
@@ -1036,9 +1047,15 @@ fn declared() -> std::vec::Vec<Difference> {
 fn authorization_outcomes_match_the_recorded_corpus() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(CORPUS);
     RULE_SETS.set(0);
+    RECORDS.set((0, 0));
     let got = corpus();
     assert!(RULE_SETS.get() > 0, "no accepted apply_doc step");
-    println!("stored rule sets checked: {}", RULE_SETS.get());
+    let (records, charged) = RECORDS.get();
+    assert!(charged > 0, "no charged record compared");
+    println!(
+        "stored rule sets checked: {}, records compared: {records} (holding a spend: {charged})",
+        RULE_SETS.get()
+    );
     if std::env::var("PERCH_RECORD_CORPUS").as_deref() == Ok("1") {
         let text = serde_json::to_string_pretty(&got).unwrap() + "\n";
         std::fs::write(&path, text).unwrap();

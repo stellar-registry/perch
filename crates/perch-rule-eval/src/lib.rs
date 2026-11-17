@@ -6,7 +6,7 @@
 //!   where storage needs them.
 //! - [`StoredRule`] and [`StoredRecord`]: `#[contracttype]` mirrors of
 //!   `rule_eval::Rule` and `rule_eval::SpendRecord`, for an account's
-//!   storage.
+//!   storage, a stored one read back from its XDR ([`mirror`]).
 //! - [`CompiledModel`]: a `#[contracttype]` mirror of `rule_eval::Doc`, the
 //!   part of a policy document rule-eval's lowering reads. [`doc_of`] reads
 //!   it as a `Doc`; with the `ir` feature, [`model_of`] builds it from a
@@ -29,6 +29,7 @@ extern crate alloc;
 mod admin;
 pub mod convert;
 mod denote;
+pub mod mirror;
 mod model;
 mod stored;
 

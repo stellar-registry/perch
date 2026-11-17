@@ -24,6 +24,10 @@
 //!
 //! Run each at the ledger the apply it checks ran at: the lowering's expiry
 //! drop is computed at the current ledger.
+//!
+//! [`check_records`] checks records parity: the spending record the account
+//! keeps for each capped rule, which `__check_auth` charges through
+//! rule-eval, equals the window OZ's spending limit keeps for the same rule.
 
 use perch_account::PerchAccountClient;
 use perch_interpreter::PerchInterpreterClient;
@@ -39,6 +43,7 @@ use stellar_accounts::policies::spending_limit::{
     get_spending_limit_data, SpendingLimitAccountParams,
 };
 use stellar_accounts::smart_account::ContextRuleType;
+use stellar_accounts::smart_account::SmartAccountStorageKey;
 
 /// What one [`check`] compared.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -270,4 +275,89 @@ fn name(s: &soroban_sdk::String) -> String {
     let mut b = std::vec![0u8; s.len() as usize];
     s.copy_into_slice(&mut b);
     String::from_utf8(b).unwrap_or_else(|_| "?".to_string())
+}
+
+/// What one [`check_records`] compared.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Records {
+    /// Installed rules with a spending limit, and those holding a spend.
+    pub capped: usize,
+    pub charged: usize,
+}
+
+/// A spending record as `(ledger, amount)` history and total.
+type Window = (Vec<(u32, i128)>, i128);
+
+/// Records parity on `account`: for every rule its admin document or a
+/// scoped document installed, the spending record the account keeps for
+/// rule-eval (absent is nothing spent) equals OZ's spending-limit record for
+/// that rule, history and total, when the rule has a spending limit; and the
+/// account keeps no record for a rule without one, nor for any rule id no
+/// longer installed.
+pub fn check_records(e: &Env, account: &Address) -> Result<Records, String> {
+    let client = PerchAccountClient::new(e, account);
+    let spending_limit = infra::perch_spending_limit::address(e);
+    let mut rules: Vec<InstalledRule> = client.installed_rules().iter().collect();
+    for scope in client.scopes(&0, &client.scope_count()).iter() {
+        if let Some(record) = client.scope(&scope) {
+            rules.extend(record.rules.iter());
+        }
+    }
+    let mine = |id: u32| -> Option<Window> {
+        e.as_contract(account, || {
+            perch_smart_account::testutils::spend_record(e, id)
+        })
+        .map(|r| {
+            (
+                r.history.iter().map(|x| (x.ledger, x.amount)).collect(),
+                r.total,
+            )
+        })
+    };
+    let mut out = Records::default();
+    for r in &rules {
+        let kept = mine(r.id);
+        if !r.policies.iter().any(|p| p.policy == spending_limit) {
+            if kept.is_some() {
+                return Err(format!(
+                    "rule {} ({}): no spending limit, and a rule-eval record",
+                    r.id,
+                    name(&r.name)
+                ));
+            }
+            continue;
+        }
+        out.capped += 1;
+        let data = e.as_contract(&spending_limit, || {
+            get_spending_limit_data(e, r.id, account)
+        });
+        let oz: Window = (
+            data.spending_history
+                .iter()
+                .map(|x| (x.ledger_sequence, x.amount))
+                .collect(),
+            data.cached_total_spent,
+        );
+        let kept = kept.unwrap_or_default();
+        if kept != oz {
+            return Err(format!(
+                "rule {} ({}): rule-eval record {kept:?}, OZ's {oz:?}",
+                r.id,
+                name(&r.name)
+            ));
+        }
+        out.charged += usize::from(!kept.0.is_empty());
+    }
+    let next: u32 = e.as_contract(account, || {
+        e.storage()
+            .instance()
+            .get(&SmartAccountStorageKey::NextId)
+            .unwrap_or(0)
+    });
+    for id in 0..next {
+        if !rules.iter().any(|r| r.id == id) && mine(id).is_some() {
+            return Err(format!("rule {id}: removed, and a rule-eval record"));
+        }
+    }
+    Ok(out)
 }

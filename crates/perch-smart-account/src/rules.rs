@@ -352,6 +352,7 @@ fn run(
         e,
         sum: DeltaSummary::default(),
         rule: None,
+        spending_limit: hooks.spending_limit.clone(),
     };
     let mut record =
         |r: &InstalledRule, step: Step, cost: Cost, in_place: Option<Cost>, replace: Cost| {
@@ -605,13 +606,17 @@ impl Effects for Meter<'_> {
     }
 }
 
-/// Performs operations through OZ, quietly, and counts them.
+/// Performs operations through OZ, quietly, and counts them. Uninstalling
+/// a rule's spending limit, by removing the policy or the rule, also drops
+/// the spending record `__check_auth` keeps for it (`gate`), as the
+/// uninstall ends the window OZ's spending limit keeps.
 struct Apply<'a> {
     e: &'a Env,
     sum: DeltaSummary,
     /// The rule being edited, read before its first removal: removals need
     /// OZ's registry ids, which no addition in the same edit changes.
     rule: Option<smart_account::ContextRule>,
+    spending_limit: Address,
 }
 
 impl Apply<'_> {
@@ -642,6 +647,9 @@ impl Effects for Apply<'_> {
             .get_unchecked(oz.policies.first_index_of(policy).unwrap());
         smart_account::remove_policy_no_events(self.e, rule.id, id);
         self.sum.policies_removed += 1;
+        if *policy == self.spending_limit {
+            crate::gate::drop_record(self.e, rule.id);
+        }
     }
 
     fn set_valid_until(&mut self, rule: &InstalledRule, valid_until: Option<u32>) {
@@ -651,6 +659,13 @@ impl Effects for Apply<'_> {
     fn remove_rule(&mut self, rule: &InstalledRule) {
         smart_account::remove_context_rule_no_events(self.e, rule.id);
         self.sum.rules_removed += 1;
+        if rule
+            .policies
+            .iter()
+            .any(|p| p.policy == self.spending_limit)
+        {
+            crate::gate::drop_record(self.e, rule.id);
+        }
     }
 
     fn add_rule(&mut self, rule: &InstalledRule, params: &Vec<Val>) -> u32 {
@@ -789,6 +804,7 @@ fn replace_all(
         e,
         sum: DeltaSummary::default(),
         rule: None,
+        spending_limit: infra::perch_spending_limit::address(e),
     };
     for c in current.iter() {
         apply.remove_rule(&c);

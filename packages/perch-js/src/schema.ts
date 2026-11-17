@@ -3,10 +3,10 @@
 // identical to the Rust model. Every object is `.strict()` — an unknown field
 // anywhere in the tree is rejected, matching perch-ir's `deny_unknown_fields`.
 //
-// Not yet mirrored from perch-ir (tracked for a follow-up on #8): duplicate JSON
-// key rejection (JSON.parse silently keeps the last value; perch-ir rejects at
-// the raw-text level) and the full semantic `validate()` pass. This schema
-// covers shape + version + fail-closed unknown-field rejection.
+// Not mirrored from perch-ir: duplicate JSON key rejection (JSON.parse silently
+// keeps the last value; perch-ir rejects at the raw-text level) and the full
+// semantic `validate()` pass. This schema covers shape + version + fail-closed
+// unknown-field rejection.
 
 import { z } from 'zod';
 
@@ -20,8 +20,15 @@ const u32 = z.number().int().gte(0).lte(0xffff_ffff);
 // perch-ir): `verifier`+`key` is external, `address` is delegated (CAP-0071 —
 // the host authenticates the address inside the account's own auth entry).
 // Both branches are strict, so a mixed shape matches neither and fails closed.
+// An external signer's optional `verifier-name` (`<name>@<version>`) names its
+// verifier in Perch's `perch/verifiers` registry (see verifiers.ts).
 const externalSignerDecl = z
-  .object({ id: z.string(), verifier: z.string(), key: z.string() })
+  .object({
+    id: z.string(),
+    verifier: z.string(),
+    'verifier-name': z.string().optional(),
+    key: z.string(),
+  })
   .strict();
 const delegatedSignerDecl = z.object({ id: z.string(), address: z.string() }).strict();
 const signerDecl = z.union([externalSignerDecl, delegatedSignerDecl]);
@@ -35,9 +42,8 @@ const allPrincipals = z
   .strict();
 // M-of-N quorum over declared signers, mirroring perch-ir's
 // Principals::Threshold. `m` is shape-checked as a u32 here; the semantic
-// range `1 <= m <= signers.length` (INV-1) lives in Rust `validate()` and is
-// part of the tracked TS `validate()` follow-up on #8, like the ack-sentinel
-// check below.
+// range `1 <= m <= signers.length` (INV-1) lives only in Rust `validate()`,
+// like the ack-sentinel check below.
 const thresholdPrincipals = z
   .object({ type: z.literal('threshold'), signers: z.array(z.string()), m: u32 })
   .strict();
@@ -82,6 +88,11 @@ const capConstraint = z
   })
   .strict();
 
+const authRoot = z.object({
+  contract: z.string().regex(/^C[A-Z2-7]{55}$/),
+  function: z.string().regex(/^[a-zA-Z0-9_]{1,32}$/),
+}).strict();
+
 const rule = z
   .object({
     name: z.string(),
@@ -91,8 +102,12 @@ const rule = z
     args: z.array(argConstraint).optional(),
     'not-after-ledger': u32.optional(),
     cap: capConstraint.optional(),
+    'auth-root': authRoot.optional(),
   })
-  .strict();
+  .strict()
+  .refine((r) => r['auth-root'] === undefined || r.scope.type !== 'self-admin', {
+    message: 'self-admin cannot carry auth-root', path: ['auth-root'],
+  });
 
 // Opt-in account-recovery enrollment, mirroring perch-ir's `RecoveryConfig`.
 // Reviewable configuration only — never the recovery attempt itself. See
@@ -103,8 +118,8 @@ const rule = z
 const guardianFields = { guardians: z.array(z.string()), quorum: u32 };
 // perch-ir's `ZkFactor`: every field required. The 64-lowercase-hex shape of
 // `circuit-id`/`enrollment-id`/`commitment` (and `commitment` being a
-// canonical BN254 field element) is Rust `validate()`, part of the tracked TS
-// `validate()` follow-up on #8 like `baseline`'s `doc-hash`.
+// canonical BN254 field element) is checked only by Rust `validate()`, like
+// `baseline`'s `doc-hash`.
 const zkFields = {
   adapter: z.string(),
   'circuit-id': z.string(),
@@ -152,10 +167,10 @@ export type Principals = z.infer<typeof principals>;
 export type Rule = z.infer<typeof rule>;
 export type ArgConstraint = z.infer<typeof argConstraint>;
 export type ArgPred = z.infer<typeof argPred>;
+export type AuthRoot = z.infer<typeof authRoot>;
 export type CapConstraint = z.infer<typeof capConstraint>;
 export type RecoveryConfig = z.infer<typeof recoveryConfig>;
 export type RecoveryMode = z.infer<typeof recoveryMode>;
-export type BaselineCommitment = z.infer<typeof baselineCommitment>;
 
 /** Parse and validate an already-JSON-parsed value into a PolicyDoc, throwing a
  *  ZodError on any shape/version/unknown-field violation (fail-closed). */
@@ -163,8 +178,8 @@ export function parsePolicyDoc(value: unknown): PolicyDoc {
   return policyDocSchema.parse(value);
 }
 
-/** Parse from a JSON string. Note: JSON.parse silently keeps the last of any
- *  duplicate keys — raw-text duplicate rejection is a tracked follow-up. */
+/** Parse from a JSON string. JSON.parse silently keeps the last of any
+ *  duplicate keys; this does not reject them. */
 export function parsePolicyDocJson(json: string): PolicyDoc {
   return parsePolicyDoc(JSON.parse(json));
 }

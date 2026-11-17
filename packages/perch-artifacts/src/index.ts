@@ -56,6 +56,19 @@ export interface DeployedContract {
   pins: Record<string, string>;
 }
 
+/** A verifier in `perch/verifiers`. `contracts.<name>.address` is the
+ * registry's copy of the same bytes, which no account admits as an admin
+ * verifier. */
+export interface DeployedVerifier {
+  version: string;
+  sha256: string;
+  bytes: number;
+  /** Its `verifier-name`: `<name>@<version>`. */
+  name: string;
+  /** Its content address in `perch/verifiers`: what a document names. */
+  address: string;
+}
+
 /** A deployment manifest (`deployments/<network>.json`, written by scripts/deploy-stack.sh). */
 export interface Deployment {
   schema: number;
@@ -69,6 +82,18 @@ export interface Deployment {
   source: { commit: string; dirty: boolean };
   toolchain: Record<string, string>;
   registry: { id: string; wasm_hash: string; admin: string; manager: string; root: string };
+  /** `perch/verifiers`, where a document's `verifier-name` resolves and the
+   * factory pins its WebAuthn verifier, with each stack verifier it serves.
+   * Absent from a deployment that predates it, whose factory pins the
+   * registry's copy. */
+  verifiers?: {
+    id: string;
+    wasm_hash: string;
+    admin: string;
+    manager: string;
+    root: string;
+    contracts: Record<string, DeployedVerifier>;
+  };
   zk: { circuit_id: string; tree_depth: number; circuit_manifest: string };
   contracts: Record<string, DeployedContract>;
 }
@@ -104,10 +129,17 @@ export const circuitManifest: CircuitManifest = json('circuits/manifest.json');
 /** Limits no contract view reports, written from the crates' own constants
  * by crates/integration-tests/tests/artifact_constants.rs. */
 export interface Constants {
+  /** An account document's caps (`MAX_DOC_*`), a grant document's
+   * (`MAX_GRANT_*`), and the rule-name cap both share. */
   doc_compiler: {
     MAX_DOC_SIGNERS: number;
     MAX_DOC_RULES: number;
     MAX_DOC_CANONICAL_BYTES: number;
+    MAX_GRANT_SIGNERS: number;
+    MAX_GRANT_RULES: number;
+    MAX_GRANT_CANONICAL_BYTES: number;
+    /** The largest ledger entry a grant document may make its account store. */
+    MAX_GRANT_STORED_BYTES: number;
     MAX_RULE_NAME_BYTES: number;
   };
   program: { PROGRAM_VERSION: number; MAX_PROGRAM_LEN: number; MAX_STACK_DEPTH: number };

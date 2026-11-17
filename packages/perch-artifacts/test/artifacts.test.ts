@@ -51,6 +51,7 @@ describe('the index', () => {
     expect(deployment().network).toBe('testnet');
     expect(circuitManifest.circuits.perch_zk_recovery?.depth).toBe(deployment().zk.tree_depth);
     expect(constants.doc_compiler.MAX_DOC_SIGNERS).toBeGreaterThan(0);
+    expect(constants.doc_compiler.MAX_GRANT_RULES).toBeGreaterThan(0);
     expect(constants.program.MAX_PROGRAM_LEN).toBeGreaterThan(0);
   });
 

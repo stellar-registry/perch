@@ -1,9 +1,8 @@
-// @stellar-registry/perch — TypeScript surface for perch policy documents.
-//
-// Shipped (this milestone): fail-closed schema mirroring perch-ir, canonical
-// JSON + doc_hash and the rule_hash/config_hash fragment hashes byte-identical
-// to the Rust model (parity-tested against the shared golden fixtures), and a
-// fluent builder producing validated documents.
+// @stellar-registry/perch — TypeScript surface for perch policy documents:
+// fail-closed schema mirroring perch-ir, canonical JSON + doc_hash and the
+// rule_hash/config_hash fragment hashes byte-identical to the Rust model
+// (parity-tested against the shared golden fixtures), and a fluent builder
+// producing validated documents.
 //
 // The consumer interface (#108): revision-consistent account reads, rule
 // selection by name and scope, the signing digest and AuthPayload, document
@@ -11,8 +10,8 @@
 // authorization encoding a wallet needs lives here, pinned against vectors the
 // Rust suite writes.
 //
-// Planned (tracking issue #8, gated on perch-compile #7 + the interpreter):
-//   - compile() with byte-identical output vs the Rust compiler
+// Not here yet (tracking issue #8): compile() with byte-identical output vs
+// the Rust compiler.
 
 export {
   canonicalJson,
@@ -36,6 +35,7 @@ export {
   type ArgConstraint,
   type ArgPred,
   type CapConstraint,
+  type AuthRoot,
 } from './schema.js';
 export {
   requestToPolicyDoc,
@@ -47,6 +47,7 @@ export {
   policy,
   delegated,
   external,
+  named,
   isSelf,
   addressEq,
   stringIn,
@@ -60,6 +61,26 @@ export {
   type RecoverySpec,
   type ZkFactorSpec,
 } from './builder.js';
+export {
+  MAX_VERIFIER_NAME_LEN,
+  VERIFIERS_PATH,
+  UnverifiedVerifier,
+  UnverifiedVerifierReused,
+  checkVerifiers,
+  deployedAddress,
+  isAccountDocument,
+  parseVerifierName,
+  resolveVerifierName,
+  unverifiedReuse,
+  unverifiedVerifiers,
+  unverifiedWarnings,
+  verifierAddress,
+  verifierRegistryId,
+  type FetchHash,
+  type ResolvedVerifier,
+  type VerifierWarning,
+} from './verifiers.js';
+export { OWNER_FNS, selfPinWarnings, type SelfPinWarning } from './grants.js';
 export {
   addressPayload,
   credentialFingerprint,
@@ -93,7 +114,9 @@ export {
   assertRevision,
   assertSignable,
   frozenAt,
+  grantMode,
   checkCapabilities,
+  checkDocumentCapabilities,
   LedgerClock,
   type AccountReader,
   type AccountConfiguration,
@@ -106,6 +129,8 @@ export {
 } from './snapshot.js';
 export {
   selectRules,
+  AuthRootMismatch,
+  type AuthorizationCall,
   selectRecoveryRule,
   resolveRule,
   type RuleRef,
@@ -157,7 +182,20 @@ export {
   accountReader,
   decodeConfiguration,
   decodeCapabilities,
+  decodeStoredRule,
+  decodeStoredGrant,
+  readGrantDoc,
   type AccountBindings,
   type CompilerBindings,
+  type GrantBindings,
   type Simulated,
 } from './bindings.js';
+export {
+  rebuildGrantDoc,
+  GrantNotRebuilt,
+  type RebuiltGrant,
+  type StoredCond,
+  type StoredRule,
+  type StoredGrant,
+  type StoredVal,
+} from './grant.js';

@@ -79,7 +79,10 @@ describe.runIf(process.env.PERCH_LIVE)('the deployed testnet stack, through the 
     expect(Buffer.from((await f.account_wasm_hash()).result).toString('hex')).toBe(
       manifest.contracts['perch-account'].sha256,
     );
-    expect((await f.webauthn_verifier()).result).toBe(manifest.contracts['perch-webauthn-verifier'].address);
+    // In perch/verifiers, once the deployment records it.
+    const verifier =
+      manifest.verifiers?.contracts['perch-webauthn-verifier'] ?? manifest.contracts['perch-webauthn-verifier'];
+    expect((await f.webauthn_verifier()).result).toBe(verifier.address);
   });
 
   it('an exercised account resolves the manifest infra', async () => {

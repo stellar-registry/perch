@@ -15,5 +15,3 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 ### 🚀 Features
 
 - Interpreter TS bindings (@stellar-registry/perch-interpreter) + perch-js threshold/cap parity (#77)
-
-

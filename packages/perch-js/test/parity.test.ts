@@ -72,8 +72,8 @@ describe('perch-ir parity: ci-publish-threshold fixture', () => {
 
 // The guardian-only recovery variant: a Protected-profile document enrolling
 // guardian-only recovery with a baseline pointing at the plain ci-publish
-// fixture's own hash. Pins the `recovery` field's canonical form — the schema
-// extension this stage adds (see docs/recovery/).
+// fixture's own hash. Pins the `recovery` field's canonical form (see
+// docs/recovery/).
 describe('perch-ir parity: ci-publish-recovery fixture (guardian-only)', () => {
   const doc = parsePolicyDoc(JSON.parse(readFileSync(td('ci-publish-recovery.json'), 'utf8')));
 

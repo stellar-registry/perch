@@ -262,7 +262,7 @@ export class SimAccount {
     };
   }
 
-  /** Today's apply: one `apply_doc` transaction. */
+  /** The single-transaction apply: one `apply_doc` transaction. */
   oneTransaction(): ApplyBackend {
     return oneTransactionBackend(this.reader(), {
       prepareApplyDoc: async ({ docJson: bytes, expectedRevision }) =>

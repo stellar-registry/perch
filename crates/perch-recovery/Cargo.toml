@@ -19,7 +19,6 @@ doctest = false
 [dependencies]
 soroban-sdk = { workspace = true }
 soroban-sdk-tools = { workspace = true }
-stellar-accounts = { workspace = true }
 # The statement, the compiled configuration, the hook/adapter/pool/account
 # clients, and the controller's error codes. A plain library, so the
 # controller and the account agree without either linking the other.

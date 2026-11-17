@@ -1,6 +1,6 @@
 [package]
 name = "perch-integration-tests"
-description = "End-to-end tests: compile → install → do_check_auth against real stellar-accounts"
+description = "End-to-end tests: compile → install → authorize through the Perch account, with differentials against stellar-accounts"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

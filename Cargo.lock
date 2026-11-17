@@ -1857,7 +1857,6 @@ dependencies = [
  "perch-recovery-interface",
  "soroban-sdk",
  "soroban-sdk-tools",
- "stellar-accounts",
 ]
 
 [[package]]
@@ -1924,7 +1923,6 @@ dependencies = [
  "rule-eval",
  "soroban-sdk",
  "soroban-sdk-tools",
- "stellar-accounts",
 ]
 
 [[package]]

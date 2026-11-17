@@ -13,8 +13,7 @@
 use std::process::ExitCode;
 
 use perch_analyze::{
-    can_call, dead_rules, encode_doc_warnings, narrows, only_calls, z3_available, WideningFinding,
-    Z3Verdict,
+    can_call, dead_rules, narrows, only_calls, z3_available, WideningFinding, Z3Verdict,
 };
 use perch_ir::PolicyDoc;
 
@@ -22,8 +21,14 @@ fn load(path: &str) -> Result<PolicyDoc, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
     let doc = perch_ir::from_json(&text).map_err(|e| format!("{path}: parse error: {e:?}"))?;
     perch_ir::validate(&doc).map_err(|e| format!("{path}: invalid document: {e:?}"))?;
-    for w in encode_doc_warnings(&doc) {
-        eprintln!("warning: {w}");
+    if doc
+        .rules
+        .iter()
+        .any(|r| matches!(r.principals, perch_ir::Principals::SelfAuthenticating(_)))
+    {
+        return Err(format!(
+            "{path}: a self-authenticating rule, which no account installs"
+        ));
     }
     Ok(doc)
 }

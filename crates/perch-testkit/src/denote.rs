@@ -31,14 +31,14 @@
 //! leaves, at most one `MinSigners` and one `FnIn`, then one `All` over all of
 //! them. It refuses any other program.
 
-use alloc::vec::Vec;
+use std::vec::Vec;
 
 use perch_program::{Op, RpnProgram};
 use soroban_sdk::{Address, Env, Vec as SVec};
 use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 use stellar_accounts::smart_account::Signer;
 
-use crate::convert::{address, signers, string_bytes, symbol_bytes};
+use perch_rule_eval::convert::{address, signers, string_bytes, symbol_bytes};
 
 /// One installed rule: the context rule's contract, signers and last ledger,
 /// the interpreter's program if it is attached, and the spending limit's
@@ -143,7 +143,7 @@ pub fn denote(e: &Env, me: &Address, rule: &Installed) -> Option<rule_eval::Rule
             let transfer = b"transfer".to_vec();
             let covers = fs.is_none_or(|fs| fs.contains(&transfer));
             rule_eval::Functions::Only(if covers {
-                alloc::vec![transfer]
+                std::vec![transfer]
             } else {
                 Vec::new()
             })

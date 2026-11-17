@@ -11,16 +11,15 @@
 //!   part of a policy document rule-eval's lowering reads. [`doc_of`] reads
 //!   it as a `Doc`; with the `ir` feature, [`model_of`] builds it from a
 //!   validated `perch_ir::PolicyDoc`.
-//! - [`denote`]: the `rule_eval::Rule` a Perch rule enforces when installed
-//!   as an OpenZeppelin context rule with the interpreter's program and the
-//!   spending limit's parameters, as accounts installed it before rule-eval
-//!   decided their authorizations.
-//! - [`admin_survives`] and [`guarded`]: the account's anti-brick check and
-//!   its signer-sufficiency invariant, on rule-eval's rules.
+//! - [`admin_survives`], [`admin_declared`] and [`guarded`]: the account's
+//!   anti-brick checks and its signer-sufficiency invariant, on rule-eval's
+//!   rules and document.
 //!
 //! Its tests check the mirrors round-trip and, in `perch-integration-tests`
 //! (`tests/perch_rule_eval.rs`), that `rule_eval::lower(doc_of(model_of(d)))`
-//! equals the denotation of `perch_compile::compile(d)`. `tests/vectors.rs`
+//! equals `perch_testkit::denote` of `perch_compile::compile(d)`: what the
+//! interpreter programs and caps Perch's RPN lowering gives the same
+//! document enforce. `tests/vectors.rs`
 //! checks that the pinned `rule-eval` and `soroban-facade` reproduce every
 //! conformance vector of the same rev.
 #![no_std]
@@ -29,13 +28,11 @@ extern crate alloc;
 
 mod admin;
 pub mod convert;
-mod denote;
 pub mod mirror;
 mod model;
 mod stored;
 
-pub use admin::{admin_survives, guarded};
-pub use denote::{denote, Installed};
+pub use admin::{admin_declared, admin_survives, guarded};
 pub use model::{
     doc_of, doc_of_in, CompiledModel, ModelArg, ModelCap, ModelPred, ModelPrincipals,
     ModelRecovery, ModelRule, ModelScope, ModelSigner, ModelZk,

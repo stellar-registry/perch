@@ -509,7 +509,7 @@ impl PerchRecovery {
             .try_compile_doc(&doc_json)
             .map_err(|_| RecoveryError::BaselineMismatch)?
             .map_err(|_| RecoveryError::BaselineMismatch)?;
-        if compiled.doc_hash != baseline || !admin_survives(&compiled.rules) {
+        if compiled.doc_hash != baseline || !admin_survives(&compiled) {
             return Err(RecoveryError::BaselineMismatch);
         }
         let key = (account, baseline);

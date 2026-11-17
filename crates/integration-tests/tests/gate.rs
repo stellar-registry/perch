@@ -25,7 +25,6 @@
 mod support;
 
 use perch_account::{PerchAccountError, PerchAuthError};
-use perch_doc_compiler::PerchDocCompilerClient;
 use perch_recovery::EvidenceDomain;
 use perch_recovery_interface::RecoveryAction;
 use perch_smart_account::testutils::{
@@ -37,9 +36,7 @@ use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScError, ScVal, ToXdr};
 use soroban_sdk::{
     contract, contractimpl, symbol_short, vec, Address, Bytes, BytesN, Env, IntoVal, Symbol,
 };
-use stellar_accounts::policies::spending_limit::{
-    get_spending_limit_data, SpendingLimitAccountParams,
-};
+use stellar_accounts::policies::spending_limit::get_spending_limit_data;
 use stellar_accounts::smart_account::{self, AuthPayload, Signer};
 use support::*;
 
@@ -215,39 +212,34 @@ fn records(w: &World) -> Records {
 
 /// Leave the account as code that attached the interpreter and the spending
 /// limit to document rules left it: each installed document rule carries
-/// the program and cap the compiler emits for it as those two policies,
+/// the program and cap Perch's RPN lowering gives it as those two policies,
 /// recorded in the installed-rule records, and no rule-eval rule set is
 /// stored.
 fn legacy(w: &World) {
     let e = &w.env;
-    let compiled = PerchDocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
-        .compile_doc(&w.client().applied_doc().unwrap());
+    let attached = perch_testkit::rpn::policies(e, &w.client().applied_doc().unwrap())
+        .unwrap_or_else(|x| panic!("the RPN lowering: {x}"));
     let interpreter = infra::perch_interpreter::address(e);
     let spending_limit = infra::perch_spending_limit::address(e);
     let digest = |b: Bytes| e.crypto().sha256(&b).to_bytes();
     let mut records = w.client().installed_rules();
     for i in 0..records.len() {
         let mut r = records.get(i).unwrap();
-        let Some(c) = compiled
-            .rules
+        let Some(c) = attached
             .iter()
-            .find(|c| !r.recovery && c.name == r.name)
+            .find(|c| !r.recovery && soroban_sdk::String::from_str(e, &c.name) == r.name)
         else {
             continue;
         };
         e.as_contract(&w.account, || {
-            if let Some(p) = c.install.first() {
+            if let Some(p) = &c.install {
                 smart_account::add_policy(e, r.id, &interpreter, p.clone().into_val(e));
                 r.policies.push_back(InstalledPolicy {
                     policy: interpreter.clone(),
                     params: digest(p.to_xdr(e)),
                 });
             }
-            if let Some(cap) = c.cap.first() {
-                let params = SpendingLimitAccountParams {
-                    spending_limit: cap.spending_limit,
-                    period_ledgers: cap.period_ledgers,
-                };
+            if let Some(params) = &c.cap {
                 smart_account::add_policy(e, r.id, &spending_limit, params.clone().into_val(e));
                 r.policies.push_back(InstalledPolicy {
                     policy: spending_limit.clone(),

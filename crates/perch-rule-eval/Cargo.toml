@@ -15,7 +15,6 @@ rule-eval = { workspace = true }
 soroban-facade = { workspace = true, features = ["sdk"] }
 soroban-sdk = { workspace = true }
 stellar-accounts = { workspace = true }
-perch-program = { workspace = true }
 # `model_of`, which builds a `CompiledModel` from a validated document. Direct
 # paths (not `workspace = true`) so `default-features = false` is honored and
 # both stay no_std.

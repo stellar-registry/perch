@@ -9,10 +9,12 @@ publish = false
 
 [dependencies]
 perch-ir = { workspace = true }
-perch-program = { workspace = true }
-perch-compile = { version = "0.1.1", path = "../perch-compile" }
+# `compose`: the rule-eval rules a document lowers to on an account, through
+# the account's own conversions (`model_of`, soroban-facade, `rule_eval::lower`).
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }
+rule-eval = { workspace = true }
 # testutils in a host bin: `Env::default()` is the only way to get an Env for
-# compile()/ToXdr off-chain, and the sdk gates it behind this feature.
+# the model and ToXdr off-chain, and the sdk gates it behind this feature.
 soroban-sdk = { workspace = true, features = ["testutils"] }
 # Pinned to the exact version soroban-env-common pins (`=28.0.0`) so there is
 # ONE stellar-xdr in the build and `soroban_sdk::xdr` types unify with ours.

@@ -1,11 +1,11 @@
 //! `denote` on installed rules Perch's lowering does not produce: what the
 //! module documentation states for them, and the programs it refuses. The
 //! rules Perch does produce are checked against rule-eval's lowering in
-//! `perch-integration-tests` (`tests/perch_rule_eval.rs`).
+//! `tests/perch_rule_eval.rs`.
 
 use perch_program::{Op, RpnProgram, PROGRAM_VERSION};
 use perch_rule_eval::convert::address;
-use perch_rule_eval::{denote, Installed};
+use perch_testkit::denote::{denote, Installed};
 use rule_eval::{Cap, Cond, Functions, Rule, Signer as ESigner};
 use rule_eval_conformance::rules_eq;
 use soroban_sdk::testutils::Address as _;

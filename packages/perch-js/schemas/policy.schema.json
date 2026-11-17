@@ -983,7 +983,7 @@
       "items": {
         "$ref": "#/$defs/rule"
       },
-      "maxItems": 11,
+      "maxItems": 10,
       "type": "array"
     },
     "signers": {

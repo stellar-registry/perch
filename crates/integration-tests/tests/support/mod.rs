@@ -698,6 +698,71 @@ impl World {
         self.delegated_entry(&self.account, key, self.rule_id(&self.account, rule), root)
     }
 
+    /// `s` as the bytes of a document.
+    pub fn json(&self, s: String) -> Bytes {
+        Bytes::from_slice(&self.env, s.as_bytes())
+    }
+
+    /// Install `account`'s authorization of `root` through its admin rule,
+    /// signed by its delegated owner key.
+    pub fn as_owner(&self, account: &Address, owner: &Address, root: SorobanAuthorizedInvocation) {
+        self.env.set_auths(&[self.delegated_entry(
+            account,
+            owner,
+            self.rule_id(account, "admin"),
+            root,
+        )]);
+    }
+
+    /// B's authorization of `root` through B's rule `b_rule`, whose signer is
+    /// the Perch account A; A approves through its rule `a_rule`, whose signer
+    /// is `key` (CAP-0071 nesting, all in B's one entry).
+    #[allow(clippy::too_many_arguments)]
+    pub fn via_delegate(
+        &self,
+        nonce: i64,
+        b: &Address,
+        b_rule: u32,
+        a: &Address,
+        a_rule: u32,
+        key: &Address,
+        root: SorobanAuthorizedInvocation,
+    ) -> SorobanAuthorizationEntry {
+        let e = &self.env;
+        SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::AddressWithDelegates(
+                SorobanAddressCredentialsWithDelegates {
+                    address_credentials: SorobanAddressCredentials {
+                        address: b.clone().into(),
+                        nonce,
+                        signature_expiration_ledger: self.ledger() + 1_000,
+                        signature: self.payload(
+                            map![e, (Signer::Delegated(a.clone()), Bytes::new(e))],
+                            b_rule,
+                        ),
+                    },
+                    delegates: std::vec![SorobanDelegateSignature {
+                        address: a.clone().into(),
+                        signature: self.payload(
+                            map![e, (Signer::Delegated(key.clone()), Bytes::new(e))],
+                            a_rule,
+                        ),
+                        nested_delegates: std::vec![SorobanDelegateSignature {
+                            address: key.clone().into(),
+                            signature: ScVal::Void,
+                            nested_delegates: VecM::default(),
+                        }]
+                        .try_into()
+                        .unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
+                },
+            ),
+            root_invocation: root,
+        }
+    }
+
     /// Anyone's selection of the zero-signer recovery rule for `root`.
     pub fn recovery_rule_entry(
         &self,

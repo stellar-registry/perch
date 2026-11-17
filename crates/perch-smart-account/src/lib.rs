@@ -206,7 +206,8 @@ pub enum PerchAccountError {
     /// A completed recovery would overflow the grant generation.
     GenerationExhausted,
     /// A grant document has a `recovery` member, a self-admin rule, a rule
-    /// on the account or its recovery contracts, or a guardian approval.
+    /// on the account or its recovery contracts, a guardian approval, or a
+    /// token-admin function.
     // docs/account-interface.md, "Errors".
     GrantEscalation,
     /// No grant document has this grant id.
@@ -1091,8 +1092,14 @@ pub trait PerchSmartAccount: CustomAccountInterface {
 ///   account the delegating account's contexts.
 /// - A selected rule a grant document installed is refused for a call on
 ///   the current recovery controller, ZK adapter or pool, or for a guardian
-///   approval on any contract (`GrantEscalation`), on every path the same
-///   way.
+///   approval or a token-admin function ([`TOKEN_ADMIN_FNS`]) on any
+///   contract (`GrantEscalation`), on every path the same way.
+/// - A context chosen under a capped rule, account or grant, or under a
+///   grant rule for a token function whose argument 0 is the owner
+///   (`transfer`, `transfer_from`, `approve`, `burn`, `burn_from`, matched
+///   by name), is refused unless argument 0 is this account
+///   (`RuleEvalRefused`), as a CAP-0071 delegate too. A grant rule for any
+///   other function matches as its argument predicates say.
 /// - rule-eval's `check_auth` over the stored rule sets refuses what it does
 ///   not accept: a chosen grant rule whose stored rule carries another
 ///   grant generation than the account's, from a grant document a
@@ -1128,7 +1135,8 @@ pub fn check_auth(
     }
     // A grant rule never authorizes a call on the excluded set, which may
     // have been adopted after its grant was applied (spec §7.6), and never
-    // casts a guardian approval, at whatever controller (§2). An account
+    // casts a guardian approval, at whatever controller (§2), or calls a
+    // token-admin function, on whatever contract (§7.6). An account
     // document's rule has no tag. A tag is extended on read, as its grant's
     // record is (`gate`), so the two live together.
     for (i, id) in signatures.context_rule_ids.iter().enumerate() {
@@ -1137,7 +1145,10 @@ pub fn check_auth(
                 contract, fn_name, ..
             })) = auth_contexts.get(i as u32)
             {
-                if excluded_contract(e, &contract) || is_guardian_approval(e, &fn_name) {
+                if excluded_contract(e, &contract)
+                    || is_guardian_approval(e, &fn_name)
+                    || is_token_admin(e, &fn_name)
+                {
                     return Err(PerchAuthError::GrantEscalation.into());
                 }
             }
@@ -1333,9 +1344,10 @@ fn apply_grant_doc(e: &Env, grant: u32, doc_json: Bytes) -> Result<BytesN<32>, P
 /// member, a rule scoped to the account itself (every `self-admin` rule)
 /// or to a contract of the excluded set (spec §7.6; the compiler checks the
 /// ZK adapter and pool only within one document, spec §15 rule 3). A rule
-/// whose `functions` names a guardian approval (§2) is refused by
-/// `rule_set::lowered_grant`; one that leaves its functions unrestricted
-/// is refused a guardian approval in `__check_auth` instead.
+/// whose `functions` names a guardian approval (§2) or a token-admin
+/// function ([`TOKEN_ADMIN_FNS`]) is refused by `rule_set::lowered_grant`;
+/// one that leaves its functions unrestricted is refused them in
+/// `__check_auth` instead.
 fn check_grant(e: &Env, me: &Address, compiled: &CompiledDoc) -> Result<(), PerchAccountError> {
     if !compiled.recovery.is_empty() {
         return Err(PerchAccountError::GrantEscalation);
@@ -1377,6 +1389,27 @@ fn check_normal(e: &Env, me: &Address, compiled: &CompiledDoc) -> Result<(), Per
     }
     Ok(())
 }
+
+/// The Stellar Asset Contract's admin functions. No grant (grant
+/// document) calls them: they act with the token admin's authority, which
+/// no argument names, so admin powers stay with the account document (spec
+/// §7.6). Like guardian approvals they are matched by name on any contract.
+pub const TOKEN_ADMIN_FNS: [&str; 4] = ["mint", "clawback", "set_admin", "set_authorized"];
+
+/// Whether `fn_name` is in [`TOKEN_ADMIN_FNS`].
+pub fn is_token_admin(e: &Env, fn_name: &Symbol) -> bool {
+    TOKEN_ADMIN_FNS
+        .iter()
+        .any(|name| Symbol::new(e, name) == *fn_name)
+}
+
+/// The token functions whose argument 0 is the address whose authority
+/// they use: the owner, or the spender of `transfer_from` and `burn_from`.
+/// They are matched by name on any contract, since a grant cannot know
+/// whether a contract is a SEP-41 token: under a grant, a call on a
+/// non-token contract exporting one of these names with another argument 0
+/// is refused.
+pub const OWNER_FNS: [&str; 5] = ["transfer", "transfer_from", "approve", "burn", "burn_from"];
 
 /// Whether `contract` is in the applied account document's excluded set,
 /// beyond the account itself: its adopted recovery controller and its ZK

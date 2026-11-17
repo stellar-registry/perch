@@ -19,7 +19,7 @@ use perch_rule_eval::{
 };
 use soroban_sdk::{Address, Env, Vec};
 
-use crate::{rules, PerchAccountError};
+use crate::{rules, PerchAccountError, TOKEN_ADMIN_FNS};
 use perch_recovery_interface::account::GUARDIAN_APPROVAL_FNS;
 
 /// The compiled document's one model, if it matches the compiled rules and
@@ -125,7 +125,8 @@ pub(crate) fn lowered(
 /// adopted recovery controller and its ZK factor's adapter and pool.
 ///
 /// Refuses with `ModelInvalid` as [`lowered`] does, with `GrantEscalation`
-/// when a rule's `functions` names a guardian approval (spec §2) or
+/// when a rule's `functions` names a guardian approval (spec §2) or a
+/// token-admin function (`TOKEN_ADMIN_FNS`, spec §7.6), or when
 /// rule-eval's scoped lowering refuses the document (a recovery member, or a
 /// rule on the account or a contract of the excluded set), and with
 /// `UnguardedRule` when a rule asks for no signer (INV-1).
@@ -145,7 +146,7 @@ pub(crate) fn lowered_grant(
         set.push(known.read(e, a).ok_or(PerchAccountError::ModelInvalid)?);
     }
     let doc = doc_of_in(e, &model, &mut known).ok_or(PerchAccountError::ModelInvalid)?;
-    if names_guardian_approval(&doc) {
+    if names_refused(&doc) {
         return Err(PerchAccountError::GrantEscalation);
     }
     let lowered = rule_eval::lower_scoped(&doc, &me, &set, gen)
@@ -154,14 +155,15 @@ pub(crate) fn lowered_grant(
 }
 
 /// Whether a rule of `d` names a guardian approval
-/// (`perch_recovery_interface::account::GUARDIAN_APPROVAL_FNS`) in its
-/// `functions`.
-fn names_guardian_approval(d: &rule_eval::Doc) -> bool {
+/// (`perch_recovery_interface::account::GUARDIAN_APPROVAL_FNS`) or a
+/// token-admin function (`TOKEN_ADMIN_FNS`) in its `functions`.
+fn names_refused(d: &rule_eval::Doc) -> bool {
     d.rules.iter().any(|r| {
         r.functions.as_ref().is_some_and(|names| {
             names.iter().any(|name| {
                 GUARDIAN_APPROVAL_FNS
                     .iter()
+                    .chain(&TOKEN_ADMIN_FNS)
                     .any(|g| name.as_slice() == g.as_bytes())
             })
         })

@@ -346,7 +346,7 @@ fn every_grant_document_the_account_takes_rebuilds() {
                     "r",
                     &c0,
                     &all(&["a"]),
-                    r#","functions":["mint","approve","burn"]"#,
+                    r#","functions":["swap","approve","burn"]"#,
                 )],
             ),
         ),

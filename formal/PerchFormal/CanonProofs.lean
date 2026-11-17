@@ -417,6 +417,22 @@ theorem miss_stringin_u32 (t e : P α) (rest : List Char) :
   pOpt_miss _ _ _ _
     (pExact_ne_after ['{', '"', 't', 'y', 'p', 'e', '"', ':', '"'] (by decide) _ _)
 
+theorem miss_args_root (t e : P α) (rest : List Char) :
+    pOpt (lit "\"args\":") t e (lit "\"auth-root\":" ++ rest) = e (lit "\"auth-root\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"', 'a'] (by decide) _ _)
+
+theorem miss_root_cap (t e : P α) (rest : List Char) :
+    pOpt (lit "\"auth-root\":") t e (lit "\"cap\":" ++ rest) = e (lit "\"cap\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
+
+theorem miss_root_functions (t e : P α) (rest : List Char) :
+    pOpt (lit "\"auth-root\":") t e (lit "\"functions\":" ++ rest) = e (lit "\"functions\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
+
+theorem miss_root_name (t e : P α) (rest : List Char) :
+    pOpt (lit "\"auth-root\":") t e (lit "\"name\":" ++ rest) = e (lit "\"name\":" ++ rest) :=
+  pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
+
 theorem miss_args_cap (t e : P α) (rest : List Char) :
     pOpt (lit "\"args\":") t e (lit "\"cap\":" ++ rest) = e (lit "\"cap\":" ++ rest) :=
   pOpt_miss _ _ _ _ (pExact_ne_after ['"'] (by decide) _ _)
@@ -575,17 +591,24 @@ theorem pCap_rt (c : CCap) (tail : List Char) :
       pStr_rt, pNat_rt, hnd_token, hnd_close, pExact_rt, obind_some]
     try rfl
 
+theorem pAuthRoot_rt (r : CAuthRoot) (tail : List Char) :
+    pAuthRoot (emitAuthRoot r ++ tail) = some (r, tail) := by
+  obtain ⟨contract, function⟩ := r
+  unfold pAuthRoot emitAuthRoot
+  simp only [List.append_assoc, pExact_rt, pStr_rt, obind_some]
+
 set_option linter.unusedSimpArgs false in
 theorem pRule_rt (r : CRule) (tail : List Char) :
     pRule (emitRule r ++ tail) = some (r, tail) := by
-  obtain ⟨name, scope, principals, functions, args, nal, cap⟩ := r
-  cases args <;> cases cap <;> cases functions <;> cases nal
+  obtain ⟨name, scope, principals, functions, args, nal, cap, root⟩ := r
+  cases args <;> cases root <;> cases cap <;> cases functions <;> cases nal
   all_goals
     unfold pRule emitRule
     simp only [List.append_assoc, List.nil_append, pOpt_hit,
+      miss_args_root, miss_root_cap, miss_root_functions, miss_root_name,
       miss_args_cap, miss_args_functions, miss_args_name, miss_cap_functions,
       miss_cap_name, miss_functions_name, miss_nal_principals,
-      pStr_rt, pNat_rt, hnd_principals, pArgList_rt, pCap_rt, pStrList_rt,
+      pStr_rt, pNat_rt, hnd_principals, pArgList_rt, pCap_rt, pAuthRoot_rt, pStrList_rt,
       pPrincipals_rt, pScope_rt, pExact_rt, obind_some]
     try rfl
 

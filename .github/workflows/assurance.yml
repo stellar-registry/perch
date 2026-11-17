@@ -3,7 +3,7 @@
 # Weekly + on demand, all jobs. A PR that touches what the Lean model or the
 # fuzz targets cover (the paths below) runs only the formal job and a short
 # fuzz pass. Findings here are bugs to fix or tests to add, not merge gates
-# (yet) — see docs/verification/PLAN.md phase 0.
+# (docs/verification/PLAN.md).
 name: Assurance
 
 on:
@@ -75,6 +75,7 @@ jobs:
         working-directory: formal
         run: |
           lake exe drt ../testdata/eval/eval-vectors.json \
+            ../testdata/auth-root.canonical.json \
             ../testdata/ci-publish.canonical.json \
             ../testdata/ci-publish-delegated.canonical.json \
             ../testdata/ci-publish-threshold.canonical.json \
@@ -114,8 +115,7 @@ jobs:
       # cargo-fuzz isn't in the install-action manifest, so it falls back to
       # cargo-binstall and fetches the project's official prebuilt release
       # binary instead of compiling from source. Pinned to the version the
-      # unpinned `cargo install` resolved to, so this changes the install
-      # method, not the tool version.
+      # unpinned `cargo install` resolved to.
       - name: Install cargo-fuzz (prebuilt release binary)
         uses: taiki-e/install-action@1168f6810a3cb30a3514bf5756a3b7f0422c6df8 # v2.87.28
         with:
@@ -134,15 +134,14 @@ jobs:
         env:
           SECONDS_PER_TARGET: ${{ github.event_name == 'pull_request' && '60' || '300' }}
         run: |
-          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta recovery_canonical_roundtrip; do
+          for t in eval_fail_closed ir_parse_roundtrip apply_doc_delta apply_grant_delta recovery_canonical_roundtrip; do
             dict=()
             if [ -f "fuzz/dicts/$t.dict" ]; then dict=("-dict=fuzz/dicts/$t.dict"); fi
             # Pin the build target to the host gnu triple. cargo-fuzz otherwise
             # defaults `--target` to the triple it was *itself* built for, and
             # the prebuilt cargo-fuzz release binary is musl-targeted -- the
             # nightly toolchain only ships the gnu std, so an implicit musl
-            # build fails with "can't find crate for `core`". The gnu triple
-            # is what the former source-built (gnu) cargo-fuzz used implicitly.
+            # build fails with "can't find crate for `core`".
             cargo +"$NIGHTLY" fuzz run -s none --target x86_64-unknown-linux-gnu "$t" -- \
               -max_total_time="$SECONDS_PER_TARGET" "${dict[@]}"
           done
@@ -172,7 +171,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       # install-action pulls the prebuilt, checksum-verified cargo-mutants
       # release binary (no compile-from-source). Pinned to the version the
@@ -218,14 +217,13 @@ jobs:
   # Komet (Runtime Verification, K framework): fuzz + symbolic execution of the
   # RPN evaluator's wasm under the mechanized Soroban + KWasm semantics — an
   # independent second opinion whose trusted base is the K semantics, not
-  # rustc/LLVM + wasmi (see komet/README.md, docs/verification/PLAN.md phase 3).
+  # rustc/LLVM + wasmi (see komet/README.md, docs/verification/PLAN.md).
   #
   # Komet is installed from Nix, pinned to the v0.1.88 release, and pulled
   # prebuilt from RV's public `k-framework` Cachix cache (the whole closure —
   # K, the haskell backend, and the bundled Soroban semantics — is published
   # there, so nothing compiles from source and no separate `komet-kdist build`
-  # is needed). Burn-in: continue-on-error while the soroban-sdk 27 contract is
-  # confirmed to run under semantics whose examples pin sdk 22.
+  # is needed).
   komet:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -238,7 +236,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: 1.97.1
           targets: wasm32v1-none
       - name: Install Nix
         uses: cachix/install-nix-action@754537aaedb35f72ab11a60cc162c49ef3016495 # v31.2.0
@@ -265,15 +263,18 @@ jobs:
           mkdir -p "$HOME/.local/bin"
           tar -xzf /tmp/stellar.tar.gz -C "$HOME/.local/bin" stellar
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      # Build with cargo, then strip the DataCount section komet v0.1.88's
-      # pykwasm parser rejects (id 0xc; emitted by the bulk-memory feature,
-      # unused by soroban's memory model). The soroban custom sections —
-      # including the contractspecv0 ABI komet reads — are preserved. `komet
-      # test --wasm` consumes the prepared wasm and skips its own build.
+      # Build with `stellar contract build` (soroban-sdk 28+ refuses a wasm
+      # build by any build system that does not shake the contract spec;
+      # `--optimize=false` keeps the bytes cargo emits), then strip the
+      # DataCount section komet v0.1.88's pykwasm parser rejects (id 0xc;
+      # emitted by the bulk-memory feature, unused by soroban's memory model).
+      # The soroban custom sections — including the contractspecv0 ABI komet
+      # reads — are preserved. `komet test --wasm` consumes the prepared wasm
+      # and skips its own build.
       - name: Build + prepare the contract wasm
         working-directory: komet
         run: |
-          cargo build --release --target wasm32v1-none
+          stellar contract build --optimize=false
           python3 strip_datacount.py \
             target/wasm32v1-none/release/perch_komet_tests.wasm \
             target/perch_komet_tests.komet.wasm

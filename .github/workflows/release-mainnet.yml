@@ -340,8 +340,9 @@ jobs:
               --source-ref refs/heads/main --source-digest "$STACK_COMMIT"
             echo "$pkg: $(sha256sum "$wasm" | cut -d' ' -f1)"
           done
-      # In deploy-stack.sh's order: tier 0 (a reused one reports as reused,
-      # or as not yet published), the account (install only), the factory.
+      # In deploy-stack.sh's order: each stack verifier perch/verifiers does
+      # not serve yet, tier 0 (a reused one reports as reused, or as not yet
+      # published), the account (install only), the factory.
       # The delegate is only the simulation source.
       - name: Simulate the deploy (dry run, submits nothing)
         if: inputs.dry_run

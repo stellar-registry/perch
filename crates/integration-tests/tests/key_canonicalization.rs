@@ -21,7 +21,7 @@ use perch_webauthn_verifier::PerchWebAuthnVerifier;
 use soroban_sdk::testutils::{Address as _, Ledger as _};
 use soroban_sdk::{vec, Address, Bytes, Env, String as SString, Vec};
 
-/// The name the fixture publishes its WebAuthn verifier under: an admin
+/// The name the fixture publishes its WebAuthn verifier under: an account
 /// document names its verifiers from `perch/verifiers`.
 const WEBAUTHN_NAME: &str = "perch-webauthn-verifier@1.0.0";
 

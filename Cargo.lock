@@ -2312,12 +2312,12 @@ dependencies = [
 [[package]]
 name = "rule-eval"
 version = "0.1.0"
-source = "git+https://github.com/bitswell/soroban-rule-core?rev=5a689a5760d9a94ef92e5182b15653bed21f7670#5a689a5760d9a94ef92e5182b15653bed21f7670"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=fe16e21bb6f145b031c50f60a12b8188d341fc25#fe16e21bb6f145b031c50f60a12b8188d341fc25"
 
 [[package]]
 name = "rule-eval-conformance"
 version = "0.1.0"
-source = "git+https://github.com/bitswell/soroban-rule-core?rev=5a689a5760d9a94ef92e5182b15653bed21f7670#5a689a5760d9a94ef92e5182b15653bed21f7670"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=fe16e21bb6f145b031c50f60a12b8188d341fc25#fe16e21bb6f145b031c50f60a12b8188d341fc25"
 dependencies = [
  "rule-eval",
  "serde",
@@ -2698,7 +2698,7 @@ dependencies = [
 [[package]]
 name = "soroban-facade"
 version = "0.1.0"
-source = "git+https://github.com/bitswell/soroban-rule-core?rev=5a689a5760d9a94ef92e5182b15653bed21f7670#5a689a5760d9a94ef92e5182b15653bed21f7670"
+source = "git+https://github.com/bitswell/soroban-rule-core?rev=fe16e21bb6f145b031c50f60a12b8188d341fc25#fe16e21bb6f145b031c50f60a12b8188d341fc25"
 dependencies = [
  "rule-eval",
  "soroban-sdk",

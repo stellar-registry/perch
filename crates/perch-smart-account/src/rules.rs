@@ -1,9 +1,9 @@
-//! Rule-set reconciliation for `apply_doc` and `apply_scope`
+//! Rule-set reconciliation for `apply_doc` and `apply_grant`
 //! (`docs/recovery/spec.md` §7.5).
 //!
 //! The account's own records are its rule registry: every context rule it
-//! installs is one [`RuleRecord`], in `rule_set` for the admin document and
-//! in its scope's record for a scoped document, under an id the account's
+//! installs is one [`RuleRecord`], in `rule_set` for the account document and
+//! in its grant's record for a grant document, under an id the account's
 //! counter allocates and never reuses ([`allocate`]). A record holds the
 //! rule's id, name and policies and the stored rule-eval rule that decides
 //! what it allows (`rule_set`); its scope, signers and last ledger are that
@@ -261,7 +261,7 @@ pub(crate) fn positions(e: &Env, n: u32) -> Vec<u32> {
 }
 
 /// A new rule id: the account's counter, which never reuses one, so spending
-/// records and scope tags keyed by id never outlive their rule into another.
+/// records and grant tags keyed by id never outlive their rule into another.
 pub(crate) fn allocate(e: &Env) -> u32 {
     let id = PerchStorage::get_next_rule_id(e).unwrap_or(0);
     let next = id

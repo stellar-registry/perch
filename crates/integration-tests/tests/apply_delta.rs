@@ -234,7 +234,7 @@ fn keeps_id(b: &InstalledRule, a: &InstalledRule) -> bool {
 fn keyed_by(me: &str, id: u32) -> [String; 2] {
     [
         format!("{me}/[SpendRecords,{id}]"),
-        format!("{me}/[ScopeTags,{id}]"),
+        format!("{me}/[GrantTags,{id}]"),
     ]
 }
 

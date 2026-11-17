@@ -86,7 +86,7 @@ fn the_doc_compilers_config_hash_matches_the_pinned_values() {
             "6f44a3313c66ff6bab1719f684e4f58b04b10ec930624f8a6432ba761cd1ae78",
         ),
     ] {
-        // An admin document names its verifiers: the fixture's, named. The
+        // An account document names its verifiers: the fixture's, named. The
         // recovery member, all `config_hash` covers, is the fixture's.
         let doc = perch_ir::from_json(&testdata(fixture)).unwrap();
         let named = perch_testkit::verifiers::name_raw(&e, &doc, || IdentityVerifier);

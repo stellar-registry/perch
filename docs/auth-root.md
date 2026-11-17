@@ -31,7 +31,7 @@ both branches, as in the referenced Guess the Number fixture.
 This condition checks exact contract and function only. It does not inspect
 root arguments, arbitrary parents or ancestors, or companion-rule names. It
 does not prove every context present in a signed authorization tree executed.
-There is no caller-supplied root argument to `check_auth` or `authorize`.
+There is no caller-supplied root argument to `perch_smart_account::check_auth` or `rule_eval::check_auth`.
 
 ## Validation and state
 
@@ -52,7 +52,7 @@ unrestricted; `Some` must contain exactly one `{contract, function}`. The
 optional wrapper permits decoding the positively identified old eight-key
 stored-rule map. New stored maps have nine exact keys; malformed roots,
 unknown/missing keys and trailing XDR never fall back to unrestricted. New
-writes include the field. Existing cap history and scope-generation data keep
+writes include the field. Existing cap history and grant-generation data keep
 their formats. Reconciliation still keeps a matched rule's id and unchanged
 cap history, including when an unrelated rule is removed.
 
@@ -66,7 +66,7 @@ cap history, including when an unrelated rule is removed.
 | Stored data | New account reads the exact legacy layout as unrestricted. New layout must not be downgraded into code that ignores its root. |
 | Views | Interface version 3, snapshot version 2. Snapshot 2 rules always expose root metadata, null when unrestricted. |
 | TypeScript | New reader accepts snapshots 1 and 2 when supplied with matching ABI bindings. Snapshot 2 with missing root metadata is refused; root-bearing apply requires interface >=3 and snapshot >=2. |
-| Events | Existing event names/codes unchanged. The legacy context-rule event/view does not describe every condition; consumers must read `installed_rules`/`rule_set` or scoped equivalents. |
+| Events | Existing event names/codes unchanged. The legacy context-rule event/view does not describe every condition; consumers must read `installed_rules`/`rule_set` or the grant equivalents. |
 | Deployed accounts | Existing compiler/account addresses remain pinned. Publishing source does not enable roots on deployed accounts. A new compiler/account build and a deliberate delayed account upgrade or new account are required. |
 | Proofs | New root semantics live in rule-core; Perch's canonical model includes the optional member. Old per-invocation interpreter proofs do not cover root enforcement. |
 
@@ -87,7 +87,7 @@ the new account still enforces it on chain.
 preorder the caller intends to sign. It does not authenticate that input;
 wallets must derive it from the actual authorization XDR, display the root,
 and bind the unchanged host payload plus selected rule ids. Nido integration
-is a separate consumer change. `scope` reconstruction retains the condition
+is a separate consumer change. Grant-document reconstruction retains the condition
 and verifies the stored canonical commitment.
 
 ## Narrowing and evidence boundaries

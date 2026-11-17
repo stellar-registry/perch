@@ -1,7 +1,7 @@
 //! The perch smart-account trait: **authorization data changes only by
-//! applying documents** — the admin document through
-//! [`PerchSmartAccount::apply_doc`], scoped documents through
-//! [`PerchSmartAccount::apply_scope`] and its removal entry points.
+//! applying documents** — the account document through
+//! [`PerchSmartAccount::apply_doc`], grant documents through
+//! [`PerchSmartAccount::apply_grant`] and its removal entry points.
 //!
 //! [`PerchSmartAccount`] extends soroban's `CustomAccountInterface` and
 //! exports a document-shaped surface: there is no piecemeal mutation API
@@ -21,21 +21,21 @@
 //! `rules`), and stores the canonical `doc_hash` so anyone can check
 //! installed == reviewed via [`PerchSmartAccount::applied_doc_hash`].
 //!
-//! The admin document holds the account's own rules, recovery, and
-//! everything a recovery restores. App grants can instead live in scoped
-//! documents, one per scope id, each compiled the same way, reconciled
+//! The account document holds the account's own rules, recovery, and
+//! everything a recovery restores. App grants can instead live in grant
+//! documents, one per grant id, each compiled the same way, reconciled
 //! against its own records, and refused if it reaches the account itself,
 //! its recovery, or its guardian approvals at any controller, or is not in
-//! normal form. A scoped document's text is not stored: its records and
+//! normal form. A grant document's text is not stored: its records and
 //! signer ids give it back, checked against its `doc_hash`. A recovery
-//! completion wipes every scope at once by advancing a generation that
+//! completion wipes every grant at once by advancing a generation that
 //! `__check_auth` checks (`docs/recovery/spec.md` §7.6).
 //!
 //! The account's own records are its rule registry (`rules`): rule ids from
 //! its counter, and each rule's name, policies, and the rule-eval rule that
 //! decides what it allows, which holds its scope, signers, and expiry.
 //! `__check_auth` decides every authorization with rule-core's
-//! `rule_eval::authorize` over those stored rules (`rule_set`, `gate`), and
+//! `rule_eval::check_auth` over those stored rules (`rule_set`, `gate`), and
 //! the account's `authenticate` (`auth`) checks the signers. The signer,
 //! payload, and context-rule types are `perch-account-types`', the XDR and
 //! contract-spec twins of OZ's. A recovery completion is decided by the
@@ -203,17 +203,17 @@ pub enum PerchAccountError {
     Recovery(RecoveryError),
     /// The account is not at `apply_doc`'s `expected_revision`.
     StaleRevision,
-    /// A completed recovery would overflow the scope generation.
+    /// A completed recovery would overflow the grant generation.
     GenerationExhausted,
-    /// A scoped document has a `recovery` member, a self-admin rule, a rule
+    /// A grant document has a `recovery` member, a self-admin rule, a rule
     /// on the account or its recovery contracts, or a guardian approval.
     // docs/account-interface.md, "Errors".
-    ScopeEscalation,
-    /// No scoped document has this scope id.
-    UnknownScope,
-    /// `gc_scope` was given a live scope; `remove_scope` removes it.
-    ScopeLive,
-    /// The document names a credential from a scope a recovery has wiped.
+    GrantEscalation,
+    /// No grant document has this grant id.
+    UnknownGrant,
+    /// `gc_grant` was given a live grant; `remove_grant` removes it.
+    GrantLive,
+    /// The document names a credential from a grant a recovery has wiped.
     // Spec §7.6.
     WipedCredential,
     /// The compiled document's model is missing, duplicated, unreadable, or
@@ -222,9 +222,9 @@ pub enum PerchAccountError {
     ModelInvalid,
     /// A rule other than the recovery rule asks for no signer (INV-1).
     UnguardedRule,
-    /// A scoped document is not in normal form, or has a rule already
+    /// A grant document is not in normal form, or has a rule already
     /// expired.
-    // docs/account-interface.md, "apply_scope".
+    // docs/account-interface.md, "apply_grant".
     NotNormalForm,
     /// A constructor admin signer's verifier is not one `perch/verifiers`
     /// deployed.
@@ -241,29 +241,29 @@ pub enum PerchAuthError {
     /// A `Protected` recovery attempt is authorized: the account authorizes
     /// nothing but that attempt's completion (spec §9).
     AccountFrozen,
-    /// A selected rule belongs to a scoped document a recovery completion
+    /// A selected rule belongs to a grant document a recovery completion
     /// wiped: the generation its stored rule carries is not the account's
     /// (spec §7.6).
-    StaleScope,
-    /// A selected scoped rule's context calls the recovery controller or
+    StaleGrant,
+    /// A selected grant rule's context calls the recovery controller or
     /// the ZK adapter or pool of the applied recovery member, any of which
-    /// may have been adopted after the scope was applied, or casts a
+    /// may have been adopted after the grant was applied, or casts a
     /// guardian approval on any contract (spec §7.6).
-    ScopeEscalation,
+    GrantEscalation,
     /// rule-eval refuses the authorization, or it chooses the recovery rule
     /// outside a completion (`gate`).
     RuleEvalRefused,
 }
 
-/// A scoped document as the account stores it: [`ScopeRecord`]'s fields,
-/// with each rule's record holding its stored rule, the scope's position in
-/// the scope index, the document's signer ids in declaration order, and
+/// A grant document as the account stores it: [`GrantRecord`]'s fields,
+/// with each rule's record holding its stored rule, the grant's position in
+/// the grant index, the document's signer ids in declaration order, and
 /// each signer's `verifier-name` (empty where it has none; the list empty
 /// when no signer has one), which with the records give back its canonical
 /// text.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StoredScope {
+pub struct StoredGrant {
     pub gen: u64,
     pub doc_hash: BytesN<32>,
     pub pos: u32,
@@ -272,10 +272,10 @@ pub struct StoredScope {
     pub verifier_names: Vec<String>,
 }
 
-impl StoredScope {
-    /// The scope as the `scope` view gives it.
-    fn record(&self, e: &Env) -> ScopeRecord {
-        ScopeRecord {
+impl StoredGrant {
+    /// The grant as the `grant` view gives it.
+    fn record(&self, e: &Env) -> GrantRecord {
+        GrantRecord {
             gen: self.gen,
             doc_hash: self.doc_hash.clone(),
             rules: rules::installed_view(e, &self.rules, None),
@@ -283,12 +283,12 @@ impl StoredScope {
     }
 }
 
-/// A scoped document as applied.
+/// A grant document as applied.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScopeRecord {
-    /// The scope generation it was applied under; wiped once
-    /// `scope_generation` moves past it.
+pub struct GrantRecord {
+    /// The grant generation it was applied under; wiped once
+    /// `grant_generation` moves past it.
     // docs/account-interface.md, "Types".
     pub gen: u64,
     /// Its canonical `doc_hash`.
@@ -318,7 +318,7 @@ pub struct InfraPins {
     pub spending_limit: Address,
 }
 
-/// What rule selection and signing need for the admin document, read at one
+/// What rule selection and signing need for the account document, read at one
 /// ledger.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -353,7 +353,7 @@ pub struct AccountCapabilities {
     pub doc_identity: Symbol,
     /// What signers sign: `addr_oz_v1`, bound to the account's address.
     pub auth_digest: Symbol,
-    /// `one_tx` (admin document) and `scoped_v1` (scoped documents).
+    /// `one_tx` (account document) and `grant_v1` (grant documents).
     pub apply_modes: Vec<Symbol>,
     /// The `AccountConfiguration` layout version.
     pub snapshot_version: u32,
@@ -434,9 +434,9 @@ fn bind_payload(e: &Env, signature_payload: &Hash<32>) -> Hash<32> {
 /// The account's consumer interface version: the views
 /// ([`PerchSmartAccount::revision`], [`PerchSmartAccount::configuration`],
 /// [`PerchSmartAccount::document`], [`PerchSmartAccount::capabilities`]) and
-/// `apply_doc`'s `expected_revision`. Version 2 adds scoped documents
-/// ([`PerchSmartAccount::apply_scope`] and the scope views); since then
-/// `configuration` and `installed_rules` cover the admin document only.
+/// `apply_doc`'s `expected_revision`. Version 2 adds grant documents
+/// ([`PerchSmartAccount::apply_grant`] and the grant views); since then
+/// `configuration` and `installed_rules` cover the account document only.
 pub const INTERFACE_VERSION: u32 = 3;
 /// The layout of [`AccountConfiguration`].
 pub const SNAPSHOT_VERSION: u32 = 2;
@@ -445,7 +445,7 @@ pub const SNAPSHOT_VERSION: u32 = 2;
 /// generation.
 pub use perch_recovery_interface::account::UpgradeRequest;
 
-/// Emitted after the admin document is applied: its `doc_hash`, the revision,
+/// Emitted after the account document is applied: its `doc_hash`, the revision,
 /// and what changed in the rule set.
 // docs/account-interface.md, "Events".
 #[contractevent]
@@ -463,13 +463,13 @@ pub struct DocApplied {
     pub policies_removed: u32,
 }
 
-/// Emitted after a scoped document is applied: its scope, `doc_hash`, scope
+/// Emitted after a grant document is applied: its grant id, `doc_hash`, grant
 /// generation, and what changed in its rule set.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScopeApplied {
+pub struct GrantApplied {
     #[topic]
-    pub scope: u32,
+    pub grant: u32,
     pub doc_hash: BytesN<32>,
     pub gen: u64,
     pub rules_added: u32,
@@ -481,21 +481,21 @@ pub struct ScopeApplied {
     pub policies_removed: u32,
 }
 
-/// Emitted when a scoped document and its rules are removed.
+/// Emitted when a grant document and its rules are removed.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScopeRemoved {
+pub struct GrantRemoved {
     #[topic]
-    pub scope: u32,
-    /// The scope generation it was applied under.
+    pub grant: u32,
+    /// The grant generation it was applied under.
     pub gen: u64,
     pub rules_removed: u32,
 }
 
-/// Emitted when a completed recovery advances the scope generation to `gen`.
+/// Emitted when a completed recovery advances the grant generation to `gen`.
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ScopesWiped {
+pub struct GrantsWiped {
     pub gen: u64,
 }
 
@@ -589,16 +589,16 @@ struct PerchStorage {
     /// transition at any controller and by every executed upgrade. Never
     /// reset; it continues through periods without recovery.
     recovery_generation: InstanceItem<u64>,
-    /// The scope generation (spec §7.6): advanced by one by every completed
+    /// The grant generation (spec §7.6): advanced by one by every completed
     /// recovery, by nothing else. Absent reads as 0. Never reset or
-    /// decreased. A scoped rule authorizes only while the generation its
+    /// decreased. A grant rule authorizes only while the generation its
     /// stored rule carries is this one.
-    scope_generation: InstanceItem<u64>,
+    grant_generation: InstanceItem<u64>,
     /// The id the next installed context rule gets. Absent reads as 0.
     /// Never reused: a removed rule's id is never given to another
     /// (`rules::allocate`).
     next_rule_id: InstanceItem<u32>,
-    /// The admin document's rules, as installed: each one's record, holding
+    /// The account document's rules, as installed: each one's record, holding
     /// the rule-eval rule `__check_auth` evaluates for it (`rules`,
     /// `rule_set`), the recovery rule last when there is one. Written by the
     /// constructor and `apply_doc`, which reconciles the compiled document
@@ -612,42 +612,42 @@ struct PerchStorage {
     /// in every successful `apply_doc` and every executed upgrade, by nothing
     /// else. Never decreases.
     revision: InstanceItem<u64>,
-    /// Each scoped document's record and rules, by scope id. `apply_scope`
-    /// reconciles a scoped document against its own record alone.
-    scopes: PersistentMap<u32, StoredScope>,
+    /// Each grant document's record and rules, by grant id. `apply_grant`
+    /// reconciles a grant document against its own record alone.
+    grants: PersistentMap<u32, StoredGrant>,
     /// What each capped rule has spent in its window, by rule id, as
     /// rule-eval charges it in `__check_auth` (`gate`). Absent reads as
     /// nothing spent. Dropped when an apply removes or replaces its rule or
-    /// changes its cap (`gate::drop_records`), and with its scope
-    /// (`drop_scope`).
+    /// changes its cap (`gate::drop_records`), and with its grant
+    /// (`drop_grant`).
     spend_records: PersistentMap<u32, StoredRecord>,
-    /// The scope of every context rule a scoped document installed, by rule
-    /// id: its tag. The admin document's rules carry none. No rule id is
+    /// The grant id of every context rule a grant document installed, by rule
+    /// id: its tag. The account document's rules carry none. No rule id is
     /// reused (`next_rule_id`), so a tag never outlives its rule into
     /// another.
-    scope_tags: PersistentMap<u32, u32>,
-    /// How many scope ids have a record: the length of `scope_index`.
-    scope_count: InstanceItem<u32>,
-    /// Every scope id with a record, by position `0..scope_count`: what
-    /// `scopes` lists. Each scope's record holds its position. A removal
+    grant_tags: PersistentMap<u32, u32>,
+    /// How many grant ids have a record: the length of `grant_index`.
+    grant_count: InstanceItem<u32>,
+    /// Every grant id with a record, by position `0..grant_count`: what
+    /// `grants` lists. Each grant's record holds its position. A removal
     /// moves the last id into the freed position, so adding or removing a
-    /// scope writes O(1) entries however many exist.
-    scope_index: PersistentMap<u32, u32>,
+    /// grant writes O(1) entries however many exist.
+    grant_index: PersistentMap<u32, u32>,
     /// The credential index (spec §7.6): for every credential fingerprint a
-    /// scoped document named, the last scope generation one named it
-    /// under. Once the scope generation has moved past it, no document may
+    /// grant document named, the last grant generation one named it
+    /// under. Once the grant generation has moved past it, no document may
     /// name that credential again. Never removed.
-    scope_credentials: PersistentMap<BytesN<32>, u64>,
+    grant_credentials: PersistentMap<BytesN<32>, u64>,
 }
 
 /// The doc-only smart account surface: documents are the only write path
-/// for authorization data, the admin document ([`Self::apply_doc`]) and
-/// scoped documents ([`Self::apply_scope`]). Plus the controlled
+/// for authorization data, the account document ([`Self::apply_doc`]) and
+/// grant documents ([`Self::apply_grant`]). Plus the controlled
 /// capabilities a wallet needs: execution through the account, full
 /// document reads, recovery cancellation, and delayed upgrades.
 #[contracttrait]
 pub trait PerchSmartAccount: CustomAccountInterface {
-    /// Apply the admin document and return its `doc_hash`. Owner
+    /// Apply the account document and return its `doc_hash`. Owner
     /// authorization, or the recovery rule for a completion. Refuses
     /// `StaleRevision` unless the account is at `expected_revision`, if given.
     /// `approval_valid_until` bounds a `Protected` reconfiguration's approvals.
@@ -683,13 +683,13 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         Ok(e.invoke_contract::<Val>(&target, &target_fn, target_args))
     }
 
-    /// The applied admin document's canonical bytes, if any.
+    /// The applied account document's canonical bytes, if any.
     // docs/account-interface.md, "Views".
     fn applied_doc(e: &Env) -> Option<Bytes> {
         PerchStorage::get_applied_doc_bytes(e)
     }
 
-    /// The applied admin document's canonical `doc_hash`, if any.
+    /// The applied account document's canonical `doc_hash`, if any.
     fn applied_doc_hash(e: &Env) -> Option<BytesN<32>> {
         PerchStorage::get_applied_doc(e)
     }
@@ -713,11 +713,11 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         PerchStorage::has_revoked(e, &fingerprint)
     }
 
-    /// The last scope generation a scoped document named this credential under,
+    /// The last grant generation a grant document named this credential under,
     /// if any.
     // docs/account-interface.md, "Views".
     fn credential_generation(e: &Env, fingerprint: BytesN<32>) -> Option<u64> {
-        PerchStorage::get_scope_credentials(e, &fingerprint)
+        PerchStorage::get_grant_credentials(e, &fingerprint)
     }
 
     /// Whether this account ever enrolled a ZK enrollment id.
@@ -885,11 +885,11 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         generation(e)
     }
 
-    /// The scope generation: advanced only by completed recoveries. A scope
+    /// The grant generation: advanced only by completed recoveries. A grant
     /// applied under another is wiped.
     // docs/account-interface.md, "Views".
-    fn scope_generation(e: &Env) -> u64 {
-        scope_generation(e)
+    fn grant_generation(e: &Env) -> u64 {
+        grant_generation(e)
     }
 
     /// The configuration revision: advanced by every `apply_doc` and executed
@@ -899,7 +899,7 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         revision(e)
     }
 
-    /// The admin document's configuration, read at one ledger.
+    /// The account document's configuration, read at one ledger.
     fn configuration(e: &Env) -> AccountConfiguration {
         AccountConfiguration {
             revision: revision(e),
@@ -916,7 +916,7 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         }
     }
 
-    /// The applied admin document's canonical bytes, with the revision they
+    /// The applied account document's canonical bytes, with the revision they
     /// belong to.
     fn document(e: &Env) -> (u64, Option<Bytes>) {
         (revision(e), PerchStorage::get_applied_doc_bytes(e))
@@ -929,10 +929,7 @@ pub trait PerchSmartAccount: CustomAccountInterface {
             interface_version: INTERFACE_VERSION,
             doc_identity: Symbol::new(e, "canon_v1"),
             auth_digest: Symbol::new(e, "addr_oz_v1"),
-            apply_modes: Vec::from_array(
-                e,
-                [Symbol::new(e, "one_tx"), Symbol::new(e, "scoped_v1")],
-            ),
+            apply_modes: Vec::from_array(e, [Symbol::new(e, "one_tx"), Symbol::new(e, "grant_v1")]),
             snapshot_version: SNAPSHOT_VERSION,
         }
     }
@@ -962,7 +959,7 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         });
     }
 
-    /// Every context rule the admin document installed, with its id.
+    /// Every context rule the account document installed, with its id.
     fn installed_rules(e: &Env) -> Vec<InstalledRule> {
         admin_rules(e)
     }
@@ -974,12 +971,12 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         stored_rules(e, &PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e)))
     }
 
-    /// The count of context rules, scoped and expired ones included.
+    /// The count of context rules, grants' and expired ones included.
     // docs/account-interface.md, "Views".
     fn get_context_rules_count(e: &Env) -> u32 {
         let mut count = PerchStorage::get_rule_set(e).map_or(0, |r| r.len());
-        for scope in Self::scopes(e, 0, u32::MAX).iter() {
-            count += PerchStorage::get_scopes(e, &scope).map_or(0, |r| r.rules.len());
+        for grant in Self::grants(e, 0, u32::MAX).iter() {
+            count += PerchStorage::get_grants(e, &grant).map_or(0, |r| r.rules.len());
         }
         count
     }
@@ -987,8 +984,8 @@ pub trait PerchSmartAccount: CustomAccountInterface {
     /// The context rule with this id; panics if there is none.
     // docs/account-interface.md, "Views".
     fn get_context_rule(e: &Env, context_rule_id: u32) -> ContextRule {
-        let records = match PerchStorage::get_scope_tags(e, &context_rule_id) {
-            Some(scope) => PerchStorage::get_scopes(e, &scope).map(|r| r.rules),
+        let records = match PerchStorage::get_grant_tags(e, &context_rule_id) {
+            Some(grant) => PerchStorage::get_grants(e, &grant).map(|r| r.rules),
             None => PerchStorage::get_rule_set(e),
         };
         let recovery = PerchStorage::get_recovery_rule(e) == Some(context_rule_id);
@@ -1001,85 +998,85 @@ pub trait PerchSmartAccount: CustomAccountInterface {
         }
     }
 
-    /// Apply a scoped document under `scope` and return its `doc_hash`. Owner
+    /// Apply a grant document under `grant` and return its `doc_hash`. Owner
     /// authorization.
-    // docs/account-interface.md, "apply_scope".
-    fn apply_scope(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
-        apply_scope_doc(e, scope, doc_json)
+    // docs/account-interface.md, "apply_grant".
+    fn apply_grant(e: &Env, grant: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
+        apply_grant_doc(e, grant, doc_json)
     }
 
-    /// Remove the scoped document under `scope` and its rules. Owner
+    /// Remove the grant document under `grant` and its rules. Owner
     /// authorization.
-    fn remove_scope(e: &Env, scope: u32) -> Result<(), PerchAccountError> {
+    fn remove_grant(e: &Env, grant: u32) -> Result<(), PerchAccountError> {
         e.current_contract_address().require_auth();
-        let record = PerchStorage::get_scopes(e, &scope).ok_or(PerchAccountError::UnknownScope)?;
-        drop_scope(e, scope, &record);
+        let record = PerchStorage::get_grants(e, &grant).ok_or(PerchAccountError::UnknownGrant)?;
+        drop_grant(e, grant, &record);
         Ok(())
     }
 
-    /// Remove a scoped document a recovery wiped, and its rules.
+    /// Remove a grant document a recovery wiped, and its rules.
     /// Permissionless.
-    // docs/account-interface.md, "Removing scopes".
-    fn gc_scope(e: &Env, scope: u32) -> Result<(), PerchAccountError> {
-        let record = PerchStorage::get_scopes(e, &scope).ok_or(PerchAccountError::UnknownScope)?;
-        if record.gen == scope_generation(e) {
-            return Err(PerchAccountError::ScopeLive);
+    // docs/account-interface.md, "Removing grants".
+    fn gc_grant(e: &Env, grant: u32) -> Result<(), PerchAccountError> {
+        let record = PerchStorage::get_grants(e, &grant).ok_or(PerchAccountError::UnknownGrant)?;
+        if record.gen == grant_generation(e) {
+            return Err(PerchAccountError::GrantLive);
         }
-        drop_scope(e, scope, &record);
+        drop_grant(e, grant, &record);
         Ok(())
     }
 
-    /// The scoped document under `scope` as applied, if any.
-    fn scope(e: &Env, scope: u32) -> Option<ScopeRecord> {
-        PerchStorage::get_scopes(e, &scope).map(|s| s.record(e))
+    /// The grant document under `grant` as applied, if any.
+    fn grant(e: &Env, grant: u32) -> Option<GrantRecord> {
+        PerchStorage::get_grants(e, &grant).map(|s| s.record(e))
     }
 
-    /// The rule-eval rules of the scoped document under `scope`, aligned with
+    /// The rule-eval rules of the grant document under `grant`, aligned with
     /// its record's rules.
-    fn scope_rule_set(e: &Env, scope: u32) -> Vec<StoredRule> {
-        match PerchStorage::get_scopes(e, &scope) {
+    fn grant_rule_set(e: &Env, grant: u32) -> Vec<StoredRule> {
+        match PerchStorage::get_grants(e, &grant) {
             Some(s) => stored_rules(e, &s.rules),
             None => Vec::new(e),
         }
     }
 
-    /// The signer ids of the scoped document under `scope`, in declaration
+    /// The signer ids of the grant document under `grant`, in declaration
     /// order, if any: with its rules, they give back its canonical text.
     // docs/account-interface.md, "Views".
-    fn scope_signer_ids(e: &Env, scope: u32) -> Option<Vec<String>> {
-        PerchStorage::get_scopes(e, &scope).map(|s| s.signer_ids)
+    fn grant_signer_ids(e: &Env, grant: u32) -> Option<Vec<String>> {
+        PerchStorage::get_grants(e, &grant).map(|s| s.signer_ids)
     }
 
-    /// Each signer's `verifier-name` in the scoped document under `scope`,
-    /// aligned with `scope_signer_ids`, if any: empty where a signer has
+    /// Each signer's `verifier-name` in the grant document under `grant`,
+    /// aligned with `grant_signer_ids`, if any: empty where a signer has
     /// none, and no entries when no signer has one.
     // docs/account-interface.md, "Views".
-    fn scope_verifier_names(e: &Env, scope: u32) -> Option<Vec<String>> {
-        PerchStorage::get_scopes(e, &scope).map(|s| s.verifier_names)
+    fn grant_verifier_names(e: &Env, grant: u32) -> Option<Vec<String>> {
+        PerchStorage::get_grants(e, &grant).map(|s| s.verifier_names)
     }
 
-    /// How many scope ids have a record, wiped ones included.
-    fn scope_count(e: &Env) -> u32 {
-        PerchStorage::get_scope_count(e).unwrap_or(0)
+    /// How many grant ids have a record, wiped ones included.
+    fn grant_count(e: &Env) -> u32 {
+        PerchStorage::get_grant_count(e).unwrap_or(0)
     }
 
-    /// The scope ids at index positions `start..start + count`, wiped ones
+    /// The grant ids at index positions `start..start + count`, wiped ones
     /// included.
     // docs/account-interface.md, "Views".
-    fn scopes(e: &Env, start: u32, count: u32) -> Vec<u32> {
-        let end = Self::scope_count(e).min(start.saturating_add(count));
+    fn grants(e: &Env, start: u32, count: u32) -> Vec<u32> {
+        let end = Self::grant_count(e).min(start.saturating_add(count));
         let mut ids = Vec::new(e);
         for i in start..end {
-            ids.push_back(PerchStorage::get_scope_index(e, &i).unwrap());
+            ids.push_back(PerchStorage::get_grant_index(e, &i).unwrap());
         }
         ids
     }
 }
 
 /// The account's `__check_auth`: the reserved-name guard, the `Protected`
-/// freeze, and the excluded-contract gate for scoped rules run before any
+/// freeze, and the excluded-contract gate for grant rules run before any
 /// rule is evaluated (spec §7.6, §9, §15); then the recovery controller
-/// decides a recovery completion, and rule-eval's `authorize` over the
+/// decides a recovery completion, and rule-eval's `check_auth` over the
 /// stored rule sets, with `authenticate` checking every signer, decides
 /// anything else (`gate`).
 ///
@@ -1092,14 +1089,14 @@ pub trait PerchSmartAccount: CustomAccountInterface {
 ///   every other entry point (each requires the account's own
 ///   authorization), and CAP-0071 delegation, where the host hands this
 ///   account the delegating account's contexts.
-/// - A selected rule a scoped document installed is refused for a call on
+/// - A selected rule a grant document installed is refused for a call on
 ///   the current recovery controller, ZK adapter or pool, or for a guardian
-///   approval on any contract (`ScopeEscalation`), on every path the same
+///   approval on any contract (`GrantEscalation`), on every path the same
 ///   way.
-/// - rule-eval's `authorize` over the stored rule sets refuses what it does
-///   not accept: a chosen scoped rule whose stored rule carries another
-///   scope generation than the account's, from a scoped document a
-///   recovery completion wiped, with `StaleScope`, anything else with
+/// - rule-eval's `check_auth` over the stored rule sets refuses what it does
+///   not accept: a chosen grant rule whose stored rule carries another
+///   grant generation than the account's, from a grant document a
+///   recovery completion wiped, with `StaleGrant`, anything else with
 ///   `RuleEvalRefused` (a chosen id that names no installed rule with
 ///   `ContextRuleNotFound`); once every signer has authenticated,
 ///   the spending records it charged are stored. A recovery completion (one
@@ -1129,22 +1126,22 @@ pub fn check_auth(
             return Err(PerchAuthError::AccountFrozen.into());
         }
     }
-    // A scoped rule never authorizes a call on the excluded set, which may
-    // have been adopted after its scope was applied (spec §7.6), and never
-    // casts a guardian approval, at whatever controller (§2). An admin
-    // document's rule has no tag. A tag is extended on read, as its scope's
+    // A grant rule never authorizes a call on the excluded set, which may
+    // have been adopted after its grant was applied (spec §7.6), and never
+    // casts a guardian approval, at whatever controller (§2). An account
+    // document's rule has no tag. A tag is extended on read, as its grant's
     // record is (`gate`), so the two live together.
     for (i, id) in signatures.context_rule_ids.iter().enumerate() {
-        if PerchStorage::has_scope_tags(e, &id) {
+        if PerchStorage::has_grant_tags(e, &id) {
             if let Some(Context::Contract(ContractContext {
                 contract, fn_name, ..
             })) = auth_contexts.get(i as u32)
             {
                 if excluded_contract(e, &contract) || is_guardian_approval(e, &fn_name) {
-                    return Err(PerchAuthError::ScopeEscalation.into());
+                    return Err(PerchAuthError::GrantEscalation.into());
                 }
             }
-            PerchStorage::extend_scope_tags_ttl(
+            PerchStorage::extend_grant_tags_ttl(
                 e,
                 &id,
                 SMART_ACCOUNT_TTL_THRESHOLD,
@@ -1187,19 +1184,19 @@ fn is_completion(
 /// A completed recovery revokes the union of the credentials it replaced in
 /// its source (the baseline's, for compromise) and every credential the
 /// applied document had that the target drops (spec §8,
-/// `credential::revocations`). It advances the scope generation, which wipes
-/// every scoped document in one write however many exist (spec §7.6), lifts
+/// `credential::revocations`). It advances the grant generation, which wipes
+/// every grant document in one write however many exist (spec §7.6), lifts
 /// the freeze, and drops any pending upgrade (spec §12).
 fn complete_recovery(
     e: &Env,
     replaced: &Vec<Credential>,
     target_fingerprints: &Vec<BytesN<32>>,
 ) -> Result<(), PerchAccountError> {
-    let next = scope_generation(e)
+    let next = grant_generation(e)
         .checked_add(1)
         .ok_or(PerchAccountError::GenerationExhausted)?;
-    PerchStorage::set_scope_generation(e, &next);
-    ScopesWiped { gen: next }.publish(e);
+    PerchStorage::set_grant_generation(e, &next);
+    GrantsWiped { gen: next }.publish(e);
     let mut replaced_fingerprints = Vec::new(e);
     for credential in replaced.iter() {
         replaced_fingerprints.push_back(
@@ -1221,14 +1218,14 @@ fn complete_recovery(
     Ok(())
 }
 
-/// `apply_scope`'s body.
-fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
+/// `apply_grant`'s body.
+fn apply_grant_doc(e: &Env, grant: u32, doc_json: Bytes) -> Result<BytesN<32>, PerchAccountError> {
     let me = e.current_contract_address();
     me.require_auth();
     let compiled: CompiledDoc = DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
         .try_compile_doc(&doc_json)??;
-    check_scoped(e, &me, &compiled)?;
-    let gen = scope_generation(e);
+    check_grant(e, &me, &compiled)?;
+    let gen = grant_generation(e);
     let mut excluded = Vec::new(e);
     if let Some(c) = PerchStorage::get_recovery_controller(e) {
         excluded.push_back(c);
@@ -1238,18 +1235,18 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
         excluded.push_back(z.pool);
     }
     let excluded: alloc::vec::Vec<Address> = excluded.iter().collect();
-    let rule_set = rule_set::lowered_scoped(e, &compiled, &excluded, gen)?;
+    let rule_set = rule_set::lowered_grant(e, &compiled, &excluded, gen)?;
     check_normal(e, &me, &compiled)?;
     for fingerprint in compiled.fingerprints.iter() {
         if PerchStorage::has_revoked(e, &fingerprint) {
             return Err(PerchAccountError::RevokedCredential);
         }
     }
-    // The credential index: refuse a credential a wiped scope named, and
+    // The credential index: refuse a credential a wiped grant named, and
     // record the rest under this generation.
     let mut unrecorded = Vec::new(e);
     for fingerprint in compiled.fingerprints.iter() {
-        match PerchStorage::get_scope_credentials(e, &fingerprint) {
+        match PerchStorage::get_grant_credentials(e, &fingerprint) {
             Some(g) if g < gen => return Err(PerchAccountError::WipedCredential),
             Some(g) if g == gen => {}
             _ => unrecorded.push_back(fingerprint),
@@ -1257,12 +1254,12 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     }
     extend_persistent(e, |ttl| {
         for fingerprint in unrecorded.iter() {
-            PerchStorage::set_scope_credentials(e, &fingerprint, &gen);
-            PerchStorage::extend_scope_credentials_ttl(e, &fingerprint, ttl, ttl);
+            PerchStorage::set_grant_credentials(e, &fingerprint, &gen);
+            PerchStorage::extend_grant_credentials_ttl(e, &fingerprint, ttl, ttl);
         }
     });
 
-    let record = PerchStorage::get_scopes(e, &scope);
+    let record = PerchStorage::get_grants(e, &grant);
     let stored = record
         .as_ref()
         .map(|r| r.rules.clone())
@@ -1273,32 +1270,32 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     let records = rules::records(e, &next, &rule_set);
     gate::drop_records(e, &stored, &records);
 
-    // Every rule in a record is tagged with the scope, so only a new id
+    // Every rule in a record is tagged with the grant, so only a new id
     // needs a tag.
     for c in current.iter() {
         if !next.iter().any(|n| n.id == c.id) {
-            PerchStorage::remove_scope_tags(e, &c.id);
+            PerchStorage::remove_grant_tags(e, &c.id);
         }
     }
     extend_persistent(e, |ttl| {
         for n in next.iter() {
             if !current.iter().any(|c| c.id == n.id) {
-                PerchStorage::set_scope_tags(e, &n.id, &scope);
-                PerchStorage::extend_scope_tags_ttl(e, &n.id, ttl, ttl);
+                PerchStorage::set_grant_tags(e, &n.id, &grant);
+                PerchStorage::extend_grant_tags_ttl(e, &n.id, ttl, ttl);
             }
         }
     });
 
     let pos = match &record {
         Some(r) => r.pos,
-        None => index_insert(e, scope),
+        None => index_insert(e, grant),
     };
     let mut signer_ids = Vec::new(e);
     for s in compiled.model.get_unchecked(0).signers.iter() {
         signer_ids.push_back(s.id);
     }
     let named = compiled.verifier_names.iter().any(|n| !n.is_empty());
-    let applied = StoredScope {
+    let applied = StoredGrant {
         gen,
         doc_hash: compiled.doc_hash.clone(),
         pos,
@@ -1311,13 +1308,13 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
         },
     };
     if record.as_ref() != Some(&applied) {
-        PerchStorage::set_scopes(e, &scope, &applied);
+        PerchStorage::set_grants(e, &grant, &applied);
         extend_persistent(e, |ttl| {
-            PerchStorage::extend_scopes_ttl(e, &scope, ttl, ttl)
+            PerchStorage::extend_grants_ttl(e, &grant, ttl, ttl)
         });
     }
-    ScopeApplied {
-        scope,
+    GrantApplied {
+        grant,
         doc_hash: compiled.doc_hash.clone(),
         gen,
         rules_added: sum.rules_added,
@@ -1332,33 +1329,33 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     Ok(compiled.doc_hash)
 }
 
-/// Refuse a compiled document that would reach past a scope: a recovery
+/// Refuse a compiled document that would reach past a grant: a recovery
 /// member, a rule scoped to the account itself (every `self-admin` rule)
 /// or to a contract of the excluded set (spec §7.6; the compiler checks the
 /// ZK adapter and pool only within one document, spec §15 rule 3). A rule
 /// whose `functions` names a guardian approval (§2) is refused by
-/// `rule_set::lowered_scoped`; one that leaves its functions unrestricted
+/// `rule_set::lowered_grant`; one that leaves its functions unrestricted
 /// is refused a guardian approval in `__check_auth` instead.
-fn check_scoped(e: &Env, me: &Address, compiled: &CompiledDoc) -> Result<(), PerchAccountError> {
+fn check_grant(e: &Env, me: &Address, compiled: &CompiledDoc) -> Result<(), PerchAccountError> {
     if !compiled.recovery.is_empty() {
-        return Err(PerchAccountError::ScopeEscalation);
+        return Err(PerchAccountError::GrantEscalation);
     }
     for rule in compiled.rules.iter() {
         let RuleScope::Contract(target) = &rule.scope else {
-            return Err(PerchAccountError::ScopeEscalation);
+            return Err(PerchAccountError::GrantEscalation);
         };
         if target == me || excluded_contract(e, target) {
-            return Err(PerchAccountError::ScopeEscalation);
+            return Err(PerchAccountError::GrantEscalation);
         }
     }
     Ok(())
 }
 
-/// Refuse a scoped document that is not in normal form (`NotNormalForm`):
+/// Refuse a grant document that is not in normal form (`NotNormalForm`):
 /// one the compiler does not find in normal form
 /// ([`CompiledDoc::normal_form`]), or with a rule already expired or an
 /// `address-eq` naming the account, which the account alone can see. Every
-/// scoped document it applies then lowers to records from which its rules,
+/// grant document it applies then lowers to records from which its rules,
 /// with its signer ids, rebuild its canonical text.
 fn check_normal(e: &Env, me: &Address, compiled: &CompiledDoc) -> Result<(), PerchAccountError> {
     if !compiled.normal_form {
@@ -1381,17 +1378,17 @@ fn check_normal(e: &Env, me: &Address, compiled: &CompiledDoc) -> Result<(), Per
     Ok(())
 }
 
-/// Whether `contract` is in the applied admin document's excluded set,
+/// Whether `contract` is in the applied account document's excluded set,
 /// beyond the account itself: its adopted recovery controller and its ZK
-/// factor's adapter and pool (spec §7.6). No scoped rule may reach them.
+/// factor's adapter and pool (spec §7.6). No grant rule may reach them.
 fn excluded_contract(e: &Env, contract: &Address) -> bool {
     PerchStorage::get_recovery_controller(e).is_some_and(|c| c == *contract)
         || PerchStorage::get_current_zk(e)
             .is_some_and(|z| *contract == z.adapter || *contract == z.pool)
 }
 
-/// Refuse a document naming a credential a scoped document named under a
-/// scope generation before `gen` (`WipedCredential`): a recovery
+/// Refuse a document naming a credential a grant document named under a
+/// grant generation before `gen` (`WipedCredential`): a recovery
 /// completion has ended that generation, and with it every grant the
 /// credential carried (spec §7.6). Before the first completion nothing can
 /// be wiped, so nothing is read.
@@ -1404,61 +1401,61 @@ fn check_unwiped(
         return Ok(());
     }
     for fingerprint in fingerprints.iter() {
-        if PerchStorage::get_scope_credentials(e, &fingerprint).is_some_and(|g| g < gen) {
+        if PerchStorage::get_grant_credentials(e, &fingerprint).is_some_and(|g| g < gen) {
             return Err(PerchAccountError::WipedCredential);
         }
     }
     Ok(())
 }
 
-/// Remove `scope`'s record and rules (their tags and spending records with
+/// Remove `grant`'s record and rules (their tags and spending records with
 /// it), and its index position.
-fn drop_scope(e: &Env, scope: u32, record: &StoredScope) {
+fn drop_grant(e: &Env, grant: u32, record: &StoredGrant) {
     for r in record.rules.iter() {
-        PerchStorage::remove_scope_tags(e, &r.id);
+        PerchStorage::remove_grant_tags(e, &r.id);
         gate::drop_record(e, r.id);
     }
-    PerchStorage::remove_scopes(e, &scope);
+    PerchStorage::remove_grants(e, &grant);
     index_remove(e, record.pos);
-    ScopeRemoved {
-        scope,
+    GrantRemoved {
+        grant,
         gen: record.gen,
         rules_removed: record.rules.len(),
     }
     .publish(e);
 }
 
-/// Append `scope` to the index and return its position.
-fn index_insert(e: &Env, scope: u32) -> u32 {
-    let n = PerchStorage::get_scope_count(e).unwrap_or(0);
-    PerchStorage::set_scope_index(e, &n, &scope);
-    PerchStorage::set_scope_count(e, &(n + 1));
+/// Append `grant` to the index and return its position.
+fn index_insert(e: &Env, grant: u32) -> u32 {
+    let n = PerchStorage::get_grant_count(e).unwrap_or(0);
+    PerchStorage::set_grant_index(e, &n, &grant);
+    PerchStorage::set_grant_count(e, &(n + 1));
     extend_persistent(e, |ttl| {
-        PerchStorage::extend_scope_index_ttl(e, &n, ttl, ttl)
+        PerchStorage::extend_grant_index_ttl(e, &n, ttl, ttl)
     });
     n
 }
 
-/// Swap-remove the scope at position `at` from the index: the last id takes
-/// its position, and that scope's record is rewritten with it.
+/// Swap-remove the grant at position `at` from the index: the last id takes
+/// its position, and that grant's record is rewritten with it.
 fn index_remove(e: &Env, at: u32) {
-    let last = PerchStorage::get_scope_count(e).unwrap_or(0) - 1;
+    let last = PerchStorage::get_grant_count(e).unwrap_or(0) - 1;
     if at != last {
-        let moved = PerchStorage::get_scope_index(e, &last).unwrap();
-        let mut record = PerchStorage::get_scopes(e, &moved).unwrap();
+        let moved = PerchStorage::get_grant_index(e, &last).unwrap();
+        let mut record = PerchStorage::get_grants(e, &moved).unwrap();
         record.pos = at;
-        PerchStorage::set_scope_index(e, &at, &moved);
-        PerchStorage::set_scopes(e, &moved, &record);
+        PerchStorage::set_grant_index(e, &at, &moved);
+        PerchStorage::set_grants(e, &moved, &record);
         extend_persistent(e, |ttl| {
-            PerchStorage::extend_scope_index_ttl(e, &at, ttl, ttl);
-            PerchStorage::extend_scopes_ttl(e, &moved, ttl, ttl);
+            PerchStorage::extend_grant_index_ttl(e, &at, ttl, ttl);
+            PerchStorage::extend_grants_ttl(e, &moved, ttl, ttl);
         });
     }
-    PerchStorage::remove_scope_index(e, &last);
-    PerchStorage::set_scope_count(e, &last);
+    PerchStorage::remove_grant_index(e, &last);
+    PerchStorage::set_grant_count(e, &last);
 }
 
-/// The admin document's rules as installed, the recovery rule marked.
+/// The account document's rules as installed, the recovery rule marked.
 fn admin_rules(e: &Env) -> Vec<InstalledRule> {
     rules::installed_view(
         e,
@@ -1484,8 +1481,8 @@ fn advance_generation(e: &Env) {
     PerchStorage::set_recovery_generation(e, &(generation(e) + 1));
 }
 
-fn scope_generation(e: &Env) -> u64 {
-    PerchStorage::get_scope_generation(e).unwrap_or(0)
+fn grant_generation(e: &Env) -> u64 {
+    PerchStorage::get_grant_generation(e).unwrap_or(0)
 }
 
 fn revision(e: &Env) -> u64 {
@@ -1581,10 +1578,10 @@ fn apply(
         }
     }
     // A completion's target is the controller's, not the authorizer's
-    // choice: refusing it here would let a credential a thief once scoped
+    // choice: refusing it here would let a credential a thief once named in a grant
     // block every later recovery.
     if !matches!(outcome, SyncOutcome::Completed(_)) {
-        check_unwiped(e, &compiled.fingerprints, scope_generation(e))?;
+        check_unwiped(e, &compiled.fingerprints, grant_generation(e))?;
     }
 
     let delta = apply_rules(e, &compiled, &rule_set, mode);
@@ -1661,9 +1658,9 @@ pub mod testutils {
         )
     }
 
-    /// Set the scope generation. Run as the account (`env.as_contract`).
-    pub fn set_scope_generation(e: &Env, generation: u64) {
-        PerchStorage::set_scope_generation(e, &generation);
+    /// Set the grant generation. Run as the account (`env.as_contract`).
+    pub fn set_grant_generation(e: &Env, generation: u64) {
+        PerchStorage::set_grant_generation(e, &generation);
     }
 
     /// Replace the admin records' stored rules with `rule_set`, in order;
@@ -1674,13 +1671,13 @@ pub mod testutils {
         PerchStorage::set_rule_set(e, &with_rules(e, &records, rule_set));
     }
 
-    /// Replace the stored rules of the scoped document under `scope`, as
-    /// [`set_rule_set`] does the admin document's. Run as the account
+    /// Replace the stored rules of the grant document under `grant`, as
+    /// [`set_rule_set`] does the account document's. Run as the account
     /// (`env.as_contract`).
-    pub fn set_scope_rule_set(e: &Env, scope: u32, rule_set: &Vec<StoredRule>) {
-        let mut stored = PerchStorage::get_scopes(e, &scope).expect("a scope record");
+    pub fn set_grant_rule_set(e: &Env, grant: u32, rule_set: &Vec<StoredRule>) {
+        let mut stored = PerchStorage::get_grants(e, &grant).expect("a grant record");
         stored.rules = with_rules(e, &stored.rules, rule_set);
-        PerchStorage::set_scopes(e, &scope, &stored);
+        PerchStorage::set_grants(e, &grant, &stored);
     }
 
     fn with_rules(e: &Env, records: &Vec<RuleRecord>, rules: &Vec<StoredRule>) -> Vec<RuleRecord> {
@@ -1697,7 +1694,7 @@ pub mod testutils {
         PerchStorage::set_rule_set(e, records);
     }
 
-    /// Install `rule` as an admin-document rule named `name`, under a new
+    /// Install `rule` as an account-document rule named `name`, under a new
     /// id, which it returns: a record with no policy, as `apply_doc` records
     /// a document rule, appended to the admin records. Run as the account
     /// (`env.as_contract`).
@@ -1714,7 +1711,7 @@ pub mod testutils {
         id
     }
 
-    /// Remove admin-document rule `id`'s record. Run as the account
+    /// Remove account-document rule `id`'s record. Run as the account
     /// (`env.as_contract`).
     pub fn remove_rule(e: &Env, id: u32) {
         let mut records = PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e));
@@ -1783,17 +1780,17 @@ fn apply_rules(
 /// `CallContract(self)`, as its record and the rule-eval rule it enforces. A
 /// rule scoped to the account authorizes every account entry point that
 /// requires the account's own authorization (`apply_doc`, the
-/// scoped-document entry points, `execute`, the upgrade and recovery-cancel
+/// grant-document entry points, `execute`, the upgrade and recovery-cancel
 /// entry points), so the admin signers hold full owner authority. Every
 /// other rule arrives via an applied, doc-reviewed document.
 ///
 /// The signers are held to the install-time limits (`rules::check`),
 /// refused (`UnverifiedVerifier`) if an external one's verifier is not one
-/// `perch/verifiers` deployed ([`is_verified_verifier`]), as an admin
+/// `perch/verifiers` deployed ([`is_verified_verifier`]), as an account
 /// document's must be, and refused if two are one key
 /// (`auth::check_distinct`), and the rule is announced as OZ's registry
 /// announces one (`ContextRuleAdded`).
-pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
+pub fn install_account_rules(e: &Env, admin_signers: &Vec<Signer>) {
     let rule = rules::admin_rule(e, rules::allocate(e), admin_signers);
     rules::check(e, &rule);
     for signer in admin_signers.iter() {
@@ -1895,5 +1892,51 @@ mod tests {
             bind_signature_payload(&e, &account_a, &payload),
             "digest must be deterministic for a fixed account and payload"
         );
+    }
+
+    // Each `PerchStorage` field's ledger key, as `contractstorage` derives it
+    // from the field name: a map's key is `[Symbol(name), key]`, an item's
+    // `Symbol(name)`. Renaming a field moves its entries to a new key and
+    // leaves the old ones unread on every deployed account, so a rename must
+    // change this list on purpose.
+    #[test]
+    fn the_storage_keys_are_the_committed_list() {
+        use crate::perch_storage_keys__::*;
+        use soroban_sdk::{Symbol, TryFromVal, Val, Vec};
+        use soroban_sdk_tools::key::StorageKey;
+        let e = Env::default();
+        let item = |k: Val| Symbol::try_from_val(&e, &k).unwrap();
+        let map = |k: Val| item(Vec::<Val>::try_from_val(&e, &k).unwrap().get(0).unwrap());
+        let id = BytesN::from_array(&e, &[0; 32]);
+        let keys = [
+            (item(AppliedDoc.to_key(&e)), "AppliedDoc"),
+            (item(AppliedDocBytes.to_key(&e)), "AppliedDocBytes"),
+            (item(AppliedFingerprints.to_key(&e)), "AppliedFingerprints"),
+            (item(RecoveryController.to_key(&e)), "RecoveryController"),
+            (item(RecoveryRule.to_key(&e)), "RecoveryRule"),
+            (item(Gate.to_key(&e)), "Gate"),
+            (item(CurrentZk.to_key(&e)), "CurrentZk"),
+            (map(Revoked::from(id.clone()).to_key(&e)), "Revoked"),
+            (map(EnrolledIds::from(id.clone()).to_key(&e)), "EnrolledIds"),
+            (item(PendingUpgrade.to_key(&e)), "PendingUpgrade"),
+            (item(RecoveryGeneration.to_key(&e)), "RecoveryGeneration"),
+            (item(GrantGeneration.to_key(&e)), "GrantGeneration"),
+            (item(NextRuleId.to_key(&e)), "NextRuleId"),
+            (item(RuleSet.to_key(&e)), "RuleSet"),
+            (item(NextUpgradeId.to_key(&e)), "NextUpgradeId"),
+            (item(Revision.to_key(&e)), "Revision"),
+            (map(Grants::from(0).to_key(&e)), "Grants"),
+            (map(SpendRecords::from(0).to_key(&e)), "SpendRecords"),
+            (map(GrantTags::from(0).to_key(&e)), "GrantTags"),
+            (item(GrantCount.to_key(&e)), "GrantCount"),
+            (map(GrantIndex::from(0).to_key(&e)), "GrantIndex"),
+            (
+                map(GrantCredentials::from(id).to_key(&e)),
+                "GrantCredentials",
+            ),
+        ];
+        for (key, name) in keys {
+            assert_eq!(key, Symbol::new(&e, name));
+        }
     }
 }

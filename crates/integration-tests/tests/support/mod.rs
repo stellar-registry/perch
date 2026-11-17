@@ -1037,14 +1037,14 @@ pub fn err<T: core::fmt::Debug, E: core::fmt::Debug + Clone>(
 }
 
 /// The id of `account`'s newest live rule named `name`, from its records:
-/// the admin document's and every scope's.
+/// the account document's and every grant's.
 pub fn newest_rule(env: &Env, account: &Address, name: &str) -> Option<u32> {
     let client = PerchAccountClient::new(env, account);
     let wanted = soroban_sdk::String::from_str(env, name);
     let mut rules: std::vec::Vec<perch_smart_account::InstalledRule> =
         client.installed_rules().iter().collect();
-    for scope in client.scopes(&0, &u32::MAX).iter() {
-        if let Some(record) = client.scope(&scope) {
+    for grant in client.grants(&0, &u32::MAX).iter() {
+        if let Some(record) = client.grant(&grant) {
             rules.extend(record.rules.iter());
         }
     }

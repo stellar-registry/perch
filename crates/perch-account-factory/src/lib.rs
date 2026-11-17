@@ -8,7 +8,7 @@
 //!   account build is a new factory, at a new address. The account's
 //!   constructor refuses an admin signer whose verifier `perch/verifiers`
 //!   did not deploy, so [`PerchAccountFactory::create`] creates only what
-//!   an admin document could hold.
+//!   an account document could hold.
 //! - **Bound to the signers.** An account's address commits to the admin
 //!   signers it is created with, not only to the caller's salt: the deploy
 //!   salt is `sha256(salt || xdr(admin_signers))`. Nobody can create an

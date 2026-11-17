@@ -25,12 +25,12 @@
 //! Rules are compared as `StoredRule`s, whose conversion from a
 //! `rule_eval::Rule` is one-to-one, so equal mirrors are equal rules.
 //!
-//! [`check_scope`] checks a scoped document's stored set the same way: the
-//! lowering is `rule_eval::lower_scoped` of the scope's model under the
+//! [`check_grant`] checks a grant document's stored set the same way: the
+//! lowering is `rule_eval::lower_scoped` of the grant's model under the
 //! generation its record carries, and each denoted rule carries that
-//! generation. The account keeps no scoped document's text: the check reads
-//! it as [`crate::rebuild`] gives it back from the scope's records and
-//! signer ids, which must hash to the stored `doc_hash`, so every scoped
+//! generation. The account keeps no grant document's text: the check reads
+//! it as [`crate::rebuild`] gives it back from the grant's records and
+//! signer ids, which must hash to the stored `doc_hash`, so every grant
 //! document a suite applies also rebuilds.
 //!
 //! Run each at the ledger the apply it checks ran at: the lowering's expiry
@@ -177,16 +177,16 @@ fn attached(e: &Env, canonical: &Bytes) -> Result<Vec<Policies>, String> {
     rpn::batch_policies_of(e, &doc)
 }
 
-/// The stored rule set of the scoped document under `scope` equals both
+/// The stored rule set of the grant document under `grant` equals both
 /// the scoped lowering of its model and the denotation of the rules its
 /// record holds (module docs).
-pub fn check_scope(e: &Env, account: &Address, scope: u32) -> Result<Checked, String> {
+pub fn check_grant(e: &Env, account: &Address, grant: u32) -> Result<Checked, String> {
     let client = PerchAccountClient::new(e, account);
     let me = address(e, account).ok_or("the account's address")?;
-    let record = client.scope(&scope).ok_or(format!("no scope {scope}"))?;
-    let stored: Vec<StoredRule> = client.scope_rule_set(&scope).iter().collect();
-    let canonical = crate::rebuild::scope_text(e, account, scope)
-        .map_err(|x| format!("scope {scope}'s text: {x}"))?;
+    let record = client.grant(&grant).ok_or(format!("no grant {grant}"))?;
+    let stored: Vec<StoredRule> = client.grant_rule_set(&grant).iter().collect();
+    let canonical = crate::rebuild::grant_text(e, account, grant)
+        .map_err(|x| format!("grant {grant}'s text: {x}"))?;
     let canonical = Bytes::from_slice(e, canonical.as_bytes());
     let (doc, model) = read_doc(e, &canonical)?;
     let mut excluded = std::vec![me.clone()];
@@ -194,7 +194,7 @@ pub fn check_scope(e: &Env, account: &Address, scope: u32) -> Result<Checked, St
         excluded.push(address(e, &c).ok_or("the controller's address")?);
     }
     let lowered = rule_eval::lower_scoped(&model, &me, &excluded, record.gen)
-        .map_err(|_| format!("scope {scope}: rule-eval's scoped lowering refuses it"))?;
+        .map_err(|_| format!("grant {grant}: rule-eval's scoped lowering refuses it"))?;
     let lowered = unexpired(e, &lowered, doc.rules.len())?;
     let mut checked = Checked {
         rules: stored.len(),
@@ -358,7 +358,7 @@ pub struct Records {
 }
 
 /// The spending records `account` keeps (module docs): for every rule its
-/// admin document or a scoped document installed, a record only when its
+/// account document or a grant document installed, a record only when its
 /// stored rule has a cap, its total the sum of its history; and no record
 /// for any rule id no longer installed. Reads the account's storage, so it
 /// also runs while the account's code is another (`rule_core_documents.rs`
@@ -370,9 +370,9 @@ pub fn check_records(e: &Env, account: &Address) -> Result<Records, String> {
             .iter()
             .zip(A::rule_set(e).iter())
             .collect();
-        for scope in A::scopes(e, 0, A::scope_count(e)).iter() {
-            if let Some(record) = A::scope(e, scope) {
-                rules.extend(record.rules.iter().zip(A::scope_rule_set(e, scope).iter()));
+        for grant in A::grants(e, 0, A::grant_count(e)).iter() {
+            if let Some(record) = A::grant(e, grant) {
+                rules.extend(record.rules.iter().zip(A::grant_rule_set(e, grant).iter()));
             }
         }
         rules

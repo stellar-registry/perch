@@ -5,7 +5,7 @@ spec, which generated bindings and explorers show, and the account is close
 to the network's 131,072-byte contract-size limit. So each entry point, type,
 field, error and event carries a one- or two-line doc in the spec, and the
 longer notes are here. The source links each section from a `//` comment.
-[`recovery/spec.md`](recovery/spec.md) is normative for recovery, scoped
+[`recovery/spec.md`](recovery/spec.md) is normative for recovery, grant
 documents and upgrades; where this page and the spec disagree, the spec wins.
 
 ## Constructor
@@ -23,13 +23,13 @@ most 256 bytes (3013), and no two that are one key (3007): two delegated
 signers with one address, or external signers their verifier's
 `batch_canonicalize_key` maps to the same bytes, each verifier asked once.
 An external signer's verifier must also be one `perch/verifiers` deployed
-(`UnverifiedVerifier`, "Verifiers"), as an admin document's must: the
+(`UnverifiedVerifier`, "Verifiers"), as an account document's must: the
 constructor reads the verifier's code hash (`Address::executable`) and
 requires the verifier to sit at that hash's content address in
 `perch/verifiers`, where only the registry's `deploy_stateless` of a
 published hash puts a contract. It makes no call for this. Every creation
 path runs the constructor, the factory's `create` and `create_passkey`
-included, so no account starts with an admin an admin document could not
+included, so no account starts with an admin an account document could not
 name.
 A rule a document installs gets the same limits; the compiler has already
 refused a non-canonical key and a key declared twice, so applies ask no
@@ -38,6 +38,11 @@ registry announces a rule: its id, name, contract, no last ledger, its
 signers' positions as their ids, and no policy.
 
 ## Verifiers
+
+A **signer** is a slot a document names by its signer id; a **credential**
+is the `Delegated(address)` or `External(verifier, key)` value that fills
+it. OpenZeppelin's smart account and the account's wire types call that
+value a `Signer`.
 
 An external signer names its verifier contract by name or by contract id
 alone (`perch_ir::verifier`):
@@ -56,10 +61,10 @@ alone (`perch_ir::verifier`):
   verifier only by applying a document.
 - **By contract id alone.** An *unverified* verifier, whose `verify`
   decides whatever the rules holding its signers allow. The compiler refuses
-  one in an admin document, a document with a `self-admin` rule or a
+  one in an account document, a document with a `self-admin` rule or a
   `recovery` member (`Compiler_DocInvalid`): every document
   `apply_doc` applies has one, and every recovery target, so no admin rule
-  and no recovery credential rests on one. A scoped document may hold one,
+  and no recovery credential rests on one. A grant document may hold one,
   at most one signer per unverified verifier in a rule
   (`Compiler_DocInvalid` otherwise): a verifier that calls every key
   canonical and accepts one signature for several would otherwise count each
@@ -68,15 +73,15 @@ alone (`perch_ir::verifier`):
   address is unverified too: the name is what the document is reviewed by.
 
 `CompiledDoc::verifier_names` carries each declared signer's name (empty
-where it has none), which `apply_scope` keeps for the rebuild.
+where it has none), which `apply_grant` keeps for the rebuild.
 
 ## Applying documents
 
 ### `apply_doc`
 
 `apply_doc(doc_json, approval_valid_until, expected_revision)` applies the
-admin document: the account's own rules, its recovery member, and everything
-a recovery restores. With the scoped-document entry points it is the only way
+account document: the account's own rules, its recovery member, and everything
+a recovery restores. With the grant-document entry points it is the only way
 authorization changes. The doc compiler it calls is derived from build-time
 pins (`crates/perch-smart-account/wasm/README.md`), never passed in. It brings
 the installed rules to the document in one invocation, changing only the
@@ -91,7 +96,7 @@ rules that differ, and returns the canonical `doc_hash`.
   bound a `Protected` reconfiguration's recorded approvals were given for; it
   is ignored otherwise.
 - **Wiped credentials.** It refuses (`WipedCredential`) a document naming a
-  credential a scoped document named before the last completed recovery,
+  credential a grant document named before the last completed recovery,
   except the completion's own target (spec §7.6).
 - **Revision.** With `expected_revision`, it refuses with `StaleRevision`
   unless the account is still at that `revision`, so a document prepared
@@ -99,16 +104,16 @@ rules that differ, and returns the canonical `doc_hash`.
   applies over whatever revision is current. Every successful call advances
   the revision by one, a re-apply of the same document included.
 
-### `apply_scope`
+### `apply_grant`
 
-`apply_scope(scope, doc_json)` applies a scoped document under `scope`, an id
+`apply_grant(grant, doc_json)` applies a grant document under `grant`, an id
 the owner chooses (one per app grant, say), and returns its `doc_hash`
 (spec §7.6). Owner authorization.
 
-- It refuses (`ScopeEscalation`) a `recovery` member, a `self-admin` rule, a
+- It refuses (`GrantEscalation`) a `recovery` member, a `self-admin` rule, a
   rule scoped to the account, its recovery controller, or its ZK adapter or
-  pool, or a rule whose `functions` names a guardian approval, so no scoped
-  document reaches the admin document's rules, recovery, upgrades, or
+  pool, or a rule whose `functions` names a guardian approval, so no grant
+  document reaches the account document's rules, recovery, upgrades, or
   guardian approvals.
 - It refuses (`NotNormalForm`) a document that is not in normal form. The
   compiler reports what the text shows (`CompiledDoc::normal_form`,
@@ -120,28 +125,28 @@ the owner chooses (one per app grant, say), and returns its `doc_hash`
   account adds what only it can see: no `address-eq` naming the account
   (write `is-self`) and no rule whose `not-after-ledger` has already been
   reached, which is refused rather than dropped.
-- It refuses (`WipedCredential`) a credential a scoped document named before
+- It refuses (`WipedCredential`) a credential a grant document named before
   the last completed recovery, and records every credential it names under
-  the current scope generation.
+  the current grant generation.
 - The document is compiled under the same caps as any document and reconciled
-  against this scope's records only. Every rule it installs is tagged with
-  the scope, and its stored rule carries the current scope generation, so
-  applying over a wiped scope revives it with the new rules.
+  against this grant's records only. Every rule it installs is tagged with
+  the grant, and its stored rule carries the current grant generation, so
+  applying over a wiped grant revives it with the new rules.
 - It keeps the document's signer ids and each signer's `verifier-name`, not
   its text (no names when no signer has one). Each normal-form document is
   the one document its stored rules lower from, so its records, signer ids
-  and verifier names give the text back ("Views", `scope_signer_ids`,
-  `scope_verifier_names`).
+  and verifier names give the text back ("Views", `grant_signer_ids`,
+  `grant_verifier_names`).
 - It calls no controller, and leaves the applied `doc_hash` and the revision
   alone.
 
-### Removing scopes
+### Removing grants
 
-`remove_scope(scope)` revokes a grant: it removes the scoped document and
-every rule it installed, with owner authorization. `gc_scope(scope)` removes a
-scoped document a recovery completion wiped. It is permissionless, because
-the wiped rules already authorize nothing, and it refuses a scope of the
-current generation (`ScopeLive`).
+`remove_grant(grant)` revokes a grant: it removes the grant document and
+every rule it installed, with owner authorization. `gc_grant(grant)` removes a
+grant document a recovery completion wiped. It is permissionless, because
+the wiped rules already authorize nothing, and it refuses a grant of the
+current generation (`GrantLive`).
 
 ## Authorization-entry root conditions
 
@@ -162,7 +167,7 @@ as the account (spec §15).
 
 ## Views
 
-- **`applied_doc`, `applied_doc_hash`, `document`.** The applied admin
+- **`applied_doc`, `applied_doc_hash`, `document`.** The applied account
   document's canonical bytes and `doc_hash`, `None` before the first
   `apply_doc`, when only the constructor's admin rule exists. Under CANON v1
   the hash is `sha256` of the bytes, so anyone can check installed ==
@@ -170,52 +175,52 @@ as the account (spec §15).
 - **`revision`.** 0 after the constructor, advanced by one in every successful
   `apply_doc` (whatever it changes, a re-apply of the same document included)
   and every executed upgrade. Freeze changes, recovery attempts, evidence, and
-  cancellations do not advance it, and neither do scoped documents: a grant
-  changing never makes an admin document prepared against this revision
+  cancellations do not advance it, and neither do grant documents: a grant
+  changing never makes an account document prepared against this revision
   stale. It never decreases and never repeats, so unlike `doc_hash` it tells
   A → B → A apart.
 - **`configuration`.** Everything rule selection and signing need for the
-  admin document, read at one ledger, with the revision it belongs to.
-  Scoped documents' rules are not in it; `scopes` and `scope` list them.
+  account document, read at one ledger, with the revision it belongs to.
+  Grant documents' rules are not in it; `grants` and `grant` list them.
 - **`capabilities`.** See `AccountCapabilities` below.
 - **`installed_rules`, `rule_set`.** `installed_rules` is every context rule
-  the admin document installed, with its id; `apply_doc` matches the
+  the account document installed, with its id; `apply_doc` matches the
   document's rules against these. `rule_set` is aligned with it: entry `i` is
   the rule-eval rule installed rule `i` enforces, and what `__check_auth`
   evaluates. The account stores each rule once, as one record holding its
   id, name and policies and its rule-eval rule; a rule's scope, signers and
   last ledger in `installed_rules` are its rule-eval rule's.
 - **`get_context_rules_count`, `get_context_rule`.** The account's rules in
-  OZ's `ContextRule` shape, read from its records (the admin document's and
-  every scope's). A rule keeps its id while it is edited in place and gets a
+  OZ's `ContextRule` shape, read from its records (the account document's and
+  every grant's). A rule keeps its id while it is edited in place and gets a
   new one when it is added or installed again; no id is given twice. A
   rule's `signer_ids` and `policy_ids` are its signers' and policies'
-  positions in it. The count includes scoped documents' and expired
+  positions in it. The count includes grant documents' and expired
   rules.
-- **`scope_generation`.** 0 until the first completed recovery, then advanced
+- **`grant_generation`.** 0 until the first completed recovery, then advanced
   by one by each completed recovery and by nothing else: not by enrollment,
   reconfiguration, removal, a controller switch, or an executed upgrade, all
-  of which advance `recovery_generation`. A scope whose record has another
+  of which advance `recovery_generation`. A grant whose record has another
   generation is wiped.
-- **`credential_generation`.** The last scope generation a scoped document
-  named this credential fingerprint under. Once `scope_generation` is past
+- **`credential_generation`.** The last grant generation a grant document
+  named this credential fingerprint under. Once `grant_generation` is past
   it, no document may name the credential (spec §7.6).
-- **`scope`, `scope_rule_set`, `scope_signer_ids`, `scope_verifier_names`.**
-  A scoped document's record, its rule-eval rules (aligned with the record's
-  rules, each carrying the scope generation it was applied under; empty for
+- **`grant`, `grant_rule_set`, `grant_signer_ids`, `grant_verifier_names`.**
+  A grant document's record, its rule-eval rules (aligned with the record's
+  rules, each carrying the grant generation it was applied under; empty for
   an unknown id), its signer ids in declaration order, and each signer's
   `verifier-name` aligned with them (empty where a signer has none, and no
   entries when no signer has one). The account does not store the
-  document's text: the four give it back, since the account applies a scoped
-  document only in normal form. perch-js's `rebuildScopeDoc` (and
-  `readScopeDoc`, which reads the four) rebuilds it and trusts it only once
-  its `sha256` is the record's `doc_hash`. Rule names repeat across scopes,
-  so a wallet selects a scoped rule by `(scope, name)`.
-- **`scopes(start, count)`.** The scope ids at positions
+  document's text: the four give it back, since the account applies a grant
+  document only in normal form. perch-js's `rebuildGrantDoc` (and
+  `readGrantDoc`, which reads the four) rebuilds it and trusts it only once
+  its `sha256` is the record's `doc_hash`. Rule names repeat across grants,
+  so a wallet selects a grant rule by `(grant, name)`.
+- **`grants(start, count)`.** The grant ids at positions
   `start..start + count` of the index (fewer at its end), wiped ones
-  included. Removing a scope moves the last id into its position, so a
+  included. Removing a grant moves the last id into its position, so a
   listing read across several calls can miss an id that moved in between;
-  read `scope_count` again to tell.
+  read `grant_count` again to tell.
 - **`renew`.** Extends the account's instance, the applied document and its
   credential fingerprints, and the named revoked-set and enrolled-id entries
   to the network maximum. Permissionless; it changes no meaning.
@@ -278,9 +283,9 @@ recorded when a controller is adopted, and passed back as
   struct. The freeze is in force while the ledger is below its `until`.
 - **`AccountCapabilities`** holds the constants of the deployed wasm a wallet
   checks before it builds anything for the account.
-  - `interface_version` is `INTERFACE_VERSION`. Version 2 adds scoped
+  - `interface_version` is `INTERFACE_VERSION`. Version 2 adds grant
     documents; since then `configuration` and `installed_rules` cover the
-    admin document only. Version 3 adds exact `auth-root` conditions.
+    account document only. Version 3 adds exact `auth-root` conditions.
   - `doc_identity` is `canon_v1`: the applied `doc_hash` is `sha256` of the
     CANON v1 canonical bytes.
   - `auth_digest` is `addr_oz_v1`: a signer signs OZ's
@@ -290,9 +295,9 @@ recorded when a controller is adopted, and passed back as
     cannot be replayed on another account. The earlier `oz_rule_ids` scheme
     omitted the account address; a client reads this symbol to tell which
     digest an account expects.
-  - `apply_modes` lists `one_tx` (the admin document in one `apply_doc`
-    transaction) and `scoped_v1` (scoped documents through `apply_scope`,
-    `remove_scope`, and `gc_scope`, spec §7.6).
+  - `apply_modes` lists `one_tx` (the account document in one `apply_doc`
+    transaction) and `grant_v1` (grant documents through `apply_grant`,
+    `remove_grant`, and `gc_grant`, spec §7.6).
   - `snapshot_version` is `SNAPSHOT_VERSION`, the layout of
     `AccountConfiguration`. Version 2 adds explicit optional root metadata
     to every installed rule; a missing field is only valid in snapshot 1.
@@ -302,17 +307,17 @@ recorded when a controller is adopted, and passed back as
 - **`InstalledPolicy.params`** is `sha256` of the install parameters' XDR. A
   policy whose parameters change is uninstalled and installed again; one whose
   parameters are unchanged is left alone.
-- **`ScopeRecord.gen`** is the scope generation the scoped document was
-  applied under. Once `scope_generation` has moved past it, a recovery
-  completion has wiped the scope: its rules authorize nothing
-  (`StaleScope`, from rule-eval's generation check on their stored rules),
-  and anyone may remove them with `gc_scope`.
+- **`GrantRecord.gen`** is the grant generation the grant document was
+  applied under. Once `grant_generation` has moved past it, a recovery
+  completion has wiped the grant: its rules authorize nothing
+  (`StaleGrant`, from rule-eval's generation check on their stored rules),
+  and anyone may remove them with `gc_grant`.
 
 ## Events
 
 Rule changes emit no event of their own, so `DocApplied` and
-`ScopeApplied`, with the applied document (`applied_doc` serves the admin
-document; a scope's records and signer ids rebuild a scoped one), are the
+`GrantApplied`, with the applied document (`applied_doc` serves the account
+document; a grant's records and signer ids rebuild a grant document), are the
 whole record of a change. The constructor emits
 `context_rule_added` for its admin rule (see "Constructor"). `UpgradeDropped` is emitted when a scheduled upgrade is cancelled,
 replaced by a newer request, found stale at execution, or cleared by a
@@ -327,19 +332,19 @@ their docs land in the account's spec too.
 - **`AdminLockout`.** Applying a document that keeps no constraint-free,
   never-expiring self-admin rule with a signer could lock the admin out, so
   it is refused (anti-brick).
-- **`ScopeEscalation`.** `apply_scope` was given a document a scoped document
+- **`GrantEscalation`.** `apply_grant` was given a document a grant document
   may not be: it has a `recovery` member, a `self-admin` rule, a rule scoped
   to the account itself, its recovery controller, or its ZK adapter or pool,
   or a rule whose `functions` names a guardian approval (spec §7.6).
-  `__check_auth` also refuses a scoped rule selected for a guardian approval
-  on any contract, with `PerchAuthError::ScopeEscalation`.
+  `__check_auth` also refuses a grant rule selected for a guardian approval
+  on any contract, with `PerchAuthError::GrantEscalation`.
 - **`ModelInvalid`.** The compiled document carries no model, more than one,
   a model soroban-facade cannot read, or one whose rules or recovery do not
   match the compiled rules one for one.
 - **`UnguardedRule`.** A rule other than the recovery rule asks for no signer
   (INV-1), so an authorization with no signer at all would satisfy it.
-- **`NotNormalForm`.** `apply_scope` was given a document outside normal form
-  ("`apply_scope`"). Each refused form either has a normal spelling that
+- **`NotNormalForm`.** `apply_grant` was given a document outside normal form
+  ("`apply_grant`"). Each refused form either has a normal spelling that
   stores the same rules (lowercase hex, a plain decimal limit, no token,
   `all`, `is-self`, the declarations reordered or the unnamed ones dropped)
   or is a rule that would authorize nothing: a capped rule on functions
@@ -348,7 +353,7 @@ their docs land in the account's spec too.
 - **`UnverifiedVerifier`.** A constructor admin signer's verifier is not a
   contract `perch/verifiers` deployed ("Constructor", "Verifiers").
 - **`Compiler_DocInvalid`.** Beside a document perch-ir's validation
-  refuses, the compiler refuses with it an admin document (or a recovery
+  refuses, the compiler refuses with it an account document (or a recovery
   target) naming a verifier by contract id alone, a rule holding two
   signers under one such verifier, and a `verifier-name` not published in
   `perch/verifiers` or resolving to another contract than the signer's

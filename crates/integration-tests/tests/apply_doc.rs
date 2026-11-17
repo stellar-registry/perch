@@ -5,7 +5,7 @@
 //!
 //! The whole `setup()` this suite used to hand-roll is now one
 //! `perch_testkit::Bootstrap::native()` call; the stand-in verifiers, the
-//! fixture constants and the fixture live in the testkit. An admin document
+//! fixture constants and the fixture live in the testkit. An account document
 //! names its verifiers from `perch/verifiers`, so the suite applies the
 //! frozen fixture with its two verifiers named (`World::fixture`).
 

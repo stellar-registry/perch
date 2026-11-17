@@ -407,7 +407,7 @@ fn compile_with_ci(key_hex: &str) -> Result<(), DocCompilerError> {
         .sha256(&Bytes::from_slice(&env, FIXTURE_NETWORK.as_bytes()))
         .to_array();
     env.ledger().with_mut(|l| l.network_id = net_id);
-    // An admin document names its verifiers: the fixture's admin verifier
+    // An account document names its verifiers: the fixture's admin verifier
     // and the ML-DSA verifier, from `perch/verifiers`.
     let admin = perch_testkit::verifiers::deploy_named(
         &env,

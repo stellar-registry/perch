@@ -97,7 +97,7 @@ impl World {
         PerchAccountClient::new(&self.env, &self.account)
     }
 
-    /// The frozen ci-publish fixture as an admin document can hold it: its
+    /// The frozen ci-publish fixture as an account document can hold it: its
     /// two verifiers named ([`FIXTURE_VERIFIER_NAMES`]), at
     /// [`Self::fixture_verifiers`] in place of the frozen addresses, and the
     /// text otherwise as written.
@@ -165,7 +165,7 @@ pub(crate) fn build(cfg: Bootstrap) -> World {
     // `apply_doc(doc)` resolves to exactly these, offline, with no registry
     // contract. Network-dependent, so it runs after the network bind above.
     let (compiler, interpreter) = register_infra_at_derived(&env);
-    // The verifiers an admin document names, where `perch/verifiers`
+    // The verifiers an account document names, where `perch/verifiers`
     // deploys them and published there under their names; the frozen
     // fixture's raw addresses keep a stand-in too.
     let verifier = verifiers::deploy(&env, PerchEd25519Verifier);

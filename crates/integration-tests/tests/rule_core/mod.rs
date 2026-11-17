@@ -29,11 +29,11 @@
 //! Before each authorization, `soroban-facade` reads the contexts the
 //! harness built and they must equal the trace's batch under the renaming,
 //! so the account is shown exactly the trace's authorization, and the
-//! account's scope generation is set to the authorization's. The account's
+//! account's grant generation is set to the authorization's. The account's
 //! own reading of the batch (`perch_rule_eval::convert::calls`, what its
 //! rule-eval check reads) must equal the facade's.
 //!
-//! `__check_auth` decides with rule-eval's `authorize` over the stored rule
+//! `__check_auth` decides with rule-eval's `check_auth` over the stored rule
 //! sets and the account's `authenticate` of every signer
 //! (`perch_smart_account::check_auth`), so a refusal by either is a refused
 //! verdict. An accepted verdict carries the spending records the account
@@ -44,19 +44,19 @@
 //! (`perch_testkit::rule_set::check_records`); a difference is reported with
 //! the authorization.
 //!
-//! After every `apply_doc` and `apply_scope`, the account's stored
+//! After every `apply_doc` and `apply_grant`, the account's stored
 //! rule-eval rule set for that document must equal both the lowering of the
 //! document's model and the denotation of its context rules with the
 //! programs and caps the compiler emits for them (`perch_testkit::rule_set`); a
 //! difference fails the run.
 //!
-//! A scoped trace's document goes through `apply_scope` instead: the harness
-//! applies the trace's admin document with `apply_doc`, sets the scope
+//! A scoped trace's document goes through `apply_grant` instead: the harness
+//! applies the trace's account document with `apply_doc`, sets the grant
 //! generation to the one the trace issues the document in, and applies the
-//! document under one scope id, authorized through the admin document's
-//! self-admin rule. Choices name the scope's rules, by their ids in its
-//! record. Perch refuses every scoped document rule-core's lowering refuses
-//! with one error, `ScopeEscalation`. Perch applies a scoped document only
+//! document under one grant id, authorized through the account document's
+//! self-admin rule. Choices name the grant's rules, by their ids in its
+//! record. Perch refuses every grant document rule-core's lowering refuses
+//! with one error, `GrantEscalation`. Perch applies a grant document only
 //! in normal form: the harness applies the normal form of the trace's
 //! document (`perch_testkit::rebuild::normal`), which stores the same rules,
 //! once the trace's own spelling, where it differs, is refused.
@@ -209,8 +209,8 @@ pub struct Run {
     /// Perch's lowering of the document's rules, as rule-eval rules over the
     /// trace's abstract identifiers.
     pub lowered: Vec<ERule>,
-    /// `apply_scope` refused the scoped document with `ScopeEscalation`.
-    pub scope_refused: bool,
+    /// `apply_grant` refused the grant document with `GrantEscalation`.
+    pub grant_refused: bool,
     /// Whether the account installed a recovery rule.
     pub recovery_rule: bool,
     pub verdicts: Vec<Got>,
@@ -221,7 +221,7 @@ pub struct Run {
     /// `__check_auth` with no context, so these call it directly.
     pub empty: usize,
     /// The stored rule sets checked (one per accepted `apply_doc` or
-    /// `apply_scope`), and the rules in them.
+    /// `apply_grant`), and the rules in them.
     pub rule_sets: usize,
     pub stored_rules: usize,
     /// The capped rules' records checked after accepted authorizations
@@ -322,7 +322,7 @@ impl<'w> Lab<'w> {
                 "controller" => w.controller.clone(),
                 "adapter" => w.adapter.clone(),
                 "pool" => w.pool.clone(),
-                // Where `perch/verifiers` deploys one, named, as an admin
+                // Where `perch/verifiers` deploys one, named, as an account
                 // document's must be.
                 "verifier" => perch_testkit::verifiers::deploy_auto(e, PerchEd25519Verifier),
                 "delegate" => e.register(Key, ()),
@@ -641,11 +641,11 @@ impl<'w> Lab<'w> {
         }
     }
 
-    /// The scoped document applied under the trace's scope id before the
+    /// The grant document applied under the trace's grant id before the
     /// trace's under [`Start::AfterPredecessor`]: [`Self::predecessor`]
     /// without its self-admin rule, on a contract the trace calls that no
-    /// scoped document is refused for.
-    fn scoped_predecessor(&mut self, t: &Trace) -> PolicyDoc {
+    /// grant document is refused for.
+    fn grant_predecessor(&mut self, t: &Trace) -> PolicyDoc {
         let w = self.w;
         let excluded = [&w.account, &w.controller, &w.adapter, &w.pool];
         let mut p = self.predecessor(t);
@@ -662,16 +662,16 @@ impl<'w> Lab<'w> {
         p
     }
 
-    /// What authorizes `apply_scope` on a scoped trace's account: the admin
+    /// What authorizes `apply_grant` on a scoped trace's account: the account
     /// document's first self-admin rule (`r<i>`), signed by its one
     /// delegated signer.
-    fn scope_authority(&mut self, admin: &JsonDoc) -> Result<(String, Address), String> {
+    fn grant_authority(&mut self, admin: &JsonDoc) -> Result<(String, Address), String> {
         let (i, rule) = admin
             .rules
             .iter()
             .enumerate()
             .find(|(_, r)| matches!(r.scope, JsonScope::SelfAdmin))
-            .ok_or("an admin document without a self-admin rule")?;
+            .ok_or("an account document without a self-admin rule")?;
         let ids = match &rule.principals {
             JsonPrincipals::All(ids) => ids,
             JsonPrincipals::Threshold { ids, .. } => ids,
@@ -896,22 +896,22 @@ fn account_refused(w: &World) -> bool {
     })
 }
 
-/// The scope id a scoped trace's document is applied under.
-pub const SCOPE: u32 = 7;
+/// The grant id a scoped trace's document is applied under.
+pub const GRANT: u32 = 7;
 
-/// Set the account's scope generation (`perch_smart_account::testutils`).
+/// Set the account's grant generation (`perch_smart_account::testutils`).
 fn set_generation(w: &World, generation: &str) -> Result<(), String> {
     let g: u64 = generation
         .parse()
         .map_err(|x| format!("generation {generation:?}: {x}"))?;
     w.env.as_contract(&w.account, || {
-        perch_smart_account::testutils::set_scope_generation(&w.env, g)
+        perch_smart_account::testutils::set_grant_generation(&w.env, g)
     });
     Ok(())
 }
 
-/// `apply_scope(SCOPE, bytes)`, authorized by `key` through the rule `rule`.
-fn apply_scope(
+/// `apply_grant(GRANT, bytes)`, authorized by `key` through the rule `rule`.
+fn apply_grant(
     w: &World,
     rule: u32,
     key: &Address,
@@ -919,19 +919,19 @@ fn apply_scope(
 ) -> Result<BytesN<32>, Result<PerchAccountError, soroban_sdk::InvokeError>> {
     let root = w.invocation(
         &w.account,
-        "apply_scope",
-        std::vec![w.sc(SCOPE), w.sc(bytes.clone())],
+        "apply_grant",
+        std::vec![w.sc(GRANT), w.sc(bytes.clone())],
     );
     w.env
         .set_auths(&[w.delegated_entry(&w.account, key, rule, root)]);
-    let out = w.client().try_apply_scope(&SCOPE, bytes);
+    let out = w.client().try_apply_grant(&GRANT, bytes);
     w.env.set_auths(&[]);
     out.map(|r| r.unwrap())
 }
 
 /// Apply `t`'s document to an account and run every authorization through
 /// it. An `Err` is a step that did not complete: the harness could not set
-/// the trace up, or Perch refused the document other than as a scoped
+/// the trace up, or Perch refused the document other than as a grant
 /// document rule-core refuses.
 pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
     let w = support::world_with(Opts {
@@ -972,10 +972,10 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
     e.ledger().with_mut(|l| l.sequence_number = 0);
     let missing = u32::MAX;
     let (mut rule_sets, mut stored_rules) = (0, 0);
-    let mut rule_set = |what: &str, scope: Option<u32>| -> Result<(), String> {
-        let c = match scope {
+    let mut rule_set = |what: &str, grant: Option<u32>| -> Result<(), String> {
+        let c = match grant {
             None => perch_testkit::rule_set::check(&e, &w.account),
-            Some(s) => perch_testkit::rule_set::check_scope(&e, &w.account, s),
+            Some(s) => perch_testkit::rule_set::check_grant(&e, &w.account, s),
         }
         .map_err(|x| format!("the rule set after {what}: {x}"))?;
         rule_sets += 1;
@@ -1003,17 +1003,17 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         }
         Some(scoped) => {
             w.apply_bytes(&canonical(&lab.doc(&scoped.admin)?), 0)
-                .map_err(|x| format!("apply_doc refuses the admin document: {x:?}"))?;
-            rule_set("the admin document", None)?;
-            let (rule, key) = lab.scope_authority(&scoped.admin)?;
+                .map_err(|x| format!("apply_doc refuses the account document: {x:?}"))?;
+            rule_set("the account document", None)?;
+            let (rule, key) = lab.grant_authority(&scoped.admin)?;
             let rule = w.rule_id(&w.account, &rule);
             set_generation(&w, &scoped.generation)?;
             if start == Start::AfterPredecessor {
-                apply_scope(&w, rule, &key, &canonical(&lab.scoped_predecessor(t)))
-                    .map_err(|x| format!("apply_scope refuses the predecessor: {x:?}"))?;
-                rule_set("the scoped predecessor", Some(SCOPE))?;
+                apply_grant(&w, rule, &key, &canonical(&lab.grant_predecessor(t)))
+                    .map_err(|x| format!("apply_grant refuses the predecessor: {x:?}"))?;
+                rule_set("the grant predecessor", Some(GRANT))?;
             }
-            // Perch applies a scoped document only in normal form, which
+            // Perch applies a grant document only in normal form, which
             // stores the same rules; the trace's own spelling, where it
             // differs, is refused.
             let normal = perch_testkit::rebuild::normal(
@@ -1022,23 +1022,23 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                 e.ledger().sequence(),
             );
             if normal != doc {
-                match apply_scope(&w, rule, &key, &canonical(&doc)) {
+                match apply_grant(&w, rule, &key, &canonical(&doc)) {
                     Err(Ok(
-                        PerchAccountError::NotNormalForm | PerchAccountError::ScopeEscalation,
+                        PerchAccountError::NotNormalForm | PerchAccountError::GrantEscalation,
                     )) => {}
                     other => {
                         return Err(format!(
-                            "apply_scope takes the document outside normal form: {other:?}"
+                            "apply_grant takes the document outside normal form: {other:?}"
                         ))
                     }
                 }
             }
-            match apply_scope(&w, rule, &key, &canonical(&normal)) {
-                Ok(_) => rule_set("the scoped document", Some(SCOPE))?,
-                Err(Ok(PerchAccountError::ScopeEscalation)) => {
+            match apply_grant(&w, rule, &key, &canonical(&normal)) {
+                Ok(_) => rule_set("the grant document", Some(GRANT))?,
+                Err(Ok(PerchAccountError::GrantEscalation)) => {
                     return Ok(Run {
                         lowered,
-                        scope_refused: true,
+                        grant_refused: true,
                         recovery_rule: false,
                         verdicts: vec![],
                         delegated: 0,
@@ -1051,9 +1051,9 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                         record_differences: vec![],
                     })
                 }
-                Err(x) => return Err(format!("apply_scope refuses the document: {x:?}")),
+                Err(x) => return Err(format!("apply_grant refuses the document: {x:?}")),
             }
-            let record = w.client().scope(&SCOPE).ok_or("no record for the scope")?;
+            let record = w.client().grant(&GRANT).ok_or("no record for the grant")?;
             for r in &mut lowered {
                 r.generation = Some(record.gen);
             }
@@ -1081,7 +1081,7 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
     let host = SdkHost::new(&e);
     let mut run = Run {
         lowered,
-        scope_refused: false,
+        grant_refused: false,
         recovery_rule,
         verdicts: vec![],
         delegated: 0,
@@ -1311,7 +1311,7 @@ pub fn expected(v: &Verdict) -> Got {
 /// should not.
 pub fn differences(t: &Trace, run: &Run) -> Vec<String> {
     let mut out = run.record_differences.clone();
-    let want = match (&t.lowered, run.scope_refused) {
+    let want = match (&t.lowered, run.grant_refused) {
         (Lowered::Error(_), true) => return out,
         (Lowered::Error(e), false) => {
             return vec![format!(

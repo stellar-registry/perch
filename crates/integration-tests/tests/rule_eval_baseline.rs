@@ -29,7 +29,7 @@
 //! checks that the generator still produces the recorded inputs.
 //!
 //! A second test runs rule-eval itself on the recorded traces: its lowering
-//! and `authorize` must give what Perch recorded.
+//! and `check_auth` must give what Perch recorded.
 
 mod rule_core;
 mod support;
@@ -604,7 +604,7 @@ fn perch_reproduces_the_recorded_baseline() {
 }
 
 /// rule-eval at the pinned rev, run on the recorded traces (its lowering,
-/// then `authorize` on each authorization), gives the lowering, verdicts and
+/// then `check_auth` on each authorization), gives the lowering, verdicts and
 /// records Perch recorded.
 #[test]
 fn rule_eval_reproduces_the_recorded_baseline() {

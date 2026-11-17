@@ -94,12 +94,12 @@ thread_local! {
     static SIMULATE: Cell<bool> = const { Cell::new(false) };
     /// How many `apply_doc` calls were checked that way.
     static SIMULATED: Cell<u32> = const { Cell::new(0) };
-    /// How many scoped documents, of how many capped grants each, a
+    /// How many grant documents, of how many capped grants each, a
     /// [`worst_compromise`] thief installs before the attempt.
-    static THIEF_SCOPES: Cell<(u32, usize)> = const { Cell::new((3, 8)) };
+    static THIEF_GRANTS: Cell<(u32, usize)> = const { Cell::new((3, 8)) };
     /// Unrelated entries [`worst_compromise`] writes before its completion,
     /// which the completion never touches: the control for the long-lived
-    /// host's storage growth (`budgets.md`, "Scoped documents").
+    /// host's storage growth (`budgets.md`, "Grant documents").
     static FILLER: Cell<u32> = const { Cell::new(0) };
 }
 
@@ -2128,7 +2128,7 @@ impl Thief {
 /// program, cap, or both forces every policy to be reinstalled whichever
 /// path the reconcile takes. All are measured.
 ///
-/// The thief also grants itself [`THIEF_SCOPES`] scoped documents, and the
+/// The thief also grants itself [`THIEF_GRANTS`] grant documents, and the
 /// owner had one of its own: the completion wipes them all, and its cost
 /// must not depend on them (spec §7.6). The completion is measured twice:
 /// on a host forked from the ledger, as one network transaction (the
@@ -2159,7 +2159,7 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Th
         0
     ));
     // The owner's own grant, from before the theft.
-    assert!(w.try_apply_scope(&a, &keys[0], 500, &scoped_doc(w, &token, &[(900, 100)])));
+    assert!(w.try_apply_grant(&a, &keys[0], 500, &grant_doc(w, &token, &[(900, 100)])));
 
     let thief = passkeys(seed + 1, shape.signers);
     let stolen = Shape {
@@ -2179,18 +2179,18 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Th
         ),
         &w.env,
     );
-    let (scopes, per) = THIEF_SCOPES.with(Cell::get);
+    let (docs, per) = THIEF_GRANTS.with(Cell::get);
     let mut thief_grant = None;
-    for s in 0..scopes {
+    for s in 0..docs {
         let first = 2000 + s as usize * per;
         let grants: std::vec::Vec<(usize, u32)> =
             (first..first + per).map(|i| (i, 1_000)).collect();
-        assert!(w.try_apply_scope(&a, &thief[0], s, &scoped_doc(w, &token, &grants)));
+        assert!(w.try_apply_grant(&a, &thief[0], s, &grant_doc(w, &token, &grants)));
         report(
-            &format!("thief apply_scope {s} ({per} grants, long-lived host)"),
+            &format!("thief apply_grant {s} ({per} grants, long-lived host)"),
             &w.env,
         );
-        thief_grant = Some((first, w.scoped_rule_id(&a, s, &format!("g{first:03}"))));
+        thief_grant = Some((first, w.grant_rule_id(&a, s, &format!("g{first:03}"))));
     }
     if let Some((i, id)) = thief_grant {
         assert!(
@@ -2235,13 +2235,13 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Th
         });
     }
     let what = format!(
-        "completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; {how}; {scopes} thief scopes of {per})"
+        "completion apply_doc (compromise, Combined, ZK rotation, both key sets revoked; {how}; {docs} thief grant documents of {per})"
     );
     // Budgeted on a forked host, which holds only what the transaction
     // touches. The long-lived host also holds every entry earlier calls
-    // wrote, the thief's scopes included, which inflates its instructions
+    // wrote, the thief's grant documents included, which inflates its instructions
     // and memory alone; its row is reported, unbudgeted, without the shape
-    // `cap-sweep.py` tabulates (`budgets.md`, "Scoped documents").
+    // `cap-sweep.py` tabulates (`budgets.md`, "Grant documents").
     assert!(w.fork_complete(&label(shape, &what), &a, &target));
     assert!(w.try_complete(&a, &target));
     report_unbudgeted(&format!("long-lived host: {what}"), &w.env);
@@ -2251,32 +2251,35 @@ fn worst_compromise(w: &World, shape: Shape, bytes: usize, seed: u8, variant: Th
     assert!(!w.activity(&a, &keys[0]));
     assert!(!w.activity_via(&a, &thief[0], &thief_rule));
 
-    // Every scope is wiped, the thief's and the owner's.
-    assert_eq!(w.account(&a).scope_generation(), 1);
+    // Every grant document is wiped, the thief's and the owner's.
+    assert_eq!(w.account(&a).grant_generation(), 1);
     if let Some((i, id)) = thief_grant {
         assert!(
             !w.spend_id(&a, &gkey(i), &token, 1, id),
             "a wiped thief grant"
         );
     }
-    let owner_grant = w.scoped_rule_id(&a, 500, "g900");
+    let owner_grant = w.grant_rule_id(&a, 500, "g900");
     assert!(
         !w.spend_id(&a, &gkey(900), &token, 1, owner_grant),
         "the owner's too"
     );
-    // Anyone collects a wiped scope. The new owner re-grants over its own,
-    // to a fresh session key: the wiped scope's key is never named again.
-    if scopes > 0 {
-        w.account(&a).gc_scope(&0);
-        report(&format!("gc_scope of a wiped scope ({per} grants)"), &w.env);
+    // Anyone collects a wiped grant document. The new owner re-grants over its own,
+    // to a fresh session key: the wiped grant document's key is never named again.
+    if docs > 0 {
+        w.account(&a).gc_grant(&0);
+        report(
+            &format!("gc_grant of a wiped grant document ({per} grants)"),
+            &w.env,
+        );
     }
-    assert!(!w.try_apply_scope(&a, &new_keys[0], 500, &scoped_doc(w, &token, &[(900, 100)])));
-    assert!(w.try_apply_scope(&a, &new_keys[0], 500, &scoped_doc(w, &token, &[(901, 100)])));
+    assert!(!w.try_apply_grant(&a, &new_keys[0], 500, &grant_doc(w, &token, &[(900, 100)])));
+    assert!(w.try_apply_grant(&a, &new_keys[0], 500, &grant_doc(w, &token, &[(901, 100)])));
     report(
-        "apply_scope over a wiped scope (one grant re-granted to a fresh key)",
+        "apply_grant over a wiped grant document (one grant re-granted to a fresh key)",
         &w.env,
     );
-    let regrant = w.scoped_rule_id(&a, 500, "g901");
+    let regrant = w.grant_rule_id(&a, 500, "g901");
     assert!(w.spend_id(&a, &gkey(901), &token, 1, regrant));
     assert!(!w.spend_id(&a, &gkey(900), &token, 1, owner_grant));
 }
@@ -3043,8 +3046,8 @@ fn cap_sweep() {
 }
 
 // ---------------------------------------------------------------------------
-// Scoped documents: grant lifecycle, scope size, many scopes, and recovery
-// with thief scopes, single document against split (`budgets.md`, "Scoped
+// Grant documents: grant lifecycle, grant document size, many grant documents, and recovery
+// with thief grant documents, single document against split (`budgets.md`, "Grant
 // documents")
 // ---------------------------------------------------------------------------
 
@@ -3098,8 +3101,8 @@ fn single_doc(w: &World, owner: &SoftPasskey, token: &Address, grants: &[(usize,
     Bytes::from_slice(&w.env, json.as_bytes())
 }
 
-/// A scoped document: the grants alone, no admin rule, no recovery.
-fn scoped_doc(w: &World, token: &Address, grants: &[(usize, u32)]) -> Bytes {
+/// A grant document: the grants alone, no admin rule, no recovery.
+fn grant_doc(w: &World, token: &Address, grants: &[(usize, u32)]) -> Bytes {
     let mut signers = std::vec![];
     let mut rules = std::vec![];
     for (i, limit) in grants {
@@ -3139,35 +3142,35 @@ impl World {
         )
     }
 
-    /// `apply_scope(scope, doc)` signed by `key` through `admin`.
-    fn try_apply_scope(&self, a: &Acct, key: &SoftPasskey, scope: u32, doc: &Bytes) -> bool {
+    /// `apply_grant(grant, doc)` signed by `key` through `admin`.
+    fn try_apply_grant(&self, a: &Acct, key: &SoftPasskey, grant: u32, doc: &Bytes) -> bool {
         let root = self.invocation(
             &a.address,
-            "apply_scope",
-            std::vec![self.sc(scope), self.sc(doc.clone())],
+            "apply_grant",
+            std::vec![self.sc(grant), self.sc(doc.clone())],
         );
         self.env
             .set_auths(&[self.passkey_entry(&a.address, key, "admin", root)]);
-        let ok = matches!(self.account(a).try_apply_scope(&scope, doc), Ok(Ok(_)));
+        let ok = matches!(self.account(a).try_apply_grant(&grant, doc), Ok(Ok(_)));
         self.env.set_auths(&[]);
         ok
     }
 
-    fn try_remove_scope(&self, a: &Acct, key: &SoftPasskey, scope: u32) -> bool {
-        let root = self.invocation(&a.address, "remove_scope", std::vec![self.sc(scope)]);
+    fn try_remove_grant(&self, a: &Acct, key: &SoftPasskey, grant: u32) -> bool {
+        let root = self.invocation(&a.address, "remove_grant", std::vec![self.sc(grant)]);
         self.env
             .set_auths(&[self.passkey_entry(&a.address, key, "admin", root)]);
-        let ok = matches!(self.account(a).try_remove_scope(&scope), Ok(Ok(_)));
+        let ok = matches!(self.account(a).try_remove_grant(&grant), Ok(Ok(_)));
         self.env.set_auths(&[]);
         ok
     }
 
-    /// The id of the scoped rule `name` in `scope`.
-    fn scoped_rule_id(&self, a: &Acct, scope: u32, name: &str) -> u32 {
+    /// The id of the grant rule `name` in `grant`.
+    fn grant_rule_id(&self, a: &Acct, grant: u32, name: &str) -> u32 {
         let wanted = soroban_sdk::String::from_str(&self.env, name);
         self.account(a)
-            .scope(&scope)
-            .expect("scope exists")
+            .grant(&grant)
+            .expect("grant exists")
             .rules
             .iter()
             .find(|r| r.name == wanted)
@@ -3264,7 +3267,7 @@ impl World {
 
 /// Whether this stack's account has the scoped tier.
 fn split_stack(w: &World, a: &Acct) -> bool {
-    w.account(a).try_scope_generation().is_ok()
+    w.account(a).try_grant_generation().is_ok()
 }
 
 /// Grant lifecycle and scoped authorization, single document vs split, as
@@ -3347,27 +3350,27 @@ fn docsplit_grant_lifecycle() {
         let token = w.funded_token(&a);
         assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
         for i in 0..k {
-            assert!(w.try_apply_scope(&a, &owner, i as u32, &scoped_doc(&w, &token, &[(i, 100)])));
+            assert!(w.try_apply_grant(&a, &owner, i as u32, &grant_doc(&w, &token, &[(i, 100)])));
         }
         let s = k as u32;
-        assert!(w.try_apply_scope(&a, &owner, s, &scoped_doc(&w, &token, &[(k, 100)])));
+        assert!(w.try_apply_grant(&a, &owner, s, &grant_doc(&w, &token, &[(k, 100)])));
         report(
-            &format!("split: add a grant via apply_scope [{k} scopes before]"),
+            &format!("split: add a grant via apply_grant [{k} grant documents before]"),
             &w.env,
         );
-        let id = w.scoped_rule_id(&a, s, &format!("g{k:03}"));
+        let id = w.grant_rule_id(&a, s, &format!("g{k:03}"));
         assert!(w.spend_id(&a, &gkey(k), &token, 5, id));
         report(
             &format!(
-                "split: capped transfer through a scoped grant [{} scopes]",
+                "split: capped transfer through a grant [{} grant documents]",
                 k + 1
             ),
             &w.env,
         );
-        assert!(w.try_apply_scope(&a, &owner, s, &scoped_doc(&w, &token, &[(k, 200)])));
+        assert!(w.try_apply_grant(&a, &owner, s, &grant_doc(&w, &token, &[(k, 200)])));
         report(
             &format!(
-                "split: change a grant's cap via apply_scope [{} scopes]",
+                "split: change a grant's cap via apply_grant [{} grant documents]",
                 k + 1
             ),
             &w.env,
@@ -3376,39 +3379,39 @@ fn docsplit_grant_lifecycle() {
         assert!(w.try_apply(&a, &owner, &single_doc(&w, &new_owner, &token, &[]), 0));
         report(
             &format!(
-                "split: rotate the owner key via apply_doc [{} scopes]",
+                "split: rotate the owner key via apply_doc [{} grant documents]",
                 k + 1
             ),
             &w.env,
         );
         assert!(
             w.spend_id(&a, &gkey(k), &token, 5, id),
-            "scopes survive an admin change"
+            "grant documents survive an admin change"
         );
-        assert!(w.try_remove_scope(&a, &new_owner, s));
+        assert!(w.try_remove_grant(&a, &new_owner, s));
         report(
             &format!(
-                "split: revoke a grant via remove_scope [{} scopes before]",
+                "split: revoke a grant via remove_grant [{} grant documents before]",
                 k + 1
             ),
             &w.env,
         );
-        w.at_rest(&a, &format!("split, {k} scopes"));
+        w.at_rest(&a, &format!("split, {k} grant documents"));
         assert!(!w.spend_id(&a, &gkey(k), &token, 5, id), "revoked");
-        // An admin auth (`execute`) with scopes installed.
+        // An admin auth (`execute`) with grant documents installed.
         assert!(w.execute(&a, &new_owner));
         report(
-            &format!("split: execute through admin [{k} scopes]"),
+            &format!("split: execute through admin [{k} grant documents]"),
             &w.env,
         );
     }
 }
 
-/// One scoped document of `n` grants: added fresh, then every rule
+/// One grant document of `n` grants: added fresh, then every rule
 /// replaced (renamed), on a stack whose compiler caps admit `n`.
 #[test]
 #[ignore = "sizing tool: PERCH_SPLIT_NS=... (more than 8 grants needs a compiler with raised caps)"]
-fn docsplit_scope_size_sweep() {
+fn docsplit_grant_size_sweep() {
     let ns: std::vec::Vec<usize> = std::env::var("PERCH_SPLIT_NS")
         .ok()
         .map(|s| s.split(',').map(|x| x.parse().unwrap()).collect())
@@ -3419,57 +3422,59 @@ fn docsplit_scope_size_sweep() {
         w.env.cost_estimate().disable_resource_limits();
         let owner = canonical_passkey([0x53; 32]);
         let a = w.new_account(canonical_passkey([0x53; 32]));
-        assert!(split_stack(&w, &a), "needs a stack with scoped documents");
+        assert!(split_stack(&w, &a), "needs a stack with grant documents");
         let token = w.funded_token(&a);
         assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
         let grants: std::vec::Vec<(usize, u32)> = (0..n).map(|i| (i, 100)).collect();
-        let doc = scoped_doc(&w, &token, &grants);
-        assert!(w.try_apply_scope(&a, &owner, 0, &doc), "apply_scope of {n}");
-        report(&format!("sweep: apply_scope, {n} grants added"), &w.env);
-        let id = w.scoped_rule_id(&a, 0, "g000");
+        let doc = grant_doc(&w, &token, &grants);
+        assert!(w.try_apply_grant(&a, &owner, 0, &doc), "apply_grant of {n}");
+        report(&format!("sweep: apply_grant, {n} grants added"), &w.env);
+        let id = w.grant_rule_id(&a, 0, "g000");
         assert!(w.spend_id(&a, &gkey(0), &token, 5, id));
         report(
-            &format!("sweep: capped transfer [{n} grants in the scope]"),
+            &format!("sweep: capped transfer [{n} grants in the grant document]"),
             &w.env,
         );
         // Every grant renamed and rekeyed: every rule replaced.
         let renamed: std::vec::Vec<(usize, u32)> = (0..n).map(|i| (i + 1000, 100)).collect();
-        assert!(w.try_apply_scope(&a, &owner, 0, &scoped_doc(&w, &token, &renamed)));
-        report(&format!("sweep: apply_scope, {n} grants replaced"), &w.env);
-        assert!(w.try_remove_scope(&a, &owner, 0));
-        report(&format!("sweep: remove_scope, {n} grants"), &w.env);
+        assert!(w.try_apply_grant(&a, &owner, 0, &grant_doc(&w, &token, &renamed)));
+        report(&format!("sweep: apply_grant, {n} grants replaced"), &w.env);
+        assert!(w.try_remove_grant(&a, &owner, 0));
+        report(&format!("sweep: remove_grant, {n} grants"), &w.env);
     }
 }
 
-/// Many scopes installed: authorization stays flat.
+/// Many grant documents installed: authorization stays flat.
 #[test]
 #[ignore = "needs the built stack"]
-fn docsplit_many_scopes() {
-    let total: usize = std::env::var("PERCH_SPLIT_SCOPES")
+fn docsplit_many_grants() {
+    let total: usize = std::env::var("PERCH_SPLIT_GRANTS")
         .ok()
         .map(|s| s.parse().unwrap())
         .unwrap_or(8);
     let w = world();
     let owner = canonical_passkey([0x54; 32]);
     let a = w.new_account(canonical_passkey([0x54; 32]));
-    assert!(split_stack(&w, &a), "needs a stack with scoped documents");
+    assert!(split_stack(&w, &a), "needs a stack with grant documents");
     let token = w.funded_token(&a);
     assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
     let per = 8usize;
     for s in 0..total {
         let grants: std::vec::Vec<(usize, u32)> =
             (s * per..(s + 1) * per).map(|i| (i, 100)).collect();
-        assert!(w.try_apply_scope(&a, &owner, s as u32, &scoped_doc(&w, &token, &grants)));
+        assert!(w.try_apply_grant(&a, &owner, s as u32, &grant_doc(&w, &token, &grants)));
     }
     report_unbudgeted(
-        &format!("many (long-lived host): apply_scope of the {total}th scope of {per} grants"),
+        &format!(
+            "many (long-lived host): apply_grant of the {total}th grant document of {per} grants"
+        ),
         &w.env,
     );
     let last = (total * per - 1) as usize;
-    let id = w.scoped_rule_id(&a, (total - 1) as u32, &format!("g{last:03}"));
+    let id = w.grant_rule_id(&a, (total - 1) as u32, &format!("g{last:03}"));
     assert!(w.fork_spend(
         &format!(
-            "many: capped transfer, last scope [{} rules installed]",
+            "many: capped transfer, last grant document [{} rules installed]",
             total * per + 1
         ),
         &a,
@@ -3478,10 +3483,10 @@ fn docsplit_many_scopes() {
         5,
         id
     ));
-    let id0 = w.scoped_rule_id(&a, 0, "g000");
+    let id0 = w.grant_rule_id(&a, 0, "g000");
     assert!(w.fork_spend(
         &format!(
-            "many: capped transfer, first scope [{} rules installed]",
+            "many: capped transfer, first grant document [{} rules installed]",
             total * per + 1
         ),
         &a,
@@ -3502,15 +3507,15 @@ fn docsplit_many_scopes() {
     ));
     let grants: std::vec::Vec<(usize, u32)> =
         (total * per..total * per + 1).map(|i| (i, 100)).collect();
-    assert!(w.fork_apply_scope(
+    assert!(w.fork_apply_grant(
         &format!(
-            "many: add a one-grant scope [{} rules installed]",
+            "many: add a one-grant document [{} rules installed]",
             total * per + 1
         ),
         &a,
         &owner,
         total as u32,
-        &scoped_doc(&w, &token, &grants)
+        &grant_doc(&w, &token, &grants)
     ));
     assert!(w.spend_id(&a, &gkey(last), &token, 5, id));
     assert!(w.execute(&a, &owner));
@@ -3521,16 +3526,16 @@ fn docsplit_many_scopes() {
         ),
         &w.env,
     );
-    w.at_rest(&a, &format!("split, {total} scopes of {per}"));
+    w.at_rest(&a, &format!("split, {total} grant documents of {per}"));
 }
 
-/// The compromise completion against the scoped documents a thief installs
-/// and the admin document's shape: [`worst_compromise`] over each
-/// `signers,both,interp,plain,fan,bytes,thief,scopes,per` of
+/// The compromise completion against the grant documents a thief installs
+/// and the account document's shape: [`worst_compromise`] over each
+/// `signers,both,interp,plain,fan,bytes,thief,docs,per` of
 /// `PERCH_SPLIT_RECOVERY` (`;`-separated; thief 0 keeps every name, 1
 /// renames every rule, 2 reprograms every rule), with `PERCH_SPLIT_FILLER`
 /// unrelated entries written before the completion as the host-growth
-/// control. Unbudgeted: a sizing tool (`budgets.md`, "Scoped documents").
+/// control. Unbudgeted: a sizing tool (`budgets.md`, "Grant documents").
 #[test]
 #[ignore = "sizing tool: PERCH_SPLIT_RECOVERY=..."]
 fn docsplit_compromise_completion() {
@@ -3557,7 +3562,7 @@ fn docsplit_compromise_completion() {
             1 => Thief::Rename,
             _ => Thief::Reprogram,
         };
-        THIEF_SCOPES.with(|t| t.set((v[7] as u32, v[8])));
+        THIEF_GRANTS.with(|t| t.set((v[7] as u32, v[8])));
         let w = world();
         w.env.cost_estimate().disable_resource_limits();
         worst_compromise(&w, shape, v[5], 140 + 7 * n as u8, thief);
@@ -3666,12 +3671,12 @@ impl World {
         )
     }
 
-    fn fork_apply_scope(
+    fn fork_apply_grant(
         &self,
         label: &str,
         a: &Acct,
         key: &SoftPasskey,
-        scope: u32,
+        grant: u32,
         doc: &Bytes,
     ) -> bool {
         let admin = self.rule_id(&a.address, "admin");
@@ -3681,12 +3686,12 @@ impl World {
             key,
             admin,
             &a.address,
-            "apply_scope",
-            std::vec![self.sc(scope), self.sc(doc.clone())],
+            "apply_grant",
+            std::vec![self.sc(grant), self.sc(doc.clone())],
         )
     }
 
-    fn fork_remove_scope(&self, label: &str, a: &Acct, key: &SoftPasskey, scope: u32) -> bool {
+    fn fork_remove_grant(&self, label: &str, a: &Acct, key: &SoftPasskey, grant: u32) -> bool {
         let admin = self.rule_id(&a.address, "admin");
         self.forked_call(
             label,
@@ -3694,8 +3699,8 @@ impl World {
             key,
             admin,
             &a.address,
-            "remove_scope",
-            std::vec![self.sc(scope)],
+            "remove_grant",
+            std::vec![self.sc(grant)],
         )
     }
 
@@ -3803,21 +3808,21 @@ fn docsplit_grant_lifecycle_forked() {
         let token = w.funded_token(&a);
         assert!(w.try_apply(&a, &owner, &single_doc(&w, &owner, &token, &[]), 0));
         for i in 0..k {
-            assert!(w.try_apply_scope(&a, &owner, i as u32, &scoped_doc(&w, &token, &[(i, 100)])));
+            assert!(w.try_apply_grant(&a, &owner, i as u32, &grant_doc(&w, &token, &[(i, 100)])));
         }
         let s = k as u32;
-        let doc = scoped_doc(&w, &token, &[(k, 100)]);
-        assert!(w.fork_apply_scope(
-            &format!("split: add a grant [{k} scopes before]"),
+        let doc = grant_doc(&w, &token, &[(k, 100)]);
+        assert!(w.fork_apply_grant(
+            &format!("split: add a grant [{k} grant documents before]"),
             &a,
             &owner,
             s,
             &doc
         ));
-        assert!(w.try_apply_scope(&a, &owner, s, &doc));
-        let id = w.scoped_rule_id(&a, s, &format!("g{k:03}"));
+        assert!(w.try_apply_grant(&a, &owner, s, &doc));
+        let id = w.grant_rule_id(&a, s, &format!("g{k:03}"));
         assert!(w.fork_spend(
-            &format!("split: capped transfer [{} scopes]", k + 1),
+            &format!("split: capped transfer [{} grant documents]", k + 1),
             &a,
             &gkey(k),
             &token,
@@ -3826,29 +3831,32 @@ fn docsplit_grant_lifecycle_forked() {
         ));
         assert!(w.execute(&a, &owner));
         report(
-            &format!("main: split: execute through admin [{} scopes]", k + 1),
+            &format!(
+                "main: split: execute through admin [{} grant documents]",
+                k + 1
+            ),
             &w.env,
         );
-        let doc = scoped_doc(&w, &token, &[(k, 200)]);
-        assert!(w.fork_apply_scope(
-            &format!("split: change a grant's cap [{} scopes]", k + 1),
+        let doc = grant_doc(&w, &token, &[(k, 200)]);
+        assert!(w.fork_apply_grant(
+            &format!("split: change a grant's cap [{} grant documents]", k + 1),
             &a,
             &owner,
             s,
             &doc
         ));
-        assert!(w.try_apply_scope(&a, &owner, s, &doc));
+        assert!(w.try_apply_grant(&a, &owner, s, &doc));
         let new_owner = canonical_passkey([0x52; 32]);
         let doc = single_doc(&w, &new_owner, &token, &[]);
         assert!(w.fork_apply_doc(
-            &format!("split: rotate the owner key [{} scopes]", k + 1),
+            &format!("split: rotate the owner key [{} grant documents]", k + 1),
             &a,
             &owner,
             &doc
         ));
         assert!(w.try_apply(&a, &owner, &doc, 0));
-        assert!(w.fork_remove_scope(
-            &format!("split: revoke a grant [{} scopes before]", k + 1),
+        assert!(w.fork_remove_grant(
+            &format!("split: revoke a grant [{} grant documents before]", k + 1),
             &a,
             &new_owner,
             s
@@ -3856,20 +3864,20 @@ fn docsplit_grant_lifecycle_forked() {
     }
 }
 
-/// The scoped tier's guards, and a key that manages one scope only.
+/// The grant tier's guards, and a key that manages one grant document only.
 #[test]
 #[ignore = "needs the built stack"]
-fn docsplit_guards_and_scope_manager() {
+fn docsplit_guards_and_grant_manager() {
     let w = world();
     let owner = canonical_passkey([0x56; 32]);
     let a = w.new_account(canonical_passkey([0x56; 32]));
-    assert!(split_stack(&w, &a), "needs a stack with scoped documents");
+    assert!(split_stack(&w, &a), "needs a stack with grant documents");
     let token = w.funded_token(&a);
     let mgr = canonical_passkey([0x57; 32]);
     // admin for the owner, plus `mgr`: a self-scoped rule limited to
-    // `apply_scope(7, ..)`.
+    // `apply_grant(7, ..)`.
     let admin_doc = format!(
-        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{},{}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"mgr","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["mgr"]}},"functions":["apply_scope"],"args":[{{"index":0,"pred":{{"type":"u32-eq","value":7}}}}]}}]}}"#,
+        r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{},{}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"mgr","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["mgr"]}},"functions":["apply_grant"],"args":[{{"index":0,"pred":{{"type":"u32-eq","value":7}}}}]}}]}}"#,
         passkey_decl(&w, "owner", &owner),
         passkey_decl(&w, "mgr", &mgr)
     );
@@ -3886,7 +3894,7 @@ fn docsplit_guards_and_scope_manager() {
         passkey_decl(&w, "k", &gkey(1))
     );
     assert!(
-        !w.try_apply_scope(
+        !w.try_apply_grant(
             &a,
             &owner,
             1,
@@ -3900,7 +3908,7 @@ fn docsplit_guards_and_scope_manager() {
         strkey(&a.address)
     );
     assert!(
-        !w.try_apply_scope(
+        !w.try_apply_grant(
             &a,
             &owner,
             1,
@@ -3910,27 +3918,27 @@ fn docsplit_guards_and_scope_manager() {
     );
     println!("\n{{\"guard\":\"self-admin, self-contract refused\"}}");
 
-    // The manager key: scope 7 yes; scope 8, apply_doc, execute no.
+    // The manager key: grant 7 yes; grant 8, apply_doc, execute no.
     let mgr_entry = |fn_name: &str, args: std::vec::Vec<ScVal>| {
         let root = w.invocation(&a.address, fn_name, args);
         w.passkey_entry(&a.address, &mgr, "mgr", root)
     };
-    let doc7 = scoped_doc(&w, &token, &[(7, 100)]);
+    let doc7 = grant_doc(&w, &token, &[(7, 100)]);
     w.env.set_auths(&[mgr_entry(
-        "apply_scope",
+        "apply_grant",
         std::vec![w.sc(7u32), w.sc(doc7.clone())],
     )]);
     assert!(
-        matches!(w.account(&a).try_apply_scope(&7, &doc7), Ok(Ok(_))),
-        "mgr manages scope 7"
+        matches!(w.account(&a).try_apply_grant(&7, &doc7), Ok(Ok(_))),
+        "mgr manages grant 7"
     );
     w.env.set_auths(&[mgr_entry(
-        "apply_scope",
+        "apply_grant",
         std::vec![w.sc(8u32), w.sc(doc7.clone())],
     )]);
     assert!(
-        w.account(&a).try_apply_scope(&8, &doc7).is_err(),
-        "mgr cannot touch scope 8"
+        w.account(&a).try_apply_grant(&8, &doc7).is_err(),
+        "mgr cannot touch grant 8"
     );
     let takeover = single_doc(&w, &mgr, &token, &[]);
     w.env.set_auths(&[mgr_entry(
@@ -3939,12 +3947,12 @@ fn docsplit_guards_and_scope_manager() {
     )]);
     assert!(
         w.account(&a).try_apply_doc(&takeover, &0, &None).is_err(),
-        "mgr cannot apply the admin document"
+        "mgr cannot apply the account document"
     );
     w.env.set_auths(&[]);
-    println!("\n{{\"guard\":\"scope manager confined to its scope id\"}}");
+    println!("\n{{\"guard\":\"scope manager confined to its grant id\"}}");
 
-    // But within its scope id the manager is unconfined: it can grant itself
+    // But within its grant id the manager is unconfined: it can grant itself
     // an uncapped transfer and move the account's tokens.
     let drain = format!(
         r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{}],"rules":[{{"name":"drain","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["m"]}}}}]}}"#,
@@ -3953,20 +3961,20 @@ fn docsplit_guards_and_scope_manager() {
     );
     let drain = Bytes::from_slice(&w.env, drain.as_bytes());
     w.env.set_auths(&[mgr_entry(
-        "apply_scope",
+        "apply_grant",
         std::vec![w.sc(7u32), w.sc(drain.clone())],
     )]);
     assert!(matches!(
-        w.account(&a).try_apply_scope(&7, &drain),
+        w.account(&a).try_apply_grant(&7, &drain),
         Ok(Ok(_))
     ));
     w.env.set_auths(&[]);
-    let id = w.scoped_rule_id(&a, 7, "drain");
+    let id = w.grant_rule_id(&a, 7, "drain");
     assert!(
         w.spend_id(&a, &mgr, &token, 900, id),
         "the manager moves 900 of 1 000"
     );
-    println!("\n{{\"guard\":\"a scope manager without an envelope can grant itself any non-account authority\"}}");
+    println!("\n{{\"guard\":\"a grant manager without an envelope can grant itself any non-account authority\"}}");
 }
 
 /// A capped transfer's cost against its spending record's history length.
@@ -4018,14 +4026,14 @@ const CENSUS_IDS: [&str; 2] = [
     "http://localhost:5542#59ee8848",
     "http://localhost:5543#abbe5266",
 ];
-/// The preview's scope ids: candidate 0 of each app's origin.
-const CENSUS_SCOPES: [u32; 2] = [3_395_152_355, 3_943_074_923];
+/// The preview's grant ids: candidate 0 of each app's origin.
+const CENSUS_GRANTS: [u32; 2] = [3_395_152_355, 3_943_074_923];
 
 fn census_key(i: u8) -> SoftPasskey {
     canonical_passkey([0x60 + i; 32])
 }
 
-/// One app's two rules, as the preview's scoped documents spell them.
+/// One app's two rules, as the preview's grant documents spell them.
 fn census_rules(game: &Address, token: &Address, sid: &str, nal: u32, sfx: &str) -> [String; 2] {
     let (g, t) = (strkey(game), strkey(token));
     [
@@ -4149,7 +4157,7 @@ fn census_dump(w: &World, a: &Acct, label: &str) -> (usize, usize) {
 }
 
 /// The preview account's grant: the constructor's admin rule, then one
-/// scoped document per app (`guess` on the game contract, and `guess-xlm`, a
+/// grant document per app (`guess` on the game contract, and `guess-xlm`, a
 /// capped XLM `transfer` to it), then a 1 XLM transfer through the second
 /// app's capped rule.
 #[test]
@@ -4168,11 +4176,11 @@ fn census_of_the_preview_grant() {
             )],
             &census_rules(&game, &token, sid, CENSUS_NALS[i], ""),
         );
-        assert!(w.try_apply_scope(&a, &census_key(0), CENSUS_SCOPES[i], &doc));
-        report_unbudgeted(&format!("census: apply_scope app {}", i + 1), &w.env);
+        assert!(w.try_apply_grant(&a, &census_key(0), CENSUS_GRANTS[i], &doc));
+        report_unbudgeted(&format!("census: apply_grant app {}", i + 1), &w.env);
         w.advance(80);
     }
-    let id = w.scoped_rule_id(&a, CENSUS_SCOPES[1], "guess-xlm");
+    let id = w.grant_rule_id(&a, CENSUS_GRANTS[1], "guess-xlm");
     assert!(census_spend(&w, &a, &census_key(2), &token, &game, id));
     report_unbudgeted("census: 1 XLM transfer through app 2's guess-xlm", &w.env);
     census_dump(&w, &a, "grant");

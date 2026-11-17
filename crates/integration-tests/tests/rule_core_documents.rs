@@ -4,8 +4,8 @@
 //! Each trace runs twice: on a fresh account, and on one whose applied
 //! document (for a scoped trace, whose scope) has other rule names (the delta
 //! then adds every rule and removes every earlier one). An admin trace's
-//! document goes through `apply_doc`; a scoped trace's through `apply_scope`
-//! under the trace's admin document and generation. Whether Perch refuses
+//! document goes through `apply_doc`; a scoped trace's through `apply_grant`
+//! under the trace's account document and generation. Whether Perch refuses
 //! the document, its lowering of the document's rules, each verdict, and
 //! each accepted authorization's spending records must equal the trace's,
 //! which rule-core's Lean model computed: the records are the ones the
@@ -73,8 +73,8 @@ fn every_document_trace_agrees_with_perch() {
     assert!(charged > 0, "no charged record compared");
     assert!(failures.is_empty(), "{}", failures.join("\n"));
     // An admin trace applies one document on a fresh account and two after
-    // a predecessor; a scoped trace also applies its admin document first,
-    // and a scoped document Perch refuses stores nothing.
+    // a predecessor; a scoped trace also applies its account document first,
+    // and a grant document Perch refuses stores nothing.
     assert_eq!(rule_sets, 3 * admin + 5 * (scoped - refused) + 3 * refused);
 }
 
@@ -121,9 +121,9 @@ fn a_changed_expectation_is_reported() {
     check(v, "a changed lowered rule");
 }
 
-/// The scoped leg is not vacuous either: a refused scoped document said to
+/// The scoped leg is not vacuous either: a refused grant document said to
 /// lower, an accepted authorization moved to a later generation, and a
-/// scoped rule's generation changed are each reported.
+/// grant rule's generation changed are each reported.
 #[test]
 fn a_changed_scoped_expectation_is_reported() {
     let load = |name: &str| -> serde_json::Value {
@@ -143,7 +143,7 @@ fn a_changed_scoped_expectation_is_reported() {
     assert!(differences(&t, &run(&t, Start::Fresh).unwrap()).is_empty());
     let mut v = refused.clone();
     v["lowered"] = serde_json::json!({ "ok": [] });
-    check(v, "a refused scoped document said to lower");
+    check(v, "a refused grant document said to lower");
 
     let issued = load("document-scoped-issued");
     let t = parse(&issued);
@@ -160,5 +160,5 @@ fn a_changed_scoped_expectation_is_reported() {
 
     let mut v = issued.clone();
     v["lowered"]["ok"][0]["generation"] = serde_json::json!("4");
-    check(v, "a changed scoped rule generation");
+    check(v, "a changed grant rule generation");
 }

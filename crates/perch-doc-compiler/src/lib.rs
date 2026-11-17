@@ -8,7 +8,7 @@
 //! and validating* (the JSON parser and the checks live here, in one audited
 //! place), while the smart account owns *the policy documents* — the stored
 //! rule set and the applied `doc_hash`. Accounts call [`compile_doc`] from
-//! `apply_doc` and `apply_scope` and lower the returned model with
+//! `apply_doc` and `apply_grant` and lower the returned model with
 //! rule-core's `rule_eval::lower` to the rules they enforce, so account wasm
 //! carries no parser at all, and this contract no rule lowering.
 //!
@@ -20,8 +20,8 @@
 //! resolves it on-chain, `deployer(perch/verifiers, fetch_hash(name,
 //! version))`, and refuses the document unless that is the signer's
 //! `verifier`. A verifier named by its contract id alone is *unverified*:
-//! refused in an admin document (one with a self-admin rule or a recovery
-//! member, which covers every recovery target), and in a scoped document
+//! refused in an account document (one with a self-admin rule or a recovery
+//! member, which covers every recovery target), and in a grant document
 //! allowed at most once per rule and listed in [`CompiledDoc::unverified`]
 //! (`perch_ir::verifier`). Each refusal is `DocInvalid`, which keeps every
 //! other code where it was.
@@ -96,7 +96,7 @@ pub enum DocCompilerError {
     /// The document failed semantic validation (dangling signer ref,
     /// malformed address or key, ambiguous empty list, …) or names its
     /// verifiers as the compiler does not take.
-    // An unverified verifier in an admin document, two signers under one in
+    // An unverified verifier in an account document, two signers under one in
     // a rule, or a `verifier-name` that does not resolve to its `verifier`:
     // docs/account-interface.md, "Verifiers".
     DocInvalid,
@@ -523,9 +523,9 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         return Err(DocCompilerError::DocTooLarge);
     }
 
-    // Verifiers: none unverified in an admin document, one signer per
+    // Verifiers: none unverified in an account document, one signer per
     // unverified verifier in a rule, and every name resolved.
-    if perch_ir::is_admin_document(doc) && !perch_ir::unverified_verifiers(doc).is_empty() {
+    if perch_ir::is_account_document(doc) && !perch_ir::unverified_verifiers(doc).is_empty() {
         return Err(DocCompilerError::DocInvalid);
     }
     if perch_ir::unverified_reuse(doc).is_some() {

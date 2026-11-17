@@ -69,7 +69,7 @@
     },
     {
       "step": "recovery: completion with the derived target",
-      "cause": "A completed recovery advances the scope generation, which ends every scoped document (apply_scope, docs/recovery/spec.md §7.6), and the account publishes ScopesWiped { gen } as it does: the event's topic is scopes_wiped and its data the new generation, here 1. It comes after the controller's epoch_advanced and recovery_completed and before the account's credential_revoked and doc_applied; every other event of the step is unchanged and in the same order. No other step completes a recovery, so no other step publishes it, and the corpus applies no scoped document.",
+      "cause": "A completed recovery advances the grant generation, which ends every grant document (apply_grant, docs/recovery/spec.md §7.6), and the account publishes GrantsWiped { gen } as it does: the event's topic is grants_wiped and its data the new generation, here 1. It comes after the controller's epoch_advanced and recovery_completed and before the account's credential_revoked and doc_applied; every other event of the step is unchanged and in the same order. No other step completes a recovery, so no other step publishes it, and the corpus applies no grant document.",
       "fields": [
         {
           "path": "corpus.recovery[9 \"completion with the derived target\"].events",
@@ -202,7 +202,7 @@
                 ]
               ],
               "topics": [
-                "sym:scopes_wiped"
+                "sym:grants_wiped"
               ]
             },
             {
@@ -260,7 +260,7 @@
     },
     {
       "step": "every scenario's setup and every apply_doc that changes the rule set: the admin rules' records",
-      "cause": "The account keeps the admin document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. The views give the shapes they did (installed_rules, rule_set, configuration, get_context_rule). Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included. Exact-root support writes auth_root: void for these unrestricted stored rules; legacy canonical bytes and authorization outcomes are unchanged. The strict decoder still accepts their exact old eight-field layout.",
+      "cause": "The account keeps the account document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. The views give the shapes they did (installed_rules, rule_set, configuration, get_context_rule). Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included. Exact-root support writes auth_root: void for these unrestricted stored rules; legacy canonical bytes and authorization outcomes are unchanged. The strict decoder still accepts their exact old eight-field layout.",
       "fields": [
         {
           "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
@@ -4454,7 +4454,7 @@
     },
     {
       "step": "every step that writes the account's instance: its rule-id counter",
-      "cause": "The account allocates rule ids from its own counter (perch-smart-account's rules::allocate), kept in its instance under NextRuleId, and gives the ids OZ's registry gave from NextId: one per rule added, none reused. Its instance storage therefore holds NextRuleId where the recorded build held OZ's Count, NextId and NextSignerId, and NextPolicyId where a step registered a policy; it keeps no rule count (get_context_rules_count counts its records). In the completion with the derived target the instance also holds ScopeGeneration = 1: a completed recovery advances the scope generation (absent reads as 0), and no other step writes the key. Every other instance key and value is as recorded.",
+      "cause": "The account allocates rule ids from its own counter (perch-smart-account's rules::allocate), kept in its instance under NextRuleId, and gives the ids OZ's registry gave from NextId: one per rule added, none reused. Its instance storage therefore holds NextRuleId where the recorded build held OZ's Count, NextId and NextSignerId, and NextPolicyId where a step registered a policy; it keeps no rule count (get_context_rules_count counts its records). In the completion with the derived target the instance also holds GrantGeneration = 1: a completed recovery advances the grant generation (absent reads as 0), and no other step writes the key. Every other instance key and value is as recorded.",
       "fields": [
         {
           "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
@@ -4858,6 +4858,10 @@
               "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
             ],
             [
+              "sym:GrantGeneration",
+              "u64:1"
+            ],
+            [
               "sym:NextRuleId",
               "u32:3"
             ],
@@ -4876,10 +4880,6 @@
             [
               "sym:Revision",
               "u64:2"
-            ],
-            [
-              "sym:ScopeGeneration",
-              "u64:1"
             ]
           ]
         },

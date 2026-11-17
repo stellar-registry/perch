@@ -74,13 +74,13 @@ fn guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_ke
 
     assert!(w.complete(&target).is_err(), "timelock not elapsed");
     w.advance(DELAY);
-    assert_eq!(w.client().scope_generation(), 0);
+    assert_eq!(w.client().grant_generation(), 0);
     let hash = w.complete(&target).expect("completion");
     assert_eq!(w.client().applied_doc(), Some(target.clone()));
     assert_eq!(hash, w.compiler().compile_doc(&target).doc_hash);
     assert_eq!(state(&w, id), AttemptState::Completed);
     assert_eq!(w.ctl().epoch(&w.account), 2, "enrollment and completion");
-    assert_eq!(w.client().scope_generation(), 1, "the completion");
+    assert_eq!(w.client().grant_generation(), 1, "the completion");
 
     // The replaced key is permanently revoked; the new one works.
     assert!(w.client().is_revoked(&fingerprint(&w, &w.owner)));
@@ -102,20 +102,20 @@ fn guardian_lost_key_recovery_installs_the_derived_target_and_revokes_the_old_ke
 
     // Completion cannot be replayed.
     assert!(w.complete(&target).is_err());
-    assert_eq!(w.client().scope_generation(), 1);
+    assert_eq!(w.client().grant_generation(), 1);
 }
 
-/// The scope generation never wraps: a completion that would advance it past
+/// The grant generation never wraps: a completion that would advance it past
 /// `u64::MAX` is refused, and the refusal changes nothing.
 #[test]
-fn a_completion_that_would_wrap_the_scope_generation_is_refused() {
+fn a_completion_that_would_wrap_the_grant_generation_is_refused() {
     let w = world();
     w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
     let (id, new_owner, target) = open_lost_key(&w, None);
     authorize(&w, id);
     w.advance(DELAY);
     w.env.as_contract(&w.account, || {
-        perch_smart_account::testutils::set_scope_generation(&w.env, u64::MAX)
+        perch_smart_account::testutils::set_grant_generation(&w.env, u64::MAX)
     });
     let doc = w.client().applied_doc();
     let revision = w.client().revision();
@@ -125,7 +125,7 @@ fn a_completion_that_would_wrap_the_scope_generation_is_refused() {
         err(w.complete(&target)),
         PerchAccountError::GenerationExhausted
     );
-    assert_eq!(w.client().scope_generation(), u64::MAX);
+    assert_eq!(w.client().grant_generation(), u64::MAX);
     assert_eq!(w.client().applied_doc(), doc);
     assert_eq!(w.client().revision(), revision);
     assert_eq!(w.client().recovery_generation(), generation);
@@ -876,10 +876,10 @@ fn a_zk_completion_spends_the_nullifier_and_installs_the_declared_enrollment() {
     assert!(w.client().recovery_gate().is_some());
 
     w.advance(DELAY);
-    assert_eq!(w.client().scope_generation(), 0);
+    assert_eq!(w.client().grant_generation(), 0);
     w.complete(&target)
         .expect("completion is not a reconfiguration");
-    assert_eq!(w.client().scope_generation(), 1, "the ZK completion");
+    assert_eq!(w.client().grant_generation(), 1, "the ZK completion");
     let n = nullifier(&w.env, &first.id);
     assert!(w.ctl().nullifier_spent(&w.account, &n));
     assert!(w.pool_client().enrollment(&w.account, &next.id).is_some());

@@ -1,14 +1,14 @@
 //! The account's rule sets as rule-core's evaluator reads them.
 //!
-//! `apply_doc` lowers the compiled admin document's model with
-//! `rule_eval::lower`, and `apply_scope` a scoped document's with
+//! `apply_doc` lowers the compiled account document's model with
+//! `rule_eval::lower`, and `apply_grant` a grant document's with
 //! `rule_eval::lower_scoped` under the account's excluded set and the current
-//! scope generation. Each drops the rules `rules::desired` drops as expired
+//! grant generation. Each drops the rules `rules::desired` drops as expired
 //! and stores the rest as `perch_rule_eval::StoredRule`s, aligned with the
 //! records the document installs: the stored rule at index `i` is what the
-//! installed rule at index `i` enforces, the admin document's recovery rule
+//! installed rule at index `i` enforces, the account document's recovery rule
 //! last when there is one. The constructor stores its admin rule the same
-//! way. `__check_auth` decides an authorization with `rule_eval::authorize`
+//! way. `__check_auth` decides an authorization with `rule_eval::check_auth`
 //! over the rules its payload chooses (`gate`).
 
 use perch_account_types::Signer;
@@ -83,7 +83,7 @@ fn stored(
     Ok(out)
 }
 
-/// The rule set the admin document `compiled` asks for on this account, as
+/// The rule set the account document `compiled` asks for on this account, as
 /// stored.
 ///
 /// Refuses with `ModelInvalid` when the compiled document carries no model
@@ -119,17 +119,17 @@ pub(crate) fn lowered(
     stored(e, &kept, &known)
 }
 
-/// The rule set the scoped document `compiled` asks for on this account
-/// under the scope generation `gen`, as stored: every rule carries `gen`.
+/// The rule set the grant document `compiled` asks for on this account
+/// under the grant generation `gen`, as stored: every rule carries `gen`.
 /// `excluded` is the account's excluded set beyond the account itself: its
 /// adopted recovery controller and its ZK factor's adapter and pool.
 ///
-/// Refuses with `ModelInvalid` as [`lowered`] does, with `ScopeEscalation`
+/// Refuses with `ModelInvalid` as [`lowered`] does, with `GrantEscalation`
 /// when a rule's `functions` names a guardian approval (spec §2) or
 /// rule-eval's scoped lowering refuses the document (a recovery member, or a
 /// rule on the account or a contract of the excluded set), and with
 /// `UnguardedRule` when a rule asks for no signer (INV-1).
-pub(crate) fn lowered_scoped(
+pub(crate) fn lowered_grant(
     e: &Env,
     compiled: &CompiledDoc,
     excluded: &[Address],
@@ -146,10 +146,10 @@ pub(crate) fn lowered_scoped(
     }
     let doc = doc_of_in(e, &model, &mut known).ok_or(PerchAccountError::ModelInvalid)?;
     if names_guardian_approval(&doc) {
-        return Err(PerchAccountError::ScopeEscalation);
+        return Err(PerchAccountError::GrantEscalation);
     }
     let lowered = rule_eval::lower_scoped(&doc, &me, &set, gen)
-        .map_err(|_| PerchAccountError::ScopeEscalation)?;
+        .map_err(|_| PerchAccountError::GrantEscalation)?;
     stored(e, &kept(e, compiled, lowered)?, &known)
 }
 

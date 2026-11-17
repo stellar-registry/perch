@@ -814,7 +814,7 @@ fn record_eq(a: &SpendRecord, b: &SpendRecord) -> bool {
             .all(|(x, y)| (x.ledger, x.amount) == (y.ledger, y.amount))
 }
 
-/// rule-eval's `authorize` reads only the rules its choices name and their
+/// rule-eval's `check_auth` reads only the rules its choices name and their
 /// records: run on the chosen rules alone, the choices renumbered to them,
 /// it accepts and refuses as on the whole set, charges the same records,
 /// and the whole set's other records come back unchanged. The account's
@@ -880,7 +880,7 @@ fn authorize_on_the_chosen_rules_is_authorize_on_the_set() {
         }
         let now = r.pick(&[0, 5, 10]);
         let generation = r.pick(&[0, 3]);
-        let full = rule_eval::authorize(
+        let full = rule_eval::check_auth(
             &rules, &records, &contexts, &choices, &signers, now, generation,
         );
 
@@ -911,7 +911,7 @@ fn authorize_on_the_chosen_rules_is_authorize_on_the_set() {
                 }
             })
             .collect();
-        let sub = rule_eval::authorize(
+        let sub = rule_eval::check_auth(
             &sub_rules,
             &sub_records,
             &contexts,

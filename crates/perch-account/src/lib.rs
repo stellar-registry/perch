@@ -22,8 +22,8 @@ use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, S
 
 #[allow(unused_imports)]
 pub use perch_smart_account::{
-    AccountCapabilities, AccountConfiguration, FreezeGate, InfraPins, InstalledRule,
-    PerchAccountError, PerchAuthError, ScopeRecord, StoredRule, UpgradeRequest,
+    AccountCapabilities, AccountConfiguration, FreezeGate, GrantRecord, InfraPins, InstalledRule,
+    PerchAccountError, PerchAuthError, StoredRule, UpgradeRequest,
 };
 
 #[contract]
@@ -35,7 +35,7 @@ impl PerchAccount {
     /// full owner authority.
     // docs/account-interface.md, "Constructor".
     pub fn __constructor(e: &Env, admin_signers: Vec<Signer>) {
-        perch_smart_account::install_admin(e, &admin_signers);
+        perch_smart_account::install_account_rules(e, &admin_signers);
     }
 }
 

@@ -2,22 +2,22 @@
 //!
 //! An authorization other than a recovery completion, on an account that
 //! stores its admin rule set, is decided by rule-eval's
-//! `rule_eval::authorize`, over the stored rule-eval rules (`rule_set`) of
-//! the rules the payload chooses, at the current ledger and scope
+//! `rule_eval::check_auth`, over the stored rule-eval rules (`rule_set`) of
+//! the rules the payload chooses, at the current ledger and grant
 //! generation, under every signer the payload names, and with the account's
 //! own spending records. `auth::authenticate` then checks every one of those
 //! signers against OpenZeppelin's digest, so wallets sign the bytes they
-//! sign for an OpenZeppelin account, and the records `authorize` charged are
+//! sign for an OpenZeppelin account, and the records `check_auth` charged are
 //! stored.
 //! Each chosen rule id is read as the stored rule its record holds, among
-//! the admin document's records, or its scope's when a scoped document
-//! installed it (its tag). `authorize` reads only the rules its
+//! the account document's records, or its grant's when a grant document
+//! installed it (its tag). `check_auth` reads only the rules its
 //! choices name, so running it over the chosen rules alone gives the verdict
 //! and records of running it over the whole stored set. A chosen id that names no installed rule refuses with
 //! `ContextRuleNotFound` (#3000), as OZ refuses it, which wallets read as a
 //! selection the configuration has since left. rule-eval's refusal of a
-//! chosen rule issued under another scope generation (`StaleGeneration`: a
-//! scoped rule a recovery completion wiped) refuses with `StaleScope`; any
+//! chosen rule issued under another grant generation (`StaleGeneration`: a
+//! grant rule a recovery completion wiped) refuses with `StaleGrant`; any
 //! other refusal, a chosen recovery rule, or a batch soroban-facade cannot
 //! read refuses the authorization with `RuleEvalRefused`. The recovery rule's stored form
 //! allows every `apply_doc` the controller could; the controller decides
@@ -26,8 +26,8 @@
 //!
 //! Each capped rule keeps one record. It is kept across an apply exactly
 //! when its rule keeps both its id and its cap: a changed cap, or a
-//! removed or replaced rule, drops it in `apply_doc` and `apply_scope`
-//! ([`drop_records`]), and removing a scope drops its rules' records.
+//! removed or replaced rule, drops it in `apply_doc` and `apply_grant`
+//! ([`drop_records`]), and removing a grant drops its rules' records.
 
 use alloc::vec::Vec;
 
@@ -42,7 +42,7 @@ use perch_account_types::{AuthPayload, SmartAccountError};
 use crate::auth::{
     authenticate, SMART_ACCOUNT_EXTEND_AMOUNT as EXTEND, SMART_ACCOUNT_TTL_THRESHOLD as THRESHOLD,
 };
-use crate::{extend_persistent, scope_generation, PerchAuthError, PerchStorage, RuleRecord};
+use crate::{extend_persistent, grant_generation, PerchAuthError, PerchStorage, RuleRecord};
 
 fn refused() -> soroban_sdk::Error {
     PerchAuthError::RuleEvalRefused.into()
@@ -50,7 +50,7 @@ fn refused() -> soroban_sdk::Error {
 
 /// Rule-eval's verdict on the authorization, once every payload signer
 /// has authenticated, storing every capped chosen rule's record when it
-/// accepts (module docs). `admin` is the admin document's records,
+/// accepts (module docs). `admin` is the account document's records,
 /// `recovery` the recovery rule's id, and `bound` the account-bound
 /// signature payload.
 pub(crate) fn authorize(
@@ -90,17 +90,17 @@ pub(crate) fn authorize(
     }
     let contexts = convert::calls(e, contexts).ok_or_else(refused)?;
     let signers = convert::signers(e, &payload.signers.keys()).ok_or_else(refused)?;
-    let after = rule_eval::authorize(
+    let after = rule_eval::check_auth(
         &rules,
         &records,
         &contexts,
         &choices,
         &signers,
         e.ledger().sequence(),
-        scope_generation(e),
+        grant_generation(e),
     )
     .map_err(|r| match r {
-        rule_eval::Refusal::StaleGeneration => PerchAuthError::StaleScope.into(),
+        rule_eval::Refusal::StaleGeneration => PerchAuthError::StaleGrant.into(),
         _ => refused(),
     })?;
     // OZ's digest: the bound payload with the chosen ids, so a signature
@@ -133,13 +133,13 @@ fn same(a: &rule_eval::SpendRecord, b: &rule_eval::SpendRecord) -> bool {
 }
 
 /// The host value of the stored rule rule `id` enforces: the one its record
-/// holds, among its scope's records when a scoped document installed it,
-/// otherwise among `admin`. A scope's record is extended as it is read, as
+/// holds, among its grant's records when a grant document installed it,
+/// otherwise among `admin`. A grant's record is extended as it is read, as
 /// the records are what authorizes.
 fn stored_rule(e: &Env, id: u32, admin: &SVec<Val>) -> Option<Val> {
-    if let Some(scope) = PerchStorage::get_scope_tags(e, &id) {
-        let record = PerchStorage::get_scopes(e, &scope)?;
-        PerchStorage::extend_scopes_ttl(e, &scope, THRESHOLD, EXTEND);
+    if let Some(grant) = PerchStorage::get_grant_tags(e, &id) {
+        let record = PerchStorage::get_grants(e, &grant)?;
+        PerchStorage::extend_grants_ttl(e, &grant, THRESHOLD, EXTEND);
         return rule_of(e, &record.rules.to_vals(), id);
     }
     rule_of(e, admin, id)

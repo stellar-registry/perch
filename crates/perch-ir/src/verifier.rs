@@ -12,7 +12,7 @@
 //!   address, and moves to another verifier only by applying a document.
 //! - **By contract id alone**: an *unverified* verifier. Its `verify` decides
 //!   whatever the rules holding its signers allow, so the compiler refuses
-//!   one in an admin document ([`is_admin_document`]) and lets a scoped
+//!   one in an account document ([`is_account_document`]) and lets a grant
 //!   document hold it, at most once per rule ([`unverified_reuse`]), listing
 //!   it in the compile result for the wallet's warning.
 //!
@@ -53,12 +53,12 @@ pub fn parse_verifier_name(s: &str) -> Option<(&str, &str)> {
     (name_ok && version_ok && parts == 3).then_some((name, version))
 }
 
-/// Whether `doc` is an admin document: it has a `self-admin` rule or a
+/// Whether `doc` is an account document: it has a `self-admin` rule or a
 /// `recovery` member. Every document an account's `apply_doc` applies has
-/// one (it must keep an admin rule), and its `apply_scope` refuses both, so
+/// one (it must keep an admin rule), and its `apply_grant` refuses both, so
 /// this is the document's role read from its text.
 #[must_use]
-pub fn is_admin_document(doc: &PolicyDoc) -> bool {
+pub fn is_account_document(doc: &PolicyDoc) -> bool {
     doc.recovery.is_some()
         || doc
             .rules

@@ -266,18 +266,18 @@ fn an_executed_upgrade_advances_the_revision_and_scheduling_does_not() {
 }
 
 // ---------------------------------------------------------------------------
-// The scope generation
+// The grant generation
 // ---------------------------------------------------------------------------
 
-/// Every `apply_doc` path other than a completion leaves the scope
+/// Every `apply_doc` path other than a completion leaves the grant
 /// generation, including each recovery transition that advances the recovery
 /// generation; a completion advances it by one; an executed upgrade leaves it.
 #[test]
-fn the_scope_generation_advances_only_on_a_completed_recovery() {
+fn the_grant_generation_advances_only_on_a_completed_recovery() {
     let w = world();
-    let scope = || w.client().scope_generation();
+    let generation = || w.client().grant_generation();
     let recovery = || w.client().recovery_generation();
-    assert_eq!(scope(), 0, "after the constructor");
+    assert_eq!(generation(), 0, "after the constructor");
 
     let plain = w.doc(None).bytes(&w);
     let loss = w.recovery("loss", Mode::Guardian);
@@ -302,7 +302,7 @@ fn the_scope_generation_advances_only_on_a_completed_recovery() {
             before + transitions,
             "{what}: recovery generation"
         );
-        assert_eq!(scope(), 0, "{what}: scope generation");
+        assert_eq!(generation(), 0, "{what}: grant generation");
     }
 
     let new_owner = w.new_key();
@@ -312,11 +312,11 @@ fn the_scope_generation_advances_only_on_a_completed_recovery() {
     let target = w.target_bytes(RecoveryAction::LostKey, &source, &replacements);
     w.guardian(0, attempt, Initiate);
     w.guardian(1, attempt, Initiate);
-    assert_eq!(scope(), 0, "attempt and evidence");
+    assert_eq!(generation(), 0, "attempt and evidence");
     w.advance(DELAY);
     let before = recovery();
     w.complete(&target).expect("completion");
-    assert_eq!(scope(), 1, "completion");
+    assert_eq!(generation(), 1, "completion");
     assert_eq!(recovery(), before + 1, "completion: recovery generation");
 
     // An executed upgrade, signed by the recovered owner.
@@ -348,10 +348,10 @@ fn the_scope_generation_advances_only_on_a_completed_recovery() {
     );
     assert_eq!(
         state
-            .get("account/instance/ScopeGeneration")
+            .get("account/instance/GrantGeneration")
             .map(String::as_str),
         Some("1"),
-        "the upgrade left the scope generation"
+        "the upgrade left the grant generation"
     );
 }
 
@@ -728,7 +728,7 @@ fn capabilities_and_limits_are_constants_of_the_wasm() {
             &w.env,
             [
                 Symbol::new(&w.env, "one_tx"),
-                Symbol::new(&w.env, "scoped_v1")
+                Symbol::new(&w.env, "grant_v1")
             ]
         )
     );

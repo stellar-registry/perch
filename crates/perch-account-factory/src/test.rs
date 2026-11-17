@@ -63,7 +63,7 @@ fn world() -> World {
     );
     // The WebAuthn verifier where `perch/verifiers` deploys the pinned hash,
     // and published there under its name: what the factory pins, and what
-    // an admin document names.
+    // an account document names.
     let verifier = perch_testkit::verifiers::deploy_at_hash(
         &env,
         &pins::perch_webauthn_verifier::hash(&env),

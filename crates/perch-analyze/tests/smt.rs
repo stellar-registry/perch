@@ -358,3 +358,138 @@ fn exact_roots_are_conjunctive_and_cannot_be_erased_by_narrowing() {
         assert_eq!(matches!(run_z3(&script), Z3Verdict::Sat(_)), accepted);
     }
 }
+
+/// A document literal must not alias the analyzer's symbolic account.
+#[test]
+fn a_literal_matching_the_lowering_placeholder_does_not_mean_self() {
+    if skip() {
+        return;
+    }
+    let parent = doc(&format!(
+        r#"{{
+          "version": 1,
+          "signers": [{{ "id": "ci", "verifier": "{VERIFIER}", "key": "0102" }}],
+          "rules": [{{
+            "name": "ci",
+            "scope": {{ "type": "contract", "address": "{REGISTRY}" }},
+            "principals": {{ "type": "all", "signers": ["ci"] }},
+            "args": [{{ "index": 0, "pred": {{ "type": "is-self" }} }}]
+          }}]
+        }}"#
+    ));
+    let mut child = parent.clone();
+    child.rules[0].args.as_mut().unwrap()[0].pred =
+        perch_ir::ArgPred::AddressEq(perch_ir::AddressEqPred {
+            address: "CDXO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO4M7R".into(),
+        });
+    perch_ir::validate(&child).unwrap();
+    assert!(narrows(&parent, &child)
+        .iter()
+        .any(|f| matches!(f, WideningFinding::SemanticWidening { .. })));
+
+    // The same separation applies to a self-admin scope versus a literal
+    // contract scope, not just to argument predicates.
+    let mut self_admin = parent.clone();
+    self_admin.rules[0].args = None;
+    self_admin.rules[0].scope = perch_ir::Scope::self_admin();
+    let mut literal_scope = self_admin.clone();
+    literal_scope.rules[0].scope =
+        perch_ir::Scope::contract("CDXO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO53XO4M7R");
+    perch_ir::validate(&self_admin).unwrap();
+    perch_ir::validate(&literal_scope).unwrap();
+    assert!(narrows(&self_admin, &literal_scope)
+        .iter()
+        .any(|f| matches!(f, WideningFinding::ScopeChanged { .. })));
+}
+
+/// SMT escape sequences in document text are literal policy bytes, not
+/// instructions to the SMT parser.
+#[test]
+fn literal_smt_escapes_do_not_alias_the_characters_they_spell() {
+    if skip() {
+        return;
+    }
+    for (escape, character) in [
+        (r"\u{61}", "a"),
+        (r"\u0061", "a"),
+        (r"\u{22}", "\""),
+        (r"\u{5c}", "\\"),
+        (r"\u{e9}", "é"),
+        (r"\u{1f600}", "😀"),
+    ] {
+        for prefix in [false, true] {
+            let predicate = |text: &str| {
+                if prefix {
+                    perch_ir::ArgPred::StringPrefix(perch_ir::StringPrefixPred {
+                        prefix: text.into(),
+                    })
+                } else {
+                    perch_ir::ArgPred::StringIn(perch_ir::StringInPred {
+                        values: vec![text.into()],
+                    })
+                }
+            };
+            let mut parent = fixture("ci-publish.json");
+            let i = parent
+                .rules
+                .iter()
+                .position(|r| matches!(r.scope, perch_ir::Scope::Contract(_)))
+                .unwrap();
+            parent.rules[i].args = Some(vec![perch_ir::ArgConstraint {
+                index: 0,
+                pred: predicate(escape),
+            }]);
+            let mut child = parent.clone();
+            child.rules[i].args.as_mut().unwrap()[0].pred = predicate(character);
+            perch_ir::validate(&parent).unwrap();
+            perch_ir::validate(&child).unwrap();
+            assert!(
+                narrows(&parent, &child)
+                    .iter()
+                    .any(|f| matches!(f, WideningFinding::SemanticWidening { .. })),
+                "{escape:?}, prefix={prefix}"
+            );
+            assert!(narrows(&child, &child).is_empty(), "{character:?}");
+        }
+    }
+}
+
+/// The public encoder accepts rule-core's byte strings, which need not be
+/// UTF-8. Distinct invalid UTF-8 bytes must not become one replacement char.
+#[test]
+fn encoder_preserves_arbitrary_byte_strings() {
+    if skip() {
+        return;
+    }
+    let d = fixture("ci-publish.json");
+    for (left, right) in [
+        (&[0xff][..], &[0xfe][..]),
+        (&[0xff][..], "�".as_bytes()),
+        ("é".as_bytes(), &[0xe9][..]),
+        ("\"\\\n\0😀".as_bytes(), "\"\\\n\0😀".as_bytes()),
+    ] {
+        let mut l = lowered(&d).remove(0).rule;
+        let mut r = lowered(&d).remove(0).rule;
+        l.conds = vec![rule_eval::Cond::ArgEq(
+            0,
+            rule_eval::Val::String(left.to_vec()),
+        )];
+        r.conds = vec![rule_eval::Cond::ArgEq(
+            0,
+            rule_eval::Val::String(right.to_vec()),
+        )];
+        let mut enc = Encoder::new();
+        let l = enc.rule_allows(&l);
+        let r = enc.rule_allows(&r);
+        let result = run_z3(&format!(
+            "{}(assert (and {l} {r}))\n(check-sat)\n",
+            enc.declarations(),
+        ));
+        assert_eq!(
+            matches!(result, Z3Verdict::Sat(_)),
+            left == right,
+            "{result:?}"
+        );
+        assert!(!matches!(result, Z3Verdict::Unknown(_)), "{result:?}");
+    }
+}

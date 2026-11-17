@@ -74,17 +74,11 @@ pub fn run_z3(script: &str) -> Z3Verdict {
 
 // --- lowering ------------------------------------------------------------------
 
-/// The account the rules are lowered on: a contract id no document names,
-/// as its `ScAddress` XDR (the `SC_ADDRESS_TYPE_CONTRACT` discriminant, then
-/// the id).
-const ACCOUNT: [u8; 36] = {
-    let mut x = [0xee; 36];
-    x[0] = 0;
-    x[1] = 0;
-    x[2] = 0;
-    x[3] = 1;
-    x
-};
+/// Symbolic self, distinct from every document address. The model converts
+/// document addresses to nonempty `ScAddress` XDR; rule-eval's pure lowering
+/// and this encoder compare opaque bytes, so an empty sentinel cannot alias
+/// any literal. A real placeholder contract id could be named by a document.
+const ACCOUNT: [u8; 0] = [];
 
 /// One document rule and the rule-eval rule it lowers to.
 pub struct LoweredRule {
@@ -386,11 +380,17 @@ fn disj(parts: &[String]) -> String {
     }
 }
 
-/// SMT-LIB 2.6 string literal of UTF-8 `bytes`: only `"` needs escaping
-/// (doubled).
+/// Injective byte-string encoding: one SMT character per original byte.
+/// Escaping every byte prevents document text from becoming an SMT Unicode
+/// escape and preserves rule-eval's byte equality and prefix semantics,
+/// including for non-UTF-8 values passed directly to `Encoder`.
 fn smt_string(bytes: &[u8]) -> String {
-    let s = String::from_utf8_lossy(bytes);
-    format!("\"{}\"", s.replace('"', "\"\""))
+    let mut out = String::from("\"");
+    for byte in bytes {
+        out.push_str(&format!("\\u{{{byte:x}}}"));
+    }
+    out.push('"');
+    out
 }
 
 /// SMT-LIB integer literal (negatives as `(- n)`).

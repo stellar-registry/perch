@@ -55,8 +55,8 @@ monitor can't decide, at the price of precision, never of soundness.
 - **Cumulative limits.** Spend caps, rate limits, "at most N per day". The violating prefix
   is determined by the *running total*, not the last event. Enforcing it requires automaton
   state that counts, i.e. a multi-state security automaton. This is exactly why `cap:` lowers
-  to OZ's stateful `spending_limit` policy attached to the same context rule rather than to
-  interpreter ops, and why no amount-shaped per-call predicate should ever be documented as a
+  to OZ's stateful `spending_limit` policy attached to a context rule (the rule's own, or a
+  generated `transfer` rule for a cap on another token) rather than to interpreter ops, and why no amount-shaped per-call predicate should ever be documented as a
   spend cap (a per-call bound is satisfied by every prefix of a repeat-caller's spree).
 - **Ordering / protocol rules.** "Configure before use" and "no publish after revoke-request"
   need state again (typestate-flavored safety).

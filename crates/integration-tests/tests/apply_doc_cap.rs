@@ -81,10 +81,9 @@ fn apply_doc_installs_the_cap_beside_the_interpreter() {
 }
 
 #[test]
-fn apply_doc_rejects_a_cap_token_that_is_not_the_scope() {
+fn apply_doc_rejects_cross_token_caps_on_transfer_functions() {
     let w = setup();
-    // An explicit cap token different from the rule's scope is refused at
-    // validation (it would silently meter a different contract).
+    // Splitting would leave the scope's transfer function uncapped.
     let mismatched = format!(r#""token": "{CI_VERIFIER}", "#); // any C-addr != TOKEN
     let doc = Bytes::from_slice(&w.env, capped_doc(&mismatched).as_bytes());
     assert!(w.account_client().try_apply_doc(&doc, &0, &None).is_err());

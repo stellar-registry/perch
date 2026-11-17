@@ -21,7 +21,7 @@ import json
 import os
 
 RULE_DOMAIN = b"perch/rule"
-FIXTURES = ["ci-publish", "ci-publish-delegated", "ci-publish-threshold"]
+FIXTURES = ["ci-publish", "ci-publish-delegated", "ci-publish-threshold", "cross-token-cap"]
 
 
 def top_level_elements(text, start):

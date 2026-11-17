@@ -74,9 +74,14 @@ const argConstraint = z.object({ index: u32, pred: argPred }).strict();
 // `limit` is a decimal string, not a number, because the canonical form carries
 // only u32 numbers (see CANONICAL.md) and an i128 amount does not fit a JSON
 // number safely. Mirrors perch-ir's CapConstraint.
+const capRecipient = z.discriminatedUnion('type', [
+  addressEqPred,
+  z.object({ type: z.literal('any') }).strict(),
+]);
 const capConstraint = z
   .object({
     token: z.string().optional(),
+    recipient: capRecipient.optional(),
     limit: z.string(),
     'period-ledgers': u32,
   })
@@ -152,6 +157,7 @@ export type Principals = z.infer<typeof principals>;
 export type Rule = z.infer<typeof rule>;
 export type ArgConstraint = z.infer<typeof argConstraint>;
 export type ArgPred = z.infer<typeof argPred>;
+export type CapRecipient = z.infer<typeof capRecipient>;
 export type CapConstraint = z.infer<typeof capConstraint>;
 export type RecoveryConfig = z.infer<typeof recoveryConfig>;
 export type RecoveryMode = z.infer<typeof recoveryMode>;

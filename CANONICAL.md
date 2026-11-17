@@ -181,3 +181,12 @@ of its own canonical emitter (`just drt`), and proves that emitter injective.
 
 A change to any byte of `ci-publish.canonical.json` or `ci-publish.doc-hash` is,
 by definition, a canonical-form break; see **Version** above.
+
+### Cross-token cap recipients
+
+`cap.recipient`, when present, is a strict tagged object: `{"type":"any"}` or
+`{"type":"address-eq","address":"…"}`. It is omitted when absent; the default
+recipient is resolved during lowering, never inserted into canonical text.
+Existing uncapped and same-token canonical forms are unchanged. Both programs
+from a cross-token rule carry the original document rule's `rule_hash`, not
+hashes of the generated scope/transfer forms. See `docs/cross-token-caps.md`.

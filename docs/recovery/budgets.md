@@ -252,11 +252,15 @@ at 294.4M (73.6%), and written entries at 141 (70.5%, the renamed thief).
 
 ### Document caps
 
-**The caps are 8 declared signers, 11 document rules, 8 192 canonical
-bytes, and rule names of at most OZ's 20 bytes**
+**The caps are 8 declared signers, 11 installed document rules, 8 192
+canonical bytes, and rule names of at most OZ's 20 bytes**
 (`perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES,
 MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}`). The generated recovery rule
-is additional to the 11. The `worst_case_*` tests in `release_stack.rs` run
+is additional to the 11. A cross-token cap
+([`../cross-token-caps.md`](../cross-token-caps.md)) installs two rules and
+counts two; neither costs more than a capped rule of the measured shape below
+(the scope rule carries only the interpreter, the transfer rule a
+one-predicate program and the cap), so the frontier bounds those documents too. The `worst_case_*` tests in `release_stack.rs` run
 all eight worst-case flows at the compiled-in caps and assert each stays
 within budget, so lowering a limit or growing a flow's cost fails CI's
 `release-stack-source` job. Rerun `scripts/cap-sweep.py` after a change to

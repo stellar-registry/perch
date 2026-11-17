@@ -304,6 +304,8 @@ fn rule(
         functions: None,
         not_after,
         cap: None,
+        cap_token: None,
+        recipient: None,
     }
 }
 

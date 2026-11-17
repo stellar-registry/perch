@@ -242,6 +242,9 @@ fn canonical_fixture(path: &str) -> &'static str {
         "testdata/ci-publish-threshold.canonical.json" => {
             include_str!("../../../testdata/ci-publish-threshold.canonical.json")
         }
+        "testdata/cross-token-cap.canonical.json" => {
+            include_str!("../../../testdata/cross-token-cap.canonical.json")
+        }
         p => panic!("no fixture {p}"),
     }
 }

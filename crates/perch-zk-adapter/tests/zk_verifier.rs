@@ -174,18 +174,15 @@ fn the_layout_is_bbs() {
     assert_eq!(p.libra_evaluation.to_bytes(), word(at::LIBRA_EVALUATION));
     assert_eq!(p.gemini_masking_eval.to_bytes(), word(at::MASKING_EVAL));
     for r in [0, LOG_N - 1, LOG_N, 27] {
-        for i in 0..ZK_BATCHED_RELATION_PARTIAL_LENGTH {
-            assert_eq!(
-                p.sumcheck_univariates[r][i].to_bytes(),
-                word(at::univariate(r, i))
-            );
+        let univariate = &p.sumcheck_univariates[r];
+        assert_eq!(univariate.len(), ZK_BATCHED_RELATION_PARTIAL_LENGTH);
+        for (i, coefficient) in univariate.iter().enumerate() {
+            assert_eq!(coefficient.to_bytes(), word(at::univariate(r, i)));
         }
     }
-    for i in 0..NUM_SMALL_IPA_EVALUATIONS {
-        assert_eq!(
-            p.libra_poly_evals[i].to_bytes(),
-            word(at::LIBRA_POLY_EVALS + 32 * i)
-        );
+    assert_eq!(p.libra_poly_evals.len(), NUM_SMALL_IPA_EVALUATIONS);
+    for (i, eval) in p.libra_poly_evals.iter().enumerate() {
+        assert_eq!(eval.to_bytes(), word(at::LIBRA_POLY_EVALS + 32 * i));
     }
     assert_eq!(
         p.base.sumcheck_evaluations[0].to_bytes(),

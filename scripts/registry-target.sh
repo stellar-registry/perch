@@ -3,7 +3,7 @@
 # repository rather than configured:
 #
 #   - the registry crates/*/wasm/registry.path derives on that network
-#     (scripts/derive-id.py), what this source's account and factory resolve;
+#     (scripts/derive-id.py), what this source's account resolves its infra in;
 #   - unless deployments/pending-registry.json declares a migration for the
 #     network that has not switched yet: then the registry the network's
 #     deployment still records (the entry's `recorded`). A reviewed change
@@ -33,9 +33,12 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 die() { echo "error: $*" >&2; exit 1; }
 command -v jq >/dev/null || die "jq not found"
 
-cmp -s "$repo_root/crates/perch-smart-account/wasm/registry.path" \
-    "$repo_root/crates/perch-account-factory/wasm/registry.path" \
-    || die "the account's and the factory's wasm/registry.path differ"
+shopt -s nullglob
+paths=("$repo_root"/crates/*/wasm/registry.path)
+shopt -u nullglob
+for p in "${paths[@]}"; do
+    cmp -s "$p" "${paths[0]}" || die "${p#"$repo_root"/} differs from ${paths[0]#"$repo_root"/}: every crate's wasm/registry.path must be one"
+done
 derived="$("$repo_root/scripts/derive-id.py" registry "$passphrase")"
 
 registry="$derived"

@@ -43,6 +43,15 @@ if [ "${1:-}" = "--undeployed" ]; then
     trap 'rm -rf "$out"' EXIT
     for module in "$@"; do
         contract="$(contract_of "$module")"
+        # Preserve the deployed ABI once: snapshot-1 structs need their own
+        # spec because the SDK decodes struct fields by position.
+        case "$module" in
+            account|doc-compiler)
+                if [ ! -f "$pkg/src/legacy-$module.ts" ] &&
+                   ! grep -q '^export const DEPLOYED = false' "$pkg/src/$module.ts"; then
+                    sed 's/[[:blank:]]*$//' "$pkg/src/$module.ts" >"$pkg/src/legacy-$module.ts"
+                fi ;;
+        esac
         hash="$(jq -r --arg c "$contract" '.artifacts[] | select(.package == $c) | .sha256' "$stack/build.json")"
         stellar contract bindings typescript --wasm "$stack/${contract//-/_}.wasm" \
             --output-dir "$out/$module" --overwrite >/dev/null
@@ -62,7 +71,7 @@ if [ "${1:-}" = "--undeployed" ]; then
                 "/** These bindings describe a build no deployment runs yet. */" \
                 "export const DEPLOYED = false;" \
                 ""
-            cat "$out/$module/src/index.ts"
+            sed 's/[[:blank:]]*$//' "$out/$module/src/index.ts"
         } >"$pkg/src/$module.ts"
         echo "  src/$module.ts  ($contract $hash, undeployed)" >&2
     done
@@ -102,7 +111,7 @@ while IFS=: read -r module contract; do
 export const WASM_SHA256 = "$hash";
 
 EOF
-        cat "$out/$module/src/index.ts"
+        sed 's/[[:blank:]]*$//' "$out/$module/src/index.ts"
     } >"$pkg/src/$module.ts"
     echo "  src/$module.ts  ($contract $hash)" >&2
 done <<<"$MODULES"

@@ -5,7 +5,7 @@
 # Phases:
 #   0. Preflight  — plugins, keys, name availability, wasm builds.
 #   1. Subregistry — deploy the managed `unverified/perch` registry from root's
-#                    published `registry` wasm (admin=manager=deployer, for now).
+#                    published `registry` wasm (admin=manager=deployer until phase 6).
 #   2. Infra      — publish + deploy perch-ed25519-verifier, the stateless
 #                    perch-doc-compiler, and perch-account (authors stay the
 #                    human deployer, deliberately).
@@ -70,16 +70,16 @@ RULES_OUT="$REPO_ROOT/testdata/deploy/perch-testnet.rules.json"
 # unverified/perch. Content-addressing makes each address a pure function of
 # (registry id + wasm hash): derivable offline, identical across networks,
 # permissionless, idempotent. (deploy_stateless and the deploy-stateless verb
-# are the upstream registry's names. The former `stateless` subregistry is
-# retired: an account derives one registry per network, so all its infra must
-# share one registry.)
+# are the upstream registry's names. There is no separate `stateless`
+# subregistry: an account derives one registry per network, so all its infra
+# must share one registry.)
 # GUARDED OFF by default — the live path needs BOTH:
 #   * #38 — upstream StatelessDeployable + a `stellar registry deploy-stateless`
 #           verb (override PERCH_DEPLOY_STATELESS_CMD if it ships differently);
 #   * #39 — crates/perch-constructorless-registry, built to
 #           $CONSTRUCTORLESS_REGISTRY_WASM.
-# Neither is merged yet, so with the flag on the script degrades to symbolic
-# dry-run output and refuses to --execute (die) at the first missing dependency.
+# With the flag on and either missing, the script degrades to symbolic dry-run
+# output and refuses to --execute (die) at the first missing dependency.
 PERCH_CONSTRUCTORLESS="${PERCH_CONSTRUCTORLESS:-0}"
 CONSTRUCTORLESS_REGISTRY_NAME="${PERCH_CONSTRUCTORLESS_REGISTRY_NAME:-constructorless}"
 CONSTRUCTORLESS_REGISTRY_WASM="${PERCH_CONSTRUCTORLESS_REGISTRY_WASM:-perch_constructorless_registry.wasm}"
@@ -275,7 +275,7 @@ if [ "$PERCH_CONSTRUCTORLESS" -eq 1 ]; then
     else
         cl_wasm_path="$WASM_DIR/$CONSTRUCTORLESS_REGISTRY_WASM"
         if [ ! -f "$cl_wasm_path" ]; then
-            # #39 guard: the perch-constructorless-registry crate isn't in-tree yet.
+            # #39 guard: the perch-constructorless-registry wasm must be built.
             if [ "$DRY_RUN" -eq 1 ]; then
                 warn "requires #39: $cl_wasm_path not built (perch-constructorless-registry crate"
                 warn "  absent) — showing the deploy symbolically."
@@ -286,7 +286,7 @@ if [ "$PERCH_CONSTRUCTORLESS" -eq 1 ]; then
         # Publish the registry wasm under unverified/perch (name from wasm meta =
         # $CONSTRUCTORLESS_REGISTRY_WASM_NAME), then deploy it as the `constructorless` name
         # with the managed (admin, manager, root) constructor. admin=manager=
-        # deployer for now; phase 6 rotates the manager to the smart account.
+        # deployer until phase 6 rotates the manager to the smart account.
         if [ -f "$cl_wasm_path" ] && [ -z "$(wasm_hash "$CONSTRUCTORLESS_REGISTRY_WASM_NAME")" ]; then
             run stellar registry publish --wasm "$cl_wasm_path" "${net_args[@]}"
         fi
@@ -471,8 +471,7 @@ deploy_env=(env STELLAR_RPC_URL="$RPC_URL" STELLAR_NETWORK_PASSPHRASE="$PASSPHRA
 # compose is offline review tooling; run it for real even in dry-run so verify
 # has an expectation file to reconcile against.
 "${deploy_env[@]}" "$PERCH_DEPLOY" compose \
-    --doc "$DOC" --account "$SA" --interpreter "$INTERPRETER" \
-    --interpreter-wasm-hash "$INTERP_HASH" \
+    --doc "$DOC" --account "$SA" \
     > "$RULES_OUT" || die "compose failed"
 # ONE transaction: apply_doc sends the document to the stateless compiler
 # contract (parse, validate, network binding, compile — all on-chain), checks
@@ -481,7 +480,7 @@ deploy_env=(env STELLAR_RPC_URL="$RPC_URL" STELLAR_NETWORK_PASSPHRASE="$PASSPHRA
 run "${deploy_env[@]}" "$PERCH_DEPLOY" apply \
     --account "$SA" --doc "$DOC" --compiler "$COMPILER" --interpreter "$INTERPRETER"
 run "${deploy_env[@]}" "$PERCH_DEPLOY" verify \
-    --account "$SA" --interpreter "$INTERPRETER" --rules "$RULES_OUT"
+    --account "$SA" --rules "$RULES_OUT"
 # The rule id CI signs under comes from the CHAIN, never hard-coded: rule ids
 # are assigned when a rule is added and change when it is replaced, so select
 # it by name in the account's configuration() snapshot with the stock stellar

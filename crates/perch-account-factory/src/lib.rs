@@ -16,11 +16,11 @@
 //!   account's own `apply_doc`.
 #![no_std]
 
+use perch_account_types::Signer;
 use soroban_sdk::{
     contract, contractevent, contractimpl, vec, xdr::ToXdr, Address, Bytes, BytesN,
     ContractExecutable, Env, Vec,
 };
-use stellar_accounts::smart_account::Signer;
 
 /// Wire version of this factory's interface. Bumped on any change a client
 /// could observe; a new version is always a new wasm and a new address.

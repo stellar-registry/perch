@@ -15,6 +15,7 @@ doctest = false
 # worlds, and it is consumed exclusively as a dev-dependency (never shipped).
 soroban-sdk = { workspace = true, features = ["testutils"] }
 stellar-accounts = { workspace = true }
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
 perch-account = { version = "0.5.1", path = "../perch-account" }
 perch-doc-compiler = { version = "0.3.5", path = "../perch-doc-compiler" }
 perch-interpreter = { version = "0.1.6", path = "../perch-interpreter" }

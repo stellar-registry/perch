@@ -18,6 +18,7 @@
 //!   or to a set with no admin rule.
 
 use perch_account::{PerchAccount, PerchAccountClient};
+use perch_account_types::Signer;
 use perch_doc_compiler::{
     admin_survives, CompiledDoc, DocCompilerClient, DocCompilerError, PerchDocCompiler,
 };
@@ -32,7 +33,6 @@ use perch_testkit::rule_set::check;
 use perch_testkit::FIXTURE_NETWORK;
 use soroban_sdk::testutils::{Address as _, EnvTestConfig, Ledger as _};
 use soroban_sdk::{contract, contractimpl, symbol_short, Address, Bytes, Env, Symbol, Vec as SVec};
-use stellar_accounts::smart_account::Signer;
 
 fn bytes(e: &Env, json: &str) -> Bytes {
     Bytes::from_slice(e, json.as_bytes())

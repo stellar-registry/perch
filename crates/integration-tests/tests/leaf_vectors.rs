@@ -18,13 +18,13 @@
 //! `signers_met` at its own count (without the floor), whichever the leaf
 //! denotes.
 
+use perch_account_types::Signer;
 use perch_conformance::{cases, materialize, AddrBook, CtxKind, OpSpec};
 use perch_program::{Op, RpnProgram, Verdict};
 use perch_rule_eval::convert::{calls, signers};
 use perch_testkit::denote::{denote, Installed};
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{Address, Env, Vec as SVec};
-use stellar_accounts::smart_account::Signer;
 
 /// Whether `ops` is in the fragment Perch's lowering emits, and whether it
 /// is a single leaf without its `All`.

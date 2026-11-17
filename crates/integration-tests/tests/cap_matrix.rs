@@ -191,7 +191,13 @@ fn run(w: &World, amount: i128) -> Result<(), ()> {
             // Via the account's `check_auth` so the signer-signed digest is the
             // address-bound one; this bare account stores no rule-eval rule
             // set, so `check_auth` runs OZ's `do_check_auth` and the policies.
-            perch_smart_account::check_auth(&w.env, &hash, &payload, &contexts).unwrap();
+            perch_smart_account::check_auth(
+                &w.env,
+                &hash,
+                &perch_testkit::twin(&w.env, payload.clone()),
+                &contexts,
+            )
+            .unwrap();
         });
     }));
     r.map_err(|_| ())

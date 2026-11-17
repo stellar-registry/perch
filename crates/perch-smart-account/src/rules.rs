@@ -41,11 +41,19 @@
 //! unchanged (`gate::drop_records`). Everything runs in the one `apply_doc`
 //! invocation, so a failure anywhere reverts every edit.
 
+use crate::auth::oz;
 use crate::infra;
+use perch_account_types::{ContextRuleType, Signer};
 use perch_doc_compiler::{CompiledDoc, CompiledRule, RuleScope};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{contracttype, Address, BytesN, Env, IntoVal, Map, String, Val, Vec};
-use stellar_accounts::smart_account::{self, ContextRuleType, Signer, MAX_POLICIES};
+use stellar_accounts::smart_account::{self, MAX_POLICIES};
+
+// The compiler refuses what OZ's registry would refuse, so a document that
+// compiles also installs: a rule name within OZ's name limit, and a rule
+// naming every declared signer within OZ's per-rule signer cap.
+const _: () = assert!(perch_doc_compiler::MAX_RULE_NAME_BYTES == smart_account::MAX_NAME_SIZE);
+const _: () = assert!(perch_doc_compiler::MAX_DOC_SIGNERS <= smart_account::MAX_SIGNERS);
 
 /// One policy attached to an installed rule.
 #[contracttype]
@@ -609,7 +617,7 @@ impl Effects for Apply<'_> {
     fn reconcile_signers(&mut self, rule: &InstalledRule, signers: &Vec<Signer>) {
         self.sum.signers_added += missing(self.e, signers, &rule.signers).len();
         self.sum.signers_removed += missing(self.e, &rule.signers, signers).len();
-        smart_account::reconcile_signers_no_events(self.e, rule.id, signers);
+        smart_account::reconcile_signers_no_events(self.e, rule.id, &oz::signers(self.e, signers));
     }
 
     fn add_policy(&mut self, rule: &InstalledRule, policy: &Address, param: &Val) {
@@ -643,10 +651,10 @@ impl Effects for Apply<'_> {
         self.sum.rules_added += 1;
         smart_account::add_context_rule_no_events(
             self.e,
-            &rule.context_type,
+            &oz::context_type(&rule.context_type),
             &rule.name,
             rule.valid_until,
-            &rule.signers,
+            &oz::signers(self.e, &rule.signers),
             &policies,
         )
         .id

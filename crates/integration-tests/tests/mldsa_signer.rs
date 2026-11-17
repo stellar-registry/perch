@@ -16,7 +16,9 @@ use perch_doc_compiler::{DocCompilerError, PerchDocCompiler, PerchDocCompilerCli
 use perch_mldsa_verifier::{key_commitment, MlDsaSigData, PerchMlDsaVerifier, SIG_CONTEXT};
 use perch_testkit::passkey::{self, SoftPasskey};
 use perch_testkit::FIXTURE_REGISTRY as REGISTRY;
-use perch_testkit::{auth_digest, fixture, AnyKeyVerifier, FIXTURE_NETWORK, FIXTURE_VERIFIERS};
+use perch_testkit::{
+    auth_digest, fixture, twin, AnyKeyVerifier, FIXTURE_NETWORK, FIXTURE_VERIFIERS,
+};
 use perch_webauthn_verifier::PerchWebAuthnVerifier;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::{Address as _, Ledger as _};
@@ -179,7 +181,8 @@ fn run_on(env: &Env, account: &Address, payload: &AuthPayload, ctx: Context) -> 
     let contexts = vec![env, ctx];
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         env.as_contract(account, || {
-            perch_smart_account::check_auth(env, &hash, payload, &contexts).unwrap();
+            perch_smart_account::check_auth(env, &hash, &twin(env, payload.clone()), &contexts)
+                .unwrap();
         });
     }))
     .map_err(|_| ())

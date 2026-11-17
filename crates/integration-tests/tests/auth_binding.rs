@@ -19,7 +19,7 @@
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_ed25519_verifier::PerchEd25519Verifier;
-use perch_testkit::auth_digest;
+use perch_testkit::{auth_digest, twin};
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::Address as _;
 use soroban_sdk::{
@@ -95,8 +95,13 @@ fn digest_for_account(env: &Env, verifier: &Address, key: &Bytes, target: &Addre
     ];
 
     env.as_contract(&account, || {
-        perch_smart_account::check_auth(env, &host_payload, &signatures, &contexts)
-            .expect("recording verifier approves");
+        perch_smart_account::check_auth(
+            env,
+            &host_payload,
+            &twin(env, signatures.clone()),
+            &contexts,
+        )
+        .expect("recording verifier approves");
     });
     env.as_contract(verifier, || {
         env.storage()
@@ -188,14 +193,19 @@ fn ed25519_external_signature_is_not_replayable_across_accounts() {
 
     // Legitimate use on account A succeeds.
     env.as_contract(&account_a, || {
-        perch_smart_account::check_auth(&env, &host_hash, &payload, &contexts)
+        perch_smart_account::check_auth(&env, &host_hash, &twin(&env, payload.clone()), &contexts)
             .expect("account A authorizes its own signature");
     });
 
     // Replaying the same signature on account B is rejected.
     let replay = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         env.as_contract(&account_b, || {
-            perch_smart_account::check_auth(&env, &host_hash, &payload, &contexts)
+            perch_smart_account::check_auth(
+                &env,
+                &host_hash,
+                &twin(&env, payload.clone()),
+                &contexts,
+            )
         })
     }));
     let rejected = match replay {

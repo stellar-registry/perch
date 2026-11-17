@@ -2,6 +2,7 @@ extern crate std;
 
 use crate::{pins, AccountCreated, PerchAccountFactory, PerchAccountFactoryClient};
 use perch_account::PerchAccountClient;
+use perch_account_types::Signer;
 use perch_doc_compiler::PerchDocCompiler;
 use perch_interpreter::PerchInterpreter;
 use perch_smart_account::infra;
@@ -16,7 +17,6 @@ use soroban_sdk::xdr::{
 };
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Event as _, IntoVal, String, TryFromVal, Val};
 use std::format;
-use stellar_accounts::smart_account::Signer;
 
 /// The account wasm the factory pinned, uploaded where `deploy_v2` finds it.
 const ACCOUNT_WASM: &[u8] = include_bytes!("../wasm/perch-account.wasm");

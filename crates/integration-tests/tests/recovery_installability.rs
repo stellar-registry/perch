@@ -165,8 +165,7 @@ fn an_expiring_admin_rule_is_refused_by_the_anti_brick_check() {
 #[test]
 fn admin_survives_requires_an_unbounded_admin_rule() {
     let env = Env::default();
-    let signer =
-        stellar_accounts::smart_account::Signer::Delegated(soroban_sdk::Address::generate(&env));
+    let signer = perch_account_types::Signer::Delegated(soroban_sdk::Address::generate(&env));
     let ids = soroban_sdk::vec![&env, String::from_str(&env, "owner")];
     let all = ModelRule {
         scope: ModelScope::SelfAdmin,

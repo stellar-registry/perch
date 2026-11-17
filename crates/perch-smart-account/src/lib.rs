@@ -32,8 +32,10 @@
 //!
 //! `__check_auth` decides every authorization with rule-core's
 //! `rule_eval::authorize` over the rule-eval rules the account stores beside
-//! the installed context rules (`rule_set`, `gate`), and OZ's `authenticate`
-//! checks the signers. OZ's context rules are the registry of rule ids and
+//! the installed context rules (`rule_set`, `gate`), and the account's
+//! `authenticate` (`auth`) checks the signers. The signer, payload, and
+//! context-rule types are `perch-account-types`', the XDR and contract-spec
+//! twins of OZ's. OZ's context rules are the registry of rule ids and
 //! signers and carry no policy but the recovery rule's controller. A
 //! recovery completion is decided by OZ's `do_check_auth` and the recovery
 //! controller alone, and so is every authorization of an account upgraded
@@ -72,14 +74,16 @@ use soroban_sdk::{
     Address, Bytes, BytesN, ContractExecutable, Env, Map, String, Symbol, Val, Vec,
 };
 use soroban_sdk_tools::{contractstorage, scerr, InstanceItem, PersistentItem, PersistentMap};
-use stellar_accounts::smart_account::{
-    self, AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccount,
-    SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD,
-};
+use stellar_accounts::smart_account::{self, SmartAccount};
 
+mod auth;
 mod gate;
 mod rule_set;
 mod rules;
+pub use auth::{SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD};
+pub use perch_account_types::{
+    AuthPayload, ContextRule, ContextRuleType, Signer, SmartAccountError,
+};
 pub use rules::{InstalledPolicy, InstalledRule};
 
 // Re-exported so `impl_perch_smart_account!` can name them via `$crate::…`
@@ -910,7 +914,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 
     /// The OZ context rule with this id; panics if there is none.
     fn get_context_rule(e: &Env, context_rule_id: u32) -> ContextRule {
-        smart_account::get_context_rule(e, context_rule_id)
+        auth::oz::context_rule(e, smart_account::get_context_rule(e, context_rule_id))
     }
 
     /// Apply a scoped document under `scope` and return its `doc_hash`. Owner
@@ -978,7 +982,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 /// The account's `__check_auth`: the reserved-name guard, the `Protected`
 /// freeze, and the scope generation gate run before any rule is evaluated
 /// (spec §7.6, §9, §15); then rule-eval's `authorize` decides over the
-/// stored rule sets and OZ's `authenticate` checks every signer (`gate`).
+/// stored rule sets and `authenticate` checks every signer (`gate`).
 ///
 /// - Any context naming an invoker-only hook is refused, on any contract,
 ///   so no signature can satisfy a hook's `account.require_auth()`.
@@ -996,7 +1000,7 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
 ///   the same way.
 /// - rule-eval's `authorize` over the stored rule sets refuses what it does
 ///   not accept (`RuleEvalRefused`; a chosen id that names no installed rule
-///   with OZ's `ContextRuleNotFound`); once every signer has authenticated,
+///   with `ContextRuleNotFound`); once every signer has authenticated,
 ///   the spending records it charged are stored. A recovery completion (one
 ///   `apply_doc` context on this account selecting the recovery rule) is
 ///   left to OZ's `do_check_auth` and the controller's `enforce` alone, so
@@ -1067,7 +1071,7 @@ pub fn check_auth(
         None => Ok(smart_account::do_check_auth(
             e,
             &bound,
-            signatures,
+            &auth::oz::payload(e, signatures),
             auth_contexts,
         )?),
     }
@@ -1651,10 +1655,10 @@ fn apply_rules(
 pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
     let rule = smart_account::add_context_rule(
         e,
-        &ContextRuleType::CallContract(e.current_contract_address()),
+        &smart_account::ContextRuleType::CallContract(e.current_contract_address()),
         &String::from_str(e, "admin"),
         None,
-        admin_signers,
+        &auth::oz::signers(e, admin_signers),
         &Map::new(e),
     );
     PerchStorage::set_installed_rules(
@@ -1688,7 +1692,7 @@ macro_rules! impl_perch_smart_account {
         #[$crate::soroban_sdk::contractimpl]
         impl CustomAccountInterface for $ty {
             type Error = $crate::soroban_sdk::Error;
-            type Signature = $crate::stellar_accounts::smart_account::AuthPayload;
+            type Signature = $crate::AuthPayload;
 
             /// Decide whether this account authorizes `auth_contexts`.
             // Refuse reserved invoker-only names and, under a `Protected`
@@ -1699,7 +1703,7 @@ macro_rules! impl_perch_smart_account {
             fn __check_auth(
                 e: $crate::soroban_sdk::Env,
                 signature_payload: $crate::soroban_sdk::crypto::Hash<32>,
-                signatures: $crate::stellar_accounts::smart_account::AuthPayload,
+                signatures: $crate::AuthPayload,
                 auth_contexts: $crate::soroban_sdk::Vec<$crate::soroban_sdk::auth::Context>,
             ) -> Result<(), Self::Error> {
                 $crate::check_auth(&e, &signature_payload, &signatures, &auth_contexts)

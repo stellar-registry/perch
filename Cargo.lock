@@ -1628,7 +1628,6 @@ version = "0.5.1"
 dependencies = [
  "perch-smart-account",
  "soroban-sdk",
- "stellar-accounts",
 ]
 
 [[package]]
@@ -1636,6 +1635,7 @@ name = "perch-account-factory"
 version = "0.3.1"
 dependencies = [
  "perch-account",
+ "perch-account-types",
  "perch-doc-compiler",
  "perch-interpreter",
  "perch-registry-resolve",
@@ -1643,6 +1643,13 @@ dependencies = [
  "perch-spending-limit",
  "perch-testkit",
  "perch-webauthn-verifier",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "perch-account-types"
+version = "0.1.0"
+dependencies = [
  "soroban-sdk",
  "stellar-accounts",
 ]
@@ -1737,12 +1744,12 @@ name = "perch-doc-compiler"
 version = "0.3.5"
 dependencies = [
  "hex",
+ "perch-account-types",
  "perch-ir",
  "perch-recovery-interface",
  "perch-rule-eval",
  "soroban-sdk",
  "soroban-sdk-tools",
- "stellar-accounts",
 ]
 
 [[package]]
@@ -1773,6 +1780,7 @@ dependencies = [
  "hex",
  "perch-account",
  "perch-account-factory",
+ "perch-account-types",
  "perch-compile",
  "perch-conformance",
  "perch-doc-compiler",
@@ -1886,12 +1894,12 @@ name = "perch-rule-eval"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "perch-account-types",
  "perch-ir",
  "rule-eval",
  "rule-eval-conformance",
  "soroban-facade",
  "soroban-sdk",
- "stellar-accounts",
 ]
 
 [[package]]
@@ -1908,6 +1916,7 @@ dependencies = [
 name = "perch-smart-account"
 version = "0.1.1"
 dependencies = [
+ "perch-account-types",
  "perch-doc-compiler",
  "perch-recovery-interface",
  "perch-registry-resolve",
@@ -1935,6 +1944,7 @@ dependencies = [
  "hex",
  "p256",
  "perch-account",
+ "perch-account-types",
  "perch-compile",
  "perch-doc-compiler",
  "perch-ed25519-verifier",

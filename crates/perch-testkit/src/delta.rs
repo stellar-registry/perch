@@ -41,6 +41,7 @@
 use crate::fixture::AnyKeyVerifier;
 use arbitrary::Unstructured;
 use perch_account::{PerchAccount, PerchAccountClient};
+use perch_account_types::{ContextRule, ContextRuleType, Signer};
 use perch_doc_compiler::{PerchDocCompiler, MAX_DOC_RULES, MAX_DOC_SIGNERS};
 use perch_interpreter::PerchInterpreter;
 use perch_recovery::PerchRecovery;
@@ -55,7 +56,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::string::{String, ToString};
 use std::vec::Vec;
-use stellar_accounts::smart_account::{ContextRuleType, Signer};
 
 pub use oracle::{OracleAccount, OracleAccountClient};
 
@@ -63,6 +63,7 @@ pub use oracle::{OracleAccount, OracleAccountClient};
 /// trait impls after the bare trait paths, which must be in scope.
 mod oracle {
     #![allow(unused_imports)]
+    use perch_account_types::{AuthPayload, ContextRule, Signer};
     use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
     use perch_smart_account::{
         check_auth, install_admin, AccountCapabilities, AccountConfiguration, FreezeGate,
@@ -72,7 +73,7 @@ mod oracle {
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;
     use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
-    use stellar_accounts::smart_account::{AuthPayload, ContextRule, Signer, SmartAccount};
+    use stellar_accounts::smart_account::SmartAccount;
 
     /// The perch account with `apply_doc` swapped for the full replace.
     #[contract]
@@ -641,11 +642,7 @@ fn enforced(e: &Env, stored: &StoredRule) -> BTreeSet<String> {
 /// `rule` rendered like [`DocModel::expected_rules`], or `None` once expired.
 /// `stored` is the stored rule its id selects, which the recovery rule's
 /// controller stands in for.
-fn granted(
-    w: &DeltaWorld,
-    rule: &stellar_accounts::smart_account::ContextRule,
-    stored: Option<&StoredRule>,
-) -> Option<String> {
+fn granted(w: &DeltaWorld, rule: &ContextRule, stored: Option<&StoredRule>) -> Option<String> {
     if rule
         .valid_until
         .is_some_and(|v| v < w.env.ledger().sequence())

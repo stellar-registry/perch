@@ -12,6 +12,7 @@
 //! variant on the true registry wasm.
 
 use perch_account::{PerchAccount, PerchAccountClient};
+use perch_account_types::Signer;
 use perch_doc_compiler::{PerchDocCompiler, PerchDocCompilerClient};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use perch_interpreter::{PerchInterpreter, PerchInterpreterClient};
@@ -19,7 +20,6 @@ use perch_smart_account::{constructorless_registry, infra};
 use perch_spending_limit::PerchSpendingLimit;
 use soroban_sdk::testutils::Ledger as _;
 use soroban_sdk::{vec, Address, Bytes, BytesN, Env, Vec};
-use stellar_accounts::smart_account::Signer;
 
 use crate::fixture::{self, AnyKeyVerifier, FIXTURE_VERIFIERS};
 use crate::Bootstrap;

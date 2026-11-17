@@ -11,13 +11,13 @@
 //! way. `__check_auth` decides an authorization with `rule_eval::authorize`
 //! over the rules its payload chooses (`gate`).
 
+use perch_account_types::Signer;
 use perch_doc_compiler::CompiledDoc;
 use perch_rule_eval::convert::Addresses;
 use perch_rule_eval::{
     admin_declared, admin_survives, doc_of_in, guarded, CompiledModel, StoredFunctions, StoredRule,
 };
 use soroban_sdk::{Address, Env, Vec};
-use stellar_accounts::smart_account::Signer;
 
 use crate::{rules, PerchAccountError};
 use perch_recovery_interface::account::GUARDIAN_APPROVAL_FNS;

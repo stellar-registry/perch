@@ -19,7 +19,6 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-stellar-accounts = { workspace = true }
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }
 
 [dev-dependencies]

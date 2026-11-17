@@ -18,7 +18,8 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-stellar-accounts = { workspace = true }
+# The account's `Signer`, which `create` takes.
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
 # Build-time pins: the account wasm hash and the WebAuthn verifier's
 # content address, both from this crate's committed `wasm/` pins.
 perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }

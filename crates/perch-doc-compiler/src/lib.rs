@@ -21,13 +21,13 @@
 
 extern crate alloc;
 
+use perch_account_types::Signer;
 use perch_recovery_interface::credential::{Credential, ReplacementSet};
 use perch_recovery_interface::RecoveryAction;
 pub use perch_rule_eval::CompiledModel;
 use perch_rule_eval::ModelPrincipals;
 use soroban_sdk::{contractclient, contracttype, Address, Bytes, BytesN, Env, String, Vec};
 use soroban_sdk_tools::scerr;
-use stellar_accounts::smart_account::Signer;
 
 /// The compiled recovery wire types, defined once in
 /// `perch-recovery-interface` and re-exported here for the compiler's
@@ -63,7 +63,7 @@ pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
 /// The longest rule name, in bytes: OZ's context-rule name limit. Checked
 /// here so that a document that compiles also installs: a compromise
 /// baseline is only published, never applied, until its recovery completes.
-pub const MAX_RULE_NAME_BYTES: u32 = stellar_accounts::smart_account::MAX_NAME_SIZE;
+pub const MAX_RULE_NAME_BYTES: u32 = 20;
 
 /// The most constraints one rule may carry, counting each argument
 /// constraint and a `functions` list as one each. A rule with more is
@@ -72,10 +72,6 @@ pub const MAX_RULE_NAME_BYTES: u32 = stellar_accounts::smart_account::MAX_NAME_S
 /// interpreter-attached rule's program is a signer floor, one leaf per
 /// constraint and one `All`, within the interpreter's stack of 128 values.
 pub const MAX_RULE_CONSTRAINTS: u32 = 127;
-
-// A rule can name every declared signer; OZ installs at most `MAX_SIGNERS`
-// per rule.
-const _: () = assert!(MAX_DOC_SIGNERS <= stellar_accounts::smart_account::MAX_SIGNERS);
 
 /// Everything `compile_doc` can refuse. (`#[scerr]` assigns sequential codes
 /// from 1, in variant order.)

@@ -5,17 +5,18 @@
 //! `rule_eval::authorize`, over the stored rule-eval rules (`rule_set`) of
 //! the rules the payload chooses, at the current ledger and scope
 //! generation, under every signer the payload names, and with the account's
-//! own spending records. OpenZeppelin's `authenticate` then checks every one
-//! of those signers against OpenZeppelin's digest, so wallets sign the same
-//! bytes as before, and the records `authorize` charged are stored.
+//! own spending records. `auth::authenticate` then checks every one of those
+//! signers against OpenZeppelin's digest, so wallets sign the bytes they
+//! sign for an OpenZeppelin account, and the records `authorize` charged are
+//! stored.
 //! OpenZeppelin's context rules are the registry of rule ids and signers:
 //! each chosen OZ id is read as the stored rule at its position, in the
 //! admin document's set when it is one of `installed_rules`, in its scope's
 //! set when a scoped document installed it (its `ScopeTag`). `authorize`
 //! reads only the rules its choices name, so running it over the chosen
 //! rules alone gives the verdict and records of running it over the whole
-//! stored set. A chosen id that names no installed rule refuses with OZ's
-//! `ContextRuleNotFound`, as OZ refuses it, which wallets read as a
+//! stored set. A chosen id that names no installed rule refuses with
+//! `ContextRuleNotFound` (#3000), as OZ refuses it, which wallets read as a
 //! selection the configuration has since left. A refusal, a chosen recovery
 //! rule, or a batch soroban-facade cannot read refuses the authorization
 //! with `RuleEvalRefused`. The recovery rule's stored form
@@ -37,11 +38,12 @@ use soroban_sdk::auth::Context;
 use soroban_sdk::crypto::Hash;
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{symbol_short, Env, Map, Symbol, TryFromVal, Val, Vec as SVec};
-use stellar_accounts::smart_account::{
-    self, AuthPayload, SmartAccountError, SMART_ACCOUNT_EXTEND_AMOUNT as EXTEND,
-    SMART_ACCOUNT_TTL_THRESHOLD as THRESHOLD,
-};
 
+use perch_account_types::{AuthPayload, SmartAccountError};
+
+use crate::auth::{
+    authenticate, SMART_ACCOUNT_EXTEND_AMOUNT as EXTEND, SMART_ACCOUNT_TTL_THRESHOLD as THRESHOLD,
+};
 use crate::{extend_persistent, scope_generation, InstalledRule, PerchAuthError, PerchStorage};
 
 fn refused() -> soroban_sdk::Error {
@@ -107,7 +109,7 @@ pub(crate) fn authorize(
     preimage.append(&payload.context_rule_ids.clone().to_xdr(e));
     let digest = e.crypto().sha256(&preimage);
     for (signer, signature) in payload.signers.iter() {
-        smart_account::authenticate(e, &digest, &signer, &signature);
+        authenticate(e, &digest, &signer, &signature);
     }
     for (j, rule) in rules.iter().enumerate() {
         if rule.cap.is_some() && !same(&records[j], &after[j]) {

@@ -9,6 +9,7 @@
 //! account from them. [`check_compiled`] checks the doc compiler's rules
 //! against the same lowering.
 
+use perch_account_types::Signer;
 use perch_compile::{CompileConfig, LoweredRule, ScopeSpec, SignerSpec};
 use perch_doc_compiler::{CompiledDoc, RuleScope};
 use perch_program::InstallParams;
@@ -17,7 +18,6 @@ use std::format;
 use std::string::String;
 use std::vec::Vec;
 use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
-use stellar_accounts::smart_account::Signer;
 
 /// One document rule as the RPN lowering attaches it.
 #[derive(Clone, Debug)]

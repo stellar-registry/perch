@@ -13,7 +13,12 @@ doctest = false
 [dependencies]
 soroban-sdk = { workspace = true }
 soroban-sdk-tools = { workspace = true }
+# OZ's context-rule registry (rule ids and signers) and the recovery
+# completion's `do_check_auth`.
 stellar-accounts = { workspace = true }
+# The signer, the `__check_auth` payload, the context rule, and the error
+# codes: the XDR and contract-spec twins of OZ's.
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
 # Client + wire types only — `contract` off, so no compiler code (parser,
 # lowering) is ever linked into account wasm.
 perch-doc-compiler = { version = "0.3.5", path = "../perch-doc-compiler", default-features = false }

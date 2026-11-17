@@ -14,8 +14,8 @@
 //! - Named cases for the diffs most likely to go wrong.
 //! - After every generated apply, on both accounts, the stored rule-eval
 //!   rule set equals the lowering of the document's model and the
-//!   denotation of what OZ, the interpreter and the spending limit hold
-//!   (`perch_testkit::rule_set`), signer order included.
+//!   denotation of OZ's rules with the programs and caps the compiler emits
+//!   for them (`perch_testkit::rule_set`), signer order included.
 //!
 //! Proptest case counts default low enough for CI; set `PERCH_DELTA_CASES`
 //! to run more.
@@ -605,24 +605,40 @@ fn sorted(names: &[&str]) -> std::vec::Vec<String> {
     out
 }
 
+/// The stored rule-eval rule of the installed rule named `name` on the
+/// delta account.
+fn stored(w: &DeltaWorld, name: &str) -> perch_smart_account::StoredRule {
+    let client = perch_account::PerchAccountClient::new(&w.env, &w.delta);
+    let at = client
+        .installed_rules()
+        .iter()
+        .position(|r| !r.recovery && r.name == soroban_sdk::String::from_str(&w.env, name))
+        .unwrap();
+    client.rule_set().get(at as u32).unwrap()
+}
+
 #[test]
-fn a_rule_keeping_its_name_with_new_functions_changes_only_its_program() {
+fn a_rule_keeping_its_name_with_new_functions_changes_only_its_stored_rule() {
     let mut a = rule("r1", Some(0), &[0]);
     a.functions = Some(std::vec!["transfer"]);
     let mut b = a.clone();
     b.functions = Some(std::vec!["transfer", "approve"]);
-    let (w, events, before, after) = case(
-        &doc(delegated(1), std::vec![admin(&[0]), a]),
+    let w = DeltaWorld::new();
+    apply_both(&w, &doc(delegated(1), std::vec![admin(&[0]), a]));
+    let old = stored(&w, "r1");
+    let before = w.installed(&w.delta);
+    let (w, events, _, after) = transition_after(
+        &w,
         &doc(delegated(1), std::vec![admin(&[0]), b]),
+        before.clone(),
     );
+    // OZ holds the rule's contract, signers and last ledger, none of which
+    // changed, so no OZ rule is touched: the stored rule alone changes.
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
-    // A policy-only edit: no signer changes, so no signer batch at all. The
-    // interpreter is this rule's alone, so OZ deregisters it as the old
-    // program goes and registers it again as the new one comes.
-    assert_eq!(
-        names(&events, &w.delta),
-        sorted(&["policy_removed", "policy_added", "rule_edited"])
-    );
+    assert!(names(&events, &w.delta).is_empty());
+    let new = stored(&w, "r1");
+    assert_ne!(new.functions, old.functions);
+    assert_eq!((new.signers, new.threshold), (old.signers, old.threshold));
 }
 
 #[test]
@@ -643,7 +659,7 @@ fn a_rule_keeping_its_name_with_a_new_scope_is_replaced() {
 }
 
 #[test]
-fn new_cap_parameters_edit_only_that_rule() {
+fn new_cap_parameters_change_only_that_rules_stored_cap() {
     let mut a = rule("r1", Some(0), &[0]);
     a.cap = Some((1_000, 100));
     let mut b = a.clone();
@@ -652,23 +668,14 @@ fn new_cap_parameters_edit_only_that_rule() {
         &doc(delegated(1), std::vec![admin(&[0]), a]),
         &doc(delegated(1), std::vec![admin(&[0]), b]),
     );
-    // The cap is part of the rule's text, so both of the rule's policies are
-    // reinstalled either way: the spending limit for its new parameters, the
-    // interpreter for its new rule-hash provenance. With no events to price
-    // (the quiet path), editing the rule's two policies writes less than
-    // replacing it, so it keeps its id. The admin rule is not touched.
+    // The cap lives in the stored rule, so no OZ rule is touched and both
+    // keep their ids; the record the old cap charged is dropped
+    // (`gate.rs`).
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
-    assert_eq!(
-        names(&events, &w.delta),
-        sorted(&[
-            "policy_removed",
-            "policy_removed",
-            "policy_added",
-            "policy_added",
-            "rule_edited",
-        ])
-    );
+    assert!(names(&events, &w.delta).is_empty());
+    let cap = stored(&w, "r1").cap.get(0).unwrap();
+    assert_eq!((cap.limit, cap.period), (2_000, 100));
 }
 
 #[test]
@@ -744,26 +751,31 @@ fn a_signer_shared_by_several_rules_changes_in_one_and_stays_in_the_others() {
 }
 
 #[test]
-fn a_policy_shared_by_several_rules_is_edited_in_one_only() {
+fn a_changed_rule_leaves_the_other_stored_rules_alone() {
     let mut r1 = rule("r1", Some(0), &[0]);
     r1.functions = Some(std::vec!["transfer"]);
     let mut r2 = rule("r2", Some(1), &[0]);
     r2.functions = Some(std::vec!["mint"]);
     let mut r1b = r1.clone();
     r1b.functions = Some(std::vec!["approve"]);
-    let (w, events, _before, after) = case(
+    let w = DeltaWorld::new();
+    apply_both(
+        &w,
         &doc(delegated(1), std::vec![admin(&[0]), r1, r2.clone()]),
+    );
+    let (admin_before, r2_before) = (stored(&w, "admin"), stored(&w, "r2"));
+    let before = w.installed(&w.delta);
+    let (w, events, _, after) = transition_after(
+        &w,
         &doc(delegated(1), std::vec![admin(&[0]), r1b, r2]),
+        before.clone(),
     );
-    // The interpreter stays registered (r2 still uses it): no registry
-    // events, just r1's program swap.
-    assert_eq!(
-        names(&events, &w.delta),
-        sorted(&["policy_removed", "policy_added", "rule_edited"])
-    );
-    let r2_id = id_of(&after, "r2");
-    let interpreter = perch_interpreter::PerchInterpreterClient::new(&w.env, &w.interpreter);
-    assert!(interpreter.get_program(&w.delta, &r2_id).is_some());
+    assert!(names(&events, &w.delta).is_empty());
+    for name in ["admin", "r1", "r2"] {
+        assert_eq!(id_of(&before, name), id_of(&after, name));
+    }
+    assert_eq!(stored(&w, "admin"), admin_before);
+    assert_eq!(stored(&w, "r2"), r2_before);
 }
 
 #[test]

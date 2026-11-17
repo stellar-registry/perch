@@ -3,14 +3,15 @@
 //!
 //! `rule_eval::lower(doc_of(model_of(d)), me)` equals the denotation
 //! (`perch_rule_eval::denote`) of each rule the doc compiler's real
-//! `compile_doc` returns for `d`, installed on `me` as the account installs
-//! it, then rule-eval's recovery rule when `d` configures recovery.
+//! `compile_doc` returns for `d`, installed on `me` as the account installed
+//! it with the interpreter and the spending limit, then rule-eval's recovery
+//! rule when `d` configures recovery.
 //!
 //! The left side is the path an account takes to rule-eval's rules: the
 //! document model and its conversion through `soroban-facade`, then rule-eval's
-//! proven lowering. The right side reads what Perch actually installs: OZ's
-//! context rule, the interpreter's program and the spending limit's
-//! parameters. Each model also survives the host's XDR.
+//! proven lowering. The right side reads what the compiler emits, as those
+//! policies enforced it: OZ's context rule, the interpreter's program and the
+//! spending limit's parameters. Each model also survives the host's XDR.
 //!
 //! The documents:
 //!

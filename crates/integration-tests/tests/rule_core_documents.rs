@@ -8,12 +8,13 @@
 //! under the trace's admin document and generation. Whether Perch refuses
 //! the document, its lowering of the document's rules, each verdict, and
 //! each accepted authorization's spending records must equal the trace's,
-//! which rule-core's Lean model computed. After every apply the account's
+//! which rule-core's Lean model computed: the records are the ones the
+//! account keeps, which rule-eval charges. After every apply the account's
 //! stored rule-eval rule set for the document must equal the lowering of its
 //! model and the denotation of what it installed (`perch_testkit::rule_set`).
-//! `__check_auth` runs OZ and then rule-eval over those sets, both of which
-//! must accept, and after every accepted authorization each capped rule's
-//! rule-eval spending record must equal OZ's (records parity). Every
+//! `__check_auth` decides with rule-eval over those sets, and after every
+//! accepted authorization the account must keep a record only for a rule
+//! stored with a cap (`perch_testkit::rule_set::check_records`). Every
 //! difference is reported, by trace and authorization.
 
 mod rule_core;

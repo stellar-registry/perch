@@ -1,10 +1,13 @@
 //! A recorded corpus of authorization outcomes, replayed against the build
 //! under test: `tests/corpus/auth-outcomes.json`.
 //!
-//! Each scenario drives the real account, compiler, interpreter, spending
-//! limit, and recovery controller under ENFORCING authorization (hand-built
-//! auth entries through `set_auths`, so every account's real `__check_auth`
-//! runs; see `support/mod.rs`). Every step records
+//! Each scenario drives the real account, compiler, and recovery controller
+//! under ENFORCING authorization (hand-built auth entries through
+//! `set_auths`, so every account's real `__check_auth` runs; see
+//! `support/mod.rs`). The corpus was recorded when the account installed
+//! the interpreter and spending-limit policies; the build under test decides
+//! with rule-eval, and the differences that brings are declared. Every step
+//! records
 //!
 //! - the outcome: the returned value, or the error the host surfaced;
 //! - the contract events the step published;
@@ -28,10 +31,12 @@
 //!
 //! After every accepted `apply_doc` step, once the step is recorded, the
 //! applying account's stored rule-eval rule set must equal the lowering of
-//! the applied document's model and the denotation of what is installed
-//! (`perch_testkit::rule_set`). After every accepted step, each capped
-//! rule's spending record as the account keeps it for rule-eval must equal
-//! OZ's spending-limit record for the rule (`rule_set::check_records`).
+//! the applied document's model and the denotation of OZ's rules with the
+//! programs and caps the compiler emits (`perch_testkit::rule_set`). After
+//! every accepted step, the account must keep a spending record only for a
+//! rule stored with a cap, and none for a removed rule
+//! (`rule_set::check_records`); what the records hold is in the recorded
+//! storage.
 //!
 //! `PERCH_RECORD_CORPUS=1 cargo test -p perch-integration-tests --test
 //! auth_corpus` rewrites the corpus from the current build.
@@ -64,7 +69,7 @@ const DECLARED: &str = "tests/corpus/declared-differences.json";
 thread_local! {
     /// The stored rule sets this thread's corpus run checked.
     static RULE_SETS: Cell<usize> = const { Cell::new(0) };
-    /// The capped rules' records this thread's corpus run compared, and
+    /// The capped rules' records this thread's corpus run checked, and
     /// those holding a spend.
     static RECORDS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }
@@ -337,7 +342,7 @@ impl<'a> Recorder<'a> {
         }
         if val.is_some() {
             let r = perch_testkit::rule_set::check_records(env, &self.w.account)
-                .unwrap_or_else(|x| panic!("{step}: records parity: {x}"));
+                .unwrap_or_else(|x| panic!("{step}: the spending records: {x}"));
             let (n, charged) = RECORDS.get();
             RECORDS.set((n + r.capped, charged + r.charged));
         }

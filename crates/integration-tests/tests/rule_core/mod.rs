@@ -5,11 +5,11 @@
 //! identifiers. [`run`] renames them injectively onto real addresses and
 //! ed25519 keys in a [`support::world`](crate::support), writes the trace's
 //! document as a Perch document, applies it with the account's real
-//! `apply_doc` (the doc compiler at its pinned address, the delta
-//! reconcile, the interpreter and spending-limit policies, and, for a
-//! document with recovery, the support module's real controller and pool),
-//! and then drives every authorization through the account's real
-//! `__check_auth` under enforcing authorization:
+//! `apply_doc` (the doc compiler at its pinned address, the rule-eval
+//! lowering and the delta reconcile, and, for a document with recovery, the
+//! support module's real controller and pool), and then drives every
+//! authorization through the account's real `__check_auth` under enforcing
+//! authorization:
 //!
 //! - an `External` signer signs OZ's digest with its ed25519 key, checked by
 //!   the real `PerchEd25519Verifier`;
@@ -33,18 +33,22 @@
 //! own reading of the batch (`perch_rule_eval::convert::calls`, what its
 //! rule-eval check reads) must equal the facade's.
 //!
-//! `__check_auth` runs OZ and then rule-eval's `authorize` over the stored
-//! rule sets (`perch_smart_account::check_auth`), so a refusal by either is
-//! a refused verdict. After every accepted authorization, each capped rule's
-//! spending record as the account keeps it for rule-eval must equal OZ's
-//! spending-limit record for the same rule, history and total (records
-//! parity); a difference is reported with the authorization.
+//! `__check_auth` decides with rule-eval's `authorize` over the stored rule
+//! sets and OZ's `authenticate` of every signer
+//! (`perch_smart_account::check_auth`), so a refusal by either is a refused
+//! verdict. An accepted verdict carries the spending records the account
+//! keeps for rule-eval, one per rule the trace lowers to (empty for an
+//! uncapped rule), which the caller compares with the trace's. After every
+//! accepted authorization the account must keep a record only for a rule
+//! stored with a cap and none for a removed rule
+//! (`perch_testkit::rule_set::check_records`); a difference is reported with
+//! the authorization.
 //!
 //! After every `apply_doc` and `apply_scope`, the account's stored
 //! rule-eval rule set for that document must equal both the lowering of the
-//! document's model and the denotation of the rules OZ, the interpreter and
-//! the spending limit hold (`perch_testkit::rule_set`); a difference fails
-//! the run.
+//! document's model and the denotation of OZ's rules with the programs and
+//! caps the compiler emits for them (`perch_testkit::rule_set`); a
+//! difference fails the run.
 //!
 //! A scoped trace's document goes through `apply_scope` instead: the harness
 //! applies the trace's admin document with `apply_doc`, sets the scope
@@ -67,7 +71,6 @@ use perch_ir::{
     SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred, ZkFactor,
 };
 use perch_program::Op;
-use perch_smart_account::infra;
 use perch_testkit::{auth_digest, FIXTURE_NETWORK};
 use rule_eval::{Cap, Cond, Functions, Rule as ERule, Signer as ESigner, Val as EVal};
 use rule_eval_conformance::documents::{
@@ -91,7 +94,6 @@ use soroban_sdk::{
     contract, contractimpl, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString, Symbol,
     Val, Vec as SVec,
 };
-use stellar_accounts::policies::spending_limit::get_spending_limit_data;
 use stellar_accounts::smart_account::{AuthPayload, Signer};
 
 use crate::support::{self, Key, Opts, World};
@@ -218,9 +220,9 @@ pub struct Run {
     /// `apply_scope`), and the rules in them.
     pub rule_sets: usize,
     pub stored_rules: usize,
-    /// The capped rules' records compared after accepted authorizations
-    /// (those holding a spend), and every one where the account's rule-eval
-    /// record differs from OZ's spending-limit record.
+    /// The capped rules' records checked after accepted authorizations
+    /// (those holding a spend), and every record the account keeps that it
+    /// should not (`perch_testkit::rule_set::check_records`).
     pub records_compared: usize,
     pub records_charged: usize,
     pub record_differences: Vec<String>,
@@ -830,20 +832,6 @@ fn rule_eval_record(w: &World, id: u32) -> Record {
     }
 }
 
-fn spending_record(w: &World, id: u32) -> Record {
-    let spending = infra::perch_spending_limit::address(&w.env);
-    let d = w.env.as_contract(&spending, || {
-        get_spending_limit_data(&w.env, id, &w.account)
-    });
-    (
-        d.spending_history
-            .iter()
-            .map(|x| (x.ledger_sequence, x.amount))
-            .collect(),
-        d.cached_total_spent,
-    )
-}
-
 /// The `signature_payload` the host hands the account's `__check_auth` for
 /// an entry: with delegates (CAP-0071 `AddressWithDelegates`) its preimage
 /// also binds the account's address.
@@ -1052,21 +1040,17 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         records_charged: 0,
         record_differences: vec![],
     };
-    // Records parity: every capped rule's rule-eval record equals OZ's.
-    let parity = |w: &World, i: usize, run: &mut Run| {
-        for (j, id) in ids.iter().enumerate() {
-            if capped.get(j) != Some(&true) || *id == missing {
-                continue;
-            }
-            run.records_compared += 1;
-            let (mine, oz) = (rule_eval_record(w, *id), spending_record(w, *id));
-            run.records_charged += usize::from(!oz.0.is_empty());
-            if mine != oz {
-                run.record_differences.push(format!(
-                    "authorization {i}: rule {j}'s rule-eval record {mine:?}, OZ's {oz:?}"
-                ));
-            }
+    // The account keeps a record only for a rule stored with a cap.
+    let hygiene = |w: &World, i: usize, run: &mut Run| match perch_testkit::rule_set::check_records(
+        &w.env, &w.account,
+    ) {
+        Ok(r) => {
+            run.records_compared += r.capped;
+            run.records_charged += r.charged;
         }
+        Err(x) => run
+            .record_differences
+            .push(format!("authorization {i}: {x}")),
     };
     for (i, a) in t.authorizations.iter().enumerate() {
         e.ledger().with_mut(|l| l.sequence_number = a.now);
@@ -1080,7 +1064,7 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         let records = |w: &World| {
             (0..ids.len())
                 .map(|j| match (capped.get(j), ids[j]) {
-                    (Some(true), id) if id != missing => spending_record(w, id),
+                    (Some(true), id) if id != missing => rule_eval_record(w, id),
                     _ => (vec![], 0),
                 })
                 .collect()
@@ -1103,7 +1087,7 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                 &SVec::new(&e),
             );
             if outcome.is_ok() {
-                parity(&w, i, &mut run);
+                hygiene(&w, i, &mut run);
             }
             run.verdicts.push(match outcome {
                 Ok(()) => Got::Accepted(records(&w)),
@@ -1226,7 +1210,7 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         e.set_auths(&[]);
         let got = match outcome {
             Ok(Ok(())) => {
-                parity(&w, i, &mut run);
+                hygiene(&w, i, &mut run);
                 Got::Accepted(records(&w))
             }
             Err(_) if account_refused(&w) => Got::Refused,
@@ -1270,7 +1254,8 @@ pub fn expected(v: &Verdict) -> Got {
 /// refused, the lowering of the document's own rules (the recovery rule,
 /// which Perch installs from its recovery member rather than lowers, only
 /// by presence), each verdict, and each accepted authorization's records;
-/// and every records-parity difference the run found.
+/// and every spending record the run found the account keeping that it
+/// should not.
 pub fn differences(t: &Trace, run: &Run) -> Vec<String> {
     let mut out = run.record_differences.clone();
     let want = match (&t.lowered, run.scope_refused) {

@@ -9,8 +9,9 @@
 //! - [`DocModel::expected_rules`] is the independent check: the rules a
 //!   document grants at the current ledger, computed from the model alone,
 //!   compared with [`live_rules`], the grant read back from OZ's context
-//!   rules and the parameters each attached policy holds. It shares no code
-//!   with the compiler or the account, so it catches what the oracle cannot.
+//!   rules and the stored rule-eval rule each one's id selects. It shares no
+//!   code with the compiler or the account, so it catches what the oracle
+//!   cannot.
 //! - [`DocModel`] is a generated policy document. [`DocModel::generate`]
 //!   draws one from bytes, so proptest (shrinking over bytes) and cargo-fuzz
 //!   share one generator. It reaches the document caps, draws signer lists
@@ -42,11 +43,9 @@ use arbitrary::Unstructured;
 use perch_account::{PerchAccount, PerchAccountClient};
 use perch_doc_compiler::{PerchDocCompiler, MAX_DOC_RULES, MAX_DOC_SIGNERS};
 use perch_interpreter::PerchInterpreter;
-use perch_interpreter::PerchInterpreterClient;
-use perch_program::Op;
 use perch_recovery::PerchRecovery;
 use perch_smart_account::testutils::{plan_doc, Mode, PlannedRule};
-use perch_smart_account::{infra, InstalledRule};
+use perch_smart_account::{infra, InstalledRule, StoredRule};
 use perch_spending_limit::PerchSpendingLimit;
 use soroban_sdk::testutils::EnvTestConfig;
 use soroban_sdk::testutils::{Address as _, Events as _, Ledger as _};
@@ -56,7 +55,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::string::{String, ToString};
 use std::vec::Vec;
-use stellar_accounts::policies::spending_limit::get_spending_limit_data;
 use stellar_accounts::smart_account::{ContextRuleType, Signer};
 
 pub use oracle::{OracleAccount, OracleAccountClient};
@@ -350,11 +348,12 @@ impl DocModel {
     /// The rules this document grants `account` at the current ledger,
     /// rendered like [`live_rules`] and computed from the model alone (no
     /// compiler or account code): a rule whose `not-after-ledger` has been
-    /// reached grants nothing; a rule's signers are a set; a threshold,
-    /// function list, or cap attaches the interpreter with an m-of-n floor
-    /// (n for `all`); a cap attaches the spending limit at the limit's
-    /// numeric value however it is spelled; recovery adds a zero-signer
-    /// self-scoped rule held by the controller.
+    /// reached grants nothing; a rule's signers are a set, of which `m` must
+    /// sign (n for `all`); a function list allows those functions and no
+    /// list every one; a cap, at the limit's numeric value however it is
+    /// spelled, allows only a `transfer` (when the functions cover it) whose
+    /// argument 2 is an `i128`, and charges that argument; recovery adds a
+    /// zero-signer self-scoped rule held by the controller.
     pub fn expected_rules(&self, w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
         let seq = w.env.ledger().sequence();
         let mut out = BTreeSet::new();
@@ -377,22 +376,25 @@ impl DocModel {
                 })
                 .collect();
             let mut policies = BTreeSet::new();
-            if r.threshold.is_some() || r.functions.is_some() || r.cap.is_some() {
-                let m = r.threshold.unwrap_or(r.signers.len() as u32);
-                let mut ops = soroban_sdk::Vec::new(&w.env);
-                ops.push_back(Op::MinSigners(m));
-                if let Some(f) = &r.functions {
-                    let mut syms = soroban_sdk::Vec::new(&w.env);
-                    for f in f {
-                        syms.push_back(soroban_sdk::Symbol::new(&w.env, f));
-                    }
-                    ops.push_back(Op::FnIn(syms));
+            let m = r.threshold.unwrap_or(r.signers.len() as u32);
+            policies.insert(format!("threshold:{m}"));
+            let functions: BTreeSet<String> = match (&r.functions, r.cap) {
+                (Some(f), None) => f.iter().map(|f| f.to_string()).collect(),
+                (f, Some(_)) if f.as_ref().is_none_or(|f| f.contains(&"transfer")) => {
+                    BTreeSet::from(["transfer".to_string()])
                 }
-                ops.push_back(Op::All(1 + r.functions.is_some() as u32));
-                policies.insert(format!("interpreter:{ops:?}"));
-            }
+                (_, Some(_)) => BTreeSet::new(),
+                (None, None) => BTreeSet::new(),
+            };
+            let kind = if r.functions.is_none() && r.cap.is_none() {
+                "any-except"
+            } else {
+                "only"
+            };
+            policies.insert(format!("functions:{kind}{functions:?}"));
             if let Some((limit, period)) = r.cap {
-                policies.insert(format!("cap:{limit}/{period}"));
+                policies.insert(format!("cond:arg2<={}", i128::MAX));
+                policies.insert(format!("cap:{limit}/{period}@2"));
             }
             out.insert(rule_line(
                 r.name,
@@ -544,12 +546,13 @@ fn rule_line(
 }
 
 /// The rules `account` grants at the current ledger, read from where they
-/// are enforced rather than from the account's own records: every OZ context
-/// rule not yet expired, its signers, and what each attached policy holds
-/// for it (the interpreter's program, the spending limit's cap).
+/// are enforced: every OZ context rule not yet expired, its signers and
+/// policies, and the stored rule-eval rule its id selects, from the admin
+/// document's set or its scope's.
 pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
     let client = PerchAccountClient::new(&w.env, account);
     let count = client.get_context_rules_count();
+    let stored = stored_rules(w, account);
     let mut out = BTreeSet::new();
     let (mut found, mut id) = (0, 0u32);
     while found < count {
@@ -560,7 +563,31 @@ pub fn live_rules(w: &DeltaWorld, account: &Address) -> BTreeSet<String> {
             continue;
         };
         found += 1;
-        out.extend(granted(w, account, &rule));
+        out.extend(granted(w, &rule, stored.get(&rule.id)));
+    }
+    out
+}
+
+/// Every stored rule-eval rule of `account`, by the OZ id of the installed
+/// rule it stands beside.
+fn stored_rules(w: &DeltaWorld, account: &Address) -> BTreeMap<u32, StoredRule> {
+    let client = PerchAccountClient::new(&w.env, account);
+    let mut out: BTreeMap<u32, StoredRule> = client
+        .installed_rules()
+        .iter()
+        .map(|r| r.id)
+        .zip(client.rule_set().iter())
+        .collect();
+    for scope in client.scopes(&0, &u32::MAX).iter() {
+        if let Some(record) = client.scope(&scope) {
+            out.extend(
+                record
+                    .rules
+                    .iter()
+                    .map(|r| r.id)
+                    .zip(client.scope_rule_set(&scope).iter()),
+            );
+        }
     }
     out
 }
@@ -573,16 +600,51 @@ pub fn rules_by_id(
     ids: impl IntoIterator<Item = u32>,
 ) -> BTreeSet<String> {
     let client = PerchAccountClient::new(&w.env, account);
+    let stored = stored_rules(w, account);
     ids.into_iter()
-        .filter_map(|id| granted(w, account, &client.get_context_rule(&id)))
+        .filter_map(|id| granted(w, &client.get_context_rule(&id), stored.get(&id)))
         .collect()
 }
 
+/// What `stored` allows beyond its contract, signers and last ledger,
+/// rendered like [`DocModel::expected_rules`]: its threshold, functions,
+/// conditions, and cap.
+fn enforced(e: &Env, stored: &StoredRule) -> BTreeSet<String> {
+    let rule = stored.to_rule(e).expect("a stored rule reads back");
+    let names = |fs: &[std::vec::Vec<u8>]| -> BTreeSet<String> {
+        fs.iter()
+            .map(|f| String::from_utf8(f.clone()).unwrap())
+            .collect()
+    };
+    let mut out = BTreeSet::from([
+        format!("threshold:{}", rule.threshold),
+        match &rule.functions {
+            rule_eval::Functions::AnyExcept(fs) => format!("functions:any-except{:?}", names(fs)),
+            rule_eval::Functions::Only(fs) => format!("functions:only{:?}", names(fs)),
+        },
+    ]);
+    for c in &rule.conds {
+        out.insert(match c {
+            rule_eval::Cond::ArgI128AtMost(i, b) => format!("cond:arg{i}<={b}"),
+            _ => "cond:other".to_string(),
+        });
+    }
+    if let Some(cap) = &rule.cap {
+        out.insert(format!(
+            "cap:{}/{}@{}",
+            cap.limit, cap.period, cap.amount_arg
+        ));
+    }
+    out
+}
+
 /// `rule` rendered like [`DocModel::expected_rules`], or `None` once expired.
+/// `stored` is the stored rule its id selects, which the recovery rule's
+/// controller stands in for.
 fn granted(
     w: &DeltaWorld,
-    account: &Address,
     rule: &stellar_accounts::smart_account::ContextRule,
+    stored: Option<&StoredRule>,
 ) -> Option<String> {
     if rule
         .valid_until
@@ -590,7 +652,6 @@ fn granted(
     {
         return None;
     }
-    let interpreter = PerchInterpreterClient::new(&w.env, &w.interpreter);
     let ctx = match &rule.context_type {
         ContextRuleType::CallContract(a) => a.clone(),
         other => panic!("unexpected context type {other:?}"),
@@ -607,27 +668,25 @@ fn granted(
             }
         })
         .collect();
-    let policies: BTreeSet<String> = rule
+    let mut policies: BTreeSet<String> = rule
         .policies
         .iter()
         .map(|p| {
-            if p == w.interpreter {
-                match interpreter.get_program(account, &rule.id) {
-                    Some(i) => format!("interpreter:{:?}", i.program.ops),
-                    None => "interpreter:none".to_string(),
-                }
-            } else if p == w.spending_limit {
-                let data = w.env.as_contract(&w.spending_limit, || {
-                    get_spending_limit_data(&w.env, rule.id, account)
-                });
-                format!("cap:{}/{}", data.spending_limit, data.period_ledgers)
-            } else if p == w.controller {
+            if p == w.controller {
                 "recovery".to_string()
             } else {
                 strkey(&p)
             }
         })
         .collect();
+    if !policies.contains("recovery") {
+        match stored {
+            Some(s) => policies.extend(enforced(&w.env, s)),
+            None => {
+                policies.insert("unstored".to_string());
+            }
+        }
+    }
     let mut name = std::vec![0u8; rule.name.len() as usize];
     rule.name.copy_into_slice(&mut name);
     Some(rule_line(

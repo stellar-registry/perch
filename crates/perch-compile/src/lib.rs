@@ -13,12 +13,13 @@
 //!   `MinSigners(n>=1)` into its program.
 //! - **INV-2 (liveness).** The admin rule is the proven exact lowering of a
 //!   constraint-free rule, and completions never depend on the evaluator. A
-//!   constraint-free rule (no function/arg limits) lowers *policy-free*, so
-//!   OZ checks it with its independently audited signer check instead of the
-//!   shared interpreter, and the account's second check runs rule-core's
-//!   lowering of the same rule (`perch-smart-account`'s `gate`). A recovery
-//!   completion is left to OZ and the recovery controller, so no deny-bug in
-//!   the interpreter or the evaluator can keep an account from recovering.
+//!   constraint-free rule (no function/arg limits) lowers *policy-free*: it
+//!   allows every function of its scope to all of its signers, with no
+//!   interpreter program. The account stores rule-core's lowering of the
+//!   same rule and decides it with rule-eval's `authorize`
+//!   (`perch-smart-account`'s `rule_set` and `gate`). A recovery completion
+//!   is left to OZ and the recovery controller, so no deny bug in the
+//!   evaluator can keep an account from recovering.
 //!
 //! Rule expiry lowers to OZ's native `valid_until` (a ledger sequence),
 //! enforced before any policy runs; in-program ledger ops are reserved for
@@ -110,8 +111,8 @@ pub struct LoweredRule {
     pub signers: Vec<SignerSpec>,
     /// From `not-after-ledger`; lowers to OZ `valid_until`.
     pub valid_until: Option<u32>,
-    /// `Some` → attach the interpreter with these params; `None` → policy-free
-    /// (INV-2), OZ enforces all-signers-must-match natively.
+    /// `Some` → the interpreter program the rule's constraints compile to;
+    /// `None` → policy-free (INV-2): every signer must sign, nothing else.
     pub install: Option<InstallParams>,
     /// `Some` → also attach OZ's `spending_limit` policy (a stateful cumulative
     /// cap) alongside the interpreter on this rule. A capped rule always carries
@@ -225,8 +226,8 @@ fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, Lo
         }
     };
 
-    // INV-2: only a bare `all` (N-of-N) rule lowers policy-free and rides OZ's
-    // native all-signers check. It must also be function/arg/cap-free — a capped
+    // INV-2: only a bare `all` (N-of-N) rule lowers policy-free, requiring
+    // every signer. It must also be function/arg/cap-free — a capped
     // rule always attaches the interpreter so INV-1's `MinSigners(n)` floor
     // enforces the full signer set (spending_limit's own single-signer floor is
     // not a substitute). A `threshold` rule is never constraint-free: it must

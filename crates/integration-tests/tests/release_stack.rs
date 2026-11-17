@@ -56,7 +56,6 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use stellar_accounts::policies::spending_limit::{SpendingLimitData, SpendingLimitStorageKey};
 use stellar_accounts::smart_account::{
     AuthPayload, Signer, SmartAccountStorageKey, MAX_NAME_SIZE, MAX_SIGNERS as OZ_MAX_SIGNERS,
 };
@@ -275,7 +274,6 @@ struct World {
     adapter: Address,
     pool: Address,
     target: Address,
-    spending_limit: Address,
     guardians: std::vec::Vec<Address>,
     circuit_id: BytesN<32>,
     nonce: Cell<i64>,
@@ -350,7 +348,7 @@ fn world() -> World {
     };
     let compiler = content("perch-doc-compiler");
     content("perch-interpreter");
-    let spending_limit = content("perch-spending-limit");
+    content("perch-spending-limit");
     let webauthn = content("perch-webauthn-verifier");
     let pool = content("perch-zk-pool");
     let adapter = content("perch-zk-adapter");
@@ -373,7 +371,6 @@ fn world() -> World {
         adapter,
         pool,
         target,
-        spending_limit,
         guardians,
         circuit_id,
         nonce: Cell::new(0),
@@ -955,10 +952,12 @@ impl World {
 // ---------------------------------------------------------------------------
 
 /// A document's shape: `signers` passkey signers (the owner first), then
-/// the rules: `admin`, `target` (the owner's activity rule, with the
-/// interpreter), `both` rules with both policies (the interpreter, from a
-/// 1-of-1 threshold and an argument constraint, and a spending cap),
-/// `interp` with the interpreter alone, and `plain` with none.
+/// the rules: `admin`, `target` (the owner's activity rule, with a program),
+/// `both` rules with both a program (from a 1-of-1 threshold and an argument
+/// constraint) and a spending cap, `interp` with a program alone, and
+/// `plain` with neither. The labels still name a program and a cap as the
+/// interpreter and spending-limit policies the account once installed for
+/// them; each is now part of the rule's stored rule-eval rule.
 #[derive(Clone, Copy, Debug)]
 struct Shape {
     signers: usize,
@@ -1930,9 +1929,10 @@ fn guardian_protected_compromise_restores_the_baseline_and_revokes_the_thief() {
 
 /// The costliest document the caps admit: every signer a passkey some rule
 /// names (as many per rule as OZ allows), and every rule but `admin` and
-/// `target` carrying both policies. Each named signer is an OZ registry
-/// entry and a registration event, each policy an install and an
-/// uninstall: what a completion's footprint, events, and memory grow with.
+/// `target` carrying a program and a cap. Each named signer is an OZ
+/// registry entry and a registration event, and each rule a stored
+/// rule-eval rule: what a completion's footprint, events, and memory grow
+/// with.
 fn worst_shape() -> Shape {
     Shape {
         signers: MAX_DOC_SIGNERS as usize,
@@ -2708,16 +2708,10 @@ impl World {
         ok
     }
 
-    /// The spending-limit policy's window for rule `id`, if it has one.
-    fn window(&self, a: &Acct, id: u32) -> Option<SpendingLimitData> {
-        self.env.as_contract(&self.spending_limit, || {
-            self.env
-                .storage()
-                .persistent()
-                .get(&SpendingLimitStorageKey::AccountContext(
-                    a.address.clone(),
-                    id,
-                ))
+    /// The account's spending record for rule `id`, if it has one.
+    fn window(&self, a: &Acct, id: u32) -> Option<perch_rule_eval::StoredRecord> {
+        self.env.as_contract(&a.address, || {
+            perch_smart_account::testutils::spend_record(&self.env, id)
         })
     }
 
@@ -2998,7 +2992,7 @@ fn cap_sweep() {
 // ---------------------------------------------------------------------------
 
 /// A grant: one session passkey on a 1-of-1 rule scoped to `token`, allowed
-/// `transfer`, with a spending cap (the interpreter and the spending limit).
+/// `transfer`, with a spending cap.
 fn grant_rule(name: &str, signer: &str, token: &Address, limit: u32) -> String {
     format!(
         r#"{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"threshold","m":1,"signers":["{signer}"]}},"functions":["transfer"],"cap":{{"limit":"{limit}","period-ledgers":1000}}}}"#,
@@ -3152,7 +3146,7 @@ impl World {
     }
 
     /// The account's ledger footprint at rest: every contract-data entry
-    /// the account owns, plus the policy state the interpreter and the
+    /// the account owns, plus any policy state the interpreter and the
     /// spending limit keep for it, as (entries, XDR bytes) per key kind.
     fn at_rest(&self, a: &Acct, label: &str) {
         use soroban_sdk::xdr::{LedgerEntryData, LedgerKey, Limits, WriteXdr};
@@ -3814,8 +3808,8 @@ fn docsplit_guards_and_scope_manager() {
     assert!(split_stack(&w, &a), "needs a stack with scoped documents");
     let token = w.funded_token(&a);
     let mgr = canonical_passkey([0x57; 32]);
-    // admin for the owner, plus `mgr`: a self-scoped rule limited by the
-    // interpreter to `apply_scope(7, ..)`.
+    // admin for the owner, plus `mgr`: a self-scoped rule limited to
+    // `apply_scope(7, ..)`.
     let admin_doc = format!(
         r#"{{"version":1,"network":"{FIXTURE_NETWORK}","signers":[{},{}],"rules":[{{"name":"admin","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["owner"]}}}},{{"name":"mgr","scope":{{"type":"self-admin"}},"principals":{{"type":"all","signers":["mgr"]}},"functions":["apply_scope"],"args":[{{"index":0,"pred":{{"type":"u32-eq","value":7}}}}]}}]}}"#,
         passkey_decl(&w, "owner", &owner),
@@ -3917,8 +3911,12 @@ fn docsplit_guards_and_scope_manager() {
     println!("\n{{\"guard\":\"a scope manager without an envelope can grant itself any non-account authority\"}}");
 }
 
-/// A capped transfer's cost against the spending limit's history length
-/// (OZ keeps every spend in the window, up to 1 000).
+/// A capped transfer's cost against its spending record's history length.
+/// The record keeps every spend in the window, 72 bytes each in a ledger
+/// entry of 172 bytes more, so the network's 65 536-byte entry limit holds
+/// 907 of them (below rule-eval's own bound of 1 000): the transfer after
+/// 906 spends is the costliest the window admits, and the next one fails
+/// until spends leave the window.
 #[test]
 #[ignore = "needs the built stack"]
 fn docsplit_spending_history() {
@@ -3934,7 +3932,7 @@ fn docsplit_spending_history() {
     ));
     let id = w.rule_id(&a.address, "g000");
     let mut done = 0;
-    for n in [0usize, 10, 100, 400] {
+    for n in [0usize, 10, 100, 400, 906] {
         while done < n {
             assert!(w.spend_id(&a, &gkey(0), &token, 1, id));
             done += 1;

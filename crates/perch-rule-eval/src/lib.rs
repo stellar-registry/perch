@@ -11,9 +11,10 @@
 //!   part of a policy document rule-eval's lowering reads. [`doc_of`] reads
 //!   it as a `Doc`; with the `ir` feature, [`model_of`] builds it from a
 //!   validated `perch_ir::PolicyDoc`.
-//! - [`denote`]: the `rule_eval::Rule` an installed Perch rule enforces (an
-//!   OpenZeppelin context rule, the interpreter's program and the spending
-//!   limit's parameters).
+//! - [`denote`]: the `rule_eval::Rule` a Perch rule enforces when installed
+//!   as an OpenZeppelin context rule with the interpreter's program and the
+//!   spending limit's parameters, as accounts installed it before rule-eval
+//!   decided their authorizations.
 //! - [`admin_survives`] and [`guarded`]: the account's anti-brick check and
 //!   its signer-sufficiency invariant, on rule-eval's rules.
 //!

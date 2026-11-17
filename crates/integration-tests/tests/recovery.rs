@@ -988,7 +988,10 @@ fn one_accounts_completion_never_spends_anothers_nullifier() {
 
 /// `enforce` runs for every context in an authorization tree, including a
 /// sub-invocation that never executes. The marker it leaves must not turn a
-/// later, unrelated `apply_doc` into a (failing) completion.
+/// later, unrelated `apply_doc` into a (failing) completion. Only an
+/// account that stores no rule-eval rule set, which OZ's `do_check_auth`
+/// decides, still runs `enforce` outside a completion: one that stores a set
+/// refuses every other authorization choosing the recovery rule.
 #[test]
 fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
     let w = world();
@@ -1005,37 +1008,53 @@ fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
         &w.env,
         IntoVal::<_, soroban_sdk::Val>::into_val(&w.account, &w.env),
     ];
-    let mut root = w.invocation(
-        &w.account,
-        "execute",
-        std::vec![
-            w.sc(w.target.clone()),
-            w.sc(f.clone()),
-            w.sc(call_args.clone())
-        ],
+    let entry = || {
+        let mut root = w.invocation(
+            &w.account,
+            "execute",
+            std::vec![
+                w.sc(w.target.clone()),
+                w.sc(f.clone()),
+                w.sc(call_args.clone())
+            ],
+        );
+        root.sub_invocations = std::vec![w.invocation(
+            &w.account,
+            "apply_doc",
+            std::vec![w.sc(target.clone()), w.sc(0u32), w.sc(None::<u64>)],
+        )]
+        .try_into()
+        .unwrap();
+        let mut entry = w.owner_entry("admin", root);
+        if let soroban_sdk::xdr::SorobanCredentials::AddressWithDelegates(c) =
+            &mut entry.credentials
+        {
+            c.address_credentials.signature = w.sc(AuthPayload {
+                signers: soroban_sdk::map![
+                    &w.env,
+                    (Signer::Delegated(w.owner.clone()), Bytes::new(&w.env))
+                ],
+                context_rule_ids: vec![
+                    &w.env,
+                    w.rule_id(&w.account, "admin"),
+                    w.rule_id(&w.account, "recovery"),
+                ],
+            });
+        }
+        entry
+    };
+    w.env.set_auths(&[entry()]);
+    assert!(
+        w.client().try_execute(&w.target, &f, &call_args).is_err(),
+        "the recovery rule outside a completion"
     );
-    root.sub_invocations = std::vec![w.invocation(
-        &w.account,
-        "apply_doc",
-        std::vec![w.sc(target.clone()), w.sc(0u32), w.sc(None::<u64>)],
-    )]
-    .try_into()
-    .unwrap();
-    let mut entry = w.owner_entry("admin", root);
-    if let soroban_sdk::xdr::SorobanCredentials::AddressWithDelegates(c) = &mut entry.credentials {
-        c.address_credentials.signature = w.sc(AuthPayload {
-            signers: soroban_sdk::map![
-                &w.env,
-                (Signer::Delegated(w.owner.clone()), Bytes::new(&w.env))
-            ],
-            context_rule_ids: vec![
-                &w.env,
-                w.rule_id(&w.account, "admin"),
-                w.rule_id(&w.account, "recovery"),
-            ],
-        });
-    }
-    w.env.set_auths(&[entry]);
+
+    // Without a stored set, OZ and the controller accept it, leaving the
+    // marker.
+    w.env.as_contract(&w.account, || {
+        perch_smart_account::testutils::remove_rule_set(&w.env)
+    });
+    w.env.set_auths(&[entry()]);
     w.client().execute(&w.target, &f, &call_args);
     w.env.set_auths(&[]);
 

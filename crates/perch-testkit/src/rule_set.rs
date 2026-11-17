@@ -6,13 +6,14 @@
 //!   rules `apply_doc` does not install); before any document, the
 //!   constructor's admin rule;
 //! - **the installed rules**: for each installed-rule record, in order, the
-//!   denotation (`perch_rule_eval::denote`) of what is enforced for it, read
-//!   back from where it is enforced: OZ's context rule
-//!   (`get_context_rule`: contract, signers in OZ's order, last ledger), the
-//!   interpreter's program and the spending limit's parameters for that
-//!   rule id. The recovery rule's record must be a zero-signer rule whose one
-//!   policy is the adopted controller, and its stored rule rule-eval's
-//!   recovery rule.
+//!   denotation (`perch_rule_eval::denote`) of OZ's context rule
+//!   (`get_context_rule`: contract, signers in OZ's order, last ledger) with
+//!   the interpreter program and spending cap the doc compiler emits for the
+//!   same document rule (`compile_doc` of the applied canonical document):
+//!   what the interpreter and the spending limit enforced when the account
+//!   attached them. A document rule's OZ rule must carry no policy. The
+//!   recovery rule's record must be a zero-signer rule whose one policy is
+//!   the adopted controller, and its stored rule rule-eval's recovery rule.
 //!
 //! Rules are compared as `StoredRule`s, whose conversion from a
 //! `rule_eval::Rule` is one-to-one, so equal mirrors are equal rules.
@@ -25,23 +26,24 @@
 //! Run each at the ledger the apply it checks ran at: the lowering's expiry
 //! drop is computed at the current ledger.
 //!
-//! [`check_records`] checks records parity: the spending record the account
-//! keeps for each capped rule, which `__check_auth` charges through
-//! rule-eval, equals the window OZ's spending limit keeps for the same rule.
+//! [`check_records`] checks the spending records the account keeps, which
+//! `__check_auth` charges through rule-eval: one only for a rule stored with
+//! a cap, none for a rule id no longer installed, and each one's total the
+//! sum of its history. What a record holds is checked against rule-core's
+//! model records and the recorded baseline (`rule_core_documents.rs`,
+//! `rule_eval_baseline.rs`).
 
 use perch_account::PerchAccountClient;
-use perch_interpreter::PerchInterpreterClient;
+use perch_doc_compiler::{CompiledDoc, PerchDocCompilerClient};
 use perch_rule_eval::convert::{address, signers};
 use perch_rule_eval::{denote, doc_of, model_of, Installed, StoredRule};
 use perch_smart_account::infra;
-use perch_smart_account::InstalledRule;
-use soroban_sdk::{Address, Env};
+use perch_smart_account::{InstalledRule, PerchSmartAccount};
+use soroban_sdk::{Address, Bytes, Env};
 use std::format;
 use std::string::{String, ToString};
 use std::vec::Vec;
-use stellar_accounts::policies::spending_limit::{
-    get_spending_limit_data, SpendingLimitAccountParams,
-};
+use stellar_accounts::policies::spending_limit::SpendingLimitAccountParams;
 use stellar_accounts::smart_account::ContextRuleType;
 use stellar_accounts::smart_account::SmartAccountStorageKey;
 
@@ -50,7 +52,7 @@ use stellar_accounts::smart_account::SmartAccountStorageKey;
 pub struct Checked {
     /// Stored rules, the recovery rule included.
     pub rules: usize,
-    /// Installed rules with the interpreter or the spending limit attached.
+    /// Rules whose compiled form carries an interpreter program or a cap.
     pub constrained: usize,
     pub capped: usize,
     pub recovery: bool,
@@ -132,8 +134,24 @@ pub fn check(e: &Env, account: &Address) -> Result<Checked, String> {
     };
 
     let lowered = lowering(e, account, &me)?;
-    compare(e, account, &stored, &records, &lowered, None, &mut checked)?;
+    let compiled = client.applied_doc().map(|d| compile(e, &d));
+    compare(
+        e,
+        account,
+        &stored,
+        &records,
+        &lowered,
+        compiled.as_ref(),
+        None,
+        &mut checked,
+    )?;
     Ok(checked)
+}
+
+/// The doc compiler's output for `canonical`, at the account's pinned
+/// compiler.
+fn compile(e: &Env, canonical: &Bytes) -> CompiledDoc {
+    PerchDocCompilerClient::new(e, &infra::perch_doc_compiler::address(e)).compile_doc(canonical)
 }
 
 /// The stored rule set of the scoped document under `scope` equals both
@@ -165,6 +183,7 @@ pub fn check_scope(e: &Env, account: &Address, scope: u32) -> Result<Checked, St
         &stored,
         &record.rules,
         &lowered,
+        Some(&compile(e, &canonical)),
         Some(record.gen),
         &mut checked,
     )?;
@@ -172,20 +191,33 @@ pub fn check_scope(e: &Env, account: &Address, scope: u32) -> Result<Checked, St
 }
 
 /// `stored` against `lowered` and against the denotation of each of
-/// `records`, read back from OZ and the policies, carrying `generation`.
+/// `records`, read back from OZ with the program and cap `compiled` (the
+/// applied document compiled, `None` before any document) emits for it,
+/// carrying `generation`.
+#[allow(clippy::too_many_arguments)]
 fn compare(
     e: &Env,
     account: &Address,
     stored: &[StoredRule],
     records: &soroban_sdk::Vec<InstalledRule>,
     lowered: &[StoredRule],
+    compiled: Option<&CompiledDoc>,
     generation: Option<u64>,
     checked: &mut Checked,
 ) -> Result<(), String> {
     let client = PerchAccountClient::new(e, account);
-    let interpreter = infra::perch_interpreter::address(e);
-    let spending_limit = infra::perch_spending_limit::address(e);
     let me = address(e, account).ok_or("the account's address")?;
+    // The compiled rules the account installs, in its order: those whose
+    // last ledger has not passed.
+    let now = e.ledger().sequence();
+    let installed: Vec<_> = compiled
+        .map(|c| {
+            c.rules
+                .iter()
+                .filter(|r| r.valid_until.is_none_or(|v| v >= now))
+                .collect()
+        })
+        .unwrap_or_default();
     if stored.len() != records.len() as usize {
         return Err(format!(
             "{} stored rules for {} installed rules",
@@ -218,35 +250,34 @@ fn compare(
             let ContextRuleType::CallContract(contract) = oz.context_type.clone() else {
                 return Err(format!("rule {i}: not a contract-call rule"));
             };
-            let mut installed = Installed {
+            if !oz.policies.is_empty() {
+                return Err(format!(
+                    "rule {i}: a document rule's OZ rule carries a policy"
+                ));
+            }
+            let mut rule = Installed {
                 contract,
                 signers: oz.signers.clone(),
                 valid_until: oz.valid_until,
                 program: None,
                 cap: None,
             };
-            for p in oz.policies.iter() {
-                if p == interpreter {
-                    let params = PerchInterpreterClient::new(e, &interpreter)
-                        .get_program(account, &record.id)
-                        .ok_or(format!("rule {i}: the interpreter holds no program"))?;
-                    installed.program = Some(params.program);
-                } else if p == spending_limit {
-                    let data = e.as_contract(&spending_limit, || {
-                        get_spending_limit_data(e, record.id, account)
-                    });
-                    installed.cap = Some(SpendingLimitAccountParams {
-                        spending_limit: data.spending_limit,
-                        period_ledgers: data.period_ledgers,
-                    });
-                    checked.capped += 1;
-                } else {
-                    return Err(format!("rule {i}: an unknown policy"));
+            if compiled.is_some() {
+                let c = installed
+                    .get(i)
+                    .ok_or(format!("rule {i}: no compiled rule installs it"))?;
+                if c.name != record.name || c.valid_until != oz.valid_until {
+                    return Err(format!("rule {i}: the compiled rule is another"));
                 }
+                rule.program = c.install.first().map(|p| p.program);
+                rule.cap = c.cap.first().map(|cap| SpendingLimitAccountParams {
+                    spending_limit: cap.spending_limit,
+                    period_ledgers: cap.period_ledgers,
+                });
             }
-            checked.constrained += usize::from(!oz.policies.is_empty());
-            let mut rule =
-                denote(e, account, &installed).ok_or(format!("rule {i}: denote refuses"))?;
+            checked.constrained += usize::from(rule.program.is_some() || rule.cap.is_some());
+            checked.capped += usize::from(rule.cap.is_some());
+            let mut rule = denote(e, account, &rule).ok_or(format!("rule {i}: denote refuses"))?;
             rule.generation = generation;
             rule
         };
@@ -277,50 +308,43 @@ fn name(s: &soroban_sdk::String) -> String {
     String::from_utf8(b).unwrap_or_else(|_| "?".to_string())
 }
 
-/// What one [`check_records`] compared.
+/// What one [`check_records`] checked.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Records {
-    /// Installed rules with a spending limit, and those holding a spend.
+    /// Installed rules stored with a cap, and those holding a spend.
     pub capped: usize,
     pub charged: usize,
 }
 
-/// A spending record as `(ledger, amount)` history and total.
-type Window = (Vec<(u32, i128)>, i128);
-
-/// Records parity on `account`: for every rule its admin document or a
-/// scoped document installed, the spending record the account keeps for
-/// rule-eval (absent is nothing spent) equals OZ's spending-limit record for
-/// that rule, history and total, when the rule has a spending limit; and the
-/// account keeps no record for a rule without one, nor for any rule id no
-/// longer installed.
+/// The spending records `account` keeps (module docs): for every rule its
+/// admin document or a scoped document installed, a record only when its
+/// stored rule has a cap, its total the sum of its history; and no record
+/// for any rule id no longer installed. Reads the account's storage, so it
+/// also runs while the account's code is another (`rule_core_documents.rs`
+/// swaps it).
 pub fn check_records(e: &Env, account: &Address) -> Result<Records, String> {
-    let client = PerchAccountClient::new(e, account);
-    let spending_limit = infra::perch_spending_limit::address(e);
-    let mut rules: Vec<InstalledRule> = client.installed_rules().iter().collect();
-    for scope in client.scopes(&0, &client.scope_count()).iter() {
-        if let Some(record) = client.scope(&scope) {
-            rules.extend(record.rules.iter());
+    type A = perch_account::PerchAccount;
+    let rules: Vec<(InstalledRule, StoredRule)> = e.as_contract(account, || {
+        let mut rules: Vec<(InstalledRule, StoredRule)> = A::installed_rules(e)
+            .iter()
+            .zip(A::rule_set(e).iter())
+            .collect();
+        for scope in A::scopes(e, 0, A::scope_count(e)).iter() {
+            if let Some(record) = A::scope(e, scope) {
+                rules.extend(record.rules.iter().zip(A::scope_rule_set(e, scope).iter()));
+            }
         }
-    }
-    let mine = |id: u32| -> Option<Window> {
-        e.as_contract(account, || {
-            perch_smart_account::testutils::spend_record(e, id)
-        })
-        .map(|r| {
-            (
-                r.history.iter().map(|x| (x.ledger, x.amount)).collect(),
-                r.total,
-            )
-        })
-    };
+        rules
+    });
     let mut out = Records::default();
-    for r in &rules {
-        let kept = mine(r.id);
-        if !r.policies.iter().any(|p| p.policy == spending_limit) {
+    for (r, stored) in &rules {
+        let kept = e.as_contract(account, || {
+            perch_smart_account::testutils::spend_record(e, r.id)
+        });
+        if stored.cap.is_empty() {
             if kept.is_some() {
                 return Err(format!(
-                    "rule {} ({}): no spending limit, and a rule-eval record",
+                    "rule {} ({}): no cap, and a spending record",
                     r.id,
                     name(&r.name)
                 ));
@@ -328,25 +352,19 @@ pub fn check_records(e: &Env, account: &Address) -> Result<Records, String> {
             continue;
         }
         out.capped += 1;
-        let data = e.as_contract(&spending_limit, || {
-            get_spending_limit_data(e, r.id, account)
-        });
-        let oz: Window = (
-            data.spending_history
-                .iter()
-                .map(|x| (x.ledger_sequence, x.amount))
-                .collect(),
-            data.cached_total_spent,
-        );
-        let kept = kept.unwrap_or_default();
-        if kept != oz {
+        let Some(kept) = kept else {
+            continue;
+        };
+        let sum = kept.history.iter().map(|x| x.amount).sum::<i128>();
+        if kept.total != sum {
             return Err(format!(
-                "rule {} ({}): rule-eval record {kept:?}, OZ's {oz:?}",
+                "rule {} ({}): a record whose total {} is not its history's {sum}",
                 r.id,
-                name(&r.name)
+                name(&r.name),
+                kept.total
             ));
         }
-        out.charged += usize::from(!kept.0.is_empty());
+        out.charged += usize::from(!kept.history.is_empty());
     }
     let next: u32 = e.as_contract(account, || {
         e.storage()
@@ -355,8 +373,11 @@ pub fn check_records(e: &Env, account: &Address) -> Result<Records, String> {
             .unwrap_or(0)
     });
     for id in 0..next {
-        if !rules.iter().any(|r| r.id == id) && mine(id).is_some() {
-            return Err(format!("rule {id}: removed, and a rule-eval record"));
+        let kept = e.as_contract(account, || {
+            perch_smart_account::testutils::spend_record(e, id)
+        });
+        if !rules.iter().any(|(r, _)| r.id == id) && kept.is_some() {
+            return Err(format!("rule {id}: removed, and a spending record"));
         }
     }
     Ok(out)

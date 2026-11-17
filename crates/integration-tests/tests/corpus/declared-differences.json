@@ -1839,6 +1839,769 @@
           }
         }
       ]
+    },
+    {
+      "step": "every step a rule refuses: documents[1], rule-selection[3, 4], policies[3, 5, 8], spending-limit[4, 7], recovery[11]",
+      "cause": "The account decides every authorization but a recovery completion with rule-eval's authorize over its stored rule sets (perch-smart-account's gate), and OZ's do_check_auth, the interpreter and the spending limit no longer run for it. A refusal therefore fails the account's __check_auth with its own RuleEvalRefused (PerchAuthError code 5) where OZ refused with UnvalidatedContext (3002: the rule does not cover the contract, a policy-free rule lacks a signer, or the rule is past its last ledger), the interpreter with its program's refusal (1), or the spending limit with SpendingLimitExceeded (3221). Every one of these steps is refused as recorded: the outcome, the events and the storage are unchanged, and only the code in the host's failed-authentication diagnostic differs. A chosen rule id that names no installed rule still fails with OZ's ContextRuleNotFound (3000), which perch-js reads as a stale selection.",
+      "fields": [
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.documents[1 \"device cannot apply through the admin rule\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.policies[3 \"transfer to another address\"].auth-failures[0]",
+          "recorded": "account: Contract(1)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.policies[5 \"one of two threshold signers\"].auth-failures[0]",
+          "recorded": "account: Contract(1)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.policies[8 \"transfer to the payee after the rule's last ledger\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.recovery[11 \"the replaced key through the target rule\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.rule-selection[3 \"owner through the admin rule on another contract\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.rule-selection[4 \"device through the target rule\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.spending-limit[4 \"spend 1 past the cap\"].auth-failures[0]",
+          "recorded": "account: Contract(3221)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.spending-limit[7 \"a single transfer over the cap\"].auth-failures[0]",
+          "recorded": "account: Contract(3221)"
+        }
+      ]
+    },
+    {
+      "step": "policies: owner applies; spending-limit: owner applies a capped rule",
+      "cause": "apply_doc installs a document rule as an OZ context rule with its contract, signers and last ledger and no policy: what it allows, its interpreter program and its cap included, is the stored rule-eval rule beside it (rule_set). So applying a document with constrained or capped rules writes no policy registry entry (PolicyData, PolicyLookup, the instance's NextPolicyId), no interpreter program and no spending-limit window, and the installed-rule records and OZ context rules carry no policy ids. The same document's stored rule set, which records the programs and caps, is checked after every accepted apply_doc step against the lowering of its model and the compiler's programs and caps (perch_testkit::rule_set). Every other entry and every event of these steps is unchanged.",
+      "fields": [
+        {
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ],
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ]
+        },
+        {
+          "now": [],
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\".val[1][3][1]",
+          "recorded": [
+            [
+              [
+                "sym:params",
+                "bytes:031b2376d0f06fdcc08ee56c743ef8c6e11c6eedfb4a4c274f422813c8c83fb9"
+              ],
+              [
+                "sym:policy",
+                "addr:interpreter"
+              ]
+            ]
+          ]
+        },
+        {
+          "now": [],
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\".val[2][3][1]",
+          "recorded": [
+            [
+              [
+                "sym:params",
+                "bytes:aa0690bc2757fc9b48b2685ac9d6e7340b3b7f695e7b0f7aa1f135583244bf3b"
+              ],
+              [
+                "sym:policy",
+                "addr:interpreter"
+              ]
+            ]
+          ]
+        },
+        {
+          "now": [],
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"].val[2][1]",
+          "recorded": [
+            "u32:0"
+          ]
+        },
+        {
+          "now": [],
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"].val[2][1]",
+          "recorded": [
+            "u32:0"
+          ]
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:policy",
+                "addr:interpreter"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:interpreter\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.interpreter Persistent [\"sym:Program\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:doc_hash",
+                "bytes:97e6c19692e41fee3f1947dbe9e5a5f6a6fc86940a97047cf9a31a031ace2146"
+              ],
+              [
+                "sym:program",
+                [
+                  [
+                    "sym:ops",
+                    [
+                      [
+                        "sym:MinSigners",
+                        "u32:1"
+                      ],
+                      [
+                        "sym:FnIn",
+                        [
+                          "sym:transfer"
+                        ]
+                      ],
+                      [
+                        "sym:ArgAddrIsSelf",
+                        "u32:0"
+                      ],
+                      [
+                        "sym:ArgAddrEq",
+                        "u32:1",
+                        "addr:payee"
+                      ],
+                      [
+                        "sym:All",
+                        "u32:4"
+                      ]
+                    ]
+                  ],
+                  [
+                    "sym:version",
+                    "u32:1"
+                  ]
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.interpreter Persistent [\"sym:Program\",\"addr:account\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:doc_hash",
+                "bytes:289b7f34d66c0643d6533b23fdd39c4dcff82145a288ca6b31f58303e3c0ca90"
+              ],
+              [
+                "sym:program",
+                [
+                  [
+                    "sym:ops",
+                    [
+                      [
+                        "sym:MinSigners",
+                        "u32:2"
+                      ],
+                      [
+                        "sym:FnIn",
+                        [
+                          "sym:protected"
+                        ]
+                      ],
+                      [
+                        "sym:All",
+                        "u32:2"
+                      ]
+                    ]
+                  ],
+                  [
+                    "sym:version",
+                    "u32:1"
+                  ]
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "now": [],
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"sym:InstalledRules\".val[1][3][1]",
+          "recorded": [
+            [
+              [
+                "sym:params",
+                "bytes:c5390906841b72fb0d22a4b7b51c48ea27a427cc8d91a7edd7b76e558690ed25"
+              ],
+              [
+                "sym:policy",
+                "addr:interpreter"
+              ]
+            ],
+            [
+              [
+                "sym:params",
+                "bytes:58e90e510e1a7a35a7680651ea0381b6af240c7a7be59f19369f5448585fafd4"
+              ],
+              [
+                "sym:policy",
+                "addr:spending_limit"
+              ]
+            ]
+          ]
+        },
+        {
+          "now": [],
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"].val[2][1]",
+          "recorded": [
+            "u32:0",
+            "u32:1"
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:spending_limit"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:interpreter"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:interpreter\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:spending_limit\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.interpreter Persistent [\"sym:Program\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:doc_hash",
+                "bytes:6e245289077b58e09f404a7151f12cd944eb63926b3503c6b4bfd85816ffb5cb"
+              ],
+              [
+                "sym:program",
+                [
+                  [
+                    "sym:ops",
+                    [
+                      [
+                        "sym:MinSigners",
+                        "u32:1"
+                      ],
+                      [
+                        "sym:FnIn",
+                        [
+                          "sym:transfer"
+                        ]
+                      ],
+                      [
+                        "sym:All",
+                        "u32:2"
+                      ]
+                    ]
+                  ],
+                  [
+                    "sym:version",
+                    "u32:1"
+                  ]
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:0"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                []
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": "spending-limit: spend 6 of 10, spend 4 more, spend 5 in the next window",
+      "cause": "A capped rule carries no OZ spending-limit policy, so an accepted capped spend no longer calls the spending limit: it publishes no spending_limit_enforced event and writes no spending-limit window. The account's own record of the rule (SpendRecords, declared above for the same three steps) is the only window, charged by rule-eval with the same history and total as the recorded OZ window held at each step. The refused spends (spend 1 past the cap, a single transfer over the cap) stay refused.",
+      "fields": [
+        {
+          "now": [],
+          "path": "corpus.spending-limit[2 \"spend 6 of 10\"].events",
+          "recorded": [
+            {
+              "contract": "spending_limit",
+              "data": [
+                [
+                  "sym:amount",
+                  "i128:6"
+                ],
+                [
+                  "sym:context",
+                  [
+                    "sym:Contract",
+                    [
+                      [
+                        "sym:args",
+                        [
+                          "addr:account",
+                          "addr:payee",
+                          "i128:6"
+                        ]
+                      ],
+                      [
+                        "sym:contract",
+                        "addr:token"
+                      ],
+                      [
+                        "sym:fn_name",
+                        "sym:transfer"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:context_rule_id",
+                  "u32:1"
+                ],
+                [
+                  "sym:total_spent_in_period",
+                  "i128:6"
+                ]
+              ],
+              "topics": [
+                "sym:spending_limit_enforced",
+                "addr:account"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[2 \"spend 6 of 10\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:6"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        },
+        {
+          "now": [],
+          "path": "corpus.spending-limit[3 \"spend 4 more, reaching the cap\"].events",
+          "recorded": [
+            {
+              "contract": "spending_limit",
+              "data": [
+                [
+                  "sym:amount",
+                  "i128:4"
+                ],
+                [
+                  "sym:context",
+                  [
+                    "sym:Contract",
+                    [
+                      [
+                        "sym:args",
+                        [
+                          "addr:account",
+                          "addr:payee",
+                          "i128:4"
+                        ]
+                      ],
+                      [
+                        "sym:contract",
+                        "addr:token"
+                      ],
+                      [
+                        "sym:fn_name",
+                        "sym:transfer"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:context_rule_id",
+                  "u32:1"
+                ],
+                [
+                  "sym:total_spent_in_period",
+                  "i128:10"
+                ]
+              ],
+              "topics": [
+                "sym:spending_limit_enforced",
+                "addr:account"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[3 \"spend 4 more, reaching the cap\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:10"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1000"
+                    ]
+                  ],
+                  [
+                    [
+                      "sym:amount",
+                      "i128:4"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        },
+        {
+          "now": [],
+          "path": "corpus.spending-limit[6 \"spend 5 in the next window\"].events",
+          "recorded": [
+            {
+              "contract": "spending_limit",
+              "data": [
+                [
+                  "sym:amount",
+                  "i128:5"
+                ],
+                [
+                  "sym:context",
+                  [
+                    "sym:Contract",
+                    [
+                      [
+                        "sym:args",
+                        [
+                          "addr:account",
+                          "addr:payee",
+                          "i128:5"
+                        ]
+                      ],
+                      [
+                        "sym:contract",
+                        "addr:token"
+                      ],
+                      [
+                        "sym:fn_name",
+                        "sym:transfer"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:context_rule_id",
+                  "u32:1"
+                ],
+                [
+                  "sym:total_spent_in_period",
+                  "i128:5"
+                ]
+              ],
+              "topics": [
+                "sym:spending_limit_enforced",
+                "addr:account"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[6 \"spend 5 in the next window\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:5"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:5"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1100"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        }
+      ]
     }
   ]
 }

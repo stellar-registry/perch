@@ -1,9 +1,12 @@
-//! The `rule_eval::Rule` an installed Perch rule enforces.
+//! The `rule_eval::Rule` a Perch rule enforces when installed with the
+//! interpreter and the spending limit.
 //!
-//! A Perch rule is installed as an OpenZeppelin context rule on one contract,
-//! with its signers and last ledger, and up to two policies: the interpreter
-//! running the rule's program, and OpenZeppelin's spending-limit policy with
-//! the rule's cap. What the three enforce together:
+//! Accounts installed a Perch rule, before rule-eval decided their
+//! authorizations, as an OpenZeppelin context rule on one contract, with its
+//! signers and last ledger, and up to two policies: the interpreter running
+//! the rule's program, and OpenZeppelin's spending-limit policy with the
+//! rule's cap; an account upgraded from that code keeps them until its first
+//! `apply_doc`. What the three enforce together:
 //!
 //! - **No policy.** OpenZeppelin requires every signer of the rule, so the
 //!   threshold is the signer count.

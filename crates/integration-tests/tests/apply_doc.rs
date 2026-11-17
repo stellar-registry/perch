@@ -49,11 +49,15 @@ fn apply_doc_installs_rules_and_stores_canonical_hash() {
     assert_ne!(admin.signers, w.admin_signers);
     let ci = client.get_context_rule(&installed.get_unchecked(1).id);
     assert_eq!(ci.name, SString::from_str(&w.env, "ci-publish"));
-    assert_eq!(ci.policies.len(), 1); // the interpreter program is attached
-    assert_eq!(ci.policies.get_unchecked(0), w.interpreter);
+    // OZ holds the rule's contract, signers and last ledger; its functions
+    // and argument conditions are the stored rule-eval rule's.
+    assert_eq!(ci.policies.len(), 0);
+    let stored = client.rule_set().get_unchecked(1);
+    assert!(!stored.conds.is_empty());
     // `not-after-ledger: 55000000` (exclusive) lowers to OZ's inclusive
     // last-valid ledger.
     assert_eq!(ci.valid_until, Some(54_999_999));
+    assert_eq!(stored.valid_until, Some(54_999_999));
 }
 
 #[test]

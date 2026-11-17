@@ -126,8 +126,11 @@ pub enum PerchAccountError {
     Recovery(RecoveryError),
     /// `apply_doc` named an `expected_revision` and the account is at
     /// another revision: the document was prepared against a configuration
-    /// that has since changed. Last, so every earlier code is unchanged.
+    /// that has since changed.
     StaleRevision,
+    /// A completed recovery would advance the scope generation past
+    /// `u64::MAX`. Last, so every earlier code is unchanged.
+    GenerationExhausted,
 }
 
 /// Why `__check_auth` refused before evaluating any rule.
@@ -396,6 +399,9 @@ struct PerchStorage {
     /// transition at any controller and by every executed upgrade. Never
     /// reset; it continues through periods without recovery.
     recovery_generation: InstanceItem<u64>,
+    /// The scope generation: advanced by one by every completed recovery,
+    /// by nothing else. Absent reads as 0. Never reset or decreased.
+    scope_generation: InstanceItem<u64>,
     /// Every context rule currently installed, as installed. `apply_doc`
     /// reconciles the compiled document against these records alone, so its
     /// cost (and a completion's) is bounded by the document caps rather than
@@ -685,6 +691,15 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         generation(e)
     }
 
+    /// The account's scope generation: 0 until the first completed
+    /// recovery, then advanced by one by each completed recovery and by
+    /// nothing else (not by enrollment, reconfiguration, removal, a
+    /// controller switch, or an executed upgrade, all of which advance
+    /// [`Self::recovery_generation`]).
+    fn scope_generation(e: &Env) -> u64 {
+        scope_generation(e)
+    }
+
     /// The configuration revision: 0 after the constructor, advanced by one
     /// in every successful `apply_doc` (whatever it changes, a re-apply of
     /// the same document included) and every executed upgrade. Freeze
@@ -834,13 +849,17 @@ fn is_completion(e: &Env, signatures: &AuthPayload, contexts: &Vec<Context>) -> 
 /// A completed recovery revokes the union of the credentials it replaced in
 /// its source (the baseline's, for compromise) and every credential the
 /// applied document had that the target drops (spec §8,
-/// `credential::revocations`). It lifts the freeze and drops any pending
-/// upgrade (spec §12).
+/// `credential::revocations`). It advances the scope generation, lifts the
+/// freeze, and drops any pending upgrade (spec §12).
 fn complete_recovery(
     e: &Env,
     replaced: &Vec<Credential>,
     target_fingerprints: &Vec<BytesN<32>>,
 ) -> Result<(), PerchAccountError> {
+    let next = scope_generation(e)
+        .checked_add(1)
+        .ok_or(PerchAccountError::GenerationExhausted)?;
+    PerchStorage::set_scope_generation(e, &next);
     let mut replaced_fingerprints = Vec::new(e);
     for credential in replaced.iter() {
         replaced_fingerprints.push_back(
@@ -868,6 +887,10 @@ fn generation(e: &Env) -> u64 {
 
 fn advance_generation(e: &Env) {
     PerchStorage::set_recovery_generation(e, &(generation(e) + 1));
+}
+
+fn scope_generation(e: &Env) -> u64 {
+    PerchStorage::get_scope_generation(e).unwrap_or(0)
 }
 
 fn revision(e: &Env) -> u64 {
@@ -1048,6 +1071,11 @@ pub mod testutils {
         mode: Mode,
     ) -> Result<BytesN<32>, PerchAccountError> {
         apply(e, doc_json, approval_valid_until, None, mode)
+    }
+
+    /// Set the scope generation. Run as the account (`env.as_contract`).
+    pub fn set_scope_generation(e: &Env, generation: u64) {
+        PerchStorage::set_scope_generation(e, &generation);
     }
 
     /// What applying `doc_json` would do to each rule slot, and what the cost

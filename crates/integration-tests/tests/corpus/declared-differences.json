@@ -66,6 +66,111 @@
           ]
         }
       ]
+    },
+    {
+      "step": "recovery: completion with the derived target",
+      "cause": "The account keeps a scope generation (instance key ScopeGeneration, absent reads as 0) that advances by one on a completed recovery and on nothing else. The corpus's one completed recovery therefore writes ScopeGeneration = 1 into the account's instance storage. Its outcome, events, authorization failures and every other storage entry are unchanged, and no other step writes the key: the refused completions before and after it, enrollment and removal leave it absent.",
+      "fields": [
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              "sym:ScopeGeneration",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ]
+        }
+      ]
     }
   ]
 }

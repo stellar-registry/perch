@@ -77,8 +77,6 @@ the owner chooses (one per app grant, say), and returns its `doc_hash`
   revives it with the new rules.
 - It calls no controller, and leaves the applied `doc_hash` and the revision
   alone.
-- It refuses (`NoRuleSet`) on an account that stores no admin rule set,
-  which the constructor never leaves.
 
 ### Removing scopes
 
@@ -264,10 +262,6 @@ their docs land in the account's spec too.
   match the compiled rules one for one.
 - **`UnguardedRule`.** A rule other than the recovery rule asks for no signer
   (INV-1), so an authorization with no signer at all would satisfy it.
-- **`NoRuleSet`.** `apply_scope` was called on an account that stores no
-  admin rule set. The constructor stores one and every `apply_doc` replaces
-  it, and an account without one authorizes nothing but a recovery
-  completion, so a deployed account does not raise it.
 - **`Compiler_KeyNotCanonicalizable`.** Either the verifier could not
   canonicalize the key at all, or the declared bytes differ from the
   canonical form it returns (for example a WebAuthn key carrying a

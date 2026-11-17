@@ -989,16 +989,14 @@ fn one_accounts_completion_never_spends_anothers_nullifier() {
     assert!(w.ctl().nullifier_spent(&w.account, &victim_n));
 }
 
-/// `enforce` runs for every context in an authorization tree, including a
-/// sub-invocation that never executes. The marker it leaves must not turn a
-/// later, unrelated `apply_doc` into a (failing) completion. Only an
-/// account that stores no rule-eval rule set, which OZ's `do_check_auth`
-/// decides over OZ's registry, still runs `enforce` outside a completion:
-/// one that stores a set refuses every other authorization choosing the
-/// recovery rule. The account never leaves itself without a set, nor writes
-/// its admin rule to OZ's registry; this test does both.
+/// `enforce` leaves a marker that only the same invocation's `rcv_sync`
+/// consumes. The account calls `enforce` only for a completion, whose one
+/// context is the `apply_doc` being authorized; an authorization tree that
+/// chooses the recovery rule for an `apply_doc` sub-invocation that never
+/// executes is refused before any controller call. So no marker outlives
+/// it, and a later, unrelated `apply_doc` is not taken for a completion.
 #[test]
-fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
+fn the_recovery_rule_for_an_unexecuted_sub_invocation_leaves_no_marker() {
     let w = world();
     let doc = w.doc(Some(w.recovery("loss", Mode::Guardian)));
     w.enroll(&doc);
@@ -1053,25 +1051,6 @@ fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
         w.client().try_execute(&w.target, &f, &call_args).is_err(),
         "the recovery rule outside a completion"
     );
-
-    // Without a stored set, OZ decides over its own registry, here given the
-    // owner's admin rule under the account's admin id: OZ and the
-    // controller accept it, leaving the marker.
-    let admin = w.rule_id(&w.account, "admin");
-    w.env.as_contract(&w.account, || {
-        perch_smart_account::testutils::remove_rule_set(&w.env);
-        let rule = stellar_accounts::smart_account::add_context_rule(
-            &w.env,
-            &stellar_accounts::smart_account::ContextRuleType::CallContract(w.account.clone()),
-            &soroban_sdk::String::from_str(&w.env, "admin"),
-            None,
-            &vec![&w.env, Signer::Delegated(w.owner.clone())],
-            &soroban_sdk::Map::new(&w.env),
-        );
-        assert_eq!(rule.id, admin);
-    });
-    w.env.set_auths(&[entry()]);
-    w.client().execute(&w.target, &f, &call_args);
     w.env.set_auths(&[]);
 
     // Same ledger: the owner cancels, then applies an unrelated document.
@@ -1082,7 +1061,7 @@ fn a_marker_left_by_an_unexecuted_sub_invocation_is_ignored() {
     let mut quorum_one = w.recovery("loss", Mode::Guardian);
     quorum_one.quorum = 1;
     w.apply(&w.doc(Some(quorum_one)), 0)
-        .expect("the stale marker is dropped, not taken for a completion");
+        .expect("no marker is taken for a completion");
 }
 
 #[test]

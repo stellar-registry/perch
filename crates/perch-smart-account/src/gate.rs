@@ -20,14 +20,13 @@
 //! rule, or a batch soroban-facade cannot read refuses the authorization
 //! with `RuleEvalRefused`. The recovery rule's stored form
 //! allows every `apply_doc` the controller could; the controller decides
-//! a completion, on OpenZeppelin's path (`check_auth`), and no other
-//! authorization may choose it.
+//! a completion (`auth::authorize_completion`), and no other authorization
+//! may choose it.
 //!
 //! Each capped rule keeps one record. It is kept across an apply exactly
 //! when its rule keeps both its id and its cap: a changed cap, or a
 //! removed or replaced rule, drops it in `apply_doc` and `apply_scope`
-//! ([`drop_records`]), and removing a scope drops its rules' records. An
-//! apply over rules stored with no rule set drops every record.
+//! ([`drop_records`]), and removing a scope drops its rules' records.
 
 use alloc::vec::Vec;
 
@@ -180,11 +179,11 @@ pub(crate) fn drop_record(e: &Env, id: u32) {
     }
 }
 
-/// After an apply took the rules `current` (stored as `before`, when it was
-/// stored) to `next` (stored as `after`): drop the record of every rule of
-/// `current` that left, or that kept its id under another cap. A rule
-/// stored without a cap keeps no record. With no `before` (rules installed
-/// by code that kept no stored set), every rule's record is dropped.
+/// After an apply took the rules `current` (stored as `before`; a scope's
+/// first apply has neither) to `next` (stored as `after`): drop the record
+/// of every rule of `current` that left, or that kept its id under another
+/// cap. A rule stored without a cap keeps no record, and a rule whose stored
+/// rule `before` does not hold has its record dropped.
 pub(crate) fn drop_records(
     e: &Env,
     current: &SVec<InstalledRule>,

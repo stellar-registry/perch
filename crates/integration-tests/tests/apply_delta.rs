@@ -230,11 +230,9 @@ fn keeps_id(b: &InstalledRule, a: &InstalledRule) -> bool {
 }
 
 /// The account's own entries keyed by rule `id`, as [`raw_entries`] names
-/// them: OZ's registry entry kept for the recovery rule, the spending
-/// record, and the scope tag.
-fn keyed_by(me: &str, id: u32) -> [String; 3] {
+/// them: the spending record and the scope tag.
+fn keyed_by(me: &str, id: u32) -> [String; 2] {
     [
-        format!("{me}/[ContextRuleData,{id}]"),
         format!("{me}/[SpendRecords,{id}]"),
         format!("{me}/[ScopeTags,{id}]"),
     ]

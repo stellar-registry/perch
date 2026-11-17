@@ -3172,8 +3172,8 @@
       ]
     },
     {
-      "step": "every scenario's setup and every step that adds, edits or removes a rule: OZ's rule and signer registry",
-      "cause": "The account's own records are its rule registry (perch-smart-account's rules.rs): an installed rule is its InstalledRule record, beside the stored rule-eval rule that decides what it allows. The account writes no OZ registry entry for its admin and document rules (ContextRuleData) and no signer or policy registry or lookup entry (SignerData, SignerLookup, PolicyLookup), so the constructor, every apply_doc that adds or edits a rule, and the completion that replaces the owner write none of these, and removing a rule or a signer removes none. Rule ids, every outcome, event and authorization failure, and every entry of the account's own are as recorded.",
+      "step": "every scenario's setup and every step that adds, edits or removes a rule: OZ's rule, signer and policy registry",
+      "cause": "The account's own records are its rule registry (perch-smart-account's rules.rs): an installed rule is its InstalledRule record, beside the stored rule-eval rule that decides what it allows, and a recovery completion reads the recovery rule from its record (auth::authorize_completion). The account writes no entry of OZ's registry: no rule (ContextRuleData), signer or policy (SignerData, PolicyData), and no lookup (SignerLookup, PolicyLookup), so the constructor, every apply_doc that adds or edits a rule, the recovery rule included, and the completion that replaces the owner write none of these, and removing a rule, a signer or the recovery rule removes none. Rule ids, every outcome, event and authorization failure, and every entry of the account's own are as recorded.",
       "fields": [
         {
           "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
@@ -3841,20 +3841,6 @@
           }
         },
         {
-          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.removed",
-          "recorded": [
-            "account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
-            "account Persistent [\"sym:PolicyData\",\"u32:0\"]",
-            "account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
-            "controller Persistent [\"sym:Config\",\"addr:account\"]"
-          ],
-          "now": [
-            "account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
-            "account Persistent [\"sym:PolicyData\",\"u32:0\"]",
-            "controller Persistent [\"sym:Config\",\"addr:account\"]"
-          ]
-        },
-        {
           "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
           "recorded": {
             "live_until": 1000999,
@@ -4085,47 +4071,44 @@
               ]
             ]
           }
-        }
-      ]
-    },
-    {
-      "step": "recovery and recovery-removal: OZ's entries kept for the recovery rule",
-      "cause": "For the recovery rule the account still writes OZ's ContextRuleData and PolicyData entries, the two OZ's do_check_auth reads to decide a completion (perch-smart-account's auth::oz). It extends them to the network maximum as it extends its own records, where OZ's registry left a new entry at the minimum (live_until 10000999, not 1000999), and it always names the controller under policy id 0, where OZ's registry gave a controller enrolled again after a removal the next id, 1. A completion reads the same rule and controller either way.",
-      "fields": [
-        {
-          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"].live_until",
-          "recorded": 1000999,
-          "now": 10000999
         },
         {
-          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"].live_until",
-          "recorded": 1000999,
-          "now": 10000999
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:recovery"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                []
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
         },
         {
-          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"].live_until",
-          "recorded": 1000999,
-          "now": 10000999
-        },
-        {
-          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"].live_until",
-          "recorded": 1000999,
-          "now": 10000999
-        },
-        {
-          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:3\"].live_until",
-          "recorded": 1000999,
-          "now": 10000999
-        },
-        {
-          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:3\"].val[2][1][0]",
-          "recorded": "u32:1",
-          "now": "u32:0"
-        },
-        {
-          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
-          "now": {
-            "live_until": 10000999,
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
             "val": [
               [
                 "sym:count",
@@ -4134,6 +4117,100 @@
               [
                 "sym:policy",
                 "addr:controller"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:recovery"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                []
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:controller"
+              ]
+            ]
+          }
+        },
+        {
+          "now": [
+            "controller Persistent [\"sym:Config\",\"addr:account\"]"
+          ],
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.removed",
+          "recorded": [
+            "account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+            "account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+            "account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+            "controller Persistent [\"sym:Config\",\"addr:account\"]"
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:3\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:recovery"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                []
+              ],
+              [
+                "sym:valid_until",
+                null
               ]
             ]
           }

@@ -12,6 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # An exact toolchain for this job's clippy/rustfmt gate, so a new Rust
+    # release's lints arrive only through a PR that bumps this pin. The
+    # variable outranks rust-toolchain.toml's `stable` (which a toolchain
+    # action's `rustup default` does not). rust-toolchain.toml itself stays
+    # on `stable`: it is a build input of every contract
+    # (scripts/release-deps.py), and the release and stack builds keep
+    # using it. Keep this equal to the dtolnay `toolchain:` below.
+    env:
+      RUSTUP_TOOLCHAIN: "1.100.0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -23,7 +32,7 @@ jobs:
       # `stable` branch is regenerated, which orphans any commit pinned on it.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
         with:
-          toolchain: stable
+          toolchain: "1.100.0"
           targets: wasm32v1-none
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2

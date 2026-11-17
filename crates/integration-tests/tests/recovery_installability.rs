@@ -283,7 +283,7 @@ fn a_thief_cannot_block_compromise_recovery_with_an_expired_baseline_rule() {
         "compromise completion cannot install the baseline (the expired \
          session rule must be dropped, not re-added): {done:?}"
     );
-    // Recovery actually took effect: the new owner controls the account, the
+    // Recovery took effect: the new owner controls the account, the
     // thief is locked out.
     assert!(
         w.activity_as(&new_owner),
@@ -360,9 +360,8 @@ fn rule(
     }
 }
 
-/// The delta path keeps an installed rule that has since expired; the full
-/// replace re-adds it. Both must now drop it, so they accept and refuse the
-/// same documents (the `apply_doc_delta` fuzz target's equivalence property).
+/// Once an installed rule expires, the delta path and the full replace both
+/// drop it, so they accept and refuse the same documents (the `apply_doc_delta` fuzz target's equivalence property).
 #[test]
 fn delta_and_full_replace_agree_after_a_rule_expires() {
     let w = DeltaWorld::new();

@@ -304,9 +304,6 @@ pub fn admin_survives(compiled: &CompiledDoc) -> bool {
     if model.rules.len() != compiled.rules.len() {
         return false;
     }
-    // A bounded self-admin rule is excluded (`valid_until.is_none()`): once its
-    // bound passes it can no longer authorize `apply_doc`, so a document whose
-    // only admin rule is bounded is a latent brick and is refused up front.
     // Regression: integration-tests/tests/recovery_installability.rs.
     compiled.rules.iter().zip(model.rules.iter()).any(|(r, m)| {
         matches!(r.scope, RuleScope::SelfAdmin)
@@ -503,7 +500,6 @@ fn parse(doc_json: &Bytes) -> Result<perch_ir::PolicyDoc, DocCompilerError> {
 fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, DocCompilerError> {
     perch_ir::validate(doc).map_err(|_| DocCompilerError::DocInvalid)?;
 
-    // Network binding.
     let net = doc.network.as_ref().ok_or(DocCompilerError::WrongNetwork)?;
     let named: BytesN<32> = e
         .crypto()

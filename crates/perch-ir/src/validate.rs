@@ -369,8 +369,8 @@ pub enum ValidationError {
     /// entirely — the enrolled condition must always be able to cancel a
     /// live attempt.
     ZeroRecoveryMaxCancels,
-    /// `recovery.controller` is not shaped like a C-address strkey (checksum
-    /// not verified — see module docs).
+    /// `recovery.controller` is not shaped like a C-address strkey
+    /// (including the CRC16 checksum).
     InvalidRecoveryController {
         /// The malformed address string.
         address: String,
@@ -633,9 +633,8 @@ impl fmt::Display for ValidationError {
 
 impl core::error::Error for ValidationError {}
 
-/// Structural strkey shape check: length 56, base32 alphabet (`A-Z2-7`), and
-/// a leading version letter from `leads`. Does **not** verify the CRC16
-/// checksum (see module docs).
+/// Strkey check: length 56, base32 alphabet (`A-Z2-7`), a leading version
+/// letter from `leads`, and a valid CRC16 checksum.
 fn is_strkey_shape(s: &str, leads: &[u8]) -> bool {
     let bytes = s.as_bytes();
     bytes.len() == 56
@@ -699,14 +698,14 @@ fn strkey_checksum_ok(bytes: &[u8]) -> bool {
 }
 
 /// Whether `s` is shaped like a contract address strkey (`C...`, 56 chars,
-/// base32 alphabet). Checksum is not verified.
+/// base32 alphabet, valid CRC16 checksum).
 #[must_use]
 pub fn is_contract_address_shape(s: &str) -> bool {
     is_strkey_shape(s, b"C")
 }
 
 /// Whether `s` is shaped like a contract (`C...`) or account (`G...`) address
-/// strkey. Checksum is not verified.
+/// strkey, including its CRC16 checksum.
 #[must_use]
 pub fn is_address_shape(s: &str) -> bool {
     is_strkey_shape(s, b"CG")
@@ -988,13 +987,8 @@ fn validate_rule(rule: &Rule, declared: &BTreeSet<&str>, errors: &mut Vec<Valida
                                 value: value.clone(),
                             });
                         }
-                        // An over-long `string-in` value is a dead candidate,
-                        // not an unsatisfiable predicate: the set stays live
-                        // through its other values, and the interpreter skips a
-                        // candidate it cannot hold. It is left to the analyzer
-                        // rather than refused here. Only `string-prefix`, whose
-                        // single over-long prefix kills the whole predicate, is
-                        // refused below.
+                        // An over-long `string-in` value is not refused: see
+                        // `MAX_STRING_PRED_LEN`.
                     }
                 }
                 ArgPred::StringPrefix(pred) => {

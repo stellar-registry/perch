@@ -106,7 +106,7 @@ fn enforce_denies_when_program_false() {
 
 #[test]
 fn enforce_denies_empty_signers_even_when_program_would_pass() {
-    // C4 floor: zero authenticated signers denies before the program runs.
+    // Signer floor: zero authenticated signers denies before the program runs.
     let (env, client, account) = setup();
     client.install(&install_params(&env), &rule(&env), &account);
     let r = client.try_enforce(
@@ -120,7 +120,7 @@ fn enforce_denies_empty_signers_even_when_program_would_pass() {
 
 #[test]
 fn enforce_denies_when_not_installed() {
-    // C2 dangling: a rule pointing at the interpreter with no stored program.
+    // Dangling rule: a rule pointing at the interpreter with no stored program.
     let (env, client, account) = setup();
     let r = client.try_enforce(
         &ctx(&env, &account, "run"),
@@ -171,7 +171,7 @@ fn uninstall_removes_then_enforce_denies() {
 
 #[test]
 fn entry_points_require_smart_account_auth() {
-    // C1: without the account's auth, install must fail. No mock_all_auths here.
+    // Without the account's auth, install must fail. No mock_all_auths here.
     let env = Env::default();
     let id = env.register(PerchInterpreter, ());
     let client = PerchInterpreterClient::new(&env, &id);

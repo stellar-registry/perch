@@ -1,6 +1,6 @@
-//! The wasm leg of the conformance vectors (PLAN.md phase 3): replays every
-//! case through the COMPILED wasm32 artifact executing under the soroban test
-//! host — so rustc, LLVM, and the wasm interpreter join the parity boundary.
+//! The wasm leg of the conformance vectors: replays every case through the
+//! COMPILED wasm32 artifact executing under the soroban test host — so rustc,
+//! LLVM, and the wasm interpreter join the parity boundary.
 //! The entry point is `perch-bench-rpn`'s exported `validate`/`eval`, which
 //! wrap the same `perch_program` functions the native leg calls directly.
 //!

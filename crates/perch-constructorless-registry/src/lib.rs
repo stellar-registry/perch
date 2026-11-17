@@ -27,7 +27,7 @@
 //!    permissionless. This falls out of composing [`Manageable`] +
 //!    [`Publishable`] with a `manager` set at construction.
 //!
-//! ## Composition (the pattern this epic demonstrates)
+//! ## Composition
 //!
 //! The contract is nothing but a `#[contract]` struct, a `__constructor`, and a
 //! series of empty `#[contractimpl(contracttrait)] impl Trait for _ {}` lines
@@ -68,14 +68,11 @@
 //
 // `no_std` only for the on-chain (`contract`) build — soroban's contract macros
 // supply the wasm panic handler. With `--no-default-features` the crate is an
-// empty `std` library, which lets the skeleton + workspace wiring build green
-// without pulling the `registry-traits` git dependency at all.
+// empty `std` library that builds without `registry-traits` or `admin-sep`.
 #![cfg_attr(feature = "contract", no_std)]
 
 // The composed, deployable contract. Everything that touches `registry-traits`
-// / `admin-sep` lives here so `--no-default-features` yields a clean, empty
-// library and the rest of the workspace keeps building without the git
-// dependency.
+// / `admin-sep` lives here so `--no-default-features` yields an empty library.
 #[cfg(feature = "contract")]
 mod contract {
     // Same-name imports: soroban's `#[contractimpl(contracttrait)]` derives the
@@ -170,31 +167,16 @@ mod contract {
 #[cfg(feature = "contract")]
 pub use contract::{ConstructorlessRegistry, ConstructorlessRegistryClient};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests. The first is fully self-contained and green: it validates that the
-// registry-traits + admin-sep composition wires up correctly (and that
-// soroban-sdk unifies to a single version across perch + registry-traits +
-// admin-sep).
-//
-// The second encodes the issue-#39 acceptance criterion end to end (publish →
-// content-addressed `deploy_stateless` → assert derived address → assert
-// idempotent redeploy). It stays `#[ignore]`d: the #38/#33 import blocker is now
-// RESOLVED, but it needs a real fixture wasm whose `__constructor` takes no args
-// (`deploy_stateless` always inits with `()`), and the embedded placeholder is
-// empty bytes that `upload_contract_wasm` rejects. Materializing that fixture
-// (a build step that drops a `.wasm` under the crate for `contractimport!`) is
-// the remaining follow-up.
-// ─────────────────────────────────────────────────────────────────────────────
 #[cfg(all(test, feature = "contract"))]
 mod test {
     use super::{ConstructorlessRegistry, ConstructorlessRegistryClient};
     use soroban_sdk::{testutils::Address as _, Address, Bytes, BytesN, Env, String};
 
-    /// Self-contained, green: constructing the subregistry wires `admin`,
-    /// `manager`, and `root` through the composed registry-traits seams. Also
-    /// exercises the composed ABI (the `#[contracttrait]` glue) at compile time,
-    /// which is what validates the vendored registry-traits against this
-    /// workspace's soroban-sdk.
+    /// Constructing the subregistry wires `admin`, `manager`, and `root`
+    /// through the composed registry-traits seams. Also exercises the composed
+    /// ABI (the `#[contracttrait]` glue) at compile time, which is what
+    /// validates the vendored registry-traits against this workspace's
+    /// soroban-sdk.
     #[test]
     fn constructor_wires_admin_manager_and_root() {
         let env = Env::default();
@@ -223,12 +205,11 @@ mod test {
         assert_eq!(client.manager(), Some(new_manager));
     }
 
-    // A deployable fixture wasm to publish and content-address deploy. Any valid
-    // no-arg-`__constructor` contract works. TODO: point `contractimport!` at a
-    // real fixture wasm once a build step materializes it under the crate.
+    // A fixture wasm to publish and content-address deploy: any valid contract
+    // whose `__constructor` takes no args (`deploy_stateless` always inits with
+    // `()`). Empty until one is committed, so the test using it is ignored.
     mod fixture {
-        // soroban_sdk::contractimport!(file = "fixtures/constructorless_fixture.wasm");
-        pub const WASM: &[u8] = &[]; // placeholder — replaced by contractimport! WASM
+        pub const WASM: &[u8] = &[];
     }
 
     #[test]
@@ -241,7 +222,6 @@ mod test {
         let manager = Address::generate(&env);
         let root = Address::generate(&env);
 
-        // Deploy the managed subregistry: __constructor(admin, manager, root).
         let registry_id = env.register(
             ConstructorlessRegistry,
             (admin.clone(), manager.clone(), root.clone()),

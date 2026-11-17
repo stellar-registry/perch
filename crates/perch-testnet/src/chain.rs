@@ -125,8 +125,6 @@ impl Chain {
         *self.scenario.borrow_mut() = name.to_string();
     }
 
-    // --- encoding --------------------------------------------------------
-
     pub fn sc<T: IntoVal<Env, Val>>(&self, v: T) -> ScVal {
         let val: Val = v.into_val(&self.env);
         ScVal::try_from_val(&self.env, &val).expect("ScVal")
@@ -140,8 +138,6 @@ impl Chain {
     pub fn address(&self, strkey: &str) -> Address {
         Address::from_str(&self.env, strkey)
     }
-
-    // --- reads -----------------------------------------------------------
 
     pub fn read(&self, contract: &str, func: &str, args: Vec<ScVal>) -> Result<ScVal> {
         match perch_deploy::tx::simulate_read(&self.rpc, contract, func, args)? {
@@ -179,8 +175,6 @@ impl Chain {
             std::thread::sleep(Duration::from_secs(5));
         }
     }
-
-    // --- writes ----------------------------------------------------------
 
     /// Simulate and sign. `Err` carries the refusal message: a contract or
     /// auth error in either simulation.

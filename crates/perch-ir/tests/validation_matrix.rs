@@ -827,7 +827,7 @@ fn display_names_the_offender() {
     assert!(msg.contains("admin") && msg.contains("300"), "{msg}");
 }
 
-// --- cap (#19 PR6): InvalidCapLimit / ZeroCapPeriod / InvalidCapToken /
+// --- cap: InvalidCapLimit / ZeroCapPeriod / InvalidCapToken /
 // --- CapWithoutToken / CapTokenMismatch -------------------------------------
 
 fn capped_doc(token: Option<&str>, limit: &str, period: u32) -> perch_ir::PolicyDoc {

@@ -7,6 +7,7 @@ use perch_doc_compiler::PerchDocCompiler;
 use perch_interpreter::PerchInterpreter;
 use perch_smart_account::infra;
 use perch_spending_limit::PerchSpendingLimit;
+use perch_testkit::delta::strkey;
 use perch_testkit::passkey::{auth_entry, SoftPasskey};
 use perch_testkit::FIXTURE_NETWORK;
 use perch_webauthn_verifier::PerchWebAuthnVerifier;
@@ -92,13 +93,6 @@ impl World {
     fn key_data(&self, key: &SoftPasskey) -> Bytes {
         Bytes::from_slice(&self.env, &key.key_data())
     }
-}
-
-fn strkey(a: &Address) -> std::string::String {
-    let s = a.to_string();
-    let mut buf = std::vec![0u8; s.len() as usize];
-    s.copy_into_slice(&mut buf);
-    std::string::String::from_utf8(buf).unwrap()
 }
 
 fn sc<T: IntoVal<Env, Val>>(env: &Env, v: T) -> ScVal {

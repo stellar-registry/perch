@@ -203,7 +203,7 @@ struct Stack {
 }
 
 fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    hex::encode(b)
 }
 
 fn sha256_hex(b: &[u8]) -> String {
@@ -767,8 +767,8 @@ impl World {
 
     /// The footprint RPC simulation declares for `root` authorized by
     /// `entry`, on the current ledger: its read-only and read-write key
-    /// counts, or why the simulated call failed. Runs the call in recording mode on a fresh host over a
-    /// snapshot of this ledger (`e2e_invoke`, what simulation runs), so the
+    /// counts, or why the simulated call failed. Runs the call in recording
+    /// mode on a fresh host over a snapshot of this ledger (`e2e_invoke`, what simulation runs), so the
     /// test environment's own metering plays no part.
     fn simulated_footprint(
         &self,
@@ -990,9 +990,8 @@ impl World {
 /// the rules: `admin`, `target` (the owner's activity rule, with a program),
 /// `both` rules with both a program (from a 1-of-1 threshold and an argument
 /// constraint) and a spending cap, `interp` with a program alone, and
-/// `plain` with neither. The labels still name a program and a cap as the
-/// interpreter and spending-limit policies the account once installed for
-/// them; each is now part of the rule's stored rule-eval rule.
+/// `plain` with neither. A program and a cap are both parts of the rule's
+/// stored rule-eval rule.
 #[derive(Clone, Copy, Debug)]
 struct Shape {
     signers: usize,
@@ -1038,10 +1037,10 @@ impl World {
     /// The document of `shape` over `keys`, recovery replacing every
     /// signer, with `values` strings in a second argument constraint of the
     /// first rule after `target`, and `pad` bytes spread over the names of
-    /// the rules after `target` (each at most the account's `MAX_NAME_SIZE`). With `with_recovery`
-    /// false: the same document
-    /// without its recovery member (a compromise baseline, to which the
-    /// target adds the member back).
+    /// the rules after `target` (each at most the account's `MAX_NAME_SIZE`).
+    /// With `with_recovery` false: the same document without its recovery
+    /// member (a compromise baseline, to which the target adds the member
+    /// back).
     fn shaped_json(
         &self,
         keys: &[SoftPasskey],

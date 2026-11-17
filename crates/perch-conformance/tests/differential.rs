@@ -1,4 +1,4 @@
-//! Differential compile→eval testing (#PLAN phase 0): random *valid* policy
+//! Differential compile→eval testing: random *valid* policy
 //! documents are lowered by the real `perch-compile`, and the resulting
 //! program's verdict under the real `rpn::eval` is compared against an
 //! **independent doc-level reference semantics** written directly from

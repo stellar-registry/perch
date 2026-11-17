@@ -21,8 +21,8 @@
 //! number lexer always compiles an `f64` branch, and serde's internally-tagged
 //! enum machinery buffers through `serde::__private::de::Content`, whose
 //! `F64(f64)` variant puts an `f64` in the module regardless of what the model
-//! actually holds. A `PolicyDoc` holds only `u32`s and strings, so both are pure
-//! deadweight — but deadweight the validator still rejects.
+//! actually holds. A `PolicyDoc` holds only `u32`s and strings, so neither
+//! float path is ever taken, yet the validator still rejects the module.
 //!
 //! So [`from_json`] walks a [`hifijson`] value tree by hand. hifijson is a
 //! float-free lexer: numbers stay as raw digit strings (`num::Parts` tells us
@@ -68,9 +68,7 @@ use crate::doc::{
 const MAX_DEPTH: usize = 64;
 
 /// A structural or syntactic problem with a policy document, carrying a
-/// human-readable message. Replaces the previous `serde_json::Error` payload now
-/// that parsing is hand-written (see the module docs on why serde is off the
-/// on-chain path); the `ParseError::Json` variant name is unchanged.
+/// human-readable message.
 #[derive(Debug)]
 pub struct JsonError(String);
 
@@ -122,7 +120,6 @@ impl core::error::Error for ParseError {
     }
 }
 
-/// Construct a `ParseError::Json` from a message.
 fn json_err(msg: impl Into<String>) -> ParseError {
     ParseError::Json(JsonError(msg.into()))
 }
@@ -160,7 +157,6 @@ pub fn from_json(input: &str) -> Result<PolicyDoc, ParseError> {
             if k.as_ref() == "version" {
                 if let Value::Number((n, parts)) = v {
                     if parts.is_int() {
-                        // `n` is hifijson's raw digit string; deref to `&str`.
                         let digits: &str = n;
                         if let Ok(ver) = digits.parse::<u64>() {
                             if ver != 1 {

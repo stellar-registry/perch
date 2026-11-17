@@ -3,9 +3,8 @@
 //! binding, compile, anti-brick check, atomic swap, canonical `doc_hash`
 //! stored. Piecemeal mutation entry points do not exist on the contract.
 //!
-//! The whole `setup()` this suite used to hand-roll is now one
-//! `perch_testkit::Bootstrap::native()` call; the stand-in verifiers, the
-//! fixture constants and the fixture live in the testkit. An account document
+//! `setup()` is `perch_testkit::Bootstrap::native()`; the stand-in verifiers,
+//! the fixture constants and the fixture live in the testkit. An account document
 //! names its verifiers from `perch/verifiers`, so the suite applies the
 //! frozen fixture with its two verifiers named (`World::fixture`).
 
@@ -116,9 +115,8 @@ fn reapply_installs_exactly_the_new_rule_set() {
 #[test]
 fn piecemeal_mutation_entry_points_do_not_exist() {
     // Doc-only is structural: the account implements OZ's SmartAccount but
-    // never exports it, so the mutation functions aren't callable at all —
-    // there is nothing to authorize, misuse, or audit. apply_doc is the only
-    // write path.
+    // never exports it, so the mutation functions aren't callable at all.
+    // apply_doc is the only write path.
     let w = setup();
     for func in [
         "add_context_rule",

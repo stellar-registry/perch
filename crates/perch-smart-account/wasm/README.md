@@ -1,7 +1,7 @@
 # Build-time pins
 
-The account reads its shared infra from this directory **at build time**; the
-account *source* hardcodes no contract ids.
+The account reads its shared infra from this directory at build time; the
+account source hardcodes no contract ids.
 
 | file | committed | used for |
 |---|---|---|
@@ -28,8 +28,8 @@ that gives:
 
 | network | root | `perch/constructorless` | |
 |---|---|---|---|
-| testnet | `CAAXJETK…HI4M` | `CDZGU4AI…BZTM` | not deployed yet: the testnet dry run of the mainnet layout creates it |
-| mainnet | `CDU4M3LD…EGUY` | `CC236AK2…B7NN` | not deployed yet |
+| testnet | `CAAXJETK…HI4M` | `CDZGU4AI…BZTM` | deployed; `deployments/testnet.json` records it |
+| mainnet | `CDU4M3LD…EGUY` | `CC236AK2…B7NN` | deployed; `deployments/mainnet.json` records it |
 
 Each holds if both hops are named deploys with no `deployer` argument:
 `perch` via the root's `deploy("registry", "perch", …)`, then
@@ -47,13 +47,12 @@ of them. The account trusts whoever creates the chain on a network: until
 controls the infra it derives. Pinning keeps a registry republish from
 changing a deployed account's behavior (`installed == reviewed`).
 
-**The testnet manifest is behind.** `deployments/testnet.json` records the
-stack in `unverified/perch/constructorless` (`CDX2DMYM…PDA7`), the layout
-before this file. `deployments/pending-registry.json` declares that one
-migration. `scripts/check-pins.sh` and `testnet_pins` accept it, warn, and
-check every hash against the manifest and every address against the derived
-registry. Any other mismatch fails. The `deploy(testnet)` commit that records
-the stack under `perch/constructorless` deletes the entry.
+A manifest recording the stack in another registry fails the pin checks
+unless `deployments/pending-registry.json` declares that migration. Then
+`scripts/check-pins.sh` and `testnet_pins` accept it, warn, and check every
+hash against the manifest and every address against the derived registry.
+Any other mismatch fails. No migration is pending: the file is `{}`, and
+`deployments/testnet.json` records the stack under `perch/constructorless`.
 
 The pins are committed so a plain checkout builds, a cargo git dependency on
 perch included, with no fetch and no network

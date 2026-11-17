@@ -247,8 +247,8 @@ fn lower_rule(env: &Env, doc: &PolicyDoc, rule: &Rule) -> Result<LoweredRule, Lo
         None
     } else {
         let program = build_program(env, rule, min_signers)?;
-        // Provenance is the rule's own canonical hash (its field keeps the
-        // `doc_hash` name; the interpreter's type is unchanged).
+        // Provenance is the rule's own canonical hash, held in the
+        // interpreter type's `doc_hash` field.
         Some(InstallParams {
             program,
             doc_hash: rule_hash_onchain(env, rule),

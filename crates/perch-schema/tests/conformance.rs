@@ -1,6 +1,6 @@
-//! Criterion 3 (conformance): validate canonical fixtures and negative
-//! examples against the schema and compare with perch-ir's real parser and
-//! document validator at the applicable boundary.
+//! Validate canonical fixtures and negative examples against the schema and
+//! compare with perch-ir's real parser and document validator at the
+//! applicable boundary.
 //!
 //! The shared declarative cases live in `testdata/schema/cases.json` (also run
 //! by the perch-js suite). The boundary cases whose inputs must be generated —
@@ -90,8 +90,8 @@ fn declared_cases_agree_at_the_applicable_boundary() {
             }
             // The schema ACCEPTS, but perch-ir's validator rejects a
             // non-representable cross-reference/semantic rule. This proves the
-            // documented boundary (docs/schema.md criterion 4): schema-valid is
-            // not validator-valid.
+            // documented boundary (docs/schema.md, "What stays outside the
+            // schema"): schema-valid is not validator-valid.
             "accept-semantic-invalid" => {
                 assert!(
                     schema_ok,
@@ -143,8 +143,7 @@ fn signer_key_length_window_matches_the_validator() {
     );
 
     // One byte over: both reject (schema via the `{1,N}` pattern, perch-ir via
-    // SignerKeyLength). This is the boundary the brief's string-length example
-    // is about — the schema and the validator flip together.
+    // SignerKeyLength): the schema and the validator flip together.
     let over = doc_with_key(&"ab".repeat(max + 1));
     assert!(
         !schema_accepts(&v, &over),
@@ -206,13 +205,13 @@ fn doc_with_rule_name(len: usize) -> Value {
 
 #[test]
 fn aggregate_caps_are_a_schema_then_compiler_boundary() {
-    // Criterion 1 + 3 for the per-document caps. These are the COMPILER's caps
-    // (`perch-doc-compiler`), not perch-ir's: perch-ir's `validate` accepts an
-    // over-cap document (it is structurally and semantically fine); only the
-    // compiler's `DocTooLarge` refuses it. The schema now encodes the
-    // representable ones (maxItems / maxLength) so an editor catches them before
-    // compilation. So, uniquely, these cases are: schema REJECTS, yet perch-ir
-    // PARSES AND VALIDATES. The constant equality is asserted in limits_parity.
+    // The per-document caps are the COMPILER's (`perch-doc-compiler`), not
+    // perch-ir's: perch-ir's `validate` accepts an over-cap document (it is
+    // structurally and semantically fine); only the compiler's `DocTooLarge`
+    // refuses it. The schema encodes the representable ones (maxItems /
+    // maxLength) so an editor catches them before compilation. So, uniquely,
+    // these cases are: schema REJECTS, yet perch-ir PARSES AND VALIDATES. The
+    // constant equality is asserted in limits_parity.
     let v = validator();
     let max_signers = perch_doc_compiler::MAX_DOC_SIGNERS;
     let max_rules = perch_doc_compiler::MAX_DOC_RULES;
@@ -299,9 +298,9 @@ fn non_ascii_rule_name_is_schema_stricter_than_the_validator() {
 
 #[test]
 fn duplicate_raw_keys_are_a_parser_only_rejection() {
-    // Criterion 4: duplicate raw JSON keys are outside JSON Schema. A validator
-    // works on already-parsed JSON (the duplicate is collapsed), so the schema
-    // cannot see it — only perch-ir's raw-text parser rejects it.
+    // Duplicate raw JSON keys are outside JSON Schema. A validator works on
+    // already-parsed JSON (the duplicate is collapsed), so the schema cannot
+    // see it — only perch-ir's raw-text parser rejects it.
     let v = validator();
     let raw = r#"{"version":1,"version":1,"signers":[{"id":"a","verifier":"CD4IF75DNQJKCT35PAJAQDPW3K337EK6SJZDMQEVLXAH65K7ZVZMLXYN","key":"ab"}],"rules":[{"name":"r","scope":{"type":"self-admin"},"principals":{"type":"all","signers":["a"]}}]}"#;
 
@@ -322,7 +321,7 @@ fn duplicate_raw_keys_are_a_parser_only_rejection() {
 
 #[test]
 fn schema_valid_is_not_canonically_encoded() {
-    // Criterion 4: lexical/canonical (RFC 8785) encoding is outside JSON Schema.
+    // Lexical/canonical (RFC 8785) encoding is outside JSON Schema.
     // The committed ci-publish fixture is schema-valid and perch-ir-valid, yet
     // its pretty, unsorted bytes are not the canonical form.
     let v = validator();

@@ -76,14 +76,6 @@ pub fn deploy_at_hash<C: ContractFunctionSet + 'static>(
     instance(env, hash)
 }
 
-/// Deploy a verifier's wasm at its content address in `perch/verifiers`.
-pub fn deploy_wasm(env: &Env, wasm: &[u8]) -> Address {
-    let hash = env
-        .deployer()
-        .upload_contract_wasm(soroban_sdk::Bytes::from_slice(env, wasm));
-    instance(env, &hash)
-}
-
 /// The instance of the code uploaded under `hash` at its content address in
 /// `perch/verifiers`, as the registry's `deploy_stateless` puts one there.
 fn instance(env: &Env, hash: &BytesN<32>) -> Address {

@@ -90,7 +90,7 @@ fn canonical_form_of_minimal_doc_is_pinned_byte_for_byte() {
 fn threshold_principals_canonicalize_byte_for_byte() {
     // A `threshold` rule serializes with its `m` (a plain u32 decimal) and
     // `signers`, keys sorted `m` < `signers` < `type`. An `all` document is
-    // unaffected (pinned by the goldens above); this pins the new shape.
+    // unaffected (pinned by the goldens above); this pins the threshold shape.
     let mut doc = base_doc();
     common::set_key(&mut doc.signers[0], "ab");
     doc.signers.push(signer("ci", ED25519_VERIFIER, "cd"));

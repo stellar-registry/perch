@@ -1,6 +1,6 @@
-//! Criterion 1 (drift): the committed artifact must equal what the generator
-//! produces now. Runs under `cargo test --workspace` (CI's `rust` job), so a
-//! change to perch-ir's constants or to the generator that is not followed by
+//! Drift: the committed artifact must equal what the generator produces.
+//! Runs under `cargo test --workspace` (CI's `rust` job), so a change to
+//! perch-ir's constants or to the generator that is not followed by
 //! `just schema` fails CI here.
 
 use std::path::PathBuf;

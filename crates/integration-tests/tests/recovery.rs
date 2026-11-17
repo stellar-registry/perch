@@ -1341,7 +1341,7 @@ fn compromise_restores_the_baseline_and_revokes_everything_added_since() {
     assert!(!w.activity_as(&thief));
 }
 
-/// The review's sequence (spec §8): the baseline names owner A, the
+/// Spec §8: the baseline names owner A, the
 /// current document has moved to owner B, and a compromise recovery
 /// replaces A's slot with C. A must be revoked although the current
 /// document no longer had it, or a second compromise recovery from the same
@@ -1401,10 +1401,9 @@ const CAP_RULES: &[&str] = CAP_RULE_NAMES
     .0;
 
 /// Spec §7.5: a completion's cost is bounded by the document caps, not by
-/// the account's history. `apply_doc` once scanned every rule id ever
-/// assigned, so (the review's regression) 19 applications of a 16-rule
-/// document (the cap then) pushed a completion past the 400-entry footprint limit, and a
-/// twentieth ordinary application failed at 403. The test host enforces
+/// the account's history. An `apply_doc` that scanned every rule id ever
+/// assigned would push a completion's footprint up with each application of
+/// a document at the rule cap, past the 400-entry limit. The test host enforces
 /// the mainnet limits, so every application and the completion here must
 /// fit, and the completion's footprint must not depend on the churn.
 #[test]

@@ -62,7 +62,6 @@ pub use oracle::{OracleAccount, OracleAccountClient};
 /// The oracle contract lives in its own module: soroban's macros name the
 /// trait impls after the bare trait paths, which must be in scope.
 mod oracle {
-    #![allow(unused_imports)]
     use perch_account_types::{AuthPayload, ContextRule, Signer};
     use perch_smart_account::testutils::apply_doc_full_replace;
     use perch_smart_account::{

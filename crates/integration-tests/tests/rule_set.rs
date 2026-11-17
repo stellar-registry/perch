@@ -7,7 +7,7 @@
 //! (`perch_testkit::rule_set::check`). This file covers what they do not:
 //!
 //! - the constructor's admin rule;
-//! - a document that only reorders a rule's signers (fork issue #22): the
+//! - a document that only reorders a rule's signers: the
 //!   stored rule, the context-rule view and the account's record agree on
 //!   the new order;
 //! - the check reports a stored set that differs from what is installed;
@@ -78,7 +78,7 @@ fn the_constructor_stores_its_admin_rule() {
     assert_eq!(admin.threshold, 1);
 }
 
-/// Fork issue #22: a document that only reorders a rule's signers. A
+/// A document that only reorders a rule's signers. A
 /// context rule keeps its signers in the order given, so the reorder is a
 /// change: the context-rule view, the account's record and the stored rule
 /// all take the new order.

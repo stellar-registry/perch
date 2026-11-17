@@ -124,8 +124,8 @@ pub struct Rule {
     pub not_after_ledger: Option<u32>,
     /// If present, a cumulative spend cap over a rolling window, enforced by a
     /// stateful sibling policy (OZ `spending_limit`) attached alongside the
-    /// interpreter — perch itself is stateless (see the crate-level "Stateless,
-    /// per-invocation semantics" section). Omitted from the canonical form when
+    /// interpreter — perch's argument predicates are stateless (see
+    /// [`ArgPred`]). Omitted from the canonical form when
     /// `None`, so documents without a cap hash exactly as before this field
     /// existed.
     pub cap: Option<CapConstraint>,

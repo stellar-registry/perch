@@ -310,8 +310,8 @@ fn rejects_duplicate_key_inside_signer() {
 
 #[test]
 fn rejects_duplicate_key_inside_tagged_payload() {
-    // Duplicate key inside the buffered content of an internally tagged enum
-    // (a contract scope) must be rejected too.
+    // A duplicate key inside an internally tagged object (a contract scope)
+    // is rejected too.
     let scope = format!(r#"{{"type":"contract","address":"{REGISTRY}","address":"{REGISTRY}"}}"#);
     let input = doc(&scope, ALL_PRINCIPALS, IS_SELF);
     assert_json_err(&input, "duplicate field");
@@ -319,9 +319,8 @@ fn rejects_duplicate_key_inside_tagged_payload() {
 
 #[test]
 fn rejects_duplicate_version_key() {
-    // {"version":2,"version":1}: a last-wins Value pre-check alone would see
-    // only the collapsed 1 and let the document through. The typed parse must
-    // still reject the duplicate.
+    // {"version":2,"version":1} is rejected whichever occurrence a last-wins
+    // or first-wins reader would keep.
     let input = valid().replace(r#""version":1"#, r#""version":2,"version":1"#);
     assert!(
         from_json(&input).is_err(),

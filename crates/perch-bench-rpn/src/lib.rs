@@ -1,8 +1,8 @@
 #![no_std]
 //! Bench-only contract exposing the frozen RPN encoding's validate/eval
-//! as metered wasm entry points for the instruction-count canary
-//! (originally the wire-format benchmark,
-//! <https://github.com/stellar-registry/perch/issues/2>).
+//! as metered wasm entry points for the instruction-count canary. The
+//! wire-format benchmark that chose RPN is
+//! <https://github.com/stellar-registry/perch/issues/2>.
 //!
 //! Never deployed to a network.
 

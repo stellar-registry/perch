@@ -1,6 +1,5 @@
-//! `apply_doc` with a cumulative cap: a capped document — once rejected by the
-//! doc-compiler as `CapUnsupported` — now compiles and installs, its cap in
-//! the stored rule-eval rule beside a context rule that carries no
+//! `apply_doc` with a cumulative cap: a capped document compiles and installs,
+//! its cap in the stored rule-eval rule beside a context rule that carries no
 //! policy. This proves the wiring; the cap's runtime allow/deny semantics
 //! are proven in rule-core's vectors (`perch-rule-eval`'s `vectors.rs`), the
 //! document traces (`rule_core_documents.rs`) and `gate.rs`.
@@ -53,7 +52,6 @@ fn apply_doc_stores_the_cap_in_the_rule_eval_rule() {
     let w = setup();
     let client = w.account_client();
 
-    // Previously `CapUnsupported`; now it compiles and applies.
     let doc = Bytes::from_slice(&w.env, capped_doc(&w, "").as_bytes());
     let hash: BytesN<32> = client.apply_doc(&doc, &0, &None);
     assert_eq!(client.applied_doc_hash(), Some(hash));
@@ -67,8 +65,7 @@ fn apply_doc_stores_the_cap_in_the_rule_eval_rule() {
     assert_eq!(admin.policies.len(), 0);
 
     // Rule 1: the record holds the capped rule's contract and signers, no
-    // policy;
-    // its stored rule allows `transfer` alone, with argument 2 an `i128`,
+    // policy; its stored rule allows `transfer` alone, with argument 2 an `i128`,
     // and carries the cap, metered from that argument.
     let capped = client.get_context_rule(&1);
     assert_eq!(capped.name, SString::from_str(&w.env, "capped"));
@@ -84,7 +81,6 @@ fn apply_doc_rejects_a_cap_token_that_is_not_the_scope() {
     let w = setup();
     // An explicit cap token different from the rule's scope is refused at
     // validation (it would silently meter a different contract).
-    // Any C-address other than TOKEN.
     let mismatched = format!(r#""token": "{}", "#, strkey(&w.fixture_verifiers[1]));
     let doc = Bytes::from_slice(&w.env, capped_doc(&w, &mismatched).as_bytes());
     assert!(w.account_client().try_apply_doc(&doc, &0, &None).is_err());

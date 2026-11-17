@@ -9,20 +9,21 @@
 //! signers against OpenZeppelin's digest, so wallets sign the bytes they
 //! sign for an OpenZeppelin account, and the records `check_auth` charged are
 //! stored.
+//!
 //! Each chosen rule id is read as the stored rule its record holds, among
 //! the account document's records, or its grant's when a grant document
-//! installed it (its tag). `check_auth` reads only the rules its
-//! choices name, so running it over the chosen rules alone gives the verdict
-//! and records of running it over the whole stored set. A chosen id that names no installed rule refuses with
-//! `ContextRuleNotFound` (#3000), as OZ refuses it, which wallets read as a
-//! selection the configuration has since left. rule-eval's refusal of a
-//! chosen rule issued under another grant generation (`StaleGeneration`: a
-//! grant rule a recovery completion wiped) refuses with `StaleGrant`; any
-//! other refusal, a chosen recovery rule, or a batch soroban-facade cannot
-//! read refuses the authorization with `RuleEvalRefused`. The recovery rule's stored form
-//! allows every `apply_doc` the controller could; the controller decides
-//! a completion (`auth::authorize_completion`), and no other authorization
-//! may choose it.
+//! installed it (its tag). `check_auth` reads only the rules its choices
+//! name, so running it over the chosen rules alone gives the verdict and
+//! records of running it over the whole stored set. A chosen id that names
+//! no installed rule refuses with `ContextRuleNotFound` (#3000), as OZ
+//! refuses it, which wallets read as a selection the configuration has since
+//! left. rule-eval's refusal of a chosen rule issued under another grant
+//! generation (`StaleGeneration`: a grant rule a recovery completion wiped)
+//! refuses with `StaleGrant`; any other refusal, a chosen recovery rule, or
+//! a batch soroban-facade cannot read refuses the authorization with
+//! `RuleEvalRefused`. The recovery rule's stored form allows every
+//! `apply_doc` the controller could; the controller decides a completion
+//! (`auth::authorize_completion`), and no other authorization may choose it.
 //!
 //! A capped rule meters the account's own transfers: a context chosen under
 //! a capped rule is refused with `RuleEvalRefused` unless its argument 0 is

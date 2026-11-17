@@ -61,8 +61,6 @@ paths=(
     crates/perch-zk-adapter
     crates/perch-account-factory
     vendor/ultrahonk-soroban-verifier
-    vendor/soroban-sdk-tools vendor/soroban-flux vendor/soroban-poseidon
-    vendor/admin-sep vendor/registry-traits
     circuits
     Cargo.toml Cargo.lock rust-toolchain.toml .cargo
 )

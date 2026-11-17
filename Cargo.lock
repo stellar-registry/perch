@@ -11,6 +11,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "admin-sep"
 version = "0.28.1"
+source = "git+https://github.com/bitswell-hq/theahaco__admin-sep?rev=7ef83abd064899e0e4b2636bd3961dd7b6dde5b3#7ef83abd064899e0e4b2636bd3961dd7b6dde5b3"
 dependencies = [
  "soroban-sdk",
 ]
@@ -2293,6 +2294,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "registry-traits"
 version = "0.1.0"
+source = "git+https://github.com/stellar-registry/contracts?rev=4925aeb68dc41c3152e07c1ab030fff3c06c22d0#4925aeb68dc41c3152e07c1ab030fff3c06c22d0"
 dependencies = [
  "semver",
  "soroban-sdk",
@@ -2720,6 +2722,7 @@ dependencies = [
 [[package]]
 name = "soroban-flux"
 version = "0.1.0"
+source = "git+https://github.com/nidohq/soroban-flux?rev=c486b6c1a3dc66e07d08be1a71e30ec002cb04ba#c486b6c1a3dc66e07d08be1a71e30ec002cb04ba"
 dependencies = [
  "soroban-flux-rs",
  "soroban-sdk",
@@ -2728,8 +2731,7 @@ dependencies = [
 [[package]]
 name = "soroban-flux-attrs"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4df45e0f79a81e49575d06735b62cad640416707a861857c37f3296525f8b8f"
+source = "git+https://github.com/nidohq/soroban-flux?rev=c486b6c1a3dc66e07d08be1a71e30ec002cb04ba#c486b6c1a3dc66e07d08be1a71e30ec002cb04ba"
 dependencies = [
  "soroban-flux-attrs-impl",
 ]
@@ -2737,8 +2739,7 @@ dependencies = [
 [[package]]
 name = "soroban-flux-attrs-impl"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d97635fd8b4f88b15f93402c2b329d02997fe905a7c186d4e4f0d4bc9ccdef16"
+source = "git+https://github.com/nidohq/soroban-flux?rev=c486b6c1a3dc66e07d08be1a71e30ec002cb04ba#c486b6c1a3dc66e07d08be1a71e30ec002cb04ba"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2748,8 +2749,7 @@ dependencies = [
 [[package]]
 name = "soroban-flux-rs"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0aa1ac5938cc3889555907b666e70e612ce32c65744ef6dbea8121b54458ce00"
+source = "git+https://github.com/nidohq/soroban-flux?rev=c486b6c1a3dc66e07d08be1a71e30ec002cb04ba#c486b6c1a3dc66e07d08be1a71e30ec002cb04ba"
 dependencies = [
  "soroban-flux-attrs",
 ]
@@ -2771,6 +2771,7 @@ dependencies = [
 [[package]]
 name = "soroban-poseidon"
 version = "28.0.0"
+source = "git+https://github.com/bitswell-hq/stellar__rs-soroban-poseidon?rev=f2226191bf442dafa9972ca37db8975013d965a2#f2226191bf442dafa9972ca37db8975013d965a2"
 dependencies = [
  "soroban-sdk",
 ]
@@ -2822,6 +2823,7 @@ dependencies = [
 [[package]]
 name = "soroban-sdk-tools"
 version = "0.1.4"
+source = "git+https://github.com/bitswell-hq/BlaineHeffron__soroban-sdk-tools?rev=87748d5fc133c47515094abb9144722aaa92a292#87748d5fc133c47515094abb9144722aaa92a292"
 dependencies = [
  "soroban-sdk",
  "soroban-sdk-tools-macro",
@@ -2830,8 +2832,7 @@ dependencies = [
 [[package]]
 name = "soroban-sdk-tools-macro"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5e6eec3e76c11bc69ebc77d31f7081b90d821a2591fe64f831ee42f88e6106a"
+source = "git+https://github.com/bitswell-hq/BlaineHeffron__soroban-sdk-tools?rev=87748d5fc133c47515094abb9144722aaa92a292#87748d5fc133c47515094abb9144722aaa92a292"
 dependencies = [
  "darling 0.23.0",
  "heck",

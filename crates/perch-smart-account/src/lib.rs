@@ -31,6 +31,8 @@
 //! `__check_auth` checks (`docs/recovery/spec.md` §7.6).
 #![no_std]
 
+extern crate alloc;
+
 use perch_doc_compiler::{
     admin_survives, CompiledDoc, CompiledRule, CompiledZkFactor, DocCompilerClient,
     DocCompilerError, RuleScope,
@@ -45,6 +47,9 @@ use perch_recovery_interface::controller::{
 use perch_recovery_interface::credential::{revocations, Credential};
 use perch_recovery_interface::zk::MembershipPoolClient;
 use perch_recovery_interface::{address_payload, UpgradeSubject};
+/// The stored rule-eval rule ([`PerchSmartAccount::rule_set`]),
+/// re-exported so a deployable can name it for `impl_perch_smart_account!`.
+pub use perch_rule_eval::StoredRule;
 use soroban_sdk::{
     auth::{Context, ContractContext, CustomAccountInterface},
     contractevent, contracttrait, contracttype,
@@ -57,6 +62,7 @@ use stellar_accounts::smart_account::{
     SMART_ACCOUNT_EXTEND_AMOUNT, SMART_ACCOUNT_TTL_THRESHOLD,
 };
 
+mod rule_set;
 mod rules;
 pub use rules::{InstalledPolicy, InstalledRule};
 
@@ -157,8 +163,15 @@ pub enum PerchAccountError {
     ScopeLive,
     /// The document names a credential a scoped document named under a
     /// scope generation a recovery completion has since ended (spec §7.6).
-    /// Last, so every earlier code is unchanged.
     WipedCredential,
+    /// The compiled document carries no model, more than one, a model
+    /// soroban-facade cannot read, or one whose rules or recovery do not
+    /// match the compiled rules one for one.
+    ModelInvalid,
+    /// A rule other than the recovery rule asks for no signer (INV-1), so an
+    /// authorization with no signer at all would satisfy it. Last, so every
+    /// earlier code is unchanged.
+    UnguardedRule,
 }
 
 /// Why `__check_auth` refused before evaluating any rule.
@@ -516,6 +529,11 @@ struct PerchStorage {
     /// by how many rules the account ever had, and an unchanged rule is not
     /// touched at all (`rules`).
     installed_rules: PersistentItem<Vec<InstalledRule>>,
+    /// The rule-eval rule set the installed rules enforce, aligned with
+    /// `installed_rules` (`rule_set`): written with it by the constructor and
+    /// `apply_doc`, absent on an account neither wrote since it was upgraded
+    /// to code that keeps it.
+    rule_set: PersistentItem<Vec<StoredRule>>,
     /// The next upgrade request id. Never reused.
     next_upgrade_id: InstanceItem<u64>,
     /// The configuration revision: 0 after the constructor, advanced by one
@@ -527,6 +545,9 @@ struct PerchStorage {
     scopes: PersistentMap<u32, ScopeRecord>,
     /// Each scoped document's canonical bytes, by scope id.
     scope_docs: PersistentMap<u32, Bytes>,
+    /// Each scoped document's rule-eval rule set, by scope id, aligned with
+    /// its record's rules (`rule_set`).
+    scope_rule_sets: PersistentMap<u32, Vec<StoredRule>>,
     /// The tag of every context rule a scoped document installed, by OZ
     /// rule id; none for the admin document's rules. OZ never reuses a rule
     /// id, so a tag never outlives its rule into another.
@@ -931,6 +952,14 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
         PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e))
     }
 
+    /// The rule-eval rules the installed rules enforce, aligned with
+    /// [`Self::installed_rules`]: entry `i` is what installed rule `i`
+    /// enforces. Empty on an account that has not applied a document since
+    /// it was upgraded to code that keeps them. Nothing evaluates them yet.
+    fn rule_set(e: &Env) -> Vec<StoredRule> {
+        PerchStorage::get_rule_set(e).unwrap_or(Vec::new(e))
+    }
+
     /// OZ's count of the account's context rules, scoped documents' and
     /// expired ones included.
     /// Read-only rule surface, re-exposed here because `SmartAccount` itself
@@ -990,6 +1019,14 @@ pub trait PerchSmartAccount: CustomAccountInterface + SmartAccount {
     /// scopes, so a wallet selects a scoped rule by `(scope, name)`.
     fn scope(e: &Env, scope: u32) -> Option<ScopeRecord> {
         PerchStorage::get_scopes(e, &scope)
+    }
+
+    /// The rule-eval rules the scoped document under `scope` installs,
+    /// aligned with its record's rules (entry `i` is what rule `i`
+    /// enforces), each carrying the scope generation it was applied under.
+    /// Empty when no scoped document has the id. Nothing evaluates them yet.
+    fn scope_rule_set(e: &Env, scope: u32) -> Vec<StoredRule> {
+        PerchStorage::get_scope_rule_sets(e, &scope).unwrap_or(Vec::new(e))
     }
 
     /// The canonical bytes of the scoped document under `scope`, if any.
@@ -1149,6 +1186,17 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     let compiled: CompiledDoc = DocCompilerClient::new(e, &infra::perch_doc_compiler::address(e))
         .try_compile_doc(&doc_json)??;
     check_scoped(e, &me, &compiled)?;
+    let gen = scope_generation(e);
+    let mut excluded = Vec::new(e);
+    if let Some(c) = PerchStorage::get_recovery_controller(e) {
+        excluded.push_back(c);
+    }
+    if let Some(z) = PerchStorage::get_current_zk(e) {
+        excluded.push_back(z.adapter);
+        excluded.push_back(z.pool);
+    }
+    let excluded: alloc::vec::Vec<Address> = excluded.iter().collect();
+    let rule_set = rule_set::lowered_scoped(e, &compiled, &excluded, gen)?;
     for fingerprint in compiled.fingerprints.iter() {
         if PerchStorage::has_revoked(e, &fingerprint) {
             return Err(PerchAccountError::RevokedCredential);
@@ -1156,7 +1204,6 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
     }
     // The credential index: refuse a credential a wiped scope named, and
     // record the rest under this generation.
-    let gen = scope_generation(e);
     let mut unrecorded = Vec::new(e);
     for fingerprint in compiled.fingerprints.iter() {
         match PerchStorage::get_scope_credentials(e, &fingerprint) {
@@ -1207,6 +1254,12 @@ fn apply_scope_doc(e: &Env, scope: u32, doc_json: Bytes) -> Result<BytesN<32>, P
         doc_hash: compiled.doc_hash.clone(),
         rules: next,
     };
+    if PerchStorage::get_scope_rule_sets(e, &scope).as_ref() != Some(&rule_set) {
+        PerchStorage::set_scope_rule_sets(e, &scope, &rule_set);
+        extend_persistent(e, |ttl| {
+            PerchStorage::extend_scope_rule_sets_ttl(e, &scope, ttl, ttl)
+        });
+    }
     if record.as_ref() != Some(&applied) {
         let new_doc = record.as_ref().map(|r| &r.doc_hash) != Some(&compiled.doc_hash);
         PerchStorage::set_scopes(e, &scope, &applied);
@@ -1319,6 +1372,7 @@ fn drop_scope(e: &Env, scope: u32, record: &ScopeRecord) {
     }
     PerchStorage::remove_scopes(e, &scope);
     PerchStorage::remove_scope_docs(e, &scope);
+    PerchStorage::remove_scope_rule_sets(e, &scope);
     index_remove(e, scope);
     ScopeRemoved {
         scope,
@@ -1413,6 +1467,7 @@ fn apply(
     if !admin_survives(&compiled.rules) {
         return Err(PerchAccountError::AdminLockout);
     }
+    let rule_set = rule_set::lowered(e, &compiled)?;
     for fingerprint in compiled.fingerprints.iter() {
         if PerchStorage::has_revoked(e, &fingerprint) {
             return Err(PerchAccountError::RevokedCredential);
@@ -1470,7 +1525,7 @@ fn apply(
         check_unwiped(e, &compiled.fingerprints, scope_generation(e))?;
     }
 
-    let delta = apply_rules(e, &compiled, mode);
+    let delta = apply_rules(e, &compiled, &rule_set, mode);
 
     if let Some(leaf) = &insert {
         MembershipPoolClient::new(e, &leaf.pool).rcv_insert(
@@ -1560,6 +1615,12 @@ pub mod testutils {
         PerchStorage::set_scope_generation(e, &generation);
     }
 
+    /// Overwrite the stored rule set. Run as the account
+    /// (`env.as_contract`).
+    pub fn set_rule_set(e: &Env, rule_set: &Vec<StoredRule>) {
+        PerchStorage::set_rule_set(e, rule_set);
+    }
+
     /// What applying `doc_json` would do to each rule slot, and what the cost
     /// model prices it at, without applying it. Run as the account
     /// (`env.as_contract`).
@@ -1578,7 +1639,14 @@ pub mod testutils {
 /// observable half-migrated state. The recovery rule is not one of
 /// `doc.rules`: it is a zero-signer self-scoped rule whose only policy is the
 /// adopted controller, installed for the compiled configuration's hash.
-fn apply_rules(e: &Env, compiled: &CompiledDoc, mode: rules::Mode) -> rules::DeltaSummary {
+/// `rule_set` (`rule_set::lowered`) is stored beside the records, which come
+/// out of the reconcile in its order.
+fn apply_rules(
+    e: &Env,
+    compiled: &CompiledDoc,
+    rule_set: &Vec<StoredRule>,
+    mode: rules::Mode,
+) -> rules::DeltaSummary {
     let current = PerchStorage::get_installed_rules(e).unwrap_or(Vec::new(e));
     let (desired, params) = rules::desired(e, compiled);
     let (next, sum) = rules::reconcile(e, &current, &desired, &params, mode);
@@ -1587,6 +1655,10 @@ fn apply_rules(e: &Env, compiled: &CompiledDoc, mode: rules::Mode) -> rules::Del
         extend_persistent(e, |ttl| {
             PerchStorage::extend_installed_rules_ttl(e, ttl, ttl)
         });
+    }
+    if PerchStorage::get_rule_set(e).as_ref() != Some(rule_set) {
+        PerchStorage::set_rule_set(e, rule_set);
+        extend_persistent(e, |ttl| PerchStorage::extend_rule_set_ttl(e, ttl, ttl));
     }
     let recovery_rule = next.iter().find(|r| r.recovery).map(|r| r.id);
     if PerchStorage::get_recovery_rule(e) != recovery_rule {
@@ -1624,8 +1696,10 @@ pub fn install_admin(e: &Env, admin_signers: &Vec<Signer>) {
         e,
         &Vec::from_array(e, [rules::admin_rule(e, rule.id, admin_signers)]),
     );
+    PerchStorage::set_rule_set(e, &Vec::from_array(e, [rule_set::admin(e, admin_signers)]));
     extend_persistent(e, |ttl| {
-        PerchStorage::extend_installed_rules_ttl(e, ttl, ttl)
+        PerchStorage::extend_installed_rules_ttl(e, ttl, ttl);
+        PerchStorage::extend_rule_set_ttl(e, ttl, ttl);
     });
 }
 

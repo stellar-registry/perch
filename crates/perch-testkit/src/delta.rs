@@ -17,6 +17,10 @@
 //!   in any order, spells keys in either hex case and cap limits with
 //!   leading zeros or a sign, and [`DocModel::sequence`] advances the ledger
 //!   between documents past the rule expiries it draws.
+//! - After every accepted step of a [`ScopeOp`] sequence, the stored
+//!   rule-eval rule set of the document it applied equals the lowering of
+//!   that document's model and the denotation of what it installed
+//!   ([`crate::rule_set`]); a removed scope keeps none.
 //! - [`DeltaWorld`] holds a delta account and an oracle account side by side
 //!   in one `Env`, with the shared infra, controller, verifier, and address
 //!   pools every generated document draws from.
@@ -64,7 +68,7 @@ mod oracle {
     use perch_smart_account::testutils::{apply_doc_full_replace, apply_doc_with, Mode};
     use perch_smart_account::{
         check_auth, install_admin, AccountCapabilities, AccountConfiguration, FreezeGate,
-        InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, ScopeRecord,
+        InfraPins, InstalledRule, PerchAccountError, PerchSmartAccount, ScopeRecord, StoredRule,
         UpgradeRequest,
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
@@ -997,12 +1001,26 @@ impl ScopeModel {
                 raw_entries(&w.env) == entries,
                 "(d) the refused {op:?} changed the ledger ({e})"
             ),
-            (Ok(()), ScopeOp::Admin(d)) => self.admin = Some(d.clone()),
+            (Ok(()), ScopeOp::Admin(d)) => {
+                self.admin = Some(d.clone());
+                if let Err(x) = crate::rule_set::check(&w.env, a) {
+                    panic!("the admin rule set after {op:?}: {x}");
+                }
+            }
             (Ok(()), ScopeOp::Apply(s, d)) => {
                 self.scopes.insert(*s, d.clone());
+                if let Err(x) = crate::rule_set::check_scope(&w.env, a, *s) {
+                    panic!("scope {s}'s rule set after {op:?}: {x}");
+                }
             }
             (Ok(()), ScopeOp::Remove(s)) => {
                 self.scopes.remove(s);
+                assert!(
+                    PerchAccountClient::new(&w.env, a)
+                        .scope_rule_set(s)
+                        .is_empty(),
+                    "{op:?} left scope {s}'s rule set"
+                );
             }
         }
         if named.is_some() {

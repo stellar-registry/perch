@@ -22,6 +22,7 @@ extern crate alloc;
 use perch_program::InstallParams;
 use perch_recovery_interface::credential::{Credential, ReplacementSet};
 use perch_recovery_interface::RecoveryAction;
+pub use perch_rule_eval::CompiledModel;
 use soroban_sdk::{contractclient, contracttype, Address, Bytes, BytesN, Env, String, Vec};
 use soroban_sdk_tools::scerr;
 use stellar_accounts::smart_account::Signer;
@@ -56,7 +57,7 @@ use soroban_sdk::{contract, contractimpl, IntoVal, Map, TryFromVal, Val};
 /// next.
 pub const MAX_DOC_SIGNERS: u32 = 8;
 /// See [`MAX_DOC_SIGNERS`].
-pub const MAX_DOC_RULES: u32 = 11;
+pub const MAX_DOC_RULES: u32 = 10;
 /// See [`MAX_DOC_SIGNERS`].
 pub const MAX_DOC_CANONICAL_BYTES: u32 = 8_192;
 /// The longest rule name, in bytes: OZ's context-rule name limit. Checked
@@ -190,6 +191,12 @@ pub struct CompiledDoc {
     /// enrolls account recovery, and the applier syncs this configuration to
     /// the controller instance it names (`docs/recovery/`).
     pub recovery: Vec<CompiledRecoveryConfig>,
+    /// The document as rule-core's lowering reads it (`rule_eval::Doc`, in
+    /// host types): one entry. A `Vec` for the same reason as `recovery`.
+    /// The applying account lowers it with `rule_eval::lower` and stores the
+    /// result beside its installed rules; `model.rules[i]` is `rules[i]`'s
+    /// document rule.
+    pub model: Vec<CompiledModel>,
 }
 
 /// What `derive_target` returns: the recovery target the controller binds
@@ -490,6 +497,9 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
     if let Some(r) = &doc.recovery {
         recovery.push_back(to_compiled_recovery(e, r)?);
     }
+    // Every document `compile` lowers has a model: what `model_of` refuses,
+    // `compile` refused first.
+    let model = perch_rule_eval::model_of(e, doc).map_err(|_| DocCompilerError::DocCompile)?;
 
     Ok(CompiledDoc {
         doc_hash,
@@ -497,6 +507,7 @@ fn compile_parsed(e: &Env, doc: &perch_ir::PolicyDoc) -> Result<CompiledDoc, Doc
         fingerprints: fingerprints(e, &canonical_credentials(e, &doc.signers)?)?,
         rules,
         recovery,
+        model: Vec::from_array(e, [model]),
     })
 }
 

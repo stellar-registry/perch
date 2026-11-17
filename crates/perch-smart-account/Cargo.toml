@@ -22,6 +22,11 @@ perch-doc-compiler = { version = "0.3.5", path = "../perch-doc-compiler", defaul
 # recovery types. A plain library: no controller code is linked into account
 # wasm, and neither deployable pins the other.
 perch-recovery-interface = { version = "0.1.0", path = "../perch-recovery-interface" }
+# The rule-eval rule set the account stores: rule-core's lowering (rule-eval)
+# of the compiled document's model, held in `perch-rule-eval`'s storage
+# mirrors, its addresses read through soroban-facade.
+rule-eval = { workspace = true }
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval" }
 # The pure `registry_id + wasm_hash → address` derivation `apply_doc` uses to
 # resolve the compiler + interpreter from the pinned constructorless-registry id.
 perch-registry-resolve = { version = "0.1.1", path = "../perch-registry-resolve" }

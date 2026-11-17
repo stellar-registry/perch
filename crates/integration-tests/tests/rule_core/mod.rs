@@ -31,6 +31,12 @@
 //! so the account is shown exactly the trace's authorization, and the
 //! account's scope generation is set to the authorization's.
 //!
+//! After every `apply_doc` and `apply_scope`, the account's stored
+//! rule-eval rule set for that document must equal both the lowering of the
+//! document's model and the denotation of the rules OZ, the interpreter and
+//! the spending limit hold (`perch_testkit::rule_set`); a difference fails
+//! the run.
+//!
 //! A scoped trace's document goes through `apply_scope` instead: the harness
 //! applies the trace's admin document with `apply_doc`, sets the scope
 //! generation to the one the trace issues the document in, and applies the
@@ -199,6 +205,10 @@ pub struct Run {
     /// Authorizations of an empty batch. No transaction makes the host call
     /// `__check_auth` with no context, so these call it directly.
     pub empty: usize,
+    /// The stored rule sets checked (one per accepted `apply_doc` or
+    /// `apply_scope`), and the rules in them.
+    pub rule_sets: usize,
+    pub stored_rules: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -911,14 +921,27 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
     // while the account still serves its views.
     e.ledger().with_mut(|l| l.sequence_number = 0);
     let missing = u32::MAX;
+    let (mut rule_sets, mut stored_rules) = (0, 0);
+    let mut rule_set = |what: &str, scope: Option<u32>| -> Result<(), String> {
+        let c = match scope {
+            None => perch_testkit::rule_set::check(&e, &w.account),
+            Some(s) => perch_testkit::rule_set::check_scope(&e, &w.account, s),
+        }
+        .map_err(|x| format!("the rule set after {what}: {x}"))?;
+        rule_sets += 1;
+        stored_rules += c.rules;
+        Ok(())
+    };
     let (ids, recovery_rule) = match &t.scoped {
         None => {
             if start == Start::AfterPredecessor {
                 w.apply_bytes(&canonical(&lab.predecessor(t)), 0)
                     .map_err(|x| format!("apply_doc refuses the predecessor: {x:?}"))?;
+                rule_set("the predecessor", None)?;
             }
             w.apply_bytes(&canonical(&doc), 0)
                 .map_err(|x| format!("apply_doc refuses the document: {x:?}"))?;
+            rule_set("the document", None)?;
             let mut ids: Vec<u32> = (0..doc.rules.len())
                 .map(|i| w.rule_id(&w.account, &format!("r{i}")))
                 .collect();
@@ -931,15 +954,17 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         Some(scoped) => {
             w.apply_bytes(&canonical(&lab.doc(&scoped.admin)?), 0)
                 .map_err(|x| format!("apply_doc refuses the admin document: {x:?}"))?;
+            rule_set("the admin document", None)?;
             let (rule, key) = lab.scope_authority(&scoped.admin)?;
             let rule = w.rule_id(&w.account, &rule);
             set_generation(&w, &scoped.generation)?;
             if start == Start::AfterPredecessor {
                 apply_scope(&w, rule, &key, &canonical(&lab.scoped_predecessor(t)))
                     .map_err(|x| format!("apply_scope refuses the predecessor: {x:?}"))?;
+                rule_set("the scoped predecessor", Some(SCOPE))?;
             }
             match apply_scope(&w, rule, &key, &canonical(&doc)) {
-                Ok(_) => {}
+                Ok(_) => rule_set("the scoped document", Some(SCOPE))?,
                 Err(Ok(PerchAccountError::ScopeEscalation)) => {
                     return Ok(Run {
                         lowered,
@@ -949,6 +974,8 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
                         delegated: 0,
                         external: 0,
                         empty: 0,
+                        rule_sets,
+                        stored_rules,
                     })
                 }
                 Err(x) => return Err(format!("apply_scope refuses the document: {x:?}")),
@@ -987,6 +1014,8 @@ pub fn run(t: &Trace, start: Start) -> Result<Run, String> {
         delegated: 0,
         external: 0,
         empty: 0,
+        rule_sets,
+        stored_rules,
     };
     for (i, a) in t.authorizations.iter().enumerate() {
         e.ledger().with_mut(|l| l.sequence_number = a.now);

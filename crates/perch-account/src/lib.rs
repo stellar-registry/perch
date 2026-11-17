@@ -18,7 +18,7 @@
 #[allow(unused_imports)]
 use perch_smart_account::{ContextRule, Signer};
 #[allow(unused_imports)]
-use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
+use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec};
 
 #[allow(unused_imports)]
 pub use perch_smart_account::{

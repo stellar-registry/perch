@@ -199,6 +199,7 @@ fn admin_survives_requires_an_unbounded_admin_rule() {
                 v.push_back(m);
                 v
             }),
+        normal_form: true,
     };
     assert!(
         admin_survives(&doc(None, &all, 1)),

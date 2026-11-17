@@ -26,7 +26,10 @@
 //! [`check_scope`] checks a scoped document's stored set the same way: the
 //! lowering is `rule_eval::lower_scoped` of the scope's model under the
 //! generation its record carries, and each denoted rule carries that
-//! generation.
+//! generation. The account keeps no scoped document's text: the check reads
+//! it as [`crate::rebuild`] gives it back from the scope's records and
+//! signer ids, which must hash to the stored `doc_hash`, so every scoped
+//! document a suite applies also rebuilds.
 //!
 //! Run each at the ledger the apply it checks ran at: the lowering's expiry
 //! drop is computed at the current ledger.
@@ -179,9 +182,9 @@ pub fn check_scope(e: &Env, account: &Address, scope: u32) -> Result<Checked, St
     let me = address(e, account).ok_or("the account's address")?;
     let record = client.scope(&scope).ok_or(format!("no scope {scope}"))?;
     let stored: Vec<StoredRule> = client.scope_rule_set(&scope).iter().collect();
-    let canonical = client
-        .scope_doc(&scope)
-        .ok_or(format!("scope {scope} has no document"))?;
+    let canonical = crate::rebuild::scope_text(e, account, scope)
+        .map_err(|x| format!("scope {scope}'s text: {x}"))?;
+    let canonical = Bytes::from_slice(e, canonical.as_bytes());
     let (doc, model) = read_doc(e, &canonical)?;
     let mut excluded = std::vec![me.clone()];
     if let Some(c) = client.recovery_controller() {

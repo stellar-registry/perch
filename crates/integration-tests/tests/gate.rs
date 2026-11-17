@@ -6,14 +6,13 @@
 //! `authenticate` checks the signers:
 //!
 //! - the stored rule alone decides what its rule id allows: one that
-//!   allows less refuses (`RuleEvalRefused`), and one that names a signer
-//!   the context rule does not lets that signer authorize;
+//!   allows less refuses (`RuleEvalRefused`), and one that names another
+//!   signer lets that signer authorize, and the rule's record reads it;
 //! - a chosen id that names no installed rule fails with OZ's
 //!   `ContextRuleNotFound`, and choosing the recovery rule outside a
 //!   completion with `RuleEvalRefused`;
 //! - a recovery completion is left to the controller, whatever the stored
-//!   set says, and even with none stored, when nothing else is authorized
-//!   (`RuleEvalRefused`);
+//!   rules say;
 //! - each capped rule's spending record is charged by rule-eval, kept by an
 //!   edit that leaves the rule's id and cap alone, and dropped when the cap
 //!   changes, the rule is replaced or removed, or its scope is removed.
@@ -24,9 +23,7 @@ use perch_account::{PerchAccountError, PerchAuthError};
 use perch_account_types::{AuthPayload, Signer};
 use perch_recovery::EvidenceDomain;
 use perch_recovery_interface::RecoveryAction;
-use perch_smart_account::testutils::{
-    remove_rule_set, set_rule_set, set_scope_rule_set, spend_record,
-};
+use perch_smart_account::testutils::{set_rule_set, set_scope_rule_set, spend_record};
 use perch_testkit::rule_set::{check_records, Records};
 use soroban_sdk::xdr::{ContractEventBody, ScAddress, ScError, ScVal};
 use soroban_sdk::{
@@ -131,7 +128,7 @@ fn capped_doc(w: &World, token: &Address, signers: &[&str], caps: &[(&str, u32)]
 /// `key`.
 fn capped_grant(w: &World, token: &Address, name: &str, key: &Address, limit: u32) -> Bytes {
     let json = format!(
-        r#"{{"version":1,"network":"{}","signers":[{{"id":"k","address":"{}"}}],"rules":[{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"threshold","m":1,"signers":["k"]}},"functions":["transfer"],"cap":{{"limit":"{limit}","period-ledgers":100}}}}]}}"#,
+        r#"{{"version":1,"network":"{}","signers":[{{"id":"k","address":"{}"}}],"rules":[{{"name":"{name}","scope":{{"type":"contract","address":"{}"}},"principals":{{"type":"all","signers":["k"]}},"functions":["transfer"],"cap":{{"limit":"{limit}","period-ledgers":100}}}}]}}"#,
         perch_testkit::FIXTURE_NETWORK,
         strkey(key),
         strkey(token)
@@ -209,17 +206,17 @@ fn the_stored_rule_alone_decides_what_its_oz_rule_allows() {
     assert!(!w.activity());
     assert_eq!(refusal(&w), rule_eval_refused());
 
-    // A stored rule that names a signer the context rule does not: the
-    // signer is only authenticated.
+    // A stored rule that names another signer: the rule's record reads its
+    // signers from it, and the signer authorizes.
     let device = Signer::Delegated(w.device.clone());
     restore(&w, "target", |r| {
         r.signers.push_back(device);
         r.threshold = 1;
     });
-    let oz = w
+    let rule = w
         .client()
         .get_context_rule(&w.rule_id(&w.account, "target"));
-    assert_eq!(oz.signers.len(), 1);
+    assert_eq!(rule.signers.len(), 2);
     assert!(w.activity_as(&w.device));
 
     // Applying a document stores the set anew.
@@ -291,28 +288,6 @@ fn a_recovery_completion_is_left_to_the_controller() {
     assert!(w.activity_as(&new_owner));
     tamper(&w, "target");
     assert!(!w.activity_as(&new_owner));
-}
-
-#[test]
-fn without_a_stored_set_the_account_authorizes_nothing_but_a_completion() {
-    let w = world();
-    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
-    w.env.as_contract(&w.account, || remove_rule_set(&w.env));
-    assert!(!w.activity());
-    assert_eq!(refusal(&w), rule_eval_refused());
-
-    let new_owner = w.new_key();
-    let replacements = w.replacements(&new_owner, None);
-    let source = w.client().applied_doc().unwrap();
-    let id = w.ctl().begin_lost_key(&w.account, &replacements);
-    let target = w.target_bytes(RecoveryAction::LostKey, &source, &replacements);
-    w.guardian(0, id, EvidenceDomain::Initiate);
-    w.guardian(1, id, EvidenceDomain::Initiate);
-    w.advance(DELAY);
-    w.complete(&target)
-        .expect("a completion never reads the stored set");
-    // The completion stored the target's set.
-    assert!(w.activity_as(&new_owner));
 }
 
 #[test]

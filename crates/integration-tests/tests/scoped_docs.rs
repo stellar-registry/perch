@@ -228,9 +228,16 @@ fn a_scoped_grant_authorizes_its_contract_until_remove_scope_revokes_it() {
     let record = w.client().scope(&4).unwrap();
     assert_eq!((record.gen, record.doc_hash.clone()), (0, hash.clone()));
     assert_eq!(record.rules.len(), 1);
+    // The account keeps the signer ids, not the text, and they give the
+    // text back.
     assert_eq!(
-        w.client().scope_doc(&4),
-        Some(w.compiler().compile_doc(&doc).canonical)
+        w.client().scope_signer_ids(&4),
+        Some(vec![&w.env, soroban_sdk::String::from_str(&w.env, "k")])
+    );
+    let text = perch_testkit::rebuild::scope_text(&w.env, &w.account, 4).unwrap();
+    assert_eq!(
+        Bytes::from_slice(&w.env, text.as_bytes()),
+        w.compiler().compile_doc(&doc).canonical
     );
     assert_eq!(w.client().scope_count(), 1);
     assert_eq!(w.client().scopes(&0, &10), vec![&w.env, 4u32]);
@@ -251,7 +258,7 @@ fn a_scoped_grant_authorizes_its_contract_until_remove_scope_revokes_it() {
     assert!(!call_via(&w, &app, id), "revoked");
     assert!(!exists(&w, id) && !has_tag(&w, id));
     assert_eq!(w.client().scope(&4), None);
-    assert_eq!(w.client().scope_doc(&4), None);
+    assert_eq!(w.client().scope_signer_ids(&4), None);
     assert_eq!(w.client().scope_count(), 0);
     assert_eq!(
         err(remove_scope_as(&w, &w.owner, 4)),
@@ -578,6 +585,37 @@ fn a_completion_wipes_every_scope_and_anyone_collects_them() {
     assert_eq!(
         err(w.client().try_gc_scope(&2)),
         PerchAccountError::ScopeLive
+    );
+}
+
+/// A wiped scope's rule is refused by rule-eval's generation check on its
+/// stored rule (`StaleScope`), after the account's own gate: one selected for
+/// a call on a recovery controller adopted after its scope was applied is
+/// refused as an escalation first.
+#[test]
+fn a_wiped_rule_is_refused_by_its_stored_generation_after_the_escalation_gate() {
+    let w = world();
+    w.enroll(&w.doc(None));
+    let k = w.new_key();
+    apply_scope(
+        &w,
+        1,
+        &scoped(
+            &w,
+            &[("k", &k)],
+            &[("game", &w.target, "k"), ("ctl", &w.controller, "k")],
+        ),
+    )
+    .unwrap();
+    let (game, ctl) = (scoped_id(&w, 1, "game"), scoped_id(&w, 1, "ctl"));
+    w.enroll(&w.doc(Some(w.recovery("loss", Mode::Guardian))));
+    let (_, _, target) = authorized_lost_key(&w);
+    w.advance(DELAY);
+    w.complete(&target).unwrap();
+    assert_eq!(check_auth_selecting(&w, game), stale());
+    assert_eq!(
+        check_auth_on(&w, &w.controller, ctl),
+        Err(PerchAuthError::ScopeEscalation.into())
     );
 }
 

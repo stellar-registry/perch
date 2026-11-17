@@ -68,13 +68,26 @@ the owner chooses (one per app grant, say), and returns its `doc_hash`
   pool, or a rule whose `functions` names a guardian approval, so no scoped
   document reaches the admin document's rules, recovery, upgrades, or
   guardian approvals.
+- It refuses (`NotNormalForm`) a document that is not in normal form. The
+  compiler reports what the text shows (`CompiledDoc::normal_form`,
+  `perch_ir::normal_form`): keys in lowercase hex, cap limits written as
+  plain decimals, no cap token, no `threshold` asking every signer it names
+  (write `all`), every capped rule's functions exactly `["transfer"]`, no
+  `string-in` value over 256 bytes, and every declared signer named by a
+  rule, the signers declared in the order the rules first name them. The
+  account adds what only it can see: no `address-eq` naming the account
+  (write `is-self`) and no rule whose `not-after-ledger` has already been
+  reached, which is refused rather than dropped.
 - It refuses (`WipedCredential`) a credential a scoped document named before
   the last completed recovery, and records every credential it names under
   the current scope generation.
 - The document is compiled under the same caps as any document and reconciled
   against this scope's records only. Every rule it installs is tagged with
-  the scope and the current scope generation, so applying over a wiped scope
-  revives it with the new rules.
+  the scope, and its stored rule carries the current scope generation, so
+  applying over a wiped scope revives it with the new rules.
+- It keeps the document's signer ids, not its text. Each normal-form
+  document is the one document its stored rules lower from, so its records
+  and signer ids give the text back ("Views", `scope_signer_ids`).
 - It calls no controller, and leaves the applied `doc_hash` and the revision
   alone.
 
@@ -117,7 +130,9 @@ as the account (spec §15).
   the admin document installed, with its id; `apply_doc` matches the
   document's rules against these. `rule_set` is aligned with it: entry `i` is
   the rule-eval rule installed rule `i` enforces, and what `__check_auth`
-  evaluates.
+  evaluates. The account stores each rule once, as one record holding its
+  id, name and policies and its rule-eval rule; a rule's scope, signers and
+  last ledger in `installed_rules` are its rule-eval rule's.
 - **`get_context_rules_count`, `get_context_rule`.** The account's rules in
   OZ's `ContextRule` shape, read from its records (the admin document's and
   every scope's). A rule keeps its id while it is edited in place and gets a
@@ -133,11 +148,15 @@ as the account (spec §15).
 - **`credential_generation`.** The last scope generation a scoped document
   named this credential fingerprint under. Once `scope_generation` is past
   it, no document may name the credential (spec §7.6).
-- **`scope`, `scope_rule_set`, `scope_doc`.** A scoped document's record, its
-  rule-eval rules (aligned with the record's rules, each carrying the scope
-  generation it was applied under; empty for an unknown id), and its
-  canonical bytes, whose `sha256` is its `doc_hash`. Rule names repeat across
-  scopes, so a wallet selects a scoped rule by `(scope, name)`.
+- **`scope`, `scope_rule_set`, `scope_signer_ids`.** A scoped document's
+  record, its rule-eval rules (aligned with the record's rules, each
+  carrying the scope generation it was applied under; empty for an unknown
+  id), and its signer ids in declaration order. The account does not store
+  the document's text: the three give it back, since the account applies a
+  scoped document only in normal form. perch-js's `rebuildScopeDoc` (and
+  `readScopeDoc`, which reads the three) rebuilds it and trusts it only once
+  its `sha256` is the record's `doc_hash`. Rule names repeat across scopes,
+  so a wallet selects a scoped rule by `(scope, name)`.
 - **`scopes(start, count)`.** The scope ids at positions
   `start..start + count` of the index (fewer at its end), wiped ones
   included. Removing a scope moves the last id into its position, so a
@@ -230,14 +249,16 @@ recorded when a controller is adopted, and passed back as
   parameters are unchanged is left alone.
 - **`ScopeRecord.gen`** is the scope generation the scoped document was
   applied under. Once `scope_generation` has moved past it, a recovery
-  completion has wiped the scope: its rules authorize nothing, and anyone may
-  remove them with `gc_scope`.
+  completion has wiped the scope: its rules authorize nothing
+  (`StaleScope`, from rule-eval's generation check on their stored rules),
+  and anyone may remove them with `gc_scope`.
 
 ## Events
 
 Rule changes emit no event of their own, so `DocApplied` and
-`ScopeApplied`, with the applied document `applied_doc` or `scope_doc`
-serves, are the whole record of a change. The constructor emits
+`ScopeApplied`, with the applied document (`applied_doc` serves the admin
+document; a scope's records and signer ids rebuild a scoped one), are the
+whole record of a change. The constructor emits
 `context_rule_added` for its admin rule (see "Constructor"). `UpgradeDropped` is emitted when a scheduled upgrade is cancelled,
 replaced by a newer request, found stale at execution, or cleared by a
 recovery.
@@ -262,6 +283,13 @@ their docs land in the account's spec too.
   match the compiled rules one for one.
 - **`UnguardedRule`.** A rule other than the recovery rule asks for no signer
   (INV-1), so an authorization with no signer at all would satisfy it.
+- **`NotNormalForm`.** `apply_scope` was given a document outside normal form
+  ("`apply_scope`"). Each refused form either has a normal spelling that
+  stores the same rules (lowercase hex, a plain decimal limit, no token,
+  `all`, `is-self`, the declarations reordered or the unnamed ones dropped)
+  or is a rule that would authorize nothing: a capped rule on functions
+  other than `transfer`, a `string-in` value no argument can match, a rule
+  already expired.
 - **`Compiler_KeyNotCanonicalizable`.** Either the verifier could not
   canonicalize the key at all, or the declared bytes differ from the
   canonical form it returns (for example a WebAuthn key carrying a

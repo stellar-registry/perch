@@ -9,16 +9,17 @@
 //! signers against OpenZeppelin's digest, so wallets sign the bytes they
 //! sign for an OpenZeppelin account, and the records `authorize` charged are
 //! stored.
-//! Each chosen rule id is read as the stored rule at its record's position,
-//! in the admin document's set when it is one of `installed_rules`, in its
-//! scope's set when a scoped document installed it (its `ScopeTag`). `authorize`
-//! reads only the rules its choices name, so running it over the chosen
-//! rules alone gives the verdict and records of running it over the whole
-//! stored set. A chosen id that names no installed rule refuses with
+//! Each chosen rule id is read as the stored rule its record holds, among
+//! the admin document's records, or its scope's when a scoped document
+//! installed it (its tag). `authorize` reads only the rules its
+//! choices name, so running it over the chosen rules alone gives the verdict
+//! and records of running it over the whole stored set. A chosen id that names no installed rule refuses with
 //! `ContextRuleNotFound` (#3000), as OZ refuses it, which wallets read as a
-//! selection the configuration has since left. A refusal, a chosen recovery
-//! rule, or a batch soroban-facade cannot read refuses the authorization
-//! with `RuleEvalRefused`. The recovery rule's stored form
+//! selection the configuration has since left. rule-eval's refusal of a
+//! chosen rule issued under another scope generation (`StaleGeneration`: a
+//! scoped rule a recovery completion wiped) refuses with `StaleScope`; any
+//! other refusal, a chosen recovery rule, or a batch soroban-facade cannot
+//! read refuses the authorization with `RuleEvalRefused`. The recovery rule's stored form
 //! allows every `apply_doc` the controller could; the controller decides
 //! a completion (`auth::authorize_completion`), and no other authorization
 //! may choose it.
@@ -30,7 +31,7 @@
 
 use alloc::vec::Vec;
 
-use perch_rule_eval::{convert, mirror, StoredRecord, StoredRule};
+use perch_rule_eval::{convert, mirror, StoredCap, StoredRecord};
 use soroban_sdk::auth::Context;
 use soroban_sdk::crypto::Hash;
 use soroban_sdk::xdr::ToXdr;
@@ -41,7 +42,7 @@ use perch_account_types::{AuthPayload, SmartAccountError};
 use crate::auth::{
     authenticate, SMART_ACCOUNT_EXTEND_AMOUNT as EXTEND, SMART_ACCOUNT_TTL_THRESHOLD as THRESHOLD,
 };
-use crate::{extend_persistent, scope_generation, InstalledRule, PerchAuthError, PerchStorage};
+use crate::{extend_persistent, scope_generation, PerchAuthError, PerchStorage, RuleRecord};
 
 fn refused() -> soroban_sdk::Error {
     PerchAuthError::RuleEvalRefused.into()
@@ -49,11 +50,12 @@ fn refused() -> soroban_sdk::Error {
 
 /// Rule-eval's verdict on the authorization, once every payload signer
 /// has authenticated, storing every capped chosen rule's record when it
-/// accepts (module docs). `admin` is the stored admin set, `recovery` the
-/// recovery rule's id, and `bound` the account-bound signature payload.
+/// accepts (module docs). `admin` is the admin document's records,
+/// `recovery` the recovery rule's id, and `bound` the account-bound
+/// signature payload.
 pub(crate) fn authorize(
     e: &Env,
-    admin: &SVec<StoredRule>,
+    admin: &SVec<RuleRecord>,
     recovery: Option<u32>,
     bound: &Hash<32>,
     payload: &AuthPayload,
@@ -61,7 +63,6 @@ pub(crate) fn authorize(
 ) -> Result<(), soroban_sdk::Error> {
     PerchStorage::extend_rule_set_ttl(e, THRESHOLD, EXTEND);
     let admin = admin.to_vals();
-    let mut installed: Option<SVec<InstalledRule>> = None;
     let mut ids: Vec<u32> = Vec::new();
     let mut rules: Vec<rule_eval::Rule> = Vec::new();
     let mut records: Vec<rule_eval::SpendRecord> = Vec::new();
@@ -73,8 +74,7 @@ pub(crate) fn authorize(
         let j = match ids.iter().position(|x| *x == id) {
             Some(j) => j,
             None => {
-                let v = stored_rule(e, id, &admin, &mut installed)
-                    .ok_or(SmartAccountError::ContextRuleNotFound)?;
+                let v = stored_rule(e, id, &admin).ok_or(SmartAccountError::ContextRuleNotFound)?;
                 let rule = mirror::rule(e, v).ok_or_else(refused)?;
                 let record = match rule.cap {
                     Some(_) => record(e, id),
@@ -99,7 +99,10 @@ pub(crate) fn authorize(
         e.ledger().sequence(),
         scope_generation(e),
     )
-    .map_err(|_| refused())?;
+    .map_err(|r| match r {
+        rule_eval::Refusal::StaleGeneration => PerchAuthError::StaleScope.into(),
+        _ => refused(),
+    })?;
     // OZ's digest: the bound payload with the chosen ids, so a signature
     // cannot be moved to other rules.
     let mut preimage = bound.to_bytes().to_bytes();
@@ -129,33 +132,31 @@ fn same(a: &rule_eval::SpendRecord, b: &rule_eval::SpendRecord) -> bool {
             .all(|(x, y)| x.ledger == y.ledger && x.amount == y.amount)
 }
 
-/// The host value of the stored rule rule `id` enforces: the entry at
-/// its position in its scope's stored set when a scoped document installed
-/// it, otherwise in `admin` at its position in `installed_rules` (read once,
-/// into `installed`). Every entry read is extended, as the stored sets are
-/// what authorizes.
-fn stored_rule(
-    e: &Env,
-    id: u32,
-    admin: &SVec<Val>,
-    installed: &mut Option<SVec<InstalledRule>>,
-) -> Option<Val> {
-    if let Some(tag) = PerchStorage::get_scope_tags(e, &id) {
-        let record = PerchStorage::get_scopes(e, &tag.scope)?;
-        let set = PerchStorage::get_scope_rule_sets(e, &tag.scope)?;
-        PerchStorage::extend_scopes_ttl(e, &tag.scope, THRESHOLD, EXTEND);
-        PerchStorage::extend_scope_rule_sets_ttl(e, &tag.scope, THRESHOLD, EXTEND);
-        return set.to_vals().get(position(&record.rules, id)?);
+/// The host value of the stored rule rule `id` enforces: the one its record
+/// holds, among its scope's records when a scoped document installed it,
+/// otherwise among `admin`. A scope's record is extended as it is read, as
+/// the records are what authorizes.
+fn stored_rule(e: &Env, id: u32, admin: &SVec<Val>) -> Option<Val> {
+    if let Some(scope) = PerchStorage::get_scope_tags(e, &id) {
+        let record = PerchStorage::get_scopes(e, &scope)?;
+        PerchStorage::extend_scopes_ttl(e, &scope, THRESHOLD, EXTEND);
+        return rule_of(e, &record.rules.to_vals(), id);
     }
-    if installed.is_none() {
-        *installed = Some(PerchStorage::get_installed_rules(e)?);
-        PerchStorage::extend_installed_rules_ttl(e, THRESHOLD, EXTEND);
-    }
-    admin.get(position(installed.as_ref()?, id)?)
+    rule_of(e, admin, id)
 }
 
-fn position(rules: &SVec<InstalledRule>, id: u32) -> Option<u32> {
-    rules.iter().position(|r| r.id == id).map(|i| i as u32)
+/// The `rule` field of the record of rule `id` among `records`, the host
+/// values of `RuleRecord`s: each is read as a map of its fields, so the
+/// stored rule reaches `mirror::rule` as it is stored.
+fn rule_of(e: &Env, records: &SVec<Val>, id: u32) -> Option<Val> {
+    for v in records.iter() {
+        let record = Map::<Symbol, Val>::try_from_val(e, &v).ok()?;
+        let this = u32::try_from_val(e, &record.get(symbol_short!("id"))?).ok()?;
+        if this == id {
+            return record.get(symbol_short!("rule"));
+        }
+    }
+    None
 }
 
 /// The spending record the account keeps for rule `id` (absent is
@@ -179,35 +180,20 @@ pub(crate) fn drop_record(e: &Env, id: u32) {
     }
 }
 
-/// After an apply took the rules `current` (stored as `before`; a scope's
-/// first apply has neither) to `next` (stored as `after`): drop the record
-/// of every rule of `current` that left, or that kept its id under another
-/// cap. A rule stored without a cap keeps no record, and a rule whose stored
-/// rule `before` does not hold has its record dropped.
-pub(crate) fn drop_records(
-    e: &Env,
-    current: &SVec<InstalledRule>,
-    before: Option<&SVec<StoredRule>>,
-    next: &SVec<InstalledRule>,
-    after: &SVec<StoredRule>,
-) {
-    let before = before.map(|b| b.to_vals());
-    let after = after.to_vals();
-    for (i, c) in current.iter().enumerate() {
-        let old = before.as_ref().and_then(|b| cap(e, b.get(i as u32)));
-        if old.as_ref().is_some_and(|v| v.is_empty()) {
+/// After an apply took the records `current` to `next`: drop the spending
+/// record of every capped rule of `current` that left, or that kept its id
+/// under another cap. A rule stored without a cap keeps no record.
+pub(crate) fn drop_records(e: &Env, current: &SVec<RuleRecord>, next: &SVec<RuleRecord>) {
+    let next: Vec<(u32, SVec<StoredCap>)> = next.iter().map(|n| (n.id, n.rule.cap)).collect();
+    for c in current.iter() {
+        if c.rule.cap.is_empty() {
             continue;
         }
-        let new = position(next, c.id).and_then(|j| cap(e, after.get(j)));
-        if old.is_none() || new != old {
+        if !next
+            .iter()
+            .any(|(id, cap)| *id == c.id && *cap == c.rule.cap)
+        {
             drop_record(e, c.id);
         }
     }
-}
-
-/// The `cap` field of the stored rule whose host value is `v`: its zero or
-/// one caps.
-fn cap(e: &Env, v: Option<Val>) -> Option<SVec<Val>> {
-    let rule = Map::<Symbol, Val>::try_from_val(e, &v?).ok()?;
-    SVec::try_from_val(e, &rule.get(symbol_short!("cap"))?).ok()
 }

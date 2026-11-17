@@ -15,7 +15,11 @@
 //!   included), the same views (`configuration`, the records, the stored
 //!   rule sets, every scope, the rule count, and `get_context_rule` for
 //!   every id ever given, its signer and policy ids aside), and the same
-//!   events.
+//!   events. Each scope's text, which that build stores (`scope_doc`), is
+//!   the one this build rebuilds from its records and signer ids
+//!   (`perch_testkit::rebuild`). A scoped document not in normal form, which
+//!   that build applies and this one refuses (`NotNormalForm`), runs on this
+//!   build alone, and must change nothing.
 //! - Generated authorizations through each account's real `__check_auth`
 //!   (`try_invoke_contract_check_auth`) after every step: the same verdict
 //!   and error code, completion-shaped selections of the recovery rule
@@ -48,7 +52,8 @@ use perch_recovery_interface::RecoveryAction;
 use perch_rule_eval::StoredFunctions;
 use perch_smart_account::StoredRule;
 use perch_testkit::delta::{
-    external_key, render, DeltaWorld, DocModel, KeyModel, ScopeOp, FUNCTIONS, SCOPE_IDS,
+    external_key, raw_entries, render, DeltaWorld, DocModel, KeyModel, ScopeOp, FUNCTIONS,
+    SCOPE_IDS,
 };
 use proptest::prelude::*;
 use soroban_sdk::auth::{Context, ContractContext};
@@ -130,8 +135,9 @@ fn next_id(env: &Env, account: &Address, oz: bool) -> u32 {
     })
 }
 
-/// Everything the views say about `account`, normalized.
-fn views(env: &Env, account: &Address) -> BTreeMap<String, String> {
+/// Everything the views say about `account`, normalized; `oz` for the
+/// OZ-backed build, which stores each scope's text.
+fn views(env: &Env, account: &Address, oz: bool) -> BTreeMap<String, String> {
     let c = PerchAccountClient::new(env, account);
     let mut out = BTreeMap::new();
     out.insert(
@@ -148,7 +154,19 @@ fn views(env: &Env, account: &Address) -> BTreeMap<String, String> {
             format!("scope_rule_set {s}"),
             norm(env, account, c.scope_rule_set(&s)),
         );
-        out.insert(format!("scope_doc {s}"), format!("{:?}", c.scope_doc(&s)));
+        let text: Option<Bytes> = if oz {
+            env.invoke_contract(
+                account,
+                &Symbol::new(env, "scope_doc"),
+                vec![env, s.into_val(env)],
+            )
+        } else {
+            perch_testkit::rebuild::read(env, account, s)
+                .unwrap()
+                .map(|st| perch_testkit::rebuild::text(env, &st).unwrap())
+                .map(|t| Bytes::from_slice(env, t.as_bytes()))
+        };
+        out.insert(format!("scope_doc {s}"), format!("{text:?}"));
     }
     out
 }
@@ -222,8 +240,19 @@ fn worlds() -> (DeltaWorld, DeltaWorld, Address) {
 }
 
 /// Run `op` on both accounts and check outcomes, events, ids and views.
-/// Returns how many rules' signer or policy ids differ.
+/// Returns how many rules' signer or policy ids differ. A scoped document
+/// this build refuses for its form alone runs on it alone.
 fn step(w: &DeltaWorld, ow: &DeltaWorld, oz: &Address, op: &ScopeOp) -> (bool, usize) {
+    if let ScopeOp::Apply(_, d) = op {
+        let scoped = d.recovery.is_none() && d.rules.iter().all(|r| r.scope.is_some());
+        if scoped && !d.normal_form(w.env.ledger().sequence()) {
+            let before = raw_entries(&w.env);
+            let out = run(w, &w.delta, op);
+            assert!(out.is_err(), "{op:?} not in normal form, applied");
+            assert_eq!(raw_entries(&w.env), before, "the refused {op:?} wrote");
+            return (false, 0);
+        }
+    }
     let a = run(w, &w.delta, op);
     let ea = events(&w.env, &w.delta);
     let b = run(ow, oz, op);
@@ -233,8 +262,8 @@ fn step(w: &DeltaWorld, ow: &DeltaWorld, oz: &Address, op: &ScopeOp) -> (bool, u
     let next = next_id(&w.env, &w.delta, false);
     assert_eq!(next, next_id(&ow.env, oz, true), "ids allocated by {op:?}");
     assert_eq!(
-        views(&w.env, &w.delta),
-        views(&ow.env, oz),
+        views(&w.env, &w.delta, false),
+        views(&ow.env, oz, true),
         "views after {op:?}"
     );
     let (fa, ia) = rules_by_id(&w.env, &w.delta, next);

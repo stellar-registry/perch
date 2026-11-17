@@ -81,8 +81,9 @@ fn doc(signers: std::vec::Vec<SignerModel>, rules: std::vec::Vec<RuleModel>) -> 
 
 /// Every outcome the generator draws, in one sequence: scopes sharing keys
 /// with the admin document and with each other, a capped and an expiring
-/// rule, edits and removals, refusals (an escalating document, an unknown
-/// scope), and admin documents applied over live scopes.
+/// rule, edits and removals, refusals (an escalating document, one not in
+/// normal form, one whose rule has expired, an unknown scope), and admin
+/// documents applied over live scopes.
 #[test]
 fn every_scope_path_keeps_each_document_to_itself() {
     let w = DeltaWorld::new();
@@ -91,33 +92,50 @@ fn every_scope_path_keeps_each_document_to_itself() {
         std::vec![signer("owner", 0), signer("s1", 1)],
         std::vec![rule("admin", None, &[0]), rule("r1", Some(0), &[1])],
     );
-    let mut capped = rule("r2", Some(1), &[1]);
+    let mut capped = rule("r2", Some(1), &[0]);
+    capped.functions = Some(std::vec!["transfer"]);
     capped.cap = Some((1_000, 100));
-    let mut expiring = rule("r3", Some(2), &[0]);
+    let mut expiring = rule("r3", Some(2), &[1]);
     expiring.not_after = Some(1_050);
     let grant = doc(
-        std::vec![signer("owner", 0), signer("s1", 1)],
-        std::vec![rule("r1", Some(0), &[1]), capped, expiring],
+        std::vec![signer("s1", 1), signer("owner", 0)],
+        std::vec![rule("r1", Some(0), &[0]), capped, expiring],
     );
+    // `grant` without `r3`, and without `owner`, whom only `r3` names.
+    let mut lasting = grant.clone();
+    lasting.rules.pop();
+    lasting.signers.pop();
     let other = doc(
         std::vec![signer("s1", 1), signer("s2", 2)],
         std::vec![rule("r1", Some(0), &[0, 1])],
     );
     let mut escalating = grant.clone();
     escalating.rules.push(rule("x", None, &[0]));
+    // `grant` with its signers declared in another order.
+    let mut unordered = grant.clone();
+    unordered.signers.reverse();
+    for r in &mut unordered.rules {
+        for i in &mut r.signers {
+            *i = 1 - *i;
+        }
+    }
+    assert!(!unordered.normal_form(w.env.ledger().sequence()));
 
-    let steps: [(u32, ScopeOp, bool); 11] = [
+    let steps: [(u32, ScopeOp, bool); 13] = [
         (0, ScopeOp::Admin(admin.clone()), true),
         (0, ScopeOp::Apply(0, grant.clone()), true),
         (0, ScopeOp::Apply(7, other.clone()), true),
         (0, ScopeOp::Apply(1, escalating), false),
+        (0, ScopeOp::Apply(1, unordered), false),
         (0, ScopeOp::Remove(1), false),
         // Past `r3`'s bound: scope 0 now grants two rules.
         (60, ScopeOp::Admin(other.clone()), false),
         (0, ScopeOp::Apply(0, other.clone()), true),
         (0, ScopeOp::Admin(admin.clone()), true),
         (0, ScopeOp::Remove(0), true),
-        (0, ScopeOp::Apply(0, grant), true),
+        // `r3` has expired: refused, not dropped.
+        (0, ScopeOp::Apply(0, grant), false),
+        (0, ScopeOp::Apply(0, lasting), true),
         (0, ScopeOp::Remove(7), true),
     ];
     for (advance, op, accepted) in steps {

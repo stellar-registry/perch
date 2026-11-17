@@ -72,7 +72,9 @@ mod oracle {
     };
     use soroban_sdk::auth::{Context, CustomAccountInterface};
     use soroban_sdk::crypto::Hash;
-    use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, Symbol, Val, Vec};
+    use soroban_sdk::{
+        contract, contractimpl, Address, Bytes, BytesN, Env, String, Symbol, Val, Vec,
+    };
 
     /// The perch account with `apply_doc` swapped for the full replace.
     #[contract]
@@ -315,15 +317,83 @@ impl DocModel {
     }
 
     /// Draw a scoped document (`apply_scope`, spec §7.6): a generated
-    /// document without its self-admin rules and recovery member. One draw
-    /// in six keeps them, a document `apply_scope` must refuse.
+    /// document without its self-admin rules and recovery member, three
+    /// draws in four in normal form ([`Self::normalize`]). One draw in six
+    /// keeps the self-admin rules and recovery member, and one in four keeps
+    /// its spellings, documents `apply_scope` must refuse.
     pub fn generate_scoped(u: &mut Unstructured) -> arbitrary::Result<DocModel> {
         let mut d = DocModel::generate(u)?;
         if !u.ratio(1, 6)? {
             d.rules.retain(|r| r.scope.is_some());
             d.recovery = None;
         }
+        if !u.ratio(1, 4)? {
+            d.normalize();
+        }
         Ok(d)
+    }
+
+    /// Rewrite this document into normal form (`perch_ir::normal_form`):
+    /// keys in lowercase hex and limits without a prefix, `all` for a
+    /// threshold asking every signer it names, `["transfer"]` for a capped
+    /// rule's functions, and the signers the rules name declared in the
+    /// order the rules first name them, the others dropped. Its rules'
+    /// expiries are kept.
+    pub fn normalize(&mut self) {
+        self.spelling = Spelling::default();
+        let mut order: Vec<usize> = Vec::new();
+        for r in &mut self.rules {
+            if r.threshold == Some(r.signers.len() as u32) {
+                r.threshold = None;
+            }
+            if r.cap.is_some() {
+                r.functions = Some(std::vec!["transfer"]);
+            }
+            for i in &r.signers {
+                if !order.contains(i) {
+                    order.push(*i);
+                }
+            }
+        }
+        for r in &mut self.rules {
+            for i in &mut r.signers {
+                *i = order.iter().position(|j| j == i).unwrap();
+            }
+        }
+        self.signers = order.iter().map(|i| self.signers[*i].clone()).collect();
+    }
+
+    /// Whether `apply_scope` takes this document's form at ledger `ledger`,
+    /// computed from the model alone: no rule's `not-after-ledger` reached,
+    /// and in normal form (no uppercase hex digit in a key, no limit prefix,
+    /// no threshold asking every signer it names, every capped rule's
+    /// functions `["transfer"]`, and every signer declared in the order the
+    /// rules first name it).
+    pub fn normal_form(&self, ledger: u32) -> bool {
+        let upper = self.signers.iter().any(|s| match s.key {
+            KeyModel::External(k) => external_key(k) != external_key(k).to_uppercase(),
+            KeyModel::Delegated(_) => false,
+        });
+        let capped = self.rules.iter().any(|r| r.cap.is_some());
+        if (self.spelling.upper_hex && upper) || (capped && !self.spelling.limit_prefix.is_empty())
+        {
+            return false;
+        }
+        let mut order: Vec<usize> = Vec::new();
+        for r in &self.rules {
+            if r.not_after.is_some_and(|n| n <= ledger)
+                || r.threshold == Some(r.signers.len() as u32)
+                || (r.cap.is_some() && r.functions.as_deref() != Some(&["transfer"][..]))
+            {
+                return false;
+            }
+            for i in &r.signers {
+                if !order.contains(i) {
+                    order.push(*i);
+                }
+            }
+        }
+        order.iter().copied().eq(0..self.signers.len())
     }
 
     /// The rules this document grants `account` at the current ledger,
@@ -956,7 +1026,8 @@ impl ScopeModel {
     /// and that the account grants nothing outside its documents. It also
     /// predicts the outcome before running `op`: an admin document is
     /// accepted iff it keeps the `admin` rule, a scoped document iff it has
-    /// no self-admin rule and no recovery member, and a removal iff the
+    /// no self-admin rule and no recovery member and is in normal form at
+    /// the current ledger ([`DocModel::normal_form`]), and a removal iff the
     /// scope is live. Nothing else can refuse in this world: generated
     /// documents always compile, recovery is a guardian-only `Loss` member
     /// with no ZK factor, and the scope pool never names the account. Panics
@@ -967,7 +1038,9 @@ impl ScopeModel {
         let expected = match op {
             ScopeOp::Admin(d) => d.rules.iter().any(|r| r.name == "admin"),
             ScopeOp::Apply(_, d) => {
-                d.recovery.is_none() && d.rules.iter().all(|r| r.scope.is_some())
+                d.recovery.is_none()
+                    && d.rules.iter().all(|r| r.scope.is_some())
+                    && d.normal_form(w.env.ledger().sequence())
             }
             ScopeOp::Remove(s) => self.scopes.contains_key(s),
         };
@@ -1070,14 +1143,17 @@ fn admin_view(w: &DeltaWorld, account: &Address) -> String {
     format!("{configuration:?} {:?} {granted:?}", client.applied_doc())
 }
 
-/// Scope `scope` as an account holds it: its record, bytes, and grant.
+/// Scope `scope` as an account holds it: its record, signer ids, and grant.
 fn scope_view(w: &DeltaWorld, account: &Address, scope: u32) -> String {
     let client = PerchAccountClient::new(&w.env, account);
     let record = client.scope(&scope);
     let granted = record
         .as_ref()
         .map(|r| rules_by_id(w, account, r.rules.iter().map(|x| x.id)));
-    format!("{record:?} {:?} {granted:?}", client.scope_doc(&scope))
+    format!(
+        "{record:?} {:?} {granted:?}",
+        client.scope_signer_ids(&scope)
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1207,7 +1283,7 @@ type SnapshotEntry = (
 );
 
 /// Rule, signer, and policy ids of one account, read from its own entries:
-/// its records, and any entry of OZ's registry.
+/// its admin records (`RuleSet`), and any entry of OZ's registry.
 struct Ids {
     rules: BTreeMap<u32, String>,
     signers: BTreeMap<u32, String>,
@@ -1232,16 +1308,23 @@ impl Ids {
                 continue;
             };
             // The account's records name its admin rules (the recovery
-            // rule among them).
+            // rule among them), each by its name and its stored rule's
+            // contract.
             if let (ScVal::Symbol(s), ScVal::Vec(Some(records))) = (&k.key, &d.val) {
-                if s.0.to_utf8_string_lossy() == "InstalledRules" {
+                if s.0.to_utf8_string_lossy() == "RuleSet" {
                     for r in records.iter() {
                         if let Some(ScVal::U32(id)) = field(r, "id") {
                             let name = field(r, "name").map(|v| render(v, Some(me)));
-                            let ty = field(r, "context_type").map(|v| render(v, Some(me)));
+                            let contract = field(r, "rule")
+                                .and_then(|rule| field(rule, "contract"))
+                                .map(|v| render(v, Some(me)));
                             ids.rules.insert(
                                 *id,
-                                format!("{}@{}", name.unwrap_or_default(), ty.unwrap_or_default()),
+                                format!(
+                                    "{}@{}",
+                                    name.unwrap_or_default(),
+                                    contract.unwrap_or_default()
+                                ),
                             );
                         }
                     }
@@ -1346,8 +1429,8 @@ impl Ids {
             (n, ScVal::U32(id)) if n.starts_with("[PolicyLookup") => {
                 self.policies.get(id).cloned().unwrap_or_default()
             }
-            // The rule records carry OZ ids.
-            ("InstalledRules", ScVal::Vec(Some(rules))) => {
+            // The rule records carry ids.
+            ("RuleSet", ScVal::Vec(Some(rules))) => {
                 let rendered: Vec<String> = rules
                     .iter()
                     .map(|r| match r {

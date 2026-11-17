@@ -203,8 +203,8 @@ before mainnet.
 
 **Why it is safe to defer:** the caps exist so that a thief holding the
 owner key cannot make a recovery too expensive to complete (spec §7.5). A
-document over a cap is refused whole and changes nothing. The OZ
-materialization is the audited backend (the Perch OZ materialization unit).
+document over a cap is refused whole and changes nothing. The account's
+own rule storage is the audited backend (the Perch rule storage unit).
 The residual limit is product capacity: a document that needs more signers,
 rules, or bytes cannot be applied.
 

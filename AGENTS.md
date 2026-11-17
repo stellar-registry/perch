@@ -46,8 +46,10 @@ and — only once the contract is actually meant to auto-publish on-chain when
 tagged — the `publish-plan` job's `ALLOW` list and `DISPATCH_TAG` regex (and
 `release-mainnet.yml`'s `MAINNET_ALLOW`, which `scripts/test-release-scripts.py`
 keeps equal to `ALLOW`).
-`ALLOW` publishes into `unverified/perch/constructorless`, perch's one
-canonical testnet registry: an account or factory derives one registry per
+`ALLOW` publishes into `perch/constructorless`, perch's one canonical
+testnet registry (`scripts/registry-target.sh`: the registry
+`crates/*/wasm/registry.path` derives, unless
+`deployments/pending-registry.json` declares a migration): an account or factory derives one registry per
 network and every infra address from it, so all infra must share that
 registry. Mainnet's is published to only by `release-mainnet.yml`'s manual
 dispatch (`docs/deploy/README.md`, "Mainnet"). The testnet registry is
@@ -103,9 +105,11 @@ built on it (the whole `apply_doc*.rs`/`cap_matrix.rs` suite) proves
 context-rule *selection*/`Policy::enforce` mechanics — those calls succeed
 regardless of which rule, if any, would actually have authorized them.
 To test real rule-selection/policy-enforcement behavior, either call
-`stellar_accounts::smart_account::do_check_auth` directly with a hand-built
+`perch_smart_account::check_auth` directly with a hand-built
 `AuthPayload`/`Context`, wrapped in `env.as_contract(&account, || {...})`
-(as `matrix.rs` does) — this bypasses host-level auth entirely rather than
+(as `auth_binding.rs` does; it decides with rule-eval over the stored rule
+set, and a recovery completion with the controller's `rcv_complete`) — this
+bypasses host-level auth entirely rather than
 depending on it — or install hand-built auth entries with `env.set_auths`,
 which runs the account's real `__check_auth` (as
 `crates/integration-tests/tests/{recovery,account_capabilities}.rs` do
@@ -125,7 +129,8 @@ longer chain of recovered panics in one `Env`; prefer a fresh `Env` (a new
 The host charges every cross-contract call's VM its whole initial linear
 memory, and rustc's default wasm stack is 1 MiB (17 pages). Each stack
 contract crate therefore has a `build.rs` linking `-zstack-size=65536` for
-its cdylib. A new deployable contract crate needs the same `build.rs`, or
+its cdylib (the ML-DSA verifier 262144 and the ZK adapter 131072, whose
+verifiers need more). A new deployable contract crate needs the same `build.rs`, or
 every call to it costs over 1 MB of the transaction's 41.9 MB. Measure with
 `release_stack.rs` (`cap_sweep`, the `worst_case_*` tests) before changing
 the document caps; `docs/recovery/budgets.md` "Document caps" has the
@@ -134,6 +139,16 @@ shadow bookkeeping (diagnostic events, auth observation), which fails on
 8 KiB documents for reasons no network charges. The SDK's default
 invocation resource limits already enforce the network's per-transaction
 limits.
+
+## Generated TypeScript bindings and changed struct layouts
+
+The generated TypeScript clients' Stellar SDK decodes contract structs by
+field position, so adding an optional Rust field does **not** make a new
+generated spec safe for old deployed values. Retain the deployed spec and
+select the matching ABI before reading changed structs; the unchanged
+`capabilities` view is the bootstrap for account snapshots. See
+`docs/auth-root.md` and `packages/perch-contracts/test/auth-root.test.ts` for
+the snapshot-1/2 boundary and its regression test.
 
 ## Maintaining this file
 

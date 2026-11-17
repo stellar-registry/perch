@@ -61,3 +61,10 @@ it generates from the template (`perch-testnet.json`,
 `perch-testnet.rules.json`) next to them; those are not committed. These
 files are environment-specific, expected to change, and pinned by nothing.
 The frozen-vector rules above do not apply to this subdirectory.
+
+`deploy/perch-author-<network>.json` are the documents the live perch
+authors apply to gain `ci-publish-verifiers`
+([`../docs/deploy/README.md`](../docs/deploy/README.md#the-perch-authors-rule-on-perchverifiers)).
+`crates/perch-deploy/tests/perch_author_docs.rs` pins each to its hash and
+to the document its author applied on chain; once applied, they record what
+each author holds.

@@ -63,6 +63,8 @@ limits; **Accepted**, inherent in the design at this revision.
 | Replacing a capped rule resets its record | E | L3 | none | [persistent spending budgets](./DEFERRED.md#persistent-spending-budgets-across-replacements) | Accepted. |
 | Ordinary and grant signatures are not revision-bound | T | L4 | `ContextRuleNotFound` on replaced rules | [revision-bound ordinary signatures](./DEFERRED.md#revision-bound-ordinary-signatures) | Accepted. |
 | Leftover completion marker misclassifies an ordinary write | T | L5 | D8 (canonical target still bound) | [completion input-byte binding](./DEFERRED.md#completion-input-byte-binding) | Accepted until the exit criterion lands. |
+| A credential any grant named before a recovery can never be named again, admin credentials and removed grants' keys included | D | 1, L10 | `WipedCredential`; the completion's target exempt | none | Accepted: deliberate, since the account cannot tell an owner's grant key from a thief's; wallets keep admin credentials out of grants. |
+| Grant changes during a `Loss` authorized window | T | 1, L8 | completion wipes every grant | none | Accepted: grants are exempt from D3; the spec does not yet say so. |
 | Upgrading a deployed account to this build locks it out | D | L9 | D11 delay | none | Accepted: no in-place migration; users of deployed accounts create a new account, funded with 5 XLM as before, rather than upgrade. |
 
 No threat is listed under repudiation: every authorization is an on-chain
@@ -111,7 +113,13 @@ accounts use ZK recovery is out of scope.
      (`StaleGrant`), and afterwards no document may name a credential a
      wiped grant named (`WipedCredential`, `credential_generation`). A grant
      does not move `revision` or `doc_hash`, so it does not invalidate a
-     collecting attempt either.
+     collecting attempt either. Nor is it a policy change for D3: under
+     `Loss`, which has no freeze, an authorized attempt blocks `apply_doc`
+     (`AttemptAuthorized`) but not `apply_grant` or `remove_grant`
+     (`grant_docs.rs`,
+     `under_loss_the_owner_changes_grants_during_an_authorized_attempt`).
+     Whatever grants exist when the attempt completes are wiped with the
+     rest (L8).
    - **What the thief leaves behind survives.** A token allowance the thief
      approves, directly or through a grant rule, stays usable after the
      freeze and after a completion wipes the grant (L2).
@@ -405,11 +413,40 @@ entry in [DEFERRED.md](./DEFERRED.md).
   [account-interface.md](./account-interface.md) and the account's source
   cite "spec §7.6" for grant documents and wiped credentials, which the
   spec does not contain. Until the spec specifies grants, their only
-  normative description is account-interface.md and the code.
+  normative description is account-interface.md and the code. The spec's
+  D3 also reads wider than the code: it refuses "every policy change"
+  during an authorized window, but grant changes are not refused (adversary
+  1, "Grants are ordinary activity"). Under `Protected` the freeze stops
+  them anyway; under `Loss` they succeed. §7.6, when written, should state
+  this exemption.
 - **L9. No migration from deployed accounts.** See
   [Several account builds](#several-account-builds). The plan for deployed
   accounts is a new account, funded with 5 XLM as at first creation, not an
   in-place upgrade.
+- **L10. A credential a grant ever named is barred for good once a
+  recovery completes.** The credential index (`grant_credentials`) records
+  every credential a grant document names, under the grant generation it
+  was named in, and is never cleared. After a completion, `apply_grant`
+  and `apply_doc` refuse (`WipedCredential`) any document naming one of
+  them; only the completion's own target is exempt, so a credential a
+  thief once granted cannot block a later recovery. Two consequences for
+  wallets:
+  1. **An admin credential that was also in a grant must be rotated.** If
+     a key names both an account-document signer and a grant signer (for
+     example the owner's passkey reused for an app grant), the completion's
+     target may keep it, but every later `apply_doc` that still names it is
+     refused. The owner has to drop it from the account document before
+     they can change anything else. Wallets should keep admin credentials
+     out of grants.
+  2. **Removing a grant does not clear its credentials.** `remove_grant`
+     leaves the index alone, so a key from a grant the owner revoked
+     before the recovery is barred too, as is one a re-applied grant
+     stopped naming. Any key that appears in any grant document under a
+     generation is single-generation.
+
+  This is deliberate: after a recovery, the account cannot tell an owner's
+  old grant key from one a thief installed. Adversaries 1 and 2.
+  Requirement: none in the spec yet (L8).
 
 ## Trusted
 

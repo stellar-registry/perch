@@ -51,7 +51,7 @@ limits; **Accepted**, inherent in the design at this revision.
 | Griefer: evidence-free attempts, stale evidence, replayed proofs or approvals | D | 4 | D2, D9, D10, D13 | none | Mitigated. |
 | Verifier that accepts any signature | S, E | 5 | `is_verified_verifier`, `UnverifiedVerifier`, `Compiler_DocInvalid`; one signer per unverified verifier per rule | none | Partial: admin rules and recovery credentials use only verified, admin-free verifiers; grants may use unverified ones; the ML-DSA verifier's `fips204` dependency is unaudited. |
 | Registry admin or manager approves a hostile verifier, replaces the registry's code, or fills an empty pinned address | T, E, D | 6 | §16 content addressing; no upgrade on deployed contracts; a resolved `verifier-name` must equal the signer's `verifier` | [contract-admin governance](./DEFERRED.md#contract-admin-governance-behind-a-multisig-and-timelock) | Open: one human-held key, changes take effect at once; the account checks verifiers' code but not its compiler's, interpreter's, or spending limit's; a broken or replaced `perch/verifiers` refuses every account document and recovery target that names a verifier until it is fixed. |
-| Supply-chain attacker or wrong artifacts | T | 7 | §16 pinned hashes; `fetch-infra-wasm.sh`, `check-pins.sh`, `testnet_pins`, `verify-deployment.sh` | Packaging rule | Partial: pins are hash- and address-checked; the testnet build is unreproduced, npm integrity is the consumer's, and five vendored crates carry Perch's ports. |
+| Supply-chain attacker or wrong artifacts | T | 7 | §16 pinned hashes; `fetch-infra-wasm.sh`, `check-pins.sh`, `testnet_pins`, `verify-deployment.sh` | Packaging rule | Partial: pins are hash- and address-checked; the deployed builds are unreproduced, npm integrity is the consumer's, and five vendored crates carry Perch's ports. |
 | External signature replayed on another account | S | 9 | §15 `addr_oz_v1` digest | none | Mitigated. |
 | An `auth-root` contract issues the guarded call on a path the owner did not intend | E | 9 | the guarded rule's target, functions, arguments, signers, expiry, and cap; rule-core `authorize.exact-root` | none | Accepted: the condition names a contract and function, not its code or arguments; it is as narrow as the root contract's behaviour, including after that contract's own upgrades. |
 | Signing request misdescribed: root conditions, stale or chosen snapshot, sibling entries, hidden grants, wrong bindings | S, T, E | 9, 10, L7 | `auth-root` enforced on chain | none | Partial: the chain decides; what the owner is shown depends on the wallet deriving contexts from the XDR, a live snapshot, listing grants, and reading `capabilities` first. |
@@ -232,10 +232,10 @@ accounts use ZK recovery is out of scope.
      manifest; `check-pins.sh` and `testnet_pins` check the committed and
      compiled pins; `verify-deployment.sh` checks the manifest against the
      chain.
-   - **Builds.** `rust-toolchain.toml` pins rustc 1.97.1. The current
-     deployments were built with other toolchains, and the testnet build was
-     from a dirty tree that has not been reproduced (audit scope,
-     "Deployment provenance").
+   - **Builds.** `rust-toolchain.toml` pins rustc 1.99.1, the version the
+     current testnet and mainnet deployments were built with (build commit
+     `c135aca`, a clean tree). No reproduction of their hashes is recorded
+     (audit scope, "Deployment provenance").
    - **Dependencies.** rule-core is a git dependency at a fixed rev; the
      OZ fork is a fork of a fork (bitswell-hq/theahaco__stellar-contracts-OZ
      `42089fc`), now linked only by the verifiers, interpreter, spending

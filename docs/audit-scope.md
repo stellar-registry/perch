@@ -36,11 +36,11 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 
 | Field | Manifest field | Value in the manifest at this commit |
 | --- | --- | --- |
-| Build commit | `source.commit`, `source.dirty` | `4e7ae8044b761c7e7ee8b82d3dd5d135f9905fd5`, the release commit on `main`; `dirty: true` (below) |
+| Build commit | `source.commit`, `source.dirty` | `c135aca277745434f2abf679edd9868c95204b51`, from before this stack; `dirty: false` |
 | Network, channel | `network_passphrase`, `channel` | testnet (`Test SDF Network ; September 2015`), `beta` |
-| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-15T06:43:23Z, from ledger 5204567 |
-| Build toolchain | `toolchain` | rustc 1.99.0 (b940084d7 2026-09-28), stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork), scaffold 0.0.27 (`builder`: `scaffold`) |
-| Registry | `registry.id`, `registry.wasm_hash` | `CDX2DMYMMEYU6FGN3HPJ2GQSSL5EZHIAMEJD4SPF55FZE5LEUBPPPDA7`, the canonical `constructorless` registry ([`testnet-deployment.md`](testnet-deployment.md)) |
+| Deployed | `deployed_at`, `deployed_ledger` | 2026-10-22T13:41:43Z, from ledger 5330546 |
+| Build toolchain | `toolchain` | rustc 1.99.1 (58cf8f9c3 2026-10-13), stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork), scaffold 0.0.27 (`builder`: `scaffold`) |
+| Registry | `registry.id`, `registry.wasm_hash` | `CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM`, the canonical `constructorless` registry ([`testnet-deployment.md`](testnet-deployment.md)) |
 | ZK circuit | `zk.circuit_id`, `zk.tree_depth` | the circuit in `circuits/manifest.json`, tree depth 32 |
 | Contracts | `contracts.<name>.version`, `.sha256`, `.address`, `.pins` | the ten below |
 
@@ -51,27 +51,29 @@ jq -r '.contracts | to_entries[] | [.key, .value.version, .value.tier, .value.sh
 | 2 | `perch-account-factory` | the account and the WebAuthn verifier |
 
 A redeploy rewrites the manifest, and the third column of the first table
-changes with it.
+changes with it. [`deployments/mainnet.json`](../deployments/mainnet.json)
+records the mainnet deployment of the same build commit with the same
+toolchain (deployed 2026-10-26T01:28:04Z, from ledger 65138427), into
+mainnet's registry `CC236AK2RX7MUO7BV7JYDDW5KHZ3X7YYJOJKCVDC543BQBNNSUCZB7NN`.
 
-**How these bytes were built.** `release.yml`'s `deploy-stack` job made
-this deployment in canonical mode
-([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)).
-It did not rebuild the doc compiler, the interpreter, the spending limit, or
-the ed25519 verifier. It reused the bytes the registry already serves for
-them, which `release.yml`'s attested release build produced. It built the
-other six with `scripts/build-stack.sh` on a GitHub-hosted Linux runner,
-using the manifest's toolchain, and attested each one's build provenance.
-`source.dirty` is `true`: when it built, the job's checkout had uncommitted
-changes in an input `scripts/source-dirty.sh` checks. The manifest does not
-record which input changed.
+**How these bytes were built.** `release.yml`'s `deploy-stack` job deploys
+in canonical mode
+([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)):
+it reuses the bytes the registry already serves for contracts it does not
+rebuild, which `release.yml`'s attested release build produced, and builds
+the rest with `scripts/build-stack.sh` on a GitHub-hosted Linux runner,
+using the manifest's toolchain, attesting each one's build provenance. The
+manifest does not record which contracts were reused. `source.dirty` is
+`false`: the checkout had no uncommitted changes in an input
+`scripts/source-dirty.sh` checks.
 
-**Reproduction record.** No reproduction of this manifest's hashes has been
-recorded. Because the tree was dirty, rebuilding `4e7ae80` is not
-guaranteed to give the six built hashes. The four reused contracts come
-from the attested release build, not from `build-stack.sh`, so rebuilding
-them with `build-stack.sh` gives other bytes
+**Reproduction record.** No reproduction of these manifests' hashes is
+recorded. Rebuilding `c135aca` with `build-stack.sh` and the recorded
+toolchain should give the hashes of the contracts the job built; a reused
+contract comes from the attested release build, not from `build-stack.sh`,
+so rebuilding it gives other bytes
 ([`deploy/README.md`](deploy/README.md#the-canonical-registry-and-publishing-the-stack-to-it)).
-The previous deployment (build commit `7b164b6`, clean tree, manifest
+An earlier deployment (build commit `7b164b6`, clean tree, manifest
 [`deployments/testnet.json` at `845c49a`](https://github.com/stellar-registry/perch/blob/845c49a376c08aeeed9f5d3c63356b753dc617f4/deployments/testnet.json))
 was reproduced in full on 2026-10-14. On a macOS arm64 host with that
 manifest's toolchain, `scripts/build-stack.sh` built a `git archive` export
@@ -95,7 +97,7 @@ evidence does not.
 
 | Input | Pin | Where |
 | --- | --- | --- |
-| Rust | rustc 1.97.1, target `wasm32v1-none`. The deployed hashes were built with the manifest's recorded rustc 1.99.0, so reproducing them needs that version, not the pinned one | `rust-toolchain.toml` |
+| Rust | rustc 1.99.1, target `wasm32v1-none`: the version both manifests record for the current deployments | `rust-toolchain.toml`; `toolchain:` in `.github/workflows/` |
 | Release profile | `opt-level = "z"`, `overflow-checks = true`, `panic = "abort"`, `lto = true`, `codegen-units = 1` | `Cargo.toml` `[profile.release]` |
 | Wasm stack | 64 KiB per contract, 128 KiB for the ZK adapter (an overflow traps) | `crates/*/build.rs` |
 | Soroban | `soroban-sdk` 29.0.1, `soroban-env-host` 29.0.1 (test host), `soroban-poseidon` 28.0.0 (vendored, moved to soroban-sdk 29; `vendor/soroban-poseidon/NOTICE`) | `Cargo.lock` |
@@ -420,8 +422,6 @@ Each is stated in full where linked.
   calls ([`zk/README.md`](zk/README.md)).
 - Client proving on the reference phone and laptop is unmeasured
   ([`recovery/budgets.md`](recovery/budgets.md) §1).
-- `rust-toolchain.toml` pins rustc 1.97.1, not the 1.99.0 the deployed
-  hashes were built with (see the toolchain table).
 
 ## Reading order
 

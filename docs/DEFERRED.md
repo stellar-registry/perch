@@ -188,10 +188,10 @@ or with the Perch interpreter, plus OZ `spending_limit` for a rule with a
 `cap`. `apply_doc` reconciles the installed rules as a delta (spec §7.5).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
-(`MAX_DOC_SIGNERS`), more than 11 rules (`MAX_DOC_RULES`), more than 8,192
+(`MAX_DOC_SIGNERS`), more than 10 rules (`MAX_DOC_RULES`), more than 8,192
 canonical bytes (`MAX_DOC_CANONICAL_BYTES`), or a rule name over 20 bytes
 (`MAX_RULE_NAME_BYTES`, OZ's `MAX_NAME_SIZE`). The recovery rule the account
-generates is additional to the 11 document rules. The caps are sized so that
+generates is additional to the 10 document rules. The caps are sized so that
 a worst-case completion, compromise restore, or `Protected` reconfiguration
 stays within 75% of every *measured* per-transaction limit — instructions,
 memory, write bytes, and write entries

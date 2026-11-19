@@ -50,9 +50,10 @@ limits; **Accepted**, inherent in the design at this revision.
 | Colluding guardians or a ZK-secret thief | S, E | 3 | D5, D6, D7 | none | Accepted: indistinguishable from the owner's factor; bounded by the delay, the uncapped `Loss` veto, and `Combined`. |
 | Griefer: evidence-free attempts, stale evidence, replayed proofs or approvals | D | 4 | D2, D9, D10, D13 | none | Mitigated. |
 | Verifier that accepts any signature | S, E | 5 | `is_verified_verifier`, `UnverifiedVerifier`, `Compiler_DocInvalid`; one signer per unverified verifier per rule | none | Partial: admin rules and recovery credentials use only verified, admin-free verifiers; grants may use unverified ones; the ML-DSA verifier's `fips204` dependency is unaudited. |
-| Registry admin or manager approves a hostile verifier, replaces the registry's code, or fills an empty pinned address | T, E | 6 | §16 content addressing; no upgrade on deployed contracts | [contract-admin governance](./DEFERRED.md#contract-admin-governance-behind-a-multisig-and-timelock) | Open: one human-held key, changes take effect at once; the account checks verifiers' code but not its compiler's, interpreter's, or spending limit's. |
+| Registry admin or manager approves a hostile verifier, replaces the registry's code, or fills an empty pinned address | T, E, D | 6 | §16 content addressing; no upgrade on deployed contracts; a resolved `verifier-name` must equal the signer's `verifier` | [contract-admin governance](./DEFERRED.md#contract-admin-governance-behind-a-multisig-and-timelock) | Open: one human-held key, changes take effect at once; the account checks verifiers' code but not its compiler's, interpreter's, or spending limit's; a broken or replaced `perch/verifiers` refuses every account document and recovery target that names a verifier until it is fixed. |
 | Supply-chain attacker or wrong artifacts | T | 7 | §16 pinned hashes; `fetch-infra-wasm.sh`, `check-pins.sh`, `testnet_pins`, `verify-deployment.sh` | Packaging rule | Partial: pins are hash- and address-checked; the testnet build is unreproduced, npm integrity is the consumer's, and five vendored crates carry Perch's ports. |
 | External signature replayed on another account | S | 9 | §15 `addr_oz_v1` digest | none | Mitigated. |
+| An `auth-root` contract issues the guarded call on a path the owner did not intend | E | 9 | the guarded rule's target, functions, arguments, signers, expiry, and cap; rule-core `authorize.exact-root` | none | Accepted: the condition names a contract and function, not its code or arguments; it is as narrow as the root contract's behaviour, including after that contract's own upgrades. |
 | Signing request misdescribed: root conditions, stale or chosen snapshot, sibling entries, hidden grants, wrong bindings | S, T, E | 9, 10, L7 | `auth-root` enforced on chain | none | Partial: the chain decides; what the owner is shown depends on the wallet deriving contexts from the XDR, a live snapshot, listing grants, and reading `capabilities` first. |
 | Indexer, relay, or RPC withholds data | D | 10 | §2 | none | Accepted: availability only; nothing they return is trusted without on-chain checks. |
 | Storage expiry | D | 11 | §3.6 (archived, never reset) | none | Partial: `renew` does not extend rule records; restoring is the client's job. |
@@ -175,8 +176,9 @@ accounts use ZK recovery is out of scope.
      at `deployer(perch/verifiers, sha256(its own code))`
      (`is_verified_verifier`, `UnverifiedVerifier`, `Compiler_DocInvalid`).
      A `verifier-name` binds name, version, and address into `doc_hash`;
-     the account stores the address, so a later re-pointing of the name
-     changes no applied account.
+     the account stores the address and authenticates against it, so a
+     later re-pointing of the name changes no applied rule. Every compile
+     resolves the name again, though (adversary 6).
    - **Unverified verifiers, in grants only.** A grant document may name a
      verifier by contract id alone, at most one signer per unverified
      verifier in a rule, so a verifier that accepts one signature for
@@ -202,6 +204,16 @@ accounts use ZK recovery is out of scope.
      accepts anything and have it count as verified (adversary 5). It
      reaches an account only through a document that names it, which the
      owner approves, or through a phishing link that gets the owner to.
+   - **Verifier names are a live dependency.** An account document may name
+     a verifier only by `verifier-name`, and the doc compiler resolves each
+     name with `perch/verifiers`' `fetch_hash` on every `compile_doc` and
+     `derive_target`, so on every `apply_doc`, recovery target, and
+     completion. The resolved address must equal the signer's `verifier`,
+     so a hostile registry cannot swap in another verifier. But a registry
+     whose code the key has replaced, or that no longer serves a published
+     name and version, makes those calls fail (`DocInvalid`): document
+     changes and recoveries that name a verifier stop until it is fixed.
+     Applied rules keep authorizing, since they hold the address.
    - **Empty addresses.** "The account trusts whoever creates the chain on a
      network: until `perch/constructorless` exists there, the first creator
      of each link controls the infra it derives"
@@ -256,7 +268,14 @@ accounts use ZK recovery is out of scope.
      current authorization entry to start at one exact contract and
      function. It checks neither the root's arguments nor ancestors, and
      does not prove that every context in a signed tree executed
-     ([auth-root.md](./auth-root.md)). `selectRules` screens roots from the
+     ([auth-root.md](./auth-root.md)). It trusts the root contract: any
+     code at that contract, including after the contract's own upgrade,
+     that makes the guarded call under that function satisfies the
+     condition, within the guarded rule's other conditions and cap.
+     Evidence: rule-core's `authorize.exact-root` (proven in its Lean
+     model; `rust.exact-root` tested) and `auth_root.rs` (enforcing host
+     auth: direct, wrong, fabricated, reordered, and cross-entry roots
+     refused). `selectRules` screens roots from the
      contexts the caller passes; the wallet must derive them from the actual
      authorization XDR. An old low-level client skips the screening; the
      account still enforces the root.
@@ -454,9 +473,12 @@ entry in [DEFERRED.md](./DEFERRED.md).
   trusts its snapshot, adversary 10), and the host's secp256r1, ed25519,
   SHA-256, BN254, and Poseidon2 functions.
 - Soroban 29.0.1's CAP-0071 delegated-auth and invoker-auth behaviour, and
-  its preorder of authorization contexts (which `auth-root` reads), as
-  pinned by Perch's tests ([recovery/cap-0071.md](./recovery/cap-0071.md),
-  [auth-root.md](./auth-root.md)).
+  its preorder of authorization contexts, as pinned by Perch's tests
+  ([recovery/cap-0071.md](./recovery/cap-0071.md),
+  [auth-root.md](./auth-root.md), `auth_root.rs`). `auth-root` takes the
+  root from `contexts[0]` of the account's host-authenticated entry; a host
+  that ordered contexts differently would make the condition test the wrong
+  call without any error, so a host upgrade must rerun those tests.
 - rule-core's `rule_eval` and `soroban-facade` at rev `a3c92ba` behave as
   its Lean model says (adversary 8).
 - The OZ fork at `42089fc`, for the code that still links it: the
@@ -467,8 +489,9 @@ entry in [DEFERRED.md](./DEFERRED.md).
   (§16; the factory is constructorless and storage-free), so this is trust
   in code at a content-addressed address, not in a party.
 - The `perch/constructorless` and `perch/verifiers` registries' admin and
-  manager, for what counts as a verified verifier and for empty addresses
-  on a new network (adversary 6).
+  manager, for what counts as a verified verifier, for empty addresses on a
+  new network, and for serving the `verifier-name` lookups every account
+  document and recovery target needs (adversary 6).
 - Signers' devices keep private keys non-exportable; guardians check out of
   band that the replacement credentials they approve belong to the person
   recovering (§2).

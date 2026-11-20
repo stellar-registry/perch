@@ -188,10 +188,10 @@ or with the Perch interpreter, plus OZ `spending_limit` for a rule with a
 `cap`. `apply_doc` reconciles the installed rules as a delta (spec §7.5).
 The doc compiler refuses with `DocTooLarge`, on every `compile_doc` and
 `derive_target`, a document with more than 8 declared signers
-(`MAX_DOC_SIGNERS`), more than 11 rules (`MAX_DOC_RULES`), more than 8,192
+(`MAX_DOC_SIGNERS`), more than 10 rules (`MAX_DOC_RULES`), more than 8,192
 canonical bytes (`MAX_DOC_CANONICAL_BYTES`), or a rule name over 20 bytes
 (`MAX_RULE_NAME_BYTES`, OZ's `MAX_NAME_SIZE`). The recovery rule the account
-generates is additional to the 11 document rules. The caps are sized so that
+generates is additional to the 10 document rules. The caps are sized so that
 a worst-case completion, compromise restore, or `Protected` reconfiguration
 stays within 75% of every *measured* per-transaction limit — instructions,
 memory, write bytes, and write entries
@@ -203,8 +203,8 @@ before mainnet.
 
 **Why it is safe to defer:** the caps exist so that a thief holding the
 owner key cannot make a recovery too expensive to complete (spec §7.5). A
-document over a cap is refused whole and changes nothing. The OZ
-materialization is the audited backend (the Perch OZ materialization unit).
+document over a cap is refused whole and changes nothing. The account's
+own rule storage is the audited backend (the Perch rule storage unit).
 The residual limit is product capacity: a document that needs more signers,
 rules, or bytes cannot be applied.
 

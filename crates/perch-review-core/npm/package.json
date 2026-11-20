@@ -1,0 +1,41 @@
+{
+  "name": "@stellar-registry/perch-review-core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Perch account's verdict and budgets for an authorization entry, from a ledger snapshot, in an import-free wasm: the account's gate checks and rule-core's check_auth, before anyone signs",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./sign-dialog": {
+      "types": "./dist/sign-dialog.d.ts",
+      "import": "./dist/sign-dialog.js"
+    }
+  },
+  "files": [
+    "dist",
+    "wasm"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build:wasm": "node scripts/build-wasm.mjs",
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.7"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stellar-registry/perch",
+    "directory": "crates/perch-review-core/npm"
+  }
+}

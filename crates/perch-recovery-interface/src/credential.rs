@@ -275,16 +275,13 @@ mod test {
         assert_ne!(a, b);
         assert_ne!(a, other_verifier);
         assert_ne!(a, delegated);
-        // Deterministic.
         assert_eq!(a, external(&e, &[1, 2, 3]).fingerprint(&e).unwrap());
     }
 
     #[test]
     fn key_length_prefix_prevents_verifier_key_boundary_shifts() {
-        // Without the length prefix, (verifier, key) pairs could only shift
-        // bytes across the key boundary if the verifier were variable-width;
-        // it isn't, but the key's length is still bound so that a key and
-        // the same key with trailing bytes never collide.
+        // The verifier is fixed-width, but the key's length is still bound so
+        // that a key and the same key with trailing bytes never collide.
         let e = Env::default();
         let short = external(&e, &[7]).encode(&e).unwrap();
         let long = external(&e, &[7, 0]).encode(&e).unwrap();
@@ -397,11 +394,10 @@ mod test {
         BytesN::from_array(e, &[byte; 32])
     }
 
-    /// The sequence reproduced against the WS3 implementation: the baseline
-    /// names owner A; the current document has moved to owner B; a
-    /// compromise recovery restores the baseline with A's slot replaced by
-    /// C. A is replaced but already absent from the current document, so a
-    /// current-minus-target rule alone would leave it unrevoked, and a
+    /// The baseline names owner A; the current document has moved to owner
+    /// B; a compromise recovery restores the baseline with A's slot replaced
+    /// by C. A is replaced but already absent from the current document, so
+    /// a current-minus-target rule alone would leave it unrevoked, and a
     /// second compromise recovery from the same baseline would restore A.
     #[test]
     fn compromise_revokes_the_replaced_baseline_credential() {

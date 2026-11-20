@@ -1,18 +1,17 @@
 //! CAP-0071 dogfood: a `Signer::Delegated` CI signer authorizing through the
-//! real `PerchAccount`'s exported `__check_auth`, with the compiled ci-publish
-//! perch program enforcing fn/arg constraints — all under ENFORCED
+//! real `PerchAccount`'s exported `__check_auth`, with the ci-publish rule as
+//! the account stores it enforcing fn/arg constraints — all under ENFORCED
 //! authorization (no mocks). The delegate here is a custom account (the same
 //! host path a G-account CI key takes on-network); its authentication rides
 //! inside the perch account's single `AddressWithDelegates` auth entry.
 //!
-//! Requires the CAP-0071 stellar-accounts patch (theahaco/stellar-contracts-OZ
-//! PR #3): `Signer::Delegated` authenticates via `delegate_account_auth`.
-//! `env.try_invoke_contract_check_auth` cannot attach delegated signers, so
-//! this drives a wrapper contract via `set_auths`, like the sdk's own
-//! delegation test.
+//! The account authenticates a `Signer::Delegated` with the host's
+//! `delegate_account_auth`. `env.try_invoke_contract_check_auth` cannot
+//! attach delegated signers, so this drives a wrapper contract via
+//! `set_auths`, like the sdk's own delegation test.
 
 use perch_account::PerchAccount;
-use perch_compile::{compile, CompileConfig};
+use perch_account_types::{AuthPayload, Signer, SmartAccountError};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use soroban_sdk::auth::{Context, CustomAccountInterface};
 use soroban_sdk::crypto::Hash;
@@ -23,14 +22,11 @@ use soroban_sdk::xdr::{
     SorobanAuthorizedInvocation, SorobanCredentials, SorobanDelegateSignature, StringM, VecM,
 };
 use soroban_sdk::{
-    contract, contractimpl, map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString,
-    TryFromVal, Val, Vec,
-};
-use stellar_accounts::smart_account::{
-    add_context_rule, AuthPayload, ContextRuleType, Signer, SmartAccountError,
+    contract, contractimpl, map, vec, Address, Bytes, Env, IntoVal, Symbol, TryFromVal, Val, Vec,
 };
 
-use perch_testkit::fixture;
+use perch_rule_eval::StoredFunctions;
+use perch_testkit::ci_publish_rule;
 
 // Stand-in for the CI key: a custom account approving everything it is asked
 // to co-sign. On-network this is a plain G-account whose classic signature the
@@ -61,6 +57,10 @@ struct MockRegistry;
 
 #[contractimpl]
 impl MockRegistry {
+    pub fn publish(_wasm_name: u32, author: Address) {
+        author.require_auth();
+    }
+
     pub fn publish_hash(_wasm_name: u32, author: Address) {
         author.require_auth();
     }
@@ -76,17 +76,22 @@ struct World {
     delegate: Address,
     registry: Address,
     rule_id: u32,
+    /// perch/verifiers, and the perch author's ci-publish-verifiers on it.
+    verifiers: Address,
+    verifiers_rule_id: u32,
 }
 
-/// Real PerchAccount (External admin at genesis, as in production), real
-/// interpreter + verifier, and a ci-publish rule whose ONLY signer is the
-/// delegated CI account — the compiled fixture program attached as policy.
+/// Real PerchAccount (External admin at genesis, as in production) and
+/// verifier, and a ci-publish rule whose ONLY signer is the delegated CI
+/// account, installed as `apply_doc` installs the fixture's. Beside it, the
+/// perch author's ci-publish-verifiers (testdata/deploy/perch-author-*.json):
+/// the same rule on a second registry, perch/verifiers, allowing
+/// publish_hash alone.
 fn setup() -> World {
     let env = Env::default();
     env.ledger().with_mut(|l| l.sequence_number = 10);
 
-    let verifier = env.register(PerchEd25519Verifier, ());
-    let interpreter = env.register(perch_interpreter::PerchInterpreter, ());
+    let verifier = perch_testkit::verifiers::deploy(&env, PerchEd25519Verifier);
     let delegate = env.register(ApproveAllAccount, ());
     let registry = env.register(MockRegistry, ());
 
@@ -96,29 +101,24 @@ fn setup() -> World {
     ];
     let account = env.register(PerchAccount, (admin_signers,));
 
-    // The compiled ci-publish program (MinSigners(1), fn in {publish,
-    // publish_hash}, arg 1 is-self) — installed under a rule whose signer is
-    // the DELEGATED account instead of the fixture's External ci key.
-    let doc = perch_ir::from_json(&fixture()).expect("parse");
-    perch_ir::validate(&doc).expect("valid");
-    let cfg = CompileConfig {
-        interpreter_wasm_hash: BytesN::from_array(&env, &[0xAB; 32]),
-    };
-    let plan = compile(&env, &doc, &cfg).expect("compile");
-    let install = plan.rules[1]
-        .install
-        .clone()
-        .expect("ci-publish attaches interpreter");
-    let policies: Map<Address, Val> = map![&env, (interpreter.clone(), install.into_val(&env))];
+    // The fixture's ci-publish rule (fn in {publish, publish_hash}, arg 1
+    // is-self), with the DELEGATED account as its signer instead of the
+    // fixture's External ci key.
+    let signers = vec![&env, Signer::Delegated(delegate.clone())];
+    let rule = ci_publish_rule(&env, &account, &registry, &signers, None);
+    let rule_id = env.as_contract(&account, || {
+        perch_smart_account::testutils::install_rule(&env, "ci-publish", &rule, &signers)
+    });
 
-    let rule = env.as_contract(&account, || {
-        add_context_rule(
+    let verifiers = env.register(MockRegistry, ());
+    let mut verifiers_rule = ci_publish_rule(&env, &account, &verifiers, &signers, None);
+    verifiers_rule.1 = StoredFunctions::Only(vec![&env, Symbol::new(&env, "publish_hash")]);
+    let verifiers_rule_id = env.as_contract(&account, || {
+        perch_smart_account::testutils::install_rule(
             &env,
-            &ContextRuleType::CallContract(registry.clone()),
-            &SString::from_str(&env, "ci-publish"),
-            None,
-            &vec![&env, Signer::Delegated(delegate.clone())],
-            &policies,
+            "ci-publish-verifiers",
+            &verifiers_rule,
+            &signers,
         )
     });
 
@@ -127,28 +127,53 @@ fn setup() -> World {
         account,
         delegate,
         registry,
-        rule_id: rule.id,
+        rule_id,
+        verifiers,
+        verifiers_rule_id,
     }
 }
 
 /// The account's credential signature: AuthPayload selecting the ci rule and
 /// naming the delegated signer. No cryptographic material — the delegate's
 /// authentication is the host-forwarded delegation itself.
-fn auth_payload_scval(w: &World) -> ScVal {
+fn auth_payload_scval(w: &World, rule_id: u32) -> ScVal {
     let payload = AuthPayload {
         signers: map![
             &w.env,
             (Signer::Delegated(w.delegate.clone()), Bytes::new(&w.env))
         ],
-        context_rule_ids: vec![&w.env, w.rule_id],
+        context_rule_ids: vec![&w.env, rule_id],
     };
     let payload_val: Val = payload.into_val(&w.env);
     ScVal::try_from_val(&w.env, &payload_val).unwrap()
 }
 
-/// One `AddressWithDelegates` entry authorizing `registry.<fn>(7, author)`.
+/// One `AddressWithDelegates` entry authorizing `registry.<fn>(7, author)`
+/// through ci-publish.
 fn entry(
     w: &World,
+    fn_name: &str,
+    author: &Address,
+    nonce: i64,
+    with_delegate: bool,
+) -> SorobanAuthorizationEntry {
+    entry_on(
+        w,
+        &w.registry,
+        w.rule_id,
+        fn_name,
+        author,
+        nonce,
+        with_delegate,
+    )
+}
+
+/// One `AddressWithDelegates` entry authorizing `contract.<fn>(7, author)`
+/// through the rule `rule_id`.
+fn entry_on(
+    w: &World,
+    contract: &Address,
+    rule_id: u32,
     fn_name: &str,
     author: &Address,
     nonce: i64,
@@ -171,14 +196,14 @@ fn entry(
                     address: w.account.clone().into(),
                     nonce,
                     signature_expiration_ledger: 100,
-                    signature: auth_payload_scval(w),
+                    signature: auth_payload_scval(w, rule_id),
                 },
                 delegates: delegates.try_into().unwrap(),
             },
         ),
         root_invocation: SorobanAuthorizedInvocation {
             function: SorobanAuthorizedFunction::ContractFn(InvokeContractArgs {
-                contract_address: w.registry.clone().into(),
+                contract_address: contract.clone().into(),
                 function_name: StringM::try_from(fn_name).unwrap().into(),
                 args: std::vec![ScVal::U32(7), ScVal::Address(author_addr)]
                     .try_into()
@@ -199,8 +224,8 @@ fn delegated_ci_signer_publishes_as_self() {
 
 #[test]
 fn delegated_ci_signer_denied_other_function() {
-    // The delegation authenticates, but the perch program rejects set_manager
-    // — proving policy enforcement runs on the CAP-0071 path.
+    // The delegation authenticates, but the rule refuses set_manager —
+    // proving the rule is enforced on the CAP-0071 path.
     let w = setup();
     w.env
         .set_auths(&[entry(&w, "set_manager", &w.account, 2, true)]);
@@ -229,5 +254,79 @@ fn delegate_missing_from_credentials_is_rejected() {
         .set_auths(&[entry(&w, "publish_hash", &w.account, 4, false)]);
     assert!(MockRegistryClient::new(&w.env, &w.registry)
         .try_publish_hash(&7, &w.account)
+        .is_err());
+}
+
+#[test]
+fn ci_publish_verifiers_publishes_a_hash_into_perch_verifiers_as_self() {
+    let w = setup();
+    w.env.set_auths(&[entry_on(
+        &w,
+        &w.verifiers,
+        w.verifiers_rule_id,
+        "publish_hash",
+        &w.account,
+        5,
+        true,
+    )]);
+    MockRegistryClient::new(&w.env, &w.verifiers).publish_hash(&7, &w.account);
+}
+
+#[test]
+fn ci_publish_verifiers_allows_publish_hash_alone() {
+    // ci-publish allows `publish` on its registry; the verifiers rule does
+    // not, there.
+    let w = setup();
+    w.env
+        .set_auths(&[entry(&w, "publish", &w.account, 6, true)]);
+    MockRegistryClient::new(&w.env, &w.registry).publish(&7, &w.account);
+    for (nonce, f) in [(7, "publish"), (8, "set_manager")] {
+        w.env.set_auths(&[entry_on(
+            &w,
+            &w.verifiers,
+            w.verifiers_rule_id,
+            f,
+            &w.account,
+            nonce,
+            true,
+        )]);
+        let client = MockRegistryClient::new(&w.env, &w.verifiers);
+        let refused = match f {
+            "publish" => client.try_publish(&7, &w.account).is_err(),
+            _ => client.try_set_manager(&7, &w.account).is_err(),
+        };
+        assert!(refused, "{f} on perch/verifiers");
+    }
+}
+
+#[test]
+fn ci_publish_verifiers_is_scoped_to_perch_verifiers_and_the_author_itself() {
+    let w = setup();
+    // Selecting it for a call on the stack registry.
+    w.env.set_auths(&[entry_on(
+        &w,
+        &w.registry,
+        w.verifiers_rule_id,
+        "publish_hash",
+        &w.account,
+        9,
+        true,
+    )]);
+    assert!(MockRegistryClient::new(&w.env, &w.registry)
+        .try_publish_hash(&7, &w.account)
+        .is_err());
+    // Naming another author.
+    let someone_else = w.env.register(ApproveAllAccount, ());
+    w.env.set_auths(&[entry_on(
+        &w,
+        &w.verifiers,
+        w.verifiers_rule_id,
+        "publish_hash",
+        &someone_else,
+        10,
+        true,
+    )]);
+    assert!(MockRegistryClient::new(&w.env, &w.verifiers)
+        .try_publish_hash(&7, &someone_else)
         .is_err());
 }

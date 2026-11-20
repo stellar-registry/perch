@@ -42,7 +42,7 @@ pub enum AuthMode {
 /// How to satisfy the smart account's auth entry: in which mode, selecting
 /// which context rule, for which account address. The signing key is
 /// `run_signed`'s single key — it signs both the auth entry and the fee
-/// envelope (a future fee-payer split would add a second key here).
+/// envelope.
 pub struct AuthSpec {
     pub mode: AuthMode,
     pub rule_id: u32,

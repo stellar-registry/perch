@@ -7,13 +7,19 @@
 #     deployer(registry, wasm_hash), runs exactly that wasm, and is what the
 #     registry serves for its name and version;
 #   - the account wasm is installed under its hash;
+#   - perch/verifiers (the manifest's `verifiers`) runs its recorded wasm,
+#     and serves each verifier it records, at its content address
+#     deployer(perch/verifiers, wasm_hash), as the stack's bytes;
 #   - the manifest is consistent: every consumer was built against the
 #     hashes deployed beside it (on-chain, the factory's views and each
 #     exercised account's `infra()` below check what was compiled in);
 #   - what consumers actually resolve on-chain is the manifest's: the
-#     factory's account hash and verifier, the adapter's circuit id and depth
-#     against the pool's, and, for every account the exercise report lists,
-#     its code hash and the infra it resolves.
+#     factory's account hash and its WebAuthn verifier (the stack's hash at
+#     its content address in perch/verifiers; a manifest without
+#     `verifiers` predates perch/verifiers, and its factory pins the stack
+#     registry's copy), the adapter's circuit id and depth against the
+#     pool's, and, for every account the exercise report lists, its code hash
+#     and the infra it resolves.
 #
 # Usage: scripts/verify-deployment.sh [--manifest deployments/<network>.json]
 #                                     [--exercise deployments/<network>-exercise.json]
@@ -29,7 +35,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --manifest) manifest="$2"; shift 2 ;;
         --exercise) exercise="$2"; shift 2 ;;
-        -h|--help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -100,11 +106,33 @@ for name in $(jq -r '.contracts | keys[]' "$manifest"); do
     done
 done
 
+verifiers="$(m '.verifiers.id // empty')"
+if [ -n "$verifiers" ]; then
+    echo "== perch/verifiers $verifiers"
+    check "perch/verifiers wasm" "$(m .verifiers.wasm_hash)" "$(code_hash "$verifiers")"
+    for name in $(jq -r '.verifiers.contracts | keys[]' "$manifest"); do
+        v() { jq -r --arg n "$name" ".verifiers.contracts[\$n]$1" "$manifest"; }
+        hash="$(v .sha256)"
+        addr="$(v .address)"
+        check "manifest: perch/verifiers serves the stack's $name" "$(jq -r --arg n "$name" '.contracts[$n].sha256' "$manifest")" "$hash"
+        check "manifest: $name verifier-name" "$name@$(v .version)" "$(v .name)"
+        check "$name content address in perch/verifiers" "$(derive content "$verifiers" "$hash")" "$addr"
+        check "$name code in perch/verifiers" "$hash" "$(code_hash "$addr")"
+        check "$name perch/verifiers $(v .version)" "$hash" \
+            "$(view "$verifiers" fetch_hash --wasm_name "$name" --version "\"$(v .version)\"")"
+    done
+fi
+
 addr_of() { jq -r --arg n "$1" '.contracts[$n].address' "$manifest"; }
 echo "== what consumers resolve"
 factory="$(addr_of perch-account-factory)"
 check "factory account wasm" "$(m '.contracts["perch-account"].sha256')" "$(view "$factory" account_wasm_hash)"
-check "factory webauthn verifier" "$(addr_of perch-webauthn-verifier)" "$(view "$factory" webauthn_verifier)"
+if [ -n "$verifiers" ]; then
+    webauthn="$(derive content "$verifiers" "$(m '.contracts["perch-webauthn-verifier"].sha256')")"
+else
+    webauthn="$(addr_of perch-webauthn-verifier)"
+fi
+check "factory webauthn verifier" "$webauthn" "$(view "$factory" webauthn_verifier)"
 adapter="$(addr_of perch-zk-adapter)"
 check "adapter circuit id" "$(m .zk.circuit_id)" "$(view "$adapter" circuit_id)"
 check "adapter depth" "$(m .zk.tree_depth)" "$(view "$adapter" tree_depth)"

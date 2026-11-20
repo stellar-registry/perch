@@ -12,13 +12,17 @@
 //!   exactly what the rule diff predicts, and nothing touches an unchanged
 //!   rule.
 //! - Named cases for the diffs most likely to go wrong.
+//! - After every generated apply, on both accounts, the stored rule-eval
+//!   rule set equals the lowering of the document's model and the
+//!   denotation of the account's context rules with the programs and caps
+//!   the compiler emits for them (`perch_testkit::rule_set`), signer order
+//!   included.
 //!
 //! Proptest case counts default low enough for CI; set `PERCH_DELTA_CASES`
 //! to run more.
 
 use arbitrary::Unstructured;
 use perch_doc_compiler::{MAX_DOC_RULES, MAX_DOC_SIGNERS};
-use perch_smart_account::testutils::{Mode, PlannedRule, Step};
 use perch_smart_account::InstalledRule;
 use perch_testkit::delta::*;
 use proptest::prelude::*;
@@ -77,6 +81,11 @@ fn apply_both(w: &DeltaWorld, d: &DocModel) {
     // The oracle shares compile and the desired rule set with the delta;
     // the model's own grant shares neither.
     if delta.is_ok() {
+        for account in [&w.delta, &w.oracle] {
+            if let Err(x) = perch_testkit::rule_set::check(&w.env, account) {
+                panic!("the stored rule set for {d:?}: {x}");
+            }
+        }
         assert_eq!(
             live_rules(w, &w.delta),
             d.expected_rules(w, &w.delta),
@@ -200,150 +209,131 @@ fn policy_set(r: &InstalledRule) -> BTreeSet<String> {
 
 fn same_content(a: &InstalledRule, b: &InstalledRule) -> bool {
     same_slot(a, b)
-        // OZ keeps signer order, so a reorder is a change.
+        // A rule keeps its signers in its document's order, so a reorder is
+        // a change.
         && a.signers == b.signers
         && policy_set(a) == policy_set(b)
         && a.valid_until == b.valid_until
 }
 
-/// The plan's entry for `r`'s slot.
-fn planned<'a>(plan: &'a [PlannedRule], r: &InstalledRule) -> &'a PlannedRule {
-    plan.iter()
-        .find(|p| {
-            p.recovery == r.recovery
-                && (r.recovery || p.name == r.name)
-                && p.context_type == r.context_type
-        })
-        .unwrap_or_else(|| panic!("no plan for {:?}", r.name))
+/// Whether changed rule `b` keeps its id as `a`: always, except a recovery
+/// rule keeping its controller under a new configuration, the one rule
+/// OZ's registry installed again under a new id.
+fn keeps_id(b: &InstalledRule, a: &InstalledRule) -> bool {
+    let controllers = |r: &InstalledRule| -> BTreeSet<String> {
+        r.policies
+            .iter()
+            .map(|p| format!("{:?}", p.policy))
+            .collect()
+    };
+    !b.recovery || !controllers(a).is_subset(&controllers(b))
 }
 
-/// Check one transition's events and writes against the plan the cost model
-/// made for it: each rule took the step planned, a changed rule took the
-/// cheaper path, and its events are exactly that path's.
+/// The account's own entries keyed by rule `id`, as [`raw_entries`] names
+/// them: the spending record and the scope tag.
+fn keyed_by(me: &str, id: u32) -> [String; 2] {
+    [
+        format!("{me}/[SpendRecords,{id}]"),
+        format!("{me}/[GrantTags,{id}]"),
+    ]
+}
+
+/// Check one transition's events and writes against the rule diff: each
+/// rule kept, edited in place, installed again under a new id, removed, or
+/// added as the id rule says, the `DocApplied` summary exactly that, and no
+/// entry keyed by an unchanged rule written.
 fn check_accounting(
     w: &DeltaWorld,
     before: &soroban_sdk::Vec<InstalledRule>,
     after: &soroban_sdk::Vec<InstalledRule>,
-    plan: &[PlannedRule],
     events: &[Event],
     changed_keys: &[String],
 ) {
     let me = contract_hex(&w.delta);
-    // The OZ mutations run quietly (`_no_events`), so the account's only
-    // event is `DocApplied`, whose summary must be exactly what the plan and
-    // the diff of the records say was done.
+    // Rule changes publish nothing of their own, so the account's only event
+    // is `DocApplied`, whose summary must be exactly what the diff of the
+    // records says was done.
     let ours: std::vec::Vec<&Event> = events.iter().filter(|e| e.contract == me).collect();
     assert!(
         ours.iter().all(|e| e.name == "doc_applied"),
-        "per-item events from the quiet path: {ours:?}"
+        "per-item events: {ours:?}"
     );
     let mut expected = Summary::default();
     let mut untouched_ids: std::vec::Vec<u32> = std::vec::Vec::new();
 
     for b in before.iter() {
-        let step = planned(plan, &b).step;
         match after.iter().find(|a| same_slot(&b, a)) {
             Some(a) if same_content(&b, &a) => {
-                assert_eq!(step, Step::Keep, "{:?}", b.name);
                 assert_eq!(a.id, b.id, "unchanged rule {:?} keeps its id", b.name);
                 untouched_ids.push(b.id);
             }
+            Some(a) if keeps_id(&b, &a) => {
+                assert_eq!(a.id, b.id, "{:?} edited in place keeps its id", b.name);
+                let (sb, sa) = (signer_set(&b), signer_set(&a));
+                let (pb, pa) = (policy_set(&b), policy_set(&a));
+                expected.rules_edited += 1;
+                expected.signers_added += sa.difference(&sb).count();
+                expected.signers_removed += sb.difference(&sa).count();
+                expected.policies_added += pa.difference(&pb).count();
+                expected.policies_removed += pb.difference(&pa).count();
+            }
             Some(a) => {
-                let p = planned(plan, &b);
-                // The cheaper path, the in-place edit on a tie; replacement
-                // also when no in-place order exists.
-                match step {
-                    Step::InPlace => {
-                        assert!(p.editable && p.in_place <= p.replace, "{p:?}");
-                        assert_eq!(p.cost, p.in_place);
-                        assert_eq!(a.id, b.id, "{:?} edited in place keeps its id", b.name);
-                        let (sb, sa) = (signer_set(&b), signer_set(&a));
-                        let (pb, pa) = (policy_set(&b), policy_set(&a));
-                        expected.rules_edited += 1;
-                        expected.signers_added += sa.difference(&sb).count();
-                        expected.signers_removed += sb.difference(&sa).count();
-                        expected.policies_added += pa.difference(&pb).count();
-                        expected.policies_removed += pb.difference(&pa).count();
-                    }
-                    Step::Replace => {
-                        assert!(!p.editable || p.in_place > p.replace, "{p:?}");
-                        assert_eq!(p.cost, p.replace);
-                        assert_ne!(a.id, b.id, "{:?} replaced gets a new id", b.name);
-                        expected.rules_removed += 1;
-                        expected.rules_added += 1;
-                    }
-                    other => panic!("changed rule {:?} planned as {other:?}", b.name),
-                }
-            }
-            None => {
-                assert_eq!(step, Step::Remove, "{:?}", b.name);
+                assert!(a.id > b.id, "{:?} installed again gets a new id", b.name);
                 expected.rules_removed += 1;
+                expected.rules_added += 1;
             }
+            None => expected.rules_removed += 1,
         }
     }
     for a in after.iter() {
         if !before.iter().any(|b| same_slot(&b, &a)) {
-            assert_eq!(planned(plan, &a).step, Step::Add, "{:?}", a.name);
+            assert!(
+                before.iter().all(|b| b.id < a.id),
+                "{:?} added gets a new id",
+                a.name
+            );
             expected.rules_added += 1;
         }
     }
     assert_eq!(
         summary(events, &w.delta),
         expected,
-        "the summary is the plan"
+        "the summary is the diff"
     );
 
-    // Nothing keyed by an unchanged rule's id was written: its OZ entry, its
-    // interpreter program, its spending-limit state.
+    // Nothing keyed by an unchanged rule's id was written: OZ's entry kept
+    // for it, its spending record, its scope tag, or another contract's
+    // state for it.
     for id in untouched_ids {
-        let rule_key = format!("{me}/[ContextRuleData,{id}]");
         let by_id = format!("{me},{id}]");
         for k in changed_keys {
             assert!(
-                *k != rule_key && !k.ends_with(&by_id),
+                !keyed_by(&me, id).contains(k) && !k.ends_with(&by_id),
                 "storage of an unchanged rule (id {id}) was written: {k}"
             );
         }
     }
 }
 
-/// The event bytes a plan prices.
-fn priced(plan: &[PlannedRule]) -> u32 {
-    plan.iter().map(|p| p.cost.events).sum()
-}
-
-fn plan_of(
-    w: &DeltaWorld,
-    account: &Address,
-    doc: &DocModel,
-    mode: Mode,
-) -> std::vec::Vec<PlannedRule> {
-    w.plan(account, doc, mode).iter().collect()
-}
-
 /// Apply `b` over `a` on both accounts; check the delta's accounting against
-/// its plan, that the cost model priced its events to the byte, and that it
-/// emits no more event bytes and writes no more entries than the full
-/// replace.
+/// the rule diff, and that it emits no more event bytes and writes no more
+/// entries than the full replace.
 fn transition(w: &DeltaWorld, a: &DocModel, b: &DocModel) {
     apply_both(w, a);
     let before = w.installed(&w.delta);
-    let plan = plan_of(w, &w.delta, b, Mode::Cheapest);
     let raw_before = raw_entries(&w.env);
     w.apply(&w.delta, b).unwrap();
     let events = w.events();
-    let (delta_priced, delta_bytes) = event_bytes(&w.env);
+    let delta_bytes = event_bytes(&w.env);
     let delta_writes = w.env.cost_estimate().resources().write_entries;
     let changed_keys = changed(&raw_before, &raw_entries(&w.env));
     let after = w.installed(&w.delta);
-    check_accounting(w, &before, &after, &plan, &events, &changed_keys);
-    assert_eq!(
-        delta_priced,
-        priced(&plan),
-        "the model prices the events exactly"
-    );
+    check_accounting(w, &before, &after, &events, &changed_keys);
+    if let Err(x) = perch_testkit::rule_set::check(&w.env, &w.delta) {
+        panic!("the stored rule set after {b:?} over {a:?}: {x}");
+    }
     w.apply(&w.oracle, b).unwrap();
-    let (_, oracle_bytes) = event_bytes(&w.env);
+    let oracle_bytes = event_bytes(&w.env);
     let oracle_writes = w.env.cost_estimate().resources().write_entries;
     assert!(
         delta_bytes <= oracle_bytes,
@@ -360,53 +350,17 @@ fn transition(w: &DeltaWorld, a: &DocModel, b: &DocModel) {
     );
 }
 
-/// `b` over `a` with every changed rule forced down one path, on the oracle
-/// account (after `a` by full replace). Returns the plan for that path and
-/// the priced event bytes measured; checks the state is the full replace's.
-fn forced(a: &DocModel, b: &DocModel, in_place: bool) -> (std::vec::Vec<PlannedRule>, u32) {
-    let w = DeltaWorld::new();
-    w.apply(&w.oracle, a).unwrap();
-    let mode = if in_place {
-        Mode::InPlace
-    } else {
-        Mode::Replace
-    };
-    let plan = plan_of(&w, &w.oracle, b, mode);
-    w.apply_forced(b, in_place).unwrap();
-    let (measured, _) = event_bytes(&w.env);
-    w.apply(&w.delta, a).unwrap();
-    w.apply(&w.delta, b).unwrap();
-    same_state(
-        &storage_state(&w.env, &w.delta, History::Keep),
-        &storage_state(&w.env, &w.oracle, History::Keep),
-        "a forced path ends where the cheapest one does",
-    );
-    (plan, measured)
-}
-
 proptest! {
     #![proptest_config(config(48))]
 
-    /// Every transition takes the cheaper path for each changed rule, emits
-    /// exactly that path's events (priced to the byte), writes nothing keyed
+    /// Every transition keeps, edits, or installs again each rule as the id
+    /// rule says, reports exactly that in `DocApplied`, writes nothing keyed
     /// by an unchanged rule, and emits and writes no more than the full
     /// replace.
     #[test]
     fn events_and_writes_are_exactly_the_diff(a in bytes(), b in bytes()) {
         let w = DeltaWorld::new();
         transition(&w, &gen_doc(&a), &gen_doc(&b));
-    }
-
-    /// Both paths the choice compares are priced exactly: forcing every
-    /// changed rule in place, or every one replaced, emits exactly the
-    /// bytes the model priced for that path, and reaches the same state.
-    #[test]
-    fn both_paths_are_priced_exactly(a in bytes(), b in bytes()) {
-        let (a, b) = (gen_doc(&a), gen_doc(&b));
-        for in_place in [true, false] {
-            let (plan, measured) = forced(&a, &b, in_place);
-            prop_assert_eq!(measured, priced(&plan), "in_place: {}", in_place);
-        }
     }
 }
 
@@ -475,19 +429,12 @@ fn transition_after(
     soroban_sdk::Vec<InstalledRule>,
     soroban_sdk::Vec<InstalledRule>,
 ) {
-    let plan = plan_of(w, &w.delta, b, Mode::Cheapest);
     let raw_before = raw_entries(&w.env);
     w.apply(&w.delta, b).unwrap();
     let events = w.events();
-    let (measured, _) = event_bytes(&w.env);
     let changed_keys = changed(&raw_before, &raw_entries(&w.env));
     let after = w.installed(&w.delta);
-    check_accounting(w, &before, &after, &plan, &events, &changed_keys);
-    assert_eq!(
-        measured,
-        priced(&plan),
-        "the model prices the events exactly"
-    );
+    check_accounting(w, &before, &after, &events, &changed_keys);
     w.apply(&w.oracle, b).unwrap();
     same_state(
         &storage_state(&w.env, &w.delta, History::Keep),
@@ -593,24 +540,48 @@ fn sorted(names: &[&str]) -> std::vec::Vec<String> {
     out
 }
 
+/// The stored rule-eval rule of the installed rule named `name` on the
+/// delta account.
+fn stored(w: &DeltaWorld, name: &str) -> perch_smart_account::StoredRule {
+    let client = perch_account::PerchAccountClient::new(&w.env, &w.delta);
+    let at = client
+        .installed_rules()
+        .iter()
+        .position(|r| !r.recovery && r.name == soroban_sdk::String::from_str(&w.env, name))
+        .unwrap();
+    client.rule_set().get(at as u32).unwrap()
+}
+
+/// The signers of the stored rule of the rule installed as `name`, read
+/// from the account's signer table.
+fn stored_signers(w: &DeltaWorld, name: &str) -> soroban_sdk::Vec<perch_account_types::Signer> {
+    let table = perch_account::PerchAccountClient::new(&w.env, &w.delta).rule_signers();
+    stored(w, name).signers_in(&w.env, &table).unwrap()
+}
+
 #[test]
-fn a_rule_keeping_its_name_with_new_functions_changes_only_its_program() {
+fn a_rule_keeping_its_name_with_new_functions_changes_only_its_stored_rule() {
     let mut a = rule("r1", Some(0), &[0]);
     a.functions = Some(std::vec!["transfer"]);
     let mut b = a.clone();
     b.functions = Some(std::vec!["transfer", "approve"]);
-    let (w, events, before, after) = case(
-        &doc(delegated(1), std::vec![admin(&[0]), a]),
+    let w = DeltaWorld::new();
+    apply_both(&w, &doc(delegated(1), std::vec![admin(&[0]), a]));
+    let old = stored(&w, "r1");
+    let old_signers = stored_signers(&w, "r1");
+    let before = w.installed(&w.delta);
+    let (w, events, _, after) = transition_after(
+        &w,
         &doc(delegated(1), std::vec![admin(&[0]), b]),
+        before.clone(),
     );
+    // The record holds the rule's contract, signers and last ledger, none
+    // of which changed, so no record changes: the stored rule alone does.
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
-    // A policy-only edit: no signer changes, so no signer batch at all. The
-    // interpreter is this rule's alone, so OZ deregisters it as the old
-    // program goes and registers it again as the new one comes.
-    assert_eq!(
-        names(&events, &w.delta),
-        sorted(&["policy_removed", "policy_added", "rule_edited"])
-    );
+    assert!(names(&events, &w.delta).is_empty());
+    let new = stored(&w, "r1");
+    assert_ne!(new.1, old.1);
+    assert_eq!((stored_signers(&w, "r1"), new.4), (old_signers, old.4));
 }
 
 #[test]
@@ -631,7 +602,7 @@ fn a_rule_keeping_its_name_with_a_new_scope_is_replaced() {
 }
 
 #[test]
-fn new_cap_parameters_edit_only_that_rule() {
+fn new_cap_parameters_change_only_that_rules_stored_cap() {
     let mut a = rule("r1", Some(0), &[0]);
     a.cap = Some((1_000, 100));
     let mut b = a.clone();
@@ -640,23 +611,14 @@ fn new_cap_parameters_edit_only_that_rule() {
         &doc(delegated(1), std::vec![admin(&[0]), a]),
         &doc(delegated(1), std::vec![admin(&[0]), b]),
     );
-    // The cap is part of the rule's text, so both of the rule's policies are
-    // reinstalled either way: the spending limit for its new parameters, the
-    // interpreter for its new rule-hash provenance. With no events to price
-    // (the quiet path), editing the rule's two policies writes less than
-    // replacing it, so it keeps its id. The admin rule is not touched.
+    // The cap lives in the stored rule, so no record changes and both keep
+    // their ids; the record the old cap charged is dropped
+    // (`gate.rs`).
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
-    assert_eq!(
-        names(&events, &w.delta),
-        sorted(&[
-            "policy_removed",
-            "policy_removed",
-            "policy_added",
-            "policy_added",
-            "rule_edited",
-        ])
-    );
+    assert!(names(&events, &w.delta).is_empty());
+    let cap = stored(&w, "r1").cap().get(0).unwrap();
+    assert_eq!((cap.0, cap.1), (2_000, 100));
 }
 
 #[test]
@@ -679,23 +641,16 @@ fn adding_a_signer_to_a_rule_emits_only_that_signer() {
 }
 
 #[test]
-fn adding_several_signers_is_one_batch() {
+fn adding_several_signers_is_one_edit() {
     // Up to the signer cap.
     let n = MAX_DOC_SIGNERS as usize;
     let added = n - 3;
     let all: std::vec::Vec<usize> = (0..n).collect();
     let a = doc(delegated(3), std::vec![admin(&[0, 1, 2])]);
     let b = doc(delegated(n), std::vec![admin(&all)]);
-    let w = DeltaWorld::new();
-    w.apply(&w.delta, &a).unwrap();
-    let plan = plan_of(&w, &w.delta, &b, Mode::Cheapest);
-    // One `reconcile_signers`: one rule write, then each new signer's registry
-    // and lookup entries.
-    assert_eq!(plan[0].step, Step::InPlace);
-    assert_eq!(plan[0].cost.writes, 1 + added as u32 * 2);
     let (w, events, before, after) = case(&a, &b);
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
-    // The summary counts the additions; registrations are not reported.
+    // The summary counts the additions, as one edit of the rule.
     let mut expected = std::vec!["signer_added"; added];
     expected.push("rule_edited");
     assert_eq!(names(&events, &w.delta), sorted(&expected));
@@ -732,26 +687,31 @@ fn a_signer_shared_by_several_rules_changes_in_one_and_stays_in_the_others() {
 }
 
 #[test]
-fn a_policy_shared_by_several_rules_is_edited_in_one_only() {
+fn a_changed_rule_leaves_the_other_stored_rules_alone() {
     let mut r1 = rule("r1", Some(0), &[0]);
     r1.functions = Some(std::vec!["transfer"]);
     let mut r2 = rule("r2", Some(1), &[0]);
     r2.functions = Some(std::vec!["mint"]);
     let mut r1b = r1.clone();
     r1b.functions = Some(std::vec!["approve"]);
-    let (w, events, _before, after) = case(
+    let w = DeltaWorld::new();
+    apply_both(
+        &w,
         &doc(delegated(1), std::vec![admin(&[0]), r1, r2.clone()]),
+    );
+    let (admin_before, r2_before) = (stored(&w, "admin"), stored(&w, "r2"));
+    let before = w.installed(&w.delta);
+    let (w, events, _, after) = transition_after(
+        &w,
         &doc(delegated(1), std::vec![admin(&[0]), r1b, r2]),
+        before.clone(),
     );
-    // The interpreter stays registered (r2 still uses it): no registry
-    // events, just r1's program swap.
-    assert_eq!(
-        names(&events, &w.delta),
-        sorted(&["policy_removed", "policy_added", "rule_edited"])
-    );
-    let r2_id = id_of(&after, "r2");
-    let interpreter = perch_interpreter::PerchInterpreterClient::new(&w.env, &w.interpreter);
-    assert!(interpreter.get_program(&w.delta, &r2_id).is_some());
+    assert!(names(&events, &w.delta).is_empty());
+    for name in ["admin", "r1", "r2"] {
+        assert_eq!(id_of(&before, name), id_of(&after, name));
+    }
+    assert_eq!(stored(&w, "admin"), admin_before);
+    assert_eq!(stored(&w, "r2"), r2_before);
 }
 
 #[test]
@@ -824,11 +784,11 @@ fn a_one_signer_rule_swaps_its_only_signer_in_place() {
 }
 
 #[test]
-fn reordering_a_rules_signers_gives_oz_and_the_record_the_new_order() {
-    // The same signer set in a new order: OZ's context rule keeps the order
-    // it was given, so the rule is edited in place (one signer swap, no
-    // signer added or removed) and both OZ and the record take the new
-    // order, as a full replace would.
+fn reordering_a_rules_signers_gives_the_record_and_the_view_the_new_order() {
+    // The same signer set in a new order: a rule keeps the order its
+    // document gives, so the rule is edited in place (no signer added or
+    // removed) and the record and `get_context_rule` take the new order, as
+    // a full replace would.
     let a = doc(delegated(3), std::vec![admin(&[0, 1, 2])]);
     let b = doc(delegated(3), std::vec![admin(&[2, 0, 1])]);
     let (w, events, before, after) = case(&a, &b);
@@ -840,8 +800,8 @@ fn reordering_a_rules_signers_gives_oz_and_the_record_the_new_order() {
         record.signers,
         before.iter().find(|r| r.id == id).unwrap().signers
     );
-    let oz = perch_account::PerchAccountClient::new(&w.env, &w.delta).get_context_rule(&id);
-    assert_eq!(oz.signers, record.signers);
+    let view = perch_account::PerchAccountClient::new(&w.env, &w.delta).get_context_rule(&id);
+    assert_eq!(view.signers, record.signers);
 }
 
 /// `n` declared signers using keys `first..first + n` of the pool.
@@ -854,48 +814,41 @@ fn delegated_keys(n: usize, first: usize) -> std::vec::Vec<SignerModel> {
         .collect()
 }
 
-/// Every key of an `old`-signer admin rule swapped for `new` fresh keys:
-/// the documents, and the plan an in-place-only apply would make.
-fn full_swap(old: usize, new: usize) -> PlannedRule {
-    let ids: std::vec::Vec<usize> = (0..old).collect();
-    let a = doc(delegated_keys(old, 0), std::vec![admin(&ids)]);
-    let ids: std::vec::Vec<usize> = (0..new).collect();
-    let b = doc(delegated_keys(new, old), std::vec![admin(&ids)]);
-    let w = DeltaWorld::new();
-    w.apply(&w.delta, &a).unwrap();
-    plan_of(&w, &w.delta, &b, Mode::InPlace).remove(0)
-}
-
 #[test]
-fn an_edit_where_nothing_survives_swaps_the_signers_then_the_policies() {
-    // Every part of r1 changes: its signer, its interpreter program (new
-    // functions), and a new cap. Nothing survives, but the target has a
-    // signer, so an in-place edit swaps the signers first (one
-    // `reconcile_signers`, which never empties the rule), then removes the
-    // old program and installs the new policies. Forced in place, it must
-    // still reach the full replace's state, priced exactly.
+fn an_edit_where_nothing_survives_keeps_the_id() {
+    // Every part of r1 changes: its signer, its functions, and a new cap.
+    // The record's signer changes and the stored rule takes the rest; the
+    // rule keeps its id and reaches the full replace's state.
     let mut a = rule("r1", Some(0), &[1]);
     a.functions = Some(std::vec!["transfer"]);
     let mut b = rule("r1", Some(0), &[2]);
     b.functions = Some(std::vec!["transfer", "approve"]);
     b.cap = Some((1_000, 100));
-    let a = doc(delegated(3), std::vec![admin(&[0]), a]);
-    let b = doc(delegated(3), std::vec![admin(&[0]), b]);
-    let (plan, measured) = forced(&a, &b, true);
-    let r1 = plan.iter().find(|p| p.step == Step::InPlace).unwrap();
-    assert!(r1.editable);
-    assert_eq!(measured, priced(&plan));
+    let (w, events, before, after) = case(
+        &doc(delegated(3), std::vec![admin(&[0]), a]),
+        &doc(delegated(3), std::vec![admin(&[0]), b]),
+    );
+    assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
+    assert_eq!(
+        names(&events, &w.delta),
+        sorted(&["signer_added", "signer_removed", "rule_edited"])
+    );
 }
 
 #[test]
-fn a_full_swap_is_editable_in_place_at_the_signer_cap() {
-    // Nothing survives, but `reconcile_signers` checks only the final set,
-    // so no order needs room for the old and new keys side by side: a full
-    // swap at the signer cap is one in-place edit.
+fn a_full_swap_at_the_signer_cap_is_one_edit() {
+    // Every key of the admin rule swapped for fresh ones, at the signer cap:
+    // the rule keeps its id.
     let n = MAX_DOC_SIGNERS as usize;
-    let p = full_swap(n, n);
-    assert!(p.editable);
-    assert_eq!(p.step, Step::InPlace);
+    let ids: std::vec::Vec<usize> = (0..n).collect();
+    let a = doc(delegated_keys(n, 0), std::vec![admin(&ids)]);
+    let b = doc(delegated_keys(n, n), std::vec![admin(&ids)]);
+    let (w, events, before, after) = case(&a, &b);
+    assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
+    let mut expected = std::vec!["signer_added"; n];
+    expected.extend(std::vec!["signer_removed"; n]);
+    expected.push("rule_edited");
+    assert_eq!(names(&events, &w.delta), sorted(&expected));
 }
 
 #[test]
@@ -1028,10 +981,46 @@ fn recovery_changes_edit_only_the_recovery_rule() {
     let (w, events, before, after) = case(&a, &b);
     assert_eq!(id_of(&before, "r1"), id_of(&after, "r1"));
     assert_eq!(id_of(&before, "admin"), id_of(&after, "admin"));
-    // A zero-signer rule whose only policy changes parameters cannot be
-    // edited in place without passing through an empty rule.
+    // The recovery rule keeps its controller under a new configuration, so
+    // it is installed again under a new id.
+    assert_ne!(recovery_id(&before), recovery_id(&after));
     assert_eq!(
         names(&events, &w.delta),
         sorted(&["context_rule_removed", "context_rule_added"])
     );
+}
+
+#[test]
+fn a_new_controller_is_swapped_in_place() {
+    let mut a = doc(delegated(1), std::vec![admin(&[0])]);
+    a.recovery = Some(RecoveryModel {
+        quorum: 1,
+        delay: 10,
+        expiry: 100,
+        max_cancels: 3,
+    });
+    let w = DeltaWorld::new();
+    apply_both(&w, &a);
+    let before = w.installed(&w.delta);
+    // The same document at another controller.
+    let w = DeltaWorld {
+        controller: w.env.register(perch_recovery::PerchRecovery, ()),
+        ..w
+    };
+    let (w, events, _, after) = transition_after(&w, &a, before.clone());
+    assert_eq!(recovery_id(&before), recovery_id(&after));
+    assert_eq!(
+        names(&events, &w.delta),
+        sorted(&["policy_added", "policy_removed", "rule_edited"])
+    );
+    let id = recovery_id(&after);
+    let view = perch_account::PerchAccountClient::new(&w.env, &w.delta).get_context_rule(&id);
+    assert_eq!(
+        view.policies,
+        soroban_sdk::vec![&w.env, w.controller.clone()]
+    );
+}
+
+fn recovery_id(rules: &soroban_sdk::Vec<InstalledRule>) -> u32 {
+    rules.iter().find(|r| r.recovery).unwrap().id
 }

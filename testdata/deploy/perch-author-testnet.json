@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "network": "Test SDF Network ; September 2015",
+  "signers": [
+    {
+      "id": "admin",
+      "verifier": "CBV6XVWKCCQ6QKRB4VKSKKRSNUVPBFWKSBMKDLPXEMKTYH5CJ3N52264",
+      "key": "18f4c5c7702def68a86c39783b1aa2efd410d8b891c9333827fa43c031f3e534"
+    },
+    {
+      "id": "ci",
+      "address": "GCYKIEDE4YNEPLSSS5THRX4NOQDWYVZH7U6QL2WLAXQECSDTD7AX2X7C"
+    }
+  ],
+  "rules": [
+    {
+      "name": "admin",
+      "scope": {
+        "type": "self-admin"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish",
+      "scope": {
+        "type": "contract",
+        "address": "CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish",
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 6999999
+    },
+    {
+      "name": "admin-registry",
+      "scope": {
+        "type": "contract",
+        "address": "CDZGU4AIND6QRCGAN72I7DCS2EKRZ76JSKYY7KKJR4CG5IR2AMFIBZTM"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "admin"
+        ]
+      }
+    },
+    {
+      "name": "ci-publish-verifiers",
+      "scope": {
+        "type": "contract",
+        "address": "CCHJ7RWPMO33JB5PS74B64N4LVTWCGLEMH5IAKYCV32X56MXGYLHN5HW"
+      },
+      "principals": {
+        "type": "all",
+        "signers": [
+          "ci"
+        ]
+      },
+      "functions": [
+        "publish_hash"
+      ],
+      "args": [
+        {
+          "index": 1,
+          "pred": {
+            "type": "is-self"
+          }
+        }
+      ],
+      "not-after-ledger": 6999999
+    }
+  ]
+}

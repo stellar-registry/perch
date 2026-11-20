@@ -42,6 +42,14 @@
     "./deployments": {
       "types": "./dist/deployments.d.ts",
       "import": "./dist/deployments.js"
+    },
+    "./legacy-account": {
+      "types": "./dist/legacy-account.d.ts",
+      "import": "./dist/legacy-account.js"
+    },
+    "./legacy-doc-compiler": {
+      "types": "./dist/legacy-doc-compiler.d.ts",
+      "import": "./dist/legacy-doc-compiler.js"
     }
   },
   "files": [

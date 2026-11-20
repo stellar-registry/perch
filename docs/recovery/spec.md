@@ -1008,10 +1008,10 @@ Two rules bound that cost:
 - **Document caps.** The doc compiler refuses, on every `apply_doc` and in
   `derive_target`, a document exceeding fixed caps
   (`DocCompilerError::DocTooLarge`): `perch_doc_compiler::MAX_DOC_SIGNERS` =
-  8 declared signers, `MAX_DOC_RULES` = 11 document rules,
+  8 declared signers, `MAX_DOC_RULES` = 10 document rules,
   `MAX_DOC_CANONICAL_BYTES` = 8 192 canonical bytes, and
   `MAX_RULE_NAME_BYTES` = 20 (OZ's context-rule name limit). The recovery
-  rule is not a document rule and is installed in addition to the 11. The
+  rule is not a document rule and is installed in addition to the 10. The
   compiler's `limits` view returns these caps. They are sized so that the
   worst-case completion fits the transaction budget: the measurements and
   the choice are in `budgets.md`, and `release_stack.rs`'s `worst_case_*`

@@ -1,9 +1,8 @@
 //! Metered RPN wire-format benchmark, evaluated AS COMPILED WASM.
 //!
-//! Originally the arena-vs-RPN decision benchmark (issue #2); postfix won
-//! and is frozen as perch-program v1 — see crates/perch-program/BENCH.md.
-//! The RPN half is kept as an instruction-count canary for the frozen
-//! format.
+//! An instruction-count canary for the frozen perch-program v1 format. The
+//! arena-vs-RPN decision behind that format (issue #2) is in
+//! crates/perch-program/BENCH.md.
 //!
 //! Metered costs only accrue to code executing as wasm — native test
 //! execution is not metered. So the encoding is wrapped in a tiny bench

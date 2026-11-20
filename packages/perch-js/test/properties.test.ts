@@ -1,4 +1,4 @@
-// Property tests for the canonicalization + schema surface (PLAN.md phase 0).
+// Property tests for the canonicalization + schema surface.
 //
 // Fixed seed so failures reproduce exactly (mirror of the Rust suites'
 // splitmix64 discipline). What these pin, beyond the frozen parity vectors:
@@ -8,7 +8,7 @@
 // - the canonical form round-trips through the schema byte-identically
 //   (canonicalJson is idempotent across parse);
 // - doc_hash is injective on the generated sample (distinct canonical bytes
-//   never collide — a hash collision here would be publishable news);
+//   never collide);
 // - every builder output passes the schema (the builder can't construct an
 //   invalid document).
 

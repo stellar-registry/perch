@@ -1,0 +1,259 @@
+{
+  "format": 1,
+  "name": "perch-capped-other-from",
+  "description": "In rule-core's model a capped rule charges a transfer of 5 from the account and one of 5 from another address, after which a further 5 from the account is over the limit of 10. The account's capped rules meter its own transfers, so it refuses the second and the third fits its limit (rule_core::refined).",
+  "document": {
+    "signers": [
+      {
+        "id": "6369",
+        "signer": {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      },
+      {
+        "id": "6f7073",
+        "signer": {
+          "delegated": {
+            "address": "6f7073"
+          }
+        }
+      }
+    ],
+    "rules": [
+      {
+        "scope": "self_admin",
+        "principals": {
+          "all": [
+            "6f7073"
+          ]
+        },
+        "functions": null,
+        "args": null,
+        "not_after_ledger": null,
+        "cap": null
+      },
+      {
+        "scope": {
+          "contract": "746f6b656e"
+        },
+        "principals": {
+          "all": [
+            "6369"
+          ]
+        },
+        "functions": [
+          "7472616e73666572"
+        ],
+        "args": null,
+        "not_after_ledger": null,
+        "cap": {
+          "limit": "10",
+          "period_ledgers": 1000
+        }
+      }
+    ],
+    "recovery": null
+  },
+  "account": "6163636f756e74",
+  "scoped": null,
+  "lowered": {
+    "ok": [
+      {
+        "contract": "6163636f756e74",
+        "functions": {
+          "any_except": []
+        },
+        "conds": [],
+        "signers": [
+          {
+            "delegated": {
+              "address": "6f7073"
+            }
+          }
+        ],
+        "threshold": 1,
+        "cap": null,
+        "valid_until": null,
+        "generation": null
+      },
+      {
+        "contract": "746f6b656e",
+        "functions": {
+          "only": [
+            "7472616e73666572"
+          ]
+        },
+        "conds": [
+          {
+            "arg_i128_at_most": {
+              "index": 2,
+              "bound": "170141183460469231731687303715884105727"
+            }
+          }
+        ],
+        "signers": [
+          {
+            "external": {
+              "verifier": "7665726966696572",
+              "key": "63692d6b6579"
+            }
+          }
+        ],
+        "threshold": 1,
+        "cap": {
+          "limit": "10",
+          "period": 1000,
+          "amount_arg": 2
+        },
+        "valid_until": null,
+        "generation": null
+      }
+    ]
+  },
+  "authorizations": [
+    {
+      "batch": [
+        {
+          "call": {
+            "contract": "746f6b656e",
+            "function": "7472616e73666572",
+            "args": [
+              {
+                "address": "6163636f756e74"
+              },
+              {
+                "address": "62"
+              },
+              {
+                "i128": "5"
+              }
+            ]
+          }
+        }
+      ],
+      "choices": [
+        1
+      ],
+      "authenticated": [
+        {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      ],
+      "now": 500,
+      "generation": "0",
+      "expected": {
+        "ok": [
+          {
+            "history": [],
+            "total": "0"
+          },
+          {
+            "history": [
+              {
+                "ledger": 500,
+                "amount": "5"
+              }
+            ],
+            "total": "5"
+          }
+        ]
+      }
+    },
+    {
+      "batch": [
+        {
+          "call": {
+            "contract": "746f6b656e",
+            "function": "7472616e73666572",
+            "args": [
+              {
+                "address": "61"
+              },
+              {
+                "address": "62"
+              },
+              {
+                "i128": "5"
+              }
+            ]
+          }
+        }
+      ],
+      "choices": [
+        1
+      ],
+      "authenticated": [
+        {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      ],
+      "now": 501,
+      "generation": "0",
+      "expected": {
+        "ok": [
+          {
+            "history": [],
+            "total": "0"
+          },
+          {
+            "history": [
+              {
+                "ledger": 500,
+                "amount": "5"
+              },
+              {
+                "ledger": 501,
+                "amount": "5"
+              }
+            ],
+            "total": "10"
+          }
+        ]
+      }
+    },
+    {
+      "batch": [
+        {
+          "call": {
+            "contract": "746f6b656e",
+            "function": "7472616e73666572",
+            "args": [
+              {
+                "address": "6163636f756e74"
+              },
+              {
+                "address": "62"
+              },
+              {
+                "i128": "5"
+              }
+            ]
+          }
+        }
+      ],
+      "choices": [
+        1
+      ],
+      "authenticated": [
+        {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      ],
+      "now": 502,
+      "generation": "0",
+      "expected": "refused"
+    }
+  ]
+}

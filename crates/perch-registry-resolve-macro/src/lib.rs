@@ -64,6 +64,11 @@ enum Mode {
     /// `deploy` convention. This is how a *named* deploy (e.g. a subregistry
     /// under its parent) is resolved from the parent registry's id.
     Named { deploy_name: String },
+    /// A registry alone, derived from a path file (`path_file:` with neither
+    /// `wasm_name:` nor `deploy_name:`): `registry(env)` and the root and path
+    /// constants, for a caller that resolves what the registry publishes at
+    /// call time.
+    Registry { registry_path: RegistryPath },
 }
 
 /// The name-only form's deployer registry, read from [`REGISTRY_FILE`]: a
@@ -71,6 +76,9 @@ enum Mode {
 /// path segment. Nothing in it names a network, so the same bytes derive each
 /// network's own registry.
 struct RegistryPath {
+    /// The file it was read from, relative to the invoking crate: tracked as a
+    /// build input (see [`Mode::Content::pin_file`]).
+    file: String,
     root_deployer: String,
     root_salt: [u8; 32],
     /// `(normalized name, sha256(name))` per segment, root first.
@@ -159,6 +167,7 @@ impl core::str::FromStr for RegistryPath {
             }
         }
         Ok(RegistryPath {
+            file: REGISTRY_FILE.to_string(),
             root_deployer: deployer.ok_or("missing `root-deployer`")?,
             root_salt: salt.ok_or("missing `root-salt`")?,
             segments: segments.ok_or("missing `path`")?,
@@ -166,22 +175,26 @@ impl core::str::FromStr for RegistryPath {
     }
 }
 
-/// Read and validate the invoking crate's [`REGISTRY_FILE`] at build time. A
-/// missing or malformed file is a build error naming it.
-fn read_registry_path(span: proc_macro2::Span) -> syn::Result<RegistryPath> {
-    let path = manifest_path(REGISTRY_FILE, span)?;
+/// Read and validate a registry path file at build time, `rel` relative to
+/// the invoking crate ([`REGISTRY_FILE`] for the name-only form). A missing or
+/// malformed file is a build error naming it.
+fn read_registry_path(rel: &str, span: proc_macro2::Span) -> syn::Result<RegistryPath> {
+    let path = manifest_path(rel, span)?;
     let text = std::fs::read_to_string(&path).map_err(|e| {
         syn::Error::new(
             span,
             format!(
-                "registry path {REGISTRY_FILE:?} not found ({e}).\n\
+                "registry path {rel:?} not found ({e}).\n\
                  Write `root-deployer`, `root-salt`, and `path` lines to {path}.",
                 path = path.display(),
             ),
         )
     })?;
-    text.parse::<RegistryPath>()
-        .map_err(|why| syn::Error::new(span, format!("registry path {REGISTRY_FILE:?}: {why}")))
+    let mut parsed = text
+        .parse::<RegistryPath>()
+        .map_err(|why| syn::Error::new(span, format!("registry path {rel:?}: {why}")))?;
+    parsed.file = rel.to_string();
+    Ok(parsed)
 }
 
 /// Parsed `registry_contract! { … }` invocation.
@@ -215,6 +228,7 @@ impl Parse for RegistrySpec {
         let mut hash: Option<[u8; 32]> = None;
         let mut wasm_file: Option<LitStr> = None;
         let mut hash_file: Option<LitStr> = None;
+        let mut path_file: Option<LitStr> = None;
 
         while !input.is_empty() {
             // `mod` is a keyword, so parse the key with `parse_any`.
@@ -265,12 +279,19 @@ impl Parse for RegistrySpec {
                     }
                     hash_file = Some(input.parse()?);
                 }
+                "path_file" => {
+                    if path_file.is_some() {
+                        return Err(syn::Error::new(key.span(), "duplicate `path_file`"));
+                    }
+                    path_file = Some(input.parse()?);
+                }
                 other => {
                     return Err(syn::Error::new(
                         key.span(),
                         format!(
                             "unknown key `{other}`; expected one of `mod`, `wasm_name`, \
-                             `deploy_name`, `client`, `hash`, `hash_file`, `wasm_file`"
+                             `deploy_name`, `client`, `hash`, `hash_file`, `wasm_file`, \
+                             `path_file`"
                         ),
                     ));
                 }
@@ -298,14 +319,51 @@ impl Parse for RegistrySpec {
                 ))
             }
             (None, None) => {
-                return Err(syn::Error::new(
-                    span,
-                    "missing a salt source: give `wasm_name` (content-addressed) or \
-                     `deploy_name` (name-salted)",
-                ))
+                let Some(path_file) = path_file else {
+                    return Err(syn::Error::new(
+                        span,
+                        "missing a salt source: give `wasm_name` (content-addressed) or \
+                         `deploy_name` (name-salted), or `path_file` alone for a registry",
+                    ));
+                };
+                if hash.is_some() || hash_file.is_some() || wasm_file.is_some() || client.is_some()
+                {
+                    return Err(syn::Error::new(
+                        path_file.span(),
+                        "a registry alone (`path_file` without `wasm_name`) takes only `mod`",
+                    ));
+                }
+                Mode::Registry {
+                    registry_path: read_registry_path(&path_file.value(), path_file.span())?,
+                }
             }
-            (Some(wasm_name), None) => content_mode(wasm_name, hash, hash_file, wasm_file, span)?,
+            (Some(wasm_name), None) => {
+                let mut mode = content_mode(wasm_name, hash, hash_file, wasm_file, span)?;
+                if let Some(path_file) = path_file {
+                    let Mode::Content {
+                        hash: Some(_),
+                        registry_path,
+                        ..
+                    } = &mut mode
+                    else {
+                        return Err(syn::Error::new(
+                            path_file.span(),
+                            "`path_file` needs a pinned hash (`hash`, `hash_file`, or \
+                             `wasm_file`)",
+                        ));
+                    };
+                    *registry_path =
+                        Some(read_registry_path(&path_file.value(), path_file.span())?);
+                }
+                mode
+            }
             (None, Some(deploy_name)) => {
+                if path_file.is_some() {
+                    return Err(syn::Error::new(
+                        deploy_name.span(),
+                        "`path_file` is not valid with `deploy_name`",
+                    ));
+                }
                 if hash.is_some() || hash_file.is_some() || wasm_file.is_some() {
                     return Err(syn::Error::new(
                         deploy_name.span(),
@@ -412,7 +470,7 @@ fn parse_named(input: ParseStream) -> syn::Result<RegistrySpec> {
             // The name-only form bakes the deployer registry's derivation too
             // (from the path file beside the hash), so `address(env)` needs no
             // `registry` arg.
-            registry_path: Some(read_registry_path(span)?),
+            registry_path: Some(read_registry_path(REGISTRY_FILE, span)?),
             pin_file: Some(file),
         },
         client: None,
@@ -526,24 +584,53 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
     // `client()` is only emitted when a `client:` path was given. Address-only
     // callers (e.g. resolving an interpreter used solely as a policy-map key, or
     // a subregistry we only need the address of) omit it and link no client type.
+    // A baked registry (`registry_path`) makes `address(env)` take no
+    // `registry` arg, and `client(env)` with it.
+    let baked = matches!(
+        &spec.mode,
+        Mode::Content {
+            registry_path: Some(_),
+            ..
+        }
+    );
     let client_item = spec.client.as_ref().map(|client| {
-        quote! {
-            /// A typed client bound to the derived address.
-            pub fn client<'a>(
-                env: &::soroban_sdk::Env,
-                registry: &::soroban_sdk::Address,
-            ) -> #client<'a> {
-                #client::new(env, &address(env, registry))
+        if baked {
+            quote! {
+                /// A typed client bound to the derived address.
+                pub fn client<'a>(env: &::soroban_sdk::Env) -> #client<'a> {
+                    #client::new(env, &address(env))
+                }
+            }
+        } else {
+            quote! {
+                /// A typed client bound to the derived address.
+                pub fn client<'a>(
+                    env: &::soroban_sdk::Env,
+                    registry: &::soroban_sdk::Address,
+                ) -> #client<'a> {
+                    #client::new(env, &address(env, registry))
+                }
             }
         }
     });
+
+    // Registry mode: the derivation alone.
+    if let Mode::Registry { registry_path } = &spec.mode {
+        let items = registry_items(registry_path);
+        return quote! {
+            #[allow(dead_code, clippy::all)]
+            pub mod #module {
+                #items
+            }
+        };
+    }
 
     // Name-salted mode: `salt == sha256(normalized_name)`, the base `deploy`
     // convention — resolves a *named* deploy (e.g. a subregistry) from its
     // parent registry's id. `registry` is the PARENT here.
     let deploy_name = match &spec.mode {
         Mode::Named { deploy_name } => Some(deploy_name.clone()),
-        Mode::Content { .. } => None,
+        Mode::Content { .. } | Mode::Registry { .. } => None,
     };
     if let Some(deploy_name) = deploy_name {
         return quote! {
@@ -581,7 +668,7 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
         pin_file,
     } = &spec.mode
     else {
-        unreachable!("named mode handled above");
+        unreachable!("named and registry modes handled above");
     };
 
     // `hash()` accessor + the salt expression `address()`/`client()` derive from.
@@ -615,62 +702,14 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
                 ::soroban_sdk::BytesN::from_array(env, &WASM_HASH)
             }
         };
-        let derive_impl = if let Some(RegistryPath {
-            root_deployer,
-            root_salt,
-            segments,
-        }) = registry_path
-        {
-            // Name-only form: the root and the path are baked from the
-            // committed file, and every hop is derived under the current
-            // network, so the same bytes resolve each network's own registry
-            // and `address(env)` needs no `registry` arg.
-            let n = segments.len();
-            let root_salt = root_salt.iter().map(|b| quote!(#b));
-            let names = segments.iter().map(|(name, _)| name);
-            let salts = segments.iter().map(|(_, salt)| {
-                let salt = salt.iter().map(|b| quote!(#b));
-                quote!([ #(#salt),* ])
-            });
+        let derive_impl = if let Some(path) = registry_path {
+            // The root and the path are baked from the committed file, and
+            // every hop is derived under the current network, so the same
+            // bytes resolve each network's own registry and `address(env)`
+            // needs no `registry` arg.
+            let registry = registry_items(path);
             quote! {
-                // A build input, never linked: see `Mode::Content::pin_file`.
-                const _: &[u8] = ::core::include_bytes!(::core::concat!(
-                    ::core::env!("CARGO_MANIFEST_DIR"),
-                    "/",
-                    #REGISTRY_FILE
-                ));
-
-                /// Who deployed the root registry, with [`ROOT_SALT`]: the
-                /// same address on every network.
-                pub const ROOT_DEPLOYER: &str = #root_deployer;
-                /// The root registry's deploy salt.
-                pub const ROOT_SALT: [u8; 32] = [ #(#root_salt),* ];
-                /// The named deploys from the root down to the registry.
-                pub const REGISTRY_PATH: [&str; #n] = [ #(#names),* ];
-                /// `sha256(name)` per [`REGISTRY_PATH`] segment: a named
-                /// deploy's salt.
-                const PATH_SALTS: [[u8; 32]; #n] = [ #(#salts),* ];
-
-                /// The deployer registry under the current network:
-                /// `deployer(ROOT_DEPLOYER, ROOT_SALT)`, then
-                /// `deployer(<registry above>, sha256(name))` per path segment.
-                /// Pure, offline; nothing here names a network.
-                pub fn registry(env: &::soroban_sdk::Env) -> ::soroban_sdk::Address {
-                    let mut at = env
-                        .deployer()
-                        .with_address(
-                            ::soroban_sdk::Address::from_str(env, ROOT_DEPLOYER),
-                            ::soroban_sdk::BytesN::from_array(env, &ROOT_SALT),
-                        )
-                        .deployed_address();
-                    for salt in PATH_SALTS.iter() {
-                        at = env
-                            .deployer()
-                            .with_address(at, ::soroban_sdk::BytesN::from_array(env, salt))
-                            .deployed_address();
-                    }
-                    at
-                }
+                #registry
 
                 /// Derive this contract's address — pure, offline:
                 /// `deployer(registry(env), WASM_HASH)`.
@@ -777,6 +816,65 @@ fn expand(spec: &RegistrySpec) -> TokenStream2 {
             #derive_impl
 
             #client_item
+        }
+    }
+}
+
+/// The items a baked registry derivation generates: `ROOT_DEPLOYER`,
+/// `ROOT_SALT`, `REGISTRY_PATH`, and `registry(env)`, with the path file
+/// tracked as a build input.
+fn registry_items(path: &RegistryPath) -> TokenStream2 {
+    let RegistryPath {
+        file,
+        root_deployer,
+        root_salt,
+        segments,
+    } = path;
+    let n = segments.len();
+    let root_salt = root_salt.iter().map(|b| quote!(#b));
+    let names = segments.iter().map(|(name, _)| name);
+    let salts = segments.iter().map(|(_, salt)| {
+        let salt = salt.iter().map(|b| quote!(#b));
+        quote!([ #(#salt),* ])
+    });
+    quote! {
+        // A build input, never linked: see `Mode::Content::pin_file`.
+        const _: &[u8] = ::core::include_bytes!(::core::concat!(
+            ::core::env!("CARGO_MANIFEST_DIR"),
+            "/",
+            #file
+        ));
+
+        /// Who deployed the root registry, with [`ROOT_SALT`]: the
+        /// same address on every network.
+        pub const ROOT_DEPLOYER: &str = #root_deployer;
+        /// The root registry's deploy salt.
+        pub const ROOT_SALT: [u8; 32] = [ #(#root_salt),* ];
+        /// The named deploys from the root down to the registry.
+        pub const REGISTRY_PATH: [&str; #n] = [ #(#names),* ];
+        /// `sha256(name)` per [`REGISTRY_PATH`] segment: a named
+        /// deploy's salt.
+        const PATH_SALTS: [[u8; 32]; #n] = [ #(#salts),* ];
+
+        /// The registry under the current network:
+        /// `deployer(ROOT_DEPLOYER, ROOT_SALT)`, then
+        /// `deployer(<registry above>, sha256(name))` per path segment.
+        /// Pure, offline; nothing here names a network.
+        pub fn registry(env: &::soroban_sdk::Env) -> ::soroban_sdk::Address {
+            let mut at = env
+                .deployer()
+                .with_address(
+                    ::soroban_sdk::Address::from_str(env, ROOT_DEPLOYER),
+                    ::soroban_sdk::BytesN::from_array(env, &ROOT_SALT),
+                )
+                .deployed_address();
+            for salt in PATH_SALTS.iter() {
+                at = env
+                    .deployer()
+                    .with_address(at, ::soroban_sdk::BytesN::from_array(env, salt))
+                    .deployed_address();
+            }
+            at
         }
     }
 }

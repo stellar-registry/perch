@@ -3,7 +3,7 @@
 # holds the mainnet delegate uses it.
 #
 # The registry is computed, not configured: the one this checkout's account
-# and factory derive on mainnet from crates/*/wasm/registry.path
+# derives its infra from on mainnet, from crates/*/wasm/registry.path
 # (scripts/derive-id.py), with its root (the path's first hop) and its path,
 # so it is perch/constructorless directly under the Stellar Registry root. The
 # one setting is
@@ -37,9 +37,12 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 pending="$repo_root/deployments/pending-registry.json"
 [ ! -f "$pending" ] || [ "$(jq -r '.mainnet // empty' "$pending")" = "" ] \
     || die "deployments/pending-registry.json declares a mainnet migration: mainnet publishes only into the registry registry.path derives"
-cmp -s "$repo_root/crates/perch-smart-account/wasm/registry.path" \
-    "$repo_root/crates/perch-account-factory/wasm/registry.path" \
-    || die "the account's and the factory's wasm/registry.path differ"
+shopt -s nullglob
+paths=("$repo_root"/crates/*/wasm/registry.path)
+shopt -u nullglob
+for p in "${paths[@]}"; do
+    cmp -s "$p" "${paths[0]}" || die "${p#"$repo_root"/} differs from ${paths[0]#"$repo_root"/}: every crate's wasm/registry.path must be one"
+done
 registry="$("$repo_root/scripts/derive-id.py" registry "$STELLAR_NETWORK_PASSPHRASE")"
 root="$("$repo_root/scripts/derive-id.py" root "$STELLAR_NETWORK_PASSPHRASE")"
 path="$(awk '$1 == "path" {print $2}' "$repo_root/crates/perch-smart-account/wasm/registry.path")"

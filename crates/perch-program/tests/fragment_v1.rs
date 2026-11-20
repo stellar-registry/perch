@@ -1,8 +1,8 @@
-//! Decidable-fragment properties of perch-program v1 (#19, idea 2).
+//! Decidable-fragment properties of perch-program v1.
 //!
 //! The op set is finite, there is no recursion or backward jump, and every leaf
 //! predicate is a total function over a finite-comparable domain. These tests
-//! pin the consequences the compiler and the static analyzer (#19 PR4) rely on:
+//! pin the consequences the compiler and the static analyzer rely on:
 //!
 //! - **Totality.** `rpn::eval` returns a [`Verdict`] for *any* op sequence and
 //!   any inputs — malformed programs fail closed to `Unknown`, never panic.

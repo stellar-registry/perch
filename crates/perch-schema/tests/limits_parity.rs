@@ -1,8 +1,6 @@
-//! Criterion 1 + the constraint source-of-truth: every limit the schema
-//! encodes is checked against its single declared source, in both directions.
-//! If a limit tightens or loosens without the schema moving with it, one of
-//! these assertions fails — "a test that fails when the validator constants and
-//! the schema disagree".
+//! Every limit the schema encodes is checked against its single declared
+//! source, in both directions. If a limit tightens or loosens without the
+//! schema moving with it, one of these assertions fails.
 //!
 //! Two source boundaries:
 //!
@@ -10,10 +8,11 @@
 //!   behaviourally via `agree`: perch-ir's `from_json` + `validate` and the
 //!   schema accept/reject the same documents. This covers `m <= N`, guardian
 //!   `quorum <= count`, the `limit` positivity/overflow shape, and the hex
-//!   shapes (the brief's motivating example: a string-length rule in
-//!   `validate.rs`).
+//!   shapes.
 //! - **the compiler's per-document caps** (`perch_doc_compiler`'s
-//!   `MAX_DOC_SIGNERS` / `MAX_DOC_RULES` / `MAX_RULE_NAME_BYTES`). These are the
+//!   `MAX_DOC_SIGNERS` / `MAX_DOC_RULES` for an account document,
+//!   `MAX_GRANT_SIGNERS` / `MAX_GRANT_RULES` for a grant document, and
+//!   `MAX_RULE_NAME_BYTES`). These are the
 //!   compiler's, not perch-ir's, so they are checked by *constant equality*: the
 //!   generator reads the constant and the committed schema's keyword must equal
 //!   it. Over/under-cap behaviour (where perch-ir's validator still accepts) is
@@ -117,6 +116,38 @@ fn contract_strkey_shape_matches_is_contract_address_shape() {
 }
 
 #[test]
+fn verifier_name_pattern_matches_the_validator() {
+    let v = validator();
+    let doc = |name: &str| {
+        json!({
+            "version": 1,
+            "signers": [{ "id": "a", "verifier": VALID_C, "verifier-name": name, "key": "ab" }],
+            "rules": [{ "name": "r", "scope": { "type": "self-admin" }, "principals": { "type": "all", "signers": ["a"] } }],
+        })
+    };
+    let longest = "a".repeat(perch_ir::MAX_VERIFIER_NAME_LEN);
+    for name in [
+        "perch-webauthn-verifier@0.1.2".to_string(),
+        "a@0.0.0".to_string(),
+        format!("{longest}@1.0.0"),
+        format!("{longest}a@1.0.0"),
+        "v@4294967295.0.0".to_string(),
+        "v@12345678901.0.0".to_string(),
+        "v@01.0.0".to_string(),
+        "v@1.0".to_string(),
+        "v@1.0.0-rc.1".to_string(),
+        "V@1.0.0".to_string(),
+        "v_x@1.0.0".to_string(),
+        "1v@1.0.0".to_string(),
+        "v".to_string(),
+        "@1.0.0".to_string(),
+    ] {
+        let expect = perch_ir::parse_verifier_name(&name).is_some();
+        agree(&v, &doc(&name), expect, &format!("verifier-name:{name}"));
+    }
+}
+
+#[test]
 fn address_strkey_shape_matches_is_address_shape() {
     let v = validator();
     let doc = |address: &str| {
@@ -207,17 +238,39 @@ fn aggregate_caps_track_the_compiler_constants() {
     // either direction (the constant moves, or someone hand-edits the schema)
     // fails here. This is the "constant" half of the source-of-truth guarantee
     // for caps perch-ir's validator does not itself enforce.
+    use perch_doc_compiler::{MAX_DOC_RULES, MAX_DOC_SIGNERS, MAX_GRANT_RULES, MAX_GRANT_SIGNERS};
     let schema = perch_schema::policy_schema();
 
     assert_eq!(
         schema["properties"]["signers"]["maxItems"],
-        json!(perch_doc_compiler::MAX_DOC_SIGNERS),
-        "signers maxItems tracks MAX_DOC_SIGNERS",
+        json!(MAX_DOC_SIGNERS.max(MAX_GRANT_SIGNERS)),
+        "signers maxItems tracks the larger signer cap",
     );
     assert_eq!(
         schema["properties"]["rules"]["maxItems"],
-        json!(perch_doc_compiler::MAX_DOC_RULES),
-        "rules maxItems tracks MAX_DOC_RULES",
+        json!(MAX_DOC_RULES.max(MAX_GRANT_RULES)),
+        "rules maxItems tracks the larger rule cap",
+    );
+    // An account document's caps (`then`) and a grant document's (`else`).
+    assert_eq!(
+        schema["then"]["properties"]["signers"]["maxItems"],
+        json!(MAX_DOC_SIGNERS),
+        "an account document's signers track MAX_DOC_SIGNERS",
+    );
+    assert_eq!(
+        schema["then"]["properties"]["rules"]["maxItems"],
+        json!(MAX_DOC_RULES),
+        "an account document's rules track MAX_DOC_RULES",
+    );
+    assert_eq!(
+        schema["else"]["properties"]["signers"]["maxItems"],
+        json!(MAX_GRANT_SIGNERS),
+        "a grant document's signers track MAX_GRANT_SIGNERS",
+    );
+    assert_eq!(
+        schema["else"]["properties"]["rules"]["maxItems"],
+        json!(MAX_GRANT_RULES),
+        "a grant document's rules track MAX_GRANT_RULES",
     );
     assert_eq!(
         schema["$defs"]["rule"]["properties"]["name"]["maxLength"],

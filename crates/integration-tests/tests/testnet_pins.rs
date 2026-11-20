@@ -1,16 +1,18 @@
-//! Guards the build-time pins every consumer **actually compiled in** against
+//! Guards the build-time pins every consumer actually compiled in against
 //! the deployment manifest (`deployments/testnet.json`):
 //!
-//! - the account's and the factory's registry paths
-//!   (`crates/*/wasm/registry.path`) are the same, and on the manifest's
-//!   network they derive the manifest's registry, or the registry a declared
-//!   pending migration names (below);
+//! - the account's registry path (`crates/perch-smart-account/wasm/
+//!   registry.path`) derives, on the manifest's network, the manifest's
+//!   registry, or the registry a declared pending migration names (below);
 //! - the account's `infra::*` modules (hashes = sha256 of the fetched
 //!   `crates/perch-smart-account/wasm/*.wasm`) derive the manifest's
 //!   compiler, interpreter, and spending-limit hashes' content addresses
 //!   under that registry;
 //! - the factory's pinned account wasm hash is the manifest's, and its
-//!   WebAuthn verifier the manifest's hash under that registry;
+//!   WebAuthn verifier the manifest's hash at its content address in
+//!   `perch/verifiers`, the registry `crates/*/wasm/verifiers.path` derives,
+//!   which a manifest records under `verifiers` (with that address) once a
+//!   deployment has created it;
 //! - every manifest address is the content address of its recorded hash.
 //!
 //! **Pending migration.** When the source derives another registry than the
@@ -26,7 +28,7 @@
 //! this test closes the loop on what was compiled. `scripts/check-pins.sh`
 //! applies the same rule offline.
 use perch_account_factory::pins;
-use perch_smart_account::{constructorless_registry, infra};
+use perch_smart_account::{constructorless_registry, infra, verifier_registry};
 use soroban_sdk::testutils::Ledger;
 use soroban_sdk::{Address, Bytes, BytesN, Env};
 
@@ -71,21 +73,7 @@ fn consumers_pin_the_deployment_manifest() {
         );
     }
 
-    // Both crates derive the same registry from the same path.
-    assert_eq!(
-        (
-            infra::perch_doc_compiler::ROOT_DEPLOYER,
-            infra::perch_doc_compiler::ROOT_SALT,
-            infra::perch_doc_compiler::REGISTRY_PATH.as_slice(),
-        ),
-        (
-            pins::perch_webauthn_verifier::ROOT_DEPLOYER,
-            pins::perch_webauthn_verifier::ROOT_SALT,
-            pins::perch_webauthn_verifier::REGISTRY_PATH.as_slice(),
-        )
-    );
     let derived = constructorless_registry(&env);
-    assert_eq!(pins::perch_webauthn_verifier::registry(&env), derived);
 
     let network = m["network"].as_str().unwrap();
     let declared = &pending[network];
@@ -124,8 +112,31 @@ fn consumers_pin_the_deployment_manifest() {
         content(&derived, "perch-spending-limit")
     );
     assert_eq!(pins::account::WASM_HASH, hash(&m, "perch-account"));
+
+    // The factory's WebAuthn verifier: the manifest's hash, in
+    // `perch/verifiers`.
+    let verifiers = verifier_registry(&env);
+    assert_eq!(pins::perch_webauthn_verifier::registry(&env), verifiers);
+    assert_eq!(
+        pins::perch_webauthn_verifier::WASM_HASH,
+        hash(&m, "perch-webauthn-verifier")
+    );
     assert_eq!(
         pins::perch_webauthn_verifier::address(&env),
-        content(&derived, "perch-webauthn-verifier")
+        content(&verifiers, "perch-webauthn-verifier")
     );
+    match m["verifiers"]["id"].as_str() {
+        Some(id) => {
+            assert_eq!(Address::from_str(&env, id), verifiers);
+            let webauthn = &m["verifiers"]["contracts"]["perch-webauthn-verifier"];
+            assert_eq!(
+                Address::from_str(&env, webauthn["address"].as_str().expect("address")),
+                pins::perch_webauthn_verifier::address(&env)
+            );
+        }
+        None => println!(
+            "{network}.json records no perch/verifiers yet; this source derives {}",
+            perch_testkit::delta::strkey(&verifiers)
+        ),
+    }
 }

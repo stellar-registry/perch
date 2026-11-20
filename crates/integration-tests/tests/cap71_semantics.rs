@@ -522,8 +522,8 @@ fn c5_zero_signer_policy_rule_defers_to_enforce_with_invoker_auth() {
     assert!(client.try_protected(&account).is_err());
 }
 
-/// The #90 root cause and its fix. A rule scoped to a hook's contract lets
-/// its signers satisfy the hook's `account.require_auth()` by signature. The
+/// A rule scoped to a hook's contract lets its signers satisfy the hook's
+/// `account.require_auth()` by signature (#90). The
 /// reserved-name guard in `__check_auth` refuses that, and the account's own
 /// invoker path still works with no auth entries at all.
 #[test]
@@ -595,8 +595,8 @@ impl ApproveController {
         guardian.require_auth_for_args(vec![&e, digest.into_val(&e)]);
     }
 
-    /// The same check placed inside a reserved hook, the way the pre-spec
-    /// controller collected `Protected` reconfiguration evidence.
+    /// The same check placed inside a reserved hook, as a controller that
+    /// collected `Protected` reconfiguration evidence in `rcv_sync` would.
     pub fn rcv_sync(e: Env, guardian: Address, digest: BytesN<32>) {
         guardian.require_auth_for_args(vec![&e, digest.into_val(&e)]);
     }

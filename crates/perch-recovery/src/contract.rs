@@ -4,12 +4,12 @@
 //!
 //! Who reaches what:
 //!
-//! - **Invoker-only hooks** (`rcv_sync`, `rcv_cancel`, `rcv_upgrade`, and
-//!   the OZ `Policy` hooks `install`, `uninstall`, `enforce`) start with
-//!   `account.require_auth()`. A perch account satisfies that only as the
-//!   direct invoker: its `__check_auth` refuses these names, so no signature
-//!   reaches them (spec §15, perch #90). They never call back into the
-//!   account, which is on the call stack and cannot be re-entered.
+//! - **Invoker-only hooks** (`rcv_sync`, `rcv_cancel`, `rcv_upgrade`,
+//!   `rcv_install`, `rcv_complete`) start with `account.require_auth()`. A
+//!   perch account satisfies that only as the direct invoker: its
+//!   `__check_auth` refuses these names, so no signature reaches them (spec
+//!   §15, perch #90). They never call back into the account, which is on the
+//!   call stack and cannot be re-entered.
 //! - **Permissionless entry points** (`begin_*`, `submit_zk`,
 //!   `submit_zk_change`, `publish_baseline`, `renew`) carry no authority:
 //!   evidence is what authorizes, and the controller builds every statement
@@ -32,7 +32,9 @@ use perch_recovery_interface::account::RecoveryAccountClient;
 use perch_recovery_interface::config::{
     zk_factor_transition_ok, CompiledRecoveryConfig, CompiledZkFactor, RecoveryProfile,
 };
-use perch_recovery_interface::controller::{Completion, RecoveryError, SyncOutcome, UpgradeStep};
+use perch_recovery_interface::controller::{
+    Completion, RecoveryError, RecoveryRule, SyncOutcome, UpgradeStep,
+};
 use perch_recovery_interface::credential::{replaced_credentials_leave, ReplacementSet};
 use perch_recovery_interface::zk::{MembershipPoolClient, ZkAdapterClient, ZkEvidence};
 use perch_recovery_interface::{
@@ -41,11 +43,9 @@ use perch_recovery_interface::{
 };
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::{
-    contract, contractevent, contractimpl, panic_with_error, Address, Bytes, BytesN, Env, IntoVal,
-    Symbol, TryFromVal, Vec,
+    contract, contractevent, contractimpl, Address, Bytes, BytesN, Env, IntoVal, Symbol,
+    TryFromVal, Vec,
 };
-use stellar_accounts::policies::Policy;
-use stellar_accounts::smart_account::{ContextRule, ContextRuleType, Signer};
 
 /// T1: an attempt was opened.
 #[contractevent]
@@ -125,59 +125,6 @@ pub struct ChangeEvidenceRecorded {
 pub struct PerchRecovery;
 
 #[contractimpl]
-impl Policy for PerchRecovery {
-    /// The configuration hash the recovery rule is installed for.
-    type AccountParams = BytesN<32>;
-
-    /// Bookkeeping only: `rcv_sync` already wrote the configuration, earlier
-    /// in the same `apply_doc`. Checks that the recovery rule has the
-    /// required shape and was installed for the stored configuration.
-    fn install(
-        e: &Env,
-        install_params: BytesN<32>,
-        context_rule: ContextRule,
-        smart_account: Address,
-    ) {
-        smart_account.require_auth();
-        assert_recovery_rule(e, &context_rule, &smart_account);
-        let config = RecoveryStorage::get_config(e, &smart_account)
-            .unwrap_or_else(|| panic_with_error!(e, RecoveryError::NotEnrolled));
-        if config.config_hash != install_params {
-            panic_with_error!(e, RecoveryError::InvalidConfiguration);
-        }
-    }
-
-    /// T5: authorize the completing `apply_doc`. The recovery rule has no
-    /// signers, so this is the whole check: the context must be this
-    /// account's `apply_doc` of the authorized attempt's exact target bytes,
-    /// inside the completion window. It then leaves a marker that only the
-    /// same invocation's `rcv_sync` consumes.
-    fn enforce(
-        e: &Env,
-        context: Context,
-        authenticated_signers: Vec<Signer>,
-        context_rule: ContextRule,
-        smart_account: Address,
-    ) {
-        smart_account.require_auth();
-        if !authenticated_signers.is_empty() {
-            panic_with_error!(e, RecoveryError::MalformedContextRule);
-        }
-        assert_recovery_rule(e, &context_rule, &smart_account);
-        if let Err(err) = authorize_completion(e, &context, &smart_account) {
-            panic_with_error!(e, err);
-        }
-    }
-
-    /// Writes nothing: OZ discards `uninstall` failures, so it can gate
-    /// nothing, and removal is decided by `rcv_sync`. Invoker-only like every
-    /// hook, so no signature can call it either.
-    fn uninstall(_e: &Env, _context_rule: ContextRule, smart_account: Address) {
-        smart_account.require_auth();
-    }
-}
-
-#[contractimpl]
 impl PerchRecovery {
     // ----------------------------------------------------------------------
     // Invoker-only hooks
@@ -200,10 +147,9 @@ impl PerchRecovery {
 
         // A marker counts only for the document it was written for, in the
         // ledger it was written, while its attempt is still the authorized
-        // one. `enforce` runs for every context in an authorization tree,
-        // including a sub-invocation that never executes, so a marker can be
-        // left behind; a stale one is dropped and the call classified
-        // normally.
+        // one. An account can ask `rcv_complete` about a context in an
+        // authorization tree that never executes, so a marker can be left
+        // behind; a stale one is dropped and the call classified normally.
         if let Some(marker) = RecoveryStorage::get_completing(e, &account) {
             RecoveryStorage::remove_completing(e, &account);
             let current = marker.target_doc_hash == doc_hash
@@ -327,6 +273,39 @@ impl PerchRecovery {
                 Ok(epoch)
             }
         }
+    }
+
+    /// Bookkeeping only: `rcv_sync` already wrote the configuration, earlier
+    /// in the same `apply_doc`. Checks that the recovery rule has the
+    /// required shape and was installed for the stored configuration.
+    pub fn rcv_install(
+        e: &Env,
+        account: Address,
+        config_hash: BytesN<32>,
+        rule: RecoveryRule,
+    ) -> Result<(), RecoveryError> {
+        account.require_auth();
+        check_rule(&rule, &account)?;
+        if require_config(e, &account)?.config_hash != config_hash {
+            return Err(RecoveryError::InvalidConfiguration);
+        }
+        Ok(())
+    }
+
+    /// T5: authorize the completing `apply_doc`. The recovery rule has no
+    /// signers, so this is the whole check: the context must be this
+    /// account's `apply_doc` of the authorized attempt's exact target bytes,
+    /// inside the completion window. It then leaves a marker that only the
+    /// same invocation's `rcv_sync` consumes.
+    pub fn rcv_complete(
+        e: &Env,
+        account: Address,
+        context: Context,
+        rule: RecoveryRule,
+    ) -> Result<(), RecoveryError> {
+        account.require_auth();
+        check_rule(&rule, &account)?;
+        authorize_completion(e, &context, &account)
     }
 
     // ----------------------------------------------------------------------
@@ -509,7 +488,7 @@ impl PerchRecovery {
             .try_compile_doc(&doc_json)
             .map_err(|_| RecoveryError::BaselineMismatch)?
             .map_err(|_| RecoveryError::BaselineMismatch)?;
-        if compiled.doc_hash != baseline || !admin_survives(&compiled.rules) {
+        if compiled.doc_hash != baseline || !admin_survives(&compiled) {
             return Err(RecoveryError::BaselineMismatch);
         }
         let key = (account, baseline);
@@ -879,7 +858,7 @@ fn cancel(
     Ok(())
 }
 
-/// The `enforce` half of T5.
+/// The `rcv_complete` half of T5.
 fn authorize_completion(
     e: &Env,
     context: &Context,
@@ -1342,10 +1321,9 @@ fn authorized_live(e: &Env, account: &Address) -> Option<Attempt> {
 }
 
 /// The recovery rule is a zero-signer rule scoped to the account itself.
-fn assert_recovery_rule(e: &Env, rule: &ContextRule, account: &Address) {
-    if !rule.signers.is_empty()
-        || rule.context_type != ContextRuleType::CallContract(account.clone())
-    {
-        panic_with_error!(e, RecoveryError::MalformedContextRule);
+fn check_rule(rule: &RecoveryRule, account: &Address) -> Result<(), RecoveryError> {
+    if rule.signers != 0 || rule.contract.as_ref() != Some(account) {
+        return Err(RecoveryError::MalformedContextRule);
     }
+    Ok(())
 }

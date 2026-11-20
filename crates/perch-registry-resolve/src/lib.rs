@@ -169,6 +169,15 @@
 //!   missing file is a build error naming it, so the pin comes from a wasm you
 //!   have on disk — fetch it first.
 //!
+//! - `path_file:` — optional — path (relative to the invoking crate's
+//!   `CARGO_MANIFEST_DIR`) to a registry path file in the
+//!   [`wasm/registry.path` format](#one-build-every-network). With a pinned
+//!   `wasm_name:`, it bakes the deployer registry's derivation as the
+//!   name-only form does: `address(env)` and `client(env)` take no `registry`
+//!   arg, and `registry(env)`, `ROOT_DEPLOYER`, `ROOT_SALT`, and
+//!   `REGISTRY_PATH` are generated. Given with `mod:` alone, it generates only
+//!   those: a **registry** whose names a caller resolves at call time.
+//!
 //! `hash:`, `hash_file:`, and `wasm_file:` are mutually exclusive; any one
 //! selects **pinned mode**, none selects **runtime mode** (call-time `fetch_hash`).
 //!

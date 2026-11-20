@@ -1,0 +1,21 @@
+[package]
+name = "perch-account-types"
+description = "The account's authorization types: its signer, the __check_auth payload, the context rule its views return, and the error codes wallets read"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+doctest = false
+
+# Types only, with no allocator: the factory, the doc compiler, rule-eval's
+# bridge, and the account all link it.
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# `tests/openzeppelin.rs`: each type against the OpenZeppelin type it twins.
+stellar-accounts = { workspace = true }

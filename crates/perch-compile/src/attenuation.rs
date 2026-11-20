@@ -3,10 +3,10 @@
 //!
 //! A holder of a policy can mint a strictly-narrower one without an issuer
 //! round-trip. What makes "narrower" *enforceable* rather than a convention is
-//! PR4's [`reachable_calls`]: a child is a valid attenuation of a parent iff
-//! every `(scope, function)` the child can authorize is one the parent could
-//! already authorize. The check is fail-closed — anything the analyzer cannot
-//! show is within the parent is rejected.
+//! [`reachable_calls`]: a child is a valid attenuation of a parent iff every
+//! `(scope, function)` the child can authorize is one the parent could already
+//! authorize. The check is fail-closed — anything the analyzer cannot show is
+//! within the parent is rejected.
 //!
 //! [`attenuate`] additionally returns the parent and child `doc_hash`es, the
 //! link in the hash chain: given both documents a verifier re-runs the check and

@@ -6,13 +6,15 @@
 //! contract already on the call stack, and the account is on the stack for
 //! every hook it calls. The account therefore passes each hook what it needs
 //! (the compiled document hash and configuration, the approval freshness
-//! bound, the upgrade step), and the controller reaches the account only from
-//! its own external entry points (evidence submission, `begin_*`,
+//! bound, the upgrade step, its recovery rule and the context a completion
+//! authorizes), and the controller reaches the account only from its own
+//! external entry points (evidence submission, `begin_*`,
 //! `publish_baseline`) through [`crate::account::RecoveryAccountClient`].
 
 use crate::config::CompiledRecoveryConfig;
 use crate::credential::Credential;
 use crate::statement::UpgradeSubject;
+use soroban_sdk::auth::Context;
 use soroban_sdk::{contractclient, contracttype, Address, BytesN, Env, Vec};
 use soroban_sdk_tools::scerr;
 
@@ -23,8 +25,9 @@ use soroban_sdk_tools::scerr;
 pub enum RecoveryError {
     /// No configuration is enrolled for this account at this controller.
     NotEnrolled,
-    /// An attempt is authorized and live: begin, policy changes, and
-    /// upgrades are refused until it completes, is cancelled, or expires.
+    /// An attempt is authorized and live, which blocks begin, policy
+    /// changes, and upgrades.
+    // Until it completes, is cancelled, or expires.
     AttemptAuthorized,
     /// No attempt with this id exists for the account.
     NoSuchAttempt,
@@ -66,9 +69,8 @@ pub enum RecoveryError {
     InvalidReplacements,
     /// The target or a replacement contains a revoked credential.
     CredentialRevoked,
-    /// The ZK enrollment id was enrolled for this account before (the
-    /// controller checks the account's `is_enrolled_id` at T1; the pure
-    /// `derive_target` cannot see the account's history).
+    /// The ZK enrollment id was enrolled for this account before.
+    // docs/account-interface.md, "Errors".
     EnrollmentIdReused,
     /// Compromise recovery with no baseline enrolled.
     NoBaseline,
@@ -81,17 +83,19 @@ pub enum RecoveryError {
     ZkWiringMismatch,
     /// The ZK factor changed without a new enrollment id.
     ZkFactorChangedInPlace,
-    /// The configuration is malformed (for example, the account is one of
-    /// its own guardians, or the quorum is out of range).
+    /// The configuration is malformed.
+    // For example, the account is one of its own guardians, or the quorum is
+    // out of range.
     InvalidConfiguration,
     /// An upgrade request recorded under an older epoch.
     StaleUpgrade,
     /// A ledger-sequence computation overflowed `u32`.
     LedgerOverflow,
-    /// The policy was attached to a context rule of the wrong shape.
+    /// A hook was called for a recovery rule of the wrong shape.
+    // It requires a signer, or authorizes calls other than the account's own.
     MalformedContextRule,
-    /// A credential the replacement set replaces still appears in the
-    /// target (a swap or a no-op replacement, spec §7.3 rule 8).
+    /// The target keeps a credential the replacement set replaces.
+    // A swap or a no-op replacement, spec §7.3 rule 8.
     ReplacedCredentialRetained,
 }
 
@@ -157,6 +161,22 @@ pub enum UpgradeStep {
     Execute(u64),
 }
 
+/// The account's recovery rule, as the hooks that serve it are told of it
+/// (spec §10): `rcv_install` when the account installs the rule, and
+/// `rcv_complete` for each context a completion selects it for. A
+/// controller serves only a rule that requires no signer and authorizes
+/// calls on the account alone, and refuses any other with
+/// `MalformedContextRule`.
+#[contracttype]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RecoveryRule {
+    /// How many signers the rule requires.
+    pub signers: u32,
+    /// The contract the rule authorizes calls on, when it is scoped to one
+    /// contract's calls; `None` for any other scope.
+    pub contract: Option<Address>,
+}
+
 /// The invoker-only hooks the account calls on its adopted controller. Each
 /// starts with `account.require_auth()`, which only the account's own code
 /// can satisfy: the account refuses these names in `__check_auth` and
@@ -183,6 +203,31 @@ pub trait RecoveryHooksInterface {
     /// Checks an upgrade step and returns the account's epoch at this
     /// controller after it (the epoch a scheduled request records).
     fn rcv_upgrade(e: &Env, account: Address, step: UpgradeStep) -> Result<u64, RecoveryError>;
+
+    /// Called when the account installs its recovery rule naming this
+    /// controller, after `rcv_sync` stored the configuration in the same
+    /// `apply_doc`. Checks the rule's shape, and that the configuration
+    /// stored for the account is `config_hash`, the one the rule is
+    /// installed for. Writes nothing. Removing the rule calls no hook:
+    /// `rcv_sync` decides and writes a removal.
+    fn rcv_install(
+        e: &Env,
+        account: Address,
+        config_hash: BytesN<32>,
+        rule: RecoveryRule,
+    ) -> Result<(), RecoveryError>;
+
+    /// T5: decides one context of a completion, which selects the recovery
+    /// rule with no signer. Accepts only `apply_doc` on the account of the
+    /// authorized attempt's exact target bytes, inside its completion
+    /// window, and leaves a marker that only the same invocation's
+    /// `rcv_sync` consumes.
+    fn rcv_complete(
+        e: &Env,
+        account: Address,
+        context: Context,
+        rule: RecoveryRule,
+    ) -> Result<(), RecoveryError>;
 }
 
 #[cfg(test)]

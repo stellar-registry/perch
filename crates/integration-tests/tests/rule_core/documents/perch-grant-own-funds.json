@@ -1,0 +1,268 @@
+{
+  "format": 1,
+  "name": "perch-grant-own-funds",
+  "description": "A grant document's rule on a token, uncapped and unrestricted in its functions, authorizes the account's own transfer, approve and burn, and a call whose first argument is another address (a pool) that is not one of those functions.",
+  "document": {
+    "signers": [
+      {
+        "id": "6369",
+        "signer": {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      }
+    ],
+    "rules": [
+      {
+        "scope": {
+          "contract": "746f6b656e"
+        },
+        "principals": {
+          "all": [
+            "6369"
+          ]
+        },
+        "functions": null,
+        "args": null,
+        "not_after_ledger": null,
+        "cap": null
+      }
+    ],
+    "recovery": null
+  },
+  "account": "6163636f756e74",
+  "scoped": {
+    "admin": {
+      "signers": [
+        {
+          "id": "6369",
+          "signer": {
+            "external": {
+              "verifier": "7665726966696572",
+              "key": "63692d6b6579"
+            }
+          }
+        },
+        {
+          "id": "6f7073",
+          "signer": {
+            "delegated": {
+              "address": "6f7073"
+            }
+          }
+        }
+      ],
+      "rules": [
+        {
+          "scope": "self_admin",
+          "principals": {
+            "all": [
+              "6f7073"
+            ]
+          },
+          "functions": null,
+          "args": null,
+          "not_after_ledger": null,
+          "cap": null
+        }
+      ],
+      "recovery": null
+    },
+    "generation": "0"
+  },
+  "lowered": {
+    "ok": [
+      {
+        "contract": "746f6b656e",
+        "functions": {
+          "any_except": []
+        },
+        "conds": [],
+        "signers": [
+          {
+            "external": {
+              "verifier": "7665726966696572",
+              "key": "63692d6b6579"
+            }
+          }
+        ],
+        "threshold": 1,
+        "cap": null,
+        "valid_until": null,
+        "generation": "0"
+      }
+    ]
+  },
+  "authorizations": [
+    {
+      "batch": [
+        {
+          "call": {
+            "contract": "746f6b656e",
+            "function": "7472616e73666572",
+            "args": [
+              {
+                "address": "6163636f756e74"
+              },
+              {
+                "address": "62"
+              },
+              {
+                "i128": "5"
+              }
+            ]
+          }
+        }
+      ],
+      "choices": [
+        0
+      ],
+      "authenticated": [
+        {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      ],
+      "now": 500,
+      "generation": "0",
+      "expected": {
+        "ok": [
+          {
+            "history": [],
+            "total": "0"
+          }
+        ]
+      }
+    },
+    {
+      "batch": [
+        {
+          "call": {
+            "contract": "746f6b656e",
+            "function": "617070726f7665",
+            "args": [
+              {
+                "address": "6163636f756e74"
+              },
+              {
+                "address": "73"
+              },
+              {
+                "i128": "5"
+              },
+              {
+                "other": "00000003000003e8"
+              }
+            ]
+          }
+        }
+      ],
+      "choices": [
+        0
+      ],
+      "authenticated": [
+        {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      ],
+      "now": 501,
+      "generation": "0",
+      "expected": {
+        "ok": [
+          {
+            "history": [],
+            "total": "0"
+          }
+        ]
+      }
+    },
+    {
+      "batch": [
+        {
+          "call": {
+            "contract": "746f6b656e",
+            "function": "6275726e",
+            "args": [
+              {
+                "address": "6163636f756e74"
+              },
+              {
+                "i128": "5"
+              }
+            ]
+          }
+        }
+      ],
+      "choices": [
+        0
+      ],
+      "authenticated": [
+        {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      ],
+      "now": 502,
+      "generation": "0",
+      "expected": {
+        "ok": [
+          {
+            "history": [],
+            "total": "0"
+          }
+        ]
+      }
+    },
+    {
+      "batch": [
+        {
+          "call": {
+            "contract": "746f6b656e",
+            "function": "73656e64",
+            "args": [
+              {
+                "address": "706f6f6c"
+              },
+              {
+                "address": "6163636f756e74"
+              },
+              {
+                "i128": "5"
+              }
+            ]
+          }
+        }
+      ],
+      "choices": [
+        0
+      ],
+      "authenticated": [
+        {
+          "external": {
+            "verifier": "7665726966696572",
+            "key": "63692d6b6579"
+          }
+        }
+      ],
+      "now": 503,
+      "generation": "0",
+      "expected": {
+        "ok": [
+          {
+            "history": [],
+            "total": "0"
+          }
+        ]
+      }
+    }
+  ]
+}

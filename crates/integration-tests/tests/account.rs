@@ -1,26 +1,21 @@
 //! Drives the EXPORTED `__check_auth` of the real `PerchAccount` through the
 //! host's check-auth frame (`try_invoke_contract_check_auth`) — the exact path
 //! a production `SorobanAuthorizationEntry` takes, including the real
-//! cross-contract calls into the deployed verifier and interpreter. matrix.rs
-//! exercises the storage-level `do_check_auth` free function; this suite covers
-//! what it can't: the constructor-installed admin rule (id 0), the
-//! contract-level export, and the least-privilege boundary between the two
-//! rules the production account ships with.
+//! cross-contract calls into the verifier: the constructor-installed admin
+//! rule (id 0), decided by rule-eval over the rule the constructor stores,
+//! the contract-level export, and the least-privilege boundary of the
+//! fixture's ci-publish rule, stored as `apply_doc` stores it
+//! (`perch_testkit::ci_publish_rule`) and decided by rule-eval.
 
 use ed25519_dalek::{Signer as _, SigningKey};
 use perch_account::PerchAccount;
-use perch_compile::{compile, CompileConfig};
+use perch_account_types::{AuthPayload, Signer, SmartAccountError};
 use perch_ed25519_verifier::PerchEd25519Verifier;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{
-    map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, String as SString, Symbol, Val,
-};
-use stellar_accounts::smart_account::{
-    add_context_rule, AuthPayload, ContextRuleType, Signer, SmartAccountError,
-};
+use soroban_sdk::{map, vec, Address, Bytes, BytesN, Env, IntoVal, Map, Symbol};
 
-use perch_testkit::{auth_digest, fixture, FIXTURE_REGISTRY};
+use perch_testkit::{auth_digest, ci_publish_rule, FIXTURE_REGISTRY};
 
 struct World {
     env: Env,
@@ -34,14 +29,14 @@ struct World {
     ci_rule_id: u32,
 }
 
-/// Deploy the real verifier + interpreter + PerchAccount (constructor installs
-/// admin as rule 0), then install the compiled ci-publish rule (rule 1).
-fn setup() -> World {
+/// Deploy the real verifier + PerchAccount (constructor installs admin as
+/// rule 0). With `ci`, also install the fixture's ci-publish rule with the
+/// ci key, as `apply_doc` stores it.
+fn setup(ci: bool) -> World {
     let env = Env::default();
     env.mock_all_auths();
 
-    let verifier = env.register(PerchEd25519Verifier, ());
-    let interpreter = env.register(perch_interpreter::PerchInterpreter, ());
+    let verifier = perch_testkit::verifiers::deploy(&env, PerchEd25519Verifier);
 
     let admin_key = SigningKey::from_bytes(&[9u8; 32]);
     let admin_pub = BytesN::from_array(&env, &admin_key.verifying_key().to_bytes());
@@ -54,34 +49,17 @@ fn setup() -> World {
     ];
     let account = env.register(PerchAccount, (admin_signers,));
 
-    // Compile the frozen fixture and install its ci-publish rule, exactly as
-    // matrix.rs does — but on the real account contract.
-    let doc = perch_ir::from_json(&fixture()).expect("parse");
-    perch_ir::validate(&doc).expect("valid");
-    let cfg = CompileConfig {
-        interpreter_wasm_hash: BytesN::from_array(&env, &[0xAB; 32]),
-    };
-    let plan = compile(&env, &doc, &cfg).expect("compile");
-    let install = plan.rules[1]
-        .install
-        .clone()
-        .expect("ci-publish attaches interpreter");
-
     let registry = Address::from_str(&env, FIXTURE_REGISTRY);
     let ci_signer = Signer::External(verifier.clone(), ci_pub.clone().into());
-    let policies: Map<Address, Val> = map![&env, (interpreter.clone(), install.into_val(&env))];
-
-    let rule = env.as_contract(&account, || {
-        add_context_rule(
-            &env,
-            &ContextRuleType::CallContract(registry.clone()),
-            &SString::from_str(&env, "ci-publish"),
-            None,
-            &vec![&env, ci_signer],
-            &policies,
-        )
-    });
-    assert_eq!(rule.id, 1, "constructor must have claimed rule id 0");
+    let ci_rule_id = if ci {
+        let signers = vec![&env, ci_signer];
+        let rule = ci_publish_rule(&env, &account, &registry, &signers, None);
+        env.as_contract(&account, || {
+            perch_smart_account::testutils::install_rule(&env, "ci-publish", &rule, &signers)
+        })
+    } else {
+        u32::MAX
+    };
 
     World {
         env,
@@ -92,7 +70,7 @@ fn setup() -> World {
         admin_pub,
         ci_key,
         ci_pub,
-        ci_rule_id: rule.id,
+        ci_rule_id,
     }
 }
 
@@ -147,7 +125,7 @@ fn check(w: &World, payload: &AuthPayload, ctx: Context) -> Result<(), ()> {
 
 #[test]
 fn admin_authorizes_self_admin() {
-    let w = setup();
+    let w = setup(false);
     let payload = signed_payload(&w, &w.admin_key, &w.admin_pub, 0);
     assert!(check(&w, &payload, self_admin_context(&w, "add_signer")).is_ok());
 }
@@ -156,7 +134,7 @@ fn admin_authorizes_self_admin() {
 fn admin_denied_on_registry_scope() {
     // Rule 0 is CallContract(self), not Default: the admin key must NOT
     // authorize registry calls.
-    let w = setup();
+    let w = setup(false);
     let payload = signed_payload(&w, &w.admin_key, &w.admin_pub, 0);
     assert!(check(
         &w,
@@ -168,7 +146,7 @@ fn admin_denied_on_registry_scope() {
 
 #[test]
 fn ci_publishes_as_self() {
-    let w = setup();
+    let w = setup(true);
     let payload = signed_payload(&w, &w.ci_key, &w.ci_pub, w.ci_rule_id);
     assert!(check(
         &w,
@@ -180,7 +158,7 @@ fn ci_publishes_as_self() {
 
 #[test]
 fn ci_denied_other_function() {
-    let w = setup();
+    let w = setup(true);
     let payload = signed_payload(&w, &w.ci_key, &w.ci_pub, w.ci_rule_id);
     assert!(check(
         &w,
@@ -192,7 +170,7 @@ fn ci_denied_other_function() {
 
 #[test]
 fn ci_denied_author_not_self() {
-    let w = setup();
+    let w = setup(true);
     let payload = signed_payload(&w, &w.ci_key, &w.ci_pub, w.ci_rule_id);
     let someone_else = Address::generate(&w.env);
     assert!(check(
@@ -206,7 +184,7 @@ fn ci_denied_author_not_self() {
 #[test]
 fn ci_denied_on_self_admin() {
     // The ci key must not be able to manage the account.
-    let w = setup();
+    let w = setup(true);
     let payload = signed_payload(&w, &w.ci_key, &w.ci_pub, w.ci_rule_id);
     assert!(check(&w, &payload, self_admin_context(&w, "add_signer")).is_err());
 }
@@ -215,7 +193,7 @@ fn ci_denied_on_self_admin() {
 fn admin_signature_rejected_for_ci_rule() {
     // Selecting the ci rule with an admin signature must fail: the rule's only
     // signer is the ci key.
-    let w = setup();
+    let w = setup(true);
     let payload = signed_payload(&w, &w.admin_key, &w.admin_pub, w.ci_rule_id);
     assert!(check(
         &w,

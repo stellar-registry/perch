@@ -1,0 +1,5173 @@
+{
+  "differences": [
+    {
+      "step": "rule-selection: an auth payload with an unknown field",
+      "cause": "soroban-sdk 28 (carried into 29) unpacks a #[contracttype] struct leniently: a map key the struct does not define is ignored instead of failing the conversion (soroban-sdk _migrating::v28_contracttype_unpacking). The account's __check_auth takes its signature as stellar-accounts' AuthPayload, so an auth entry whose signature map carries an extra key, which soroban-sdk 27 refused while decoding (WasmVm InvalidAction), now decodes and is checked like the same payload without the key: the signers and context_rule_ids it does carry are verified as before, and the call is authorized. No other step differs.",
+      "fields": [
+        {
+          "now": [],
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].auth-failures",
+          "recorded": [
+            "account: WasmVm(InvalidAction)"
+          ]
+        },
+        {
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].outcome.err",
+          "recorded": "Context(InvalidAction)"
+        },
+        {
+          "now": "u32:2",
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].outcome.ok"
+        },
+        {
+          "now": {
+            "live_until": 1001000,
+            "val": null
+          },
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].storage.set.account Temporary \"nonce:6\""
+        },
+        {
+          "now": {
+            "live_until": 1000999,
+            "val": {
+              "instance-storage": [
+                [
+                  "sym:hits",
+                  "u32:2"
+                ]
+              ]
+            }
+          },
+          "path": "corpus.rule-selection[7 \"an auth payload with an unknown field\"].storage.set.target Persistent \"instance\""
+        }
+      ]
+    },
+    {
+      "step": "recovery-removal: owner removes recovery",
+      "cause": "soroban-sdk 28 (carried into 29) publishes a #[contractevent] whose data format is a map without its void fields (soroban-sdk _migrating::v28_contractevent_packing). perch-recovery's EpochAdvanced { account, epoch, config_hash: Option<BytesN<32>> } is published with config_hash None when an account's recovery configuration is removed; its data map now holds only epoch, where soroban-sdk 27 also carried config_hash as void. Readers that treat an absent config_hash as None see the same event. The same applies to any Perch event with an Option field that is None; EpochAdvanced is the only one with such a field.",
+      "fields": [
+        {
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].events[0].data",
+          "recorded": [
+            [
+              "sym:config_hash",
+              null
+            ],
+            [
+              "sym:epoch",
+              "u64:2"
+            ]
+          ],
+          "now": [
+            [
+              "sym:epoch",
+              "u64:2"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "step": "recovery: completion with the derived target",
+      "cause": "A completed recovery advances the grant generation, which ends every grant document (apply_grant, docs/recovery/spec.md §7.6), and the account publishes GrantsWiped { gen } as it does: the event's topic is grants_wiped and its data the new generation, here 1. It comes after the controller's epoch_advanced and recovery_completed and before the account's credential_revoked and doc_applied; every other event of the step is unchanged and in the same order. No other step completes a recovery, so no other step publishes it, and the corpus applies no grant document.",
+      "fields": [
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].events",
+          "recorded": [
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:config_hash",
+                  "bytes:dc3ca0f97f1f3450b1cb83fe14f28448930f376cd94d841720df6099c954e5fc"
+                ],
+                [
+                  "sym:epoch",
+                  "u64:2"
+                ]
+              ],
+              "topics": [
+                "sym:epoch_advanced",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:attempt_id",
+                  "u64:0"
+                ],
+                [
+                  "sym:target_doc_hash",
+                  "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+                ]
+              ],
+              "topics": [
+                "sym:recovery_completed",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [],
+              "topics": [
+                "sym:credential_revoked",
+                "bytes:b3856265f2e804a7eb4739e64fccb74333c6eba5ded7ec1fbab01db2aab67a9b"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [
+                [
+                  "sym:policies_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:policies_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:revision",
+                  "u64:2"
+                ],
+                [
+                  "sym:rules_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:rules_edited",
+                  "u32:2"
+                ],
+                [
+                  "sym:rules_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:signers_added",
+                  "u32:2"
+                ],
+                [
+                  "sym:signers_removed",
+                  "u32:2"
+                ]
+              ],
+              "topics": [
+                "sym:doc_applied",
+                "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+              ]
+            }
+          ],
+          "now": [
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:config_hash",
+                  "bytes:dc3ca0f97f1f3450b1cb83fe14f28448930f376cd94d841720df6099c954e5fc"
+                ],
+                [
+                  "sym:epoch",
+                  "u64:2"
+                ]
+              ],
+              "topics": [
+                "sym:epoch_advanced",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "controller",
+              "data": [
+                [
+                  "sym:attempt_id",
+                  "u64:0"
+                ],
+                [
+                  "sym:target_doc_hash",
+                  "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+                ]
+              ],
+              "topics": [
+                "sym:recovery_completed",
+                "addr:account"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [
+                [
+                  "sym:gen",
+                  "u64:1"
+                ]
+              ],
+              "topics": [
+                "sym:grants_wiped"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [],
+              "topics": [
+                "sym:credential_revoked",
+                "bytes:b3856265f2e804a7eb4739e64fccb74333c6eba5ded7ec1fbab01db2aab67a9b"
+              ]
+            },
+            {
+              "contract": "account",
+              "data": [
+                [
+                  "sym:policies_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:policies_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:revision",
+                  "u64:2"
+                ],
+                [
+                  "sym:rules_added",
+                  "u32:0"
+                ],
+                [
+                  "sym:rules_edited",
+                  "u32:2"
+                ],
+                [
+                  "sym:rules_removed",
+                  "u32:0"
+                ],
+                [
+                  "sym:signers_added",
+                  "u32:2"
+                ],
+                [
+                  "sym:signers_removed",
+                  "u32:2"
+                ]
+              ],
+              "topics": [
+                "sym:doc_applied",
+                "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "step": "every scenario's setup and every apply_doc that changes the rule set: the admin rules' records",
+      "cause": "The account keeps the account document's rules in one persistent entry, key RuleSet: one record per installed rule, the recovery rule last, each holding the rule's id, name and policies and the rule-eval rule that decides what it allows (perch-smart-account's RuleRecord). A rule's scope, signers and last ledger are its stored rule's contract, signers and valid_until, and it is the recovery rule when its id is the instance's RecoveryRule, so the account keeps no other record of the rule: it writes no InstalledRules entry. The constructor writes RuleSet with the admin rule, so each scenario's setup writes it; every accepted apply_doc whose records change writes it again, and one that leaves them unchanged (a re-apply, a rejected document) writes nothing. installed_rules, configuration and get_context_rule give the shapes they did; rule_set gives the stored rules as stored, their signers positions in rule_signers. Each of these steps' outcome, events, authorization failures and every other storage entry are unchanged, the entry's live_until included. The entry is the tuple of a signer table (each signer the rules name, once, in the order they first name it) and the records; each record and its stored rule is a tuple (snapshot 3), the stored rule naming its signers by position in the table and holding a void root for these unrestricted rules. Legacy canonical bytes and authorization outcomes are unchanged. The account reads only this layout.",
+      "fields": [
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:target2"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:2",
+                  "str:target2",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:token"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:pay"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:031b2376d0f06fdcc08ee56c743ef8c6e11c6eedfb4a4c274f422813c8c83fb9"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:interpreter"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  "u32:1049"
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:joint"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:aa0690bc2757fc9b48b2685ac9d6e7340b3b7f695e7b0f7aa1f135583244bf3b"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:interpreter"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ],
+                    [
+                      "sym:Delegated",
+                      "addr:device"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ],
+                [
+                  "sym:Delegated",
+                  "addr:device"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:pay",
+                  [],
+                  [
+                    "addr:token",
+                    [
+                      "sym:Only",
+                      [
+                        "sym:transfer"
+                      ]
+                    ],
+                    [
+                      [
+                        "sym:ArgEq",
+                        "u32:0",
+                        [
+                          "sym:Address",
+                          "addr:account"
+                        ]
+                      ],
+                      [
+                        "sym:ArgEq",
+                        "u32:1",
+                        [
+                          "sym:Address",
+                          "addr:payee"
+                        ]
+                      ]
+                    ],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    "u32:1049",
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:2",
+                  "str:joint",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:Only",
+                      [
+                        "sym:protected"
+                      ]
+                    ],
+                    [],
+                    [
+                      "u32:0",
+                      "u32:1"
+                    ],
+                    "u32:2",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:2",
+                  "str:recovery",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ],
+                  [
+                    "addr:account",
+                    [
+                      "sym:Only",
+                      [
+                        "sym:apply_doc"
+                      ]
+                    ],
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10001009,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:new_owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:new_owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10001009,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:new_owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:2",
+                  "str:recovery",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ],
+                  [
+                    "addr:account",
+                    [
+                      "sym:Only",
+                      [
+                        "sym:apply_doc"
+                      ]
+                    ],
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:2"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:2",
+                  "str:recovery",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ],
+                  [
+                    "addr:account",
+                    [
+                      "sym:Only",
+                      [
+                        "sym:apply_doc"
+                      ]
+                    ],
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:3"
+                ],
+                [
+                  "sym:name",
+                  "str:recovery"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  true
+                ],
+                [
+                  "sym:signers",
+                  []
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:3",
+                  "str:recovery",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c96fd53991e58a742d64c470b27a2850f39ffebff033e2c91e34f1d944ff6e86"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:controller"
+                      ]
+                    ]
+                  ],
+                  [
+                    "addr:account",
+                    [
+                      "sym:Only",
+                      [
+                        "sym:apply_doc"
+                      ]
+                    ],
+                    [],
+                    [],
+                    "u32:0",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:target"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:target"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:target",
+                  [],
+                  [
+                    "addr:target",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent \"sym:RuleSet\""
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"sym:InstalledRules\"",
+          "recorded": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:account"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:0"
+                ],
+                [
+                  "sym:name",
+                  "str:admin"
+                ],
+                [
+                  "sym:policies",
+                  []
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ],
+              [
+                [
+                  "sym:context_type",
+                  [
+                    "sym:CallContract",
+                    "addr:token"
+                  ]
+                ],
+                [
+                  "sym:id",
+                  "u32:1"
+                ],
+                [
+                  "sym:name",
+                  "str:spend"
+                ],
+                [
+                  "sym:policies",
+                  [
+                    [
+                      [
+                        "sym:params",
+                        "bytes:c5390906841b72fb0d22a4b7b51c48ea27a427cc8d91a7edd7b76e558690ed25"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:interpreter"
+                      ]
+                    ],
+                    [
+                      [
+                        "sym:params",
+                        "bytes:58e90e510e1a7a35a7680651ea0381b6af240c7a7be59f19369f5448585fafd4"
+                      ],
+                      [
+                        "sym:policy",
+                        "addr:spending_limit"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:recovery",
+                  false
+                ],
+                [
+                  "sym:signers",
+                  [
+                    [
+                      "sym:Delegated",
+                      "addr:owner"
+                    ]
+                  ]
+                ],
+                [
+                  "sym:valid_until",
+                  null
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ],
+              [
+                [
+                  "u32:0",
+                  "str:admin",
+                  [],
+                  [
+                    "addr:account",
+                    [
+                      "sym:AnyExcept",
+                      []
+                    ],
+                    [],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [],
+                    null,
+                    null,
+                    null
+                  ]
+                ],
+                [
+                  "u32:1",
+                  "str:spend",
+                  [],
+                  [
+                    "addr:token",
+                    [
+                      "sym:Only",
+                      [
+                        "sym:transfer"
+                      ]
+                    ],
+                    [
+                      [
+                        "sym:ArgI128AtMost",
+                        "u32:2",
+                        "i128:170141183460469231731687303715884105727"
+                      ]
+                    ],
+                    [
+                      "u32:0"
+                    ],
+                    "u32:1",
+                    [
+                      [
+                        "i128:10",
+                        "u32:100",
+                        "u32:2"
+                      ]
+                    ],
+                    null,
+                    null,
+                    null
+                  ]
+                ]
+              ]
+            ]
+          },
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"sym:RuleSet\""
+        }
+      ]
+    },
+    {
+      "step": "spending-limit: every accepted spend through the capped rule",
+      "cause": "__check_auth runs rule-eval's authorize after OZ's do_check_auth, over the account's stored rule-eval rules, and keeps a spending record for each capped rule it charges in one new persistent entry per rule, key SpendRecords(rule id), written only when a charge changes it. Each accepted capped transfer (spend 6 of 10, spend 4 more, spend 5 in the next window) therefore writes the capped rule's SpendRecords entry beside OZ's spending-limit record, with the same history and total: the spends in the window, oldest first, the one before the window evicted. The refused spends write nothing, as before. No outcome, event, authorization failure or other storage entry differs in any step.",
+      "fields": [
+        {
+          "path": "corpus.spending-limit[2 \"spend 6 of 10\"].storage.set.account Persistent [\"sym:SpendRecords\",\"u32:1\"]",
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                "sym:history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:total",
+                "i128:6"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[3 \"spend 4 more, reaching the cap\"].storage.set.account Persistent [\"sym:SpendRecords\",\"u32:1\"]",
+          "now": {
+            "live_until": 10000999,
+            "val": [
+              [
+                "sym:history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1000"
+                    ]
+                  ],
+                  [
+                    [
+                      "sym:amount",
+                      "i128:4"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:total",
+                "i128:10"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[6 \"spend 5 in the next window\"].storage.set.account Persistent [\"sym:SpendRecords\",\"u32:1\"]",
+          "now": {
+            "live_until": 10001099,
+            "val": [
+              [
+                "sym:history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:5"
+                    ],
+                    [
+                      "sym:ledger",
+                      "u32:1100"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:total",
+                "i128:5"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": "every step a rule refuses: documents[1], rule-selection[3, 4], policies[3, 5, 8], spending-limit[4, 7], recovery[11]",
+      "cause": "The account decides every authorization but a recovery completion with rule-eval's authorize over its stored rule sets (perch-smart-account's gate), and OZ's do_check_auth, the interpreter and the spending limit no longer run for it. A refusal therefore fails the account's __check_auth with its own RuleEvalRefused (PerchAuthError code 5) where OZ refused with UnvalidatedContext (3002: the rule does not cover the contract, a policy-free rule lacks a signer, or the rule is past its last ledger), the interpreter with its program's refusal (1), or the spending limit with SpendingLimitExceeded (3221). Every one of these steps is refused as recorded: the outcome, the events and the storage are unchanged, and only the code in the host's failed-authentication diagnostic differs. A chosen rule id that names no installed rule still fails with OZ's ContextRuleNotFound (3000), which perch-js reads as a stale selection.",
+      "fields": [
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.documents[1 \"device cannot apply through the admin rule\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.policies[3 \"transfer to another address\"].auth-failures[0]",
+          "recorded": "account: Contract(1)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.policies[5 \"one of two threshold signers\"].auth-failures[0]",
+          "recorded": "account: Contract(1)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.policies[8 \"transfer to the payee after the rule's last ledger\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.recovery[11 \"the replaced key through the target rule\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.rule-selection[3 \"owner through the admin rule on another contract\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.rule-selection[4 \"device through the target rule\"].auth-failures[0]",
+          "recorded": "account: Contract(3002)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.spending-limit[4 \"spend 1 past the cap\"].auth-failures[0]",
+          "recorded": "account: Contract(3221)"
+        },
+        {
+          "now": "account: Contract(5)",
+          "path": "corpus.spending-limit[7 \"a single transfer over the cap\"].auth-failures[0]",
+          "recorded": "account: Contract(3221)"
+        }
+      ]
+    },
+    {
+      "step": "policies: owner applies; spending-limit: owner applies a capped rule",
+      "cause": "apply_doc installs a document rule with its contract, signers and last ledger and no policy: what it allows, its interpreter program and its cap included, is the stored rule-eval rule beside it (rule_set). So applying a document with constrained or capped rules writes no policy registry entry (PolicyData, PolicyLookup), no interpreter program and no spending-limit window. The same document's stored rule set, which records the programs and caps, is checked after every accepted apply_doc step against the lowering of its model and the compiler's programs and caps (perch_testkit::rule_set). Every event of these steps is unchanged.",
+      "fields": [
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:policy",
+                "addr:interpreter"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:interpreter\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.interpreter Persistent [\"sym:Program\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:doc_hash",
+                "bytes:97e6c19692e41fee3f1947dbe9e5a5f6a6fc86940a97047cf9a31a031ace2146"
+              ],
+              [
+                "sym:program",
+                [
+                  [
+                    "sym:ops",
+                    [
+                      [
+                        "sym:MinSigners",
+                        "u32:1"
+                      ],
+                      [
+                        "sym:FnIn",
+                        [
+                          "sym:transfer"
+                        ]
+                      ],
+                      [
+                        "sym:ArgAddrIsSelf",
+                        "u32:0"
+                      ],
+                      [
+                        "sym:ArgAddrEq",
+                        "u32:1",
+                        "addr:payee"
+                      ],
+                      [
+                        "sym:All",
+                        "u32:4"
+                      ]
+                    ]
+                  ],
+                  [
+                    "sym:version",
+                    "u32:1"
+                  ]
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.interpreter Persistent [\"sym:Program\",\"addr:account\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:doc_hash",
+                "bytes:289b7f34d66c0643d6533b23fdd39c4dcff82145a288ca6b31f58303e3c0ca90"
+              ],
+              [
+                "sym:program",
+                [
+                  [
+                    "sym:ops",
+                    [
+                      [
+                        "sym:MinSigners",
+                        "u32:2"
+                      ],
+                      [
+                        "sym:FnIn",
+                        [
+                          "sym:protected"
+                        ]
+                      ],
+                      [
+                        "sym:All",
+                        "u32:2"
+                      ]
+                    ]
+                  ],
+                  [
+                    "sym:version",
+                    "u32:1"
+                  ]
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:spending_limit"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:interpreter"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:interpreter\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:spending_limit\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.interpreter Persistent [\"sym:Program\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:doc_hash",
+                "bytes:6e245289077b58e09f404a7151f12cd944eb63926b3503c6b4bfd85816ffb5cb"
+              ],
+              [
+                "sym:program",
+                [
+                  [
+                    "sym:ops",
+                    [
+                      [
+                        "sym:MinSigners",
+                        "u32:1"
+                      ],
+                      [
+                        "sym:FnIn",
+                        [
+                          "sym:transfer"
+                        ]
+                      ],
+                      [
+                        "sym:All",
+                        "u32:2"
+                      ]
+                    ]
+                  ],
+                  [
+                    "sym:version",
+                    "u32:1"
+                  ]
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:0"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                []
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": "spending-limit: spend 6 of 10, spend 4 more, spend 5 in the next window",
+      "cause": "A capped rule carries no OZ spending-limit policy, so an accepted capped spend no longer calls the spending limit: it publishes no spending_limit_enforced event and writes no spending-limit window. The account's own record of the rule (SpendRecords, declared above for the same three steps) is the only window, charged by rule-eval with the same history and total as the recorded OZ window held at each step. The refused spends (spend 1 past the cap, a single transfer over the cap) stay refused.",
+      "fields": [
+        {
+          "now": [],
+          "path": "corpus.spending-limit[2 \"spend 6 of 10\"].events",
+          "recorded": [
+            {
+              "contract": "spending_limit",
+              "data": [
+                [
+                  "sym:amount",
+                  "i128:6"
+                ],
+                [
+                  "sym:context",
+                  [
+                    "sym:Contract",
+                    [
+                      [
+                        "sym:args",
+                        [
+                          "addr:account",
+                          "addr:payee",
+                          "i128:6"
+                        ]
+                      ],
+                      [
+                        "sym:contract",
+                        "addr:token"
+                      ],
+                      [
+                        "sym:fn_name",
+                        "sym:transfer"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:context_rule_id",
+                  "u32:1"
+                ],
+                [
+                  "sym:total_spent_in_period",
+                  "i128:6"
+                ]
+              ],
+              "topics": [
+                "sym:spending_limit_enforced",
+                "addr:account"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[2 \"spend 6 of 10\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:6"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        },
+        {
+          "now": [],
+          "path": "corpus.spending-limit[3 \"spend 4 more, reaching the cap\"].events",
+          "recorded": [
+            {
+              "contract": "spending_limit",
+              "data": [
+                [
+                  "sym:amount",
+                  "i128:4"
+                ],
+                [
+                  "sym:context",
+                  [
+                    "sym:Contract",
+                    [
+                      [
+                        "sym:args",
+                        [
+                          "addr:account",
+                          "addr:payee",
+                          "i128:4"
+                        ]
+                      ],
+                      [
+                        "sym:contract",
+                        "addr:token"
+                      ],
+                      [
+                        "sym:fn_name",
+                        "sym:transfer"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:context_rule_id",
+                  "u32:1"
+                ],
+                [
+                  "sym:total_spent_in_period",
+                  "i128:10"
+                ]
+              ],
+              "topics": [
+                "sym:spending_limit_enforced",
+                "addr:account"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[3 \"spend 4 more, reaching the cap\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:10"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:6"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1000"
+                    ]
+                  ],
+                  [
+                    [
+                      "sym:amount",
+                      "i128:4"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1000"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        },
+        {
+          "now": [],
+          "path": "corpus.spending-limit[6 \"spend 5 in the next window\"].events",
+          "recorded": [
+            {
+              "contract": "spending_limit",
+              "data": [
+                [
+                  "sym:amount",
+                  "i128:5"
+                ],
+                [
+                  "sym:context",
+                  [
+                    "sym:Contract",
+                    [
+                      [
+                        "sym:args",
+                        [
+                          "addr:account",
+                          "addr:payee",
+                          "i128:5"
+                        ]
+                      ],
+                      [
+                        "sym:contract",
+                        "addr:token"
+                      ],
+                      [
+                        "sym:fn_name",
+                        "sym:transfer"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "sym:context_rule_id",
+                  "u32:1"
+                ],
+                [
+                  "sym:total_spent_in_period",
+                  "i128:5"
+                ]
+              ],
+              "topics": [
+                "sym:spending_limit_enforced",
+                "addr:account"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[6 \"spend 5 in the next window\"].storage.set.spending_limit Persistent [\"sym:AccountContext\",\"addr:account\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:cached_total_spent",
+                "i128:5"
+              ],
+              [
+                "sym:period_ledgers",
+                "u32:100"
+              ],
+              [
+                "sym:spending_history",
+                [
+                  [
+                    [
+                      "sym:amount",
+                      "i128:5"
+                    ],
+                    [
+                      "sym:ledger_sequence",
+                      "u32:1100"
+                    ]
+                  ]
+                ]
+              ],
+              [
+                "sym:spending_limit",
+                "i128:10"
+              ]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "step": "every step that writes the account's instance: its rule-id counter",
+      "cause": "The account allocates rule ids from its own counter (perch-smart-account's rules::allocate), kept in its instance under NextRuleId, and gives the ids OZ's registry gave from NextId: one per rule added, none reused. Its instance storage therefore holds NextRuleId where the recorded build held OZ's Count, NextId and NextSignerId, and NextPolicyId where a step registered a policy; it keeps no rule count (get_context_rules_count counts its records). In the completion with the derived target the instance also holds GrantGeneration = 1: a completed recovery advances the grant generation (absent reads as 0), and no other step writes the key. Every other instance key and value is as recorded.",
+      "fields": [
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.documents[3 \"owner re-applies the same document\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:15f72aaa1d77664ff82ac28e54924851994fed6cf8740414a696cbf1752f5919"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:15f72aaa1d77664ff82ac28e54924851994fed6cf8740414a696cbf1752f5919"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:2a2ec4e8ba952ba6a2b93fa9b2c5d3f7e3ca206b92907256d6d0eb566df2be19"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:2"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:95b54234360e04ff7be15e5d7428cbe9b918cc99804e55fef32081e0212d4b35"
+            ],
+            [
+              "sym:GrantGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:1"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:3"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:2"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:3"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:3"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:4"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:3f0e654d0794e953e7e2baa7ea95789451ed107628da76ef4908e81b6a1f2086"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:4"
+            ],
+            [
+              "sym:RecoveryController",
+              "addr:controller"
+            ],
+            [
+              "sym:RecoveryGeneration",
+              "u64:3"
+            ],
+            [
+              "sym:RecoveryRule",
+              "u32:3"
+            ],
+            [
+              "sym:Revision",
+              "u64:3"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:d45e5066737e70f8af27ba7a8f012792411c3e70099694e2c44dfb2d1b6d778f"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:1"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:NextRuleId",
+              "u32:1"
+            ]
+          ]
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent \"instance\".val.instance-storage",
+          "recorded": [
+            [
+              "sym:AppliedDoc",
+              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ],
+            [
+              [
+                "sym:Count"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextPolicyId"
+              ],
+              "u32:2"
+            ],
+            [
+              [
+                "sym:NextSignerId"
+              ],
+              "u32:1"
+            ]
+          ],
+          "now": [
+            [
+              "sym:AppliedDoc",
+              "bytes:dd124b3550a688b2e86381c675521e90be42ccb43f3f38e2d760cdad10744bd3"
+            ],
+            [
+              "sym:NextRuleId",
+              "u32:2"
+            ],
+            [
+              "sym:Revision",
+              "u64:1"
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "step": "every scenario's setup and every step that adds, edits or removes a rule: OZ's rule, signer and policy registry",
+      "cause": "The account's own records are its rule registry (perch-smart-account's rules.rs): an installed rule is its InstalledRule record, beside the stored rule-eval rule that decides what it allows, and a recovery completion reads the recovery rule from its record (auth::authorize_completion). The account writes no entry of OZ's registry: no rule (ContextRuleData), signer or policy (SignerData, PolicyData), and no lookup (SignerLookup, PolicyLookup), so the constructor, every apply_doc that adds or edits a rule, the recovery rule included, and the completion that replaces the owner write none of these, and removing a rule, a signer or the recovery rule removes none. Rule ids, every outcome, event and authorization failure, and every entry of the account's own are as recorded.",
+      "fields": [
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[2 \"owner applies the first document\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.removed",
+          "recorded": [
+            "account Persistent [\"sym:ContextRuleData\",\"u32:1\"]"
+          ],
+          "now": []
+        },
+        {
+          "path": "corpus.documents[8 \"owner replaces the rule set and drops device\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target2"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:token"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:pay"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                "u32:1049"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:joint"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0",
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:3"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:device"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.policies[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:7acc72887babc1884ff6978549b27eae679bc9f00e017799275748a53470921e\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.removed",
+          "recorded": [
+            "account Persistent [\"sym:SignerData\",\"u32:0\"]",
+            "account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+            "controller Persistent [\"sym:Authorized\",\"addr:account\"]"
+          ],
+          "now": [
+            "controller Persistent [\"sym:Authorized\",\"addr:account\"]"
+          ]
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1001009,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:new_owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[9 \"completion with the derived target\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:b086a35dfd3a21a420785ca0a42f4b11939aa9bffd2f39e91fe750aaa005a3c8\"]",
+          "recorded": {
+            "live_until": 1001009,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:1"
+          }
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.rule-selection[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:target"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:target"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.rule-selection[1 \"owner applies\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:admin"
+              ],
+              [
+                "sym:policy_ids",
+                []
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[0 \"setup\"].storage.set.account Persistent [\"sym:SignerLookup\",\"bytes:52cf0c9667f319cf7cf107106d7a0f294a4d25584777c77b91ae39beb1ed27c0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": "u32:0"
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:token"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:spend"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0",
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.spending-limit[1 \"owner applies a capped rule\"].storage.set.account Persistent [\"sym:SignerData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:2"
+              ],
+              [
+                "sym:signer",
+                [
+                  "sym:Delegated",
+                  "addr:owner"
+                ]
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:recovery"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                []
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:controller"
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:recovery"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:0"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                []
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[1 \"owner enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:controller"
+              ]
+            ]
+          }
+        },
+        {
+          "now": [
+            "controller Persistent [\"sym:Config\",\"addr:account\"]"
+          ],
+          "path": "corpus.recovery-removal[2 \"owner removes recovery\"].storage.removed",
+          "recorded": [
+            "account Persistent [\"sym:ContextRuleData\",\"u32:2\"]",
+            "account Persistent [\"sym:PolicyData\",\"u32:0\"]",
+            "account Persistent [\"sym:PolicyLookup\",\"addr:controller\"]",
+            "controller Persistent [\"sym:Config\",\"addr:account\"]"
+          ]
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:ContextRuleData\",\"u32:3\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:context_type",
+                [
+                  "sym:CallContract",
+                  "addr:account"
+                ]
+              ],
+              [
+                "sym:name",
+                "str:recovery"
+              ],
+              [
+                "sym:policy_ids",
+                [
+                  "u32:1"
+                ]
+              ],
+              [
+                "sym:signer_ids",
+                []
+              ],
+              [
+                "sym:valid_until",
+                null
+              ]
+            ]
+          }
+        },
+        {
+          "path": "corpus.recovery-removal[3 \"owner re-enrolls guardian recovery\"].storage.set.account Persistent [\"sym:PolicyData\",\"u32:1\"]",
+          "recorded": {
+            "live_until": 1000999,
+            "val": [
+              [
+                "sym:count",
+                "u32:1"
+              ],
+              [
+                "sym:policy",
+                "addr:controller"
+              ]
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

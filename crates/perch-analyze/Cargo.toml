@@ -1,6 +1,6 @@
 [package]
 name = "perch-analyze"
-description = "Per-policy SMT prover: dead rules, intent conformance (only-calls), semantic attenuation — PolicyDoc → SMT-LIB, discharged by z3"
+description = "Per-policy SMT prover: dead rules, intent conformance (only-calls), semantic attenuation — a PolicyDoc's rule-eval rules → SMT-LIB, discharged by z3"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,10 +8,11 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-# Pure doc-level analysis: no soroban dependency in the library.
 perch-ir = { workspace = true }
-
-[dev-dependencies]
-# Cross-checks against the coarse op-level analyzer.
-perch-compile = { version = "0.1.1", path = "../perch-compile" }
+# The rules analyzed are the account's: `model_of`, read through
+# soroban-facade, lowered by `rule_eval::lower`.
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }
+rule-eval = { workspace = true }
+# testutils in a host tool: `Env::default()` is the only way to get an Env
+# for the model off-chain, and the sdk gates it behind this feature.
 soroban-sdk = { workspace = true, features = ["testutils"] }

@@ -15,6 +15,7 @@ doctest = false
 # worlds, and it is consumed exclusively as a dev-dependency (never shipped).
 soroban-sdk = { workspace = true, features = ["testutils"] }
 stellar-accounts = { workspace = true }
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
 perch-account = { version = "0.5.1", path = "../perch-account" }
 perch-doc-compiler = { version = "0.3.5", path = "../perch-doc-compiler" }
 perch-interpreter = { version = "0.1.6", path = "../perch-interpreter" }
@@ -26,6 +27,16 @@ perch-spending-limit = { version = "0.1.4", path = "../perch-spending-limit" }
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account", features = ["testutils"] }
 # The controller generated recovery documents adopt (`delta`).
 perch-recovery = { version = "0.1.5", path = "../perch-recovery" }
+# The stored rule-eval rule set's check (`rule_set`): the applied
+# document's model, rule-eval's lowering, and the denotation of what is
+# installed.
+perch-ir = { workspace = true }
+perch-rule-eval = { version = "0.1.0", path = "../perch-rule-eval", features = ["ir"] }
+rule-eval = { workspace = true }
+# What Perch's RPN lowering attaches to each rule (`rpn`): the denotation
+# the stored set is checked against, and the policies of an account upgraded
+# from code that attached them.
+perch-compile = { version = "0.1.1", path = "../perch-compile" }
 # Shared document generator for proptest and cargo-fuzz (`delta`).
 arbitrary = "1"
 hex = "0.4"

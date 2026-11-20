@@ -21,8 +21,8 @@
 //! number lexer always compiles an `f64` branch, and serde's internally-tagged
 //! enum machinery buffers through `serde::__private::de::Content`, whose
 //! `F64(f64)` variant puts an `f64` in the module regardless of what the model
-//! actually holds. A `PolicyDoc` holds only `u32`s and strings, so both are pure
-//! deadweight — but deadweight the validator still rejects.
+//! actually holds. A `PolicyDoc` holds only `u32`s and strings, so neither
+//! float path is ever taken, yet the validator still rejects the module.
 //!
 //! So [`from_json`] walks a [`hifijson`] value tree by hand. hifijson is a
 //! float-free lexer: numbers stay as raw digit strings (`num::Parts` tells us
@@ -52,10 +52,11 @@ use hifijson::value::{self, Value};
 use hifijson::SliceLexer;
 
 use crate::doc::{
-    AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, BaselineCommitment, CapConstraint,
-    ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig, RecoveryMode,
-    RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals, SignerDecl,
-    SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred, ZkFactor,
+    AddressEqPred, AllPrincipals, ArgConstraint, ArgPred, AuthRoot, BaselineCommitment,
+    CapConstraint, ContractScope, GuardianSet, IsSelfPred, PolicyDoc, Principals, RecoveryConfig,
+    RecoveryMode, RecoveryProfile, Rule, Scope, SelfAdminScope, SelfAuthenticatingPrincipals,
+    SignerDecl, SignerMethod, StringInPred, StringPrefixPred, ThresholdPrincipals, U32EqPred,
+    ZkFactor,
 };
 
 /// Maximum JSON nesting depth accepted by [`from_json`]. A valid `PolicyDoc`
@@ -67,9 +68,7 @@ use crate::doc::{
 const MAX_DEPTH: usize = 64;
 
 /// A structural or syntactic problem with a policy document, carrying a
-/// human-readable message. Replaces the previous `serde_json::Error` payload now
-/// that parsing is hand-written (see the module docs on why serde is off the
-/// on-chain path); the `ParseError::Json` variant name is unchanged.
+/// human-readable message.
 #[derive(Debug)]
 pub struct JsonError(String);
 
@@ -121,7 +120,6 @@ impl core::error::Error for ParseError {
     }
 }
 
-/// Construct a `ParseError::Json` from a message.
 fn json_err(msg: impl Into<String>) -> ParseError {
     ParseError::Json(JsonError(msg.into()))
 }
@@ -159,7 +157,6 @@ pub fn from_json(input: &str) -> Result<PolicyDoc, ParseError> {
             if k.as_ref() == "version" {
                 if let Value::Number((n, parts)) = v {
                     if parts.is_int() {
-                        // `n` is hifijson's raw digit string; deref to `&str`.
                         let digits: &str = n;
                         if let Ok(ver) = digits.parse::<u64>() {
                             if ver != 1 {
@@ -321,19 +318,24 @@ fn signer_from_value<N: AsRef<str>, S: AsRef<str>>(
 ) -> Result<SignerDecl, ParseError> {
     let obj = as_object(v, "signer")?;
     // Field-shape discrimination, fail-closed: an `address` field makes the
-    // signer delegated (`verifier`/`key` then reject as unknown fields);
-    // otherwise it is external and `verifier`+`key` are required. Mixed or
-    // incomplete shapes error, never coerce.
+    // signer delegated (`verifier`/`key`/`verifier-name` then reject as
+    // unknown fields); otherwise it is external, `verifier`+`key` are
+    // required, and `verifier-name` is optional. Mixed or incomplete shapes
+    // error, never coerce.
     let method = if field(obj, "address")?.is_some() {
         deny_unknown(obj, &["id", "address"])?;
         SignerMethod::Delegated {
             address: as_str(req_field(obj, "address")?, "address")?,
         }
     } else {
-        deny_unknown(obj, &["id", "verifier", "key"])?;
+        deny_unknown(obj, &["id", "verifier", "verifier-name", "key"])?;
         SignerMethod::External {
             verifier: as_str(req_field(obj, "verifier")?, "verifier")?,
             key: as_str(req_field(obj, "key")?, "key")?,
+            verifier_name: match opt_field(obj, "verifier-name")? {
+                Some(v) => Some(as_str(v, "verifier-name")?),
+                None => None,
+            },
         }
     };
     Ok(SignerDecl {
@@ -354,6 +356,7 @@ fn rule_from_value<N: AsRef<str>, S: AsRef<str>>(v: &Value<N, S>) -> Result<Rule
             "args",
             "not-after-ledger",
             "cap",
+            "auth-root",
         ],
     )?;
     let name = as_str(req_field(obj, "name")?, "rule name")?;
@@ -385,6 +388,17 @@ fn rule_from_value<N: AsRef<str>, S: AsRef<str>>(v: &Value<N, S>) -> Result<Rule
         Some(v) => Some(cap_from_value(v)?),
         None => None,
     };
+    let auth_root = match opt_field(obj, "auth-root")? {
+        Some(v) => {
+            let root = as_object(v, "auth-root")?;
+            deny_unknown(root, &["contract", "function"])?;
+            Some(AuthRoot {
+                contract: as_str(req_field(root, "contract")?, "auth-root contract")?,
+                function: as_str(req_field(root, "function")?, "auth-root function")?,
+            })
+        }
+        None => None,
+    };
     Ok(Rule {
         name,
         scope,
@@ -393,6 +407,7 @@ fn rule_from_value<N: AsRef<str>, S: AsRef<str>>(v: &Value<N, S>) -> Result<Rule
         args,
         not_after_ledger,
         cap,
+        auth_root,
     })
 }
 

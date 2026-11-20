@@ -15,6 +15,7 @@
 //! not a copy.
 
 use perch_account::PerchAccount;
+use perch_testkit::delta::strkey;
 use soroban_sdk::auth::{Context, ContractContext};
 use soroban_sdk::xdr::ToXdr;
 use soroban_sdk::{
@@ -63,13 +64,6 @@ fn raw(b: &Bytes) -> std::vec::Vec<u8> {
     let mut out = std::vec![0u8; b.len() as usize];
     b.copy_into_slice(&mut out);
     out
-}
-
-fn strkey(a: &Address) -> std::string::String {
-    let s = a.to_string();
-    let mut buf = std::vec![0u8; s.len() as usize];
-    s.copy_into_slice(&mut buf);
-    std::string::String::from_utf8(buf).unwrap()
 }
 
 fn ids_json(ids: &Vec<u32>) -> serde_json::Value {
@@ -218,7 +212,7 @@ impl Recorder {
 #[test]
 fn the_signing_digest_is_the_one_oz_verifies() {
     let e = Env::default();
-    let recorder = e.register(Recorder, ());
+    let recorder = perch_testkit::verifiers::deploy(&e, Recorder);
     let key = Bytes::from_array(&e, &[7; 32]);
     let signer = Signer::External(recorder.clone(), key);
     let account = e.register(PerchAccount, (vec![&e, signer.clone()],));
@@ -238,7 +232,13 @@ fn the_signing_digest_is_the_one_oz_verifies() {
         context_rule_ids: ids.clone(),
     };
     e.as_contract(&account, || {
-        perch_smart_account::check_auth(&e, &payload, &auth, &vec![&e, context]).unwrap();
+        perch_smart_account::check_auth(
+            &e,
+            &payload,
+            &perch_testkit::twin(&e, auth),
+            &vec![&e, context],
+        )
+        .unwrap();
     });
     let seen = RecorderClient::new(&e, &recorder).seen();
     assert_eq!(

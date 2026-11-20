@@ -92,9 +92,9 @@ describe('consistent reads', () => {
   });
 
   it('a retry after a revision mismatch still refuses answers older than the mismatched ones', async () => {
-    // The review's reproducer: attempt 1 reads configuration() at revision 0
-    // (ledger 100) and document() at revision 1 (ledger 110); attempt 2 is a
-    // lagging node with consistent revision-0 answers at ledgers 90 to 94.
+    // Attempt 1 reads configuration() at revision 0 (ledger 100) and
+    // document() at revision 1 (ledger 110); attempt 2 is a lagging node with
+    // consistent revision-0 answers at ledgers 90 to 94.
     const reads: Record<string, { revision: bigint; ledger: number }[]> = {
       configuration: [
         { revision: 0n, ledger: 100 },

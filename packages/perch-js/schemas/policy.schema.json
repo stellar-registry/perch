@@ -356,6 +356,153 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 9,
+                "minItems": 9
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 9
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 10,
+                "minItems": 10
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 10
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 11,
+                "minItems": 11
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 11
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 12,
+                "minItems": 12
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 12
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 13,
+                "minItems": 13
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 13
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 14,
+                "minItems": 14
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 14
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "signers": {
+                "maxItems": 15,
+                "minItems": 15
+              }
+            },
+            "required": [
+              "signers",
+              "m"
+            ]
+          },
+          "then": {
+            "properties": {
+              "m": {
+                "maximum": 15
+              }
+            }
+          }
         }
       ],
       "description": "Who a rule authorizes, tagged by `type`.",
@@ -787,6 +934,28 @@
     },
     "rule": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scope": {
+                "properties": {
+                  "type": {
+                    "const": "self-admin"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "auth-root"
+              ]
+            }
+          }
+        }
+      ],
       "description": "A single policy rule: who (`principals`) may do what (`functions`, `args`) where (`scope`) until when (`not-after-ledger`), with an optional cumulative spend `cap`.",
       "properties": {
         "args": {
@@ -796,6 +965,25 @@
           },
           "minItems": 1,
           "type": "array"
+        },
+        "auth-root": {
+          "additionalProperties": false,
+          "properties": {
+            "contract": {
+              "description": "Exact contract at the root of this account's authorization entry, not the outer transaction call.",
+              "pattern": "^C[A-Z2-7]{55}$",
+              "type": "string"
+            },
+            "function": {
+              "pattern": "^[a-zA-Z0-9_]{1,32}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "contract",
+            "function"
+          ],
+          "type": "object"
         },
         "cap": {
           "$ref": "#/$defs/capConstraint"
@@ -894,6 +1082,11 @@
               "description": "Verifier contract (C-address) that checks this signer's signatures.",
               "pattern": "^C[A-Z2-7]{55}$",
               "type": "string"
+            },
+            "verifier-name": {
+              "description": "The verifier's name and exact version in Perch's managed `perch/verifiers` registry. The compiler resolves it and refuses the document unless it names `verifier`. Absent, the verifier is unverified: an admin document may not name one, and a scoped document may hold one signer per unverified verifier in a rule.",
+              "pattern": "^[a-z][a-z0-9-]{0,63}@(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})\\.(0|[1-9][0-9]{0,9})$",
+              "type": "string"
             }
           },
           "required": [
@@ -942,6 +1135,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "The reviewable artifact at the center of perch: a smart account's signers, rules, scopes, constraints, and optional recovery enrollment. This schema describes document format `version: 1` as perch-ir's strict parser (`from_json`) accepts it and its validator (`validate`) accepts the representable rules. Schema-valid is NOT the same as authorized or canonically encoded: duplicate raw keys, canonical (RFC 8785) encoding, cross-reference and semantic invariants, aggregate resource bounds, signatures, and authorization are all enforced elsewhere — see `docs/schema.md`.",
+  "else": {
+    "properties": {
+      "rules": {
+        "maxItems": 50
+      },
+      "signers": {
+        "maxItems": 15
+      }
+    }
+  },
   "examples": [
     {
       "network": "Test SDF Network ; September 2015",
@@ -969,6 +1172,43 @@
       "version": 1
     }
   ],
+  "if": {
+    "anyOf": [
+      {
+        "required": [
+          "recovery"
+        ]
+      },
+      {
+        "properties": {
+          "rules": {
+            "contains": {
+              "properties": {
+                "scope": {
+                  "properties": {
+                    "type": {
+                      "const": "self-admin"
+                    }
+                  },
+                  "required": [
+                    "type"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "scope"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "rules"
+        ]
+      }
+    ]
+  },
   "properties": {
     "network": {
       "description": "Optional network identifier (a passphrase or short name). Omitted from the canonical form when absent; an explicit JSON null is rejected, so leave the key out rather than setting it null.",
@@ -979,19 +1219,19 @@
       "description": "Optional account-recovery enrollment (reviewable configuration, never a recovery attempt). Omitted from the canonical form when absent, so a document that never enrolls recovery hashes exactly as before this field existed."
     },
     "rules": {
-      "description": "The policy rules. Order is preserved and significant to the hash. At most MAX_DOC_RULES (the compiler's per-document rule cap).",
+      "description": "The policy rules. Order is preserved and significant to the hash. At most MAX_DOC_RULES in an account document and MAX_GRANT_RULES in a grant document (the compiler's per-document rule caps).",
       "items": {
         "$ref": "#/$defs/rule"
       },
-      "maxItems": 11,
+      "maxItems": 50,
       "type": "array"
     },
     "signers": {
-      "description": "Declared signers that rules reference by id. At most MAX_DOC_SIGNERS (the compiler's per-document signer cap). The canonical-byte budget is a separate aggregate bound the schema cannot express — see `docs/schema.md`.",
+      "description": "Declared signers that rules reference by id. At most MAX_DOC_SIGNERS in an account document (one with a self-admin rule or a recovery member) and MAX_GRANT_SIGNERS in a grant document (the compiler's per-document signer caps). The canonical-byte budget is a separate aggregate bound the schema cannot express — see `docs/schema.md`.",
       "items": {
         "$ref": "#/$defs/signerDecl"
       },
-      "maxItems": 8,
+      "maxItems": 15,
       "type": "array"
     },
     "version": {
@@ -1004,6 +1244,16 @@
     "signers",
     "rules"
   ],
+  "then": {
+    "properties": {
+      "rules": {
+        "maxItems": 10
+      },
+      "signers": {
+        "maxItems": 8
+      }
+    }
+  },
   "title": "Perch Policy Document",
   "type": "object"
 }

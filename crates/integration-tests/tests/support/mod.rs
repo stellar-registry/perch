@@ -8,12 +8,12 @@
 //!
 //! The contracts are the real ones (`PerchAccount`, the doc compiler and
 //! interpreter at their pinned content addresses, the `PerchRecovery`
-//! controller, the WS2 membership pool), except:
+//! controller, the membership pool), except:
 //!
 //! - the owner's key and the guardians are [`Key`] stand-ins: custom
 //!   accounts whose `__check_auth` approves until [`Key::deny`] is called.
 //!   The owner signs as `Signer::Delegated(owner)`, so the account's own
-//!   `__check_auth` and OZ rule selection run exactly as on-chain;
+//!   `__check_auth` and its rule selection run exactly as on-chain;
 //! - the ZK adapter is [`MockAdapter`], which accepts a proof only if it is
 //!   [`mock_proof`] of the exact statement digest, enrollment id, and
 //!   nullifier, against a root the enrolled pool knows. Real proofs are the
@@ -52,7 +52,7 @@ use soroban_sdk::{
 use std::cell::Cell;
 use std::format;
 use std::string::String;
-use stellar_accounts::smart_account::{AuthPayload, Signer, SmartAccountStorageKey};
+use stellar_accounts::smart_account::{AuthPayload, Signer};
 
 // ---------------------------------------------------------------------------
 // Stand-in contracts
@@ -119,38 +119,31 @@ impl Target {
     }
 }
 
-/// A policy whose `install` always fails: stands in for a policy install
-/// that fails partway through an `apply_doc`.
+/// A recovery controller whose `rcv_sync` enrolls any configuration and
+/// whose `rcv_install` always fails: the recovery rule's install, the last
+/// step of an `apply_doc` that adds it, fails after every other rule edit.
 #[contract]
-pub struct FailingPolicy;
+pub struct FailingController;
 
 #[contractimpl]
-impl stellar_accounts::policies::Policy for FailingPolicy {
-    type AccountParams = Val;
-
-    fn enforce(
-        _e: &Env,
-        _context: Context,
-        _authenticated_signers: Vec<Signer>,
-        _context_rule: stellar_accounts::smart_account::ContextRule,
-        _smart_account: Address,
-    ) {
+impl FailingController {
+    pub fn rcv_sync(
+        _e: Env,
+        _account: Address,
+        _doc_hash: BytesN<32>,
+        _recovery: Val,
+        _approval_valid_until: u32,
+    ) -> perch_recovery_interface::controller::SyncOutcome {
+        perch_recovery_interface::controller::SyncOutcome::Enrolled
     }
 
-    fn install(
-        e: &Env,
-        _install_params: Val,
-        _context_rule: stellar_accounts::smart_account::ContextRule,
-        _smart_account: Address,
-    ) {
-        soroban_sdk::panic_with_error!(e, KeyError::Denied);
-    }
-
-    fn uninstall(
-        _e: &Env,
-        _context_rule: stellar_accounts::smart_account::ContextRule,
-        _smart_account: Address,
-    ) {
+    pub fn rcv_install(
+        _e: Env,
+        _account: Address,
+        _config_hash: BytesN<32>,
+        _rule: perch_recovery_interface::controller::RecoveryRule,
+    ) -> Result<(), KeyError> {
+        Err(KeyError::Denied)
     }
 }
 
@@ -238,12 +231,7 @@ pub fn enrollment(e: &Env, n: u8) -> ZkEnrollment {
 // Documents
 // ---------------------------------------------------------------------------
 
-pub fn strkey(a: &Address) -> String {
-    let s = a.to_string();
-    let mut buf = std::vec![0u8; s.len() as usize];
-    s.copy_into_slice(&mut buf);
-    String::from_utf8(buf).unwrap()
-}
+pub use perch_testkit::delta::strkey;
 
 pub fn hex32(b: &BytesN<32>) -> String {
     hex::encode(b.to_array())
@@ -395,6 +383,8 @@ pub struct World {
     pub target: Address,
     pub guardians: std::vec::Vec<Address>,
     nonce: Cell<i64>,
+    /// The last [`fixed_address`] handed out, when [`Opts::fixed_addresses`].
+    fixed: Option<Cell<u8>>,
 }
 
 /// How [`world_with`] departs from the default world.
@@ -402,11 +392,31 @@ pub struct World {
 pub struct Opts {
     /// The account is the full-replace oracle (`perch_testkit::delta`).
     pub oracle: bool,
-    /// [`FailingPolicy`] sits at the spending-limit address: any capped
-    /// rule's install fails.
-    pub failing_spending_limit: bool,
+    /// The account runs this wasm instead (`oz_differential.rs`,
+    /// `controller_differential.rs`).
+    pub account_wasm: Option<&'static [u8]>,
+    /// The recovery controller runs this wasm instead
+    /// (`controller_differential.rs`).
+    pub controller_wasm: Option<&'static [u8]>,
     /// Which compiler sits at the compiler's address.
     pub compiler: TestCompiler,
+    /// Every contract the world registers, and every [`World::new_key`],
+    /// sits at a [`fixed_address`] instead of one from the SDK's test
+    /// address generator, so documents naming them hash the same under any
+    /// SDK version.
+    pub fixed_addresses: bool,
+    /// The env writes no `test_snapshots/` file when dropped.
+    pub skip_snapshot: bool,
+}
+
+/// The `n`th fixed contract address: `C` strkey of `[0xF1; 31] ++ [n]`.
+pub fn fixed_address(e: &Env, n: u8) -> Address {
+    let mut id = [0xF1; 32];
+    id[31] = n;
+    let sc = soroban_sdk::xdr::ScAddress::Contract(soroban_sdk::xdr::ContractId(
+        soroban_sdk::xdr::Hash(id),
+    ));
+    Address::try_from_val(e, &ScVal::Address(sc)).unwrap()
 }
 
 /// The compiler a world runs (`perch_doc_compiler::testutils`).
@@ -443,7 +453,13 @@ pub fn world() -> World {
 }
 
 pub fn world_with(opts: Opts) -> World {
-    let env = Env::default();
+    let env = if opts.skip_snapshot {
+        Env::new_with_config(soroban_sdk::testutils::EnvTestConfig {
+            capture_snapshot_at_drop: false,
+        })
+    } else {
+        Env::default()
+    };
     let network_id = env
         .crypto()
         .sha256(&Bytes::from_slice(&env, FIXTURE_NETWORK.as_bytes()))
@@ -475,32 +491,39 @@ pub fn world_with(opts: Opts) -> World {
         PerchInterpreter,
         (),
     );
-    if opts.failing_spending_limit {
-        env.register_at(
-            &infra::perch_spending_limit::address(&env),
-            FailingPolicy,
-            (),
-        );
-    } else {
-        env.register_at(
-            &infra::perch_spending_limit::address(&env),
-            PerchSpendingLimit,
-            (),
-        );
-    }
+    env.register_at(
+        &infra::perch_spending_limit::address(&env),
+        PerchSpendingLimit,
+        (),
+    );
 
-    let owner = env.register(Key, ());
-    let device = env.register(Key, ());
-    let guardians = (0..3).map(|_| env.register(Key, ())).collect();
-    let controller = env.register(PerchRecovery, ());
-    let adapter = env.register(MockAdapter, ());
-    let pool = env.register(PerchZkPool, ());
-    let target = env.register(Target, ());
+    let fixed = opts.fixed_addresses.then(|| Cell::new(0u8));
+    macro_rules! register {
+        ($contract:expr, $args:expr) => {
+            match &fixed {
+                Some(n) => {
+                    n.set(n.get() + 1);
+                    env.register_at(&fixed_address(&env, n.get()), $contract, $args)
+                }
+                None => env.register($contract, $args),
+            }
+        };
+    }
+    let owner = register!(Key, ());
+    let device = register!(Key, ());
+    let guardians = (0..3).map(|_| register!(Key, ())).collect();
+    let controller = match opts.controller_wasm {
+        Some(wasm) => register!(wasm, ()),
+        None => register!(PerchRecovery, ()),
+    };
+    let adapter = register!(MockAdapter, ());
+    let pool = register!(PerchZkPool, ());
+    let target = register!(Target, ());
     let admin = vec![&env, Signer::Delegated(owner.clone())];
-    let account = if opts.oracle {
-        env.register(perch_testkit::delta::OracleAccount, (admin,))
-    } else {
-        env.register(PerchAccount, (admin,))
+    let account = match (opts.oracle, opts.account_wasm) {
+        (true, _) => register!(perch_testkit::delta::OracleAccount, (admin,)),
+        (false, Some(wasm)) => register!(wasm, (admin,)),
+        (false, None) => register!(PerchAccount, (admin,)),
     };
 
     // Enforcing authorization from here on: only explicit entries pass.
@@ -517,6 +540,7 @@ pub fn world_with(opts: Opts) -> World {
         target,
         guardians,
         nonce: Cell::new(0),
+        fixed,
     }
 }
 
@@ -669,6 +693,71 @@ impl World {
         self.delegated_entry(&self.account, key, self.rule_id(&self.account, rule), root)
     }
 
+    /// `s` as the bytes of a document.
+    pub fn json(&self, s: String) -> Bytes {
+        Bytes::from_slice(&self.env, s.as_bytes())
+    }
+
+    /// Install `account`'s authorization of `root` through its admin rule,
+    /// signed by its delegated owner key.
+    pub fn as_owner(&self, account: &Address, owner: &Address, root: SorobanAuthorizedInvocation) {
+        self.env.set_auths(&[self.delegated_entry(
+            account,
+            owner,
+            self.rule_id(account, "admin"),
+            root,
+        )]);
+    }
+
+    /// B's authorization of `root` through B's rule `b_rule`, whose signer is
+    /// the Perch account A; A approves through its rule `a_rule`, whose signer
+    /// is `key` (CAP-0071 nesting, all in B's one entry).
+    #[allow(clippy::too_many_arguments)]
+    pub fn via_delegate(
+        &self,
+        nonce: i64,
+        b: &Address,
+        b_rule: u32,
+        a: &Address,
+        a_rule: u32,
+        key: &Address,
+        root: SorobanAuthorizedInvocation,
+    ) -> SorobanAuthorizationEntry {
+        let e = &self.env;
+        SorobanAuthorizationEntry {
+            credentials: SorobanCredentials::AddressWithDelegates(
+                SorobanAddressCredentialsWithDelegates {
+                    address_credentials: SorobanAddressCredentials {
+                        address: b.clone().into(),
+                        nonce,
+                        signature_expiration_ledger: self.ledger() + 1_000,
+                        signature: self.payload(
+                            map![e, (Signer::Delegated(a.clone()), Bytes::new(e))],
+                            b_rule,
+                        ),
+                    },
+                    delegates: std::vec![SorobanDelegateSignature {
+                        address: a.clone().into(),
+                        signature: self.payload(
+                            map![e, (Signer::Delegated(key.clone()), Bytes::new(e))],
+                            a_rule,
+                        ),
+                        nested_delegates: std::vec![SorobanDelegateSignature {
+                            address: key.clone().into(),
+                            signature: ScVal::Void,
+                            nested_delegates: VecM::default(),
+                        }]
+                        .try_into()
+                        .unwrap(),
+                    }]
+                    .try_into()
+                    .unwrap(),
+                },
+            ),
+            root_invocation: root,
+        }
+    }
+
     /// Anyone's selection of the zero-signer recovery rule for `root`.
     pub fn recovery_rule_entry(
         &self,
@@ -721,19 +810,7 @@ impl World {
     /// it edits in place under its id, but a rule it replaces whole gets a
     /// new one, so ids can move; the newest match wins.
     pub fn rule_id(&self, account: &Address, name: &str) -> u32 {
-        let next: u32 = self.env.as_contract(account, || {
-            self.env
-                .storage()
-                .instance()
-                .get(&SmartAccountStorageKey::NextId)
-                .unwrap_or(0)
-        });
-        let client = PerchAccountClient::new(&self.env, account);
-        let wanted = soroban_sdk::String::from_str(&self.env, name);
-        (0..next)
-            .rev()
-            .find(|id| matches!(client.try_get_context_rule(id), Ok(Ok(r)) if r.name == wanted))
-            .unwrap_or(u32::MAX)
+        newest_rule(&self.env, account, name).unwrap_or(u32::MAX)
     }
 
     // --- account calls -----------------------------------------------------
@@ -990,7 +1067,14 @@ impl World {
     }
 
     pub fn new_key(&self) -> Address {
-        self.env.register(Key, ())
+        match &self.fixed {
+            Some(n) => {
+                n.set(n.get() + 1);
+                self.env
+                    .register_at(&fixed_address(&self.env, n.get()), Key, ())
+            }
+            None => self.env.register(Key, ()),
+        }
     }
 }
 
@@ -1010,4 +1094,23 @@ pub fn err<T: core::fmt::Debug, E: core::fmt::Debug + Clone>(
         Err(Ok(e)) => e,
         other => panic!("expected a contract error, got {other:?}"),
     }
+}
+
+/// The id of `account`'s newest live rule named `name`, from its records:
+/// the account document's and every grant's.
+pub fn newest_rule(env: &Env, account: &Address, name: &str) -> Option<u32> {
+    let client = PerchAccountClient::new(env, account);
+    let wanted = soroban_sdk::String::from_str(env, name);
+    let mut rules: std::vec::Vec<perch_smart_account::InstalledRule> =
+        client.installed_rules().iter().collect();
+    for grant in client.grants(&0, &u32::MAX).iter() {
+        if let Some(record) = client.grant(&grant) {
+            rules.extend(record.rules.iter());
+        }
+    }
+    rules
+        .iter()
+        .filter(|r| r.name == wanted)
+        .map(|r| r.id)
+        .max()
 }

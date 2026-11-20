@@ -1,0 +1,30 @@
+[package]
+name = "perch-rule-eval"
+description = "Perch's rules as rule-core's evaluator reads them: host-value conversions, storage mirrors, and the denotation of an installed rule"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+doctest = false
+
+[dependencies]
+rule-eval = { workspace = true }
+soroban-facade = { workspace = true, features = ["sdk"] }
+soroban-sdk = { workspace = true }
+perch-account-types = { version = "0.1.0", path = "../perch-account-types" }
+# `model_of`, which builds a `CompiledModel` from a validated document. Direct
+# paths (not `workspace = true`) so `default-features = false` is honored and
+# both stay no_std.
+perch-ir = { version = "0.1.1", path = "../perch-ir", default-features = false, optional = true }
+hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
+
+[features]
+# `model_of`: what the doc compiler needs. An account needs only the rest.
+ir = ["dep:perch-ir", "dep:hex"]
+
+[dev-dependencies]
+rule-eval-conformance = { workspace = true }
+soroban-sdk = { workspace = true, features = ["testutils"] }

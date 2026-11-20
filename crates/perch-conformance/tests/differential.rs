@@ -1,4 +1,4 @@
-//! Differential compile→eval testing (#PLAN phase 0): random *valid* policy
+//! Differential compile→eval testing: random *valid* policy
 //! documents are lowered by the real `perch-compile`, and the resulting
 //! program's verdict under the real `rpn::eval` is compared against an
 //! **independent doc-level reference semantics** written directly from
@@ -99,6 +99,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
             method: SignerMethod::External {
                 verifier: VERIFIER_A.into(),
                 key: "0102".into(),
+                verifier_name: None,
             },
         },
         SignerDecl {
@@ -112,6 +113,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
             method: SignerMethod::External {
                 verifier: VERIFIER_B.into(),
                 key: "aabbcc".into(),
+                verifier_name: None,
             },
         },
     ];
@@ -203,6 +205,7 @@ fn gen_doc(rng: &mut Rng, doc_idx: u32) -> PolicyDoc {
             principals,
             functions,
             args,
+            auth_root: None,
             not_after_ledger: if rng.chance(3) {
                 Some(1 + rng.below(1_000_000))
             } else {

@@ -1,14 +1,10 @@
 [package]
 name = "perch-account"
-description = "Deployable OZ smart account governed by perch policies; admin for the perch registry"
+description = "Deployable Perch smart account governed by perch policies; admin for the perch registry"
 version = "0.5.1"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-# No cargo-manifest `publish = false`: release-plz's `release` command skips
-# manifest-unpublishable packages (no tag ever — the missing-4-tags bug of the
-# v0.1.0 release). crates.io publish is blocked workspace-wide in
-# release-plz.toml instead.
 
 [package.metadata.stellar]
 cargo_inherit = true
@@ -19,7 +15,6 @@ doctest = false
 
 [dependencies]
 soroban-sdk = { workspace = true }
-stellar-accounts = { workspace = true }
 perch-smart-account = { version = "0.1.1", path = "../perch-smart-account" }
 
 [dev-dependencies]

@@ -9,18 +9,18 @@
 //! registry id and this contract's wasm hash.
 //!
 //! ## Security contract
-//! - **Multi-tenant auth (C1):** `smart_account` is an *argument* to the Policy
+//! - **Multi-tenant auth:** `smart_account` is an *argument* to the Policy
 //!   trait, and one interpreter instance serves every account. Every mutating
 //!   or authorizing entry point (`install`, `uninstall`, `enforce`) calls
 //!   `smart_account.require_auth()` first, so nobody can plant or drop another
 //!   account's `(account, rule)` state. Reads are not gated:
 //!   [`PerchInterpreter::get_program`] is a public view — programs live in
-//!   ledger state, which is world-readable over RPC regardless, so auth there
-//!   would be theater, not protection.
-//! - **Dangling-deny (C2):** `enforce` panics `NotInstalled` when no program
+//!   ledger state, which is world-readable over RPC regardless, so gating
+//!   them would hide nothing.
+//! - **Dangling-deny:** `enforce` panics `NotInstalled` when no program
 //!   exists for the rule — a rule that still lists the interpreter after an
 //!   uninstall degrades to deny, never allow.
-//! - **Signer sufficiency (C3/C4):** `signer_count` is the number of
+//! - **Signer sufficiency:** `signer_count` is the number of
 //!   *authenticated* signers OZ passes, never the rule's configured set; and
 //!   `enforce` denies outright when that set is empty, a defense-in-depth floor
 //!   behind the compiler's `MinSigners` injection (INV-1).
@@ -119,17 +119,17 @@ impl Policy for PerchInterpreter {
         context_rule: ContextRule,
         smart_account: Address,
     ) {
-        // C1: only the account may drive its own authorization.
+        // Only the account may drive its own authorization.
         smart_account.require_auth();
 
-        // C4: defense-in-depth signer floor. OZ defers signer sufficiency to
+        // Defense-in-depth signer floor. OZ defers signer sufficiency to
         // policies once any policy attaches, so an empty auth payload could
         // otherwise reach a program that never checks the count.
         if authenticated_signers.is_empty() {
             panic_with_error!(env, Error::Denied);
         }
 
-        // C2: a missing program denies (dangling rule → DoS, never allow).
+        // A missing program denies (dangling rule → DoS, never allow).
         let key = DataKey::Program(smart_account.clone(), context_rule.id);
         let params: InstallParams = env
             .storage()
@@ -140,7 +140,7 @@ impl Policy for PerchInterpreter {
             .persistent()
             .extend_ttl(&key, TTL_THRESHOLD, EXTEND_AMOUNT);
 
-        // C3: signer_count is the AUTHENTICATED count, never the configured set.
+        // signer_count is the AUTHENTICATED count, never the configured set.
         let inputs = EvalInputs {
             context: &context,
             signer_count: authenticated_signers.len(),

@@ -1,4 +1,4 @@
-//! The configuration revision and the consumer views (#108), and
+//! The configuration revision and the consumer views, and
 //! `apply_doc`'s `expected_revision` (RFC #109 §3c), under ENFORCING
 //! authorization: every call below runs the account's real `__check_auth`
 //! (`support/mod.rs`).
@@ -159,14 +159,13 @@ fn rule_not_found() -> soroban_sdk::Error {
     soroban_sdk::Error::from_contract_error(SmartAccountError::ContextRuleNotFound as u32)
 }
 
-/// Whether OZ holds no rule `id`.
+/// Whether the account holds no rule `id`: its view refuses with
+/// `ContextRuleNotFound`.
 fn rule_missing(w: &World, id: u32) -> bool {
-    w.env.as_contract(&w.account, || {
-        !w.env
-            .storage()
-            .persistent()
-            .has(&stellar_accounts::smart_account::SmartAccountStorageKey::ContextRuleData(id))
-    })
+    matches!(
+        w.client().try_get_context_rule(&id),
+        Err(Ok(e)) if e == rule_not_found()
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -263,6 +262,96 @@ fn an_executed_upgrade_advances_the_revision_and_scheduling_does_not() {
     assert_eq!(
         state.get("account/instance/Revision").map(String::as_str),
         Some("2")
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The grant generation
+// ---------------------------------------------------------------------------
+
+/// Every `apply_doc` path other than a completion leaves the grant
+/// generation, including each recovery transition that advances the recovery
+/// generation; a completion advances it by one; an executed upgrade leaves it.
+#[test]
+fn the_grant_generation_advances_only_on_a_completed_recovery() {
+    let w = world();
+    let generation = || w.client().grant_generation();
+    let recovery = || w.client().recovery_generation();
+    assert_eq!(generation(), 0, "after the constructor");
+
+    let plain = w.doc(None).bytes(&w);
+    let loss = w.recovery("loss", Mode::Guardian);
+    let mut quorum3 = loss.clone();
+    quorum3.quorum = 3;
+    let mut switched = loss.clone();
+    switched.controller = w.env.register(perch_recovery::PerchRecovery, ());
+    for (what, bytes, transitions) in [
+        ("owner apply", plain.clone(), 0),
+        ("re-apply of the same document", plain.clone(), 0),
+        ("enrollment", w.doc(Some(loss.clone())).bytes(&w), 1),
+        ("reconfiguration", w.doc(Some(quorum3)).bytes(&w), 1),
+        ("controller switch", w.doc(Some(switched)).bytes(&w), 2),
+        ("removal", plain, 1),
+        ("enrollment again", w.doc(Some(loss)).bytes(&w), 1),
+    ] {
+        let before = recovery();
+        w.apply_bytes(&bytes, 0)
+            .unwrap_or_else(|e| panic!("{what}: {e:?}"));
+        assert_eq!(
+            recovery(),
+            before + transitions,
+            "{what}: recovery generation"
+        );
+        assert_eq!(generation(), 0, "{what}: grant generation");
+    }
+
+    let new_owner = w.new_key();
+    let replacements = w.replacements(&new_owner, None);
+    let source = w.client().applied_doc().unwrap();
+    let attempt = w.ctl().begin_lost_key(&w.account, &replacements);
+    let target = w.target_bytes(RecoveryAction::LostKey, &source, &replacements);
+    w.guardian(0, attempt, Initiate);
+    w.guardian(1, attempt, Initiate);
+    assert_eq!(generation(), 0, "attempt and evidence");
+    w.advance(DELAY);
+    let before = recovery();
+    w.complete(&target).expect("completion");
+    assert_eq!(generation(), 1, "completion");
+    assert_eq!(recovery(), before + 1, "completion: recovery generation");
+
+    // An executed upgrade, signed by the recovered owner.
+    let wasm = w.env.deployer().upload_contract_wasm(Bytes::from_slice(
+        &w.env,
+        include_bytes!("../../perch-smart-account/wasm/perch-spending-limit.wasm"),
+    ));
+    let call = |name: &str, args: std::vec::Vec<soroban_sdk::xdr::ScVal>| {
+        w.env
+            .set_auths(&[w.entry_as(&new_owner, "admin", w.invocation(&w.account, name, args))]);
+    };
+    call(
+        "schedule_upgrade",
+        std::vec![w.sc(wasm.clone()), w.sc(0u32)],
+    );
+    let id = w.client().schedule_upgrade(&wasm, &0);
+    w.advance(ACCOUNT_UPGRADE_DELAY_LEDGERS);
+    call("execute_upgrade", std::vec![w.sc(id)]);
+    w.client().execute_upgrade(&id);
+    w.env.set_auths(&[]);
+    // The account now runs other code, so read the stored counters.
+    let state = storage_state(&w.env, &w.account, History::Keep);
+    assert_eq!(
+        state
+            .get("account/instance/RecoveryGeneration")
+            .map(String::as_str),
+        Some((before + 2).to_string().as_str()),
+        "the upgrade advanced the recovery generation"
+    );
+    assert_eq!(
+        state
+            .get("account/instance/GrantGeneration")
+            .map(String::as_str),
+        Some("1"),
+        "the upgrade left the grant generation"
     );
 }
 
@@ -369,7 +458,7 @@ fn a_b_a_restores_the_doc_hash_but_not_the_selection() {
     assert_eq!(hash_again, hash_a);
     assert_eq!(w.client().configuration().doc_hash, Some(hash_a));
     let j = select(&w, "app").expect("app at r3");
-    assert_ne!(j, i, "OZ never reuses an id");
+    assert_ne!(j, i, "no rule id is reused");
     assert_ne!(r3, r1, "the revision tells A -> B -> A from A");
 
     // The r1 selection names an id that no longer exists: the transaction
@@ -635,7 +724,13 @@ fn capabilities_and_limits_are_constants_of_the_wasm() {
     assert_eq!(caps.auth_digest, Symbol::new(&w.env, "addr_oz_v1"));
     assert_eq!(
         caps.apply_modes,
-        Vec::from_array(&w.env, [Symbol::new(&w.env, "one_tx")])
+        Vec::from_array(
+            &w.env,
+            [
+                Symbol::new(&w.env, "one_tx"),
+                Symbol::new(&w.env, "grant_v1")
+            ]
+        )
     );
     w.enroll(&w.doc(None));
     assert_eq!(

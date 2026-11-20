@@ -55,8 +55,9 @@ pub struct SignerDecl {
 }
 
 /// How a signer authenticates. Discriminated in JSON by field shape, not a
-/// `type` tag: `{"verifier","key"}` is external, `{"address"}` is delegated —
-/// anything else fails closed in [`crate::parse`].
+/// `type` tag: `{"verifier","key"}` (with an optional `"verifier-name"`) is
+/// external, `{"address"}` is delegated — anything else fails closed in
+/// [`crate::parse`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SignerMethod {
     /// A raw key checked by a verifier contract (OZ `Signer::External`).
@@ -69,6 +70,16 @@ pub enum SignerMethod {
         /// exists because commitment-style keys can be larger than raw curve
         /// points.
         key: String,
+        /// The verifier's name in Perch's `perch/verifiers` registry, as
+        /// `<name>@<version>` with an exact version
+        /// ([`crate::verifier::parse_verifier_name`]). Present, the doc
+        /// compiler resolves it on-chain and refuses the document unless it
+        /// resolves to `verifier`, so the canonical form binds the name, the
+        /// version and the address together. Absent, the verifier is
+        /// *unverified*: named by its contract id alone, which an account
+        /// document may not do ([`crate::verifier`]). Omitted from the
+        /// canonical form when `None`.
+        verifier_name: Option<String>,
     },
     /// An address (G- or C-strkey) the host authenticates via CAP-0071
     /// authentication delegation (OZ `Signer::Delegated`): the delegate
@@ -113,11 +124,26 @@ pub struct Rule {
     pub not_after_ledger: Option<u32>,
     /// If present, a cumulative spend cap over a rolling window, enforced by a
     /// stateful sibling policy (OZ `spending_limit`) attached alongside the
-    /// interpreter — perch itself is stateless (see the crate-level "Stateless,
-    /// per-invocation semantics" section). Omitted from the canonical form when
+    /// interpreter — perch's argument predicates are stateless (see
+    /// [`ArgPred`]). Omitted from the canonical form when
     /// `None`, so documents without a cap hash exactly as before this field
     /// existed.
     pub cap: Option<CapConstraint>,
+    /// Exact first contract call of this account's host-authenticated
+    /// authorization entry. Omitted means unrestricted. This is not a
+    /// transaction-root or ancestry condition; every other rule check still
+    /// applies. Forbidden on self-admin rules.
+    pub auth_root: Option<AuthRoot>,
+}
+
+/// An exact authorization-entry root, never supplied by the caller separately
+/// from the host-authenticated context batch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuthRoot {
+    /// Contract-address strkey of the first authorized invocation.
+    pub contract: String,
+    /// Exact Soroban function symbol (no wildcard).
+    pub function: String,
 }
 
 /// A cumulative spend cap on a [`Rule`], over a rolling window of ledgers.

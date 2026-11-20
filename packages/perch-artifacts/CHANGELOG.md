@@ -4,11 +4,28 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.0] - 2026-11-20
+
+### 🚀 Features
+
+- *(perch-js)* Follow the account API in the TypeScript packages
+- *(smart-account)* Store the rule-eval rule sets the installed rules enforce (#56)
+- *(smart-account)* Decide authorizations with rule-eval (#58)
+- *(account,doc-compiler)* [**breaking**] Name verifiers from perch/verifiers; refuse unverified ones in admin documents (#68)
+- Add exact authorization-root constraints to Perch rules (#69)
+- *(perch-doc-compiler)* Give grant documents their own caps and a compact stored layout (#100)
+
+### 🧪 Testing
+
+- Regenerate constants.json, policy.schema.json
+- Regenerate diagnostic-events.json
+- Regenerate constants.json, policy.schema.json, vectors.json
+
 ## [0.2.2] - 2026-10-26
 
 ### 💼 Other
 
-- *(mainnet)* Recovery stack @ c135aca277745434f2abf679edd9868c95204b51
+- *(mainnet)* Recovery stack @ c135aca277745434f2abf679edd9868c95204b51 (#163)
 
 ## [0.2.1] - 2026-10-22
 
@@ -48,3 +65,5 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 - Constructorless membership pool, real ZK circuit/adapter, reproducible artifacts (epic #99 WS2) (#101)
 - New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
 - *(testnet)* Fresh deployment record of the merged #99 stack, from main's 7ae915d (#112)
+
+

@@ -1,6 +1,6 @@
 {
   "name": "@stellar-registry/perch-contracts",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "TypeScript clients for the perch stack contracts (account, factory, recovery controller, ZK pool and adapter, WebAuthn verifier, doc compiler), generated from the deployed wasm, with the deployment manifests",
   "license": "Apache-2.0",
   "type": "module",

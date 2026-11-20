@@ -2,220 +2,205 @@
 
 A composable policy layer for Soroban smart accounts.
 
-Perch is a policy library and toolchain for Soroban smart accounts whose signers, authorization payload and context-rule views are wire-compatible with [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts); the account and the recovery controller link none of its code. At its center is a declarative, reviewable policy document (canonical JSON, content-hashed) describing what each signer on a smart account may do. Builders in Rust and TypeScript produce the document, the on-chain doc compiler compiles it, and the account lowers it to rule-core's evaluator (`rule-eval`). The account's [contract interface](./docs/account-interface.md) describes its rule views and authorization paths. Perch accounts can also enroll opt-in recovery (guardians, a zero-knowledge proof, or both) in the same document.
+Perch lets you describe **who can do what** in a reviewable policy document:
+which signers may call which contracts, with what arguments, until which
+ledger, and within what spending limits. Rust and TypeScript builders produce
+canonical JSON with a content hash. An on-chain compiler prepares the document;
+the account lowers it to rule-core's evaluator through `perch-rule-eval`.
+Its signer, authorization payload, and context-rule wire types remain compatible
+with [OpenZeppelin `stellar-accounts`](https://github.com/OpenZeppelin/stellar-contracts),
+while the current account and recovery controller link none of its code.
 
-The motivating use-case is a CI key stored in GitHub that can publish Wasm releases to the [Stellar Registry](https://github.com/stellar-registry) as a smart account, and do nothing else.
+**Source and deployment status.** Recorded deployments are in the
+[testnet](./deployments/testnet.json) and [mainnet](./deployments/mainnet.json)
+manifests. This source adds features beyond those builds. Read the
+[client and deployment compatibility guide](./docs/auth-root.md#client-and-deployment-compatibility)
+before using the new interface or choosing contract bindings. The
+[audit manifest](./docs/audit-scope.md) records review scope and provenance;
+[deferred work](./docs/DEFERRED.md) describes known limitations.
+
+[Get started](#get-started) · [How it works](#how-it-works) ·
+[Documentation](#documentation) · [Repository map](#repository-map) ·
+[Development](#development)
+
+## Get started
+
+Install the TypeScript SDK (ESM):
+
+```sh
+npm install @stellar-registry/perch
+```
+
+The example uses the current source API; check the
+[package version guidance](./packages/perch-js/README.md#install) against the SDK
+and compiler you use. Give a CI key permission to publish Wasm releases to the
+[Stellar Registry](https://github.com/stellar-registry), while a maintainer's
+passkey retains account administration:
 
 ```ts
+import {
+  policy, named, delegated, isSelf, canonicalJson, docHash,
+} from '@stellar-registry/perch';
+
 const doc = policy()
+  .network('Test SDF Network ; September 2015')
   .signer('admin', named(WEBAUTHN_VERIFIER_NAME, WEBAUTHN_VERIFIER, maintainerPasskey))
-  .signer('ci',    delegated(CI_ACCOUNT)) // CAP-0071: host-authenticated G-account
-  .rule('root', r => r.selfAdmin().signedBy('admin'))
+  .signer('ci', delegated(CI_ACCOUNT)) // CAP-0071: host-authenticated G-account
+  .rule('admin', r => r.selfAdmin().signedBy('admin'))
   .rule('ci-publish', r => r
     .callContract(REGISTRY)
     .signedBy('ci')
     .func('publish', 'publish_hash')
-    .arg(1, isSelf())
-    .notAfter(QUARTER_EXPIRY))
+    .arg(1, isSelf()) // The registry's author argument must be this account.
+    .notAfter(EXPIRY_LEDGER))
   .build();
+
+const docJson = canonicalJson(doc); // Bytes to submit through apply_doc.
+const hash = docHash(doc);          // SHA-256 of the canonical document.
 ```
 
-A **signer** is a slot a document names by its signer id (`admin` and `ci` above); a **credential** is the `Delegated(address)` or `External(verifier, key)` value that fills it. OpenZeppelin's smart account and Perch's wire types call that value a `Signer`.
+Supply a verifier `name@version` from Perch's managed `perch/verifiers` registry,
+its resolved address, the publishing registry address, maintainer passkey public
+key (bytes or hex), CI account address, and expiry ledger. The compiler checks
+that the verifier name resolves to the supplied address; see
+[verifier selection](./packages/perch-js/README.md#verifiers). Under this document,
+the CI signer can authorize only the two publishing functions for this account,
+within the ledger bound.
 
-## Status
+Building a document does not install it. Continue with the
+[SDK guide](./packages/perch-js/README.md#using-a-perch-account) to read an account,
+select its rules, construct signatures, and apply the document. The account's
+pinned on-chain compiler is authoritative; the TypeScript SDK does not compile
+policies.
 
-Recorded deployments are in [`deployments/testnet.json`](./deployments/testnet.json)
-and [`deployments/mainnet.json`](./deployments/mainnet.json). This source adds
-features beyond those deployed builds; see [exact-root compatibility](./docs/auth-root.md#client-and-deployment-compatibility)
-before using the new account interface. For the external security audit:
+A **signer** is a document slot named by an id (`admin` or `ci` here). A
+**credential** is the delegated address or external verifier/key pair filling
+that slot. OpenZeppelin's and Perch's wire types call that value a `Signer`.
 
-- [`docs/audit-scope.md`](./docs/audit-scope.md): the audit manifest: the
-  reviewed commit, the deployed build and its hashes, toolchains, review
-  units, known limitations, and the reading order.
-- [`docs/DEFERRED.md`](./docs/DEFERRED.md): work deferred until after the
-  audit, with the current behaviour each item leaves in place.
+## How it works
 
-## Stateless predicates and cumulative caps
+1. **Describe and review.** A `PolicyDoc` declares signers, rules, and optional
+   recovery. [CANON v1](./CANONICAL.md) defines its canonical JSON and `doc_hash`,
+   plus the `rule_hash` and recovery `config_hash` fragment identities.
+2. **Apply.** `apply_doc` calls the account's pinned document compiler and
+   reconciles its rules and signers. `apply_grant` installs a grant document.
+   The [account interface](./docs/account-interface.md) describes both paths.
+3. **Enforce.** The account authenticates credentials and checks authorization
+   with rule-core's evaluator. Rules constrain calls, signers, expiry, and
+   spending; the account stores each capped rule's spending record.
 
-Every argument constraint is a stateless predicate over a *single*
-invocation: this call's contract, function, arguments, signer count, and
-ledger. A numeric argument bound limits one call, not a running total, so a
-signer can call repeatedly to exceed any intended total. A cumulative limit
-is a rule's `cap`: the rule allows only a metered `transfer`, and the
-account keeps the rule's spending record, which rule-eval charges with
-every transfer it allows. Replacing a capped rule, or changing its cap,
-starts an empty spending record
-([`docs/DEFERRED.md`](./docs/DEFERRED.md#persistent-spending-budgets-across-replacements)).
-[`docs/verification/THEORY.md`](./docs/verification/THEORY.md) states which
-policies a stateless monitor can enforce.
+Signers can use external verifiers, including passkeys, ed25519, and ML-DSA-65,
+or delegated host authentication through CAP-0071. Rules support all-of and
+threshold signer groups. Optional [account recovery](./docs/recovery/README.md)
+uses guardians, a zero-knowledge proof, or both, configured in the same document.
+A rule can also require an [exact authorization-entry root](./docs/auth-root.md),
+such as allowing a token transfer only within an entry rooted at a game's
+`guess` call. Legacy interpreter proofs do not cover this condition.
 
-A transfer rule can also require an exact authorization-entry root, such as
-a game's `guess` call. See [exact-root semantics](./docs/auth-root.md) and the
-[TypeScript usage](./packages/perch-js/README.md#exact-authorization-entry-roots).
+### Per-call constraints and cumulative spending
 
-## Layout
+Argument constraints inspect a **single invocation**: its contract,
+function, arguments, authenticated signer count, and ledger. Repeating a call
+can exceed an intended total even when each call satisfies its argument bounds.
 
-```
-CANONICAL.md          normative definition of the canonical form, doc_hash, and the
-                      fragment hashes (CANON v1)
-crates/
-  perch-ir/           policy document model: canonical JSON, doc_hash, validation
-  perch-schema/       host-side generator for the versioned PolicyDoc JSON Schema
-                      (draft 2020-12), derived from perch-ir's constants; see docs/schema.md
-  perch-program/      on-chain constraint encoding + fail-closed evaluation (no_std rlib)
-  perch-interpreter/  the deployable OZ Policy contract that evaluates programs
-                      (legacy accounts; current accounts attach no policy to a rule)
-  perch-compile/      RPN lowering: PolicyDoc → OZ rules with interpreter programs
-                      (off-chain: the differential suites and legacy accounts)
-  perch-rule-eval/    Perch's rules as rule-core's evaluator reads them: host-value
-                      conversions, storage mirrors, the anti-brick checks
-  perch-review-core/  off-chain: an account's `__check_auth` verdict and cap budgets
-                      for an authorization entry, from a ledger snapshot, as
-                      import-free wasm; npm/ holds its private TypeScript wrapper
-  perch-account-types/  the account's signer, `__check_auth` payload, context rule,
-                      and error codes, XDR- and spec-identical to OZ's
-  perch-doc-compiler/ deployable, stateless: doc JSON → compiled rules (signers,
-                      last ledger), the document model the account lowers with
-                      rule-eval, doc_hash, config_hash, document caps, and
-                      recovery target derivation
-  perch-smart-account/  the account trait: apply_doc and apply_grant (the account and
-                      grant documents, the only write paths for rules and signers),
-                      the delta reconcile of account records, execute, upgrades, the recovery
-                      hooks, and the consumer views
-  perch-account/      the deployable account contract over perch-smart-account
-  perch-account-factory/  deployable factory: deploys the build-time-pinned account
-                      wasm at an address bound to its admin signers
-  perch-spending-limit/  deployable wrapper of OZ spending_limit (legacy accounts'
-                      cumulative caps; current accounts keep a rule's spending record)
-  perch-ed25519-verifier/  deployable ed25519 verifier for External signers
-  perch-mldsa-verifier/  deployable ML-DSA-65 (FIPS 204, post-quantum) verifier for
-                      External signers; constructorless, no admin
-  perch-webauthn-verifier/  deployable WebAuthn (passkey, secp256r1) verifier for
-                      External signers; constructorless, no admin
-  perch-recovery/     deployable recovery controller: the one implementation of
-                      docs/recovery/spec.md (Loss/Protected × guardian/ZK/combined),
-                      adopted through the document's `recovery` member
-  perch-recovery-interface/  the recovery statement, its encoding, and the interfaces
-                      between controller, account, adapter, and pool (no contract)
-  perch-zk-pool/      deployable ZK membership pool: account-authorized enrollment,
-                      depth-32 Poseidon2 trees with rollover (docs/zk/)
-  perch-zk-adapter/   deployable ZK adapter: root check, statement binding, and the
-                      zero-knowledge UltraHonk verifier with the circuit's VK compiled in
-  perch-zk-primitives/  host-side Poseidon2 for the circuit's formulas (no_std)
-  perch-zk-prover/    native witnesses/proving + `perch-zk-fixtures` (artifacts,
-                      fixtures, bench)
-  perch-registry-resolve/, perch-registry-resolve-macro/  build-time infra pins:
-                      `deployer(registry, sha256(pinned wasm))`, no runtime address
-  perch-constructorless-registry/  the content-addressing registry contract
-  perch-deploy/       deploy/CI tool (lib + bin): signs smart-account auth entries
-  perch-testnet/      exercises a deployed stack on testnet: passkey owners, G-account
-                      guardians, real proofs, enforcing auth, measured transactions
-  perch-derive-id/    offline content-address and name-salt contract id derivation
-  perch-conformance/  eval-semantics conformance vectors + compile→eval differential
-                      + wasm-leg suites
-  perch-analyze/      per-policy SMT prover (a document's rule-eval rules →
-                      SMT-LIB, z3): dead rules, intent conformance (only-calls),
-                      semantic attenuation (narrows)
-  perch-golden/       golden XDR vectors of the on-chain wire format
-  perch-bench/, perch-bench-rpn/  metered instruction-count canary for the program
-                      encoding (crates/perch-program/BENCH.md)
-  perch-testkit/      test bootstrap and the full-replace oracle for the delta apply
-  integration-tests/  enforcing-auth, recovery, delta, revision, and release-stack suites
-packages/
-  perch-js/           @stellar-registry/perch: schemas, builder, canonical JSON and
-                      hashes, statement encodings, and the consumer interface
-                      (revision-consistent reads, rule selection, signing digests,
-                      the apply lifecycle); ships the generated policy.schema.json
-                      under schemas/ (see docs/schema.md)
-  perch-interpreter-js/  @stellar-registry/perch-interpreter: interpreter client
-                      bindings (generated from the wasm; `just bindings-interpreter-js`)
-  perch-zk/           @stellar-registry/perch-zk: ZK recovery proof helpers (commitments,
-                      witnesses, bb.js proving) and a trust-free pool indexer
-                      (`@stellar-registry/perch-zk/indexer`)
-  perch-relay/        @stellar-registry/perch-relay: store-and-forward relay for signed
-                      guardian approvals
-  perch-contracts/    @stellar-registry/perch-contracts: stack contract bindings generated
-                      from deployed or explicitly undeployed wasm, plus deployment
-                      manifests (see packages/perch-contracts/README.md)
-  perch-artifacts/    @stellar-registry/perch-artifacts: deployments/, circuits/, test
-                      vectors, document and program limits, fetch-infra-wasm.sh and
-                      zk-toolchain.sh as files, copied at build time
-circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
-                      artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
-vendor/               the audited UltraHonk verifier plus perch's ZK-flavor delta,
-                      vendored with its NOTICE
-formal/               Lean 4 model of the v1 evaluator and CANON v1, with
-                      machine-checked theorems; replays the conformance and canonical
-                      vectors (`just drt`)
-fuzz/                 cargo-fuzz targets: evaluator totality, parser/canonicalization
-                      round-trip, recovery canonical form, delta apply
-komet/                Komet (K-framework) property tests of the evaluator wasm
-scripts/              build-stack.sh / deploy-stack.sh: the stack in pin order and its
-                      manifest; fetch-infra-wasm.sh: build-time pins from the manifest,
-                      hash- and address-checked; verify-deployment.sh: the manifest
-                      against the chain; bindings-contracts.sh, check-packages.sh;
-                      bootstrap-testnet.sh: the canonical registry + author account;
-                      zk-toolchain.sh: pinned, checksummed nargo/bb
-deployments/          deployment manifests and the raw testnet exercise
-                      record (testnet-exercise.json)
-docs/audit-scope.md   the audit manifest
-docs/account-interface.md  the account's entry points, types, events, and errors: the
-                      notes too long for its contract spec's doc comments
-docs/DEFERRED.md      work deferred until after the audit
-docs/auth-root.md     exact-root authorization semantics and client/deployment
-                      compatibility
-docs/recovery/        account recovery: the authoritative spec, statement layouts,
-                      CAP-0071 reliance, the implementation map, budgets, and formal
-                      coverage
-docs/zk/              ZK recovery circuit, pool, adapter, and measurements (the
-                      depth decision is in docs/recovery/budgets.md)
-docs/deploy/          build order, manifests, pin verification, and the testnet exercise
-                      report
-docs/verification/    what is proved, differentially tested, and tested only (PLAN.md);
-                      enforceability theory (THEORY.md)
-docs/schema.md        the PolicyDoc JSON Schema: generation, drift, release path, versioning,
-                      and the boundary between schema-valid and authorized/canonical
-docs/testnet-deployment.md  the `unverified/perch` testnet registry and author account
-                      that deployments before 2026-10-22 resolve their infra in
-docs/index.html       reading hub for the published HTML documentation (GitHub Pages);
-                      it links each paper, walkthrough, simulation, and slide deck
-testdata/             golden vectors shared by the Rust, TypeScript, and Lean suites
-                      (frozen); see testdata/README.md
-testdata/schema/      shared PolicyDoc JSON Schema conformance cases (Rust + perch-js suites)
-```
+Use a rule's `cap` for a cumulative limit. A capped rule allows only a metered
+`transfer`; rule-eval charges the account's spending record for each transfer
+it allows. **Replacing a capped rule or changing its cap starts an empty
+spending record.** See the [budget lifecycle limitation](./docs/DEFERRED.md#persistent-spending-budgets-across-replacements)
+and [stateless enforceability theory](./docs/verification/THEORY.md).
 
-[`docs/deploy/`](./docs/deploy/README.md) covers release and deployment,
-including build order, manifests, registries, and deployment verification.
+## Documentation
+
+| I want to… | Start here |
+| --- | --- |
+| Build documents or integrate a wallet | [TypeScript SDK and account lifecycle](./packages/perch-js/README.md) |
+| Inspect account entry points and grant documents | [Account interface](./docs/account-interface.md) · [Exact-root semantics](./docs/auth-root.md) |
+| Understand document identity and validation | [Canonical format](./CANONICAL.md) · [PolicyDoc JSON Schema](./docs/schema.md) |
+| Configure or implement recovery | [Recovery guide and specification](./docs/recovery/README.md) · [ZK circuit, pool, and adapter](./docs/zk/README.md) |
+| Build or verify a deployment | [Deployment guide](./docs/deploy/README.md) · [Testnet exercise](./docs/deploy/testnet-exercise.md) |
+| Review security and known limitations | [Audit scope](./docs/audit-scope.md) · [Threat model](./docs/THREAT_MODEL.md) · [Deferred work](./docs/DEFERRED.md) |
+| Understand verification evidence | [Coverage and trusted base](./docs/verification/PLAN.md) · [Lean model and theorems](./formal/README.md) |
+| Read the papers, walkthroughs, demos, or slides | [HTML reading hub](./docs/index.html) · [Slide deck](./docs/slides/README.md) |
+
+The theorems in `formal/` cover the **Lean model** of the legacy v1 evaluator,
+its lowering, and the canonical form. Shared vectors and differential tests
+connect that model to Rust; they do not establish an end-to-end proof of the
+current rule-core account or the deployed recovery stack. The verification guide
+separates proofs, differential evidence, and components covered by tests only.
+
+## Repository map
+
+| Area | Entry points |
+| --- | --- |
+| Document model and schema | [`perch-ir`](./crates/perch-ir) · [`perch-schema`](./crates/perch-schema) |
+| Compilation and evaluation | [`perch-doc-compiler`](./crates/perch-doc-compiler) · [`perch-rule-eval`](./crates/perch-rule-eval) · [`perch-analyze`](./crates/perch-analyze) |
+| Accounts and wire types | [`perch-smart-account`](./crates/perch-smart-account) · [`perch-account`](./crates/perch-account) · [`perch-account-factory`](./crates/perch-account-factory) · [`perch-account-types`](./crates/perch-account-types) |
+| Off-chain authorization review | [`perch-review-core`](./crates/perch-review-core/README.md): snapshot-based verdicts and cap budgets, with a private TypeScript wrapper |
+| Legacy policies and differential tests | [`perch-compile`](./crates/perch-compile) · [`perch-program`](./crates/perch-program) · [`perch-interpreter`](./crates/perch-interpreter) · [`perch-spending-limit`](./crates/perch-spending-limit) |
+| Recovery and ZK | [Implementation map](./docs/recovery/implementation.md) · [`circuits/`](./circuits) · [Vendored verifier](./vendor/ultrahonk-soroban-verifier/README.md) |
+| Deployment and infrastructure pins | [`scripts/`](./scripts) · [`deployments/`](./deployments) · [Build order and pin verification](./docs/deploy/README.md) |
+| Verification and tests | [`formal/`](./formal) · [`fuzz/`](./fuzz) · [`komet/`](./komet) · [`integration-tests`](./crates/integration-tests) · [Shared vectors](./testdata/README.md) |
+
+Client packages each have their own API and usage guide:
+
+| Package | Purpose |
+| --- | --- |
+| [`@stellar-registry/perch`](./packages/perch-js/README.md) | Policy builder, schema, canonical JSON, hashes, and account lifecycle |
+| [`@stellar-registry/perch-contracts`](./packages/perch-contracts/README.md) | Stack bindings for recorded deployments and explicitly undeployed builds, plus manifests |
+| [`@stellar-registry/perch-interpreter`](./packages/perch-interpreter-js/README.md) | Interpreter contract bindings |
+| [`@stellar-registry/perch-zk`](./packages/perch-zk/README.md) | Recovery proof helpers and a trust-free pool indexer |
+| [`@stellar-registry/perch-relay`](./packages/perch-relay/README.md) | Store-and-forward relay for signed guardian approvals |
+| [`@stellar-registry/perch-artifacts`](./packages/perch-artifacts/README.md) | Deployment manifests, circuit artifacts, vectors, limits, and tooling |
 
 ## Development
 
-Building contract wasm requires the scaffold plugin:
-`cargo install --locked stellar-scaffold-cli` (and `stellar-registry-cli` for
-the deploy flow). `rust-toolchain.toml` pins rustc 1.99.1;
-reproducing a deployment's hashes needs the rustc version its manifest
-records ([`docs/audit-scope.md`](./docs/audit-scope.md#toolchains-and-locked-inputs)).
+Use Rust via rustup and `just`; [`rust-toolchain.toml`](./rust-toolchain.toml)
+pins Rust 1.99.1, the Wasm target, rustfmt, and clippy. TypeScript CI uses
+Node.js 22. Contract Wasm builds also need the Stellar CLI and scaffold plugin:
 
 ```sh
-just test              # cargo test --workspace
-just build             # cargo build --workspace (native)
-just build-contracts   # stellar scaffold build: all contract wasms with
-                       #   name/binver meta, to target/stellar/$STELLAR_NETWORK/
-just check             # cargo fmt --check + cargo clippy -D warnings
-just formal            # build the Lean model, check every theorem (needs elan)
-just drt               # differential conformance: Rust evaluator + Lean model
-                       #   over the same frozen vectors
-just fuzz              # coverage-guided fuzzing (needs cargo-fuzz + nightly)
-just mutants           # mutation testing of the security core (cargo-mutants)
-just coverage          # branch coverage incl. the conformance suite (cargo-llvm-cov)
-just zk-artifacts check  # rebuild the ZK circuit artifacts, VKs, and proof fixtures
-                         #   with the pinned toolchain; fail on any byte of drift
-just zk-bench          # ZK proving + metered on-chain costs (docs/zk/measurements.md)
-scripts/fetch-infra-wasm.sh   # build-time pins from deployments/testnet.json
-scripts/verify-deployment.sh  # the manifest against the chain
+cargo install --locked stellar-scaffold-cli
 ```
 
-[`docs/verification/PLAN.md`](./docs/verification/PLAN.md) covers what is
-proved, what is differentially tested, and what is tested only.
+The deploy flow additionally needs `stellar-registry-cli`; follow the
+[deployment guide](./docs/deploy/README.md) for CLI requirements and build order.
+Reproducing deployed bytes requires the manifest's recorded toolchain and inputs
+([provenance and reproduction limits](./docs/audit-scope.md#deployment-provenance)).
+
+Run from the repository root:
+
+```sh
+just build             # Native workspace build.
+just test              # Rust workspace tests; some need the pinned Wasm below.
+just check             # rustfmt check and clippy with warnings denied.
+just build-contracts   # Scaffold Wasm build to target/stellar/$STELLAR_NETWORK/.
+```
+
+Tests that load deployment artifacts need `scripts/fetch-infra-wasm.sh`
+(Stellar CLI, jq, and Python 3). It fetches by the recorded hashes and addresses
+and refreshes the local pin files from the manifest. Follow the
+[deployment guide](./docs/deploy/README.md) when testing source that differs
+from the recorded stack. `scripts/verify-deployment.sh` checks the manifest
+against the chain.
+
+For the TypeScript SDK:
+
+```sh
+cd packages/perch-js
+npm ci
+npm run check
+npm run build
+npm test
+```
+
+Additional checks are in the [`justfile`](./justfile): `just formal` and
+`just drt` for Lean proofs and differential conformance (requires elan),
+`just fuzz` for fuzzing (cargo-fuzz and nightly), `just mutants` for mutation
+testing (cargo-mutants), and `just coverage` for branch coverage (cargo-llvm-cov).
+`just zk-artifacts check` rebuilds pinned circuit artifacts and fails on drift;
+`just zk-bench` measures proving and on-chain costs. See
+[verification coverage](./docs/verification/PLAN.md) and
+[ZK measurements](./docs/zk/measurements.md) for scope and prerequisites.
 
 ## License
 

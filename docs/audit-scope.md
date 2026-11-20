@@ -105,7 +105,7 @@ evidence does not.
 | Stellar CLI | deployment build: stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork) and scaffold 0.0.27, SHA-256-checked by `release.yml`'s `deploy-stack` (manifest `toolchain`); CI: stellar-cli 27.1.0, SHA-256-checked | `.github/workflows/release.yml`, `.github/actions/setup-stellar` |
 | ZK proving | nargo 1.0.0-beta.9, bb 0.87.0, every download SHA-256-pinned per platform; proofs are `UltraKeccakZKFlavor` | `scripts/zk-toolchain.sh`, `circuits/manifest.json` |
 | ZK proving (JS) | `@noir-lang/noir_js` 1.0.0-beta.9, `@aztec/bb.js` 0.87.0, exact versions | `packages/perch-zk/package.json` |
-| rule-core | `rule-eval`, `soroban-facade`, and `rule-eval-conformance` (tests only) at bitswell/soroban-rule-core `a3c92ba074dcac4052727b7599e5fd8674af6c0a`, one rev for all three; `soroban-facade` pins `soroban-sdk` `=29.0.1` | `Cargo.toml`, `Cargo.lock` |
+| rule-core | `rule-eval`, `soroban-facade`, and `rule-eval-conformance` (tests only) at stellar-registry/soroban-rule-core `a3c92ba074dcac4052727b7599e5fd8674af6c0a`, one rev for all three; `soroban-facade` pins `soroban-sdk` `=29.0.1` | `Cargo.toml`, `Cargo.lock` |
 | UltraHonk verifier base | NethermindEth/rs-soroban-ultrahonk `c2160987260284c656ffbdad8344210fc162b177` | `vendor/ultrahonk-soroban-verifier/NOTICE`, `UPSTREAM.sha256` |
 | Lean | `leanprover/lean4:v4.33.0` | `formal/lean-toolchain` |
 
@@ -146,7 +146,7 @@ backend needs no integration review with the core paths it touches
 
 | Item | Identity | Assigned to |
 | --- | --- | --- |
-| rule-core: `rule-eval` and `soroban-facade` | bitswell/soroban-rule-core `a3c92ba0` | Explicit dependency review |
+| rule-core: `rule-eval` and `soroban-facade` | stellar-registry/soroban-rule-core `a3c92ba0` | Explicit dependency review |
 | OZ fork PR [#3](https://github.com/theahaco/stellar-contracts-OZ/pull/3): CAP-0071 delegated auth | in theahaco/stellar-contracts-OZ `33726766` | Explicit dependency review |
 | OZ fork PR [#4](https://github.com/theahaco/stellar-contracts-OZ/pull/4): `_no_events` variants | in `33726766` | Explicit dependency review |
 | OZ fork PR [#5](https://github.com/theahaco/stellar-contracts-OZ/pull/5): `reconcile_signers` | head `33726766` | Explicit dependency review |
@@ -266,7 +266,7 @@ Merging the pull requests is
 
 ### rule-core
 
-`rule-eval` and `soroban-facade` come from bitswell/soroban-rule-core at
+`rule-eval` and `soroban-facade` come from stellar-registry/soroban-rule-core at
 `a3c92ba074dcac4052727b7599e5fd8674af6c0a`, a git dependency, not vendored.
 `rule-eval` is the rule-set evaluator and document lowering, proven against
 rule-core's Lean model; `soroban-facade` reads Soroban values and

@@ -4,6 +4,20 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.2.0] - 2026-11-20
+
+### 🚀 Features
+
+- *(perch-js)* Follow the account API in the TypeScript packages
+- *(account,doc-compiler)* [**breaking**] Name verifiers from perch/verifiers; refuse unverified ones in admin documents (#68)
+- Add exact authorization-root constraints to Perch rules (#69)
+- *(perch-smart-account)* Rename scoped documents to grants across the account API (#76)
+- *(perch-doc-compiler)* Give grant documents their own caps and a compact stored layout (#100)
+
+### 🚜 Refactor
+
+- *(recovery)* [**breaking**] Call the controller through Perch-owned hooks (#65)
+
 ## [0.1.2] - 2026-10-22
 
 ### 💼 Other
@@ -34,3 +48,5 @@ are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 
 - New deployables, pin-ordered stack, manifest pipeline, release-stack harness, packages (epic #99 WS4) (#103)
 - *(testnet)* Fresh deployment record of the merged #99 stack, from main's 7ae915d (#112)
+
+

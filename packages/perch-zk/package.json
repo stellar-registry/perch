@@ -1,6 +1,6 @@
 {
   "name": "@stellar-registry/perch-zk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Proof helpers for Perch ZK recovery: commitments, Merkle witnesses from pool leaves, a trust-free pool indexer, circuit inputs, and UltraHonk proving in the browser or Node",
   "license": "Apache-2.0",
   "type": "module",

@@ -4,6 +4,33 @@ All notable changes to this component are documented here. Contract versions
 are the on-chain wasm publishes and `perch-js` versions are the npm releases of
 `@stellar-registry/perch`; the format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.5.0] - 2026-11-20
+
+### 🚀 Features
+
+- *(perch-js)* Follow the account API in the TypeScript packages
+- *(smart-account)* Store the rule-eval rule sets the installed rules enforce (#56)
+- *(account)* [**breaking**] Store each rule once; keep a scoped document's signer ids (#66)
+- *(account,doc-compiler)* [**breaking**] Name verifiers from perch/verifiers; refuse unverified ones in admin documents (#68)
+- Add exact authorization-root constraints to Perch rules (#69)
+- *(perch-smart-account)* Rename scoped documents to grants across the account API (#76)
+- *(perch-doc-compiler)* Give grant documents their own caps and a compact stored layout (#100)
+
+### 🐛 Bug Fixes
+
+- *(perch-smart-account)* Pin capped rules and grants' token calls to the account (#77)
+
+### 🚜 Refactor
+
+- *(account,recovery)* Drop stellar-accounts from the account and controller (#67)
+
+### 🧪 Testing
+
+- Regenerate constants.json, policy.schema.json
+- Regenerate policy.schema.json, vectors.json
+- Regenerate policy.schema.json, vectors.json
+- Regenerate constants.json, policy.schema.json, vectors.json
+
 ## [0.4.1] - 2026-10-21
 
 ### 📚 Documentation

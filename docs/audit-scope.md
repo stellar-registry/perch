@@ -100,7 +100,7 @@ evidence does not.
 | Rust | rustc 1.99.1, target `wasm32v1-none`: the version both manifests record for the current deployments | `rust-toolchain.toml`; `toolchain:` in `.github/workflows/` |
 | Release profile | `opt-level = "z"`, `overflow-checks = true`, `panic = "abort"`, `lto = true`, `codegen-units = 1` | `Cargo.toml` `[profile.release]` |
 | Wasm stack | 64 KiB per contract, 128 KiB for the ZK adapter (an overflow traps) | `crates/*/build.rs` |
-| Soroban | `soroban-sdk` 29.0.1, `soroban-env-host` 29.0.1 (test host), `soroban-poseidon` 28.0.0 (vendored, moved to soroban-sdk 29; `vendor/soroban-poseidon/NOTICE`) | `Cargo.lock` |
+| Soroban | `soroban-sdk` 29.0.1, `soroban-env-host` 29.0.1 (test host), `soroban-poseidon` 28.0.0 (moved to soroban-sdk 29, pinned to bitswell-hq/stellar__rs-soroban-poseidon `f2226191bf442dafa9972ca37db8975013d965a2` until stellar/rs-soroban-poseidon PR [#21](https://github.com/stellar/rs-soroban-poseidon/pull/21) is released) | `Cargo.toml`, `Cargo.lock` |
 | OpenZeppelin accounts | `stellar-accounts` 0.7.1 at bitswell-hq/theahaco__stellar-contracts-OZ `42089fc90684fdab33a85eac3e8311259b69a61b` (theahaco's fork at `33726766`, moved to soroban-sdk 29.0.1) | `Cargo.toml`, `Cargo.lock` |
 | Stellar CLI | deployment build: stellar 28.0.0-aha.0 (the `theahaco/stellar-cli` fork) and scaffold 0.0.27, SHA-256-checked by `release.yml`'s `deploy-stack` (manifest `toolchain`); CI: stellar-cli 27.1.0, SHA-256-checked | `.github/workflows/release.yml`, `.github/actions/setup-stellar` |
 | ZK proving | nargo 1.0.0-beta.9, bb 0.87.0, every download SHA-256-pinned per platform; proofs are `UltraKeccakZKFlavor` | `scripts/zk-toolchain.sh`, `circuits/manifest.json` |

@@ -51,7 +51,7 @@ limits; **Accepted**, inherent in the design at this revision.
 | Griefer: evidence-free attempts, stale evidence, replayed proofs or approvals | D | 4 | D2, D9, D10, D13 | none | Mitigated. |
 | Verifier that accepts any signature | S, E | 5 | `is_verified_verifier`, `UnverifiedVerifier`, `Compiler_DocInvalid`; one signer per unverified verifier per rule | none | Partial: admin rules and recovery credentials use only verified, admin-free verifiers; grants may use unverified ones; the ML-DSA verifier's `fips204` dependency is unaudited. |
 | Registry admin or manager approves a hostile verifier, replaces the registry's code, or fills an empty pinned address | T, E, D | 6 | §16 content addressing; no upgrade on deployed contracts; a resolved `verifier-name` must equal the signer's `verifier` | [contract-admin governance](./DEFERRED.md#contract-admin-governance-behind-a-multisig-and-timelock) | Open: one human-held key, changes take effect at once; the account checks verifiers' code but not its compiler's, interpreter's, or spending limit's; a broken or replaced `perch/verifiers` refuses every account document and recovery target that names a verifier until it is fixed. |
-| Supply-chain attacker or wrong artifacts | T | 7 | §16 pinned hashes; `fetch-infra-wasm.sh`, `check-pins.sh`, `testnet_pins`, `verify-deployment.sh` | Packaging rule | Partial: pins are hash- and address-checked; the deployed builds are unreproduced, npm integrity is the consumer's, and five vendored crates carry Perch's ports. |
+| Supply-chain attacker or wrong artifacts | T | 7 | §16 pinned hashes; `fetch-infra-wasm.sh`, `check-pins.sh`, `testnet_pins`, `verify-deployment.sh` | Packaging rule | Partial: pins are hash- and address-checked; the deployed builds are unreproduced, npm integrity is the consumer's, and five crates are pinned to unreleased commits that move them to soroban-sdk 29. |
 | External signature replayed on another account | S | 9 | §15 `addr_oz_v1` digest | none | Mitigated. |
 | An `auth-root` contract issues the guarded call on a path the owner did not intend | E | 9 | the guarded rule's target, functions, arguments, signers, expiry, and cap; rule-core `authorize.exact-root` | none | Accepted: the condition names a contract and function, not its code or arguments; it is as narrow as the root contract's behaviour, including after that contract's own upgrades. |
 | Signing request misdescribed: root conditions, stale or chosen snapshot, sibling entries, hidden grants, wrong bindings | S, T, E | 9, 10, L7 | `auth-root` enforced on chain | none | Partial: the chain decides; what the owner is shown depends on the wallet deriving contexts from the XDR, a live snapshot, listing grants, and reading `capabilities` first. |
@@ -88,7 +88,7 @@ accounts use ZK recovery is out of scope.
 | Spending records and grant records | The account's own storage (`SpendRecords`, `Grants`, `GrantTags`, `RuleSet`) | A cap is only as good as its record: lost or reset history is unspent budget (L3, adversary 11). |
 | `perch/constructorless` and `perch/verifiers` registry keys | The registries' admin and manager: one human-held key, backed up in 1Password ([DEFERRED](./DEFERRED.md#contract-admin-governance-behind-a-multisig-and-timelock)) | Which verifiers count as verified, which names resolve, the registry's own code, and, on a network where a pinned address is still empty, what lands there (adversary 6). |
 | Build-time pins | `crates/*/wasm/*.sha256`, `registry.path`, `verifiers.path`, baked into the account and factory | Which compiler, verifier, and account bytes every account built from this source trusts (adversary 7). |
-| rule-core | `bitswell/soroban-rule-core` at rev `a3c92ba`, a git dependency | The evaluator that decides every authorization but a recovery completion (adversary 8). |
+| rule-core | `stellar-registry/soroban-rule-core` at rev `a3c92ba`, a git dependency | The evaluator that decides every authorization but a recovery completion (adversary 8). |
 | Release and npm publishing credentials | GitHub Actions (`release.yml`, `release-mainnet.yml`), npm | What gets published under Perch's names: contract wasm and the JS packages wallets sign with (adversary 7). |
 
 ## Adversaries
@@ -239,10 +239,11 @@ accounts use ZK recovery is out of scope.
    - **Dependencies.** rule-core is a git dependency at a fixed rev; the
      OZ fork is a fork of a fork (bitswell-hq/theahaco__stellar-contracts-OZ
      `42089fc`), now linked only by the verifiers, interpreter, spending
-     limit, and off-chain tools. This stack vendors and ports five crates to
-     soroban-sdk 29 (`soroban-sdk-tools`, `soroban-poseidon`, `soroban-flux`,
-     `registry-traits`, `admin-sep`); each port is Perch's change to
-     third-party code, recorded in its NOTICE.
+     limit, and off-chain tools. Five crates are pinned to git commits that
+     move them to soroban-sdk 29 (`soroban-sdk-tools`, `soroban-poseidon`,
+     `soroban-flux`, `registry-traits`, `admin-sep`); each is a change to
+     third-party code not yet released upstream, and the comment on its pin
+     names the upstream pull request it waits on.
    - **npm.** Packages publish with `--provenance`; this repository records
      no integrity hashes. A consumer resolving a published version must show
      it equal to the reviewed source

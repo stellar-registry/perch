@@ -142,9 +142,8 @@ packages/
                       zk-toolchain.sh as files, copied at build time
 circuits/             Noir ZK recovery circuit (depth 32 + depth-24 fallback), compiled
                       artifacts, and manifest.json pinning sources/VKs/proofs/toolchain
-vendor/               vendored third-party crates, each with its NOTICE: the audited
-                      UltraHonk verifier plus perch's ZK-flavor delta, soroban-sdk-tools,
-                      soroban-flux, soroban-poseidon, registry-traits, admin-sep
+vendor/               the audited UltraHonk verifier plus perch's ZK-flavor delta,
+                      vendored with its NOTICE
 formal/               Lean 4 model of the v1 evaluator and CANON v1, with
                       machine-checked theorems; replays the conformance and canonical
                       vectors (`just drt`)

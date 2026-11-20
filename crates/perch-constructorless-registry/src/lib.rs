@@ -39,13 +39,13 @@
 //! [`registry-traits`](https://github.com/stellar-registry/contracts) (PR #33):
 //! [`Publishable`], [`Manageable`], and the content-addressed
 //! [`StatelessDeployable`]; plus [`Administratable`] and [`Upgradable`] from
-//! [`admin-sep`](https://github.com/theahaco/admin-sep) (`v0.28.1`, vendored).
+//! [`admin-sep`](https://github.com/theahaco/admin-sep) (`v0.28.1`, on soroban-sdk 29).
 //!
 //! ## Admin: a single `ADMIN` key shared with registry-traits
 //!
 //! The canonical `registry` contract composes `Administratable` and
-//! `Upgradable` from **`admin-sep`**. This workspace builds a vendored copy
-//! (`vendor/admin-sep`, moved to soroban-sdk 29), so it composes the same real
+//! `Upgradable` from **`admin-sep`**. This workspace builds it at a pinned commit
+//! moved to soroban-sdk 29, so it composes the same real
 //! `#[contracttrait]`s for its public `admin` / `set_admin` / `upgrade` entry
 //! points — no local glue.
 //!
@@ -175,7 +175,7 @@ mod test {
     /// Constructing the subregistry wires `admin`, `manager`, and `root`
     /// through the composed registry-traits seams. Also exercises the composed
     /// ABI (the `#[contracttrait]` glue) at compile time, which is what
-    /// validates the vendored registry-traits against this workspace's
+    /// validates the pinned registry-traits against this workspace's
     /// soroban-sdk.
     #[test]
     fn constructor_wires_admin_manager_and_root() {

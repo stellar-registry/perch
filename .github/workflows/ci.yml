@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # rust-toolchain.toml pins an exact rustc, so this job's clippy/rustfmt
+    # gate and its builds share one toolchain and a new Rust release's lints
+    # arrive only through a PR that bumps the pin. Keep the dtolnay
+    # `toolchain:` below equal to it.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

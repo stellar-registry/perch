@@ -1,9 +1,8 @@
 # Threat model
 
 What Perch protects, against whom, what it trusts, and where the audited
-behaviour stops protecting. This covers the source at the top of the
-`stack/*` series (bitswell-hq/stellar-registry__perch#105–#121, the split of
-stellar-registry/perch#168): accounts that own their authorization types and
+behaviour stops protecting. This covers the source in this repository at
+this revision: accounts that own their authorization types and
 decide every authorization with rule-core's evaluator (`rule-eval`), grant
 documents, named verifiers, exact authorization-entry roots, and the
 off-chain review core. Companion to [audit-scope.md](./audit-scope.md),

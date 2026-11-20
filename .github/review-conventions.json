@@ -1,0 +1,57 @@
+{
+  "$comment": "perch's settings for the shared bitswell-hq/review-conventions checks (.github/workflows/review-conventions.yml). Its README's \"Config reference\" documents every key. Scopes are the crate and package directories plus the non-crate scopes in CONTRIBUTING.md; scripts/test-review-conventions.mjs keeps the list in step with crates/ and packages/. Rules that need code (release.yml, release-deps.py) are in review-conventions.mjs.",
+  "header": {
+    "types": ["feat", "fix", "perf", "refactor", "revert", "test", "docs", "build", "ci", "chore", "style", "deploy"],
+    "scopes": [
+      "integration-tests", "perch-account", "perch-account-factory", "perch-analyze", "perch-artifacts",
+      "perch-bench", "perch-bench-rpn", "perch-compile", "perch-conformance", "perch-constructorless-registry",
+      "perch-contracts", "perch-deploy", "perch-derive-id", "perch-doc-compiler", "perch-ed25519-verifier",
+      "perch-golden", "perch-interpreter", "perch-interpreter-js", "perch-ir", "perch-js",
+      "perch-mldsa-verifier", "perch-program", "perch-recovery", "perch-recovery-interface",
+      "perch-registry-resolve", "perch-registry-resolve-macro", "perch-relay", "perch-schema",
+      "perch-smart-account", "perch-spending-limit", "perch-testkit", "perch-testnet",
+      "perch-webauthn-verifier", "perch-zk", "perch-zk-adapter", "perch-zk-pool", "perch-zk-primitives",
+      "perch-zk-prover",
+      "deps", "ci", "release", "release-mainnet", "docs", "scripts", "testnet", "mainnet", "deploy",
+      "pins", "bootstrap", "circuits", "vendor", "contracts", "workspace"
+    ]
+  },
+  "commits": {
+    "trailers": ["Refs", "Closes", "Fixes", "Security", "Wasm", "Co-authored-by", "Reported-by", "Suggested-by", "Tested-by", "Reviewed-by", "Signed-off-by"]
+  },
+  "skip": {
+    "authors": ["github-actions[bot]", "dependabot[bot]"]
+  },
+  "help": "See CONTRIBUTING.md.",
+  "module": ".github/review-conventions.mjs",
+  "rules": [
+    {
+      "id": "wasm-impact-answer",
+      "when": { "sections": { "Wasm impact": "[\\s\\S]*" } },
+      "section": "Wasm impact",
+      "match": "\\|",
+      "allowNone": 20,
+      "message": "Give the before/after table (| Contract | main | this PR | Why |)"
+    },
+    {
+      "id": "pins-reproduce",
+      "when": { "paths": ["crates/*/wasm/*.sha256", "deployments/"], "notTemplate": ["mechanical.md"] },
+      "requireSections": ["Wasm impact"],
+      "message": "Pins or deployment records changed: use mechanical.md (its Reproduce section), or state the Wasm impact"
+    },
+    {
+      "id": "spec-citation",
+      "when": { "paths": ["docs/recovery/spec.md"] },
+      "section": "Security impact",
+      "match": "§|\\bD\\d+\\b",
+      "message": "docs/recovery/spec.md changed: cite the § or Dn it changes (contract.md)"
+    },
+    {
+      "id": "trailer-not-none",
+      "scope": "commit",
+      "trailer": ["Security", "Wasm"],
+      "notMatch": "^(none|n/?a|unchanged|nothing)\\b",
+      "message": "Omit the trailer when there is nothing to say: cliff.toml files the commit by its presence"
+    }
+  ]
+}

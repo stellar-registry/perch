@@ -252,11 +252,16 @@ at 294.4M (73.6%), and written entries at 141 (70.5%, the renamed thief).
 
 ### Document caps
 
-**The caps are 8 declared signers, 11 document rules, 8 192 canonical
+**The caps are 8 declared signers, 10 document rules, 8 192 canonical
 bytes, and rule names of at most OZ's 20 bytes**
 (`perch_doc_compiler::{MAX_DOC_SIGNERS, MAX_DOC_RULES,
 MAX_DOC_CANONICAL_BYTES, MAX_RULE_NAME_BYTES}`). The generated recovery rule
-is additional to the 11. The `worst_case_*` tests in `release_stack.rs` run
+is additional to the 10. `MAX_DOC_RULES` was 11 when this document's
+figures were measured; storing each document's rule-eval rule set took the
+binding compromise completion at 8 × 11 to 77.3% of instructions, and the
+cap became 10 (74.2% at 8 × 10, all eight flows,
+bitswell-hq/stellar-registry__perch#56). The tables below predate that
+change. The `worst_case_*` tests in `release_stack.rs` run
 all eight worst-case flows at the compiled-in caps and assert each stays
 within budget, so lowering a limit or growing a flow's cost fails CI's
 `release-stack-source` job. Rerun `scripts/cap-sweep.py` after a change to

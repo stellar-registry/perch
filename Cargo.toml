@@ -67,16 +67,16 @@ soroban-sdk-tools = { version = "0.1.4", git = "https://github.com/bitswell-hq/B
 # OpenZeppelin/stellar-contracts once these patches land there.
 stellar-accounts = { version = "0.7.1", git = "https://github.com/bitswell-hq/theahaco__stellar-contracts-OZ.git", rev = "42089fc90684fdab33a85eac3e8311259b69a61b", package = "stellar-accounts" }
 
-# rule-core (bitswell/soroban-rule-core): the rule-set evaluator and document
+# rule-core (stellar-registry/soroban-rule-core): the rule-set evaluator and document
 # lowering proven against its Lean model (rule-eval), the Soroban value and
 # context reading for contract shells (soroban-facade), and the conformance
 # runner whose vectors the model generates (rule-eval-conformance, tests
 # only). All three at one rev, so that rev is the only place the vectors are
 # pinned. soroban-facade pins soroban-sdk exactly (=29.0.1), so moving
 # Perch's SDK first needs a rule-core rev that moves it.
-rule-eval = { git = "https://github.com/bitswell/soroban-rule-core", rev = "a3c92ba074dcac4052727b7599e5fd8674af6c0a" }
-soroban-facade = { git = "https://github.com/bitswell/soroban-rule-core", rev = "a3c92ba074dcac4052727b7599e5fd8674af6c0a" }
-rule-eval-conformance = { git = "https://github.com/bitswell/soroban-rule-core", rev = "a3c92ba074dcac4052727b7599e5fd8674af6c0a" }
+rule-eval = { git = "https://github.com/stellar-registry/soroban-rule-core", rev = "a3c92ba074dcac4052727b7599e5fd8674af6c0a" }
+soroban-facade = { git = "https://github.com/stellar-registry/soroban-rule-core", rev = "a3c92ba074dcac4052727b7599e5fd8674af6c0a" }
+rule-eval-conformance = { git = "https://github.com/stellar-registry/soroban-rule-core", rev = "a3c92ba074dcac4052727b7599e5fd8674af6c0a" }
 
 perch-ir = { version = "0.1.1", path = "crates/perch-ir" }
 perch-program = { version = "0.1.1", path = "crates/perch-program" }

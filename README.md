@@ -191,7 +191,7 @@ including build order, manifests, registries, and deployment verification.
 
 Building contract wasm requires the scaffold plugin:
 `cargo install --locked stellar-scaffold-cli` (and `stellar-registry-cli` for
-the deploy flow). `rust-toolchain.toml` pins rustc 1.97.1;
+the deploy flow). `rust-toolchain.toml` pins rustc 1.99.1;
 reproducing a deployment's hashes needs the rustc version its manifest
 records ([`docs/audit-scope.md`](./docs/audit-scope.md#toolchains-and-locked-inputs)).
 

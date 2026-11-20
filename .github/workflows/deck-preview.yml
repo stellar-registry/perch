@@ -1,12 +1,12 @@
-name: Deck preview
+name: Docs preview
 
-# Per-PR preview of docs/ (the slide deck): deploys to the gh-pages branch
+# Per-PR preview of docs/ (book and slide deck): deploys to the gh-pages branch
 # under /pr-preview/pr-<number>/ and maintains a sticky PR comment with the
 # link. The preview is deployed on open/update and removed when the PR closes.
 on:
   pull_request:
     types: [opened, reopened, synchronize, closed]
-    paths: ["docs/**"]
+    paths: ["docs/**", "book/**", "testdata/**", ".github/actions/build-book/**", ".github/workflows/deck-preview.yml"]
 
 permissions: {}
 
@@ -24,6 +24,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked]
         # the preview action pushes gh-pages with the checkout token, so
         # credentials must persist for this job (unlike the rest of CI).
+      - uses: ./.github/actions/build-book
+        if: github.event.action != 'closed'
       - uses: rossjrw/pr-preview-action@ffa7509e91a3ec8dfc2e5536c4d5c1acdf7a6de9 # v1.8.1
         with:
           source-dir: docs
